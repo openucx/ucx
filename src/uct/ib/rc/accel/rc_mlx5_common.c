@@ -1000,7 +1000,7 @@ void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
 
 #if HAVE_DECL_MLX5DV_CREATE_QP
 void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
-                                        struct ibv_qp_init_attr_ex *qp_attr,
+                                        uct_ib_qp_init_attr_t *qp_attr,
                                         struct mlx5dv_qp_init_attr *dv_attr,
                                         unsigned scat2cqe_dir_mask)
 {

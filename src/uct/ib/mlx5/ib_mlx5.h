@@ -274,6 +274,10 @@ typedef struct uct_ib_mlx5_md {
 
     uint8_t                  mkey_tag;
 #endif
+    struct {
+        size_t dc;
+        size_t ud;
+    } dv_tx_wqe_ratio;
     /* The maximum number of outstanding RDMA Read/Atomic operations per DC QP. */
     uint8_t                  max_rd_atomic_dc;
 } uct_ib_mlx5_md_t;
@@ -845,6 +849,8 @@ uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
 static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp) { }
 
 #endif
+
+size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);
 
 ucs_status_t
 uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,

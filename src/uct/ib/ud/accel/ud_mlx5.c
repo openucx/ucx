@@ -18,6 +18,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
+#include <ucs/profile/profile.h>
 #include <string.h>
 #include <arpa/inet.h> /* For htonl */
 
@@ -710,6 +711,15 @@ static void uct_ud_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
     iface->cq[dir].cq_sn++;
 }
 
+static void uct_ud_mlx5_qp_update_caps(struct ibv_qp_cap *qp_caps)
+{
+    /* Set minimal possible values for max_send_sge, max_recv_sge and
+     * max_inline_data to minimize WQE length */
+    qp_caps->max_recv_sge    = 1;
+    qp_caps->max_send_sge    = 2; /* UD header + payload */
+    qp_caps->max_inline_data = 0;
+}
+
 static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 uct_ib_qp_attr_t *ib_attr,
                                                 struct ibv_qp **qp_p)
@@ -721,6 +731,7 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
     uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
 
+    uct_ud_mlx5_qp_update_caps(&ib_attr->cap);
     attr.super     = *ib_attr;
     attr.mmio_mode = UCT_IB_MLX5_MMIO_MODE_LAST;
 
@@ -823,28 +834,88 @@ static uct_iface_ops_t uct_ud_mlx5_iface_tl_ops = {
     .iface_is_reachable       = uct_ib_iface_is_reachable
 };
 
-static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
-                           uct_md_h md, uct_worker_h worker,
+static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
+{
+    uct_ib_qp_init_attr_t qp_init_attr = {};
+    uct_ib_device_t *dev               = &md->super.dev;
+    ucs_status_t status;
+    struct ibv_qp *qp;
+    uct_ib_mlx5dv_qp_tmp_objs_t qp_tmp_objs;
+
+    if (md->dv_tx_wqe_ratio.ud != 0) {
+        return UCS_OK;
+    }
+
+    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, md->super.pd, &qp_tmp_objs);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    uct_ib_mlx5dv_qp_init_attr(&qp_init_attr, md->super.pd, &qp_tmp_objs,
+                               IBV_QPT_UD, 128);
+    uct_ud_mlx5_qp_update_caps(&qp_init_attr.cap);
+
+#if HAVE_DECL_IBV_CREATE_QP_EX
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp_ex, dev->ibv_context,
+                                 &qp_init_attr);
+#else
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, pd, &qp_init_attr);
+#endif
+    if (qp == NULL) {
+        ucs_error("md=%p: failed to create %s QP "
+                  "TX wr:%d sge:%d inl:%d RX wr:%d sge:%d: %m",
+                  md, uct_ib_qp_type_str(qp_init_attr.qp_type),
+                  qp_init_attr.cap.max_send_wr, qp_init_attr.cap.max_send_sge,
+                  qp_init_attr.cap.max_inline_data,
+                  qp_init_attr.cap.max_recv_wr, qp_init_attr.cap.max_recv_sge);
+        status = UCS_ERR_IO_ERROR;
+        goto out_qp_tmp_objs_close;
+    }
+
+    status = uct_ib_mlx5dv_calc_tx_wqe_ratio(qp, qp_init_attr.cap.max_send_wr,
+                                             &md->dv_tx_wqe_ratio.ud);
+
+    uct_ib_destroy_qp(qp);
+
+out_qp_tmp_objs_close:
+    uct_ib_mlx5dv_qp_tmp_objs_destroy(&qp_tmp_objs);
+out:
+    return status;
+}
+
+static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
+                           uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_ud_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_ud_mlx5_iface_config_t);
+    uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md,
+                                                        uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
+    unsigned tx_queue_len              = config->super.super.tx.queue_len;
+    size_t sq_length;
     ucs_status_t status;
     int i;
 
     ucs_trace_func("");
 
+    status = uct_ud_mlx5dv_calc_tx_wqe_ratio(md);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    sq_length = ucs_roundup_pow2(tx_queue_len * md->dv_tx_wqe_ratio.ud);
+
     init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
+    init_attr.cq_len[UCT_IB_DIR_TX] = sq_length;
     init_attr.cq_len[UCT_IB_DIR_RX] = config->super.super.rx.queue_len;
 
     self->tx.mmio_mode     = config->mlx5_common.mmio_mode;
     self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
-                              &uct_ud_mlx5_iface_tl_ops, md, worker, params,
+                              &uct_ud_mlx5_iface_tl_ops, tl_md, worker, params,
                               &config->super, &init_attr);
 
     self->super.config.max_inline = uct_ud_mlx5_max_inline();

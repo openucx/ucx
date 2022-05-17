@@ -299,6 +299,22 @@ static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 
+static void uct_ib_mlx5_dci_qp_update_attr(uct_ib_qp_init_attr_t *qp_attr)
+{
+    /* DCI doesn't support receiving data, and set minimal possible values for
+     * max_send_sge and max_inline_data to minimize WQE length */
+    qp_attr->cap.max_recv_sge    = 0;
+    qp_attr->cap.max_send_sge    = 1;
+    qp_attr->cap.max_inline_data = 0;
+}
+
+static void uct_ib_mlx5dv_dci_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
+                                           struct mlx5dv_qp_init_attr *dv_attr)
+{
+    uct_ib_mlx5_dci_qp_update_attr(qp_attr);
+    uct_ib_mlx5dv_dc_qp_init_attr(dv_attr, MLX5DV_DCTYPE_DCI);
+}
+
 static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                                  uint8_t pool_index,
                                                  uint8_t dci_index,
@@ -346,11 +362,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
 
     uct_ib_mlx5_iface_fill_attr(ib_iface, &dci->txwq.super, &attr);
     uct_ib_iface_fill_attr(ib_iface, &attr.super);
-    attr.super.ibv.cap.max_recv_sge     = 0;
-
-    dv_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
-    dv_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCI;
-    dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
+    uct_ib_mlx5dv_dci_qp_init_attr(&attr.super.ibv, &dv_attr);
     uct_rc_mlx5_common_fill_dv_qp_attr(&iface->super, &attr.super.ibv, &dv_attr,
                                        UCS_BIT(UCT_IB_DIR_TX));
     qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
@@ -505,8 +517,8 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
                                           uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
     struct mlx5dv_qp_init_attr dv_init_attr = {};
-    struct ibv_qp_init_attr_ex init_attr = {};
-    struct ibv_qp_attr attr = {};
+    uct_ib_qp_init_attr_t init_attr         = {};
+    struct ibv_qp_attr attr                 = {};
     ucs_status_t status;
     int ret;
 
@@ -514,18 +526,9 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
         return uct_dc_mlx5_iface_devx_create_dct(iface);
     }
 
-    init_attr.comp_mask             = IBV_QP_INIT_ATTR_PD;
-    init_attr.pd                    = uct_ib_iface_md(&iface->super.super.super)->pd;
-    init_attr.recv_cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
-    /* DCT can't send, but send_cq have to point to valid CQ */
-    init_attr.send_cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
-    init_attr.srq                   = iface->super.rx.srq.verbs.srq;
-    init_attr.qp_type               = IBV_QPT_DRIVER;
-
-    dv_init_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
-    dv_init_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCT;
-    dv_init_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
-
+    uct_ib_mlx5dv_dct_qp_init_attr(&init_attr, &dv_init_attr, md->super.pd,
+                                   iface->super.super.super.cq[UCT_IB_DIR_RX],
+                                   iface->super.rx.srq.verbs.srq);
     uct_rc_mlx5_common_fill_dv_qp_attr(&iface->super, &init_attr, &dv_init_attr,
                                        UCS_BIT(UCT_IB_DIR_RX));
 
@@ -1254,6 +1257,68 @@ static uct_iface_ops_t uct_dc_mlx5_iface_tl_ops = {
     .iface_get_address        = uct_dc_mlx5_iface_get_address,
 };
 
+static ucs_status_t uct_dc_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
+{
+    uct_ib_device_t *dev               = &md->super.dev;
+    uct_ib_qp_init_attr_t qp_init_attr = {};
+    struct mlx5dv_qp_init_attr dv_attr = {};
+    struct ibv_qp *dci_qp;
+    ucs_status_t status;
+    uct_ib_mlx5dv_qp_tmp_objs_t qp_tmp_objs;
+
+    if (md->dv_tx_wqe_ratio.dc != 0) {
+        return UCS_OK;
+    }
+
+    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, md->super.pd, &qp_tmp_objs);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    uct_ib_mlx5dv_qp_init_attr(&qp_init_attr, md->super.pd, &qp_tmp_objs,
+                               IBV_QPT_DRIVER, 0);
+    uct_ib_mlx5dv_dci_qp_init_attr(&qp_init_attr, &dv_attr);
+
+    dci_qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
+                                     &qp_init_attr, &dv_attr);
+    if (dci_qp == NULL) {
+        ucs_error("%s: mlx5dv_create_qp(DCI) failed: %m",
+                  uct_ib_device_name(dev));
+        status = UCS_ERR_IO_ERROR;
+        goto out_qp_tmp_objs_close;
+    }
+
+    status = uct_ib_mlx5dv_calc_tx_wqe_ratio(dci_qp,
+                                             qp_init_attr.cap.max_send_wr,
+                                             &md->dv_tx_wqe_ratio.dc);
+    uct_ib_destroy_qp(dci_qp);
+
+out_qp_tmp_objs_close:
+    uct_ib_mlx5dv_qp_tmp_objs_destroy(&qp_tmp_objs);
+out:
+    return status;
+}
+
+static ucs_status_t uct_dc_mlx5_calc_sq_length(uct_ib_mlx5_md_t *md,
+                                               unsigned tx_queue_len,
+                                               size_t *sq_length_p)
+{
+    ucs_status_t status;
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) {
+        *sq_length_p = uct_ib_mlx5_devx_sq_length(tx_queue_len);
+    } else {
+        status = uct_dc_mlx5dv_calc_tx_wqe_ratio(md);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        *sq_length_p = ucs_roundup_pow2(tx_queue_len * md->dv_tx_wqe_ratio.dc);
+    }
+
+    return UCS_OK;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -1263,6 +1328,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md,
                                                         uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
+    uint8_t num_dcis                   = config->ndci +
+                                         UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
+    unsigned tx_queue_len              = config->super.super.tx.queue_len;
+    size_t sq_length;
     ucs_status_t status;
     unsigned tx_cq_size;
 
@@ -1284,9 +1353,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len *
-                                      UCT_IB_MLX5_MAX_BB *
-                                      (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
+    status = uct_dc_mlx5_calc_sq_length(md, tx_queue_len, &sq_length);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * num_dcis;
+
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
@@ -1299,8 +1372,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     /* driver will round up num cqes to pow of 2 if needed */
     if (ucs_roundup_pow2(tx_cq_size) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
         ucs_error("Can't allocate TX resources, try to decrease dcis number (%d)"
-                  " or tx qp length (%d)",
-                  config->ndci, config->super.super.tx.queue_len);
+                  " or tx qp length (%d)", config->ndci, tx_queue_len);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1355,6 +1427,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     if (status != UCS_OK) {
         goto err_destroy_dct;
     }
+
+    ucs_assertv(sq_length >= self->tx.bb_max, "sq_length %zu bb_max %u",
+                sq_length, self->tx.bb_max);
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis and %d cqes, dct 0x%x",
               self, uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,

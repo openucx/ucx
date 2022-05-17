@@ -211,6 +211,13 @@ typedef struct uct_ib_iface_init_attr {
 } uct_ib_iface_init_attr_t;
 
 
+#if HAVE_DECL_IBV_CREATE_QP_EX
+typedef struct ibv_qp_init_attr_ex uct_ib_qp_init_attr_t;
+#else
+typedef struct ibv_qp_init_attr uct_ib_qp_init_attr_t;
+#endif
+
+
 typedef struct uct_ib_qp_attr {
     int                         qp_type;
     struct ibv_qp_cap           cap;
@@ -219,11 +226,7 @@ typedef struct uct_ib_qp_attr {
     uint32_t                    srq_num;
     unsigned                    sq_sig_all;
     unsigned                    max_inl_cqe[UCT_IB_DIR_NUM];
-#if HAVE_DECL_IBV_CREATE_QP_EX
-    struct ibv_qp_init_attr_ex  ibv;
-#else
-    struct ibv_qp_init_attr     ibv;
-#endif
+    uct_ib_qp_init_attr_t       ibv;
 } uct_ib_qp_attr_t;
 
 
