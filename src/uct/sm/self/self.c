@@ -385,9 +385,6 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .iface_is_reachable       = uct_self_iface_is_reachable
 };
 
-UCT_TL_DEFINE(&uct_self_component, self, uct_self_query_tl_devices, uct_self_iface_t,
-              "SELF_", uct_self_iface_config_table, uct_self_iface_config_t);
-
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
