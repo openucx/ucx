@@ -3944,6 +3944,45 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr);
  * UCP client / server example using different APIs (tag, stream, am) utility.
  */
 
+typedef struct ucp_user_mem_allocator_ops {
+    /**
+     * Initialize user memory allocator
+     *
+     * @param [in]  worker        UCP worker client.
+     * @param [in]  buffer_size   Size of buffers needed from the memory allocator,
+     *                            this attribute is immutable during the
+     *                            lifetime of the memory allocation instance.
+     * @param [out] allocator_obj Instance of user defined memory allocation object.
+     *
+     * @return                    Error code as defined by @ref ucs_status_t
+     */
+    ucs_status_t (*init_memory_allocator)(ucp_worker_h worker, size_t buffer_size, void **allocator_obj);
+    
+    /**
+     * Get buffer and memory handle from user allocator
+     *
+     * @param [in]  allocator_obj User defined memory allocator object.
+     * @param [out] memh          Buffer's UCP memory handle.
+     * 
+     * @return pointer to buffer
+     */
+    void* (*get_buf)(void *allocator_obj, ucp_mem_h* memh);
+
+    /**
+     * Return buffer to the memory allocation instance.
+     *
+     * @param buff buffer to release.
+     */
+    void  (*put_buf)(void *buff);
+
+    /**
+     * Clean memory allocator object
+     *
+     * @param allocator_obj User defined memory allocator object.
+     */
+    void  (*cleanup)(void *allocator_obj);
+} ucp_user_mem_allocator_ops_t;
+
 END_C_DECLS
 
 #endif

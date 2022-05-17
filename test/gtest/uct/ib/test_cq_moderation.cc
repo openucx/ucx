@@ -92,7 +92,7 @@ protected:
         } while (ctx.wait_for_event(test_e, 0));
     }
 
-    static ucs_status_t am_cb(void *arg, void *data, size_t len, unsigned flags) {
+    static ucs_status_t am_cb(void *arg, void *data, void *payload, size_t len, unsigned flags) {
         ucs_assert_always(arg != NULL);
         test_uct_cq_moderation *self = static_cast<test_uct_cq_moderation*>(arg);
 

@@ -82,7 +82,7 @@ static ucs_stats_class_t uct_iface_stats_class = {
 #endif
 
 
-static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
+static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data, void* payload,
                                               size_t length, unsigned flags)
 {
     const size_t dump_len = 64;
@@ -488,6 +488,55 @@ UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
+static ucs_status_t 
+uct_base_iface_rx_buffers_default_agent_get(void* agent, void* arg, ucs_buffers_agent_buffer_t* buf) 
+{
+    uct_iface_recv_desc_t *obj;
+    ucs_mpool_t *mp = agent;
+
+    obj = ucs_mpool_get_inline(mp);
+    if (obj == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+    
+    buf->memh = obj->uct_memh;
+    buf->buf  = obj+1;
+    return UCS_OK;
+}
+
+static void uct_base_iface_rx_buffers_default_agent_put(void *buf) {
+    ucs_mpool_put_inline(buf);
+}
+
+static ucs_buffers_agent_ops_t uct_base_iface_rx_buffers_default_agent_ops = {
+    uct_base_iface_rx_buffers_default_agent_get,
+    uct_base_iface_rx_buffers_default_agent_put
+};
+
+ucs_status_t 
+uct_base_iface_init_rx_buffers_agent(uct_base_iface_t *iface, const uct_iface_params_t *params)
+{
+    
+    iface->rx_buffers_agent = NULL;
+    iface->rx_buffers_agent_arg = NULL;
+    iface->rx_buffers_agent_ops = &uct_base_iface_rx_buffers_default_agent_ops;
+    
+    if ((params->field_mask & UCT_IFACE_PARAM_FIELD_RX_BUFFERS_AGENT) != 0) {
+
+        if (params->rx_buffers_agent == NULL ||
+            params->rx_buffers_agent_arg == NULL ||
+            params->rx_buffers_agent_ops == NULL) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        iface->rx_buffers_agent = params->rx_buffers_agent;
+        iface->rx_buffers_agent_arg = params->rx_buffers_agent_arg;
+        iface->rx_buffers_agent_ops = params->rx_buffers_agent_ops;
+
+    }
+
+    return UCS_OK;
+}
 
 UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
                     uct_iface_internal_ops_t *internal_ops, uct_md_h md,
@@ -525,6 +574,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
                                                     ERR_HANDLER_ARG, NULL);
     self->progress_flags    = 0;
     uct_worker_progress_init(&self->prog);
+    uct_base_iface_init_rx_buffers_agent(self, params);
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         uct_iface_set_stub_am_handler(self, id);
@@ -888,4 +938,10 @@ void uct_tl_unregister(uct_tl_t *tl)
 {
     ucs_list_del(&tl->config.list);
     /* TODO: add list_del from ucs_config_global_list */
+}
+
+void uct_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
+{
+    uct_iface_recv_desc_t *desc = obj;
+    desc->uct_memh = memh;
 }

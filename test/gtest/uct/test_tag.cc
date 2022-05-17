@@ -423,7 +423,7 @@ public:
         return self->unexpected_handler(r_ctx, const_cast<void*>(header), flags);
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+    static ucs_status_t am_handler(void *arg, void *data, void *payload, size_t length,
                                    unsigned flags)
     {
         is_am_received = true;
@@ -950,7 +950,7 @@ public:
     void test_common(send_func sfunc, size_t num_segs, size_t exp_segs = 1,
                      bool is_eager = true);
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+    static ucs_status_t am_handler(void *arg, void *data, void *payload, size_t length,
                                    unsigned flags);
 
     static ucs_status_t unexp_eager(void *arg, void *data, size_t length,
@@ -1130,7 +1130,7 @@ ucs_status_t test_tag_mp_xrq::handle_uct_desc(void *data, unsigned flags)
     return UCS_OK;
 }
 
-ucs_status_t test_tag_mp_xrq::am_handler(void *arg, void *data, size_t length,
+ucs_status_t test_tag_mp_xrq::am_handler(void *arg, void *data, void *payload, size_t length,
                                          unsigned flags)
 {
    EXPECT_TRUE(flags & UCT_CB_PARAM_FLAG_FIRST);

@@ -116,7 +116,7 @@ private:
     }
 
     static ucs_status_t
-    am_cb(void *arg, void *data, size_t length, unsigned flags)
+    am_cb(void *arg, void *data, void *payload, size_t length, unsigned flags)
     {
         size_t &recv_cnt = *(static_cast<size_t*>(arg));
         ++recv_cnt;

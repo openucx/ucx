@@ -45,7 +45,7 @@ public:
         self->m_async_event_ctx.signal();
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+    static ucs_status_t am_handler(void *arg, void *data, void *payload, size_t length,
                                    unsigned flags) {
         recv_desc_t *my_desc  = (recv_desc_t *) arg;
         uint64_t *test_ib_hdr = (uint64_t *) data;

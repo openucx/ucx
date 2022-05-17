@@ -52,6 +52,16 @@ enum {
 
 
 /**
+ * IB RX segments scatter gather list entries.
+ */
+enum {
+    UCT_IB_RX_SG_TL_HEADER_IDX = 0,
+    UCT_IB_RX_SG_PAYLOAD_IDX   = 1,
+    UCT_IB_RECV_SG_LIST_LEN
+};
+
+
+/**
  * IB port/path MTU.
  */
 typedef enum uct_ib_mtu {
@@ -325,8 +335,8 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
  *                   |
  * uct_recv_desc_t   |
  *               |   |
- *               |   am_callback/tag_unexp_callback
- *               |   |
+ *               |               am_callback/tag_unexp_callback
+ *               |               |
  * +------+------+---+-----------+---------+
  * | LKey |  ??? | D | Head Room | Payload |
  * +------+------+---+--+--------+---------+
@@ -336,8 +346,8 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
  *                      post_receive
  *
  * (2)
- *            am_callback/tag_unexp_callback
- *            |
+ *                               am_callback/tag_unexp_callback
+ *                               |
  * +------+---+------------------+---------+
  * | LKey | D |     Head Room    | Payload |
  * +------+---+-----+---+--------+---------+
@@ -352,14 +362,23 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
  *
  */
 typedef struct uct_ib_iface_recv_desc {
-    uint32_t                lkey;
+    void    *payload;
+    uint32_t payload_lkey;
+    uint32_t lkey;
 } UCS_S_PACKED uct_ib_iface_recv_desc_t;
-
 
 
 extern ucs_config_field_t uct_ib_iface_config_table[];
 extern const char *uct_ib_mtu_values[];
 
+
+/**
+ * Create memory pool of receive sg descs.
+ */
+ucs_status_t uct_ib_iface_recv_sg_mpools_init(uct_ib_iface_t *iface,
+                                              const uct_ib_iface_config_t *config,
+                                              const uct_iface_params_t *params,
+                                              const char *name, ucs_mpool_t *mp);
 
 /**
  * Create memory pool of receive descriptors.
@@ -379,7 +398,7 @@ uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
     void *desc = (char*)ib_desc + iface->config.rx_headroom_offset;
     ucs_status_t status;
 
-    status = uct_iface_invoke_am(&iface->super, am_id, data, length,
+    status = uct_iface_invoke_am(&iface->super, am_id, data, NULL, length,
                                  UCT_CB_PARAM_FLAG_DESC);
     if (status == UCS_OK) {
         ucs_mpool_put_inline(ib_desc);
@@ -517,9 +536,16 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
     return (void*)((char *)desc + iface->config.rx_hdr_offset);
 }
 
+static inline void *
+uct_ib_iface_recv_desc_payload(uct_ib_iface_t *iface,
+                               uct_ib_iface_recv_desc_t *desc)
+{
+    return UCS_PTR_BYTE_OFFSET(desc, iface->config.rx_payload_offset + sizeof(uct_ib_iface_recv_desc_t));
+}
+
 typedef struct uct_ib_recv_wr {
     struct ibv_recv_wr ibwr;
-    struct ibv_sge     sg;
+    struct ibv_sge     sg[UCT_IB_RECV_SG_LIST_LEN];
 } uct_ib_recv_wr_t;
 
 /**
@@ -530,6 +556,8 @@ typedef struct uct_ib_recv_wr {
  */
 int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n);
+int uct_ib_iface_prepare_rx_wrs_rc(uct_ib_iface_t *iface, ucs_mpool_t *mp,
+                                   uct_ib_recv_wr_t *wrs, unsigned n);
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
@@ -632,6 +660,12 @@ static UCS_F_ALWAYS_INLINE
 size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)
 {
     return (size_t)ucs_max((ssize_t)(max_inline - min_size), 0);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+uct_ib_iface_tl_hdr_length(uct_ib_iface_t *iface)
+{
+    return iface->config.rx_payload_offset - iface->config.rx_hdr_offset;
 }
 
 static UCS_F_ALWAYS_INLINE void

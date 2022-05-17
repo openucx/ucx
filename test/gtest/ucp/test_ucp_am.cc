@@ -192,11 +192,12 @@ void test_ucp_am::do_send_process_data_test(int test_release, uint16_t am_id,
     replies       = 0;
     this->release = test_release;
 
-    for (size_t i = 0; i < buf_size + 1; i = i ? (i * 2) : 1) {
+    for (size_t i = 0; i < 4096 + 1; i = i ? (i * 2) : 1) {
         for (size_t j = 0; j < i; j++) {
             buf[j] = i;
         }
 
+        printf("buf size %lu\n", i);
         reply   = NULL;
         sstatus = ucp_am_send_nb(sender().ep(), am_id,
                                  buf.data(), 1, ucp_dt_make_contig(i),

@@ -234,7 +234,7 @@ public:
                                NULL, 0);
     }
 
-    static ucs_status_t am_handler_ordering(void *arg, void *data,
+    static ucs_status_t am_handler_ordering(void *arg, void *data, void *payload,
                                             size_t length, unsigned flags) {
         uint64_t *prev_sn = (uint64_t*)arg;
         uint64_t sn       = *(uint64_t*)data;
@@ -571,7 +571,7 @@ public:
     }
 
     static ucs_status_t
-    recv_handler(void *arg, void *data, size_t length, unsigned flags)
+    recv_handler(void *arg, void *data, void *payload, size_t length, unsigned flags)
     {
         EXPECT_EQ(*(size_t*)arg, length);
         ++m_recv_count;

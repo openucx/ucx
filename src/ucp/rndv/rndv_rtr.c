@@ -395,18 +395,19 @@ ucp_proto_t ucp_rndv_rtr_mtype_proto = {
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 
-ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
+ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, void* payload, size_t length,
                                            unsigned flags)
 {
     ucp_worker_h worker     = arg;
-    ucp_rndv_ack_hdr_t *atp = data;
     const ucp_proto_rndv_rtr_priv_t *rpriv;
     ucp_request_t *req;
+    ucp_rndv_ack_hdr_t atp;
 
-    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, atp->super.req_id, 0,
-                               return UCS_OK, "ATP %p", atp);
+    ucp_am_concat_msg_hdr(data, payload, &atp);
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, atp.super.req_id, 0,
+                               return UCS_OK, "ATP %p", &atp);
 
-    if (!ucp_proto_common_frag_complete(req, atp->size, "rndv_atp")) {
+    if (!ucp_proto_common_frag_complete(req, atp.size, "rndv_atp")) {
         return UCS_OK;
     }
 
@@ -418,21 +419,24 @@ ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
 }
 
 ucs_status_t
-ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
+ucp_proto_rndv_handle_data(void *arg, void *data, void *payload, size_t length, unsigned flags)
 {
-    ucp_worker_h worker                   = arg;
-    ucp_request_data_hdr_t *rndv_data_hdr = data;
-    size_t recv_len                       = length - sizeof(*rndv_data_hdr);
+    ucp_worker_h worker = arg;
+    size_t recv_len     = length - sizeof(ucp_request_data_hdr_t);
+    size_t payload_d    = sizeof(ucp_request_data_hdr_t) > sizeof(ucp_am_hdr_t) ? 
+                          sizeof(ucp_request_data_hdr_t) - sizeof(ucp_am_hdr_t) : 0;
     const ucp_proto_rndv_rtr_priv_t *rpriv;
     ucs_status_t status;
     ucp_request_t *req;
+    ucp_request_data_hdr_t rndv_data_hdr;
 
-    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rndv_data_hdr->req_id, 0,
-                               return UCS_OK, "RNDV_DATA %p", rndv_data_hdr);
+    ucp_am_concat_msg_hdr(data, payload, &rndv_data_hdr)
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rndv_data_hdr.req_id, 0,
+                               return UCS_OK, "RNDV_DATA %p", &rndv_data_hdr);
 
     status = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,
-                                      recv_len, rndv_data_hdr->offset,
-                                      rndv_data_hdr + 1);
+                                      recv_len, rndv_data_hdr.offset,
+                                      UCS_PTR_BYTE_OFFSET(payload, payload_d));
     if (status != UCS_OK) {
         ucp_proto_request_abort(req, status);
         return UCS_OK;

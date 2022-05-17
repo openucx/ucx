@@ -752,29 +752,30 @@ static void ucp_proto_rndv_send_complete_one(void *request, ucs_status_t status,
 }
 
 ucs_status_t
-ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
+ucp_proto_rndv_handle_rtr(void *arg, void *data, void *payload, size_t length, unsigned flags)
 {
     ucp_worker_h worker           = arg;
-    const ucp_rndv_rtr_hdr_t *rtr = data;
     ucp_request_t *req, *freq;
     ucs_status_t status;
     uint32_t op_flags;
     uint8_t sg_count;
+    ucp_rndv_rtr_hdr_t rtr;
+    
+    ucp_am_concat_msg_hdr(data, payload, &rtr);
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr.sreq_id, 0, return UCS_OK,
+                               "RTR %p", &rtr);
 
-    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 0, return UCS_OK,
-                               "RTR %p", rtr);
-
-    ucp_trace_req(req, "RTR offset %zu length %zu/%zu req %p", rtr->offset,
-                  rtr->size, req->send.state.dt_iter.length, req);
+    ucp_trace_req(req, "RTR offset %zu length %zu/%zu req %p", rtr.offset,
+                  rtr.size, req->send.state.dt_iter.length, req);
 
     /* RTR covers the whole send request - use the send request directly */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED);
 
     op_flags = req->send.proto_config->select_param.op_flags;
 
-    if (rtr->size == req->send.state.dt_iter.length) {
+    if (rtr.size == req->send.state.dt_iter.length) {
         /* RTR covers the whole send request - use the send request directly */
-        ucs_assert(rtr->offset == 0);
+        ucs_assert(rtr.offset == 0);
 
         ucp_datatype_iter_mem_dereg(worker->context, &req->send.state.dt_iter,
                                     UCP_DT_MASK_ALL);
@@ -782,7 +783,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
         sg_count = req->send.proto_config->select_param.sg_count;
-        status   = ucp_proto_rndv_send_start(worker, req, 0, op_flags, rtr,
+        status   = ucp_proto_rndv_send_start(worker, req, 0, op_flags, &rtr,
                                              length, sg_count);
         if (status != UCS_OK) {
             goto err_request_fail;
@@ -803,8 +804,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         ucp_request_set_callback(freq, send.cb,
                                  ucp_proto_rndv_send_complete_one);
 
-        ucp_datatype_iter_slice(&req->send.state.dt_iter, rtr->offset,
-                                rtr->size, &freq->send.state.dt_iter,
+        ucp_datatype_iter_slice(&req->send.state.dt_iter, rtr.offset,
+                                rtr.size, &freq->send.state.dt_iter,
                                 &sg_count);
 
         /* Send rendezvous fragment, when it's completed update 'remaining'
@@ -813,7 +814,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
          */
         status = ucp_proto_rndv_send_start(worker, freq,
                                            UCP_OP_ATTR_FLAG_MULTI_SEND,
-                                           op_flags, rtr, length, sg_count);
+                                           op_flags, &rtr, length, sg_count);
         if (status != UCS_OK) {
             goto err_put_freq;
         }

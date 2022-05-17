@@ -157,7 +157,7 @@ static void uct_self_iface_sendrecv_am(uct_self_iface_t *iface, uint8_t am_id,
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, am_id,
                        buffer, length, "RX: AM_%s", title);
 
-    status = uct_iface_invoke_am(&iface->super, am_id, buffer,
+    status = uct_iface_invoke_am(&iface->super, am_id, buffer, NULL,
                                  length, 0);
     ucs_assert(status == UCS_OK);
     ucs_mpool_put_inline(buffer);

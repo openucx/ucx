@@ -58,7 +58,7 @@ public:
         uct_p2p_test::cleanup();
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+    static ucs_status_t am_handler(void *arg, void *data, void *payload, size_t length,
                                    unsigned flags) {
         uct_p2p_am_test *self = reinterpret_cast<uct_p2p_am_test*>(arg);
         return self->am_handler(data, length, flags);
@@ -85,7 +85,7 @@ public:
         return status;
     }
 
-    static ucs_status_t am_handler_resp(void *arg, void *data, size_t length,
+    static ucs_status_t am_handler_resp(void *arg, void *data, void *payload, size_t length,
                                         unsigned flags) {
         uct_p2p_am_test *self = reinterpret_cast<uct_p2p_am_test*>(arg);
 
@@ -841,7 +841,7 @@ public:
     }
 
     static ucs_status_t
-    am_handler(void *arg, void *data, size_t length, unsigned flags)
+    am_handler(void *arg, void *data, void *payload, size_t length, unsigned flags)
     {
         uct_p2p_am_alignment *self = reinterpret_cast<uct_p2p_am_alignment*>(
                 arg);

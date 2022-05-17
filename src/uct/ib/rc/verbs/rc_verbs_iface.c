@@ -426,8 +426,8 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsign
 
     wrs  = ucs_alloca(sizeof *wrs  * max);
 
-    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super, &iface->super.rx.mp,
-                                        wrs, max);
+    count = uct_ib_iface_prepare_rx_wrs_rc(&iface->super.super, iface->super.rx.mps,
+                                           wrs, max);
     if (ucs_unlikely(count == 0)) {
         return 0;
     }

@@ -52,6 +52,7 @@ void test_uct_peer_failure::init()
 }
 
 ucs_status_t test_uct_peer_failure::am_dummy_handler(void *arg, void *data,
+                                                     void *payload,
                                                      size_t length,
                                                      unsigned flags)
 {

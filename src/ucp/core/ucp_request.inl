@@ -842,6 +842,53 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
     return status;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_recv_desc_am_init(ucp_worker_h worker, void *data, void *payload, size_t length,
+                   int data_offset, unsigned am_flags, uint16_t hdr_len,
+                   uint16_t rdesc_flags, int priv_length, size_t alignment,
+                   const char *name, ucp_recv_desc_t **rdesc_p)
+{
+    ucp_recv_desc_t *rdesc;
+    void *data_hdr;
+    ucs_status_t status;
+    size_t padding;
+
+    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
+        /* slowpath */
+        ucs_assert(priv_length <= UCP_WORKER_HEADROOM_PRIV_SIZE);
+        data_hdr                   = UCS_PTR_BYTE_OFFSET(data, -data_offset);
+        rdesc                      = (ucp_recv_desc_t *)data_hdr - 1;
+        rdesc->flags               = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc->release_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
+        status                     = UCS_INPROGRESS;
+        rdesc->payload = payload;
+    } else {
+        rdesc = (ucp_recv_desc_t*)ucs_mpool_set_get_inline(&worker->am_mps,
+                                                           length);
+        if (rdesc == NULL) {
+            *rdesc_p = NULL; /* To suppress compiler warning */
+            ucs_error("ucp recv descriptor is not allocated");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        padding = ucs_padding((uintptr_t)(rdesc + 1), alignment);
+        rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
+        rdesc->release_desc_offset = padding;
+
+        /* No need to initialize rdesc->priv_length here, because it is only
+         * needed for releasing UCT descriptor. */
+        rdesc->flags = rdesc_flags;
+        status       = UCS_OK;
+        rdesc->payload = UCS_PTR_BYTE_OFFSET(rdesc + 1, data_offset);
+        memcpy(rdesc->payload, payload, length);
+    }
+
+    ucp_recv_desc_set_name(rdesc, name);
+    rdesc->length  = length + data_offset;
+    *rdesc_p       = rdesc;
+    return status;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
 {

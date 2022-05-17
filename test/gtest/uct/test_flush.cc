@@ -89,7 +89,7 @@ public:
          }
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+    static ucs_status_t am_handler(void *arg, void *data, void *payload, size_t length,
                                    unsigned flags)
     {
         if (arg == NULL) {
@@ -817,7 +817,7 @@ protected:
         return test->error_handler(ep, status);
     }
 
-    static ucs_status_t am_cb(void *arg, void *data, size_t length, unsigned flags) {
+    static ucs_status_t am_cb(void *arg, void *data, void *payload, size_t length, unsigned flags) {
         uct_cancel_test *test = reinterpret_cast<uct_cancel_test*>(arg);
         return test->am(data, length, flags);
     }
