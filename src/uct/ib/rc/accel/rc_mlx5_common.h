@@ -94,6 +94,7 @@ typedef enum {
     UCT_RC_MLX5_SRQ_TOPO_LIST,
     UCT_RC_MLX5_SRQ_TOPO_CYCLIC,
     UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED,
+    UCT_RC_MLX5_SRQ_TOPO_HYBRID,
     UCT_RC_MLX5_SRQ_TOPO_LAST
 } uct_rc_mlx5_srq_topo_t;
 
@@ -133,7 +134,8 @@ enum {
     UCT_RC_MLX5_POLL_FLAG_TM                 = UCS_BIT(0),
     UCT_RC_MLX5_POLL_FLAG_HAS_EP             = UCS_BIT(1),
     UCT_RC_MLX5_POLL_FLAG_TAG_CQE            = UCS_BIT(2),
-    UCT_RC_MLX5_POLL_FLAG_LINKED_LIST        = UCS_BIT(3)
+    UCT_RC_MLX5_POLL_FLAG_LINKED_LIST        = UCS_BIT(3),
+    UCT_RC_MLX5_POLL_FLAG_HYBRID             = UCS_BIT(4)
 };
 
 
@@ -568,6 +570,7 @@ extern ucs_config_field_t uct_rc_mlx5_common_config_table[];
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface);
 unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface);
+unsigned uct_rc_mlx5_iface_srq_post_recv_hybrid(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface);
 

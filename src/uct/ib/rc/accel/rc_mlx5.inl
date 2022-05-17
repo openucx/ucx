@@ -137,6 +137,19 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
         return;
     }
 
+    if (poll_flags & UCT_RC_MLX5_POLL_FLAG_HYBRID) {
+        if (wqe_index == ((srq->free_idx + 1) & srq->mask)) {
+            seg                     = uct_ib_mlx5_srq_get_wqe(srq, srq->free_idx);
+            seg->srq.next_wqe_index = htons(wqe_index);
+            srq->free_idx           = wqe_index;
+            srq->free_wait          = 0;
+        } else {
+            /* Mark the segment as out-of-order, post_recv will advance free */
+            seg->srq.free = 1;
+        }
+        return;
+    }
+
     seg_free = (seg->srq.ptr_mask == UCS_MASK(iface->tm.mp.num_strides));
 
     if (ucs_likely(seg_free && (wqe_ctr == (srq->ready_idx + 1)))) {
@@ -1430,6 +1443,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 #endif
 
     ucs_assert((poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) ||
+               (poll_flags & UCT_RC_MLX5_POLL_FLAG_HYBRID) ||
                (uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,
                                         iface->rx.srq.mask)->srq.next_wqe_index == 0));
 
@@ -1549,6 +1563,8 @@ out:
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
         if (poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) {
             uct_rc_mlx5_iface_srq_post_recv_ll(iface);
+        } else if (poll_flags & UCT_RC_MLX5_POLL_FLAG_HYBRID) {
+            uct_rc_mlx5_iface_srq_post_recv_hybrid(iface);
         } else {
             uct_rc_mlx5_iface_srq_post_recv(iface);
         }

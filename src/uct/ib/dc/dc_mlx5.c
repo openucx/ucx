@@ -292,6 +292,11 @@ static unsigned uct_dc_mlx5_iface_progress_ll(void *arg)
     return uct_dc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_LINKED_LIST);
 }
 
+static unsigned uct_dc_mlx5_iface_progress_hybrid(void *arg)
+{
+    return uct_dc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_HYBRID);
+}
+
 static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
 {
     return uct_dc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_TM);
@@ -633,6 +638,8 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
 
     if (iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
         iface->super.super.progress = uct_dc_mlx5_iface_progress_ll;
+    } else if (iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_HYBRID) {
+        iface->super.super.progress = uct_dc_mlx5_iface_progress_hybrid;
     } else {
         iface->super.super.progress = uct_dc_mlx5_iface_progress_cyclic;
     }

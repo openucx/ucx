@@ -69,6 +69,8 @@
 #define UCT_IB_MLX5_MP_RQ_FIRST_MSG_FLAG UCS_BIT(29) /* MP first packet indication */
 #define UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG  UCS_BIT(30) /* MP last packet indication */
 #define UCT_IB_MLX5_MP_RQ_FILLER_FLAG    UCS_BIT(31) /* Filler CQE indicator */
+#define UCT_IB_MLX5_SRQ_HYBRID_WAIT      1 /* Max wait counts before using noncontiguous
+                                              freed seg in SRQ hybrid topology */
 
 #if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_BF
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC MLX5DV_UAR_ALLOC_TYPE_BF
@@ -345,6 +347,9 @@ typedef struct uct_ib_mlx5_srq {
         } devx;
 #endif
     };
+    uint8_t                            free_wait;  /* have waited how many times before
+                                                      using a noncontiguous freed seg
+                                                      in hybrid topology */
 } uct_ib_mlx5_srq_t;
 
 
