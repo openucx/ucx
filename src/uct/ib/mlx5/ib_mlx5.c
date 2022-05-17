@@ -939,6 +939,11 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
     }
 }
 
+size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length)
+{
+    return ucs_roundup_pow2_or0(tx_qp_length * UCT_IB_MLX5_MAX_BB);
+}
+
 /* Keep the function as a separate to test SL selection */
 ucs_status_t
 uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
