@@ -56,6 +56,8 @@ public:
     virtual void push_config();
     virtual void pop_config();
 
+    void stats_activate();
+    void stats_restore();
 protected:
     class scoped_log_handler {
     public:
