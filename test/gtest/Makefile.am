@@ -119,6 +119,7 @@ gtest_SOURCES = \
 	ucs/test_event_set.cc \
 	ucs/test_stats_filter.cc \
 	uct/test_peer_failure.cc \
+	uct/test_sockaddr.cc \
 	uct/test_tag.cc \
 	uct/tcp/test_tcp.cc \
 	\
@@ -227,10 +228,6 @@ endif
 if HAVE_MLX5_DV
 gtest_SOURCES += \
 	uct/ib/test_cqe_zipping.cc
-endif
-if HAVE_RDMACM
-gtest_SOURCES += \
-	uct/ib/test_sockaddr.cc
 endif
 endif # HAVE_IB
 

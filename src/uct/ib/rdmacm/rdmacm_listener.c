@@ -11,6 +11,7 @@
 #include "rdmacm_listener.h"
 
 #include <ucs/sys/sock.h>
+#include <ucs/async/async.h>
 
 
 #define UCS_RDMACM_MAX_BACKLOG_PATH        "/proc/sys/net/rdma_ucm/max_backlog"
@@ -128,8 +129,12 @@ ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
 
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_listener_t)
 {
+    ucs_async_context_t *async = self->super.cm->iface.worker->async;
+
+    UCS_ASYNC_BLOCK(async);
     ucs_debug("listener %p: destroying rdma_cm_id %p", self, self->id);
     uct_rdmacm_cm_destroy_id(self->id);
+    UCS_ASYNC_UNBLOCK(async);
 }
 
 ucs_status_t uct_rdmacm_listener_query(uct_listener_h listener,
