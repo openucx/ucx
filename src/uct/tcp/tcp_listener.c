@@ -145,7 +145,10 @@ err:
 
 UCS_CLASS_CLEANUP_FUNC(uct_tcp_listener_t)
 {
+    ucs_async_context_t *async = self->super.cm->iface.worker->async;
     ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(async);
 
     status = ucs_async_remove_handler(self->listen_fd, 1);
     if (status != UCS_OK) {
@@ -154,6 +157,8 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_listener_t)
     }
 
     ucs_close_fd(&self->listen_fd);
+
+    UCS_ASYNC_UNBLOCK(async);
 }
 
 ucs_status_t uct_tcp_listener_reject(uct_listener_h listener,
