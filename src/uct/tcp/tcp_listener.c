@@ -72,9 +72,6 @@ uct_tcp_listener_conn_req_handler(int fd, ucs_event_set_types_t events,
         goto err_delete_ep;
     }
 
-    /* Adding the ep to a list on the cm for cleanup purposes */
-    ucs_list_add_tail(&listener->sockcm->ep_list, &ep->list);
-
     async_ctx = listener->super.cm->iface.worker->async;
     status = ucs_async_set_event_handler(async_ctx->mode, conn_fd,
                                          UCS_EVENT_SET_EVREAD |
@@ -84,6 +81,9 @@ uct_tcp_listener_conn_req_handler(int fd, ucs_event_set_types_t events,
     if (status != UCS_OK) {
         goto err_delete_ep;
     }
+
+    /* Adding the ep to a list on the cm for cleanup purposes */
+    ucs_list_add_tail(&listener->sockcm->ep_list, &ep->list);
 
     return;
 
