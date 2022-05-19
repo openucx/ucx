@@ -215,8 +215,6 @@ public:
 
     virtual void modify_config(const std::string& name, const std::string& value,
                                modify_config_mode_t mode = FAIL_IF_NOT_EXIST);
-    void stats_activate();
-    void stats_restore();
 
     void disable_keepalive();
 

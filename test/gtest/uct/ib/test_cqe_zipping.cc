@@ -67,9 +67,7 @@ public:
 
     virtual void init()
     {
-#ifdef ENABLE_STATS
         stats_activate();
-#endif
         modify_config("IB_CQE_ZIPPING_ENABLE", "y");
 
         test_uct_ib_with_specific_port::init();
@@ -104,9 +102,7 @@ private:
         test_uct_ib::cleanup();
         test_uct_ib_with_specific_port::cleanup();
 
-#ifdef ENABLE_STATS
         stats_restore();
-#endif
     }
 
     ucs_status_t am_zcopy()

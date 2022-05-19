@@ -15,7 +15,6 @@ extern "C" {
 #include <uct/ib/ud/base/ud_iface.h>
 #endif
 #include <ucs/arch/atomic.h>
-#include <ucs/stats/stats.h>
 }
 
 #include <queue>
@@ -561,23 +560,6 @@ void ucp_test::modify_config(const std::string& name, const std::string& value,
                            << ucs_status_string(status));
         }
     }
-}
-
-void ucp_test::stats_activate()
-{
-    ucs_stats_cleanup();
-    push_config();
-    modify_config("STATS_DEST",    "file:/dev/null");
-    modify_config("STATS_TRIGGER", "exit");
-    ucs_stats_init();
-    ASSERT_TRUE(ucs_stats_is_active());
-}
-
-void ucp_test::stats_restore()
-{
-    ucs_stats_cleanup();
-    pop_config();
-    ucs_stats_init();
 }
 
 bool ucp_test::check_tls(const std::string& tls)
