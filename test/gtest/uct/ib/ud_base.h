@@ -24,6 +24,8 @@ class ud_base_test : public uct_test {
 public:
     virtual void init();
 
+    virtual uct_error_handler_t get_err_handler() const;
+
     uct_ud_ep_t *ep(entity *e);
 
     uct_ud_ep_t *ep(entity *e, int i);

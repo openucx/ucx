@@ -918,6 +918,91 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
 
+
+class test_ud_peer_failure : public ud_base_test {
+public:
+    test_ud_peer_failure()
+    {
+        m_err_count = 0;
+    }
+
+    void init()
+    {
+        set_config("UD_TIMEOUT=3s");
+        ud_base_test::init();
+        connect();
+    }
+
+    void kill_receiver()
+    {
+        m_entities.remove(m_e2);
+    }
+
+    static ucs_status_t err_cb(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        m_err_count++;
+        return UCS_OK;
+    }
+
+    uct_error_handler_t get_err_handler() const
+    {
+        return err_cb;
+    }
+
+protected:
+    static size_t m_err_count;
+};
+
+size_t test_ud_peer_failure::m_err_count = 0;
+
+UCS_TEST_SKIP_COND_P(test_ud_peer_failure, send_am_after_kill,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_EP_CHECK),
+                     // Increase UD timer tick to not get NO_RESOURCE from AM
+                     "UD_TIMER_TICK?=2s") {
+    ucs_status_t status;
+
+    flush();
+
+    status = uct_ep_check(m_e1->ep(0), 0, NULL);
+    ASSERT_UCS_OK(status);
+    flush();
+    // Allow keepalive request to complete
+    short_progress_loop();
+
+    // Set TX window to big enough value to not get UCS_ERR_NO_RESOURCE from
+    // AM SHORT operations
+    set_tx_win(m_e1, 1024);
+
+    // We are still alive
+    EXPECT_EQ(0, m_err_count);
+
+    kill_receiver();
+
+    status = uct_ep_check(m_e1->ep(0), 0, NULL);
+    ASSERT_UCS_OK(status);
+
+    // Post AM operation to check that an error could be detected by EP_CHECK
+    // when an endpoint has an in-flight AM operation
+    const ucs_time_t loop_end_limit = ucs::get_deadline(10.0);
+    while ((m_err_count == 0) && (ucs_get_time() < loop_end_limit)) {
+        const uint64_t send_data = 0;
+        status = uct_ep_am_short(m_e1->ep(0), 0, 0, &send_data,
+                                 sizeof(send_data));
+        if (m_err_count == 0) {
+            ASSERT_UCS_OK(status);
+            // Have a 2-second deadline to wait for peer failure and ensure
+            // scheduling new AM operations while no error was detected
+            wait_for_flag(&m_err_count, 2.0);
+        }
+    }
+
+    EXPECT_EQ(1, m_err_count);
+}
+
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud_peer_failure)
+
+
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
