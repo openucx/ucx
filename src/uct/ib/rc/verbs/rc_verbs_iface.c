@@ -530,7 +530,7 @@ uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
         .cap.max_send_wr     = 1,
         .cap.max_recv_wr     = 1,
         .cap.max_send_sge    = 1,
-        .cap.max_recv_sge    = 2,
+        .cap.max_recv_sge    = 1,
         .cap.max_inline_data = 0
     };
     struct ibv_cq *cq;

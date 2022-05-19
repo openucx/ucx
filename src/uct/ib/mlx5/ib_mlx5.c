@@ -779,7 +779,7 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
     }
 
     if (!ucs_is_pow2(qp_info.dv.rq.wqe_cnt) ||
-        qp_info.dv.rq.stride != sizeof(struct mlx5_wqe_data_seg)*2) {
+        qp_info.dv.rq.stride != sizeof(struct mlx5_wqe_data_seg)) {
         ucs_error("mlx5 rx wq [count=%d stride=%d] has invalid parameters",
                   qp_info.dv.rq.wqe_cnt,
                   qp_info.dv.rq.stride);

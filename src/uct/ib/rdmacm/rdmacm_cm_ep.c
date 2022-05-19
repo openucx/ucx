@@ -340,7 +340,7 @@ uct_rdmacm_cm_create_dummy_qp(uct_rdmacm_cm_device_context_t *ctx,
     qp_init_attr.cap.max_send_wr  = 2;
     qp_init_attr.cap.max_recv_wr  = 2;
     qp_init_attr.cap.max_send_sge = 1;
-    qp_init_attr.cap.max_recv_sge = 2;
+    qp_init_attr.cap.max_recv_sge = 1;
 
     qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, cep->id->pd, &qp_init_attr);
     if (qp == NULL) {
