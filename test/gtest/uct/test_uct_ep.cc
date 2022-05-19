@@ -53,14 +53,6 @@ protected:
         m_sender->destroy_ep(0);
     }
 
-    bool skip_on_ib_dc() {
-#ifdef HAVE_DC_DV /* skip due to DCI stuck bug */
-        return has_transport("dc_mlx5");
-#else
-        return false;
-#endif
-    }
-
     struct test_ep_comp_t {
         uct_completion_t comp;
         test_uct_ep      *test;
@@ -106,8 +98,7 @@ protected:
 };
 
 UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
-                     (!check_caps(UCT_IFACE_FLAG_AM_ZCOPY) ||
-                      skip_on_ib_dc())) {
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     ucs_status_t status;
 
     create_sender();

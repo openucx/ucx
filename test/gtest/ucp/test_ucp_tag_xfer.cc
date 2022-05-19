@@ -64,15 +64,6 @@ public:
         test_ucp_tag::cleanup();
     }
 
-    bool skip_on_ib_dc() {
-#if HAVE_DC_DV
-        // skip due to DCI stuck bug
-        return has_transport("dc_x");
-#else
-        return false;
-#endif
-    }
-
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         add_variant_with_value(variants, get_ctx_params(), VARIANT_DEFAULT, "");
@@ -608,8 +599,7 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, false, false);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_tag_xfer, generic_err_unexp,
-                     skip_on_ib_dc()) {
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, false, false, false);
 }
 
