@@ -923,7 +923,11 @@ uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         atomic_rkey = UCT_IB_INVALID_MKEY;
     }
 
-    if (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE) {
+    /* Register indirect key, that does not support atomic operations, only if
+     * we have a dedicated atomic key or atomic support wasn't requested */
+    if ((flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE) &&
+        ((atomic_rkey != UCT_IB_INVALID_MKEY) ||
+         !(memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC))) {
         if (memh->indirect_rkey == UCT_IB_INVALID_MKEY) {
             status = md->ops->reg_indirect_key(md, memh);
             if (status != UCS_OK) {
