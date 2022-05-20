@@ -503,8 +503,8 @@ enum uct_flush_flags {
     UCT_FLUSH_FLAG_LOCAL    = 0,            /**< Guarantees that the data
                                                  transfer is completed but the
                                                  target buffer may not be
-                                                 updated yet.*/
-    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0)    /**< The library will make a best
+                                                 updated yet. */
+    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0),   /**< The library will make a best
                                                  effort attempt to cancel all
                                                  uncompleted operations.
                                                  However, there is a chance that
@@ -519,6 +519,10 @@ enum uct_flush_flags {
                                                  error state, and it becomes
                                                  unusable for send operations
                                                  and should be destroyed. */
+    UCT_FLUSH_FLAG_REMOTE   = UCS_BIT(1)    /**< Guarantees that the target
+                                                 buffer is updated. Effective
+                                                 for remote memory write and
+                                                 remote atomic operations. */
 };
 
 

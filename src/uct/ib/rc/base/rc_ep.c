@@ -188,6 +188,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
                             uct_rc_ep_pending_purge_warn_cb, self);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(iface, &self->txqp);
+    uct_rc_iface_remove_flush_remote(iface, self);
 }
 
 UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
@@ -306,6 +307,16 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
     uct_rc_op_release_get_bcopy(op);
+    ucs_mpool_put(desc);
+}
+
+void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
+                                    const void *resp)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+
+    uct_rc_op_release_get_bcopy(op);
+    uct_invoke_completion(desc->super.user_comp, UCS_OK);
     ucs_mpool_put(desc);
 }
 
@@ -666,3 +677,4 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
     uct_invoke_completion(desc->super.user_comp, UCS_OK);
     ucs_mpool_put(desc);
 }
+

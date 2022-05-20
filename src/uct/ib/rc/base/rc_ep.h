@@ -15,6 +15,16 @@
 
 #define RC_UNSIGNALED_INF UINT16_MAX
 
+#define UCT_RC_EP_ADD_FLUSH_REMOTE(_ep, _rkey, _remote_addr) \
+    { \
+        ucs_status_t _status; \
+        \
+        _status = uct_rc_ep_add_flush_remote(_ep, _rkey, _remote_addr); \
+        if (ucs_unlikely(_status != UCS_OK)) { \
+            return _status; \
+        } \
+    }
+
 enum {
     UCT_RC_FC_STAT_NO_CRED,
     UCT_RC_FC_STAT_TX_GRANT,
@@ -52,6 +62,9 @@ enum {
 
     /* Error handler already called or flush(CANCEL) disabled it */
     UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(3),
+
+    /* Information about fence pointer is stored in iface */
+    UCT_RC_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(4),
 
     /* Soft Credit Request: indicates that peer needs to piggy-back credits
      * grant to counter AM (if any). Can be bundled with
@@ -234,6 +247,9 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp);
+
+void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
+                                    const void *resp);
 
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp);
@@ -532,6 +548,28 @@ uct_rc_ep_fence_put(uct_rc_iface_t *iface, uct_ib_fence_info_t *fi,
     } else {
         *rkey = uct_ib_md_direct_rkey(*rkey);
     }
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_ep_add_flush_remote(uct_rc_ep_t *ep, uct_rkey_t rkey,
+                           uint64_t addr)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_rc_iface_t);
+    ucs_status_t status;
+
+    if (ucs_likely(ep->flags & UCT_RC_EP_FLAG_FLUSH_REMOTE)) {
+        return UCS_OK;
+    }
+
+    status = uct_rc_iface_add_flush_remote(iface, ep, rkey, addr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    ep->flags |= UCT_RC_EP_FLAG_FLUSH_REMOTE;
+
+    return UCS_OK;
 }
 
 #endif

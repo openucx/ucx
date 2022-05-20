@@ -444,6 +444,14 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
     }
 }
 
+UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_remote,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY) ||
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY)) {
+    m_flush_flags = UCT_FLUSH_FLAG_REMOTE;
+
+    test_flush_put_bcopy(&uct_flush_test::flush_ep_nb);
+}
+
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_iface_no_comp,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     test_flush_put_bcopy(&uct_flush_test::flush_iface_no_comp);

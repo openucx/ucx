@@ -16,6 +16,17 @@
 #include <ucs/time/time.h>
 
 
+#define UCT_DC_MLX5_ADD_FLUSH_REMOTE(_ep, _rkey, _remote_addr) \
+    { \
+        ucs_status_t _status; \
+        \
+        _status = uct_dc_mlx5_ep_add_flush_remote(_ep, _rkey, _remote_addr); \
+        if (ucs_unlikely(_status != UCS_OK)) { \
+            return _status; \
+        } \
+    }
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                             unsigned opcode, unsigned length,
@@ -410,6 +421,28 @@ ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     return UCS_INPROGRESS;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_dc_mlx5_ep_add_flush_remote(uct_dc_mlx5_ep_t *ep, uct_rkey_t rkey,
+                                uint64_t addr)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    ucs_status_t status;
+
+    if (ucs_likely(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE)) {
+        return UCS_OK;
+    }
+
+    status = uct_rc_iface_add_flush_remote(&iface->super.super, ep, rkey, addr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE;
+
+    return UCS_OK;
+}
+
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,
                                 unsigned length, uint64_t remote_addr,
@@ -423,6 +456,7 @@ uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,
     UCT_DC_MLX5_CHECK_RES(iface, ep);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    UCT_DC_MLX5_ADD_FLUSH_REMOTE(ep, rkey, remote_addr);
     uct_rc_mlx5_ep_fence_put(&iface->super, txwq, &rkey, &remote_addr,
                              ep->atomic_mr_offset);
     uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
@@ -456,6 +490,7 @@ ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
     UCT_CHECK_LENGTH(length, 0, iface->super.dm.seg_len, "put_short");
     UCT_DC_MLX5_CHECK_RES(iface, ep);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    UCT_DC_MLX5_ADD_FLUSH_REMOTE(ep, rkey, remote_addr);
     uct_rc_mlx5_ep_fence_put(&iface->super, txwq, &rkey, &remote_addr,
                              ep->atomic_mr_offset);
     status = uct_rc_mlx5_common_ep_short_dm(&iface->super, UCT_IB_QPT_DCI, NULL,
@@ -486,6 +521,7 @@ ssize_t uct_dc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp,
                                        desc, pack_cb, arg, length);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    UCT_DC_MLX5_ADD_FLUSH_REMOTE(ep, rkey, remote_addr);
     uct_rc_mlx5_ep_fence_put(&iface->super, txwq, &rkey, &remote_addr,
                              ep->atomic_mr_offset);
     uct_dc_mlx5_iface_bcopy_post(iface, ep, MLX5_OPCODE_RDMA_WRITE, length,
@@ -508,6 +544,7 @@ ucs_status_t uct_dc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
                      "put_zcopy");
     UCT_DC_MLX5_CHECK_RES(iface, ep);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    UCT_DC_MLX5_ADD_FLUSH_REMOTE(ep, rkey, remote_addr);
     uct_rc_mlx5_ep_fence_put(&iface->super, txwq, &rkey, &remote_addr,
                              ep->atomic_mr_offset);
 
@@ -631,6 +668,40 @@ uct_dc_mlx5_ep_flush_cancel(uct_dc_mlx5_ep_t *ep)
     return UCS_INPROGRESS;
 }
 
+static ucs_status_t
+uct_dc_mlx5_ep_flush_remote(uct_dc_mlx5_ep_t *ep, uct_completion_t *comp)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    const unsigned get_length  = 1;
+    uct_rc_iface_send_desc_t *desc;
+    khiter_t kh_iter;
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
+
+    UCT_DC_MLX5_CHECK_RES(iface, ep);
+
+    UCT_RC_IFACE_GET_TX_DESC(iface, &iface->super.super.tx.mp, desc);
+    desc->super.handler   = uct_rc_ep_flush_remote_handler;
+    desc->super.user_comp = comp;
+
+    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+
+    kh_iter = kh_get(uct_rc_iface_flush_remote,
+                     &iface->super.super.flush_remote_kh, (uintptr_t)ep);
+
+    uct_dc_mlx5_iface_bcopy_post(iface, ep, MLX5_OPCODE_RDMA_READ, get_length,
+                                 kh_val(&iface->super.super.flush_remote_kh,
+                                        kh_iter).addr,
+                                 kh_val(&iface->super.super.flush_remote_kh,
+                                        kh_iter).rkey, desc, 0, 0, desc + 1,
+                                 NULL);
+
+    UCT_RC_RDMA_READ_POSTED(&iface->super.super, get_length);
+
+    return UCS_INPROGRESS;
+}
+
+
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
@@ -641,6 +712,10 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_status_t status;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
+    UCT_CHECK_PARAM(!ucs_test_all_flags(flags, UCT_FLUSH_FLAG_CANCEL |
+                                               UCT_FLUSH_FLAG_REMOTE),
+                    "flags CANCEL and REMOTE could not be used together");
+
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         status = uct_dc_mlx5_ep_flush_cancel(ep);
         if (status != UCS_INPROGRESS) {
@@ -648,6 +723,11 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         }
 
         goto out;
+    }
+
+    if (ucs_unlikely((flags & UCT_FLUSH_FLAG_REMOTE) &&
+                     (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE))) {
+        return uct_dc_mlx5_ep_flush_remote(ep, comp);
     }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
@@ -1166,6 +1246,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                                  uct_rc_ep_pending_purge_warn_cb, self);
     uct_dc_mlx5_ep_fc_cleanup(self);
     uct_dc_mlx5_ep_keepalive_cleanup(self);
+    uct_rc_iface_remove_flush_remote(&iface->super.super, self);
 
     if ((self->dci == UCT_DC_MLX5_EP_NO_DCI) ||
         uct_dc_mlx5_iface_is_dci_rand(iface)) {

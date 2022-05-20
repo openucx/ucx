@@ -65,6 +65,7 @@ uct_rc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer, unsigned len
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     UCT_RC_MLX5_CHECK_PUT_SHORT(length, 0);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super, rkey, remote_addr);
 
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset);
@@ -132,6 +133,7 @@ uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
 
     UCT_CHECK_LENGTH(length, 0, iface->dm.seg_len, "put_short");
     UCT_RC_CHECK_RES(rc_iface, &ep->super);
+    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super, rkey, remote_addr);
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset);
     status = uct_rc_mlx5_common_ep_short_dm(iface, IBV_QPT_RC, NULL, 0, buffer,
@@ -156,6 +158,7 @@ ssize_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     size_t length;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super, rkey, remote_addr);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp,
                                        desc, pack_cb, arg, length);
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
@@ -182,6 +185,7 @@ ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
     UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), 0, UCT_IB_MAX_MESSAGE_SIZE,
                      "put_zcopy");
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super, rkey, remote_addr);
 
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset);
@@ -559,12 +563,52 @@ void uct_rc_mlx5_ep_vfs_populate(uct_rc_ep_t *rc_ep)
     uct_rc_txqp_vfs_populate(&ep->super.txqp, ep);
 }
 
+static ucs_status_t
+uct_rc_mlx5_ep_flush_remote(uct_ep_h tl_ep, uct_completion_t *comp)
+{
+    const unsigned get_length = 1;
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_rc_iface_send_desc_t *desc;
+    khiter_t kh_iter;
+
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+
+    UCT_RC_IFACE_GET_TX_DESC(iface, &iface->super.tx.mp, desc);
+    desc->super.handler   = uct_rc_ep_flush_remote_handler;
+    desc->super.user_comp = comp;
+
+    kh_iter = kh_get(uct_rc_iface_flush_remote,
+                     &iface->super.flush_remote_kh, (uintptr_t)ep);
+
+    uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
+                                       &ep->tx.wq, MLX5_OPCODE_RDMA_READ,
+                                       get_length,
+                                       kh_val(&iface->super.flush_remote_kh,
+                                              kh_iter).addr,
+                                       kh_val(&iface->super.flush_remote_kh,
+                                              kh_iter).rkey, NULL, NULL, 0,
+                                       MLX5_WQE_CTRL_CQ_UPDATE, 0, desc,
+                                       desc + 1, NULL);
+    UCT_RC_RDMA_READ_POSTED(&iface->super, get_length);
+
+    return UCS_INPROGRESS;
+}
+
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
+
+    UCT_CHECK_PARAM(!ucs_test_all_flags(flags, UCT_FLUSH_FLAG_CANCEL |
+                                               UCT_FLUSH_FLAG_REMOTE),
+                    "flags CANCEL and REMOTE could not be used together");
+
+    if (ucs_unlikely((flags & UCT_FLUSH_FLAG_REMOTE) &&
+                     (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_REMOTE))) {
+        return uct_rc_mlx5_ep_flush_remote(tl_ep, comp);
+    }
 
     status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max, flags);
     if (status != UCS_INPROGRESS) {

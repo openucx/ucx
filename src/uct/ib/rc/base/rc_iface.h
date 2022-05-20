@@ -13,6 +13,7 @@
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/arbiter.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/debug/log.h>
@@ -149,6 +150,7 @@ typedef struct uct_rc_iface_common_config {
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
     unsigned long            ece;
+    int                      flush_remote;
 
     struct {
         double               timeout;
@@ -233,6 +235,14 @@ typedef struct uct_rc_srq {
 } uct_rc_srq_t;
 
 
+typedef struct uct_rc_iface_flush_remote {
+    uct_rkey_t rkey;
+    uintptr_t  addr;
+} uct_rc_iface_flush_remote_t;
+
+KHASH_INIT(uct_rc_iface_flush_remote, uintptr_t, uct_rc_iface_flush_remote_t, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
 struct uct_rc_iface {
     uct_ib_iface_t              super;
 
@@ -290,6 +300,7 @@ struct uct_rc_iface {
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
         uct_rc_fence_mode_t  fence_mode;
+        int                  flush_remote;
         unsigned             exp_backoff;
         uint32_t             ece;
         size_t               max_get_zcopy;
@@ -308,6 +319,8 @@ struct uct_rc_iface {
 
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;
+
+    khash_t(uct_rc_iface_flush_remote) flush_remote_kh;
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_rc_iface_ops_t*,
                   uct_md_h, uct_worker_h, const uct_iface_params_t*,
@@ -386,6 +399,8 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface);
 
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
+
+void uct_rc_iface_remove_flush_remote(uct_rc_iface_t *iface, void *ep);
 
 
 /**
@@ -617,6 +632,31 @@ uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
 #if ENABLE_DEBUG_DATA
     op->name = name;
 #endif
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_iface_add_flush_remote(uct_rc_iface_t *iface, void *ep, uct_rkey_t rkey,
+                              uintptr_t addr)
+{
+    khiter_t kh_iter;
+    int kh_res;
+
+    if (ucs_unlikely(!iface->config.flush_remote)) {
+        return UCS_OK;
+    }
+
+    kh_iter = kh_put(uct_rc_iface_flush_remote, &iface->flush_remote_kh,
+                     (uintptr_t)ep, &kh_res);
+    if (ucs_unlikely(kh_res == -1)) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_assert((kh_res != 0));
+
+    kh_val(&iface->flush_remote_kh, kh_iter).rkey = rkey;
+    kh_val(&iface->flush_remote_kh, kh_iter).addr = addr;
+
+    return UCS_OK;
 }
 
 #endif

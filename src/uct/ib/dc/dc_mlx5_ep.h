@@ -46,9 +46,12 @@ enum uct_dc_mlx5_ep_flags {
 
     /* Error handler already called or flush(CANCEL) disabled it */
     UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(7),
+
+    /* Info needed for flush_remote operation is stored in iface khash */
+    UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(8),
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(8)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(9)
 #else
     UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
 #endif
