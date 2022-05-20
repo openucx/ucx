@@ -556,8 +556,7 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     }
 
     /* Initialize send request */
-    req->flags                    = 0;
-    req->send.ep                  = ep;
+    ucp_proto_request_send_init(req, ep, 0);
     req->send.rndv.remote_req_id  = rts->sreq.req_id;
     req->send.rndv.remote_address = rts->address;
     req->send.rndv.offset         = 0;

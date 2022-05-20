@@ -162,6 +162,8 @@ static void ucp_proto_request_set_proto(ucp_request_t *req,
                                         const ucp_proto_config_t *proto_config,
                                         size_t msg_length)
 {
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_SEND);
+
     req->send.proto_config = proto_config;
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         ucp_proto_trace_selected(req, msg_length);
@@ -201,13 +203,15 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
     /* Set pointer to request's protocol configuration */
     ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
     ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
-    req->send.proto_config = &thresh_elem->proto_config;
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
-        ucp_proto_trace_selected(req, msg_length);
-    }
-
-    ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
+    ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_request_send_init(ucp_request_t *req, ucp_ep_h ep, uint32_t flags)
+{
+    req->flags   = UCP_REQUEST_FLAG_PROTO_SEND | flags;
+    req->send.ep = ep;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
@@ -224,8 +228,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     ucs_status_t status;
     uint8_t sg_count;
 
-    req->flags   = UCP_REQUEST_FLAG_PROTO_SEND;
-    req->send.ep = ep;
+    ucp_proto_request_send_init(req, ep, 0);
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init, worker->context,
                           (void*)buffer, count, datatype, contig_length, 1,
@@ -245,6 +248,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        /* coverity[offset_free] */
         ucp_request_imm_cmpl_param(param, req, send);
     }
 

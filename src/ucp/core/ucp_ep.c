@@ -1171,8 +1171,8 @@ ucs_status_ptr_t ucp_ep_modify_nb(ucp_ep_h ep, const ucp_ep_params_t *params)
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
 {
-    ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t  status    = UCS_PTR_STATUS(arg);
+    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t  status = UCS_PTR_STATUS(arg);
 
     /* TODO: check for context->config.ext.proto_enable when all protocols are
      *       implemented, such as flush, AM/RNDV, etc */
