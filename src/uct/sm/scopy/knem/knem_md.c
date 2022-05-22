@@ -145,8 +145,10 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
 }
 
 static ucs_status_t uct_knem_mem_reg(uct_md_h md, void *address, size_t length,
-                                     unsigned flags, uct_mem_h *memh_p)
+                                     const uct_md_mem_reg_params_t *params,
+                                     uct_mem_h *memh_p)
 {
+    uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     uct_knem_key_t *key;
     ucs_status_t status;
 
@@ -259,10 +261,13 @@ static inline uct_knem_rcache_region_t* uct_knem_rcache_region_from_memh(uct_mem
     return ucs_container_of(memh, uct_knem_rcache_region_t, key);
 }
 
-static ucs_status_t uct_knem_mem_rcache_reg(uct_md_h uct_md, void *address,
-                                            size_t length, unsigned flags,
-                                            uct_mem_h *memh_p)
+static ucs_status_t
+uct_knem_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
+                        const uct_md_mem_reg_params_t *params,
+                        uct_mem_h *memh_p)
 {
+    uint64_t flags    = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS,
+                                                   0);
     uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
     ucs_rcache_region_t *rregion;
     ucs_status_t status;

@@ -465,6 +465,19 @@ uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr, size_t length,
 ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
                             unsigned flags, uct_mem_h *memh_p)
 {
+    uct_md_mem_reg_params_t params = {
+        .field_mask = UCT_MD_MEM_REG_FIELD_FLAGS,
+        .flags      = flags
+    };
+
+    return uct_md_mem_reg_v2(md, address, length, &params, memh_p);
+}
+
+ucs_status_t uct_md_mem_reg_v2(uct_md_h md, void *address, size_t length,
+                               const uct_md_mem_reg_params_t *params,
+                               uct_mem_h *memh_p)
+{
+    uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     ucs_status_t status;
 
     if ((length == 0) || (address == NULL)) {
@@ -477,12 +490,12 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
     status = uct_mem_check_flags(flags);
     if (status != UCS_OK) {
         uct_md_log_mem_reg_error(flags,
-                                 "uct_md_mem_reg(flags=0x%x): invalid flags",
-                                 flags);
+                                 "uct_md_mem_reg_v2(flags=0x%lx): invalid"
+                                 " flags", flags);
         return status;
     }
 
-    return md->ops->mem_reg(md, address, length, flags, memh_p);
+    return md->ops->mem_reg(md, address, length, params, memh_p);
 }
 
 ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
@@ -517,6 +530,25 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr, size_t len
                                        ucs_memory_type_t *mem_type_p)
 {
     return md->ops->detect_memory_type(md, addr, length, mem_type_p);
+}
+
+ucs_status_t uct_md_dummy_mem_reg(uct_md_h md, void *address, size_t length,
+                                  const uct_md_mem_reg_params_t *params,
+                                  uct_mem_h *memh_p)
+{
+    /* We have to emulate memory registration. Return dummy pointer */
+    *memh_p = (void*)0xdeadbeef;
+    return UCS_OK;
+}
+
+ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
+                                    const uct_md_mem_dereg_params_t *params)
+{
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    ucs_assert(params->memh == (void*)0xdeadbeef);
+
+    return UCS_OK;
 }
 
 void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
