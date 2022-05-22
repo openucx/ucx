@@ -58,6 +58,17 @@ void* test_md::alloc_thread(void *arg)
     return NULL;
 }
 
+ucs_status_t test_md::reg_mem(unsigned flags, void *address, size_t length,
+                              uct_mem_h *memh_p)
+{
+    uct_md_mem_reg_params_t reg_params;
+
+    reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+    reg_params.flags      = flags;
+
+    return uct_md_mem_reg_v2(md(), address, length, &reg_params, memh_p);
+}
+
 std::vector<test_md_param> test_md::enum_mds(const std::string& cmpt_name) {
 
     std::vector<md_resource> md_resources = enum_md_resources();
@@ -664,22 +675,20 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
         UCS_TEST_SKIP_R("test not needed with cuda-ipc");
     }
 
-    comp().comp.func         = dereg_cb;
-    comp().comp.status       = UCS_OK;
-    comp().self              = this;
-
-    dereg_params.field_mask  = UCT_MD_MEM_DEREG_FIELD_FLAGS |
-                               UCT_MD_MEM_DEREG_FIELD_MEMH |
-                               UCT_MD_MEM_DEREG_FIELD_COMPLETION;
-    dereg_params.comp        = &comp().comp;
-
-    ptr                      = malloc(size);
+    comp().comp.func        = dereg_cb;
+    comp().comp.status      = UCS_OK;
+    comp().self             = this;
+    ptr                     = malloc(size);
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_FLAGS |
+                              UCT_MD_MEM_DEREG_FIELD_MEMH |
+                              UCT_MD_MEM_DEREG_FIELD_COMPLETION;
+    dereg_params.comp       = &comp().comp;
 
     for (mem_reg_count = 1; mem_reg_count < limit; mem_reg_count++) {
         comp().comp.count = (mem_reg_count + 1) / 2;
         m_comp_count = 0;
 
-        status = uct_md_mem_reg(md(), ptr, size, md_flags, &memh);
+        status = reg_mem(md_flags, ptr, size, &memh);
         ASSERT_UCS_OK(status);
         memhs.push_back(memh);
 
@@ -693,7 +702,7 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
                                << "-th key is not unique";
 
         for (iter = 1; iter < mem_reg_count; iter++) {
-            status = uct_md_mem_reg(md(), ptr, size, md_flags, &memh);
+            status = reg_mem(md_flags, ptr, size, &memh);
             ASSERT_UCS_OK(status);
             memhs.push_back(memh);
         }
@@ -721,6 +730,21 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
     free(ptr);
 }
 
+UCS_TEST_SKIP_COND_P(test_md, reg_bad_arg,
+                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST) ||
+                     !ENABLE_PARAMS_CHECK)
+{
+    uct_mem_h memh;
+    ucs_status_t status;
+
+    status = reg_mem(UCT_MD_MEM_FLAG_HIDE_ERRORS, NULL, 0, &memh);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    status = reg_mem(UCT_MD_MEM_FLAG_HIDE_ERRORS | UCT_MD_MEM_FLAG_FIXED, NULL,
+                     0, &memh);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
 UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
                      !check_reg_mem_type(UCS_MEMORY_TYPE_HOST) ||
                      !ENABLE_PARAMS_CHECK)
@@ -734,7 +758,7 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
     uct_md_mem_dereg_params_t params;
 
     ptr    = malloc(size);
-    status = uct_md_mem_reg(md(), ptr, size, md_flags, &memh);
+    status = reg_mem(md_flags, ptr, size, &memh);
     ASSERT_UCS_OK(status);
 
     comp().comp.func   = dereg_cb;

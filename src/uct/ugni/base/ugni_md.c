@@ -51,17 +51,13 @@ static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 }
 
 static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
-                                     unsigned flags, uct_mem_h *memh_p)
+                                     const uct_md_mem_reg_params_t *params,
+                                     uct_mem_h *memh_p)
 {
     ucs_status_t status;
     gni_return_t ugni_rc;
     uct_ugni_md_t *ugni_md = ucs_derived_of(md, uct_ugni_md_t);
     gni_mem_handle_t * mem_hndl = NULL;
-
-    if (0 == length) {
-        ucs_error("Unexpected length %zu", length);
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     mem_hndl = ucs_malloc(sizeof(gni_mem_handle_t), "gni_mem_handle_t");
     if (NULL == mem_hndl) {

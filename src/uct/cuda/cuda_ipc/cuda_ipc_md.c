@@ -226,9 +226,7 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
     CUdevice cu_device;
     ucs_status_t status;
 
-    if (!length) {
-        return UCS_OK;
-    }
+    ucs_assert((addr != NULL) && (length != 0));
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
@@ -252,8 +250,9 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
-                                         unsigned flags, uct_mem_h *memh_p)
+static ucs_status_t
+uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
+                     const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     uct_cuda_ipc_key_t *key;
     ucs_status_t status;

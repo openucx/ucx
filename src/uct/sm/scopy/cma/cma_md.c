@@ -151,7 +151,8 @@ uct_cma_query_md_resources(uct_component_t *component,
 }
 
 static ucs_status_t uct_cma_mem_reg(uct_md_h md, void *address, size_t length,
-                                    unsigned flags, uct_mem_h *memh_p)
+                                    const uct_md_mem_reg_params_t *params,
+                                    uct_mem_h *memh_p)
 {
     /* For testing we have to make sure that
      * memh_h != UCT_MEM_HANDLE_NULL

@@ -389,8 +389,9 @@ static void uct_xpmem_mem_detach_common(uct_xpmem_remote_region_t *xpmem_region)
     uct_xpmem_rmem_put(rmem);
 }
 
-static ucs_status_t uct_xmpem_mem_reg(uct_md_h md, void *address, size_t length,
-                                      unsigned flags, uct_mem_h *memh_p)
+static ucs_status_t
+uct_xmpem_mem_reg(uct_md_h md, void *address, size_t length,
+                  const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     ucs_status_t status;
     uct_mm_seg_t *seg;

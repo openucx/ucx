@@ -42,9 +42,10 @@ protected:
     void check_memory(void *address, void *expect, size_t size,
                       ucs_memory_type_t mem_type);
     void free_memory(void *address, ucs_memory_type_t mem_type);
-    void test_registration();
     static bool is_device_detected(ucs_memory_type_t mem_type);
     static void* alloc_thread(void *arg);
+    ucs_status_t reg_mem(unsigned flags, void *address, size_t length,
+                         uct_mem_h *memh_p);
 
     uct_md_h md() const {
         return m_md;
