@@ -1471,7 +1471,13 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep,
     }
 }
 
-unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
+static void uct_dc_mlx5_ep_fc_hard_req_init_resend(uct_dc_mlx5_iface_t *iface,
+                                                   ucs_time_t now)
+{
+    iface->tx.fc_hard_req_resend_time = now + iface->tx.fc_hard_req_timeout;
+}
+
+static unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
 {
     uct_dc_mlx5_iface_t *iface = arg;
     ucs_time_t now             = ucs_get_time();
@@ -1481,6 +1487,8 @@ unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
     if (ucs_likely(now < iface->tx.fc_hard_req_resend_time)) {
         return 0;
     }
+
+    uct_dc_mlx5_ep_fc_hard_req_init_resend(iface, now);
 
     /* Go over all endpoints that are waiting for FC window being restored and
      * resend FC_HARD_REQ packet to make sure a peer will resend FC_PURE_GRANT
@@ -1544,6 +1552,10 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
         }
 
         goto out;
+    }
+
+    if (iface->tx.fc_hard_req_progress_cb_id == UCS_CALLBACKQ_ID_NULL) {
+        uct_dc_mlx5_ep_fc_hard_req_init_resend(iface, now);
     }
 
     uct_worker_progress_register_safe(
