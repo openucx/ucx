@@ -645,8 +645,10 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
  * Guarantee that all packed keys are unique. */
 UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
 {
-    static const size_t size = 1 * UCS_MBYTE;
-    const int limit          = 2000 / ucs::test_time_multiplier();
+    static const size_t size       = 1 * UCS_MBYTE;
+    const int limit                = 2000 / ucs::test_time_multiplier();
+    static const unsigned md_flags = UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                                     UCT_MD_MEM_ACCESS_REMOTE_GET;
     std::vector<uct_mem_h> memhs;
     std::set<uint64_t> keys_set;
     uct_mem_h memh;
@@ -677,7 +679,7 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
         comp().comp.count = (mem_reg_count + 1) / 2;
         m_comp_count = 0;
 
-        status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL, &memh);
+        status = uct_md_mem_reg(md(), ptr, size, md_flags, &memh);
         ASSERT_UCS_OK(status);
         memhs.push_back(memh);
 
@@ -691,8 +693,7 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
                                << "-th key is not unique";
 
         for (iter = 1; iter < mem_reg_count; iter++) {
-            status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
-                                    &memh);
+            status = uct_md_mem_reg(md(), ptr, size, md_flags, &memh);
             ASSERT_UCS_OK(status);
             memhs.push_back(memh);
         }
@@ -724,14 +725,16 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
                      !check_reg_mem_type(UCS_MEMORY_TYPE_HOST) ||
                      !ENABLE_PARAMS_CHECK)
 {
-    static const size_t size = 1 * UCS_MBYTE;
+    static const size_t size       = 1 * UCS_MBYTE;
+    static const unsigned md_flags = UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                                     UCT_MD_MEM_ACCESS_REMOTE_GET;
     uct_mem_h memh;
     void *ptr;
     ucs_status_t status;
     uct_md_mem_dereg_params_t params;
 
     ptr    = malloc(size);
-    status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL, &memh);
+    status = uct_md_mem_reg(md(), ptr, size, md_flags, &memh);
     ASSERT_UCS_OK(status);
 
     comp().comp.func   = dereg_cb;
