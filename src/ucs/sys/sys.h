@@ -629,11 +629,15 @@ unsigned long ucs_sys_get_proc_create_time(pid_t pid);
 
 
 /*
- * Get the current max locked memory limit.
+ * Get effective max locked memory limit (unlimited for privileged user).
+ * In case we can't query the system for capabilities, we fallback to
+ * @ref ucs_sys_get_memlock_rlimit
  *
  * @param [out] rlimit_value If successful, set to the current limit value.
+ *
+ * @return UCS_OK if successful, or error status if failed.
  */
-ucs_status_t ucs_sys_get_memlock_rlimit(size_t *rlimit_value);
+ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value);
 
 
 /*

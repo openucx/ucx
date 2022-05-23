@@ -241,7 +241,7 @@ void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno,
     ucs_status_t status;
 
     if (sys_errno == ENOMEM) {
-        status = ucs_sys_get_memlock_rlimit(&memlock_limit);
+        status = ucs_sys_get_effective_memlock_rlimit(&memlock_limit);
         if ((status == UCS_OK) && (memlock_limit != SIZE_MAX)) {
             ucs_log(level,
                     "%s failed: %s. Please set max locked memory "
