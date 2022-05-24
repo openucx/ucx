@@ -570,18 +570,11 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t wqe_index)
     return UCS_PTR_BYTE_OFFSET(srq->buf, (wqe_index & srq->mask) * srq->stride);
 }
 
-static ucs_status_t UCS_F_MAYBE_UNUSED
+static void UCS_F_MAYBE_UNUSED
 uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_mlx5_qp_t *qp,
                             uct_ib_mlx5_qp_attr_t *attr)
 {
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_iface_get_res_domain(iface, qp);
-    if (status != UCS_OK) {
-        return status;
-    }
-
 #if HAVE_DECL_IBV_CREATE_QP_EX
     attr->super.ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
     if (qp->verbs.rd->pd != NULL) {
@@ -590,8 +583,6 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
         attr->super.ibv.pd          = uct_ib_iface_md(iface)->pd;
     }
 #endif
-
-    return UCS_OK;
 }
 
 
