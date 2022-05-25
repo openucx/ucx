@@ -32,8 +32,8 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
     uct_scopy_iface_query(&iface->super, iface_attr);
 
     iface_attr->iface_addr_len      = 0;
-    iface_attr->bandwidth.shared    = iface->super.super.config.bandwidth;
-    iface_attr->bandwidth.dedicated = 0;
+    iface_attr->bandwidth.dedicated = iface->super.super.config.bandwidth;
+    iface_attr->bandwidth.shared    = 0;
 
     return UCS_OK;
 }
