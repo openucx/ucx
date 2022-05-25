@@ -67,9 +67,12 @@ public:
 
     void init() {
         m_err_count = 0;
-        modify_config("KEEPALIVE_INTERVAL", "10s");
+        modify_config("KEEPALIVE_INTERVAL", "5s");
         modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
         modify_config("SA_DATA_VERSION", sa_data_version_v2() ? "v2" : "v1");
+        modify_config("RC_TIMEOUT", "100us", IGNORE_IF_NOT_EXIST);
+        modify_config("RC_RETRY_COUNT", "3", IGNORE_IF_NOT_EXIST);
+        modify_config("UD_TIMEOUT", "5s", IGNORE_IF_NOT_EXIST);
 
         get_sockaddr();
         ucp_test::init();
