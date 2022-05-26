@@ -700,6 +700,11 @@ void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status)
     ucp_request_complete_send(request, status);
 }
 
+void ucp_proto_request_zcopy_abort(ucp_request_t *request, ucs_status_t status)
+{
+    ucp_invoke_uct_completion(&request->send.state.uct_comp, status);
+}
+
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
 {
     /* Short protocol requires contig/host */

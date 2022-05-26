@@ -95,5 +95,5 @@ ucp_proto_t ucp_reconfig_proto = {
     .init     = ucp_proto_reconfig_init,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_reconfig_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = ucp_request_complete_send
 };
