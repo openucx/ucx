@@ -160,7 +160,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
         return status;
     }
 
-    return ucp_request_send_buffer_reg_lane(req, req->send.lane, 0);
+    return ucp_request_send_reg_lane(req, req->send.lane);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t

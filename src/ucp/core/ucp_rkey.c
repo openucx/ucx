@@ -123,16 +123,18 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
     distance->bandwidth = UCS_FP8_UNPACK(BANDWIDTH, packed_distance->bandwidth);
 }
 
-static ssize_t
-ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
-                     const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
-                     ucp_sys_dev_map_t sys_dev_map,
-                     const ucs_sys_dev_distance_t *sys_distance, void *buffer,
-                     int sparse_memh, unsigned uct_flags)
+UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
+                 (context, md_map, memh, mem_info, sys_dev_map, sys_distance,
+                  uct_flags, buffer),
+                 ucp_context_h context, ucp_md_map_t md_map,
+                 const ucp_mem_h memh, const ucp_memory_info_t *mem_info,
+                 ucp_sys_dev_map_t sys_dev_map,
+                 const ucs_sys_dev_distance_t *sys_distance, unsigned uct_flags,
+                 void *buffer)
 {
     void *p = buffer;
     uct_md_mkey_pack_params_t params;
-    unsigned md_index, uct_memh_index;
+    unsigned md_index;
     char UCS_V_UNUSED buf[128];
     ucs_sys_device_t sys_dev;
     size_t tl_rkey_size;
@@ -153,7 +155,6 @@ ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
 
     params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
     /* Write both size and rkey_buffer for each UCT rkey */
-    uct_memh_index = 0;
     ucs_for_each_bit (md_index, md_map) {
         tl_rkey_size = context->tl_mds[md_index].attr.rkey_packed_size;
         *ucs_serialize_next(&p, uint8_t) = tl_rkey_size;
@@ -162,17 +163,15 @@ ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
         params.flags = context->tl_mds[md_index].pack_flags_mask & uct_flags;
 
         status = uct_md_mkey_pack_v2(context->tl_mds[md_index].md,
-                                     memh[sparse_memh ? md_index :
-                                     uct_memh_index], &params, tl_rkey_buf);
+                                     memh->uct[md_index], &params, tl_rkey_buf);
         if (status != UCS_OK) {
             result = status;
             goto out;
         }
 
-        ucs_trace("rkey[%d]=%s for md[%d]=%s", uct_memh_index,
+        ucs_trace("rkey %s for md[%d]=%s",
                   ucs_str_dump_hex(p, tl_rkey_size, buf, sizeof(buf), SIZE_MAX),
                   md_index, context->tl_mds[md_index].rsc.md_name);
-        ++uct_memh_index;
     }
 
     if (ucs_likely(mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
@@ -196,29 +195,6 @@ out:
     return result;
 }
 
-UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
-                 (context, md_map, memh, mem_info, sys_dev_map, uct_flags,
-                  sys_distance, buffer),
-                 ucp_context_h context, ucp_md_map_t md_map,
-                 const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
-                 ucp_sys_dev_map_t sys_dev_map, unsigned uct_flags,
-                 const ucs_sys_dev_distance_t *sys_distance, void *buffer)
-{
-    return ucp_rkey_pack_common(context, md_map, memh, mem_info,
-                                sys_dev_map, sys_distance, buffer, 0, uct_flags);
-}
-
-UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
-                 (context, md_map, memh, mem_info, sys_dev_map, sys_distance,
-                  buffer),
-                 ucp_context_h context, ucp_md_map_t md_map,
-                 const ucp_mem_h memh, const ucp_memory_info_t *mem_info,
-                 ucp_sys_dev_map_t sys_dev_map,
-                 const ucs_sys_dev_distance_t *sys_distance, void *buffer)
-{
-    return ucp_rkey_pack_common(context, md_map, memh->uct, mem_info,
-                                sys_dev_map, sys_distance, buffer, 1, 0);
-}
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t ucp_memh_export_md_map(ucp_mem_h memh)
 {
@@ -624,7 +600,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
         mem_info.type    = memh->mem_type;
         mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         return ucp_rkey_pack_memh(memh->context, memh->md_map, memh, &mem_info,
-                                  0, NULL, memh_buffer);
+                                  0, NULL, 0, memh_buffer);
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
