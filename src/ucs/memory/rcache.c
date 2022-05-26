@@ -1149,6 +1149,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_status_t status;
     size_t mp_obj_size, mp_align;
     int ret;
+    ucs_mpool_params_t mp_params;
 
     if (params->region_struct_size < sizeof(ucs_rcache_region_t)) {
         status = UCS_ERR_INVALID_PARAM;
@@ -1203,8 +1204,14 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     mp_obj_size = ucs_max(mp_obj_size, sizeof(ucs_rcache_comp_entry_t));
 
     mp_align    = ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN);
-    status      = ucs_mpool_init(&self->mp, 0, mp_obj_size, 0, mp_align, 1024,
-                                 UINT_MAX, &ucs_rcache_mp_ops, "rcache_mp");
+
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = mp_obj_size;
+    mp_params.alignment       = mp_align;
+    mp_params.elems_per_chunk = 1024;
+    mp_params.ops             = &ucs_rcache_mp_ops;
+    mp_params.name            = "rcache_mp";
+    status = ucs_mpool_init(&mp_params, &self->mp);
     if (status != UCS_OK) {
         goto err_cleanup_pgtable;
     }

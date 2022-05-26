@@ -76,11 +76,14 @@ struct ucs_mpool_data {
     size_t                 elem_size;       /* Size of element in the chunk */
     size_t                 alignment;       /* Element alignment */
     size_t                 align_offset;    /* Offset to alignment point */
+    double                 grow_factor;     /* Grow factor for number of elements per chunk */
+    size_t                 max_chunk_size;  /* Maximum chunk size to decide if chunk grows
+                                             * only take effect on grow_factor=1 */
     unsigned               elems_per_chunk; /* Number of elements per chunk */
     unsigned               quota;           /* How many more elements can be allocated */
     ucs_mpool_elem_t       *tail;           /* Free list tail */
     ucs_mpool_chunk_t      *chunks;         /* List of allocated chunks */
-    ucs_mpool_ops_t        *ops;            /* Memory pool operations */
+    const ucs_mpool_ops_t  *ops;            /* Memory pool operations */
     char                   *name;           /* Name - used for debugging */
 };
 
@@ -142,26 +145,77 @@ struct ucs_mpool_ops {
 };
 
 
+typedef struct ucs_mpool_params {
+    /**
+     * Size of user-defined private data area.
+     */
+    size_t                priv_size;
+
+    /**
+     * Size of an element.
+     */
+    size_t                elem_size;
+
+    /**
+     * Offset in the element which should be aligned to the given boundary.
+     */
+    size_t                align_offset;
+
+    /**
+     * Boundary to which align the given offset within the element.
+     */
+    size_t                alignment;
+
+    /**
+     * Number of elements in first chunk.
+     */
+    unsigned              elems_per_chunk;
+
+    /**
+     * Maximal size for new chunks.
+     */
+    size_t                max_chunk_size;
+
+    /**
+     * Maximal number of elements which can be allocated by the pool.
+     * -1 or UINT_MAX means no limit.
+     */
+    unsigned              max_elems;
+
+    /**
+     * Grow factor for number of elements in a single chunk.
+     */
+    double                grow_factor;
+
+    /**
+     * Memory pool operations.
+     */
+    const ucs_mpool_ops_t *ops;
+
+    /**
+     * Memory pool name.
+     */
+    const char            *name;
+} ucs_mpool_params_t;
+
+
+/**
+ * Initialize some fields of memory params to default values.
+ *
+ * @param params           User defined ucs_mpool_params_t configuration
+ */
+void ucs_mpool_params_reset(ucs_mpool_params_t *params);
+
+
 /**
  * Initialize a memory pool.
  *
+ * @param params           User defined ucs_mpool_params_t configuration
  * @param mp               Memory pool structure.
- * @param priv_size        Size of user-defined private data area.
- * @param elem_size        Size of an element.
- * @param align_offset     Offset in the element which should be aligned to the given boundary.
- * @param alignment        Boundary to which align the given offset within the element.
- * @param elems_per_chunk  Number of elements in a single chunk.
- * @param max_elems        Maximal number of elements which can be allocated by the pool.
- *                         -1 or UINT_MAX means no limit.
- * @param ops              Memory pool operations.
- * @param name             Memory pool name.
  *
  * @return UCS status code.
  */
-ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
-                            size_t elem_size, size_t align_offset, size_t alignment,
-                            unsigned elems_per_chunk, unsigned max_elems,
-                            ucs_mpool_ops_t *ops, const char *name);
+ucs_status_t ucs_mpool_init(const ucs_mpool_params_t *params, ucs_mpool_t *mp);
 
 
 /**

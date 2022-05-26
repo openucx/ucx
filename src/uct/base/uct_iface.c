@@ -869,6 +869,15 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
     return addr_ns->sys_ns == my_addr.sys_ns;
 }
 
+void uct_iface_mpool_config_copy(ucs_mpool_params_t *mp_params,
+                                 const uct_iface_mpool_config_t *cfg)
+{
+      mp_params->max_elems       = cfg->max_bufs;
+      mp_params->elems_per_chunk = cfg->bufs_grow;
+      mp_params->max_chunk_size  = cfg->max_chunk_size;
+      mp_params->grow_factor     = cfg->grow_factor;
+}
+
 void uct_tl_register(uct_component_t *component, uct_tl_t *tl)
 {
     ucs_list_add_tail(&ucs_config_global_list, &tl->config.list);

@@ -23,7 +23,7 @@ static ucs_config_field_t uct_ugni_smsg_iface_config_table[] = {
      ucs_offsetof(uct_ugni_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("SMSG", -1, 0, "smsg",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("SMSG", -1, 0, 128m, 1.0, "smsg",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
                                   "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
                                   "and could cause deadlock or performance degradation."),
@@ -276,6 +276,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     gni_return_t ugni_rc;
     unsigned int bytes_per_mbox;
     gni_smsg_attr_t smsg_attr;
+    ucs_mpool_params_t mp_params;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params,
                               &uct_ugni_smsg_iface_ops,
@@ -309,31 +310,26 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
         goto clean_cq;
     }
 
-    status = ucs_mpool_init(&self->free_desc,
-                            0,
-                            self->config.smsg_seg_size + sizeof(uct_ugni_smsg_desc_t),
-                            0,
-                            UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                            128           ,               /* grow */
-                            config->mpool.max_bufs,       /* max buffers */
-                            &uct_ugni_smsg_desc_mpool_ops,
-                            "UGNI-SMSG-DESC");
-
+    ucs_mpool_params_reset(&mp_params);
+    uct_iface_mpool_config_copy(&mp_params, &config->mpool);
+    mp_params.elem_size       = self->config.smsg_seg_size + sizeof(uct_ugni_smsg_desc_t);
+    mp_params.elems_per_chunk = 128;
+    mp_params.ops             = &uct_ugni_smsg_desc_mpool_ops;
+    mp_params.name            = "UGNI-SMSG-DESC";
+    status = ucs_mpool_init(&mp_params, &self->free_desc);
     if (UCS_OK != status) {
         ucs_error("Desc Mpool creation failed");
         goto clean_cq;
     }
 
-    status = ucs_mpool_init(&self->free_mbox,
-                            0,
-                            self->bytes_per_mbox + sizeof(uct_ugni_smsg_mbox_t),
-                            sizeof(uct_ugni_smsg_mbox_t),
-                            UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                            128,                          /* grow */
-                            config->mpool.max_bufs,       /* max buffers */
-                            &uct_ugni_smsg_mbox_mpool_ops,
-                            "UGNI-SMSG-MBOX");
-
+    ucs_mpool_params_reset(&mp_params);
+    uct_iface_mpool_config_copy(&mp_params, &config->mpool);
+    mp_params.elem_size       = self->bytes_per_mbox + sizeof(uct_ugni_smsg_mbox_t);
+    mp_params.align_offset    = sizeof(uct_ugni_smsg_mbox_t);
+    mp_params.elems_per_chunk = 128;
+    mp_params.ops             = &uct_ugni_smsg_mbox_mpool_ops;
+    mp_params.name            = "UGNI-SMSG-MBOX";
+    status = ucs_mpool_init(&mp_params, &self->free_mbox);
     if (UCS_OK != status) {
         ucs_error("Mbox Mpool creation failed");
         goto clean_mbox;

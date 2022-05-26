@@ -214,6 +214,7 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
                            const uct_iface_config_t *tl_config)
 {
     ucs_status_t status;
+    ucs_mpool_params_t mp_params;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops, 
                               &uct_base_iface_internal_ops,
@@ -221,15 +222,13 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_IPC_TL_NAME));
 
-    status = ucs_mpool_init(&self->signal_pool,
-                            0,
-                            sizeof(uct_rocm_ipc_signal_desc_t),
-                            0,
-                            UCS_SYS_CACHE_LINE_SIZE,
-                            128,
-                            1024,
-                            &uct_rocm_ipc_signal_desc_mpool_ops,
-                            "ROCM_IPC signal objects");
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = sizeof(uct_rocm_ipc_signal_desc_t);
+    mp_params.elems_per_chunk = 128;
+    mp_params.max_elems       = 1024;
+    mp_params.ops             = &uct_rocm_ipc_signal_desc_mpool_ops;
+    mp_params.name            = "ROCM_IPC signal objects";
+    status = ucs_mpool_init(&mp_params, &self->signal_pool);
     if (status != UCS_OK) {
         ucs_error("rocm/ipc signal mpool creation failed");
         return status;

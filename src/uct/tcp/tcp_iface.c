@@ -75,10 +75,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 
   UCT_TCP_SYN_CNT(ucs_offsetof(uct_tcp_iface_config_t, syn_cnt)),
 
-  UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, "send",
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
 
-  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 8, "receive",
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 8, 128m, 1.0, "receive",
                                 ucs_offsetof(uct_tcp_iface_config_t, rx_mpool), ""),
 
   {"PORT_RANGE", "0",
@@ -607,6 +607,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     uct_tcp_md_t *tcp_md           = ucs_derived_of(md, uct_tcp_md_t);
     ucs_status_t status;
     int i;
+    ucs_mpool_params_t mp_params;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
@@ -705,22 +706,26 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = ucs_mpool_init(&self->tx_mpool, 0, self->config.tx_seg_size,
-                            0, UCS_SYS_CACHE_LINE_SIZE,
-                            (config->tx_mpool.bufs_grow == 0) ?
-                            32 : config->tx_mpool.bufs_grow,
-                            config->tx_mpool.max_bufs,
-                            &uct_tcp_mpool_ops, "uct_tcp_iface_tx_buf_mp");
+    ucs_mpool_params_reset(&mp_params);
+    uct_iface_mpool_config_copy(&mp_params, &config->tx_mpool);
+    mp_params.elems_per_chunk = (config->tx_mpool.bufs_grow == 0) ?
+                                32 : config->tx_mpool.bufs_grow;
+    mp_params.elem_size       = self->config.tx_seg_size;
+    mp_params.ops             = &uct_tcp_mpool_ops;
+    mp_params.name            = "uct_tcp_iface_tx_buf_mp";
+    status = ucs_mpool_init(&mp_params, &self->tx_mpool);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = ucs_mpool_init(&self->rx_mpool, 0, self->config.rx_seg_size * 2,
-                            0, UCS_SYS_CACHE_LINE_SIZE,
-                            (config->rx_mpool.bufs_grow == 0) ?
-                            32 : config->rx_mpool.bufs_grow,
-                            config->rx_mpool.max_bufs,
-                            &uct_tcp_mpool_ops, "uct_tcp_iface_rx_buf_mp");
+    ucs_mpool_params_reset(&mp_params);
+    uct_iface_mpool_config_copy(&mp_params, &config->rx_mpool);
+    mp_params.elems_per_chunk = (config->rx_mpool.bufs_grow == 0) ?
+                                32 : config->rx_mpool.bufs_grow;
+    mp_params.elem_size       = self->config.rx_seg_size * 2;
+    mp_params.ops             = &uct_tcp_mpool_ops;
+    mp_params.name            = "uct_tcp_iface_rx_buf_mp";
+    status = ucs_mpool_init(&mp_params, &self->rx_mpool);
     if (status != UCS_OK) {
         goto err_cleanup_tx_mpool;
     }

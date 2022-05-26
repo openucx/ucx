@@ -427,6 +427,7 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     const unsigned count = iface->config.tx_cq_len;
     uct_rc_iface_send_op_t *op;
     ucs_status_t status;
+    ucs_mpool_params_t mp_params;
 
     iface->tx.ops_buffer = ucs_calloc(count, sizeof(*iface->tx.ops_buffer),
                                       "rc_tx_ops");
@@ -445,10 +446,12 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     /* Create memory pool for flush completions. Can't just alloc a certain
      * size buffer, because number of simultaneous flushes is not limited by
      * CQ or QP resources. */
-    status = ucs_mpool_init(&iface->tx.send_op_mp, 0, sizeof(*op), 0,
-                            UCS_SYS_CACHE_LINE_SIZE, 256,
-                            UINT_MAX, &uct_rc_send_op_mpool_ops,
-                            "send-ops-mpool");
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = sizeof(*op);
+    mp_params.elems_per_chunk = 256;
+    mp_params.ops             = &uct_rc_send_op_mpool_ops;
+    mp_params.name            = "send-ops-mpool";
+    status = ucs_mpool_init(&mp_params, &iface->tx.send_op_mp);
 
     return status;
 }
@@ -554,6 +557,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     uint32_t max_ib_msg_size;
     ucs_status_t status;
     unsigned tx_cq_size;
+    ucs_mpool_params_t mp_params;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, md, worker,
                               params, &config->super, init_attr);
@@ -675,9 +679,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
 
     /* Create mempool for pending requests */
     ucs_assert(init_attr->fc_req_size >= sizeof(uct_rc_pending_req_t));
-    status = ucs_mpool_init(&self->tx.pending_mp, 0, init_attr->fc_req_size,
-                            0, 1, 128, UINT_MAX, &uct_rc_pending_mpool_ops,
-                            "pending-ops");
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = init_attr->fc_req_size;
+    mp_params.alignment       = 1;
+    mp_params.elems_per_chunk = 128;
+    mp_params.ops             = &uct_rc_pending_mpool_ops;
+    mp_params.name            = "pending-ops";
+    status = ucs_mpool_init(&mp_params, &self->tx.pending_mp);
     if (status != UCS_OK) {
         goto err_cleanup_rx;
     }

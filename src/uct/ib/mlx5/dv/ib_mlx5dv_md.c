@@ -848,6 +848,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     unsigned max_rd_atomic_dc;
     void *cap;
     int ret;
+    ucs_mpool_params_t mp_params;
 
 #if HAVE_DECL_MLX5DV_IS_SUPPORTED
     if (!mlx5dv_is_supported(ibv_device)) {
@@ -1051,11 +1052,12 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     ucs_recursive_spinlock_init(&md->dbrec_lock, 0);
-    status = ucs_mpool_init(&md->dbrec_pool, 0,
-                            sizeof(uct_ib_mlx5_dbrec_t), 0,
-                            UCS_SYS_CACHE_LINE_SIZE,
-                            ucs_get_page_size() / UCS_SYS_CACHE_LINE_SIZE - 1,
-                            UINT_MAX, &uct_ib_mlx5_dbrec_ops, "devx dbrec");
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = sizeof(uct_ib_mlx5_dbrec_t);
+    mp_params.elems_per_chunk = ucs_get_page_size() / UCS_SYS_CACHE_LINE_SIZE - 1;
+    mp_params.ops             = &uct_ib_mlx5_dbrec_ops;
+    mp_params.name            = "devx dbrec";
+    status = ucs_mpool_init(&mp_params, &md->dbrec_pool);
     if (status != UCS_OK) {
         goto err_free;
     }

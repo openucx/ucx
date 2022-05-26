@@ -515,14 +515,21 @@ ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
                                   uct_iface_mpool_init_obj_cb_t init_obj_cb,
                                   const char *name)
 {
-    unsigned elems_per_chunk;
     ucs_status_t status;
+    ucs_mpool_params_t mp_params;
 
-    elems_per_chunk = (config->bufs_grow != 0) ? config->bufs_grow : grow;
-    status = ucs_mpool_init(mp, sizeof(uct_iface_mp_priv_t),
-                            elem_size, align_offset, alignment,
-                            elems_per_chunk, config->max_bufs,
-                            &uct_iface_mpool_ops, name);
+    ucs_mpool_params_reset(&mp_params);
+    uct_iface_mpool_config_copy(&mp_params, config);
+    mp_params.elems_per_chunk = (config->bufs_grow != 0) ?
+                                config->bufs_grow : grow;
+    mp_params.priv_size       = sizeof(uct_iface_mp_priv_t);
+    mp_params.elem_size       = elem_size;
+    mp_params.align_offset    = align_offset;
+    mp_params.alignment       = alignment;
+    mp_params.ops             = &uct_iface_mpool_ops;
+    mp_params.name            = name;
+    /* Create memory pool of bounce buffers */
+    status = ucs_mpool_init(&mp_params, mp);
     if (status != UCS_OK) {
         return status;
     }

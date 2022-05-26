@@ -179,6 +179,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                                                      uct_self_iface_config_t);
     size_t align_offset, alignment;
     ucs_status_t status;
+    ucs_mpool_params_t mp_params;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
@@ -209,11 +210,14 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
-    status = ucs_mpool_init(
-            &self->msg_mp, 0, self->send_size, align_offset, alignment,
-            2, /* 2 elements are enough for most of communications */
-            UINT_MAX, &uct_self_iface_mpool_ops, "self_msg_desc");
-
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = self->send_size;
+    mp_params.align_offset    = align_offset;
+    mp_params.alignment       = alignment;
+    mp_params.elems_per_chunk = 2; /* 2 elements are enough for most of communications */
+    mp_params.ops             = &uct_self_iface_mpool_ops;
+    mp_params.name            = "self_msg_desc";
+    status = ucs_mpool_init(&mp_params, &self->msg_mp);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }

@@ -42,6 +42,7 @@ ucs_mpool_set_init(ucs_mpool_set_t *mp_set, size_t *sizes, unsigned sizes_count,
     size_t size;
     ucs_mpool_t *mpools;
     ucs_status_t status;
+    ucs_mpool_params_t mp_params;
 
     if (sizes_count == 0) {
         ucs_error("creation of empty mpool_set is not allowed");
@@ -93,9 +94,17 @@ ucs_mpool_set_init(ucs_mpool_set_t *mp_set, size_t *sizes, unsigned sizes_count,
     ucs_for_each_bit(size_log2, mp_set->bitmap) {
         map_idx = max_idx - size_log2;
         size    = (map_idx == 0) ? max_mp_entry_size : UCS_BIT(size_log2);
-        status  = ucs_mpool_init(&mpools[mps_idx], priv_size,
-                                 size + priv_elem_size, align_offset, alignment,
-                                 elems_per_chunk, max_elems, ops, name);
+
+        ucs_mpool_params_reset(&mp_params);
+        mp_params.priv_size       = priv_size;
+        mp_params.elem_size       = size + priv_elem_size;
+        mp_params.align_offset    = align_offset;
+        mp_params.alignment       = alignment;
+        mp_params.elems_per_chunk = elems_per_chunk;
+        mp_params.max_elems       = max_elems;
+        mp_params.ops             = ops;
+        mp_params.name            = name;
+        status  = ucs_mpool_init(&mp_params, &mpools[mps_idx]);
         if (status != UCS_OK) {
             goto err;
         }
