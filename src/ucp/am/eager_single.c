@@ -384,7 +384,7 @@ ucp_proto_t ucp_am_eager_single_zcopy_proto = {
     .init     = ucp_am_eager_single_zcopy_proto_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_zcopy_proto_progress},
-    .abort    = ucp_proto_request_bcopy_abort
+    .abort    = ucp_proto_request_zcopy_abort
 };
 
 static ucs_status_t ucp_am_eager_single_zcopy_reply_proto_init(

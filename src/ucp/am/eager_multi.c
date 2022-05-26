@@ -273,5 +273,5 @@ ucp_proto_t ucp_am_eager_multi_zcopy_proto = {
     .init     = ucp_am_eager_multi_zcopy_proto_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_zcopy_proto_progress},
-    .abort    = ucp_proto_request_bcopy_abort
+    .abort    = ucp_proto_request_zcopy_abort
 };
