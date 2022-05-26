@@ -104,6 +104,7 @@ void test_md::test_reg_mem(unsigned access_mask,
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS |
                             UCT_MD_MEM_DEREG_FIELD_MEMH;
+        /* coverity[freed_arg:FALSE] */
         status            = uct_md_mem_dereg_v2(md(), &params);
         ASSERT_UCS_STATUS_EQ(UCS_ERR_UNSUPPORTED, status);
 
@@ -111,22 +112,26 @@ void test_md::test_reg_mem(unsigned access_mask,
         status            = uct_md_mem_dereg_v2(md(), &params);
     } else {
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION;
+        /* coverity[freed_arg:FALSE] */
         status            = uct_md_mem_dereg_v2(md(), &params);
         ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
+        /* coverity[freed_arg:FALSE] */
         status            = uct_md_mem_dereg_v2(md(), &params);
         ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
+        /* coverity[freed_arg:FALSE] */
         status            = uct_md_mem_dereg_v2(md(), &params);
         ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
                             UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
+        /* coverity[freed_arg:FALSE] */
         status            = uct_md_mem_dereg_v2(md(), &params);
         ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 

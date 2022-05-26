@@ -34,7 +34,7 @@ enum {
  * Memory handle buffer packed flags.
  */
 enum {
-    UCP_MEMH_BUFFER_FLAG_EXPORTED = UCS_BIT(0) 
+    UCP_MEMH_BUFFER_FLAG_EXPORTED = UCS_BIT(0)
 };
 
 
@@ -54,6 +54,7 @@ typedef struct ucp_mem {
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
+    ucp_md_map_t        inv_md_map;     /* Which memory handles should be invalidated */
     ucp_mem_h           parent;         /* - NULL if entry should be returned to rcache
                                            - pointer to self if rcache disabled
                                            - pointer to rcache memh if entry is a user memh */
@@ -158,7 +159,12 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                ucp_md_map_t reg_md_map, unsigned uct_flags,
                                ucp_mem_h *memh_p);
 
+ucs_status_t ucp_memh_register_slow(ucp_context_h context, ucp_mem_h memh,
+                                    ucp_md_map_t md_map, unsigned uct_flags);
+
 void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh);
+
+void ucp_memh_unmap(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map);
 
 ucs_status_t ucp_mem_rcache_init(ucp_context_h context);
 

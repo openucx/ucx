@@ -73,27 +73,49 @@ not_found:
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
+ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
+                    ucs_rcache_invalidate_comp_func_t cb, void *arg,
+                    ucp_md_map_t inv_md_map)
 {
-    ucs_rcache_t *rcache;
-    khiter_t iter;
-
-    ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64,
+    ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64
+              " inv_md_map %" PRIx64,
               memh, ucp_memh_address(memh), ucp_memh_length(memh),
-              memh->md_map);
+              memh->md_map, inv_md_map);
 
     if (ucs_unlikely(ucp_memh_is_zero_length(memh))) {
         return;
     }
 
+    memh->inv_md_map |= inv_md_map;
+
     /* User memory handle, or rcache was disabled */
     if (ucs_unlikely(memh->parent != NULL)) {
-        ucp_memh_cleanup(context, memh);
-        ucs_free(memh);
+        if (!--memh->super.refcount) {
+            ucp_memh_cleanup(context, memh);
+            ucs_free(memh);
+
+            if (cb != NULL) {
+                cb(arg);
+            }
+        }
         return;
     }
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
+    if (cb != NULL) {
+        ucs_rcache_region_invalidate(context->rcache, &memh->super, cb, arg);
+    }
+
+    ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
+{
+    ucs_rcache_t *rcache;
+    khiter_t iter;
+
     if (memh->flags & UCP_MEMH_FLAG_IMPORTED) {
         iter = kh_get(ucp_context_imported_mem_hash,
                       context->imported_mem_hash, memh->remote_uuid);
@@ -101,11 +123,12 @@ ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
 
         rcache = kh_value(context->imported_mem_hash, iter);
         ucs_assert(rcache != NULL);
+        UCP_THREAD_CS_ENTER(&context->mt_lock);
         ucs_rcache_region_put_unsafe(rcache, &memh->super);
+        UCP_THREAD_CS_EXIT(&context->mt_lock);
     } else {
-        ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
+        ucp_memh_invalidate(context, memh, NULL, NULL, 0);
     }
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)
@@ -147,6 +170,52 @@ ucp_memh_is_iov_buffer_in_range(const ucp_mem_h memh, const void *buffer,
     }
 
     return 1;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_memh_register(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map,
+                  unsigned uct_flags)
+{
+    ucp_md_map_t reg_md_map = ~memh->md_map & md_map;
+
+    if (reg_md_map == 0) {
+        return UCS_OK;
+    }
+
+    return ucp_memh_register_slow(context, memh, reg_md_map, uct_flags);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_memh_update(ucp_context_h context, void *address, size_t length,
+                ucs_memory_type_t mem_type, ucp_md_map_t md_map,
+                unsigned uct_flags, ucp_mem_h *memh_p)
+{
+    ucs_status_t status;
+
+    if (*memh_p == NULL) {
+        return ucp_memh_get(context, address, length, mem_type, md_map,
+                            uct_flags, memh_p);
+    }
+
+    if (ucs_test_all_flags((*memh_p)->md_map, md_map) ||
+        ucp_memh_is_zero_length(*memh_p)) {
+        return UCS_OK;
+    }
+
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+    status = ucp_memh_register(context, *memh_p, md_map, uct_flags);
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+    return status;
+}
+
+
+static UCS_F_ALWAYS_INLINE ucp_mem_h ucp_memh_hold(ucp_context_h context,
+                                                   ucp_mem_h memh)
+{
+    ucs_assert((memh->parent != NULL) || (context->rcache == NULL) ||
+               ucp_memh_is_zero_length(memh));
+    memh->super.refcount++;
+    return memh;
 }
 
 #endif

@@ -23,26 +23,19 @@ typedef enum ucp_dt_type          ucp_dt_class_t;
 
 
 /**
- * Memory registration state of a buffer/operation
- */
-typedef struct ucp_dt_reg {
-    ucp_md_map_t                  md_map;    /* Map of used memory domains */
-    uct_mem_h                     memh[UCP_MAX_OP_MDS];
-} ucp_dt_reg_t;
-
-
-/**
  * State of progressing sent/receive operation on a datatype.
  */
 typedef struct ucp_dt_state {
     size_t                        offset;  /* Total offset in overall payload. */
     union {
-        ucp_dt_reg_t              contig;
+        struct {
+            ucp_mem_h             memh;      /* Pointer to memh */
+        } contig;
         struct {
             size_t                iov_offset;     /* Offset in the IOV item */
             size_t                iovcnt_offset;  /* The IOV item to start copy */
             size_t                iovcnt;         /* Number of IOV buffers */
-            ucp_dt_reg_t          *dt_reg;        /* Pointer to IOV memh[iovcnt] */
+            ucp_mem_h             *memhs;         /* Pointer to IOV memh[iovcnt] */
         } iov;
         struct {
             void                  *state;

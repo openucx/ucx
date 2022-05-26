@@ -277,7 +277,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
-                                          mdesc->memh, &mem_info, 0, NULL,
+                                          mdesc->memh, &mem_info, 0, NULL, 0,
                                           rtr + 1);
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",

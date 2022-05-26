@@ -128,7 +128,7 @@ ucp_dt_recv_state_init(ucp_dt_state_t *dt_state, void *buffer,
 
     switch (dt & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        dt_state->dt.contig.md_map     = 0;
+        dt_state->dt.contig.memh       = NULL;
         break;
    case UCP_DATATYPE_IOV:
        /* on receive side, only IOV uses offset field, to allow seeking
@@ -139,7 +139,7 @@ ucp_dt_recv_state_init(ucp_dt_state_t *dt_state, void *buffer,
         dt_state->dt.iov.iov_offset    = 0;
         dt_state->dt.iov.iovcnt_offset = 0;
         dt_state->dt.iov.iovcnt        = dt_count;
-        dt_state->dt.iov.dt_reg        = NULL;
+        dt_state->dt.iov.memhs         = NULL;
         break;
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_to_generic(dt);

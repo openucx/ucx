@@ -260,6 +260,9 @@ struct ucp_request {
 
                             /* Actual lanes count */
                             uint8_t        lanes_count;
+
+                            /* Memory domains to send remote keys */
+                            ucp_md_map_t   md_map;
                         };
 
                         /* Used by "new" rendezvous protocols, in proto_rndv.c */
@@ -443,7 +446,7 @@ struct ucp_request {
 
                  struct {
                     ucp_am_recv_data_nbx_callback_t cb;    /* Completion callback */
-                    ucp_recv_desc_t                 *desc; /* RTS desc */
+                    ucp_recv_desc_t                 *desc; /* Receive desc */
                 } am;
             };
         } recv;
