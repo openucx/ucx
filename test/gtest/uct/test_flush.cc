@@ -689,7 +689,7 @@ public:
 
         m_s0->connect();
 
-        /* there is a chance that one side getting disconect error before
+        /* There is a chance that one side getting disconnect error before
          * calling flush(CANCEL) */
         EXPECT_LE(m_err_count, 1);
     }
