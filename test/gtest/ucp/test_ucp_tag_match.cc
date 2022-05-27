@@ -546,6 +546,7 @@ public:
         RNDV_SCHEME_PUT_ZCOPY,
         RNDV_SCHEME_GET_ZCOPY,
         RNDV_SCHEME_LAST,
+        RNDV_GET_ZCOPY_MANY_LANES,
         PUT_ZCOPY_FLUSH = ENABLE_PROTO << 1
     };
 
@@ -557,6 +558,9 @@ public:
         modify_config("RNDV_THRESH", "0");
         modify_config("RNDV_SCHEME", rndv_schemes[rndv_scheme()]);
         modify_config("RNDV_PUT_FORCE_FLUSH", force_flush() ? "y" : "n");
+        if (get_variant_value() & RNDV_GET_ZCOPY_MANY_LANES) {
+            modify_config("MAX_RNDV_LANES", "3");
+        }
         test_ucp_tag_match::init();
     }
 
@@ -574,6 +578,11 @@ public:
                                RNDV_SCHEME_PUT_ZCOPY | ENABLE_PROTO |
                                        PUT_ZCOPY_FLUSH,
                                "rndv_put_flush,proto");
+        // Add variant to check the RNDV lanes weight correctness for many lanes number
+        add_variant_with_value(variants, get_ctx_params(),
+                               RNDV_SCHEME_GET_ZCOPY | ENABLE_PROTO |
+                                       RNDV_GET_ZCOPY_MANY_LANES,
+                               "rndv_get_zcopy,proto,many_lanes");
     }
 
 protected:
