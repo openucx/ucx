@@ -947,10 +947,6 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
 #endif
 
     attr->port                    = iface->config.port_num;
-
-    if (attr->qp_type == IBV_QPT_UD) {
-        return;
-    }
 }
 
 ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,

@@ -726,14 +726,14 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
     status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {
-        goto err_destroy_qp;
+        return status;
     }
 
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
                                    iface->tx.mmio_mode, &iface->tx.wq,
                                    qp->verbs.qp);
     if (status != UCS_OK) {
-        return status;
+        goto err_destroy_qp;
     }
 
     *qp_p = qp->verbs.qp;
@@ -772,7 +772,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .super = {
         .super = {
             .iface_estimate_perf = uct_ib_iface_estimate_perf,
-            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_ud_ep_invalidate
         },
@@ -866,7 +866,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
-    self->super.tx.available = self->tx.wq.bb_max;
+    self->super.tx.available     = self->tx.wq.bb_max;
+    self->super.config.tx_qp_len = self->tx.wq.bb_max;
     ucs_assert(init_attr.cq_len[UCT_IB_DIR_TX] >= self->tx.wq.bb_max);
 
     status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq);

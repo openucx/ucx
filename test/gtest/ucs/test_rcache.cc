@@ -810,20 +810,13 @@ class test_rcache_stats : public test_rcache {
 protected:
 
     virtual void init() {
-        ucs_stats_cleanup();
-        push_config();
-        modify_config("STATS_DEST",    "file:/dev/null");
-        modify_config("STATS_TRIGGER", "exit");
-        ucs_stats_init();
-        ASSERT_TRUE(ucs_stats_is_active());
+        stats_activate();
         test_rcache::init();
     }
 
     virtual void cleanup() {
         test_rcache::cleanup();
-        ucs_stats_cleanup();
-        pop_config();
-        ucs_stats_init();
+        stats_restore();
     }
 
     int get_counter(int stat) {

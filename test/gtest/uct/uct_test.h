@@ -351,8 +351,6 @@ protected:
     virtual void modify_config(const std::string& name, const std::string& value,
                                modify_config_mode_t mode = FAIL_IF_NOT_EXIST);
     bool get_config(const std::string& name, std::string& value) const;
-    void stats_activate();
-    void stats_restore();
 
     virtual bool has_transport(const std::string& tl_name) const;
     virtual bool has_ud() const;

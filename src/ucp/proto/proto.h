@@ -50,6 +50,10 @@ typedef unsigned ucp_proto_id_t;
 typedef uint64_t ucp_proto_id_mask_t;
 
 
+/* Performance calculation tree node */
+typedef struct ucp_proto_perf_node ucp_proto_perf_node_t;
+
+
 /* Protocol stage ID */
 enum {
     /* Initial stage. All protocols start from this stage. */

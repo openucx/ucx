@@ -1144,6 +1144,13 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_seg_size)
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx_reply {
 public:
+    test_ucp_am_nbx_dts()
+    {
+        if (is_proto_enabled()) {
+            modify_config("PROTO_ENABLE", "y");
+        }
+    }
+
     static const uint64_t dts_bitmap = UCS_BIT(UCP_DATATYPE_CONTIG) |
                                        UCS_BIT(UCP_DATATYPE_IOV) |
                                        UCS_BIT(UCP_DATATYPE_GENERIC);
@@ -1172,12 +1179,18 @@ public:
                            ucp_datatype_class_names);
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    static void get_test_variants_errh(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, base_test_generator,
                            UCP_ERR_HANDLING_MODE_NONE);
         add_variant_values(variants, base_test_generator,
                            UCP_ERR_HANDLING_MODE_PEER, "errh");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_test_variants_errh, 0);
+        add_variant_values(variants, get_test_variants_errh, 1, "proto");
     }
 
     void init()
@@ -1210,9 +1223,14 @@ private:
     {
         return static_cast<ucp_err_handling_mode_t>(get_variant_value(4));
     }
+
+    bool is_proto_enabled() const
+    {
+        return get_variant_value(5);
+    }
 };
 
-UCS_TEST_P(test_ucp_am_nbx_dts, short_send)
+UCS_TEST_P(test_ucp_am_nbx_dts, short_send, "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
 {
     test_am(1);
 }

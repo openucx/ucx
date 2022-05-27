@@ -187,6 +187,7 @@ struct uct_ud_iface {
         ucs_time_t           peer_timeout;
         ucs_time_t           min_poke_time;
         unsigned             tx_qp_len;
+        unsigned             rx_qp_len;
         unsigned             max_inline;
         int                  check_grh_dgid;
         unsigned             max_window;
@@ -347,6 +348,8 @@ void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
                                    uct_ud_ctl_desc_t *cdesc, int is_async);
+
+void uct_ud_iface_vfs_refresh(uct_iface_h iface);
 
 void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
                                   int is_async);

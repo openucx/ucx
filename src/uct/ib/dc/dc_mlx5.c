@@ -339,11 +339,12 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         goto init_qp;
     }
 
-    status = uct_ib_mlx5_iface_fill_attr(ib_iface, &dci->txwq.super, &attr);
+    status = uct_ib_mlx5_iface_get_res_domain(ib_iface, &dci->txwq.super);
     if (status != UCS_OK) {
         return status;
     }
 
+    uct_ib_mlx5_iface_fill_attr(ib_iface, &dci->txwq.super, &attr);
     uct_ib_iface_fill_attr(ib_iface, &attr.super);
     attr.super.ibv.cap.max_recv_sge     = 0;
 
@@ -357,7 +358,8 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
     if (qp == NULL) {
         ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI): failed: %m",
                   UCT_IB_IFACE_ARG(ib_iface));
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto err_put_res_domain;
     }
 
     dci->txwq.super.verbs.qp = qp;
@@ -411,6 +413,12 @@ err:
     uct_rc_txqp_cleanup(&iface->super.super, &dci->txqp);
 err_qp:
     uct_ib_mlx5_destroy_qp(md, &dci->txwq.super);
+#if HAVE_DC_DV
+err_put_res_domain:
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI)) {
+        uct_ib_mlx5_iface_put_res_domain(&dci->txwq.super);
+    }
+#endif
     return status;
 }
 

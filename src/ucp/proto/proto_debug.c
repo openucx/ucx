@@ -15,6 +15,54 @@
 #include <ucs/datastruct/array.inl>
 
 
+/* Performance node data entry */
+typedef struct {
+    const char        *name;
+    ucs_linear_func_t value;
+} ucp_proto_perf_node_data_t;
+
+/* Array of performance data entries */
+UCS_ARRAY_DEFINE_INLINE(ucp_proto_perf_node_data, unsigned,
+                        ucp_proto_perf_node_data_t);
+
+/* Array of performance node pointers - used for node children array */
+UCS_ARRAY_DEFINE_INLINE(ucp_proto_perf_node, unsigned, ucp_proto_perf_node_t*);
+
+/*
+ * Performance estimation for a range of message sizes.
+ * Defined in C file to prevent direct access to the structure fields.
+ */
+struct ucp_proto_perf_node {
+    /* Type of the range */
+    ucp_proto_perf_node_type_t       type;
+
+    /* Name of the range */
+    const char                       *name;
+
+    /* Description of the range */
+    char                             desc[UCP_PROTO_DESC_STR_MAX];
+
+    /* Number of references in the performance tree defined by 'children' */
+    unsigned                         refcount;
+
+    /* Child nodes */
+    ucs_array_t(ucp_proto_perf_node) children;
+
+    union {
+        /*
+         * Index of selected child node in the 'children' array.
+         * Used when type == UCP_PROTO_PERF_NODE_TYPE_SELECT
+         */
+        unsigned                              selected_child;
+
+        /*
+         * Data entries
+         * Used when type == UCP_PROTO_PERF_NODE_TYPE_DATA
+         */
+        ucs_array_t(ucp_proto_perf_node_data) data;
+    };
+};
+
 /* Protocol information table */
 typedef struct {
     char range_str[32];
@@ -375,6 +423,190 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
     }
 
     ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key, strb);
+}
+
+ucp_proto_perf_node_t *ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
+                                               const char *name,
+                                               const char *desc_fmt, va_list ap)
+{
+    ucp_proto_perf_node_t *perf_node;
+
+    perf_node = ucs_malloc(sizeof(*perf_node), "ucp_proto_perf_node");
+    if (perf_node == NULL) {
+        return NULL;
+    }
+
+    perf_node->type     = type;
+    perf_node->name     = name;
+    perf_node->refcount = 1;
+    ucs_array_init_dynamic(&perf_node->children);
+    ucs_vsnprintf_safe(perf_node->desc, sizeof(perf_node->desc), desc_fmt, ap);
+
+    return perf_node;
+}
+
+static void ucp_proto_perf_node_free(ucp_proto_perf_node_t *perf_node)
+{
+    ucp_proto_perf_node_t **child_elem;
+
+    /* Delete children recursively */
+    ucs_array_for_each(child_elem, &perf_node->children) {
+        ucp_proto_perf_node_deref(child_elem);
+    }
+    ucs_array_cleanup_dynamic(&perf_node->children);
+
+    if (perf_node->type == UCP_PROTO_PERF_NODE_TYPE_DATA) {
+        ucs_array_cleanup_dynamic(&perf_node->data);
+    }
+
+    ucs_free(perf_node);
+}
+
+#define UCP_PROTO_PERF_NODE_NEW(_type, _name, _desc_fmt) \
+    ({ \
+        ucp_proto_perf_node_t *__perf_node; \
+        va_list __ap; \
+        \
+        va_start(__ap, _desc_fmt); \
+        __perf_node = ucp_proto_perf_node_new( \
+                UCP_PROTO_PERF_NODE_TYPE_##_type, _name, _desc_fmt, __ap); \
+        va_end(__ap); \
+        \
+        if (__perf_node == NULL) { \
+            return NULL; \
+        } \
+        \
+        __perf_node; \
+    })
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_new_data(const char *name, const char *desc_fmt, ...)
+{
+    ucp_proto_perf_node_t *perf_node;
+
+    perf_node = UCP_PROTO_PERF_NODE_NEW(DATA, name, desc_fmt);
+    ucs_array_init_dynamic(&perf_node->data);
+    return perf_node;
+}
+
+ucp_proto_perf_node_t *ucp_proto_perf_node_new_select(const char *name,
+                                                      unsigned selected_child,
+                                                      const char *desc_fmt, ...)
+{
+    ucp_proto_perf_node_t *perf_node;
+
+    perf_node                 = UCP_PROTO_PERF_NODE_NEW(SELECT, name, desc_fmt);
+    perf_node->selected_child = selected_child;
+    return perf_node;
+}
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_new_compose(const char *name, const char *desc_fmt, ...)
+{
+    return UCP_PROTO_PERF_NODE_NEW(COMPOSE, name, desc_fmt);
+}
+
+void ucp_proto_perf_node_ref(ucp_proto_perf_node_t *perf_node)
+{
+    if (perf_node != NULL) {
+        ucs_assert(perf_node->refcount != UINT_MAX);
+        ++perf_node->refcount;
+    }
+}
+
+void ucp_proto_perf_node_deref(ucp_proto_perf_node_t **perf_node_p)
+{
+    ucp_proto_perf_node_t *perf_node = *perf_node_p;
+
+    if (perf_node == NULL) {
+        return;
+    }
+
+    ucs_assertv(perf_node->refcount > 0, "perf_node=%p name='%s' desc='%s'",
+                perf_node, perf_node->name, perf_node->desc);
+    --perf_node->refcount;
+    if (perf_node->refcount == 0) {
+        ucp_proto_perf_node_free(perf_node);
+        *perf_node_p = NULL;
+    }
+}
+
+static void
+ucp_proto_perf_node_append_child(ucp_proto_perf_node_t *perf_node,
+                                 ucp_proto_perf_node_t *child_perf_node)
+{
+    ucs_array_append(ucp_proto_perf_node, &perf_node->children,
+                     ucs_diag("failed to add perf node child");
+                     return );
+    *ucs_array_last(&perf_node->children) = child_perf_node;
+}
+
+void ucp_proto_perf_node_own_child(ucp_proto_perf_node_t *perf_node,
+                                   ucp_proto_perf_node_t **child_perf_node_p)
+{
+    if (*child_perf_node_p == NULL) {
+        return;
+    } else if (perf_node == NULL) {
+        ucp_proto_perf_node_deref(child_perf_node_p);
+        return;
+    }
+
+    ucp_proto_perf_node_append_child(perf_node, *child_perf_node_p);
+}
+
+void ucp_proto_perf_node_add_child(ucp_proto_perf_node_t *perf_node,
+                                   ucp_proto_perf_node_t *child_perf_node)
+{
+    if ((perf_node == NULL) || (child_perf_node == NULL)) {
+        return;
+    }
+
+    ucp_proto_perf_node_append_child(perf_node, child_perf_node);
+    ucp_proto_perf_node_ref(child_perf_node);
+}
+
+void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
+                                  const char *name,
+                                  const ucs_linear_func_t value)
+{
+    ucp_proto_perf_node_data_t *data;
+
+    if (perf_node == NULL) {
+        return;
+    }
+
+    ucs_assert(perf_node->type == UCP_PROTO_PERF_NODE_TYPE_DATA);
+
+    ucs_array_append(ucp_proto_perf_node_data, &perf_node->data,
+                     ucs_diag("failed to add perf node data");
+                     return );
+    data        = ucs_array_last(&perf_node->data);
+    data->name  = name;
+    data->value = value;
+}
+
+void ucp_proto_perf_node_add_scalar(ucp_proto_perf_node_t *perf_node,
+                                    const char *name, double value)
+{
+    ucp_proto_perf_node_add_data(perf_node, name,
+                                 ucs_linear_func_make(value, 0));
+}
+
+void ucp_proto_perf_node_add_bandwidth(ucp_proto_perf_node_t *perf_node,
+                                       const char *name, double value)
+{
+    ucp_proto_perf_node_add_data(perf_node, name,
+                                 ucs_linear_func_make(0, 1.0 / value));
+}
+
+const char *ucp_proto_perf_node_name(ucp_proto_perf_node_t *perf_node)
+{
+    return (perf_node == NULL) ? "(null)" : perf_node->name;
+}
+
+const char *ucp_proto_perf_node_desc(ucp_proto_perf_node_t *perf_node)
+{
+    return (perf_node == NULL) ? "(null)" : perf_node->desc;
 }
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,

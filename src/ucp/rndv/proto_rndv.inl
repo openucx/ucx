@@ -168,8 +168,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
     }
 
     ucp_trace_req(req, "allocated rndv fragment %p", freq);
-    freq->flags   = UCP_REQUEST_FLAG_RNDV_FRAG;
-    freq->send.ep = req->send.ep;
+
+    ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
 
     *freq_p = freq;

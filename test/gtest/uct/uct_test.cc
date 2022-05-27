@@ -7,7 +7,6 @@
 #include "uct_test.h"
 #include "uct/api/uct_def.h"
 
-#include <ucs/stats/stats.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <common/test_helpers.h>
@@ -629,23 +628,6 @@ bool uct_test::has_ugni() const {
 bool uct_test::has_gpu() const {
     return (has_transport("cuda_copy") || has_transport("gdr_copy") ||
             has_transport("rocm_copy"));
-}
-
-void uct_test::stats_activate()
-{
-    ucs_stats_cleanup();
-    push_config();
-    modify_config("STATS_DEST",    "file:/dev/null");
-    modify_config("STATS_TRIGGER", "exit");
-    ucs_stats_init();
-    ASSERT_TRUE(ucs_stats_is_active());
-}
-
-void uct_test::stats_restore()
-{
-    ucs_stats_cleanup();
-    pop_config();
-    ucs_stats_init();
 }
 
 uct_test::entity *

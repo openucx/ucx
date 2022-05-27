@@ -173,18 +173,16 @@ public:
     }
 
     void init() {
-#ifdef ENABLE_STATS
         stats_activate();
-#endif
         test_rc::init();
     }
 
-#ifdef ENABLE_STATS
     void cleanup() {
         uct_test::cleanup();
         stats_restore();
     }
 
+#ifdef ENABLE_STATS
     uint64_t get_no_reads_stat_counter(entity *e) {
         uct_rc_iface_t *iface = ucs_derived_of(e->iface(), uct_rc_iface_t);
 
