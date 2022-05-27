@@ -30,8 +30,11 @@ ucp_proto_multi_request_init(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE uint32_t
 ucs_proto_multi_calc_weight(double lane_weight, double total_weight)
 {
-    return (uint32_t)(
-            ((lane_weight * UCP_PROTO_MULTI_WEIGHT_MAX) / total_weight) + 0.5);
+    uint32_t weight =
+        ucs_div_round_up(lane_weight * UCP_PROTO_MULTI_WEIGHT_MAX,
+                         total_weight);
+
+    return ucs_min(weight, UCP_PROTO_MULTI_WEIGHT_MAX);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
