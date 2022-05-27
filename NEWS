@@ -11,7 +11,7 @@
 ### Features:
 ### Bugfixes:
 
-## 1.13.0 (May 19, 2022)
+## 1.13.0 (May 27, 2022)
 #### Features
 ##### Core
 * Added new objects to VFS: local and remote address of endpoint, statistics of ucp_ep_create success/failure, failed/destroyed endpoints
