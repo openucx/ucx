@@ -428,8 +428,10 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                           uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
     struct ibv_qp_attr attr;
     long attr_mask;
+    ucs_status_t status;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_dc_mlx5_iface_devx_dci_connect(iface, &dci->txwq.super,
@@ -448,6 +450,12 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     if (ibv_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
         ucs_error("ibv_modify_qp(DCI, INIT) failed : %m");
         return UCS_ERR_IO_ERROR;
+    }
+
+    status = uct_ib_device_set_ece(dev, dci->txwq.super.verbs.qp,
+                                   iface->super.super.config.ece);
+    if (status != UCS_OK) {
+        return status;
     }
 
     /* Move QP to the RTR state */
@@ -499,6 +507,7 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
     struct mlx5dv_qp_init_attr dv_init_attr = {};
     struct ibv_qp_init_attr_ex init_attr = {};
     struct ibv_qp_attr attr = {};
+    ucs_status_t status;
     int ret;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCT) {
@@ -542,6 +551,12 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
     if (ret) {
          ucs_error("error modifying DCT to INIT: %m");
          goto err;
+    }
+
+    status = uct_ib_device_set_ece(dev, iface->rx.dct.verbs.qp,
+                                   iface->super.super.config.ece);
+    if (status != UCS_OK) {
+        goto err;
     }
 
     attr.qp_state                  = IBV_QPS_RTR;

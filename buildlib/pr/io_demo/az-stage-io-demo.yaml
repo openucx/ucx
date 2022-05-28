@@ -11,6 +11,8 @@ parameters:
   default: $(roce_iface)
 - name: initial_delay
   default: 20
+- name: ece
+  default: '0'
 - name: analyzer_allow_list_args
   default: ''
 - name: interference
@@ -64,6 +66,7 @@ steps:
     export UCX_NET_DEVICES=$(echo ${net_devices##*( )} | tr " ", ",")
     export UCX_TLS=${{ parameters.iodemo_tls }}
     export UCX_RNDV_THRESH=4k
+    export UCX_RC_ECE=${{ parameters.ece }}
     export LD_LIBRARY_PATH=$(workspace)/install/lib:$LD_LIBRARY_PATH
     export UCX_LOG_LEVEL=info
     num_tasks=$(echo ${{ parameters.roce_iface }} | wc -w)

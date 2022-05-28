@@ -196,6 +196,10 @@ AS_IF([test "x$with_ib" = "xyes"],
                        ibv_create_srq_ex],
                       [], [], [[#include <infiniband/verbs.h>]])
 
+       # Check ECE operation APIs are supported by rdma-core package
+       AC_CHECK_DECLS(ibv_set_ece,
+                     [], [], [[#include <infiniband/verbs.h>]])
+
        # We shouldn't confuse upstream ibv_query_device_ex with
        # legacy MOFED one, distinguish by arguments number
        AC_CHECK_DECL(ibv_query_device_ex, [

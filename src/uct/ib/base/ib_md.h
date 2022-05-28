@@ -133,6 +133,7 @@ typedef struct uct_ib_md {
         uct_ib_device_spec_t *specs;    /* Custom device specifications */
         unsigned             count;     /* Number of custom devices */
     } custom_devices;
+    int                      ece_enable;
     int                      check_subnet_filter;
     uint64_t                 subnet_filter;
     double                   pci_bw;
@@ -495,6 +496,13 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access, struct ibv_mr **mr_p, int silent);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
+
+
+/**
+ * Check if IB md device has ECE capability
+ */
+ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md);
+
 
 ucs_status_t
 uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
