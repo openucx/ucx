@@ -63,6 +63,7 @@ void ucs_mpool_params_reset(ucs_mpool_params_t *params)
     params->elem_size       = 0;
     params->align_offset    = 0;
     params->alignment       = UCS_SYS_CACHE_LINE_SIZE;
+    params->malloc_safe     = 0;
     params->elems_per_chunk = 128;
     params->max_chunk_size  = 128 * UCS_MBYTE;
     params->max_elems       = UINT_MAX;
@@ -100,6 +101,7 @@ ucs_status_t ucs_mpool_init(const ucs_mpool_params_t *params, ucs_mpool_t *mp)
     mp->data->alignment       = params->alignment;
     mp->data->align_offset    = sizeof(ucs_mpool_elem_t) + params->align_offset;
     mp->data->elems_per_chunk = params->elems_per_chunk;
+    mp->data->malloc_safe     = params->malloc_safe;
     mp->data->quota           = params->max_elems;
     mp->data->tail            = NULL;
     mp->data->chunks          = NULL;
@@ -249,8 +251,10 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     chunk_size          = ucs_min(chunk_size, data->max_chunk_size);
     status = data->ops->chunk_alloc(mp, &chunk_size, &ptr);
     if (status != UCS_OK) {
-        ucs_error("Failed to allocate memory pool (name=%s) chunk: %s",
-                  ucs_mpool_name(mp), ucs_status_string(status));
+        if (!data->malloc_safe) {
+            ucs_error("Failed to allocate memory pool (name=%s) chunk: %s",
+                      ucs_mpool_name(mp), ucs_status_string(status));
+        }
         return;
     }
 
@@ -259,8 +263,10 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     chunk->elems     = ucs_mpool_chunk_elems(mp, chunk);
     chunk->num_elems = ucs_mpool_num_elems_per_chunk(mp, chunk, chunk_size);
 
-    ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
-              ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);
+    if (!data->malloc_safe) {
+        ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
+                  ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);
+    }
 
     for (i = 0; i < chunk->num_elems; ++i) {
         elem         = ucs_mpool_chunk_elem(data, chunk, i);

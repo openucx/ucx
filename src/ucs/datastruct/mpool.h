@@ -81,6 +81,7 @@ struct ucs_mpool_data {
                                              * only take effect on grow_factor=1 */
     unsigned               elems_per_chunk; /* Number of elements per chunk */
     unsigned               quota;           /* How many more elements can be allocated */
+    int                    malloc_safe;     /* Avoid triggering malloc() during put/get */
     ucs_mpool_elem_t       *tail;           /* Free list tail */
     ucs_mpool_chunk_t      *chunks;         /* List of allocated chunks */
     const ucs_mpool_ops_t  *ops;            /* Memory pool operations */
@@ -165,6 +166,12 @@ typedef struct ucs_mpool_params {
      * Boundary to which align the given offset within the element.
      */
     size_t                alignment;
+
+    /**
+     * Avoid triggering malloc() during put/get operations, this makes the
+     * memory pool safe to use from memory hooks context.
+     */
+    int                   malloc_safe;
 
     /**
      * Number of elements in first chunk.
