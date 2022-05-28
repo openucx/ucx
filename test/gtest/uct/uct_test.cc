@@ -1081,6 +1081,12 @@ uct_listener_h uct_test::entity::listener() const {
     return m_listener;
 }
 
+uct_listener_h uct_test::entity::revoke_listener() const {
+    uct_listener_h uct_listener = listener();
+    m_listener.revoke();
+    return uct_listener;
+}
+
 uct_iface_h uct_test::entity::iface() const {
     return m_iface;
 }
