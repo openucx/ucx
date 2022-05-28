@@ -482,6 +482,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 {
     uct_cuda_ipc_iface_config_t *config = NULL;
     ucs_status_t status;
+    ucs_mpool_params_t mp_params;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops,
@@ -501,15 +502,13 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     self->config.enable_get_zcopy    = config->enable_get_zcopy;
     self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
 
-    status = ucs_mpool_init(&self->event_desc,
-                            0,
-                            sizeof(uct_cuda_ipc_event_desc_t),
-                            0,
-                            UCS_SYS_CACHE_LINE_SIZE,
-                            128,
-                            self->config.max_cuda_ipc_events,
-                            &uct_cuda_ipc_event_desc_mpool_ops,
-                            "CUDA_IPC EVENT objects");
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = sizeof(uct_cuda_ipc_event_desc_t);
+    mp_params.elems_per_chunk = 128;
+    mp_params.max_elems       = self->config.max_cuda_ipc_events;
+    mp_params.ops             = &uct_cuda_ipc_event_desc_mpool_ops;
+    mp_params.name            = "CUDA_IPC EVENT objects";
+    status = ucs_mpool_init(&mp_params, &self->event_desc);
     if (UCS_OK != status) {
         ucs_error("mpool creation failed");
         return UCS_ERR_IO_ERROR;

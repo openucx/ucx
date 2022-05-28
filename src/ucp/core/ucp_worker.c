@@ -1789,6 +1789,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     uct_iface_attr_t *if_attr;
     ucp_rsc_index_t  iface_id;
     ucs_status_t     status;
+    ucs_mpool_params_t mp_params;
 
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         if_attr           = &worker->ifaces[iface_id]->attr;
@@ -1803,11 +1804,14 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     /* Create a hashtable of memory pools for mem_type devices */
     kh_init_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
 
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = sizeof(ucp_request_t) +
+                                context->config.request.size;
+    mp_params.elems_per_chunk = 128;
+    mp_params.ops             = &ucp_request_mpool_ops;
+    mp_params.name            = "ucp_requests";
     /* Create memory pool for requests */
-    status = ucs_mpool_init(&worker->req_mp, 0,
-                            sizeof(ucp_request_t) + context->config.request.size,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_request_mpool_ops, "ucp_requests");
+    status = ucs_mpool_init(&mp_params, &worker->req_mp);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1841,22 +1845,27 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
          * Thus rkey_mpool_max_md=2 is the optimal value to keeping short
          * rkeys in the rkey mpool.
          */
-        status = ucs_mpool_init(&worker->rkey_mp, 0,
-                                sizeof(ucp_rkey_t) +
-                                sizeof(ucp_tl_rkey_t) *
-                                worker->context->config.ext.rkey_mpool_max_md,
-                                0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                                &ucp_rkey_mpool_ops, "ucp_rkeys");
+        ucs_mpool_params_reset(&mp_params);
+        mp_params.elem_size       = sizeof(ucp_rkey_t) +
+                                    (sizeof(ucp_tl_rkey_t) *
+                                     worker->context->config.ext.rkey_mpool_max_md);
+        mp_params.elems_per_chunk = 128;
+        mp_params.ops             = &ucp_rkey_mpool_ops;
+        mp_params.name            = "ucp_rkeys";
+        status = ucs_mpool_init(&mp_params, &worker->rkey_mp);
         if (status != UCS_OK) {
             goto err_req_mp_cleanup;
         }
     }
 
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = context->config.ext.seg_size + sizeof(ucp_mem_desc_t);
+    mp_params.align_offset    = sizeof(ucp_mem_desc_t);
+    mp_params.elems_per_chunk = 128;
+    mp_params.ops             = &ucp_reg_mpool_ops;
+    mp_params.name            = "ucp_reg_bufs";
     /* Create memory pool of bounce buffers */
-    status = ucs_mpool_init(&worker->reg_mp, 0,
-                            context->config.ext.seg_size + sizeof(ucp_mem_desc_t),
-                            sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
-                            128, UINT_MAX, &ucp_reg_mpool_ops, "ucp_reg_bufs");
+    status = ucs_mpool_init(&mp_params, &worker->reg_mp);
     if (status != UCS_OK) {
         goto err_rkey_mp_cleanup;
     }

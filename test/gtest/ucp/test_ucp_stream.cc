@@ -766,7 +766,8 @@ void test_ucp_stream_many2one::do_send_worker_poll_test(ucp_datatype_t dt)
 
 void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
 {
-    const size_t                                       niter = 2018;
+    /* Limit rx buffer memory consumption */
+    const size_t                                       niter = 1000;
     std::vector<size_t>                                roffsets(m_nsenders, 0);
     std::vector<ucp::data_type_desc_t>                 dt_rdescs(m_nsenders);
     std::vector<std::pair<size_t, request_wrapper_t> > rreqs;
