@@ -1208,6 +1208,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = mp_obj_size;
     mp_params.alignment       = mp_align;
+    mp_params.malloc_safe     = 1;
     mp_params.elems_per_chunk = 1024;
     mp_params.ops             = &ucs_rcache_mp_ops;
     mp_params.name            = "rcache_mp";
