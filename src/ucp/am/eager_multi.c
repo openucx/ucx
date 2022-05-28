@@ -42,11 +42,12 @@ ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = 0,
+        .max_lanes           = context->config.ext.max_eager_lanes,
+        .initial_reg_md_map  = 0,
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
-        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
-        .max_lanes           = context->config.ext.max_eager_lanes
+        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
 
     if (!ucp_am_check_init_params(init_params, UCP_AM_OP_ID_MASK_ALL,
@@ -166,11 +167,12 @@ ucp_am_eager_multi_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
+        .max_lanes           = context->config.ext.max_eager_lanes,
+        .initial_reg_md_map  = 0,
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
-        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
-        .max_lanes           = context->config.ext.max_eager_lanes
+        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
     if (!ucp_am_check_init_params(init_params, UCP_AM_OP_ID_MASK_ALL,
