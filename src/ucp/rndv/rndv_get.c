@@ -178,7 +178,7 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
         /* The error completion handler is not sending ATS */
         request->send.state.uct_comp.func =
                 ucp_proto_rndv_get_zcopy_fetch_err_completion;
-        ucp_invoke_uct_completion(&request->send.state.uct_comp, status);
+        ucp_proto_request_zcopy_abort(request, status);
         break;
     case UCP_PROTO_RNDV_GET_STAGE_ATS:
         rreq = ucp_request_get_super(request);
