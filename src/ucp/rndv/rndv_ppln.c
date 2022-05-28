@@ -40,15 +40,14 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
     ucp_proto_caps_t *caps                       = init_params->caps;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
-    const ucp_proto_select_range_t *frag_range;
+    const ucp_proto_threshold_elem_t *thresh_elem;
     const ucp_proto_select_elem_t *select_elem;
+    const ucp_proto_perf_range_t *frag_range;
     size_t frag_min_length, frag_max_length;
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
     ucs_linear_func_t ppln_overhead;
-    ucp_proto_perf_type_t perf_type;
-    ucs_linear_func_t *ppln_perf;
     char frag_size_str[32];
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
@@ -86,16 +85,15 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    /* Take the last protocol in the list */
-    for (frag_range = select_elem->perf_ranges;
-         frag_range->super.max_length < frag_max_length; ++frag_range)
-        ;
+    frag_range  = ucp_proto_perf_range_search(select_elem, frag_max_length);
+    thresh_elem = ucp_proto_select_thresholds_search(select_elem,
+                                                     frag_max_length);
 
     /* Initialize private data */
     *init_params->priv_size = sizeof(*rpriv);
     rpriv->frag_proto       = *select_elem;
     rpriv->frag_size        = frag_max_length;
-    caps->cfg_thresh        = frag_range->cfg_thresh;
+    caps->cfg_thresh        = thresh_elem->proto_config.cfg_thresh;
     caps->cfg_priority      = 0;
     caps->min_length        = frag_max_length + 1;
     caps->num_ranges        = 0;
@@ -103,18 +101,15 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
               ucs_memunits_to_str(rpriv->frag_size, frag_size_str,
                                   sizeof(frag_size_str)),
-              UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->super.perf));
+              UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
 
     /* Add the single range of the pipeline protocol */
-    ucp_proto_common_add_ppln_range(init_params, &frag_range->super, SIZE_MAX);
+    ucp_proto_common_add_ppln_range(init_params, frag_range, SIZE_MAX);
 
     /* Add overheads: PPLN overhead */
     ppln_overhead = ucs_linear_func_make(ppln_frag_overhead,
                                          ppln_frag_overhead / rpriv->frag_size);
-    for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
-        ppln_perf = &caps->ranges[0].perf[perf_type];
-        ucs_linear_func_add_inplace(ppln_perf, ppln_overhead);
-    }
+    ucp_proto_perf_add(caps->ranges[0].perf, ppln_overhead);
 
     /* Add overheads: ack time */
     return ucp_proto_rndv_ack_init(init_params, &rpriv->ack);

@@ -123,9 +123,6 @@ typedef enum {
  * Performance estimation for a range of message sizes.
  */
 typedef struct {
-    /* Protocol name */
-    const char        *name;
-
     /* Maximal payload size for this range */
     size_t            max_length;
 
@@ -296,7 +293,7 @@ extern const char *ucp_operation_descs[];
 
 
 /* Performance types names */
-extern const char *ucp_proto_perf_types[];
+extern const char *ucp_proto_perf_type_names[];
 
 
 /* Get number of globally registered protocols */
@@ -307,5 +304,21 @@ unsigned ucp_protocols_count(void);
    description from proto->desc, and set config to an empty string. */
 void ucp_proto_default_query(const ucp_proto_query_params_t *params,
                              ucp_proto_query_attr_t *attr);
+
+static inline void
+ucp_proto_perf_copy(ucs_linear_func_t dest[UCP_PROTO_PERF_TYPE_LAST],
+                    const ucs_linear_func_t src[UCP_PROTO_PERF_TYPE_LAST])
+{
+    dest[UCP_PROTO_PERF_TYPE_SINGLE] = src[UCP_PROTO_PERF_TYPE_SINGLE];
+    dest[UCP_PROTO_PERF_TYPE_MULTI]  = src[UCP_PROTO_PERF_TYPE_MULTI];
+}
+
+static inline void
+ucp_proto_perf_add(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
+                   ucs_linear_func_t func)
+{
+    ucs_linear_func_add_inplace(&perf[UCP_PROTO_PERF_TYPE_SINGLE], func);
+    ucs_linear_func_add_inplace(&perf[UCP_PROTO_PERF_TYPE_MULTI], func);
+}
 
 #endif
