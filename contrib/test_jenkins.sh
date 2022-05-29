@@ -263,15 +263,24 @@ get_active_ib_devices() {
 }
 
 #
-# Check IB devices on state INIT
+# Check host state
 #
 check_machine() {
+	# Check IB devices on state INIT
 	init_dev=$(get_ib_devices PORT_INIT)
 	if [ -n "${init_dev}" ]
 	then
 		echo "${init_dev} have state PORT_INIT"
 		exit 1
 	fi
+
+	# Log machine status
+	lscpu
+	uname -a
+	free -m
+	ofed_info -s || true
+	ibv_devinfo -v || true
+	show_gids || true
 }
 
 #
