@@ -476,8 +476,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
 
     init_attr->rx_priv_len = sizeof(uct_ud_recv_skb_t) -
                              sizeof(uct_ib_iface_recv_desc_t);
-    init_attr->rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
-    init_attr->seg_size    = ucs_min(mtu, config->super.seg_size);
+    init_attr->rx_hdr_len  = UCT_UD_RX_HDR_LEN;
+    init_attr->seg_size    = ucs_min(mtu, config->super.seg_size) + UCT_IB_GRH_LEN;
     init_attr->qp_type     = IBV_QPT_UD;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, md, worker,
@@ -739,9 +739,9 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
 
     iface_attr->cap.am.max_short       = uct_ib_iface_hdr_size(iface->config.max_inline,
                                                                sizeof(uct_ud_neth_t));
-    iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - UCT_UD_RX_HDR_LEN;
     iface_attr->cap.am.min_zcopy       = 0;
-    iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - UCT_UD_RX_HDR_LEN;
     iface_attr->cap.am.align_mtu       = uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
     iface_attr->cap.am.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.am.max_iov         = am_max_iov;
