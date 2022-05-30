@@ -126,11 +126,9 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod,
                       (UCT_IB_MLX5_CAP_GENERAL << 1) |
                       UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR);
-    ret = mlx5dv_devx_general_cmd(verbs, in, sizeof(in),
-                                  out, sizeof(out));
-    if (ret != 0) {
-        ucs_debug("mlx5dv_devx_general_cmd(%s, QUERY_HCA_CAP) failed: %m",
-                  dev_name);
+    status = uct_ib_mlx5_devx_general_cmd(verbs, in, sizeof(in), out,
+                                          sizeof(out), "QUERY_HCA_CAP", 1);
+    if (status != UCS_OK) {
         goto dummy_qp_ctx_init;
     }
 
@@ -144,10 +142,9 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod,
                       (UCT_IB_MLX5_CAP_2_GENERAL << 1) |
                       UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR);
-    ret = mlx5dv_devx_general_cmd(verbs, in, sizeof(in),
-                                  out, sizeof(out));
-    if (ret != 0) {
-        ucs_debug("mlx5dv_devx_general_cmd(%s, QUERY_HCA_CAP_2) failed: %m", dev_name);
+    status = uct_ib_mlx5_devx_general_cmd(verbs, in, sizeof(in), out,
+                                          sizeof(out), "QUERY_HCA_CAP_2", 1);
+    if (status != UCS_OK) {
         goto dummy_qp_ctx_init;
     }
 
@@ -313,7 +310,7 @@ uct_rdmacm_cm_reserved_qpn_blk_alloc(uct_rdmacm_cm_device_context_t *ctx,
         ucs_log(err_level,
                 "mlx5dv_devx_obj_create(dev=%s GENERAL_OBJECT, "
                 "type=RESERVED_QPN granularity=%d) failed, "
-                "syndrome %x: %m",
+                "syndrome 0x%x: %m",
                 ibv_get_device_name(verbs->device),
                 ctx->log_reserved_qpn_granularity,
                 UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome));
@@ -343,10 +340,7 @@ void uct_rdmacm_cm_reserved_qpn_blk_release(
 #if HAVE_DECL_MLX5DV_IS_SUPPORTED
     ucs_assert(blk->refcount == 0);
 
-    if (mlx5dv_devx_obj_destroy(blk->obj)) {
-        ucs_error("mlx5dv_devx_obj_destroy(type=RESERVED_QPN) failed: %m");
-    }
-
+    uct_ib_mlx5_devx_obj_destroy(blk->obj, "RESERVED_QPN");
     ucs_trace("destroyed reserved QPN 0x%x blk %p", blk->first_qpn, blk);
 
     ucs_free(blk);
