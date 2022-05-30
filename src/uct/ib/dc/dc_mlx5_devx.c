@@ -81,11 +81,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
         UCT_IB_MLX5DV_SET(dctc, dctc, ece, iface->super.super.config.ece);
     }
 
-    iface->rx.dct.devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
-                                                    out, sizeof(out));
+    iface->rx.dct.devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
+                                                         sizeof(in), out,
+                                                         sizeof(out), "DCT");
     if (iface->rx.dct.devx.obj == NULL) {
-        ucs_error("mlx5dv_devx_obj_create(DCT) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(create_dct_out, out, syndrome));
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -180,7 +179,6 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
 {
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(set_xrq_dc_params_entry_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(set_xrq_dc_params_entry_out)] = {};
-    int ret;
 
     if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, pkey_table_index,
@@ -197,13 +195,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, opcode,
                       UCT_IB_MLX5_CMD_OP_SET_XRQ_DC_PARAMS_ENTRY);
 
-    ret = mlx5dv_devx_obj_modify(iface->super.rx.srq.devx.obj, in, sizeof(in), out, sizeof(out));
-    if (ret) {
-        ucs_error("mlx5dv_devx_obj_modify(SET_XRQ_DC_PARAMS) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(set_xrq_dc_params_entry_out, out, syndrome));
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
+    return uct_ib_mlx5_devx_obj_modify(iface->super.rx.srq.devx.obj, in,
+                                       sizeof(in), out, sizeof(out),
+                                       "SET_XRQ_DC_PARAMS");
 }
 

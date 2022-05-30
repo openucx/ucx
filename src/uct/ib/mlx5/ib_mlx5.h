@@ -732,6 +732,24 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
 
+ucs_status_t uct_ib_mlx5_devx_obj_modify(struct mlx5dv_devx_obj *obj,
+                                         const void *in, size_t inlen,
+                                         void *out, size_t outlen,
+                                         char *msg_arg);
+
+struct mlx5dv_devx_obj *
+uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
+                            size_t inlen, void *out, size_t outlen,
+                            char *msg_arg);
+
+ucs_status_t
+uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg);
+
+ucs_status_t uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
+                                          const void *in, size_t inlen,
+                                          void *out, size_t outlen,
+                                          char *msg_arg, int silent);
+
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);

@@ -578,18 +578,13 @@ err:
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
-    int UCS_V_UNUSED ret;
-
     switch (srq->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
         uct_ib_destroy_srq(srq->verbs.srq);
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
 #if HAVE_DEVX
-        ret = mlx5dv_devx_obj_destroy(srq->devx.obj);
-        if (ret) {
-            ucs_warn("mlx5dv_devx_obj_destroy(SRQ) failed: %m");
-        }
+        uct_ib_mlx5_devx_obj_destroy(srq->devx.obj, "SRQ");
         uct_rc_mlx5_devx_cleanup_srq(md, srq);
 #endif
         break;

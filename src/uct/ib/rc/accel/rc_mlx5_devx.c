@@ -249,12 +249,10 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
         return UCS_OK;
     }
 
-    iface->rx.srq.devx.obj = mlx5dv_devx_obj_create(dev->ibv_context,
-                                                    in, sizeof(in),
-                                                    out, sizeof(out));
+    iface->rx.srq.devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
+                                                         sizeof(in), out,
+                                                         sizeof(out), "XRQ");
     if (iface->rx.srq.devx.obj == NULL) {
-        ucs_error("mlx5dv_devx_obj_create(XRQ) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(create_xrq_out, out, syndrome));
         status = UCS_ERR_IO_ERROR;
         goto err_cleanup_srq;
     }
@@ -298,12 +296,10 @@ ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    iface->rx.srq.devx.obj = mlx5dv_devx_obj_create(dev->ibv_context,
-                                                    in, sizeof(in),
-                                                    out, sizeof(out));
+    iface->rx.srq.devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
+                                                         sizeof(in), out,
+                                                         sizeof(out), "RMP");
     if (iface->rx.srq.devx.obj == NULL) {
-        ucs_error("mlx5dv_devx_obj_create(RMP) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(create_rmp_out, out, syndrome));
         status = UCS_ERR_IO_ERROR;
         goto err_cleanup_srq;
     }
