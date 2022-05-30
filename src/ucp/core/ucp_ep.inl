@@ -132,37 +132,11 @@ static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t 
     return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_ep_ext_gen_t* ucp_ep_ext_gen(ucp_ep_h ep)
-{
-    return (ucp_ep_ext_gen_t*)ucs_strided_elem_get(ep, 0, 1);
-}
-
-static UCS_F_ALWAYS_INLINE ucp_ep_ext_proto_t* ucp_ep_ext_proto(ucp_ep_h ep)
-{
-    return (ucp_ep_ext_proto_t*)ucs_strided_elem_get(ep, 0, 2);
-}
-
-static UCS_F_ALWAYS_INLINE ucp_ep_h ucp_ep_from_ext_gen(ucp_ep_ext_gen_t *ep_ext)
-{
-    return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 1, 0);
-}
-
-static UCS_F_ALWAYS_INLINE ucp_ep_h ucp_ep_from_ext_proto(ucp_ep_ext_proto_t *ep_ext)
-{
-    return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 2, 0);
-}
-
 static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
     ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    return &ucp_ep_ext_gen(ep)->flush_state;
-}
-
-static UCS_F_ALWAYS_INLINE ucp_ep_ext_control_t* ucp_ep_ext_control(ucp_ep_h ep)
-{
-    ucs_assert(ucp_ep_ext_gen(ep)->control_ext != NULL);
-    return ucp_ep_ext_gen(ep)->control_ext;
+    return &ep->ext->flush_state;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_ep_update_flags(
@@ -185,13 +159,13 @@ static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
         return UCS_PTR_MAP_KEY_INVALID;
     }
 #endif
-    return ucp_ep_ext_control(ep)->remote_ep_id;
+    return ep->ext->remote_ep_id;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_local_id(ucp_ep_h ep)
 {
-    ucs_assert(ucp_ep_ext_control(ep)->local_ep_id != UCS_PTR_MAP_KEY_INVALID);
-    return ucp_ep_ext_control(ep)->local_ep_id;
+    ucs_assert(ep->ext->local_ep_id != UCS_PTR_MAP_KEY_INVALID);
+    return ep->ext->local_ep_id;
 }
 
 /*
@@ -212,16 +186,16 @@ static inline void ucp_ep_update_remote_id(ucp_ep_h ep,
                                            ucs_ptr_map_key_t remote_id)
 {
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
-        ucs_assertv(remote_id == ucp_ep_ext_control(ep)->remote_ep_id,
+        ucs_assertv(remote_id == ep->ext->remote_ep_id,
                     "ep=%p flags=0x%" PRIx32 " rkey=0x%" PRIxPTR
                     " ep->remote_id=0x%" PRIxPTR, ep, ep->flags, remote_id,
-                    ucp_ep_ext_control(ep)->remote_ep_id);
+                    ep->ext->remote_ep_id);
     }
 
     ucs_assert(remote_id != UCS_PTR_MAP_KEY_INVALID);
     ucs_trace("ep %p: set remote_id to 0x%" PRIxPTR, ep, remote_id);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_ID, 0);
-    ucp_ep_ext_control(ep)->remote_ep_id = remote_id;
+    ep->ext->remote_ep_id = remote_id;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
