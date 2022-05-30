@@ -886,8 +886,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     /* write buffer sizes */
     for (i = 0; i <= self->rx.wq.mask; i++) {
-        self->rx.wq.wqes[i].byte_count = htonl(self->super.super.config.rx_payload_offset +
-                                               self->super.super.config.seg_size);
+        self->rx.wq.wqes[i].byte_count = 
+                htonl(self->super.super.config.seg_size);
     }
 
     while (self->super.rx.available >= self->super.super.config.rx_max_batch) {

@@ -261,7 +261,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
     }
 
     return uct_iface_mpool_init(&iface->super, mp,
-                                iface->config.rx_payload_offset +
+                                iface->config.rx_hdr_offset +
                                         iface->config.seg_size,
                                 align_offset, alignment, &config->rx.mp, grow,
                                 uct_ib_iface_recv_desc_init, name);
@@ -1423,7 +1423,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
     while (count < n) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);
         wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
-        wrs[count].sg.length = iface->config.rx_payload_offset + iface->config.seg_size;
+        wrs[count].sg.length = iface->config.seg_size;
         wrs[count].sg.lkey   = desc->lkey;
         wrs[count].ibwr.num_sge = 1;
         wrs[count].ibwr.wr_id   = (uintptr_t)desc;

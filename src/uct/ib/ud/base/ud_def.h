@@ -122,6 +122,9 @@ typedef struct uct_ud_neth {
 } UCS_S_PACKED uct_ud_neth_t;
 
 
+#define UCT_UD_RX_HDR_LEN (UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t))
+
+
 enum {
     UCT_UD_SEND_SKB_FLAG_ACK_REQ    = UCS_BIT(0), /* ACK was requested for this skb */
     UCT_UD_SEND_SKB_FLAG_COMP       = UCS_BIT(1), /* This skb contains a completion */
