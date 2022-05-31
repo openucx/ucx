@@ -13,13 +13,6 @@
 #include <ucs/sys/preprocessor.h>
 
 
-void print_version()
-{
-    printf("# Version %s\n", UCT_VERNO_STRING);
-    printf("# Git branch '%s', revision %s\n", UCT_SCM_BRANCH, UCT_SCM_VERSION);
-    printf("# Configured with: %s\n", UCX_CONFIGURE_FLAGS);
-}
-
 void print_build_config()
 {
     typedef struct {
