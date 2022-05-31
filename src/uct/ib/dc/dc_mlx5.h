@@ -49,7 +49,7 @@ struct ibv_ravh {
 /**
  * Set iface config flag for enabling full handshake on DCI/DCT,
  * according to user configuration. Fail if the user requests to
- * force full-handlshake, while the HW does not support it.
+ * force full-handshake, while the HW does not support it.
  */
 #define UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(_self, _config, _config_name, \
                                                _flag_name, _status, _err) \
