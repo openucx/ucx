@@ -51,7 +51,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     int wqe_size;
     int dvflags;
     void *qpc;
-    int ret;
 
     uct_ib_iface_fill_attr(iface, &attr->super);
 
@@ -155,11 +154,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                           UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
     }
 
-    qp->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
-                                          out, sizeof(out));
+    qp->devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in, sizeof(in),
+                                               out, sizeof(out), "QP");
     if (!qp->devx.obj) {
-        ucs_error("mlx5dv_devx_obj_create(QP) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(create_qp_out, out, syndrome));
         status = UCS_ERR_IO_ERROR;
         goto err_free_db;
     }
@@ -178,12 +175,10 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         }
         UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
 
-        ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2init, sizeof(in_2init),
-                out_2init, sizeof(out_2init));
-        if (ret) {
-            ucs_error("mlx5dv_devx_obj_modify(2INIT_QP) failed, syndrome %x: %m",
-                    UCT_IB_MLX5DV_GET(rst2init_qp_out, out_2init, syndrome));
-            status = UCS_ERR_IO_ERROR;
+        status = uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in_2init,
+                                             sizeof(in_2init), out_2init,
+                                             sizeof(out_2init), "2INIT_QP");
+        if (status != UCS_OK) {
             goto err_free;
         }
     }
@@ -226,26 +221,24 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         void *out, size_t outlen)
 {
     int ret;
+    char opcode_str[16];
+
+    ucs_snprintf_zero(opcode_str, sizeof(opcode_str), "opcode=0x%x",
+                      UCT_IB_MLX5DV_GET(modify_qp_in, in, opcode));
 
     switch (qp->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
         ret = mlx5dv_devx_qp_modify(qp->verbs.qp, in, inlen, out, outlen);
         if (ret) {
-            ucs_error("mlx5dv_devx_qp_modify(%x) failed, syndrome %x: %m",
-                      UCT_IB_MLX5DV_GET(modify_qp_in, in, opcode),
+            ucs_error("mlx5dv_devx_qp_modify(%s) failed, syndrome 0x%x: %m",
+                      opcode_str,
                       UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
             return UCS_ERR_IO_ERROR;
         }
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
-        ret = mlx5dv_devx_obj_modify(qp->devx.obj, in, inlen, out, outlen);
-        if (ret) {
-            ucs_error("mlx5dv_devx_obj_modify(%x) failed, syndrome %x: %m",
-                      UCT_IB_MLX5DV_GET(modify_qp_in, in, opcode),
-                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
-            return UCS_ERR_IO_ERROR;
-        }
-        break;
+        return uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in, inlen, out, outlen,
+                                           opcode_str);
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         return UCS_ERR_UNSUPPORTED;
     }
@@ -266,8 +259,7 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
         ret = mlx5dv_devx_qp_query(qp->verbs.qp, in, inlen, out, outlen);
         if (ret) {
-            ucs_error("mlx5dv_devx_qp_query(%x) failed, syndrome %x: %m",
-                      UCT_IB_MLX5_CMD_OP_QUERY_QP,
+            ucs_error("mlx5dv_devx_qp_query(QP) failed, syndrome 0x%x: %m",
                       UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
             return UCS_ERR_IO_ERROR;
         }
@@ -275,8 +267,7 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         ret = mlx5dv_devx_obj_query(qp->devx.obj, in, inlen, out, outlen);
         if (ret) {
-            ucs_error("mlx5dv_devx_obj_query(%x) failed, syndrome %x: %m",
-                      UCT_IB_MLX5_CMD_OP_QUERY_QP,
+            ucs_error("mlx5dv_devx_obj_query(QP) failed, syndrome 0x%x: %m",
                       UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
             return UCS_ERR_IO_ERROR;
         }
@@ -311,12 +302,81 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
 {
-    int ret = mlx5dv_devx_obj_destroy(qp->devx.obj);
-    if (ret) {
-        ucs_error("mlx5dv_devx_obj_destroy(QP) failed: %m");
-    }
+    uct_ib_mlx5_devx_obj_destroy(qp->devx.obj, "QP");
     uct_ib_mlx5_put_dbrec(qp->devx.dbrec);
     uct_ib_mlx5_md_buf_free(md, qp->devx.wq_buf, &qp->devx.mem);
+}
+
+ucs_status_t uct_ib_mlx5_devx_obj_modify(struct mlx5dv_devx_obj *obj,
+                                         const void *in, size_t inlen,
+                                         void *out, size_t outlen,
+                                         char *msg_arg)
+{
+    int ret;
+    unsigned syndrome;
+
+    ret = mlx5dv_devx_obj_modify(obj, in, inlen, out, outlen);
+    if (ret != 0) {
+        syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        ucs_error("mlx5dv_devx_obj_modify(%s) failed, syndrome 0x%x: %m",
+                  msg_arg, syndrome);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+struct mlx5dv_devx_obj *
+uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
+                            size_t inlen, void *out, size_t outlen,
+                            char *msg_arg)
+{
+    struct mlx5dv_devx_obj *obj;
+    unsigned syndrome;
+
+    obj = mlx5dv_devx_obj_create(context, in, inlen, out, outlen);
+    if (obj == NULL) {
+        syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        ucs_error("mlx5dv_devx_obj_create(%s) failed on %s, syndrome 0x%x: %m",
+                  msg_arg, ibv_get_device_name(context->device), syndrome);
+    }
+
+    return obj;
+}
+
+ucs_status_t
+uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg)
+{
+    int ret;
+
+    ret = mlx5dv_devx_obj_destroy(obj);
+    if (ret != 0) {
+        ucs_warn("mlx5dv_devx_obj_destroy(%s) failed: %m", msg_arg);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
+                                          const void *in, size_t inlen,
+                                          void *out, size_t outlen,
+                                          char *msg_arg, int silent)
+{
+    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    int ret;
+    unsigned syndrome;
+
+    ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
+    if (ret != 0) {
+        syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        ucs_log(level,
+                "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
+                msg_arg, ibv_get_device_name(context->device), syndrome);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
@@ -326,7 +386,7 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_vport_context_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_vport_context_out)] = {};
     void *ctx;
-    int ret;
+    ucs_status_t status;
 
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK)) {
         return UCS_ERR_UNSUPPORTED;
@@ -336,14 +396,11 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                       UCT_IB_MLX5_CMD_OP_QUERY_HCA_VPORT_CONTEXT);
     UCT_IB_MLX5DV_SET(query_hca_vport_context_in, in, port_num, port_num);
 
-    ret = mlx5dv_devx_general_cmd(md->super.dev.ibv_context, in, sizeof(in),
-                                  out, sizeof(out));
-    if (ret != 0) {
-        ucs_error("mlx5dv_devx_general_cmd(QUERY_HCA_VPORT_CONTEXT) failed,"
-                  " syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(query_hca_vport_context_out, out,
-                                    syndrome));
-        return UCS_ERR_IO_ERROR;
+    status = uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, in,
+                                          sizeof(in), out, sizeof(out),
+                                          "QUERY_HCA_VPORT_CONTEXT", 0);
+    if (status != UCS_OK) {
+        return status;
     }
 
     ctx = UCT_IB_MLX5DV_ADDR_OF(query_hca_vport_context_out, out,
