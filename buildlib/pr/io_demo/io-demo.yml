@@ -32,14 +32,6 @@ parameters:
         tls: "rc_x"
         test_name: tag_cx6_rc
         extra_run_args: ""
-      "tag match on CX6/RC with auto ECE":
-        args: ""
-        duration: 600
-        interface: $(roce_iface_cx6)
-        tls: "rc_x"
-        ece: "auto"
-        test_name: tag_cx6_rc_auto_ece
-        extra_run_args: ""
       "active messages on CX6/RC":
         args: "-A"
         duration: 600
