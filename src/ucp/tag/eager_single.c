@@ -84,7 +84,7 @@ ucp_proto_t ucp_eager_short_proto = {
     .init     = ucp_proto_eager_short_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_eager_short_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = ucp_proto_request_bcopy_abort
 };
 
 static size_t ucp_eager_single_pack(void *dest, void *arg)
@@ -222,5 +222,5 @@ ucp_proto_t ucp_eager_zcopy_single_proto = {
     .init     = ucp_proto_eager_zcopy_single_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_zcopy_single_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = ucp_proto_request_zcopy_abort
 };
