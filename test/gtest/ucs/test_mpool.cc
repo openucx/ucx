@@ -126,6 +126,24 @@ UCS_TEST_F(test_mpool, wrong_ops) {
     EXPECT_TRUE(status == UCS_ERR_INVALID_PARAM);
 }
 
+UCS_TEST_F(test_mpool, wrong_mpool_chuk_size) {
+    ucs_mpool_t mp;
+    ucs_mpool_ops_t ops = { 0 };
+    scoped_log_handler log_handler(mpool_log_handler);
+    ucs_mpool_params_t mp_params;
+
+    ucs_mpool_params_reset(&mp_params);
+    mp_params.elem_size       = header_size + data_size;
+    mp_params.align_offset    = header_size;
+    mp_params.alignment       = align;
+    mp_params.elems_per_chunk = 1;
+    mp_params.max_chunk_size  = mp_params.elems_per_chunk * mp_params.elem_size;
+    mp_params.ops             = &ops;
+    mp_params.name            = "tests";
+    ucs_status_t status       = ucs_mpool_init(&mp_params, &mp);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
 UCS_TEST_F(test_mpool, basic) {
     ucs_status_t status;
     ucs_mpool_t mp;

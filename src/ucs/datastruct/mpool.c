@@ -72,8 +72,17 @@ void ucs_mpool_params_reset(ucs_mpool_params_t *params)
     params->name            = "";
 }
 
+static size_t ucs_mpool_chunk_size(ucs_mpool_t *mp, unsigned num_elems)
+{
+    return sizeof(ucs_mpool_chunk_t) + mp->data->alignment +
+           (num_elems * ucs_mpool_elem_total_size(mp->data));
+}
+
 ucs_status_t ucs_mpool_init(const ucs_mpool_params_t *params, ucs_mpool_t *mp)
 {
+    size_t min_chunk_size;
+    ucs_status_t status;
+
     /* Check input values */
     if ((params->elem_size == 0) ||
         (params->align_offset > params->elem_size) ||
@@ -110,7 +119,16 @@ ucs_status_t ucs_mpool_init(const ucs_mpool_params_t *params, ucs_mpool_t *mp)
 
     if (mp->data->name == NULL) {
         ucs_error("Failed to allocate memory pool data name");
+        status = UCS_ERR_NO_MEMORY;
         goto err_strdup;
+    }
+
+    min_chunk_size = ucs_mpool_chunk_size(mp, 1);
+    if (params->max_chunk_size < min_chunk_size) {
+        ucs_error("Invalid memory pool parameter: chunk size is too small (%zu)",
+                  params->max_chunk_size);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_name;
     }
 
     VALGRIND_CREATE_MEMPOOL(mp, 0, 0);
@@ -120,10 +138,12 @@ ucs_status_t ucs_mpool_init(const ucs_mpool_params_t *params, ucs_mpool_t *mp)
               mp->data->elem_size);
     return UCS_OK;
 
+err_free_name:
+    ucs_free(mp->data->name);
 err_strdup:
     ucs_free(mp->data);
     mp->data = NULL;
-    return UCS_ERR_NO_MEMORY;
+    return status;
 }
 
 void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
@@ -210,12 +230,6 @@ static void *ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
     chunk_padding = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
                                 data->alignment);
     return UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
-}
-
-static size_t ucs_mpool_chunk_size(ucs_mpool_t *mp, unsigned num_elems)
-{
-    return sizeof(ucs_mpool_chunk_t) + mp->data->alignment +
-           (num_elems * ucs_mpool_elem_total_size(mp->data));
 }
 
 unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
