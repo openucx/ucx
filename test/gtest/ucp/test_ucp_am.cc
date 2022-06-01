@@ -31,10 +31,25 @@ extern "C" {
 
 class test_ucp_am_base : public ucp_test {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+    test_ucp_am_base()
+    {
+        if (is_proto_enabled()) {
+            modify_config("PROTO_ENABLE", "y");
+        }
+    }
+
+    static void
+    get_test_variants_prereg(std::vector<ucp_test_variant> &variants)
+    {
         add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
         add_variant_with_value(variants, UCP_FEATURE_AM, TEST_FLAG_PREREG,
                                "prereg");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_test_variants_prereg, 0);
+        add_variant_values(variants, get_test_variants_prereg, 1, "proto");
     }
 
     virtual void init() {
@@ -53,6 +68,12 @@ protected:
     bool prereg() const
     {
         return get_variant_value(0) & TEST_FLAG_PREREG;
+    }
+
+private:
+    bool is_proto_enabled() const
+    {
+        return get_variant_value(1);
     }
 };
 
@@ -355,7 +376,7 @@ protected:
                sizeof(ucp_am_hdr_t);
     }
 
-    virtual unsigned get_send_flag()
+    virtual unsigned get_send_flag() const
     {
         return 0;
     }
@@ -809,9 +830,9 @@ public:
     }
 
 protected:
-    virtual unsigned get_send_flag()
+    virtual unsigned get_send_flag() const
     {
-        return get_variant_value(1);
+        return get_variant_value(2);
     }
 };
 
@@ -939,12 +960,12 @@ public:
 private:
     virtual ucs_memory_type_t tx_memtype() const
     {
-        return static_cast<ucs_memory_type_t>(get_variant_value(1));
+        return static_cast<ucs_memory_type_t>(get_variant_value(2));
     }
 
     virtual ucs_memory_type_t rx_memtype() const
     {
-        return static_cast<ucs_memory_type_t>(get_variant_value(2));
+        return static_cast<ucs_memory_type_t>(get_variant_value(3));
     }
 };
 
@@ -956,24 +977,13 @@ UCS_TEST_P(test_ucp_am_nbx_eager_memtype, basic)
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_eager_memtype)
 
 
-class test_ucp_am_nbx_eager_data_release : public test_ucp_am_nbx_reply {
+class test_ucp_am_nbx_eager_data_release : public test_ucp_am_nbx {
 public:
     test_ucp_am_nbx_eager_data_release()
     {
         modify_config("RNDV_THRESH", "inf");
         modify_config("ZCOPY_THRESH", "inf");
-        if (enable_proto()) {
-            modify_config("PROTO_ENABLE", "y");
-        }
         m_data_ptr = NULL;
-    }
-
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
-                           0);
-        add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
-                           1, "proto");
     }
 
     virtual ucs_status_t
@@ -995,21 +1005,14 @@ public:
     void test_data_release(size_t size)
     {
         size_t hdr_size = ucs_min(max_am_hdr(), 8);
-        test_am_send_recv(size, 0, get_send_flag(),
-                          UCP_AM_FLAG_PERSISTENT_DATA);
+        test_am_send_recv(size, 0, 0, UCP_AM_FLAG_PERSISTENT_DATA);
         ucp_am_data_release(receiver().worker(), m_data_ptr);
 
-        test_am_send_recv(size, hdr_size, get_send_flag(),
-                          UCP_AM_FLAG_PERSISTENT_DATA);
+        test_am_send_recv(size, hdr_size, 0, UCP_AM_FLAG_PERSISTENT_DATA);
         ucp_am_data_release(receiver().worker(), m_data_ptr);
     }
 
 private:
-    unsigned enable_proto()
-    {
-        return get_variant_value(2);
-    }
-
     void *m_data_ptr;
 };
 
@@ -1144,13 +1147,6 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_seg_size)
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx_reply {
 public:
-    test_ucp_am_nbx_dts()
-    {
-        if (is_proto_enabled()) {
-            modify_config("PROTO_ENABLE", "y");
-        }
-    }
-
     static const uint64_t dts_bitmap = UCS_BIT(UCP_DATATYPE_CONTIG) |
                                        UCS_BIT(UCP_DATATYPE_IOV) |
                                        UCS_BIT(UCP_DATATYPE_GENERIC);
@@ -1179,7 +1175,7 @@ public:
                            ucp_datatype_class_names);
     }
 
-    static void get_test_variants_errh(std::vector<ucp_test_variant> &variants)
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, base_test_generator,
                            UCP_ERR_HANDLING_MODE_NONE);
@@ -1187,18 +1183,12 @@ public:
                            UCP_ERR_HANDLING_MODE_PEER, "errh");
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_values(variants, get_test_variants_errh, 0);
-        add_variant_values(variants, get_test_variants_errh, 1, "proto");
-    }
-
     void init()
     {
         test_ucp_am_nbx::init();
 
-        m_dt    = make_dt(get_variant_value(2));
-        m_rx_dt = make_dt(get_variant_value(3));
+        m_dt    = make_dt(get_variant_value(3));
+        m_rx_dt = make_dt(get_variant_value(4));
     }
 
     void cleanup()
@@ -1221,12 +1211,7 @@ public:
 private:
     ucp_err_handling_mode_t get_err_mode() const
     {
-        return static_cast<ucp_err_handling_mode_t>(get_variant_value(4));
-    }
-
-    bool is_proto_enabled() const
-    {
-        return get_variant_value(5);
+        return static_cast<ucp_err_handling_mode_t>(get_variant_value(5));
     }
 };
 
@@ -1278,16 +1263,6 @@ public:
     {
         m_status = UCS_OK;
         modify_config("RNDV_THRESH", "128");
-        if (enable_proto()) {
-            modify_config("PROTO_ENABLE", "y");
-        }
-    }
-
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 0);
-        add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 1,
-                           "proto");
     }
 
     ucs_status_t am_data_handler(const void *header, size_t header_length,
@@ -1352,12 +1327,6 @@ public:
     }
 
     ucs_status_t m_status;
-
-private:
-    unsigned enable_proto()
-    {
-        return get_variant_value(1);
-    }
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")

@@ -98,7 +98,8 @@ ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
         .super.hdr_size      = sizeof(ucp_am_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_SHORT,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
@@ -228,7 +229,8 @@ static ucs_status_t ucp_am_eager_single_bcopy_proto_init_common(
         .super.hdr_size      = sizeof(ucp_am_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
@@ -312,7 +314,8 @@ static ucs_status_t ucp_am_eager_single_zcopy_proto_init_common(
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_ZCOPY
     };

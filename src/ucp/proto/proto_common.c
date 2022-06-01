@@ -22,6 +22,14 @@ ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
     return params->ep_config_key->lanes[lane].rsc_index;
 }
 
+static size_t
+ucp_proto_common_get_seg_size(const ucp_proto_common_init_params_t *params,
+                              ucp_lane_index_t lane)
+{
+    ucs_assert(lane < UCP_MAX_LANES);
+    return params->super.ep_config_key->lanes[lane].seg_size;
+}
+
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
                                      ucp_md_map_t md_map, ucp_lane_index_t lane,
                                      ucp_proto_common_lane_priv_t *lane_priv)
@@ -150,7 +158,8 @@ size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
 static void
 ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                                const uct_iface_attr_t *iface_attr,
-                               size_t *min_frag_p, size_t *max_frag_p)
+                               ucp_lane_index_t lane, size_t *min_frag_p,
+                               size_t *max_frag_p)
 {
     *min_frag_p = ucp_proto_common_get_iface_attr_field(iface_attr,
                                                         params->min_frag_offs,
@@ -158,6 +167,13 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
     *max_frag_p = ucp_proto_common_get_iface_attr_field(iface_attr,
                                                         params->max_frag_offs,
                                                         SIZE_MAX);
+
+    /* Adjust maximum fragment size taking into account segment size to prevent
+       sending more than the remote side supports. */
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE) {
+        *max_frag_p = ucs_min(ucp_proto_common_get_seg_size(params, lane),
+                              *max_frag_p);
+    }
 }
 
 static void ucp_proto_common_update_lane_perf_by_distance(
@@ -208,7 +224,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     uct_perf_attr_t perf_attr;
     ucs_status_t status;
 
-    ucp_proto_common_get_frag_size(params, &wiface->attr, &tl_min_frag,
+    ucp_proto_common_get_frag_size(params, &wiface->attr, lane, &tl_min_frag,
                                    &tl_max_frag);
 
     status = ucp_proto_common_lane_perf_attr(&params->super, lane,
@@ -332,7 +348,6 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
 
         /* Check if lane type matches */
-        ucs_assert(lane < UCP_MAX_LANES);
         if (!(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
             ucs_trace("%s: no %s in name types", lane_desc,
                       ucp_lane_type_info[lane_type].short_name);
@@ -472,7 +487,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
         lane       = lanes[lane_index];
         iface_attr = ucp_proto_common_get_iface_attr(&params->super, lane);
 
-        ucp_proto_common_get_frag_size(params, iface_attr, &tl_min_frag,
+        ucp_proto_common_get_frag_size(params, iface_attr, lane, &tl_min_frag,
                                        &tl_max_frag);
 
         /* Minimal fragment size must be 0, unless 'MIN_FRAG' flag is set */

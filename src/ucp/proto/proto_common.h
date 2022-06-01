@@ -50,6 +50,10 @@ typedef enum {
 
     /* Supports non-zero minimal fragment size */
     UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG      = UCS_BIT(7),
+
+    /* Adjust maximum fragment size taking into account segment size to prevent
+     * sending more than the remote side supports */
+    UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE  = UCS_BIT(8)
 } ucp_proto_common_init_flags_t;
 
 
