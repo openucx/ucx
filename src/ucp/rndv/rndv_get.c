@@ -93,6 +93,12 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
+    if (ucs_unlikely(uct_comp->status != UCS_OK)) {
+        ucp_proto_rndv_rkey_destroy(req);
+        ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
+        return;
+    }
+
     ucp_proto_rndv_recv_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
 }
 
