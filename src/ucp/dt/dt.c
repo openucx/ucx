@@ -53,7 +53,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                   ucs_memory_type_names[mem_type]);
     }
 
-    status = uct_ep_put_short(ep->uct_eps[lane], recv_data, recv_length,
+    status = uct_ep_put_short(ucp_ep_get_lane(ep, lane), recv_data, recv_length,
                               (uint64_t)buffer, rkey_bundle.rkey);
     if (status != UCS_OK) {
         ucs_fatal("mem type unpack failed to uct_ep_put_short() %s",
@@ -91,7 +91,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
                   ucs_memory_type_names[mem_type]);
     }
 
-    status = uct_ep_get_short(ep->uct_eps[lane], dest, length,
+    status = uct_ep_get_short(ucp_ep_get_lane(ep, lane), dest, length,
                               (uint64_t)src, rkey_bundle.rkey);
     if (status != UCS_OK) {
         ucs_fatal("mem type pack failed to uct_ep_get_short() %s",

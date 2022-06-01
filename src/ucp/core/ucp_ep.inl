@@ -24,9 +24,24 @@ static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
     return &ep->worker->ep_config[ep->cfg_index];
 }
 
+static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_lane(ucp_ep_h ep,
+                                                    ucp_lane_index_t lane_index)
+{
+    ucs_assert(lane_index != UCP_NULL_LANE);
+
+    return ep->uct_eps[lane_index];
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
+                                                uct_ep_h uct_ep)
+{
+    ucs_assert(lane_index != UCP_NULL_LANE);
+
+    ep->uct_eps[lane_index] = uct_ep;
+}
+
 static inline ucp_lane_index_t ucp_ep_get_am_lane(ucp_ep_h ep)
 {
-    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
     return ep->am_lane;
 }
 
@@ -38,7 +53,6 @@ static inline ucp_lane_index_t ucp_ep_get_wireup_msg_lane(ucp_ep_h ep)
 
 static inline ucp_lane_index_t ucp_ep_get_tag_lane(ucp_ep_h ep)
 {
-    ucs_assert(ucp_ep_config(ep)->key.tag_lane != UCP_NULL_LANE);
     return ucp_ep_config(ep)->key.tag_lane;
 }
 
@@ -56,12 +70,12 @@ static inline int ucp_ep_config_key_has_tag_lane(const ucp_ep_config_key_t *key)
 
 static inline uct_ep_h ucp_ep_get_am_uct_ep(ucp_ep_h ep)
 {
-    return ep->uct_eps[ucp_ep_get_am_lane(ep)];
+    return ucp_ep_get_lane(ep, ucp_ep_get_am_lane(ep));
 }
 
 static inline uct_ep_h ucp_ep_get_tag_uct_ep(ucp_ep_h ep)
 {
-    return ep->uct_eps[ucp_ep_get_tag_lane(ep)];
+    return ucp_ep_get_lane(ep, ucp_ep_get_tag_lane(ep));
 }
 
 static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t lane)

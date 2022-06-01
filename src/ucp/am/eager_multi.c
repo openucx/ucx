@@ -243,8 +243,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
     ucp_am_eager_zcopy_add_footer(req, footer_offset, lpriv->super.md_index,
                                   iov, &iov_count, footer_size);
 
-    return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id,
-                           &hdr, sizeof(ucp_am_hdr_t), iov, iov_count, 0,
+    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                           am_id, &hdr, sizeof(ucp_am_hdr_t), iov, iov_count, 0,
                            &req->send.state.uct_comp);
 }
 

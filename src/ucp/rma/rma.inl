@@ -113,7 +113,8 @@ ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id, ucp_lane_index_t lane,
      * able to complete the remote request operation inside uct_ep_am_bcopy()
      * and decrement the flush_ops_count before it was incremented */
     ucp_worker_flush_ops_count_inc(ep->worker);
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[lane], id, pack_cb, pack_arg, 0);
+    packed_len = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lane),
+                                 id, pack_cb, pack_arg, 0);
     if (packed_len > 0) {
         if (packed_len_p != NULL) {
             *packed_len_p = packed_len;
