@@ -236,6 +236,15 @@ static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
     attr->is_estimation = 1;
 }
 
+static void ucp_proto_rndv_rtr_abort(ucp_request_t *req, ucs_status_t status)
+{
+    const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_request_t *rreq                    = ucp_request_get_super(req);
+
+    rreq->status = status;
+    rpriv->data_received(req, 0);
+}
+
 ucp_proto_t ucp_rndv_rtr_proto = {
     .name     = "rndv/rtr",
     .desc     = NULL,
@@ -243,7 +252,7 @@ ucp_proto_t ucp_rndv_rtr_proto = {
     .init     = ucp_proto_rndv_rtr_init,
     .query    = ucp_proto_rndv_rtr_query,
     .progress = {ucp_proto_rndv_rtr_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = ucp_proto_rndv_rtr_abort
 };
 
 
