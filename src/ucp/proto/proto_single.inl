@@ -34,11 +34,11 @@ ucp_proto_am_bcopy_single_send(ucp_request_t *req, ucp_am_id_t am_id,
         ucs_assertv((packed_size >= 0) && (packed_size <= max_packed_size),
                     "packed_size=%zd max_packed_size=%zu", packed_size,
                     max_packed_size);
-        return uct_ep_am_short(ep->uct_eps[lane], am_id, buffer[0],
+        return uct_ep_am_short(ucp_ep_get_lane(ep, lane), am_id, buffer[0],
                                &buffer[1], packed_size - sizeof(buffer[0]));
     } else {
         /* Send as bcopy */
-        packed_size = uct_ep_am_bcopy(ep->uct_eps[lane], am_id, pack_func,
+        packed_size = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lane), am_id, pack_func,
                                       pack_arg, 0);
         return ucs_likely(packed_size >= 0) ? UCS_OK : packed_size;
     }

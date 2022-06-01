@@ -68,8 +68,8 @@ ucp_proto_rndv_put_common_send(ucp_request_t *req,
     uint64_t remote_address = req->send.rndv.remote_address +
                               req->send.state.dt_iter.offset;
 
-    return uct_ep_put_zcopy(req->send.ep->uct_eps[lpriv->super.lane], iov, 1,
-                            remote_address, tl_rkey, comp);
+    return uct_ep_put_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                            iov, 1, remote_address, tl_rkey, comp);
 }
 
 static void
@@ -92,7 +92,8 @@ ucp_proto_rndv_put_common_flush_send(ucp_request_t *req, ucp_lane_index_t lane)
 
     ucp_trace_req(req, "flush lane[%d] " UCT_TL_RESOURCE_DESC_FMT, lane,
                   UCT_TL_RESOURCE_DESC_ARG(ucp_ep_get_tl_rsc(ep, lane)));
-    return uct_ep_flush(ep->uct_eps[lane], 0, &req->send.state.uct_comp);
+    return uct_ep_flush(ucp_ep_get_lane(ep, lane), 0,
+                        &req->send.state.uct_comp);
 }
 
 static ucs_status_t
@@ -155,7 +156,7 @@ ucp_proto_rndv_put_common_fenced_atp_send(ucp_request_t *req,
 {
     ucs_status_t status;
 
-    status = uct_ep_fence(req->send.ep->uct_eps[lane], 0);
+    status = uct_ep_fence(ucp_ep_get_lane(req->send.ep, lane), 0);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }

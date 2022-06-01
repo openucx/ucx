@@ -60,7 +60,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_am_bcopy_send_func(
 
     pack_ctx.max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
 
-    packed_size = uct_ep_am_bcopy(ep->uct_eps[lpriv->super.lane],
+    packed_size = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lpriv->super.lane),
                                   UCP_AM_ID_RNDV_DATA,
                                   ucp_proto_rndv_am_bcopy_pack, &pack_ctx, 0);
     if (ucs_unlikely(packed_size < 0)) {

@@ -55,11 +55,13 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
     uct_atomic_op_t op                   = req->send.amo.uct_op;
     uint64_t *result64                   = req->send.buffer;
     uint32_t *result32                   = req->send.buffer;
+    uct_ep_h uct_ep;
     uint64_t value;
     ucs_status_t status;
     uct_rkey_t tl_rkey;
 
     req->send.lane = spriv->super.lane;
+    uct_ep         = ucp_ep_get_lane(ep, req->send.lane);
     tl_rkey        = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                           spriv->super.rkey_index);
 
@@ -77,36 +79,30 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
 
     if (op_size == sizeof(uint64_t)) {
         if (op_id == UCP_OP_ID_AMO_POST) {
-            status = UCS_PROFILE_CALL(uct_ep_atomic64_post,
-                                      ep->uct_eps[req->send.lane], op, value,
+            status = UCS_PROFILE_CALL(uct_ep_atomic64_post, uct_ep, op, value,
                                       remote_addr, tl_rkey);
         } else if (op_id == UCP_OP_ID_AMO_FETCH) {
-            status = UCS_PROFILE_CALL(uct_ep_atomic64_fetch,
-                                      ep->uct_eps[req->send.lane], op, value,
+            status = UCS_PROFILE_CALL(uct_ep_atomic64_fetch, uct_ep, op, value,
                                       result64, remote_addr, tl_rkey,
                                       &req->send.state.uct_comp);
         } else {
             ucs_assert(op_id == UCP_OP_ID_AMO_CSWAP);
-            status = UCS_PROFILE_CALL(uct_ep_atomic_cswap64,
-                                      ep->uct_eps[req->send.lane], value,
+            status = UCS_PROFILE_CALL(uct_ep_atomic_cswap64, uct_ep, value,
                                       *result64, remote_addr, tl_rkey, result64,
                                       &req->send.state.uct_comp);
         }
     } else {
         ucs_assert(op_size == sizeof(uint32_t));
         if (op_id == UCP_OP_ID_AMO_POST) {
-            status = UCS_PROFILE_CALL(uct_ep_atomic32_post,
-                                      ep->uct_eps[req->send.lane], op, value,
+            status = UCS_PROFILE_CALL(uct_ep_atomic32_post, uct_ep, op, value,
                                       remote_addr, tl_rkey);
         } else if (op_id == UCP_OP_ID_AMO_FETCH) {
-            status = UCS_PROFILE_CALL(uct_ep_atomic32_fetch,
-                                      ep->uct_eps[req->send.lane], op, value,
+            status = UCS_PROFILE_CALL(uct_ep_atomic32_fetch, uct_ep, op, value,
                                       result32, remote_addr, tl_rkey,
                                       &req->send.state.uct_comp);
         } else {
             ucs_assert(op_id == UCP_OP_ID_AMO_CSWAP);
-            status = UCS_PROFILE_CALL(uct_ep_atomic_cswap32,
-                                      ep->uct_eps[req->send.lane], value,
+            status = UCS_PROFILE_CALL(uct_ep_atomic_cswap32, uct_ep, value,
                                       *result32, remote_addr, tl_rkey, result32,
                                       &req->send.state.uct_comp);
         }

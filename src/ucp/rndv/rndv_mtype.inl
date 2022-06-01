@@ -109,7 +109,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
     ucs_status_t status;
     uct_iov_t iov;
 
-    ucs_assert(lane != UCP_NULL_LANE);
     ucs_assert(mdesc != NULL);
 
     ucp_trace_req(req, "mdesc %p copy-%s %p %s using memtype-ep %p lane[%d]",
@@ -124,7 +123,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
 
     /* Copy from mdesc to user buffer */
     ucs_assert(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG);
-    status = copy_func(mtype_ep->uct_eps[lane], &iov, 1,
+    status = copy_func(ucp_ep_get_lane(mtype_ep, lane), &iov, 1,
                        (uintptr_t)req->send.state.dt_iter.type.contig.buffer,
                        UCT_INVALID_RKEY, &req->send.state.uct_comp);
     ucp_trace_req(req, "mdesc %p copy returned %s", mdesc,

@@ -35,10 +35,10 @@ ucp_proto_get_offload_bcopy_send_func(ucp_request_t *req,
     max_length = ucp_proto_multi_max_payload(req, lpriv, 0);
     length     = ucp_datatype_iter_next_ptr(&req->send.state.dt_iter,
                                             max_length, next_iter, &dest);
-    return uct_ep_get_bcopy(req->send.ep->uct_eps[lpriv->super.lane],
+    return uct_ep_get_bcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
                             ucp_proto_get_offload_bcopy_unpack, dest, length,
                             req->send.rma.remote_addr +
-                            req->send.state.dt_iter.offset,
+                                    req->send.state.dt_iter.offset,
                             tl_rkey, &req->send.state.uct_comp);
 }
 
@@ -135,9 +135,9 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
     mpriv = req->send.proto_config->priv;
     ucp_proto_common_zcopy_adjust_min_frag(req, mpriv->min_frag, iov.length,
                                            &iov, 1, &offset);
-    return uct_ep_get_zcopy(req->send.ep->uct_eps[lpriv->super.lane], &iov, 1,
-                            req->send.rma.remote_addr + offset, tl_rkey,
-                            &req->send.state.uct_comp);
+    return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                            &iov, 1, req->send.rma.remote_addr + offset,
+                            tl_rkey, &req->send.state.uct_comp);
 }
 
 static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self)

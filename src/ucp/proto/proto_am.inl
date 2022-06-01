@@ -46,8 +46,8 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
     ssize_t packed_len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb,
-                                     req, 0);
+    packed_len     = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
+                                     am_id, pack_cb, req, 0);
     if (ucs_unlikely(packed_len < 0)) {
         /* Reset the state to the previous one */
         req->send.state.dt = state;
@@ -78,7 +78,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     req->send.lane = (!enable_am_bw || (state.offset == 0)) ? /* first part of message must be sent */
                      ucp_ep_get_am_lane(ep) :                 /* via AM lane */
                      ucp_send_request_get_am_bw_lane(req);
-    uct_ep         = ep->uct_eps[req->send.lane];
+    uct_ep         = ucp_ep_get_lane(ep, req->send.lane);
 
     for (;;) {
         if (state.offset == 0) {
@@ -261,7 +261,7 @@ ucs_status_t ucp_am_zcopy_common(ucp_request_t *req, const void *hdr,
                              user_hdr_desc->memh->uct[md_idx], &iov_count);
     }
 
-    return uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
+    return uct_ep_am_zcopy(ucp_ep_get_lane(ep, req->send.lane), am_id, (void*)hdr,
                            hdr_size, iov, iov_count, 0,
                            &req->send.state.uct_comp);
 }

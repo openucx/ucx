@@ -221,7 +221,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
 
     tl_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_config->put_short.rkey_index);
     return UCS_PROFILE_CALL(uct_ep_put_short,
-                            ep->uct_eps[rkey_config->put_short.lane],
+                            ucp_ep_get_lane(ep, rkey_config->put_short.lane),
                             buffer, length, remote_addr, tl_rkey);
 }
 
@@ -286,8 +286,9 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         if (ucs_likely(!(attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) &&
                        ((ssize_t)count <= rkey->cache.max_put_short))) {
             status = UCS_PROFILE_CALL(uct_ep_put_short,
-                                      ep->uct_eps[rkey->cache.rma_lane], buffer,
-                                      count, remote_addr, rkey->cache.rma_rkey);
+                                      ucp_ep_get_lane(ep, rkey->cache.rma_lane),
+                                      buffer, count, remote_addr,
+                                      rkey->cache.rma_rkey);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 ret = UCS_STATUS_PTR(status);
                 goto out_unlock;

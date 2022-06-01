@@ -26,7 +26,7 @@ static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
 
-    status = uct_ep_am_short(req->send.ep->uct_eps[spriv->super.lane],
+    status = uct_ep_am_short(ucp_ep_get_lane(req->send.ep, spriv->super.lane),
                              UCP_AM_ID_EAGER_ONLY, req->send.msg_proto.tag,
                              req->send.state.dt_iter.type.contig.buffer,
                              req->send.state.dt_iter.length);
@@ -199,7 +199,7 @@ ucp_proto_eager_zcopy_send_func(ucp_request_t *req,
         .super.tag = req->send.msg_proto.tag
     };
 
-    return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],
+    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, spriv->super.lane),
                            UCP_AM_ID_EAGER_ONLY, &hdr, sizeof(hdr), iov, 1, 0,
                            &req->send.state.uct_comp);
 }
