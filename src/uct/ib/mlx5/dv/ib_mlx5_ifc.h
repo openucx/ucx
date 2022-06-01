@@ -1245,6 +1245,12 @@ static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size, int dc)
                          UCT_IB_MLX5_QPC_CS_RES_DISABLE;
 }
 
+enum {
+    UCT_IB_MLX5_QPC_TS_FORMAT_FREE_RUNNING = 0x0,
+    UCT_IB_MLX5_QPC_TS_FORMAT_DEFAULT      = 0x1,
+    UCT_IB_MLX5_QPC_TS_FORMAT_REAL_TIME    = 0x2
+};
+
 struct uct_ib_mlx5_qpc_bits {
     uint8_t         state[0x4];
     uint8_t         lag_tx_port_affinity[0x4];
@@ -1273,7 +1279,9 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         log_rq_stride[0x3];
     uint8_t         no_sq[0x1];
     uint8_t         log_sq_size[0x4];
-    uint8_t         reserved_at_55[0x6];
+    uint8_t         reserved_at_55[0x3];
+    uint8_t         ts_format[0x2];
+    uint8_t         reserved_at_5a[0x1];
     uint8_t         rlky[0x1];
     uint8_t         ulp_stateless_offload_mode[0x4];
 
