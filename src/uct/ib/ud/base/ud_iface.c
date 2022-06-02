@@ -576,7 +576,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
                                   sizeof(uct_ud_send_skb_t) + data_size,
                                   sizeof(uct_ud_send_skb_t),
                                   UCT_UD_SKB_ALIGN,
-                                  &config->super.tx.mp, self->config.tx_qp_len,
+                                  &config->super.tx.mp,
+                                  self->super.config.tx_qp_len,
                                   uct_ud_iface_send_skb_init, "ud_tx_skb");
     if (status != UCS_OK) {
         goto err_rx_mpool;
@@ -1061,8 +1062,8 @@ void uct_ud_iface_vfs_refresh(uct_iface_h iface)
                             "rx_qp_len");
 
     ucs_vfs_obj_add_ro_file(ud_iface, ucs_vfs_show_primitive,
-                            &ud_iface->config.tx_qp_len, UCS_VFS_TYPE_INT,
-                            "tx_qp_len");
+                            &ud_iface->super.config.tx_qp_len,
+                            UCS_VFS_TYPE_INT, "tx_qp_len");
 }
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,

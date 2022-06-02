@@ -414,8 +414,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     }
 #endif
     iface->tm.cmd_wq.super.super.qp_num = qp->qp_num;
-    return uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                 iface->tx.mmio_mode,
+    return uct_ib_mlx5_txwq_init(&iface->super.super, iface->tx.mmio_mode,
                                  &iface->tm.cmd_wq.super, qp);
 }
 #endif
@@ -810,7 +809,7 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
                                       sizeof(uct_rc_iface_send_desc_t),
                                       UCS_SYS_CACHE_LINE_SIZE,
                                       &config->super.tx.mp,
-                                      iface->super.config.tx_qp_len,
+                                      iface->super.super.config.tx_qp_len,
                                       uct_rc_iface_send_desc_init,
                                       "tag_eager_send_desc");
         if (status != UCS_OK) {

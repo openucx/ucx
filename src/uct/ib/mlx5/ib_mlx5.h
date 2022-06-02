@@ -654,7 +654,7 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
 /**
  * Initialize txwq structure.
  */
-ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
+ucs_status_t uct_ib_mlx5_txwq_init(uct_ib_iface_t *iface,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
 
@@ -863,6 +863,8 @@ uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
 static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp) { }
 
 #endif
+
+size_t uct_ib_mlx5_sq_length(size_t tx_qp_length);
 
 ucs_status_t
 uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,

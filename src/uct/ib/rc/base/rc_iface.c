@@ -577,7 +577,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->tx.cq_available       = tx_cq_size - 1;
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
-    self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
     self->config.tx_poll_always = config->tx.poll_always;
@@ -666,7 +665,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                   sizeof(uct_rc_iface_send_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &config->super.tx.mp,
-                                  self->config.tx_qp_len,
+                                  self->super.config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_send_desc");
     if (status != UCS_OK) {
@@ -1001,11 +1000,11 @@ ucs_status_t uct_rc_iface_estimate_perf(uct_iface_h tl_iface,
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
-        ucs_assertv(iface->config.tx_cq_len >= iface->config.tx_qp_len,
+        ucs_assertv(iface->config.tx_cq_len >= iface->super.config.tx_qp_len,
                     "iface %p: tx_cq_len=%u tx_qp_len=%u", iface,
-                    iface->config.tx_cq_len, iface->config.tx_qp_len);
+                    iface->config.tx_cq_len, iface->super.config.tx_qp_len);
         perf_attr->max_inflight_eps =
-                iface->config.tx_cq_len / iface->config.tx_qp_len;
+                iface->config.tx_cq_len / iface->super.config.tx_qp_len;
     }
 
     return UCS_OK;

@@ -319,7 +319,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
     ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
 
     uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
-                                iface->super.super.config.tx_qp_len,
+                                iface->super.super.super.config.tx_qp_len,
                                 &iface->super.rx.srq);
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) {
@@ -368,7 +368,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
 init_qp:
 #else
     uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
-                                iface->super.super.config.tx_qp_len,
+                                iface->super.super.super.config.tx_qp_len,
                                 &iface->super.rx.srq);
     status = uct_ib_mlx5_iface_create_qp(ib_iface, &dci->txwq.super, &attr);
     if (status != UCS_OK) {
@@ -397,7 +397,7 @@ init_qp:
     }
 
     if (dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
-        status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
+        status = uct_ib_mlx5_txwq_init(&iface->super.super.super,
                                        iface->super.tx.mmio_mode, &dci->txwq,
                                        dci->txwq.super.verbs.qp);
         if (status != UCS_OK) {
@@ -1263,6 +1263,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md,
                                                         uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
+    uint8_t num_dcis                   = config->ndci +
+                                         UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
     ucs_status_t status;
     unsigned tx_cq_size;
 
@@ -1284,9 +1286,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len *
-                                      UCT_IB_MLX5_MAX_BB *
-                                      (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
+    init_attr.cq_len[UCT_IB_DIR_TX] =
+            uct_ib_mlx5_sq_length(config->super.super.tx.queue_len) * num_dcis;
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
@@ -1355,6 +1356,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     if (status != UCS_OK) {
         goto err_destroy_dct;
     }
+
+    ucs_assertv((init_attr.cq_len[UCT_IB_DIR_TX] / num_dcis) >=
+                        self->tx.bb_max,
+                "cq_len %u num_dcis %u bb_max %u",
+                init_attr.cq_len[UCT_IB_DIR_TX], num_dcis, self->tx.bb_max);
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis and %d cqes, dct 0x%x",
               self, uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,

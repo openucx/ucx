@@ -48,7 +48,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     int max_tx, max_rx, len_tx, len;
     uct_ib_mlx5_devx_uar_t *uar;
     ucs_status_t status;
-    int wqe_size;
     int dvflags;
     void *qpc;
 
@@ -71,15 +70,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err;
     }
 
-    wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
-               sizeof(struct mlx5_wqe_umr_ctrl_seg) +
-               sizeof(struct mlx5_wqe_mkey_context_seg) +
-               ucs_max(sizeof(struct mlx5_wqe_umr_klm_seg), 64) +
-               ucs_max(attr->super.cap.max_send_sge * sizeof(struct mlx5_wqe_data_seg),
-                       ucs_align_up(sizeof(struct mlx5_wqe_inl_data_seg) +
-                                    attr->super.cap.max_inline_data, 16));
-    len_tx = ucs_roundup_pow2_or0(attr->super.cap.max_send_wr * wqe_size);
-    max_tx = len_tx / MLX5_SEND_WQE_BB;
+    max_tx = uct_ib_mlx5_sq_length(attr->super.cap.max_send_wr);
+    len_tx = max_tx * MLX5_SEND_WQE_BB;
     max_rx = ucs_roundup_pow2_or0(attr->super.cap.max_recv_wr);
     len    = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
 

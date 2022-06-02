@@ -290,8 +290,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
                               &config->super.super, &init_attr);
 
-    self->config.tx_max_wr               = ucs_min(config->tx_max_wr,
-                                                   self->super.config.tx_qp_len);
+    self->config.tx_max_wr               = ucs_min(
+            config->tx_max_wr, self->super.super.config.tx_qp_len);
     self->super.config.tx_moderation     = ucs_min(config->super.tx_cq_moderation,
                                                    self->config.tx_max_wr / 4);
     self->super.config.fence_mode        = (uct_rc_fence_mode_t)config->super.super.fence_mode;
@@ -337,7 +337,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                                   sizeof(uct_rc_iface_send_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &ib_config->tx.mp,
-                                  self->super.config.tx_qp_len,
+                                  self->super.super.config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_verbs_short_desc");
     if (status != UCS_OK) {
@@ -354,7 +354,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 
     /* Create a dummy QP in order to find out max_inline */
     status = uct_rc_iface_qp_create(&self->super, &qp, &attr,
-                                    self->super.config.tx_qp_len,
+                                    self->super.super.config.tx_qp_len,
                                     self->srq);
     if (status != UCS_OK) {
         goto err_common_cleanup;

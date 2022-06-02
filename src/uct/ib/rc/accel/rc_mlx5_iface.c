@@ -374,7 +374,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 
     if (attr->super.cap.max_send_wr) {
-        status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
+        status = uct_ib_mlx5_txwq_init(&iface->super.super,
                                        iface->tx.mmio_mode, txwq,
                                        qp->verbs.qp);
         if (status != UCS_OK) {
@@ -800,7 +800,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                                   sizeof(uct_rc_iface_send_desc_t) + UCT_IB_MAX_ATOMIC_SIZE,
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &rc_config->super.tx.mp,
-                                  self->super.config.tx_qp_len,
+                                  self->super.super.config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_mlx5_atomic_desc");
     if (status != UCS_OK) {

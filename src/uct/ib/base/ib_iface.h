@@ -274,6 +274,7 @@ struct uct_ib_iface {
     uct_ib_device_gid_info_t  gid_info;
 
     struct {
+        unsigned              tx_qp_len;
         unsigned              rx_payload_offset;   /* offset from desc to payload */
         unsigned              rx_hdr_offset;       /* offset from desc to network header */
         unsigned              rx_headroom_offset;  /* offset from desc to user headroom */

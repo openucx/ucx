@@ -341,7 +341,7 @@ private:
             ucs_status_t status;
 
             uct_rc_mlx5_iface_fill_attr(m_iface, &attr,
-                                        m_iface->super.config.tx_qp_len,
+                                        m_iface->super.super.config.tx_qp_len,
                                         &m_iface->rx.srq);
             status = uct_rc_mlx5_iface_create_qp(m_iface, &m_txwq.super,
                                                  &m_txwq, &attr);
@@ -388,9 +388,9 @@ private:
             uct_ib_qp_attr_t attr = {};
             ucs_status_t status;
 
-            status = uct_rc_iface_qp_create(&m_iface->super, &m_ibqp, &attr,
-                                            m_iface->super.config.tx_qp_len,
-                                            m_iface->srq);
+            status = uct_rc_iface_qp_create(
+                    &m_iface->super, &m_ibqp, &attr,
+                    m_iface->super.super.config.tx_qp_len, m_iface->srq);
             ASSERT_UCS_OK(status);
 
             status = uct_rc_iface_qp_init(&m_iface->super, m_ibqp);

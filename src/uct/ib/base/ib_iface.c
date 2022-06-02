@@ -1273,7 +1273,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     }
 
     self->ops                       = ops;
-
+    self->config.tx_qp_len          = config->tx.queue_len;
     self->config.rx_payload_offset  = sizeof(uct_ib_iface_recv_desc_t) +
                                       ucs_max(sizeof(uct_recv_desc_t) +
                                               rx_headroom,

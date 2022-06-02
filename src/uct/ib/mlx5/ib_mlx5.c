@@ -645,15 +645,17 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
+ucs_status_t uct_ib_mlx5_txwq_init(uct_ib_iface_t *iface,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp)
 {
-    uct_ib_mlx5_mmio_mode_t mmio_mode;
+    uct_priv_worker_t *worker  = iface->super.worker;
     uct_ib_mlx5dv_qp_t qp_info = {};
-    uct_ib_mlx5dv_t obj = {};
+    uct_ib_mlx5dv_t obj        = {};
+    uct_ib_mlx5_mmio_mode_t mmio_mode;
     ucs_status_t status;
+    uint32_t wqe_size;
 
     obj.dv.qp.in = verbs_qp;
     obj.dv.qp.out = &qp_info.dv;
@@ -663,13 +665,18 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
         return UCS_ERR_IO_ERROR;
     }
 
-    if ((qp_info.dv.sq.stride != MLX5_SEND_WQE_BB) || !ucs_is_pow2(qp_info.dv.sq.wqe_cnt) ||
-        ((qp_info.dv.bf.size != 0) && (qp_info.dv.bf.size != UCT_IB_MLX5_BF_REG_SIZE)))
-    {
+    wqe_size = qp_info.dv.sq.wqe_cnt / iface->config.tx_qp_len;
+
+    if ((qp_info.dv.sq.stride != MLX5_SEND_WQE_BB) ||
+        !ucs_is_pow2(qp_info.dv.sq.wqe_cnt) ||
+        (wqe_size > UCT_IB_MLX5_MAX_BB) ||
+        ((qp_info.dv.bf.size != 0) &&
+         (qp_info.dv.bf.size != UCT_IB_MLX5_BF_REG_SIZE))) {
         ucs_error("mlx5 device parameters not suitable for transport "
-                  "bf.size(%d) %d, sq.stride(%d) %d, wqe_cnt %d",
+                  "bf.size(%d) %d, sq.stride(%d) %d, wqe_cnt %d, wqe_size %u",
                   UCT_IB_MLX5_BF_REG_SIZE, qp_info.dv.bf.size,
-                  MLX5_SEND_WQE_BB, qp_info.dv.sq.stride, qp_info.dv.sq.wqe_cnt);
+                  MLX5_SEND_WQE_BB, qp_info.dv.sq.stride,
+                  qp_info.dv.sq.wqe_cnt, wqe_size);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -937,6 +944,11 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
+}
+
+size_t uct_ib_mlx5_sq_length(size_t tx_qp_length)
+{
+    return ucs_roundup_pow2_or0(tx_qp_length * UCT_IB_MLX5_MAX_BB);
 }
 
 /* Keep the function as a separate to test SL selection */

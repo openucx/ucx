@@ -729,9 +729,8 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
         return status;
     }
 
-    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                   iface->tx.mmio_mode, &iface->tx.wq,
-                                   qp->verbs.qp);
+    status = uct_ib_mlx5_txwq_init(&iface->super.super, iface->tx.mmio_mode,
+                                   &iface->tx.wq, qp->verbs.qp);
     if (status != UCS_OK) {
         goto err_destroy_qp;
     }
@@ -837,7 +836,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     ucs_trace_func("");
 
     init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
+    init_attr.cq_len[UCT_IB_DIR_TX] =
+            uct_ib_mlx5_sq_length(config->super.super.tx.queue_len);
     init_attr.cq_len[UCT_IB_DIR_RX] = config->super.super.rx.queue_len;
 
     self->tx.mmio_mode     = config->mlx5_common.mmio_mode;
@@ -866,8 +866,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
-    self->super.tx.available     = self->tx.wq.bb_max;
-    self->super.config.tx_qp_len = self->tx.wq.bb_max;
+    self->super.tx.available = self->tx.wq.bb_max;
     ucs_assert(init_attr.cq_len[UCT_IB_DIR_TX] >= self->tx.wq.bb_max);
 
     status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq);
