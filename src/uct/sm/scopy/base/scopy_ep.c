@@ -109,6 +109,41 @@ uct_scopy_ep_tx_init(uct_ep_h tl_ep, const uct_iov_t *iov,
     return UCS_INPROGRESS;
 }
 
+void
+uct_scopy_ep_tx_error(uct_scopy_ep_t *ep, const char *arg_str,
+                      const char *op_name, const char *op_ret_str,
+                      int op_errno, size_t iov_type_size,
+                      const void *local_iov, size_t local_iov_cnt,
+                      const void *remote_iov,
+                      ucs_string_buffer_iov_get_length_func_t get_length_f,
+                      ucs_string_buffer_iov_get_buffer_func_t get_buffer_f)
+{
+    uct_base_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                             uct_base_iface_t);
+    UCS_STRING_BUFFER_ONSTACK(local_iov_str, 256);
+    UCS_STRING_BUFFER_ONSTACK(remote_iov_str, 256);
+    ucs_log_level_t log_lvl;
+    ucs_status_t status;
+
+    status  = uct_iface_handle_ep_err(&iface->super, &ep->super.super,
+                                      UCS_ERR_CONNECTION_RESET);
+    log_lvl = uct_base_iface_failure_log_level(iface, status,
+                                               UCS_ERR_CONNECTION_RESET);
+
+    /* Dump IO vector */
+    ucs_string_buffer_append_iov(&local_iov_str, local_iov, iov_type_size,
+                                 local_iov_cnt, get_length_f,
+                                 get_buffer_f);
+    ucs_string_buffer_append_iov(&remote_iov_str, remote_iov,
+                                 iov_type_size, 1, get_length_f,
+                                 get_buffer_f);
+
+    ucs_log(log_lvl, "ep %p: %s(%s, {%s}-->{%s}) returned %s: %s", ep,
+            op_name, arg_str, ucs_string_buffer_cstr(&local_iov_str),
+            ucs_string_buffer_cstr(&remote_iov_str), op_ret_str,
+            strerror(op_errno));
+}
+
 ucs_status_t uct_scopy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                     size_t iov_cnt, uint64_t remote_addr,
                                     uct_rkey_t rkey, uct_completion_t *comp)

@@ -2667,6 +2667,7 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_64k, "RNDV_THRESH=0")
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rc, "rc_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, "rc_x") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ib, "ib") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib, "shm,ib") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, tcp, "tcp") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all, "all")
 

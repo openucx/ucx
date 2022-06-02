@@ -188,6 +188,19 @@ size_t ucs_iovec_get_length(const struct iovec *iov)
 }
 
 /**
+ * Returns the particular IOVEC data buffer.
+ *
+ * @param [in]     iov             Pointer to the IOVEC element.
+ *
+ * @return The IOVEC data buffer.
+ */
+static UCS_F_ALWAYS_INLINE
+void* ucs_iovec_get_buffer(const struct iovec *iov)
+{
+    return iov->iov_base;
+}
+
+/**
  * Calculates the total length of the IOVEC array buffers.
  *
  * @param [in]     iov            Pointer to the array of IOVEC elements.

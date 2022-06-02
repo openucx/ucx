@@ -17,6 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <uct/base/uct_iface.h>
 
 
 #define UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(_params) \
@@ -42,7 +43,8 @@ ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 
     md_attr->rkey_packed_size     = sizeof(uct_knem_key_t);
     md_attr->cap.flags            = UCT_MD_FLAG_REG |
-                                    UCT_MD_FLAG_NEED_RKEY;
+                                    UCT_MD_FLAG_NEED_RKEY |
+                                    UCT_MD_FLAG_INVALIDATE;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
@@ -113,7 +115,7 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
     struct knem_cmd_create_region create;
     struct knem_cmd_param_iovec knem_iov[1];
     uct_knem_md_t *knem_md = (uct_knem_md_t *)md;
-    int knem_fd = knem_md->knem_fd;
+    int knem_fd            = knem_md->knem_fd;
 
     ucs_assert_always(knem_fd > -1);
 
@@ -178,6 +180,7 @@ static ucs_status_t uct_knem_mem_dereg_internal(uct_md_h md, uct_knem_key_t *key
     rc = ioctl(knem_fd, KNEM_CMD_DESTROY_REGION, &key->cookie);
     if (rc < 0) {
         ucs_error("KNEM destroy region failed, err = %m");
+        return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
@@ -189,12 +192,19 @@ static ucs_status_t uct_knem_mem_dereg(uct_md_h md,
     uct_knem_key_t *key;
     ucs_status_t status;
 
-    UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(params);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
 
     key    = (uct_knem_key_t *)params->memh;
     status = uct_knem_mem_dereg_internal(md, key);
     if (status == UCS_OK) {
         ucs_free(key);
+    }
+
+    if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
+        UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+        /* suppress coverity false-positive */
+        ucs_assert(params->comp != NULL);
+        uct_invoke_completion(params->comp, UCS_OK);
     }
 
     return status;
@@ -278,6 +288,13 @@ static ucs_status_t uct_knem_mem_rcache_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
+static void uct_knem_mem_region_invalidate_cb(void *arg)
+{
+    uct_completion_t *comp = arg;
+
+    uct_invoke_completion(comp, UCS_OK);
+}
+
 static ucs_status_t
 uct_knem_mem_rcache_dereg(uct_md_h uct_md,
                           const uct_md_mem_dereg_params_t *params)
@@ -285,9 +302,15 @@ uct_knem_mem_rcache_dereg(uct_md_h uct_md,
     uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
     uct_knem_rcache_region_t *region;
  
-    UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(params);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
  
     region = uct_knem_rcache_region_from_memh(params->memh);
+    if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
+        UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+        ucs_rcache_region_invalidate(md->rcache, &region->super,
+                                     uct_knem_mem_region_invalidate_cb,
+                                     params->comp);
+    }
 
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;

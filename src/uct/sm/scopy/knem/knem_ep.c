@@ -51,6 +51,43 @@ void uct_knem_iovec_set_buffer(struct knem_cmd_param_iovec *iov, void *buffer)
     iov->base = (uintptr_t)buffer;
 }
 
+static size_t uct_knem_iovec_get_length(const void *iov)
+{
+    return ((struct knem_cmd_param_iovec*)iov)->len;
+}
+
+static void* uct_knem_iovec_get_buffer(const void *iov)
+{
+    return (void*)(uintptr_t)((struct knem_cmd_param_iovec*)iov)->base;
+}
+
+static void uct_knem_ep_tx_error(uct_ep_h tl_ep, int knem_fd,
+                                 uct_scopy_tx_op_t tx_op, int ret,
+                                 int icopy_status, int op_errno,
+                                 const struct knem_cmd_param_iovec *local_iov,
+                                 size_t local_iov_cnt, uint64_t remote_addr,
+                                 size_t remote_length)
+{
+    uct_knem_ep_t *knem_ep = ucs_derived_of(tl_ep, uct_knem_ep_t);
+    UCS_STRING_BUFFER_ONSTACK(knem_fd_strb, 32);
+    UCS_STRING_BUFFER_ONSTACK(ret_strb, 64);
+    struct knem_cmd_param_iovec remote_iov;
+
+    ucs_string_buffer_appendf(&knem_fd_strb, "fd=%d", knem_fd);
+    ucs_string_buffer_appendf(&ret_strb, "ret=%d icopy_status=%d", ret,
+                              icopy_status);
+
+    remote_iov.base = (uintptr_t)remote_addr;
+    remote_iov.len  = remote_length;
+
+    uct_scopy_ep_tx_error(
+            &knem_ep->super, ucs_string_buffer_cstr(&knem_fd_strb),
+            uct_knem_ep_tx_op_str[tx_op], ucs_string_buffer_cstr(&ret_strb),
+            errno, sizeof(struct knem_cmd_param_iovec), local_iov,
+            local_iov_cnt, &remote_iov, uct_knem_iovec_get_length,
+            uct_knem_iovec_get_buffer);
+}
+
 ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
                             ucs_iov_iter_t *iov_iter, size_t *length_p,
                             uint64_t remote_addr, uct_rkey_t rkey,
@@ -62,7 +99,7 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
     uct_knem_key_t *key          = (uct_knem_key_t*)rkey;
     size_t local_iov_cnt         = UCT_SM_MAX_IOV;
     struct knem_cmd_param_iovec local_iov[UCT_SM_MAX_IOV];
-    size_t UCS_V_UNUSED total_iov_length;
+    size_t total_iov_length;
     struct knem_cmd_inline_copy icopy;
     int i, ret;
 
@@ -92,9 +129,9 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
     ret = ioctl(knem_fd, KNEM_CMD_INLINE_COPY, &icopy);
     if (ucs_unlikely((ret < 0) ||
                      (icopy.current_status != KNEM_STATUS_SUCCESS))) {
-        ucs_error("KNEM inline copy \"%s\" failed, ioctl() return value - %d, "
-                  "copy status - %d: %m",
-                  uct_knem_ep_tx_op_str[tx_op], ret, icopy.current_status);
+        uct_knem_ep_tx_error(tl_ep, knem_fd, tx_op, ret, icopy.current_status,
+                             errno, local_iov, local_iov_cnt, remote_addr,
+                             total_iov_length);
         return UCS_ERR_IO_ERROR;
     }
 
