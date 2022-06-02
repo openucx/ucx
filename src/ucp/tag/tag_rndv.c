@@ -148,8 +148,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
 
 ucs_status_t ucp_tag_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_TAG_SEND);
-    if (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) {
+    if (((init_params->select_param->op_id != UCP_OP_ID_TAG_SEND) &&
+         (init_params->select_param->op_id != UCP_OP_ID_TAG_SEND_SYNC)) ||
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
