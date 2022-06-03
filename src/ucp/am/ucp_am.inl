@@ -22,18 +22,6 @@ ucp_am_fill_header(ucp_am_hdr_t *hdr, ucp_request_t *req)
     hdr->header_length = req->send.msg_proto.am.header_length;
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
-{
-    ucp_dt_state_t hdr_state;
-
-    hdr_state.offset = 0ul;
-
-    ucp_dt_pack(req->send.ep->worker, ucp_dt_make_contig(1),
-                UCS_MEMORY_TYPE_HOST, buffer, req->send.msg_proto.am.header,
-                &hdr_state, req->send.msg_proto.am.header_length);
-}
-
 static UCS_F_ALWAYS_INLINE int
 ucp_am_check_init_params(const ucp_proto_init_params_t *init_params,
                          uint64_t op_id_mask, uint16_t exclude_flags)
