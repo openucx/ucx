@@ -125,10 +125,9 @@ static ucs_status_t ucp_proto_thresholds_next_range(
                 /* The protocol is lowest priority up to 'cfg_thresh' - 1 */
                 disabled_proto_mask |= UCS_BIT(proto_id);
                 max_length           = ucs_min(max_length, caps->cfg_thresh - 1);
-            } else {
+            } else if (caps->cfg_priority >= max_cfg_priority) {
                 /* The protocol is force-activated on 'msg_length' and above */
-                max_cfg_priority  = ucs_max(max_cfg_priority,
-                                            caps->cfg_priority);
+                max_cfg_priority  = caps->cfg_priority;
                 max_prio_proto_id = proto_id;
             }
         }
