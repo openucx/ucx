@@ -26,8 +26,18 @@ public:
         enable_tag_mp_offload();
     }
 
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_tag::get_test_variants, 0);
+        add_variant_values(variants, test_ucp_tag::get_test_variants, 1,
+                           "proto");
+    }
+
     void init()
     {
+        if (enable_proto()) {
+            modify_config("PROTO_ENABLE", "y");
+        }
         test_ucp_tag::init();
         check_offload_support(true);
     }
@@ -89,6 +99,12 @@ public:
         ucp_request_cancel(e.worker(), req);
         wait(req);
         request_free(req);
+    }
+
+private:
+    bool enable_proto() const
+    {
+        return get_variant_value(0);
     }
 };
 
@@ -718,10 +734,6 @@ public:
 
     void init()
     {
-        if (m_ucp_config->ctx.proto_enable) {
-            UCS_TEST_SKIP_R("FIXME: RNDV is not implemented in HW_TM/proto_v2");
-        }
-
         stats_activate();
         test_ucp_tag_offload::init(); // No need for multi::init()
     }

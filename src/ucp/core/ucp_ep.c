@@ -2148,9 +2148,12 @@ static void ucp_ep_config_adjust_max_short(ssize_t *max_short,
  * user buffer when matched. Thus, minimum message size allowed to be sent with
  * RNDV protocol should be bigger than maximal possible SW RNDV request
  * (i.e. header plus packed keys size). */
-size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config)
+size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_context_h context,
+                                          const ucp_ep_config_key_t *key)
 {
-    return sizeof(ucp_rndv_rts_hdr_t) + config->rndv.rkey_size;
+    return sizeof(ucp_rndv_rts_hdr_t) +
+           ucp_rkey_packed_size(context, key->rma_bw_md_map,
+                                UCS_SYS_DEVICE_ID_UNKNOWN, 0);
 }
 
 static void ucp_ep_config_init_short_thresh(ucp_memtype_thresh_t *thresh)
@@ -2691,7 +2694,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             config->tag.lane                   = lane;
             max_rndv_thresh                    = iface_attr->cap.tag.eager.max_zcopy;
             max_am_rndv_thresh                 = iface_attr->cap.tag.eager.max_bcopy;
-            min_rndv_thresh                    = ucp_ep_tag_offload_min_rndv_thresh(config);
+            min_rndv_thresh                    = ucp_ep_tag_offload_min_rndv_thresh(
+                                                     context, &config->key);
             min_am_rndv_thresh                 = min_rndv_thresh;
 
             ucs_assertv_always(iface_attr->cap.tag.rndv.max_hdr >=

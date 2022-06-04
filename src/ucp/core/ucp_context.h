@@ -92,7 +92,7 @@ typedef struct ucp_context_config {
      *  preregistered bounce buffers. */
     size_t                                 tm_max_bb_size;
     /** Enabling SW rndv protocol with tag offload mode */
-    int                                    tm_sw_rndv;
+    ucs_ternary_auto_value_t               tm_sw_rndv;
     /** Pack debug information in worker address */
     int                                    address_debug_info;
     /** Maximal size of worker address name for debugging */

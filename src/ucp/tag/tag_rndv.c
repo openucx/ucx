@@ -114,7 +114,7 @@ ucp_tag_send_start_rndv(ucp_request_t *sreq, const ucp_request_param_t *param)
     return status;
 }
 
-static size_t ucp_tag_rndv_proto_rts_pack(void *dest, void *arg)
+size_t ucp_tag_rndv_proto_rts_pack(void *dest, void *arg)
 {
     ucp_rndv_rts_hdr_t *tag_rts = dest;
     ucp_request_t *req          = arg;
@@ -155,9 +155,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
 
 ucs_status_t ucp_tag_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
-    if (!ucp_proto_init_check_op(init_params,
-                                 UCS_BIT(UCP_OP_ID_TAG_SEND) |
-                                 UCS_BIT(UCP_OP_ID_TAG_SEND_SYNC))) {
+    if (!ucp_tag_rndv_check_op_id(init_params) ||
+        ucp_ep_config_key_has_tag_lane(init_params->ep_config_key)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

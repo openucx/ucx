@@ -10,6 +10,7 @@
 #include <ucp/rndv/rndv.h>
 #include <ucp/tag/tag_match.h>
 #include <ucp/core/ucp_request.h>
+#include <ucp/proto/proto_init.h>
 
 
 #define ucp_tag_hdr_from_rts(_rts) \
@@ -33,6 +34,8 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
 
 ucs_status_t ucp_proto_progress_tag_rndv_rts(uct_pending_req_t *self);
 
+size_t ucp_tag_rndv_proto_rts_pack(void *dest, void *arg);
+
 
 static UCS_F_ALWAYS_INLINE ucp_rndv_rts_hdr_t *
 ucp_tag_rndv_rts_from_rdesc(ucp_recv_desc_t *rdesc)
@@ -40,6 +43,14 @@ ucp_tag_rndv_rts_from_rdesc(ucp_recv_desc_t *rdesc)
     ucs_assert(rdesc->payload_offset == sizeof(ucp_rndv_rts_hdr_t));
 
     return (ucp_rndv_rts_hdr_t*)(rdesc + 1);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_tag_rndv_check_op_id(const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_init_check_op(init_params,
+                                   UCS_BIT(UCP_OP_ID_TAG_SEND) |
+                                   UCS_BIT(UCP_OP_ID_TAG_SEND_SYNC));
 }
 
 #endif

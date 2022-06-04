@@ -304,9 +304,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, tm_force_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TM_SW_RNDV", "n",
-   "Use software rendezvous protocol with tag offload. If enabled, tag offload\n"
-   "mode will be used for messages sent with eager protocol only.",
-   ucs_offsetof(ucp_context_config_t, tm_sw_rndv), UCS_CONFIG_TYPE_BOOL},
+   "Use software rendezvous protocol even when tag matching offload is enabled.\n"
+   "In this case tag matching offload will be used for messages sent with eager\n"
+   "protocol only. If the value is set to \"try\", the rendezvous protocol is\n"
+   "selected automatically according to the performance characteristics.",
+   ucs_offsetof(ucp_context_config_t, tm_sw_rndv), UCS_CONFIG_TYPE_TERNARY},
 
   {"NUM_EPS", "auto",
    "An optimization hint of how many endpoints would be created on this context.\n"
