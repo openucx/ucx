@@ -53,11 +53,12 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                              [CUDA_LIBS="$CUDA_LIBS -lcudart"], [cuda_happy="no"])])
 
          # Check nvml header files
-         AC_CHECK_HEADERS([nvml.h],
-                          [cuda_happy="yes"],
-                          [AS_IF([test "x$with_cuda" != "xguess"],
-                                 [AC_MSG_ERROR([nvml header not found. Install appropriate cuda-nvml-devel package])])
-                           cuda_happy="no"])
+         AS_IF([test "x$cuda_happy" = "xyes"],
+               [AC_CHECK_HEADERS([nvml.h],
+                                 [cuda_happy="yes"],
+                                 [AS_IF([test "x$with_cuda" != "xguess"],
+                                        [AC_MSG_ERROR([nvml header not found. Install appropriate cuda-nvml-devel package])])
+                                  cuda_happy="no"])])
 
          # Check nvml library
          AS_IF([test "x$cuda_happy" = "xyes"],
