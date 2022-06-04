@@ -359,18 +359,6 @@ ucp_am_fill_first_footer(ucp_am_first_ftr_t *ftr, ucp_request_t *req)
     ftr->total_size = req->send.length;
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
-{
-    ucp_dt_state_t hdr_state;
-
-    hdr_state.offset = 0ul;
-
-    ucp_dt_pack(req->send.ep->worker, ucp_dt_make_contig(1),
-                UCS_MEMORY_TYPE_HOST, buffer, req->send.msg_proto.am.header,
-                &hdr_state, req->send.msg_proto.am.header_length);
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_zcopy_pack_user_header(ucp_request_t *req)
 {
