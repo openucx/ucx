@@ -948,7 +948,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                       uint8_t *sl_p)
 {
     ucs_status_t status = UCS_OK;
-    const char UCS_V_UNUSED *sl_ar_support_str;
+    const char *sl_ar_support_str;
     uint16_t sl_allow_mask, sls_with_ar, sls_without_ar;
     ucs_string_buffer_t sls_with_ar_str, sls_without_ar_str;
     char sl_str[8];

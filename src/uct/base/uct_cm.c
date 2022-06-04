@@ -88,7 +88,7 @@ ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
     *priv_data_ret = ret;
 out:
      return status;
- }
+}
 
 ucs_status_t uct_cm_ep_resolve_cb(uct_cm_base_ep_t *cep,
                                   const uct_cm_ep_resolve_args_t *args)

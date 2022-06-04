@@ -9,8 +9,6 @@
 #endif
 
 #include "dc_mlx5.inl"
-#include "dc_mlx5_ep.h"
-#include "dc_mlx5.h"
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/time/time.h>
