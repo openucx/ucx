@@ -44,6 +44,9 @@ void ucp_proto_common_init_base_caps(
         const ucp_proto_common_init_params_t *params, size_t min_length);
 
 
+void ucp_proto_perf_range_add_data(const ucp_proto_perf_range_t *range);
+
+
 /*
  * Accepts a list of performance functions for a given range and appends the
  * convex or concave envelope of these functions to an output list.

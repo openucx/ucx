@@ -347,6 +347,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
     params->caps->min_length           = 0;
     params->caps->num_ranges           = 1;
     params->caps->ranges[0].max_length = max_length;
+    params->caps->ranges[0].node       = NULL;
     for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
         params->caps->ranges[0].perf[perf_type] = UCS_LINEAR_FUNC_ZERO;
     }
