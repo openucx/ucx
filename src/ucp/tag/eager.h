@@ -88,8 +88,8 @@ void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t stat
 void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self);
 
 static UCS_F_ALWAYS_INLINE int
-ucp_proto_eager_check_op_id(const ucp_proto_init_params_t *init_params,
-                            ucp_operation_id_t op_id, int offload_enabled)
+ucp_tag_eager_check_op_id(const ucp_proto_init_params_t *init_params,
+                          ucp_operation_id_t op_id, int offload_enabled)
 {
     return ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) &&
            (offload_enabled ==

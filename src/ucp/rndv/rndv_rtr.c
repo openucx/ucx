@@ -71,7 +71,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
     };
     ucs_status_t status;
 
-    status = ucp_proto_rndv_ctrl_init(&params);
+    status = ucp_proto_rndv_ctrl_am_init(&params);
     if (status != UCS_OK) {
         return status;
     }
