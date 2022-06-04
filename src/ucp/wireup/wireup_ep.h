@@ -59,7 +59,7 @@ struct ucp_wireup_ep {
     /**< TLs which are available on client side resolved device */
     ucp_tl_bitmap_t           cm_resolve_tl_bitmap;
     /**< Destination resource indicies used for checking intersection between
-         between two configurations in case of CM */
+         two configurations in case of CM */
     ucp_rsc_index_t           dst_rsc_indices[UCP_MAX_LANES];
 };
 
