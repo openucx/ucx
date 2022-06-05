@@ -41,7 +41,8 @@ uct_dc_mlx5_get_arbiter_params(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_ep_schedule(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+uct_dc_mlx5_ep_schedule(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
+                        int force)
 {
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         /* no dci:
@@ -49,7 +50,7 @@ uct_dc_mlx5_ep_schedule(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
          * arbiter. This way we can assure fairness between all eps waiting for
          * dci allocation. Relevant for dcs and dcs_quota policies.
          */
-        uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
+        uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep, force);
     } else {
         uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
     }
@@ -83,5 +84,5 @@ uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
         return;
     }
 
-    uct_dc_mlx5_ep_schedule(iface, ep);
+    uct_dc_mlx5_ep_schedule(iface, ep, 0);
 }
