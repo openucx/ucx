@@ -1481,6 +1481,7 @@ static unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
     ucs_time_t now             = ucs_get_time();
     uint64_t ep_key;
     uct_dc_mlx5_ep_t *ep;
+    ucs_status_t UCS_V_UNUSED status;
 
     if (ucs_likely(now < iface->tx.fc_hard_req_resend_time)) {
         return 0;
@@ -1493,7 +1494,16 @@ static unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
      * packet in case of failure on the remote FC endpoint */
     kh_foreach_key(&iface->tx.fc_hash, ep_key, {
         ep = (uct_dc_mlx5_ep_t*)ep_key;
-        uct_dc_mlx5_ep_schedule(iface, ep);
+
+        /* Allocate DCI for the endpoint to schedule the endpoint to DCI wait
+         * queue if there is free DCI */
+        status = uct_dc_mlx5_iface_dci_get(iface, ep);
+        ucs_assertv((status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE),
+                    "%s", ucs_status_string(status));
+
+        /* Force DCI scheduling, since FC resources may never become available
+         * unless we send FC_HARD_REQ packet */
+        uct_dc_mlx5_ep_schedule(iface, ep, 1);
     })
 
     return 1;
@@ -1613,7 +1623,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
             /* Since DCI isn't assigned for the FC endpoint, schedule DCI
              * allocation for progressing possible FC_PURE_GRANT re-sending
              * operation which are scheduled on the pending queue */
-            uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
+            uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep, 0);
         }
     }
 
