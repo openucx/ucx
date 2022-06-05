@@ -61,19 +61,26 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };
+    ucp_proto_caps_t rkey_ptr_caps;
     ucs_status_t status;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
+    params.super.super.caps = &rkey_ptr_caps;
     status = ucp_proto_single_init_priv(&params, &rpriv->spriv);
     if (status != UCS_OK) {
         return status;
     }
 
     *init_params->priv_size = sizeof(*rpriv);
-    return ucp_proto_rndv_ack_init(init_params, &rpriv->ack);
+    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
+                                     &rkey_ptr_caps, UCS_LINEAR_FUNC_ZERO,
+                                     &rpriv->ack);
+    ucp_proto_select_caps_cleanup(&rkey_ptr_caps);
+
+    return status;
 }
 
 static void

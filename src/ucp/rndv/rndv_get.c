@@ -10,6 +10,8 @@
 
 #include "proto_rndv.inl"
 #include "rndv_mtype.inl"
+#include <ucp/proto/proto_debug.h>
+
 
 #define UCP_PROTO_RNDV_GET_DESC "read from remote"
 
@@ -62,6 +64,8 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
     }
 
     return ucp_proto_rndv_bulk_init(&params, init_params->priv,
+                                    UCP_PROTO_RNDV_GET_DESC,
+                                    UCP_PROTO_RNDV_ATS_NAME,
                                     init_params->priv_size);
 }
 
@@ -325,40 +329,45 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
 
 
 static ucs_status_t
-ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
+ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_perf_type_t perf_type;
-    size_t max_length;
+    ucp_proto_perf_range_t *range0;
+    ucp_proto_caps_t caps;
+    ucs_status_t status;
 
-    if (ucp_proto_rndv_init_params_is_ppln_frag(params)) {
+    if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         return UCS_ERR_UNSUPPORTED;
     }
+
+    *init_params->priv_size = sizeof(ucp_proto_rndv_ack_priv_t);
+
+    caps.cfg_thresh                          = 0;
+    caps.cfg_priority                        = 1;
+    caps.min_length                          = 0;
+    caps.num_ranges                          = 1;
+    range0                                   = &caps.ranges[0];
+    range0->perf[UCP_PROTO_PERF_TYPE_SINGLE] = UCS_LINEAR_FUNC_ZERO;
+    range0->perf[UCP_PROTO_PERF_TYPE_MULTI]  = UCS_LINEAR_FUNC_ZERO;
+    range0->node                             = NULL;
 
     /* This protocols supports either a regular rendezvous receive but without
      * data, or a rendezvous receive which should ignore the data.
      * In either case, we just need to send an ATS.
      */
-    if (params->select_param->op_id == UCP_OP_ID_RNDV_RECV) {
-        max_length = 0;
-    } else if (params->select_param->op_id == UCP_OP_ID_RNDV_RECV_DROP) {
-        max_length = SIZE_MAX;
+    if (init_params->select_param->op_id == UCP_OP_ID_RNDV_RECV) {
+        range0->max_length = 0;
+    } else if (init_params->select_param->op_id == UCP_OP_ID_RNDV_RECV_DROP) {
+        range0->max_length = SIZE_MAX;
     } else {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    /* Support only 0-length messages */
-    *params->priv_size                 = sizeof(ucp_proto_rndv_ack_priv_t);
-    params->caps->cfg_thresh           = 0;
-    params->caps->cfg_priority         = 1;
-    params->caps->min_length           = 0;
-    params->caps->num_ranges           = 1;
-    params->caps->ranges[0].max_length = max_length;
-    params->caps->ranges[0].node       = NULL;
-    for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
-        params->caps->ranges[0].perf[perf_type] = UCS_LINEAR_FUNC_ZERO;
-    }
+    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
+                                     &caps, UCS_LINEAR_FUNC_ZERO,
+                                     init_params->priv);
+    ucp_proto_select_caps_cleanup(&caps);
 
-    return ucp_proto_rndv_ack_init(params, params->priv);
+    return status;
 }
 
 ucs_status_t ucp_proto_rndv_ats_proto_progress(uct_pending_req_t *uct_req)
