@@ -18,6 +18,8 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
+#include <ucs/vfs/base/vfs_cb.h>
+#include <ucs/vfs/base/vfs_obj.h>
 
 
 /* Must be less then peer_timeout to avoid false positive errors taking into
@@ -1799,4 +1801,46 @@ ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
     uct_ud_ep_handle_timeout(ep);
     uct_ud_leave(iface);
     return UCS_OK;
+}
+
+void uct_ud_ep_vfs_populate(uct_ud_ep_t *ep)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_ud_iface_t);
+
+    UCS_STATIC_ASSERT(sizeof(uct_ud_psn_t) == sizeof(uint16_t));
+
+    ucs_vfs_obj_add_dir(iface, ep, "ep/%p", ep);
+
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->ep_id,
+                            UCS_VFS_TYPE_U32, "ep_id");
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->dest_ep_id,
+                            UCS_VFS_TYPE_U32, "dest_ep_id");
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->flags,
+                            UCS_VFS_TYPE_U16 | UCS_VFS_TYPE_FLAG_HEX, "flags");
+
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->tx.psn,
+                            UCS_VFS_TYPE_U16, "tx/psn");
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->tx.max_psn,
+                            UCS_VFS_TYPE_U16, "tx/max_psn");
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->tx.acked_psn,
+                            UCS_VFS_TYPE_U16, "tx/acked_psn");
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->tx.pending.ops,
+                            UCS_VFS_TYPE_U32_HEX, "tx/pending_ops");
+
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive,
+                            &ep->rx.ooo_pkts.head_sn, UCS_VFS_TYPE_U16,
+                            "rx/ooo_pkts_sn");
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->rx.acked_psn,
+                            UCS_VFS_TYPE_U16, "rx/acked_psn");
+
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->ca.wmax,
+                            UCS_VFS_TYPE_U16, "ca/wmax");
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->ca.cwnd,
+                            UCS_VFS_TYPE_U16, "ca/cwnd");
+
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->resend.psn,
+                            UCS_VFS_TYPE_U16, "resend/psn");
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->resend.max_psn,
+                            UCS_VFS_TYPE_U16, "resend/max_psn");
 }

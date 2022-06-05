@@ -1047,6 +1047,8 @@ void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
 void uct_ud_iface_vfs_refresh(uct_iface_h iface)
 {
     uct_ud_iface_t *ud_iface = ucs_derived_of(iface, uct_ud_iface_t);
+    uct_ud_ep_t *ep;
+    int i;
 
     ucs_vfs_obj_add_ro_file(ud_iface, ucs_vfs_show_primitive,
                             &ud_iface->rx.available, UCS_VFS_TYPE_INT,
@@ -1063,6 +1065,10 @@ void uct_ud_iface_vfs_refresh(uct_iface_h iface)
     ucs_vfs_obj_add_ro_file(ud_iface, ucs_vfs_show_primitive,
                             &ud_iface->config.tx_qp_len, UCS_VFS_TYPE_INT,
                             "tx_qp_len");
+
+    ucs_ptr_array_for_each(ep, i, &ud_iface->eps) {
+        uct_ud_ep_vfs_populate(ep);
+    }
 }
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
