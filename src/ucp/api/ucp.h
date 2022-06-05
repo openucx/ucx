@@ -1970,7 +1970,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
  *
  * @note
  * @li Higher level protocols can add additional communication isolation, as
- * MPI does with it's communicator object. A single communication context may
+ * MPI does with its communicator object. A single communication context may
  * be used to support multiple MPI communicators.
  * @li The context can be used to isolate the communication that corresponds to
  * different protocols. For example, if MPI and OpenSHMEM are using UCP to

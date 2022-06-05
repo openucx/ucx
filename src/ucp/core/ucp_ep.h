@@ -185,7 +185,7 @@ typedef struct ucp_ep_config_key_lane {
 
 /*
  * Endpoint configuration key.
- * This is filled by to the transport selection logic, according to the local
+ * This is filled by the transport selection logic, according to the local
  * resources and set of remote addresses.
  */
 struct ucp_ep_config_key {
@@ -214,7 +214,7 @@ struct ucp_ep_config_key {
     /* Lanes for high-bw active messages, sorted by priority, highest first */
     ucp_lane_index_t         am_bw_lanes[UCP_MAX_LANES];
 
-    /* Local memory domains to send remote keys for in high-bw rma protocols
+    /* Local memory domains to send remote keys used by high-bw rma protocols
      * NOTE: potentially it can be different than what is imposed by rma_bw_lanes,
      * since these are the MDs used by remote side for accessing our memory. */
     ucp_md_map_t             rma_bw_md_map;

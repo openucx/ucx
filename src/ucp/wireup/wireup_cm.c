@@ -429,8 +429,6 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucp_context_h context                      = worker->context;
     ucp_wireup_ep_t *cm_wireup_ep              =
             ucp_ep_get_cm_wireup_ep(ep);
-    /* Set to NULL to call ucs_free safely */
-    void *ucp_addr                             = NULL;
     unsigned ep_init_flags;
     unsigned i;
     ucp_tl_bitmap_t tl_bitmap;
@@ -532,7 +530,6 @@ try_fallback:
 err:
     ucp_ep_set_failed(ep, ucp_ep_get_cm_lane(ep), status);
 out:
-    ucs_free(ucp_addr);
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
 }
@@ -623,7 +620,6 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_unpacked_address_t addr;
     ucp_tl_bitmap_t tl_bitmap;
     ucp_rsc_index_t dev_index;
-    ucp_rsc_index_t UCS_V_UNUSED rsc_index;
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
