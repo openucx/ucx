@@ -36,6 +36,7 @@ static ucs_status_t
 ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
                                uint64_t rndv_modes, size_t max_length,
                                ucs_linear_func_t unpack_time,
+                               ucp_proto_perf_node_t *unpack_perf_node,
                                ucs_memory_type_t mem_type,
                                ucs_sys_device_t sys_dev)
 {
@@ -57,9 +58,11 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .unpack_time         = unpack_time,
+        .unpack_perf_node    = unpack_perf_node,
         .perf_bias           = 0.0,
         .mem_info.type       = mem_type,
         .mem_info.sys_dev    = sys_dev,
+        .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME
     };
     ucs_status_t status;
 
@@ -209,7 +212,7 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
     }
 
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, SIZE_MAX,
-                                            UCS_LINEAR_FUNC_ZERO,
+                                            UCS_LINEAR_FUNC_ZERO, NULL,
                                             init_params->select_param->mem_type,
                                             init_params->select_param->sys_dev);
     if (status != UCS_OK) {
@@ -361,26 +364,23 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     }
 
     status = ucp_proto_common_buffer_copy_time(
-            init_params->worker, "rtr_mtype", UCS_MEMORY_TYPE_HOST,
+            init_params->worker, "rtr/mtype unpack", UCS_MEMORY_TYPE_HOST,
             init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
             &unpack_time, &unpack_perf_node);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucp_proto_perf_node_deref(&unpack_perf_node);
-
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
-                                            unpack_time, UCS_MEMORY_TYPE_HOST,
+                                            unpack_time, unpack_perf_node,
+                                            UCS_MEMORY_TYPE_HOST,
                                             UCS_SYS_DEVICE_ID_UNKNOWN);
-    if (status != UCS_OK) {
-        return status;
-    }
+    ucp_proto_perf_node_deref(&unpack_perf_node);
 
     rpriv->pack_cb       = ucp_proto_rndv_rtr_mtype_pack;
     rpriv->data_received = ucp_proto_rndv_rtr_mtype_data_received;
 
-    return UCS_OK;
+    return status;
 }
 
 static void
