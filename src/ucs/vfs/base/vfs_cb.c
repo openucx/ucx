@@ -58,7 +58,7 @@ void ucs_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
         }
 
         if (type & UCS_VFS_TYPE_FLAG_HEX) {
-            ucs_string_buffer_appendf(strb, "%lx\n", ulvalue);
+            ucs_string_buffer_appendf(strb, "0x%lx\n", ulvalue);
         } else if (type & UCS_VFS_TYPE_FLAG_UNSIGNED) {
             ucs_string_buffer_appendf(strb, "%lu\n", ulvalue);
         } else {
