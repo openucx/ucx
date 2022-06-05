@@ -27,62 +27,93 @@ public:
         VARIANT_MAX         = UCS_BIT(3)
     };
 
-    void init() {
-        int mem_type_pair_index =
-                get_variant_value() % m_mem_type_pairs.size();
-        int varient_index       =
-                get_variant_value() / m_mem_type_pairs.size();
+    void init()
+    {
+        int variant_flags = get_variant_value() / m_mem_type_pairs.size();
 
-        if (varient_index & VARIANT_GDR_OFF) {
-            m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        if (variant_flags & VARIANT_GDR_OFF) {
+            if (!has_any_transport(
+                        {"dc_x", "ud_v", "ud_x", "rc_v", "rc_x", "ib"})) {
+                UCS_TEST_SKIP_R("No GPU direct RDMA");
+            }
+
+            m_env.push_back(
+                    new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
         }
 
-        if (varient_index & VARIANT_TAG_OFFLOAD) {
+        if (variant_flags & VARIANT_TAG_OFFLOAD) {
+            if (!has_any_transport({"rc_x", "dc_x", "ib"})) {
+                UCS_TEST_SKIP_R("No tag offload");
+            }
+
             enable_tag_mp_offload();
 
             if (RUNNING_ON_VALGRIND) {
-                m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE",  "8k"));
-                m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
+                m_env.push_back(
+                        new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
+                m_env.push_back(
+                        new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
                 m_env.push_back(
                         new ucs::scoped_setenv("UCX_RC_RX_QUEUE_LEN", "1024"));
             }
         }
 
-        if (varient_index & VARIANT_PROTO) {
+        if (variant_flags & VARIANT_PROTO) {
             modify_config("PROTO_ENABLE", "y");
         }
 
-        m_send_mem_type = m_mem_type_pairs[mem_type_pair_index][0];
-        m_recv_mem_type = m_mem_type_pairs[mem_type_pair_index][1];
+        int mem_type_pair_index = get_variant_value() % m_mem_type_pairs.size();
+        m_send_mem_type         = m_mem_type_pairs[mem_type_pair_index][0];
+        m_recv_mem_type         = m_mem_type_pairs[mem_type_pair_index][1];
 
-        modify_config("MAX_EAGER_LANES",          "2");
-        modify_config("MAX_RNDV_LANES",           "2");
-        modify_config("RNDV_PIPELINE_SHM_ENABLE", "y");
+        modify_config("MAX_EAGER_LANES", "2");
+        modify_config("MAX_RNDV_LANES", "2");
 
         test_ucp_tag::init();
     }
 
-    void cleanup() {
-        test_ucp_tag::cleanup();
+    static void
+    add_mem_type_test_variant(std::vector<ucp_test_variant> &variants,
+                              int variant_value,
+                              ucs_memory_type_t send_mem_type,
+                              ucs_memory_type_t recv_mem_type)
+    {
+        std::string name = ucs_memory_type_names[send_mem_type] +
+                           std::string(":") +
+                           ucs_memory_type_names[recv_mem_type];
+
+        int variant_flags = variant_value / m_mem_type_pairs.size();
+
+        if (variant_flags & VARIANT_GDR_OFF) {
+            if ((send_mem_type != UCS_MEMORY_TYPE_CUDA) &&
+                (send_mem_type != UCS_MEMORY_TYPE_ROCM) &&
+                (recv_mem_type != UCS_MEMORY_TYPE_CUDA) &&
+                (recv_mem_type != UCS_MEMORY_TYPE_ROCM)) {
+                /* No need to disable GPU-direct if the memory type does not
+                   support it anyway */
+                return;
+            }
+            name += ",nogdr";
+        }
+
+        if (variant_flags & VARIANT_TAG_OFFLOAD) {
+            name += ",offload";
+        }
+
+        if (variant_flags & VARIANT_PROTO) {
+            name += ",proto";
+        }
+
+        add_variant_with_value(variants, get_ctx_params(), variant_value, name);
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
         int count = 0;
         for (int i = 0; i < VARIANT_MAX; i++) {
-            for (const auto& mem_type_pair : m_mem_type_pairs) {
-                std::string name =
-                        std::string(ucs_memory_type_names[mem_type_pair[0]]) + ":" +
-                        std::string(ucs_memory_type_names[mem_type_pair[1]]);
-                if (i & VARIANT_GDR_OFF) {
-                    name += ",nogdr";
-                }
-                if (i & VARIANT_TAG_OFFLOAD) {
-                    name += ",offload";
-                }
-                if (i & VARIANT_PROTO) {
-                    name += ",proto";
-                }
-                add_variant_with_value(variants, get_ctx_params(), count, name);
+            for (const auto &mem_type_pair : m_mem_type_pairs) {
+                add_mem_type_test_variant(variants, count, mem_type_pair[0],
+                                          mem_type_pair[1]);
                 ++count;
             }
         }
