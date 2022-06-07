@@ -289,6 +289,7 @@ struct uct_rc_iface {
         uint8_t              max_rd_atomic;
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
+        uint8_t              flush_remote;
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
         uint32_t             ece;
@@ -386,7 +387,6 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface);
 
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
-
 
 /**
  * Creates an RC or DCI QP

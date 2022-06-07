@@ -132,6 +132,11 @@ static void uct_ib_mlx5_parse_relaxed_order(uct_ib_mlx5_md_t *md,
                                 (sizeof(uct_ib_mlx5_mr_t) * num_mrs);
 }
 
+static uint8_t uct_ib_mlx5_get_mr_id()
+{
+    return getpid() & 0xff;
+}
+
 #if HAVE_DEVX
 
 typedef struct uct_ib_mlx5_dbrec_page {
@@ -248,6 +253,38 @@ uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md, int atomic,
 }
 
 static ucs_status_t
+uct_ib_mlx5_devx_reg_ksm_data_addr(uct_ib_mlx5_md_t *md, struct ibv_mr *mr,
+                                   intptr_t addr, size_t length,
+                                   uintptr_t iova, int atomic, int list_size,
+                                   struct mlx5dv_devx_obj **mr_p,
+                                   uint32_t *mkey)
+{
+    int i;
+    char *in;
+    void *klm;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_alloc_mkey_inbox(list_size, &in);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
+    for (i = 0; i < list_size; i++) {
+        UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->lkey);
+        UCT_IB_MLX5DV_SET64(klm, klm, address,
+                            addr + (i * UCT_IB_MD_MAX_MR_SIZE));
+        klm = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
+    }
+
+    status = uct_ib_mlx5_devx_reg_ksm(md, atomic, iova, length,
+                                      list_size, UCT_IB_MD_MAX_MR_SIZE, in,
+                                      mr_p, mkey);
+    ucs_free(in);
+    return status;
+}
+
+static ucs_status_t
 uct_ib_mlx5_devx_reg_ksm_data_contig(uct_ib_mlx5_md_t *md,
                                      uct_ib_mlx5_mr_t *mr, off_t off,
                                      int atomic, struct mlx5dv_devx_obj **mr_p,
@@ -261,29 +298,10 @@ uct_ib_mlx5_devx_reg_ksm_data_contig(uct_ib_mlx5_md_t *md,
                                  md->super.dev.atomic_align);
     /* add off to workaround CREATE_MKEY range check issue */
     int list_size = ucs_div_round_up(length + off, UCT_IB_MD_MAX_MR_SIZE);
-    int i;
-    char *in;
-    void *klm;
-    ucs_status_t status;
 
-    status = uct_ib_mlx5_alloc_mkey_inbox(list_size, &in);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
-    for (i = 0; i < list_size; i++) {
-        UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->super.ib->lkey);
-        UCT_IB_MLX5DV_SET64(klm, klm, address,
-                            addr + (i * UCT_IB_MD_MAX_MR_SIZE));
-        klm = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
-    }
-
-    status = uct_ib_mlx5_devx_reg_ksm(md, atomic, addr + off, length,
-                                      list_size, UCT_IB_MD_MAX_MR_SIZE, in,
-                                      mr_p, mkey);
-    ucs_free(in);
-    return status;
+    return uct_ib_mlx5_devx_reg_ksm_data_addr(md, mr->super.ib, addr, length,
+                                              addr + off, atomic, list_size,
+                                              mr_p, mkey);
 }
 
 /**
@@ -819,6 +837,38 @@ close_ctx:
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops;
 
+static ucs_status_t uct_ib_mlx5_devx_init_flush_mr(uct_ib_mlx5_md_t *md)
+{
+    ucs_status_t status;
+
+    ucs_assert(UCT_IB_MD_FLUSH_REMOTE_LENGTH <= ucs_get_page_size());
+
+    status = uct_ib_reg_mr(md->super.pd, md->zero_buf,
+                           UCT_IB_MD_FLUSH_REMOTE_LENGTH,
+                           UCT_IB_MEM_ACCESS_FLAGS, &md->flush_mr, 1);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_mlx5_devx_reg_ksm_data_addr(md, md->flush_mr,
+                                                (intptr_t)md->zero_buf,
+                                                UCT_IB_MD_FLUSH_REMOTE_LENGTH,
+                                                0, 0, 1,
+                                                &md->flush_dvmr,
+                                                &md->super.flush_rkey);
+    if (status != UCS_OK) {
+        uct_ib_dereg_mr(md->flush_mr);
+        ucs_error("failed to create flush_remote rkey: %s",
+                  ucs_status_string(status));
+        return status;
+    }
+
+    ucs_debug("created indirect rkey 0x%x for remote flush",
+              md->super.flush_rkey);
+    ucs_assert((md->super.flush_rkey & 0xff) == 0);
+    return UCS_OK;
+}
+
 static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
                                              uct_ib_md_t **p_md)
@@ -1074,8 +1124,15 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->super.cap_flags |= UCT_MD_FLAG_INVALIDATE;
     }
 
-    *p_md       = &md->super;
-    return status;
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_KSM) {
+        status = uct_ib_mlx5_devx_init_flush_mr(md);
+        if (status != UCS_OK) {
+            md->super.flush_rkey = uct_ib_mlx5_get_mr_id() << 8;
+        }
+    }
+
+    *p_md = &md->super;
+    return UCS_OK;
 
 err_release_dbrec:
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
@@ -1088,11 +1145,24 @@ err:
     return status;
 }
 
+static void uct_ib_mlx5_devx_cleanup_flush_mr(uct_ib_mlx5_md_t *md)
+{
+    ucs_status_t status;
+
+    uct_ib_mlx5_devx_obj_destroy(md->flush_dvmr, "flush_dvmr");
+
+    status = uct_ib_dereg_mr(md->flush_mr);
+    if (status != UCS_OK) {
+        ucs_warn("uct_ib_dereg_mr(flush_mr) failed: %m");
+    }
+}
+
 static void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
     uct_ib_mlx5_devx_mr_lru_cleanup(md);
+    uct_ib_mlx5_devx_cleanup_flush_mr(md);
     uct_ib_mlx5_md_buf_free(md, md->zero_buf, &md->zero_mem);
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
     ucs_recursive_spinlock_destroy(&md->dbrec_lock);
@@ -1290,6 +1360,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     if (status != UCS_OK) {
         goto err_free;
     }
+
+    md->super.flush_rkey = uct_ib_mlx5_get_mr_id() << 8;
 
     /* cppcheck-suppress autoVariables */
     *p_md = &md->super;
