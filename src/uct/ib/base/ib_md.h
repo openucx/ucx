@@ -31,6 +31,8 @@
 
 #define UCT_IB_MD_NAME(_x)        "ib_" UCS_PP_QUOTE(_x)
 
+#define UCT_IB_MD_FLUSH_REMOTE_LENGTH 8
+
 
 /**
  * IB MD statistics counters
@@ -143,6 +145,12 @@ typedef struct uct_ib_md {
     uint64_t                 reg_mem_types;
     uint64_t                 cap_flags;
     char                     *name;
+    /* flush_remote rkey is used as atomic_mr_id value (8-16 bits of rkey)
+     * when UMR regions can be created. Dummy value must be zero always
+     * (assuming that lowest byte is mkey tag which is not used).
+     * flush_remote_pack and atomic_mr_id values are passed in iface address to
+     * implement flush remote operation. */
+    uint32_t                 flush_rkey;
 } uct_ib_md_t;
 
 

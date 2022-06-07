@@ -272,6 +272,8 @@ typedef struct uct_ib_mlx5_md {
         size_t               count;
     } lru_rkeys;
 
+    struct ibv_mr            *flush_mr;
+    struct mlx5dv_devx_obj   *flush_dvmr;
     uint8_t                  mkey_tag;
 #endif
     /* The maximum number of outstanding RDMA Read/Atomic operations per DC QP. */
