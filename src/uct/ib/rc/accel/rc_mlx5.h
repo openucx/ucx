@@ -49,13 +49,19 @@ typedef struct {
 } uct_rc_mlx5_iface_qp_cleanup_ctx_t;
 
 
-typedef struct uct_rc_mlx5_ep_address {
+typedef struct uct_rc_mlx5_ep_base_address {
     uct_ib_uint24_t  qp_num;
     /* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
      * another one for HW (device will use it for RDMA reads and sending RNDV
      * Complete messages). */
     uct_ib_uint24_t  tm_qp_num;
     uint8_t          atomic_mr_id;
+} UCS_S_PACKED uct_rc_mlx5_ep_base_address_t;
+
+
+typedef struct uct_rc_mlx5_ep_address {
+    uct_rc_mlx5_ep_base_address_t super;
+    uint16_t                      flush_remote_rkey;
 } UCS_S_PACKED uct_rc_mlx5_ep_address_t;
 
 

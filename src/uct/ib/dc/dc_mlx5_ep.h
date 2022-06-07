@@ -27,35 +27,45 @@
 
 enum uct_dc_mlx5_ep_flags {
     /* DCI pool EP assigned to according to it's lag port */
-    UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK     = UCS_MASK(3),
+    UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK      = UCS_MASK(3),
 
     /* EP is in the tx_wait state. See description of the dcs+quota dci
        selection policy above */
-    UCT_DC_MLX5_EP_FLAG_TX_WAIT             = UCS_BIT(3),
+    UCT_DC_MLX5_EP_FLAG_TX_WAIT              = UCS_BIT(3),
 
     /* EP has GRH address. Used by dc_mlx5 endpoint */
-    UCT_DC_MLX5_EP_FLAG_GRH                 = UCS_BIT(4),
+    UCT_DC_MLX5_EP_FLAG_GRH                  = UCS_BIT(4),
 
     /* Keepalive Request scheduled: indicates that keepalive request
      * is scheduled in outstanding queue and no more keepalive actions
      * are needed */
-    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED    = UCS_BIT(5),
+    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED     = UCS_BIT(5),
 
     /* Flush cancel was executed on EP */
-    UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL        = UCS_BIT(6),
+    UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL         = UCS_BIT(6),
 
     /* Error handler already called or flush(CANCEL) disabled it */
-    UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(7),
+    UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED  = UCS_BIT(7),
 
-    /* Info needed for flush_remote operation is stored in iface khash */
-    UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(8),
+    /* EP supports flush remote operation */
+    UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE_ENABLED = UCS_BIT(8),
+
+    /* Flush remote operation should be invoked */
+    UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE         = UCS_BIT(9),
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(9)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED          = UCS_BIT(10)
 #else
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED          = 0
 #endif
 };
+
+
+/* Address-vector for link-local scope */
+typedef struct uct_dc_mlx5_base_av {
+    uint32_t dqp_dct;
+    uint16_t rlid;
+} UCS_S_PACKED uct_dc_mlx5_base_av_t;
 
 
 struct uct_dc_mlx5_ep {
@@ -66,17 +76,18 @@ struct uct_dc_mlx5_ep {
      */
     union {
         struct {
-            uct_base_ep_t         super;
-            ucs_arbiter_group_t   arb_group;
+            uct_base_ep_t       super;
+            ucs_arbiter_group_t arb_group;
         };
-        ucs_list_link_t           list;
+        ucs_list_link_t         list;
     };
 
-    uint8_t                       dci;
-    uint16_t                      flags;
-    uint16_t                      atomic_mr_offset;
-    uct_rc_fc_t                   fc;
-    uct_ib_mlx5_base_av_t         av;
+    uint8_t                     dci;
+    uint8_t                     atomic_mr_id;
+    uint16_t                    flags;
+    uct_rc_fc_t                 fc;
+    uct_dc_mlx5_base_av_t       av;
+    uint16_t                    flush_remote_rkey;
 };
 
 typedef struct {

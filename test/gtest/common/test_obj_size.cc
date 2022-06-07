@@ -38,7 +38,7 @@ extern "C" {
 class test_obj_size : public ucs::test {
 };
 
-#define EXPECTED_SIZE(_obj, _size) EXPECT_EQ((size_t)_size, sizeof(_obj))
+#define EXPECTED_SIZE(_obj, _size) printf(#_obj " = %d (%d)\n", (int)sizeof(_obj), (int)_size); EXPECT_EQ((size_t)_size, sizeof(_obj))
 
 UCS_TEST_F(test_obj_size, size) {
 

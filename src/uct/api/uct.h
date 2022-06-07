@@ -519,10 +519,15 @@ enum uct_flush_flags {
                                                  error state, and it becomes
                                                  unusable for send operations
                                                  and should be destroyed. */
-    UCT_FLUSH_FLAG_REMOTE   = UCS_BIT(1)    /**< Guarantees that the target
-                                                 buffer is updated. Effective
-                                                 for remote memory write and
-                                                 remote atomic operations. */
+    UCT_FLUSH_FLAG_REMOTE   = UCS_BIT(1)    /**< Guarantees that all previous
+                                                 UCP memory update operations
+                                                 (put, atomics, etc.) are
+                                                 completed, the target memory
+                                                 of these operation was updated,
+                                                 and the updated memory is
+                                                 globally visible for all
+                                                 processing elements in the
+                                                 system. */
 };
 
 

@@ -677,11 +677,11 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_ib_md_t *md                   = uct_ib_iface_md(ucs_derived_of(
                                         tl_ep->iface, uct_ib_iface_t));
 
-    uct_ib_pack_uint24(rc_addr->qp_num, ep->tx.wq.super.qp_num);
-    uct_ib_mlx5_md_get_atomic_mr_id(md, &rc_addr->atomic_mr_id);
+    uct_ib_pack_uint24(rc_addr->super.qp_num, ep->tx.wq.super.qp_num);
+    uct_ib_mlx5_md_get_atomic_mr_id(md, &rc_addr->super.atomic_mr_id);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.qp_num);
+        uct_ib_pack_uint24(rc_addr->super.tm_qp_num, ep->tm_qp.qp_num);
     }
 
     return UCS_OK;
@@ -767,7 +767,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
         status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tm_qp,
-                                           uct_ib_unpack_uint24(rc_addr->qp_num),
+                                           uct_ib_unpack_uint24(rc_addr->super.qp_num),
                                            &ah_attr, path_mtu,
                                            ep->super.path_index);
         if (status != UCS_OK) {
@@ -776,9 +776,9 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
 
         /* Need to connect local ep QP to the one owned by device
          * (and bound to XRQ) on the peer. */
-        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
+        qp_num = uct_ib_unpack_uint24(rc_addr->super.tm_qp_num);
     } else {
-        qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
+        qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);
     }
 
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tx.wq.super, qp_num,
@@ -788,7 +788,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         return status;
     }
 
-    ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
+    ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->super.atomic_mr_id);
     ep->super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
 
     return UCS_OK;

@@ -146,6 +146,11 @@ enum {
     UCT_EP_PARAM_VALUE(_params, path_index, PATH_INDEX, 0)
 
 
+#define UCT_IFACE_PARAM_FEATURE(_params, _feature) \
+    (UCT_IFACE_PARAM_VALUE(_params, features, FEATURES, UINT64_MAX) & \
+     UCT_IFACE_FEATURE_ ## _feature)
+
+
 /**
  * Check the condition and return status as a pointer if not true.
  */

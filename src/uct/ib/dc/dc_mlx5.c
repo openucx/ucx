@@ -193,7 +193,9 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
-    iface_attr->iface_addr_len = sizeof(uct_dc_mlx5_iface_addr_t);
+    iface_attr->iface_addr_len = uct_dc_mlx5_iface_is_flush_remote(iface) ?
+                                 sizeof(uct_dc_mlx5_iface_addr_t) :
+                                 sizeof(uct_dc_mlx5_iface_base_addr_t);
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
@@ -855,7 +857,8 @@ int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
     iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     ucs_assert_always(iface_addr != NULL);
 
-    return ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) == iface->version_flag) &&
+    return ((addr->super.flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
+            iface->version_flag) &&
            (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ==
             UCT_RC_MLX5_TM_ENABLED(&iface->super)) &&
            uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
@@ -866,14 +869,19 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
 {
     uct_dc_mlx5_iface_t      *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_iface_addr_t *addr  = (uct_dc_mlx5_iface_addr_t *)iface_addr;
-    uct_ib_md_t              *md    = uct_ib_iface_md(ucs_derived_of(iface,
-                                                      uct_ib_iface_t));
+    uct_ib_mlx5_md_t         *md    = ucs_derived_of(iface->super.super.super.super.md,
+                                                     uct_ib_mlx5_md_t);
 
-    uct_ib_pack_uint24(addr->qp_num, iface->rx.dct.qp_num);
-    uct_ib_mlx5_md_get_atomic_mr_id(md, &addr->atomic_mr_id);
-    addr->flags        = iface->version_flag;
+    uct_ib_pack_uint24(addr->super.qp_num, iface->rx.dct.qp_num);
+    uct_ib_mlx5_md_get_atomic_mr_id(&md->super, &addr->super.atomic_mr_id);
+    addr->super.flags      = iface->version_flag;
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        addr->flags   |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
+        addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
+    }
+
+    if (uct_dc_mlx5_iface_is_flush_remote(iface)) {
+        addr->flush_remote_rkey = md->flush_remote_pack;
+        addr->super.flags      |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_REMOTE;
     }
 
     return UCS_OK;
@@ -1335,6 +1343,12 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     if ((params->field_mask & UCT_IFACE_PARAM_FIELD_FEATURES) &&
         !(params->features & UCT_IFACE_FEATURE_PUT)) {
         self->flags |= UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT;
+    }
+
+    if ((md->flags & UCT_IB_MLX5_MD_FLAG_FLUSH_REMOTE) &&
+        UCT_IFACE_PARAM_FEATURE(params, GET) &&
+        UCT_IFACE_PARAM_FEATURE(params, PUT)) {
+        self->flags |= UCT_DC_MLX5_IFACE_FLAG_FLUSH_REMOTE;
     }
 
     UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(self, config, dci, DCI, status, err);

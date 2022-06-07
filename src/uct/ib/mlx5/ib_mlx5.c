@@ -917,7 +917,7 @@ ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *ibmd, uint8_t *mr_id)
      * Usually parallel processes running on the same node as part of a single
      * job will have consecutive PIDs. For example MPI ranks, slurm spawned tasks...
      */
-    *mr_id = getpid() % 256;
+    *mr_id = md->atomic_mr_id;
     return UCS_OK;
 
 unsupported:

@@ -208,6 +208,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
     uct_rc_iface_t *rc_iface   = &iface->super;
+    uct_ib_mlx5_md_t *md       = ucs_derived_of(rc_iface->super.super.md,
+                                                uct_ib_mlx5_md_t);
     size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(0);
     size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(0);
     ucs_status_t status;
@@ -234,7 +236,9 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                    UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m     += 1e-9; /* 1 ns per each extra QP */
-    iface_attr->ep_addr_len    = sizeof(uct_rc_mlx5_ep_address_t);
+    iface_attr->ep_addr_len    = (md->flags & UCT_IB_MLX5_MD_FLAG_FLUSH_REMOTE) ?
+                                 sizeof(uct_rc_mlx5_ep_address_t) :
+                                 sizeof(uct_rc_mlx5_ep_base_address_t);
     iface_attr->iface_addr_len = sizeof(uint8_t);
     return UCS_OK;
 }
