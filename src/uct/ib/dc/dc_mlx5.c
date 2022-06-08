@@ -594,7 +594,7 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
 #if HAVE_DEVX
-        mlx5dv_devx_obj_destroy(iface->rx.dct.devx.obj);
+        uct_ib_mlx5_devx_obj_destroy(iface->rx.dct.devx.obj, "DCT");
 #endif
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
