@@ -2421,7 +2421,7 @@ ucs_status_t uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr,
  * must support @ref UCT_MD_FLAG_REG flag.
  *
  * @param [in]     md        Memory domain to register memory on.
- * @param [out]    address   Memory to register.
+ * @param [in]     address   Memory to register.
  * @param [in]     length    Size of memory to register. Must be >0.
  * @param [in]     flags     Memory allocation flags, see @ref uct_md_mem_flags.
  * @param [out]    memh_p    Filled with handle for allocated region.
