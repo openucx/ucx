@@ -206,7 +206,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     return UCS_OK;
 
 err_free:
-    mlx5dv_devx_obj_destroy(qp->devx.obj);
+    uct_ib_mlx5_devx_obj_destroy(qp->devx.obj, "QP");
 err_free_db:
     uct_ib_mlx5_put_dbrec(qp->devx.dbrec);
 err_free_mem:
