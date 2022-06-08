@@ -1509,7 +1509,7 @@ typedef struct uct_md_mem_attr {
      * (https://01.org/linuxgraphics/gfx-docs/drm/driver-api/dma-buf.html).
      * If the md does not support querying fd object associated with the region,
      * then UCT_DMABUF_FD_INVALID is returned. It is responsibility of the
-     * user to close returned fd once used.
+     * user to close returned fd once used using close().
      */
     int               dmabuf_fd;
 
