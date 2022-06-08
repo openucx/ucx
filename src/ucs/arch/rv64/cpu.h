@@ -100,10 +100,6 @@ static inline uint64_t ucs_arch_read_hres_clock()
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem
 
 static inline void ucs_arch_clear_cache(void * start, void * end) {
-    /**
-     * msync is a system call that invokes a supervised instruction
-     * causing the rv64 harts to flush their datacache 
-     */
     ucs_acquire_barrier();
     ucs_rv64_dcache_flush(start, end);
     ucs_rv64_icache_flush(start, end);
