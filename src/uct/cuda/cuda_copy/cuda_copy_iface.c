@@ -310,7 +310,7 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
                                                         cuda_event_desc);
     CUcontext cuda_context;
 
-    UCT_CUDA_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
+    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
     if (uct_cuda_base_context_match(cuda_context, iface->cuda_context)) {
         UCT_CUDA_FUNC_LOG_ERR(cudaEventDestroy(base->event));
     }
@@ -453,7 +453,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
-    UCT_CUDA_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
+    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
     if (uct_cuda_base_context_match(cuda_context, self->cuda_context)) {
 
         for (src = 0; src < UCS_MEMORY_TYPE_LAST; ++src) {

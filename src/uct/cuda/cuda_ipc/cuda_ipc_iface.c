@@ -442,7 +442,7 @@ static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
                                                        event_desc);
     CUcontext cuda_context;
 
-    UCT_CUDA_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
+    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
     if (uct_cuda_base_context_match(cuda_context, iface->cuda_context)) {
         UCT_CUDA_FUNC_LOG_ERR(cudaEventDestroy(base->event));
     }
@@ -529,7 +529,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     int i;
     CUcontext cuda_context;
 
-    UCT_CUDA_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
+    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
 
     if (self->streams_initialized &&
         uct_cuda_base_context_match(cuda_context, self->cuda_context)) {
