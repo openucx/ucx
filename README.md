@@ -162,7 +162,7 @@ $ make -C test/gtest test
 * [CUDA](https://developer.nvidia.com/cuda-zone)
 * [ROCm](https://rocm.github.io/)
 * Shared Memory
-    * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](http://knem.gforge.inria.fr/), and [xpmem](https://github.com/hjelmn/xpmem)
+    * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](https://knem.gitlabpages.inria.fr), and [xpmem](https://github.com/hjelmn/xpmem)
 * TCP/IP
 
 <hr>
