@@ -1238,6 +1238,7 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
     ucs_status_t status;
     uct_ep_h ep, remote_ep;
     uct_ep_params_t ep_params;
+    uct_iface_addr_t *iface_addr;
 
     reserve_ep(index);
     if (m_eps[index]) {
@@ -1245,8 +1246,15 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
     }
 
     other.reserve_ep(other_index);
-    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+
+    iface_addr = (uct_iface_addr_t*)malloc(other.iface_attr().iface_addr_len);
+
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                           UCT_EP_PARAM_FIELD_IFACE_ADDR;
     ep_params.iface      = other.m_iface;
+    ep_params.iface_addr = iface_addr;
+    status               = uct_iface_get_address(iface(), iface_addr);
+    ASSERT_UCS_OK(status);
     status               = uct_ep_create(&ep_params, &remote_ep);
     ASSERT_UCS_OK(status);
     other.m_eps[other_index].reset(remote_ep, uct_ep_destroy);
@@ -1255,6 +1263,8 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
         connect_p2p_ep(remote_ep, remote_ep);
     } else {
         ep_params.iface     = m_iface;
+        status              = uct_iface_get_address(other.iface(), iface_addr);
+        ASSERT_UCS_OK(status);
         ucs_status_t status = uct_ep_create(&ep_params, &ep);
         ASSERT_UCS_OK(status);
 
@@ -1263,6 +1273,8 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
 
         m_eps[index].reset(ep, uct_ep_destroy);
     }
+
+    free(iface_addr);
 }
 
 void uct_test::entity::connect_to_iface(unsigned index, entity& other) {

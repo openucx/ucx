@@ -212,7 +212,7 @@ typedef struct uct_rc_mlx5_cmd_wq {
     uct_ib_mlx5_txwq_t            super;
     uct_rc_mlx5_srq_op_t          *ops;     /* array of operations on command QP */
     int                           ops_head; /* points to the next operation to be completed */
-    int                           ops_tail; /* points to the last adde operation*/
+    int                           ops_tail; /* points to the last added operation*/
     int                           ops_mask; /* mask which bounds head and tail by
                                                ops array size */
 } uct_rc_mlx5_cmd_wq_t;
@@ -239,7 +239,7 @@ typedef struct uct_rc_mlx5_mp_context {
      * is being processed (not all fragments are delivered to the user via
      * uct_tag_unexp_eager_cb_t callback yet). Otherwise, any incoming tag
      * eager message should be either a single fragment message or the first
-     * fragment of multi-fragmeneted message. */
+     * fragment of multi-fragmented message. */
     uint8_t                       free;
 } uct_rc_mlx5_mp_context_t;
 
@@ -248,6 +248,17 @@ typedef struct uct_rc_mlx5_mp_hash_key {
     uint64_t                      guid;
     uint32_t                      qp_num;
 } uct_rc_mlx5_mp_hash_key_t;
+
+
+typedef struct uct_rc_mlx5_iface_base_addr {
+    uint8_t                       flags;
+} UCS_S_PACKED uct_rc_mlx5_iface_base_addr_t;
+
+
+typedef struct uct_rc_mlx5_iface_addr {
+    uct_rc_mlx5_iface_base_addr_t super;
+    uint32_t                      flush_remote_rkey;
+} UCS_S_PACKED uct_rc_mlx5_iface_addr_t;
 
 
 static UCS_F_ALWAYS_INLINE int

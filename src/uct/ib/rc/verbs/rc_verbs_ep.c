@@ -156,7 +156,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super, rkey, remote_addr);
+    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super);
     uct_rc_verbs_ep_fence_put(iface, ep, &rkey, &remote_addr);
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
@@ -178,7 +178,7 @@ ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                        pack_cb, arg, length);
-    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super, rkey, remote_addr);
+    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super);
     uct_rc_verbs_ep_fence_put(iface, ep, &rkey, &remote_addr);
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.opcode, IBV_WR_RDMA_WRITE, sge,
                               length, remote_addr, rkey);
@@ -199,7 +199,7 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
 
     UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge,
                        "uct_rc_verbs_ep_put_zcopy");
-    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super, rkey, remote_addr);
+    UCT_RC_EP_ADD_FLUSH_REMOTE(&ep->super);
     uct_rc_verbs_ep_fence_put(iface, ep, &rkey, &remote_addr);
     status = uct_rc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, 0ul, remote_addr, rkey,
                                         comp, uct_rc_ep_send_op_completion_handler,
@@ -443,13 +443,12 @@ static void uct_rc_verbs_ep_post_flush(uct_rc_verbs_ep_t *ep, int send_flags)
 static ucs_status_t
 uct_rc_verbs_ep_flush_remote(uct_rc_verbs_ep_t *ep, uct_completion_t *comp)
 {
-    const unsigned get_length   = 1;
+    const unsigned get_length   = 8;
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
     uct_rc_iface_send_desc_t *desc;
     struct ibv_send_wr wr;
     struct ibv_sge sge;
-    khiter_t kh_iter;
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
@@ -457,16 +456,13 @@ uct_rc_verbs_ep_flush_remote(uct_rc_verbs_ep_t *ep, uct_completion_t *comp)
     desc->super.handler   = uct_rc_ep_flush_remote_handler;
     desc->super.user_comp = comp;
 
-    kh_iter = kh_get(uct_rc_iface_flush_remote,
-                     &iface->super.flush_remote_kh, (uintptr_t)ep);
-
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.opcode, IBV_WR_RDMA_READ, sge, get_length,
-                              kh_val(&iface->super.flush_remote_kh,kh_iter).addr,
-                              uct_ib_md_direct_rkey(kh_val(&iface->super.flush_remote_kh,
-                                                           kh_iter).rkey));
+                              0, ep->super.flush_remote.rkey);
 
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SIGNALED, INT_MAX);
     UCT_RC_RDMA_READ_POSTED(&iface->super, get_length);
+    ep->super.flush_remote.state &= ~UCT_RC_EP_FLUSH_REMOTE_STATE_REQUESTED;
+
     return UCS_INPROGRESS;
 }
 
@@ -484,7 +480,9 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                     "flags CANCEL and REMOTE could not be used together");
 
     if (ucs_unlikely((flags & UCT_FLUSH_FLAG_REMOTE) &&
-                     (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_REMOTE))) {
+                     ucs_test_all_flags(ep->super.flush_remote.state,
+                                        UCT_RC_EP_FLUSH_REMOTE_STATE_REQUESTED |
+                                        UCT_RC_EP_FLUSH_REMOTE_STATE_ENABLED))) {
         return uct_rc_verbs_ep_flush_remote(ep, comp);
     }
 
@@ -587,12 +585,17 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_verbs_ep_address_t *rc_addr = (uct_rc_verbs_ep_address_t*)addr;
     uint8_t mr_id;
 
-    rc_addr->flags      = 0;
-    uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
+    rc_addr->super.flags = 0;
+    uct_ib_pack_uint24(rc_addr->super.qp_num, ep->qp->qp_num);
 
     if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
-        rc_addr->flags          |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
-        *(uint8_t*)(rc_addr + 1) = mr_id;
+        rc_addr->super.flags |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
+        rc_addr->atomic_mr_id = mr_id;
+
+        if (md->cap_flags & UCT_MD_FLAG_FLUSH_REMOTE) {
+            rc_addr->flush_remote_rkey = md->flush_remote_pack;
+            rc_addr->super.flags      |= UCT_RC_VERBS_ADDR_FLUSH_REMOTE;
+        }
     }
     return UCS_OK;
 }
@@ -618,14 +621,24 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                         &path_mtu);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
-    qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
+    qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);
     status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu);
     if (status != UCS_OK) {
         return status;
     }
 
-    if (rc_addr->flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
-        ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(*(uint8_t*)(rc_addr + 1));
+    ep->super.flush_remote.state = 0;
+
+    if (rc_addr->super.flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
+        ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
+
+        if (rc_addr->super.flags & UCT_RC_VERBS_ADDR_FLUSH_REMOTE) {
+            ep->super.flush_remote.rkey =
+                    ((uint32_t)rc_addr->flush_remote_rkey << 16) +
+                    ((uint32_t)rc_addr->atomic_mr_id << 8);
+            ep->super.flush_remote.state = UCT_RC_EP_FLUSH_REMOTE_STATE_ENABLED;
+        }
+
     } else {
         ep->super.atomic_mr_offset = 0;
     }
@@ -661,6 +674,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     if (status != UCS_OK) {
         goto err_qp_cleanup;
     }
+
+    self->super.flush_remote.state = 0;
 
     uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);

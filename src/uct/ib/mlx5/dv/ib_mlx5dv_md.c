@@ -870,10 +870,10 @@ static ucs_status_t uct_ib_mlx5_devx_init_flush_remote(uct_ib_mlx5_md_t *md)
                                                 ucs_get_page_size(),
                                                 0, 0, list_size,
                                                 &md->flush_remote_devx_mr,
-                                                &md->flush_remote_rkey);
+                                                &md->super.flush_remote_rkey);
     if (status == UCS_OK) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_FLUSH_REMOTE;
-        ucs_assert(md->dummy == 0);
+        md->super.cap_flags |= UCT_MD_FLAG_FLUSH_REMOTE;
+        ucs_assert(md->super.dummy == 0);
     } else {
         uct_ib_dereg_mr(md->flush_remote_mr);
     }
@@ -1136,7 +1136,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         status = uct_ib_mlx5_devx_init_flush_remote(md);
 
         if (status != UCS_OK) {
-            md->atomic_mr_id = getpid() & 0xff;
+            md->super.atomic_mr_id = getpid() & 0xff;
         }
     }
 
@@ -1159,7 +1159,7 @@ static void uct_ib_mlx5_devx_cleanup_flush_remote(uct_ib_mlx5_md_t *md)
     ucs_status_t status;
     int ret;
 
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_FLUSH_REMOTE)) {
+    if (!(md->super.cap_flags & UCT_MD_FLAG_FLUSH_REMOTE)) {
         return;
     }
 
@@ -1405,7 +1405,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    md->atomic_mr_id = getpid() & 0xff;
+    md->super.atomic_mr_id = getpid() & 0xff;
 
     /* cppcheck-suppress autoVariables */
     *p_md = &md->super;

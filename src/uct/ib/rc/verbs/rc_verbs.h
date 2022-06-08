@@ -23,7 +23,8 @@
 
 
 enum {
-    UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR = UCS_BIT(0)
+    UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR = UCS_BIT(0),
+    UCT_RC_VERBS_ADDR_FLUSH_REMOTE  = UCS_BIT(1)
 };
 
 
@@ -35,9 +36,16 @@ enum {
 };
 
 
-typedef struct uct_rc_verbs_ep_address {
+typedef struct uct_rc_verbs_ep_base_address {
     uint8_t          flags;
     uct_ib_uint24_t  qp_num;
+} UCS_S_PACKED uct_rc_verbs_ep_base_address_t;
+
+
+typedef struct uct_rc_verbs_ep_address {
+    uct_rc_verbs_ep_base_address_t super;
+    uint8_t                        atomic_mr_id;
+    uint16_t                       flush_remote_rkey;
 } UCS_S_PACKED uct_rc_verbs_ep_address_t;
 
 

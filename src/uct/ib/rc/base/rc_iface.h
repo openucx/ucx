@@ -115,6 +115,11 @@ enum {
 };
 
 
+enum {
+    UCT_RC_IFACE_FLAG_FLUSH_REMOTE = UCS_BIT(0)
+};
+
+
 typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *resp);
 
 
@@ -235,14 +240,6 @@ typedef struct uct_rc_srq {
 } uct_rc_srq_t;
 
 
-typedef struct uct_rc_iface_flush_remote {
-    uct_rkey_t rkey;
-    uintptr_t  addr;
-} uct_rc_iface_flush_remote_t;
-
-KHASH_INIT(uct_rc_iface_flush_remote, uintptr_t, uct_rc_iface_flush_remote_t, 1,
-           kh_int64_hash_func, kh_int64_hash_equal);
-
 struct uct_rc_iface {
     uct_ib_iface_t              super;
 
@@ -311,6 +308,8 @@ struct uct_rc_iface {
         uct_rc_send_handler_t  atomic64_ext_handler;  /* 64bit extended */
     } config;
 
+    uint16_t                 flags;
+
     UCS_STATS_NODE_DECLARE(stats)
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
@@ -319,8 +318,6 @@ struct uct_rc_iface {
 
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;
-
-    khash_t(uct_rc_iface_flush_remote) flush_remote_kh;
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_rc_iface_ops_t*,
                   uct_md_h, uct_worker_h, const uct_iface_params_t*,
@@ -400,8 +397,8 @@ void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface);
 
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
 
-void uct_rc_iface_remove_flush_remote(uct_rc_iface_t *iface, void *ep);
-
+void uct_rc_iface_set_flush_remote(uct_rc_iface_t *iface,
+                                   const uct_iface_params_t *params);
 
 /**
  * Creates an RC or DCI QP
@@ -634,29 +631,10 @@ uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
 #endif
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_iface_add_flush_remote(uct_rc_iface_t *iface, void *ep, uct_rkey_t rkey,
-                              uintptr_t addr)
+static UCS_F_ALWAYS_INLINE int
+uct_rc_iface_is_flush_remote(uct_rc_iface_t *iface)
 {
-    khiter_t kh_iter;
-    int kh_res;
-
-    if (ucs_unlikely(!iface->config.flush_remote)) {
-        return UCS_OK;
-    }
-
-    kh_iter = kh_put(uct_rc_iface_flush_remote, &iface->flush_remote_kh,
-                     (uintptr_t)ep, &kh_res);
-    if (ucs_unlikely(kh_res == -1)) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    ucs_assert((kh_res != 0));
-
-    kh_val(&iface->flush_remote_kh, kh_iter).rkey = rkey;
-    kh_val(&iface->flush_remote_kh, kh_iter).addr = addr;
-
-    return UCS_OK;
+    return iface->flags & UCT_RC_IFACE_FLAG_FLUSH_REMOTE;
 }
 
 #endif

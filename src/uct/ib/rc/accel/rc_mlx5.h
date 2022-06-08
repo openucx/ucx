@@ -25,6 +25,17 @@
                                    UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
+enum {
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
+
+    /* Tag Matching address. It additionally contains QP number which
+     * is used for hardware offloads. */
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM,
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_MASK = UCS_MASK(UCT_RC_MLX5_IFACE_ADDR_TYPE_TM),
+    UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_REMOTE = UCS_BIT(1)
+};
+
+
 /**
  * RC remote endpoint
  */
@@ -49,19 +60,13 @@ typedef struct {
 } uct_rc_mlx5_iface_qp_cleanup_ctx_t;
 
 
-typedef struct uct_rc_mlx5_ep_base_address {
+typedef struct uct_rc_mlx5_ep_address {
     uct_ib_uint24_t  qp_num;
     /* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
      * another one for HW (device will use it for RDMA reads and sending RNDV
      * Complete messages). */
     uct_ib_uint24_t  tm_qp_num;
     uint8_t          atomic_mr_id;
-} UCS_S_PACKED uct_rc_mlx5_ep_base_address_t;
-
-
-typedef struct uct_rc_mlx5_ep_address {
-    uct_rc_mlx5_ep_base_address_t super;
-    uint16_t                      flush_remote_rkey;
 } UCS_S_PACKED uct_rc_mlx5_ep_address_t;
 
 

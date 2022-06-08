@@ -101,9 +101,6 @@ typedef enum {
 
     /** Disable PUT capability (RDMA_WRITE) */
     UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT              = UCS_BIT(7),
-
-    /** Support flush remote operation */
-    UCT_DC_MLX5_IFACE_FLAG_FLUSH_REMOTE             = UCS_BIT(8)
 } uct_dc_mlx5_iface_flags_t;
 
 
@@ -240,7 +237,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
  * 0        release     stack      ndci
  *              top     top
  * 
- * Overall count of DCI's to relase and allocated DCI's could not be more than
+ * Overall count of DCI's to release and allocated DCI's could not be more than
  * ndci and these stacks are not intersected
  */
 typedef struct {
@@ -489,12 +486,6 @@ static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_is_dci_keepalive(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
     return dci_index == iface->keepalive_dci;
-}
-
-static UCS_F_ALWAYS_INLINE int
-uct_dc_mlx5_iface_is_flush_remote(uct_dc_mlx5_iface_t *iface)
-{
-    return iface->flags & UCT_DC_MLX5_IFACE_FLAG_FLUSH_REMOTE;
 }
 
 #endif

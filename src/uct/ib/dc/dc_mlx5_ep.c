@@ -1252,7 +1252,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                                  uct_rc_ep_pending_purge_warn_cb, self);
     uct_dc_mlx5_ep_fc_cleanup(self);
     uct_dc_mlx5_ep_keepalive_cleanup(self);
-    uct_rc_iface_remove_flush_remote(&iface->super.super, self);
 
     if ((self->dci == UCT_DC_MLX5_EP_NO_DCI) ||
         uct_dc_mlx5_iface_is_dci_rand(iface)) {

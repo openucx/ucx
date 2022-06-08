@@ -735,8 +735,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
         self->config.fc_hard_thresh = 0;
     }
 
-    kh_init_inplace(uct_rc_iface_flush_remote, &self->flush_remote_kh);
-
     return UCS_OK;
 
 err_cleanup_rx:
@@ -792,8 +790,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 {
     uct_rc_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_rc_iface_ops_t);
     unsigned i;
-
-    kh_destroy_inplace(uct_rc_iface_flush_remote, &self->flush_remote_kh);
 
     /* Release table. TODO release on-demand when removing ep. */
     for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {
@@ -1073,13 +1069,15 @@ static void ucp_send_op_mpool_obj_str(ucs_mpool_t *mp, void *obj,
 #endif
 }
 
-void uct_rc_iface_remove_flush_remote(uct_rc_iface_t *iface, void *ep)
+void uct_rc_iface_set_flush_remote(uct_rc_iface_t *iface,
+                                   const uct_iface_params_t *params)
 {
-    khiter_t kh_iter;
+    uct_ib_md_t *md = ucs_derived_of(iface->super.super.md, uct_ib_md_t);
 
-    kh_iter = kh_get(uct_rc_iface_flush_remote, &iface->flush_remote_kh,
-                     (uintptr_t)ep);
-    if (kh_iter != kh_end(&iface->flush_remote_kh)) {
-        kh_del(uct_rc_iface_flush_remote, &iface->flush_remote_kh, kh_iter);
+    if ((md->cap_flags & UCT_MD_FLAG_FLUSH_REMOTE) &&
+        iface->config.flush_remote &&
+        UCT_IFACE_PARAM_FEATURE(params, GET) &&
+        UCT_IFACE_PARAM_FEATURE(params, PUT)) {
+        iface->flags |= UCT_RC_IFACE_FLAG_FLUSH_REMOTE;
     }
 }

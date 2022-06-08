@@ -22,15 +22,6 @@
 #include "rc_mlx5.inl"
 
 
-enum {
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
-
-    /* Tag Matching address. It additionally contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM
-};
-
-
 /**
  * RC mlx5 interface configuration
  */
@@ -207,11 +198,9 @@ static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
-    uct_rc_iface_t *rc_iface   = &iface->super;
-    uct_ib_mlx5_md_t *md       = ucs_derived_of(rc_iface->super.super.md,
-                                                uct_ib_mlx5_md_t);
-    size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(0);
-    size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(0);
+    uct_rc_iface_t *rc_iface = &iface->super;
+    size_t max_am_inline     = UCT_IB_MLX5_AM_MAX_SHORT(0);
+    size_t max_put_inline    = UCT_IB_MLX5_PUT_MAX_SHORT(0);
     ucs_status_t status;
 
 #if HAVE_IBV_DM
@@ -236,10 +225,10 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                    UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m     += 1e-9; /* 1 ns per each extra QP */
-    iface_attr->ep_addr_len    = (md->flags & UCT_IB_MLX5_MD_FLAG_FLUSH_REMOTE) ?
-                                 sizeof(uct_rc_mlx5_ep_address_t) :
-                                 sizeof(uct_rc_mlx5_ep_base_address_t);
-    iface_attr->iface_addr_len = sizeof(uint8_t);
+    iface_attr->ep_addr_len    = sizeof(uct_rc_mlx5_ep_address_t);
+    iface_attr->iface_addr_len = uct_rc_iface_is_flush_remote(&iface->super) ?
+                                 sizeof(uct_rc_mlx5_iface_addr_t) :
+                                 sizeof(uct_rc_mlx5_iface_base_addr_t);
     return UCS_OK;
 }
 
@@ -673,9 +662,20 @@ static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)
 }
 
 static ucs_status_t uct_rc_mlx5_iface_get_address(uct_iface_h tl_iface,
-                                                  uct_iface_addr_t *addr)
+                                                  uct_iface_addr_t *iface_addr)
 {
-    *(uint8_t*)addr = uct_rc_mlx5_iface_get_address_type(tl_iface);
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_md_t *md                = ucs_derived_of(iface->super.super.super.md,
+                                                    uct_ib_md_t);
+    uct_rc_mlx5_iface_addr_t *addr = (uct_rc_mlx5_iface_addr_t*)iface_addr;
+
+    addr->super.flags = uct_rc_mlx5_iface_get_address_type(tl_iface);
+
+    if (uct_rc_iface_is_flush_remote(&iface->super)) {
+        addr->super.flags      |= UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_REMOTE;
+        addr->flush_remote_rkey = md->flush_remote_rkey;
+    }
 
     return UCS_OK;
 }
@@ -684,9 +684,12 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
                                    const uct_iface_addr_t *iface_addr)
 {
+    uct_rc_mlx5_iface_base_addr_t *addr =
+            (uct_rc_mlx5_iface_base_addr_t*)iface_addr;
     uint8_t my_type = uct_rc_mlx5_iface_get_address_type(tl_iface);
 
-    if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
+    if ((iface_addr != NULL) &&
+        (my_type != (addr->flags & UCT_RC_MLX5_IFACE_ADDR_TYPE_MASK))) {
         return 0;
     }
 
@@ -810,6 +813,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     if (status != UCS_OK) {
         goto cleanup_dm;
     }
+
+    uct_rc_iface_set_flush_remote(&self->super, params);
 
 #if HAVE_DEVX
     status = uct_rc_mlx5_devx_iface_init_events(self);

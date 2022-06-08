@@ -188,7 +188,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
                             uct_rc_ep_pending_purge_warn_cb, self);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(iface, &self->txqp);
-    uct_rc_iface_remove_flush_remote(iface, self);
 }
 
 UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)

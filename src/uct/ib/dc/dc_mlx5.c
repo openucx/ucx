@@ -193,7 +193,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
-    iface_attr->iface_addr_len = uct_dc_mlx5_iface_is_flush_remote(iface) ?
+    iface_attr->iface_addr_len = uct_rc_iface_is_flush_remote(&iface->super.super) ?
                                  sizeof(uct_dc_mlx5_iface_addr_t) :
                                  sizeof(uct_dc_mlx5_iface_base_addr_t);
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
@@ -879,8 +879,8 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
         addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
     }
 
-    if (uct_dc_mlx5_iface_is_flush_remote(iface)) {
-        addr->flush_remote_rkey = md->flush_remote_pack;
+    if (uct_rc_iface_is_flush_remote(&iface->super.super)) {
+        addr->flush_remote_rkey = md->super.flush_remote_pack;
         addr->super.flags      |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_REMOTE;
     }
 
@@ -1345,11 +1345,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         self->flags |= UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT;
     }
 
-    if ((md->flags & UCT_IB_MLX5_MD_FLAG_FLUSH_REMOTE) &&
-        UCT_IFACE_PARAM_FEATURE(params, GET) &&
-        UCT_IFACE_PARAM_FEATURE(params, PUT)) {
-        self->flags |= UCT_DC_MLX5_IFACE_FLAG_FLUSH_REMOTE;
-    }
+    uct_rc_iface_set_flush_remote(&self->super.super, params);
 
     UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(self, config, dci, DCI, status, err);
     UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(self, config, dci_ka, KEEPALIVE,

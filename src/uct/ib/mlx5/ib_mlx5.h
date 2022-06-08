@@ -186,8 +186,6 @@ enum {
     UCT_IB_MLX5_MD_FLAG_CQE128_ZIP           = UCS_BIT(11),
     /* Device performance is optimized when RDMA_WRITE is not used */
     UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED = UCS_BIT(12),
-    /* MD supports flush_remote operation */
-    UCT_IB_MLX5_MD_FLAG_FLUSH_REMOTE         = UCS_BIT(13),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
@@ -278,14 +276,6 @@ typedef struct uct_ib_mlx5_md {
 #endif
     /* The maximum number of outstanding RDMA Read/Atomic operations per DC QP. */
     uint8_t                  max_rd_atomic_dc;
-    union {
-        uint32_t             flush_remote_rkey;
-        struct {
-            uint8_t          dummy; /* must be zero */
-            uint8_t          atomic_mr_id;
-            uint16_t         flush_remote_pack;
-        };
-    };
     struct ibv_mr*           flush_remote_mr;
     struct mlx5dv_devx_obj   *flush_remote_devx_mr;
 } uct_ib_mlx5_md_t;
