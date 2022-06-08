@@ -649,7 +649,8 @@ static ucs_status_t uct_ib_mlx5_add_page(ucs_mpool_t *mp, size_t *size_p, void *
     uct_ib_mlx5_devx_umem_t mem;
     ucs_status_t status;
 
-    status = uct_ib_mlx5_md_buf_alloc(md, size, 1, (void **)&page, &mem, "devx dbrec");
+    status = uct_ib_mlx5_md_buf_alloc(md, size, 1, (void**)&page, &mem, 0,
+                                      "devx dbrec");
     if (status != UCS_OK) {
         return status;
     }
@@ -1055,7 +1056,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     status = uct_ib_mlx5_md_buf_alloc(md, ucs_get_page_size(), 0, &md->zero_buf,
-                                      &md->zero_mem, "zero umem");
+                                      &md->zero_mem, 0, "zero umem");
     if (status != UCS_OK) {
         goto err_release_dbrec;
     }

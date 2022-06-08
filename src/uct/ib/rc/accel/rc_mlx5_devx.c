@@ -154,7 +154,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     len    = max * stride;
 
     status = uct_ib_mlx5_md_buf_alloc(md, len, 0, &iface->rx.srq.buf,
-                                      &iface->rx.srq.devx.mem, "srq buf");
+                                      &iface->rx.srq.devx.mem, 0, "srq buf");
     if (status != UCS_OK) {
         return status;
     }

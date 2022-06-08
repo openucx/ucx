@@ -766,7 +766,7 @@ uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
-                         char *name)
+                         int access_mode, char *name)
 {
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
     ucs_status_t status;
@@ -789,7 +789,8 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     }
 
     mem->size = size;
-    mem->mem  = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size, 0);
+    mem->mem  = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size,
+                                     access_mode);
     if (mem->mem == NULL) {
         ucs_log(level, "mlx5dv_devx_umem_reg() failed: %m");
         status = UCS_ERR_NO_MEMORY;

@@ -85,7 +85,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     if (tx != NULL) {
         status = uct_ib_mlx5_md_buf_alloc(md, len, 0, &qp->devx.wq_buf,
-                                          &qp->devx.mem, "qp umem");
+                                          &qp->devx.mem, 0, "qp umem");
         if (status != UCS_OK) {
             goto err_uar;
         }
