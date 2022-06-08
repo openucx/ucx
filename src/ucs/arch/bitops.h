@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
+* Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -21,7 +22,7 @@ BEGIN_C_DECLS
 #elif defined(__aarch64__)
 #  include "aarch64/bitops.h"
 #elif defined(__riscv)
-#  include "riscv/bitops.h"
+#  include "rv64/bitops.h"
 #else
 #  error "Unsupported architecture"
 #endif

@@ -104,7 +104,7 @@ typedef struct ucs_cpu_builtin_memcpy {
 #elif defined(__aarch64__)
 #  include "aarch64/cpu.h"
 #elif defined(__riscv)
-#  include "riscv/cpu.h"
+#  include "rv64/cpu.h"
 #else
 #  error "Unsupported architecture"
 #endif

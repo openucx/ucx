@@ -31,10 +31,27 @@
 #include <unistd.h>
 #include <pthread.h>
 
+#if defined(__riscv)
+ #include <ucs/arch/cpu.h>
+#endif
 
 #define UCM_HOOK_STR \
     ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ?  "reloc" : "bistro")
 
+#if defined(__riscv)
+#define UCM_FIRE_EVENT(_event, _mask, _data, _call)                            \
+     do {                                                                      \
+         int exp_events = (_event) & (_mask);                                  \
+         (_data)->fired_events = 0;                                            \
+         ucs_rv64_isb();                                                       \
+         _call;                                                                \
+         /* in case if any event is missed - set corresponding bit to 0     */ \
+         /* same as equation:                                               */ \
+         /* (_data)->out_events &= ~(exp_events ^                           */ \
+         /*                          ((_data)->fired_events & exp_events)); */ \
+         (_data)->out_events &= ~exp_events | (_data)->fired_events;           \
+     } while(0)
+#else
 #define UCM_FIRE_EVENT(_event, _mask, _data, _call)                           \
     do {                                                                      \
         int exp_events = (_event) & (_mask);                                  \
@@ -48,6 +65,7 @@
         /*                          ((_data)->fired_events & exp_events)); */ \
         (_data)->out_events &= ~exp_events | (_data)->fired_events;           \
     } while(0)
+#endif
 
 #define UCM_MMAP_EVENT_NAME_ENTRY(_event) \
     [ucs_ilog2(UCM_EVENT_##_event)] = #_event
@@ -181,7 +199,11 @@ ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data,
     }
 
     if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+#if defined(__riscv)
+        ucs_arch_clear_cache(p, p+ucm_get_page_size());
+#endif
         shmid = shmget(IPC_PRIVATE, ucm_get_page_size(), IPC_CREAT | SHM_R | SHM_W);
+
         if (shmid == -1) {
             ucm_debug("shmget failed: %m");
             return;

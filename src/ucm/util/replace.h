@@ -27,6 +27,23 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
 #define UCM_DEFINE_REPLACE_FUNC(_name, _rettype, _fail_val, ...) \
     _UCM_DEFINE_REPLACE_FUNC(ucm_override_##_name, ucm_##_name, _rettype, _fail_val, __VA_ARGS__)
 
+#if defined(__riscv)
+#define _UCM_DEFINE_REPLACE_FUNC(_over_name, _ucm_name, _rettype, _fail_val, ...) \
+    \
+    /* Define a symbol which goes to the replacement - in case we are loaded first */ \
+    _rettype _over_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
+    { \
+        _rettype res; \
+        UCM_BISTRO_PROLOGUE; \
+        \
+        if (ucs_unlikely(ucm_reloc_get_orig_thread == pthread_self())) { \
+            return (_rettype)_fail_val; \
+        } \
+        res = _ucm_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        UCM_BISTRO_EPILOGUE; \
+        return res; \
+    }
+#else
 #define _UCM_DEFINE_REPLACE_FUNC(_over_name, _ucm_name, _rettype, _fail_val, ...) \
     \
     /* Define a symbol which goes to the replacement - in case we are loaded first */ \
@@ -43,6 +60,7 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
         UCM_BISTRO_EPILOGUE; \
         return res; \
     }
+#endif
 
 #define UCM_OVERRIDE_FUNC(_name, _rettype) \
     _rettype _name() __attribute__ ((alias (UCS_PP_QUOTE(ucm_override_##_name)))); \
