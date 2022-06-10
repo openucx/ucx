@@ -1,9 +1,12 @@
+/**
+ * Copyright (C) UT-Battelle, LLC. 2022. ALL RIGHTS
+ */
+
 #include "ofi_md.h"
 #include "ofi_def.h"
 #include <ucs/debug/log.h>
 #include <stdint.h>
 
-/* separate MDs for system mem and hmem */
 /* TODO: Looks like RKEYs maynot be needed, need to adjust since right now I'm just assuming it does */
 /* FI_PROGRESS_UNSPEC */
 

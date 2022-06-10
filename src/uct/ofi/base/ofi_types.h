@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) UT-Battelle, LLC. 2022. ALL RIGHTS
+ */
+
 #ifndef UCT_UGNI_TYPES_H
 #define UCT_UGNI_TYPES_H
 

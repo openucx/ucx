@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) UT-Battelle, LLC. 2022. ALL RIGHTS RESERVED.
+ */
+
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/log.h>

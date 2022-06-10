@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) UT-Battelle, LLC. 2022. ALL RIGHTS
+ */
+
 #ifndef UCT_OFI_DEV_H
 #define UCT_OFI_DEV_H
 #include <ucs/type/status.h>

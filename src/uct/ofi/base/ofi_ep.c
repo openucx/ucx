@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) UT-Battelle, LLC. 2022. ALL RIGHTS
+ */
+
 #include "ofi_iface.h"
 #include "ofi_ep.h"
 

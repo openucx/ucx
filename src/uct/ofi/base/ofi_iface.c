@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) UT-Battelle, LLC. 2022. ALL RIGHTS
+ */
+
 #include <rdma/fi_cm.h>
 #include <uct/base/uct_iface.h>
 #include "ofi_iface.h"
