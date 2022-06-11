@@ -75,7 +75,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     /* ensure context is set before creating events/streams */
     if (iface->cuda_context == NULL) {
-        UCT_CUDA_FUNC_LOG_ERR(cuCtxGetCurrent(&iface->cuda_context));
+        UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&iface->cuda_context));
         if (iface->cuda_context == NULL) {
             ucs_error("attempt to perform cuda memcpy without active context");
             return UCS_ERR_IO_ERROR;
