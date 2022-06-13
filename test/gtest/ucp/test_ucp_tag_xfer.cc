@@ -435,8 +435,10 @@ void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
         request_free(sreq);
     }
 
-    /* the generic unpack function is expected to fail */
-    EXPECT_EQ(UCS_ERR_NO_MEMORY, rreq->status);
+    if (count > 0) {
+        /* the generic unpack function is expected to fail */
+        EXPECT_EQ(UCS_ERR_NO_MEMORY, rreq->status);
+    }
     request_free(rreq);
     EXPECT_EQ(2, ucp::dt_gen_start_count);
     EXPECT_EQ(2, ucp::dt_gen_finish_count);
@@ -595,22 +597,22 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_unexp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, false, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp, "PROTO_INDIRECT_ID=y") {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp, "PROTO_INDIRECT_ID=y") {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, false, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp_sync) {
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp_sync, "PROTO_INDIRECT_ID=y") {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp_sync) {
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp_sync, "PROTO_INDIRECT_ID=y") {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, false, true, false);
 }
 

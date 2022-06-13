@@ -45,11 +45,18 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
     size_t iov_index;
 
     ucs_assert(dt_iter->type.iov.memh == NULL);
+
+    if (md_map == 0) {
+        return UCS_OK;
+    }
+
     /* TODO allocate from memory pool */
     iov_memh = ucs_calloc(iov_count, sizeof(*iov_memh), "dt_iov_memh");
     if (iov_memh == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
+
+    dt_iter->type.iov.memh = iov_memh;
 
     for (iov_index = 0; iov_index < iov_count; ++iov_index) {
         iov    = ucp_datatype_iter_iov_at(dt_iter, iov_index);
@@ -62,7 +69,6 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
         }
     }
 
-    dt_iter->type.iov.memh = iov_memh;
     return UCS_OK;
 }
 
@@ -72,8 +78,12 @@ void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
     ucp_mem_h *memh = dt_iter->type.iov.memh;
     size_t iov_index, length;
 
+    if (memh == NULL) {
+        return;
+    }
+
     ucp_datatype_iter_iov_for_each(iov_index, length, dt_iter) {
-        ucp_memh_put(context, memh[iov_index], 0);
+        ucp_datatype_memh_dereg(context, memh + iov_index);
     }
 
     ucs_free(memh);
@@ -86,6 +96,7 @@ size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
                                       ucp_datatype_iter_t *next_iter,
                                       uct_iov_t *iov, size_t max_iov)
 {
+    ucp_mem_h *iov_memh = dt_iter->type.iov.memh;
     size_t remaining_dst, remaining_src;
     size_t iov_offset, dst_iov_index;
     size_t length, max_iter_length;
@@ -114,12 +125,13 @@ size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
         src_iov = ucp_datatype_iter_iov_at(dt_iter,
                                            next_iter->type.iov.iov_index);
         if (src_iov->length > 0) {
-            dst_iov = &iov[dst_iov_index++];
-            memh    = dt_iter->type.iov.memh[next_iter->type.iov.iov_index];
-
+            dst_iov         = &iov[dst_iov_index++];
+            memh            = (iov_memh == NULL) ? NULL :
+                              iov_memh[next_iter->type.iov.iov_index];
             iov_offset      = next_iter->type.iov.iov_offset;
             dst_iov->buffer = UCS_PTR_BYTE_OFFSET(src_iov->buffer, iov_offset);
-            dst_iov->memh   = ucp_datatype_iter_uct_memh(memh, memh_index);
+            dst_iov->memh   = (memh == NULL) ? UCT_MEM_HANDLE_NULL :
+                              ucp_datatype_iter_uct_memh(memh, memh_index);
             dst_iov->stride = 0;
             dst_iov->count  = 1;
 
