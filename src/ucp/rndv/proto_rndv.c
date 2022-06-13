@@ -753,6 +753,10 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
             goto err_request_fail;
         }
     } else {
+        ucs_assertv(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG,
+                    "fragmented rendezvous is not supported with datatype %s",
+                    ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
+
         /* Partial RTR, its "offset" and "size" fields specify part to send */
         status = ucp_proto_rndv_frag_request_alloc(worker, req, &freq);
         if (status != UCS_OK) {

@@ -488,6 +488,15 @@ ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
     return ucp_datatype_iter_is_end_position(dt_iter, dt_iter);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_memh_dereg(ucp_context_h context, ucp_mem_h *memh_p)
+{
+    if (*memh_p != NULL) {
+        ucp_memh_put(context, *memh_p, 0);
+        *memh_p = NULL;
+    }
+}
+
 /*
  * Register memory and update iterator state
  */
@@ -523,10 +532,7 @@ ucp_datatype_iter_mem_dereg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
                             unsigned dt_mask)
 {
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
-        if (dt_iter->type.contig.memh != NULL) {
-            ucp_memh_put(context, dt_iter->type.contig.memh, 0);
-            dt_iter->type.contig.memh = NULL;
-        }
+        ucp_datatype_memh_dereg(context, &dt_iter->type.contig.memh);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
     }

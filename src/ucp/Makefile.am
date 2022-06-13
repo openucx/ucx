@@ -146,6 +146,7 @@ libucp_la_SOURCES = \
 	rndv/rndv_ppln.c \
 	rndv/rndv_put.c \
 	rndv/rndv_rtr.c \
+	rndv/rndv_ats.c \
 	rndv/rndv_rkey_ptr.c \
 	rndv/rndv.c \
 	stream/stream_recv.c \
