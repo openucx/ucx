@@ -483,6 +483,7 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
 {
     const size_t max_iovcnt = 1;
     ucp_ep_h ep             = req->send.ep;
+    uct_ep_h uct_ep         = ucp_ep_get_lane(ep, lane);
     ucp_ep_config_t *config = ucp_ep_config(ep);
     uct_iov_t iov[max_iovcnt];
     size_t iovcnt;
@@ -551,11 +552,11 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
 
     for (;;) {
         if (proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) {
-            status = uct_ep_get_zcopy(ep->uct_eps[lane], iov, iovcnt,
+            status = uct_ep_get_zcopy(uct_ep, iov, iovcnt,
                                       req->send.rndv.remote_address + offset,
                                       uct_rkey, &req->send.state.uct_comp);
         } else {
-            status = uct_ep_put_zcopy(ep->uct_eps[lane], iov, iovcnt,
+            status = uct_ep_put_zcopy(uct_ep, iov, iovcnt,
                                       req->send.rndv.remote_address + offset,
                                       uct_rkey, &req->send.state.uct_comp);
         }

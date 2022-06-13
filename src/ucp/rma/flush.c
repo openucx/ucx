@@ -80,7 +80,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
         /* Search for next lane to start flush */
         lane   = ucs_ffs64(all_lanes & ~req->send.flush.started_lanes);
-        uct_ep = ep->uct_eps[lane];
+        uct_ep = ucp_ep_get_lane(ep, lane);
         if (uct_ep == NULL) {
             req->send.flush.started_lanes |= UCS_BIT(lane);
             --req->send.state.uct_comp.count;
@@ -201,10 +201,10 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
-    status = uct_ep_flush(ep->uct_eps[lane], req->send.flush.uct_flags,
+    status = uct_ep_flush(ucp_ep_get_lane(ep, lane), req->send.flush.uct_flags,
                           &req->send.state.uct_comp);
-    ucs_trace("flushing ep %p lane[%d]=%p: %s", ep, lane, ep->uct_eps[lane],
-              ucs_status_string(status));
+    ucs_trace("flushing ep %p lane[%d]=%p: %s", ep, lane,
+              ucp_ep_get_lane(ep, lane), ucs_status_string(status));
     if (status == UCS_OK) {
         --req->send.state.uct_comp.count; /* UCT endpoint is flushed */
     } else if (UCS_STATUS_IS_ERR(status) && (status != UCS_ERR_NO_RESOURCE)) {

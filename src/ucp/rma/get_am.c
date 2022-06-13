@@ -89,7 +89,8 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = sizeof(ucp_get_req_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_PUT_SHORT,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };

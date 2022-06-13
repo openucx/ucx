@@ -71,7 +71,7 @@ static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
         .super.hdr_size      = hdr_size,
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
-        .super.flags         = 0,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
     };
@@ -232,7 +232,8 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = sizeof(ucp_eager_first_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
     };
@@ -270,8 +271,8 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
                                              max_payload, lpriv->super.md_index,
                                              UCP_DT_MASK_CONTIG_IOV, next_iter,
                                              iov, lpriv->super.max_iov);
-    return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id,
-                           &hdr, hdr_size, iov, iov_count, 0,
+    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                           am_id, &hdr, hdr_size, iov, iov_count, 0,
                            &req->send.state.uct_comp);
 }
 

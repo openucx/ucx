@@ -503,8 +503,8 @@ enum uct_flush_flags {
     UCT_FLUSH_FLAG_LOCAL    = 0,            /**< Guarantees that the data
                                                  transfer is completed but the
                                                  target buffer may not be
-                                                 updated yet.*/
-    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0)    /**< The library will make a best
+                                                 updated yet. */
+    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0),   /**< The library will make a best
                                                  effort attempt to cancel all
                                                  uncompleted operations.
                                                  However, there is a chance that
@@ -519,6 +519,15 @@ enum uct_flush_flags {
                                                  error state, and it becomes
                                                  unusable for send operations
                                                  and should be destroyed. */
+    UCT_FLUSH_FLAG_REMOTE   = UCS_BIT(1)    /**< Guarantees that all previous
+                                                 UCP memory update operations
+                                                 (put, atomics, etc.) are
+                                                 completed, the target memory
+                                                 of these operation was updated,
+                                                 and the updated memory is
+                                                 globally visible for all
+                                                 processing elements in the
+                                                 system. */
 };
 
 
@@ -2421,7 +2430,7 @@ ucs_status_t uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr,
  * must support @ref UCT_MD_FLAG_REG flag.
  *
  * @param [in]     md        Memory domain to register memory on.
- * @param [out]    address   Memory to register.
+ * @param [in]     address   Memory to register.
  * @param [in]     length    Size of memory to register. Must be >0.
  * @param [in]     flags     Memory allocation flags, see @ref uct_md_mem_flags.
  * @param [out]    memh_p    Filled with handle for allocated region.

@@ -23,7 +23,7 @@ ucp_proto_eager_tag_offload_short_progress(uct_pending_req_t *self)
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
 
-    status = uct_ep_tag_eager_short(ep->uct_eps[spriv->super.lane],
+    status = uct_ep_tag_eager_short(ucp_ep_get_lane(ep, spriv->super.lane),
                                     req->send.msg_proto.tag,
                                     req->send.state.dt_iter.type.contig.buffer,
                                     req->send.state.dt_iter.length);
@@ -62,7 +62,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         .super.send_op       = UCT_EP_OP_EAGER_SHORT,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
-                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY,
+                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_SHORT
     };
@@ -104,7 +105,8 @@ ucp_proto_eager_tag_offload_bcopy_common(ucp_request_t *req,
 {
     ssize_t packed_len;
 
-    packed_len = uct_ep_tag_eager_bcopy(req->send.ep->uct_eps[spriv->super.lane],
+    packed_len = uct_ep_tag_eager_bcopy(ucp_ep_get_lane(req->send.ep,
+                                                        spriv->super.lane),
                                         req->send.msg_proto.tag, imm_data,
                                         ucp_eager_tag_offload_pack, req, 0);
 
@@ -132,7 +134,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
         .super.send_op       = UCT_EP_OP_EAGER_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
-                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY,
+                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_BCOPY
     };
@@ -238,7 +241,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_ZCOPY
     };
@@ -264,7 +268,8 @@ ucp_proto_tag_offload_zcopy_send_func(ucp_request_t *req,
                                       const ucp_proto_single_priv_t *spriv,
                                       uct_iov_t *iov)
 {
-    return uct_ep_tag_eager_zcopy(req->send.ep->uct_eps[spriv->super.lane],
+    return uct_ep_tag_eager_zcopy(ucp_ep_get_lane(req->send.ep,
+                                                  spriv->super.lane),
                                   req->send.msg_proto.tag, 0ul, iov, 1, 0,
                                   &req->send.state.uct_comp);
 }
@@ -303,7 +308,8 @@ ucp_proto_tag_offload_zcopy_sync_send_func(ucp_request_t *req,
                                            const ucp_proto_single_priv_t *spriv,
                                            uct_iov_t *iov)
 {
-    return uct_ep_tag_eager_zcopy(req->send.ep->uct_eps[spriv->super.lane],
+    return uct_ep_tag_eager_zcopy(ucp_ep_get_lane(req->send.ep,
+                                                  spriv->super.lane),
                                   req->send.msg_proto.tag,
                                   ucp_send_request_get_ep_remote_id(req), iov,
                                   1, 0, &req->send.state.uct_comp);

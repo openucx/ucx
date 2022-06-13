@@ -41,7 +41,7 @@ ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = sizeof(ucp_am_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
-        .super.flags         = 0,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
         .first.lane_type     = UCP_LANE_TYPE_AM,
@@ -166,7 +166,8 @@ ucp_am_eager_multi_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = sizeof(ucp_am_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
         .first.lane_type     = UCP_LANE_TYPE_AM,
@@ -243,8 +244,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
     ucp_am_eager_zcopy_add_footer(req, footer_offset, lpriv->super.md_index,
                                   iov, &iov_count, footer_size);
 
-    return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id,
-                           &hdr, sizeof(ucp_am_hdr_t), iov, iov_count, 0,
+    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                           am_id, &hdr, sizeof(ucp_am_hdr_t), iov, iov_count, 0,
                            &req->send.state.uct_comp);
 }
 

@@ -450,7 +450,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         return UCS_OK;
     }
 
-    wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
+    wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
     if ((wireup_ep == NULL) ||
         !ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
         !ucp_ep_is_local_connected(ucp_ep)) {
@@ -1952,7 +1952,7 @@ ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
 }
 
 /* All the ucp endpoints will share the configurations. No need for every ep to
- * have it's own configuration (to save memory footprint). Same config can be used
+ * have its own configuration (to save memory footprint). Same config can be used
  * by different eps.
  * A 'key' identifies an entry in the ep_config array. An entry holds the key and
  * additional configuration parameters and thresholds.
@@ -3169,6 +3169,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
     ucp_ep_h ep;
+    uct_ep_h uct_ep;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
 
@@ -3184,6 +3185,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     }
 
     lane      = ucp_ep_config(ep)->key.keepalive_lane;
+    uct_ep    = ucp_ep_get_lane(ep, lane);
     rsc_index = ucp_ep_get_rsc_index(ep, lane);
 
     ucs_assertv((rsc_index != UCP_NULL_RESOURCE) ||
@@ -3192,26 +3194,23 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
                 ep, ucp_ep_get_cm_lane(ep), lane, rsc_index);
 
     ucs_trace("ep %p: do keepalive on lane[%d]=%p ep->flags=0x%x", ep, lane,
-              ep->uct_eps[lane], ep->flags);
+              uct_ep, ep->flags);
 
     if (ucp_ep_is_am_keepalive(ep, rsc_index,
                                ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane))) {
-        status = ucp_ep_do_uct_ep_am_keepalive(ep, ep->uct_eps[lane],
-                                               rsc_index);
+        status = ucp_ep_do_uct_ep_am_keepalive(ep, uct_ep, rsc_index);
     } else {
-        status = uct_ep_check(ep->uct_eps[lane], 0, NULL);
+        status = uct_ep_check(uct_ep, 0, NULL);
     }
 
     if (status == UCS_ERR_NO_RESOURCE) {
         return 0;
     } else if (status != UCS_OK) {
-        ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s",
-                 worker, ep, lane, ep->uct_eps[lane],
-                 ucs_status_string(status));
+        ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s", worker,
+                 ep, lane, uct_ep, ucs_status_string(status));
     } else {
         ucs_trace("worker %p: keepalive done on ep %p lane[%d]=%p, now: <%lf"
-                  " sec>", worker, ep, lane, ep->uct_eps[lane],
-                  ucs_time_to_sec(now));
+                  " sec>", worker, ep, lane, uct_ep, ucs_time_to_sec(now));
     }
 
 #if UCS_ENABLE_ASSERT

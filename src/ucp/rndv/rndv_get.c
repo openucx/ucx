@@ -80,8 +80,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
                                                    lpriv->super.rkey_index);
     uint64_t remote_address = req->send.rndv.remote_address + offset;
 
-    return uct_ep_get_zcopy(req->send.ep->uct_eps[lpriv->super.lane], iov, 1,
-                            remote_address, tl_rkey, comp);
+    return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                            iov, 1, remote_address, tl_rkey, comp);
 }
 
 static void
@@ -93,6 +93,12 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
+    if (ucs_unlikely(uct_comp->status != UCS_OK)) {
+        ucp_proto_rndv_rkey_destroy(req);
+        ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
+        return;
+    }
+
     ucp_proto_rndv_recv_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
 }
 

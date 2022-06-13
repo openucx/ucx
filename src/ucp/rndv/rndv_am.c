@@ -60,7 +60,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_am_bcopy_send_func(
 
     pack_ctx.max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
 
-    packed_size = uct_ep_am_bcopy(ep->uct_eps[lpriv->super.lane],
+    packed_size = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lpriv->super.lane),
                                   UCP_AM_ID_RNDV_DATA,
                                   ucp_proto_rndv_am_bcopy_pack, &pack_ctx, 0);
     if (ucs_unlikely(packed_size < 0)) {
@@ -106,12 +106,22 @@ ucp_proto_rdnv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
-        .super.flags         = 0,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
     };
 
     return ucp_proto_rdnv_am_init_common(&params);
+}
+
+static void
+ucp_proto_rndv_am_bcopy_abort(ucp_request_t *req, ucs_status_t status)
+{
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
+
+    ucp_proto_request_bcopy_abort(req,status);
 }
 
 ucp_proto_t ucp_rndv_am_bcopy_proto = {
@@ -121,5 +131,5 @@ ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .init     = ucp_proto_rdnv_am_bcopy_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_rndv_am_bcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = ucp_proto_rndv_am_bcopy_abort
 };

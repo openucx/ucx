@@ -365,13 +365,13 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
         /* During discarding transfer the pending queues content from the
          * previously configured UCP EP to a temporary queue for further
          * replaying */
-        ucp_worker_discard_uct_ep(ucp_ep, ucp_ep->uct_eps[lane_idx],
+        ucp_worker_discard_uct_ep(ucp_ep, ucp_ep_get_lane(ucp_ep, lane_idx),
                                   ucp_ep_get_rsc_index(ucp_ep, lane_idx),
                                   UCT_FLUSH_FLAG_CANCEL,
                                   ucp_request_purge_enqueue_cb, &queue,
                                   (ucp_send_nbx_callback_t)ucs_empty_function,
                                   NULL);
-        ucp_ep->uct_eps[lane_idx] = NULL;
+        ucp_ep_set_lane(ucp_ep, lane_idx, NULL);
     }
 }
 
@@ -383,6 +383,7 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
     ucp_lane_index_t lane_idx;
     ucp_rsc_index_t rsc_idx;
     uint8_t path_index;
+    uct_ep_h uct_ep;
 
     UCS_BITMAP_CLEAR(tl_bitmap);
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
@@ -395,15 +396,17 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
             continue;
         }
 
-        status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane_idx]);
+        status = ucp_wireup_ep_create(ep, &uct_ep);
         if (status != UCS_OK) {
             goto out;
         }
 
+        ucp_ep_set_lane(ep, lane_idx, uct_ep);
+
         UCS_BITMAP_SET(*tl_bitmap, rsc_idx);
         if (ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane_idx)) {
             path_index = ucp_ep_get_path_index(ep, lane_idx);
-            status     = ucp_wireup_ep_connect(ep->uct_eps[lane_idx], 0,
+            status     = ucp_wireup_ep_connect(ucp_ep_get_lane(ep, lane_idx), 0,
                                                rsc_idx, path_index, 0, NULL);
             if (status != UCS_OK) {
                 goto out;
@@ -429,8 +432,6 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucp_context_h context                      = worker->context;
     ucp_wireup_ep_t *cm_wireup_ep              =
             ucp_ep_get_cm_wireup_ep(ep);
-    /* Set to NULL to call ucs_free safely */
-    void *ucp_addr                             = NULL;
     unsigned ep_init_flags;
     unsigned i;
     ucp_tl_bitmap_t tl_bitmap;
@@ -532,7 +533,6 @@ try_fallback:
 err:
     ucp_ep_set_failed(ep, ucp_ep_get_cm_lane(ep), status);
 out:
-    ucs_free(ucp_addr);
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
 }
@@ -623,7 +623,6 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_unpacked_address_t addr;
     ucp_tl_bitmap_t tl_bitmap;
     ucp_rsc_index_t dev_index;
-    ucp_rsc_index_t UCS_V_UNUSED rsc_index;
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
@@ -1394,11 +1393,10 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     uct_ep_h uct_ep;
     ucs_status_t status;
 
-    ucs_assert(lane != UCP_NULL_LANE);
-    ucs_assert(ep->uct_eps[lane] == NULL);
+    ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
 
     /* TODO: split CM and wireup lanes */
-    status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane]);
+    status = ucp_wireup_ep_create(ep, &uct_ep);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to create wireup CM lane, status %s",
                  ep, ucs_status_string(status));
@@ -1406,6 +1404,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         goto err;
     }
 
+    ucp_ep_set_lane(ep, lane, uct_ep);
     ep->ext->cm_idx = cm_idx;
 
     /* create a server side CM endpoint */
@@ -1441,7 +1440,8 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         goto err;
     }
 
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, UCP_NULL_RESOURCE);
+    ucp_wireup_ep_set_next_ep(ucp_ep_get_lane(ep, lane), uct_ep,
+                              UCP_NULL_RESOURCE);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     return UCS_OK;
 

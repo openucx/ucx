@@ -89,7 +89,7 @@ ucp_proto_multi_no_resource(ucp_request_t *req, ucp_lane_index_t lane)
     }
 
     /* failed to send on another lane - add to its pending queue */
-    uct_ep = req->send.ep->uct_eps[lane];
+    uct_ep = ucp_ep_get_lane(req->send.ep, lane);
     status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
     if (status == UCS_ERR_BUSY) {
         /* try sending again */
@@ -270,7 +270,7 @@ ucp_proto_eager_bcopy_multi_common_send_func(
     }
     pack_ctx.max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
 
-    packed_size = uct_ep_am_bcopy(ep->uct_eps[lpriv->super.lane], am_id,
+    packed_size = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lpriv->super.lane), am_id,
                                   pack_cb, &pack_ctx, 0);
     if (ucs_likely(packed_size >= 0)) {
         ucs_assert(packed_size >= hdr_size);
