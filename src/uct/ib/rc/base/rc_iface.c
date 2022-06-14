@@ -499,7 +499,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
     struct ibv_srq *srq;
 
-    srq_init_attr.attr.max_sge   = 2;
+    srq_init_attr.attr.max_sge   = UCT_IB_RECV_SGE_LIST_LEN;
     srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
     srq_init_attr.attr.srq_limit = 0;
     srq_init_attr.srq_context    = iface;

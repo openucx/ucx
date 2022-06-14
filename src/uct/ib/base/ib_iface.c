@@ -1429,7 +1429,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
         wrs[count].sg[1].addr   = (uintptr_t)uct_ib_iface_recv_desc_payload(iface, desc);
         wrs[count].sg[1].length = wrs[count].sg[0].length + iface->config.seg_size;
         wrs[count].sg[1].lkey   = desc->lkey;
-        wrs[count].ibwr.num_sge = 2;
+        wrs[count].ibwr.num_sge = UCT_IB_RECV_SGE_LIST_LEN;
         wrs[count].ibwr.wr_id   = (uintptr_t)desc;
         wrs[count].ibwr.sg_list = wrs[count].sg;
         wrs[count].ibwr.next    = &wrs[count + 1].ibwr;
