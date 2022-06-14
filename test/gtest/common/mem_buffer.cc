@@ -76,12 +76,22 @@ bool mem_buffer::is_gpu_supported()
 bool mem_buffer::is_rocm_managed_supported()
 {
 #if HAVE_ROCM
-    int device_id, has_managed_mem;
-    return ((hipGetDevice(&device_id) == hipSuccess) &&
-            (hipDeviceGetAttribute(&has_managed_mem,
-                                   hipDeviceAttributeManagedMemory,
-                                   device_id) == hipSuccess) &&
-            has_managed_mem);
+    hipError_t ret;
+    void *dptr;
+    hipPointerAttribute_t attr;
+
+    ret = hipMallocManaged(&dptr, 64);
+    if (ret != hipSuccess) {
+        return false;
+    }
+
+    ret = hipPointerGetAttributes(&attr, dptr);
+    if (ret != hipSuccess) {
+        return false;
+    }
+
+    hipFree(dptr);
+    return attr.memoryType == hipMemoryTypeUnified;
 #else
     return false;
 #endif
