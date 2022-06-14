@@ -81,8 +81,9 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     return HSA_STATUS_SUCCESS;
 }
 
-static ucs_status_t uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
-                                         unsigned flags, uct_mem_h *memh_p)
+static ucs_status_t
+uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
+                     const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     uct_rocm_ipc_key_t *key;
     hsa_status_t status;

@@ -115,10 +115,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
     ucs_log_level_t log_level;
     int ret;
 
-    if (!length) {
-        memset(mem_hndl, 0, sizeof(*mem_hndl));
-        return UCS_OK;
-    }
+    ucs_assert((address != NULL) && (length != 0));
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
@@ -188,8 +185,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_dereg_internal,
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
-                                         unsigned flags, uct_mem_h *memh_p)
+static ucs_status_t
+uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
+                     const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     uct_gdr_copy_mem_t *mem_hndl = NULL;
     void *start, *end;
@@ -289,8 +287,11 @@ uct_gdr_copy_rache_region_from_memh(uct_mem_h memh)
 
 static ucs_status_t
 uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
-                            unsigned flags, uct_mem_h *memh_p)
+                            const uct_md_mem_reg_params_t *params,
+                            uct_mem_h *memh_p)
 {
+    uint64_t flags        = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
+                                                       FIELD_FLAGS, 0);
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     ucs_rcache_region_t *rregion;
     ucs_status_t status;

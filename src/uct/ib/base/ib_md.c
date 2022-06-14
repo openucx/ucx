@@ -752,9 +752,12 @@ err:
     return status;
 }
 
-static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
-                                   unsigned flags, uct_mem_h *memh_p)
+static ucs_status_t
+uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
+               const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
+    uint64_t flags  = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS,
+                                                 0);
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_status_t status;
     uct_ib_mem_t *memh;
@@ -958,10 +961,12 @@ static inline uct_ib_rcache_region_t* uct_ib_rcache_region_from_memh(uct_mem_h m
     return ucs_container_of(memh, uct_ib_rcache_region_t, memh);
 }
 
-static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
-                                          size_t length, unsigned flags,
-                                          uct_mem_h *memh_p)
+static ucs_status_t
+uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
+                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
+    uint64_t flags  = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS,
+                                                 0);
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_rcache_region_t *rregion;
     ucs_status_t status;
@@ -1083,16 +1088,19 @@ static ucs_status_t uct_ib_md_odp_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_global_odp_reg(uct_md_h uct_md, void *address,
-                                              size_t length, unsigned flags,
-                                              uct_mem_h *memh_p)
+static ucs_status_t
+uct_ib_mem_global_odp_reg(uct_md_h uct_md, void *address, size_t length,
+                          const uct_md_mem_reg_params_t *params,
+                          uct_mem_h *memh_p)
 {
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    uint64_t flags     = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS,
+                                                    0);
+    uct_ib_md_t *md    = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_mem_t *memh = md->global_odp;
 
     ucs_assert(md->global_odp != NULL);
     if (flags & UCT_MD_MEM_FLAG_LOCK) {
-        return uct_ib_mem_reg(uct_md, address, length, flags, memh_p);
+        return uct_ib_mem_reg(uct_md, address, length, params, memh_p);
     }
 
     if (md->config.odp.prefetch) {

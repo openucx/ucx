@@ -82,8 +82,9 @@ static ucs_status_t uct_rocm_gdr_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_gdr_mem_reg(uct_md_h md, void *address, size_t length,
-                                         unsigned flags, uct_mem_h *memh_p)
+static ucs_status_t
+uct_rocm_gdr_mem_reg(uct_md_h md, void *address, size_t length,
+                     const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     uct_rocm_gdr_mem_t *mem_hndl = NULL;
 

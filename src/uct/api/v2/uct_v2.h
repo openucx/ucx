@@ -192,6 +192,15 @@ typedef struct {
 
 /**
  * @ingroup UCT_MD
+ * @brief MD memory registration operation flags.
+ */
+typedef enum {
+    UCT_MD_MEM_REG_FIELD_FLAGS = UCS_BIT(0)
+} uct_md_mem_reg_field_mask_t;
+
+
+/**
+ * @ingroup UCT_MD
  * @brief MD memory de-registration operation flags.
  */
 typedef enum {
@@ -310,6 +319,26 @@ typedef void (*uct_md_mem_invalidate_cb_t)(void *arg);
 
 /**
  * @ingroup UCT_MD
+ * @brief Operation parameters passed to @ref uct_md_mem_reg_v2.
+ */
+typedef struct uct_md_mem_reg_params {
+    /**
+     * Mask of valid fields in this structure and operation flags, using
+     * bits from @ref uct_md_mem_reg_field_mask_t. Fields not specified
+     * in this mask will be ignored. Provides ABI compatibility with respect
+     * to adding new fields.
+     */
+    uint64_t                     field_mask;
+
+    /**
+     * Operation specific flags, using bits from @ref uct_md_mem_flags_t.
+     */
+    uint64_t                     flags;
+} uct_md_mem_reg_params_t;
+
+
+/**
+ * @ingroup UCT_MD
  * @brief Operation parameters passed to @ref uct_md_mem_dereg_v2.
  */
 typedef struct uct_md_mem_dereg_params {
@@ -419,16 +448,39 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
 /**
  * @ingroup UCT_MD
- * @brief Undo the operation of @ref uct_md_mem_reg() and invalidate memory
- *        region.
+ * @brief Register memory for zero-copy sends and remote access.
+ *
+ * Register memory on the memory domain. In order to use this function, @a md
+ * must support the @ref UCT_MD_FLAG_REG flag.
+ *
+ * @param [in]  md          Memory domain that was used to register the memory.
+ * @param [in]  address     Memory to register.
+ * @param [in]  length      Size of memory to register. Must be > 0.
+ * @param [in]  params      Operation parameters, see @ref
+ *                          uct_md_mem_reg_params_t.
+ * @param [out] memh_p      Filled with handle for allocated region.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_md_mem_reg_v2(uct_md_h md, void *address, size_t length,
+                               const uct_md_mem_reg_params_t *params,
+                               uct_mem_h *memh_p);
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Undo the operation of @ref uct_md_mem_reg() or
+ *        @ref uct_md_mem_reg_v2() and invalidate memory region.
  *
  * This routine deregisters the memory region registered by @ref uct_md_mem_reg
- * and allow the memory region to be invalidated with callback called when the
+ * and allows the memory region to be invalidated with callback called when the
  * memory region is unregistered.
  *
  * @param [in]  md          Memory domain that was used to register the memory.
  * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mem_dereg_params_t.
+ *
+ * @return Error code.
  */
 ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
                                  const uct_md_mem_dereg_params_t *params);

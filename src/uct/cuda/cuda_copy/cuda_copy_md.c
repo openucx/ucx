@@ -88,19 +88,15 @@ static ucs_status_t uct_cuda_copy_rkey_release(uct_component_t *component,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
-                 (md, address, length, flags, memh_p),
+                 (md, address, length, params, memh_p),
                  uct_md_h md, void *address, size_t length,
-                 unsigned flags, uct_mem_h *memh_p)
+                 const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
+    uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     ucs_log_level_t log_level;
     CUmemorytype memType;
     CUresult result;
     ucs_status_t status;
-
-    if (address == NULL) {
-        *memh_p = address;
-        return UCS_OK;
-    }
 
     result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                    (CUdeviceptr)(address));

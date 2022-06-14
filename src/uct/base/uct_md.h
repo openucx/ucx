@@ -25,6 +25,10 @@
     ucs_log(uct_md_reg_log_lvl(_flags), _fmt, ## __VA_ARGS__)
 
 
+#define UCT_MD_MEM_REG_FIELD_VALUE(_params, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCT_MD_MEM_REG, _params, _name, _flag, _default)
+
+
 #define UCT_MD_MEM_DEREG_FIELD_VALUE(_params, _name, _flag, _default) \
     UCS_PARAM_VALUE(UCT_MD_MEM_DEREG, _params, _name, _flag, _default)
 
@@ -92,10 +96,10 @@ typedef ucs_status_t (*uct_md_mem_advise_func_t)(uct_md_h md,
                                                  size_t length,
                                                  unsigned advice);
 
-typedef ucs_status_t (*uct_md_mem_reg_func_t)(uct_md_h md, void *address,
-                                              size_t length,
-                                              unsigned flags,
-                                              uct_mem_h *memh_p);
+typedef ucs_status_t
+(*uct_md_mem_reg_func_t)(uct_md_h md, void *address, size_t length,
+                         const uct_md_mem_reg_params_t *params,
+                         uct_mem_h *memh_p);
 
 typedef ucs_status_t
 (*uct_md_mem_dereg_func_t)(uct_md_h md,
@@ -220,6 +224,12 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         unsigned num_methods,
                                         const uct_mem_alloc_params_t *params);
 
+ucs_status_t uct_md_dummy_mem_reg(uct_md_h md, void *address, size_t length,
+                                  const uct_md_mem_reg_params_t *params,
+                                  uct_mem_h *memh_p);
+
+ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
+                                    const uct_md_mem_dereg_params_t *params);
 
 void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
                               const uct_md_rcache_config_t *rcache_config);
