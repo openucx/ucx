@@ -289,7 +289,7 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
     size_t page_size;
     size_t unused;
 
-    ucs_string_buffer_appendf(&msg, "ibv_reg_ms(address=%p, length=%zu, access=0x%lx)",
+    ucs_string_buffer_appendf(&msg, "ibv_reg_mr(address=%p, length=%zu, access=0x%lx)",
                               address, length, access_flags);
 
     if (err == EINVAL) {
