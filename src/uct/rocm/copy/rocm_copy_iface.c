@@ -130,8 +130,61 @@ static uct_iface_ops_t uct_rocm_copy_iface_ops = {
     .iface_is_reachable       = uct_rocm_copy_iface_is_reachable,
 };
 
+
+static ucs_status_t
+uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
+{
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth.dedicated = 0;
+        if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
+            perf_attr->bandwidth.shared = 0;
+        } else {
+            switch (perf_attr->operation) {
+            case UCT_EP_OP_GET_SHORT:
+                perf_attr->bandwidth.shared = 2000.0 * UCS_MBYTE;
+                break;
+            case UCT_EP_OP_GET_ZCOPY:
+                perf_attr->bandwidth.shared = 8000.0 * UCS_MBYTE;
+                break;
+            case UCT_EP_OP_PUT_SHORT:
+                perf_attr->bandwidth.shared = 10500.0 * UCS_MBYTE;
+                break;
+            case UCT_EP_OP_PUT_ZCOPY:
+                perf_attr->bandwidth.shared = 9500.0 * UCS_MBYTE;
+                break;
+            default:
+                perf_attr->bandwidth.shared = 0;
+                break;
+            }
+        }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
+        perf_attr->send_pre_overhead = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
+        perf_attr->send_post_overhead = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
+        perf_attr->recv_overhead = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = ucs_linear_func_make(10e-6, 0);
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
+        perf_attr->max_inflight_eps = SIZE_MAX;
+    }
+
+    return UCS_OK;
+}
+
+
 static uct_iface_internal_ops_t uct_rocm_copy_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf,
+    .iface_estimate_perf = uct_rocm_copy_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
