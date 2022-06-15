@@ -263,6 +263,11 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
+        name: rocm
+        demands: ucx_rocm -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
         name: docker
         demands:
           - ucx_docker -equals yes
