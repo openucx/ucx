@@ -64,6 +64,7 @@
 enum {
     UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP           = 0x100,
     UCT_IB_MLX5_CMD_OP_CREATE_MKEY             = 0x200,
+    UCT_IB_MLX5_CMD_OP_CREATE_CQ               = 0x400,
     UCT_IB_MLX5_CMD_OP_CREATE_QP               = 0x500,
     UCT_IB_MLX5_CMD_OP_RST2INIT_QP             = 0x502,
     UCT_IB_MLX5_CMD_OP_INIT2RTR_QP             = 0x503,
@@ -1615,6 +1616,104 @@ struct uct_ib_mlx5_create_reserved_qpn_in_bits {
 
 enum {
     UCT_IB_MLX5_OBJ_TYPE_RESERVED_QPN = 0x002C,
+};
+
+struct uct_ib_mlx5_cqc_bits {
+    uint8_t         status[0x4];
+    uint8_t         as_notify[0x1];
+    uint8_t         initiator_src_dct[0x1];
+    uint8_t         dbr_umem_valid[0x1];
+    uint8_t         reserved_at_7[0x1];
+    uint8_t         cqe_sz[0x3];
+    uint8_t         cc[0x1];
+    uint8_t         reserved_at_c[0x1];
+    uint8_t         scqe_break_moderation_en[0x1];
+    uint8_t         oi[0x1];
+    uint8_t         cq_period_mode[0x2];
+    uint8_t         cqe_comp_en[0x1];
+    uint8_t         mini_cqe_res_format[0x2];
+    uint8_t         st[0x4];
+    uint8_t         reserved_at_18[0x1];
+    uint8_t         cqe_comp_layout[0x7];
+
+    uint8_t         dbr_umem_id[0x20];
+
+    uint8_t         reserved_at_40[0x14];
+    uint8_t         page_offset[0x6];
+    uint8_t         reserved_at_5a[0x2];
+    uint8_t         mini_cqe_res_format_ext[0x2];
+    uint8_t         cq_timestamp_format[0x2];
+
+    uint8_t         reserved_at_60[0x3];
+    uint8_t         log_cq_size[0x5];
+    uint8_t         uar_page[0x18];
+
+    uint8_t         reserved_at_80[0x4];
+    uint8_t         cq_period[0xc];
+    uint8_t         cq_max_count[0x10];
+
+    uint8_t         reserved_at_a0[0x18];
+    uint8_t         c_eqn[0x8];
+
+    uint8_t         reserved_at_c0[0x3];
+    uint8_t         log_page_size[0x5];
+    uint8_t         reserved_at_c8[0x18];
+
+    uint8_t         reserved_at_e0[0x20];
+
+    uint8_t         reserved_at_100[0x8];
+    uint8_t         last_notified_index[0x18];
+
+    uint8_t         reserved_at_120[0x8];
+    uint8_t         last_solicit_index[0x18];
+
+    uint8_t         reserved_at_140[0x8];
+    uint8_t         consumer_counter[0x18];
+
+    uint8_t         reserved_at_160[0x8];
+    uint8_t         producer_counter[0x18];
+
+    uint8_t         local_partition_id[0xc];
+    uint8_t         process_id[0x14];
+
+    uint8_t         reserved_at_1A0[0x20];
+
+    uint8_t         dbr_addr[0x40];
+};
+
+struct uct_ib_mlx5_create_cq_out_bits {
+    uint8_t         status[0x8];
+    uint8_t         reserved_at_8[0x18];
+
+    uint8_t         syndrome[0x20];
+
+    uint8_t         reserved_at_40[0x8];
+    uint8_t         cqn[0x18];
+
+    uint8_t         reserved_at_60[0x20];
+};
+
+struct uct_ib_mlx5_create_cq_in_bits {
+    uint8_t         opcode[0x10];
+    uint8_t         uid[0x10];
+
+    uint8_t         reserved_at_20[0x10];
+    uint8_t         op_mod[0x10];
+
+    uint8_t         reserved_at_40[0x40];
+
+    struct uct_ib_mlx5_cqc_bits cqc;
+
+    uint8_t         cq_umem_offset[0x40];
+
+    uint8_t         cq_umem_id[0x20];
+
+    uint8_t         cq_umem_valid[0x1];
+    uint8_t         reserved_at_2e1[0x1f];
+
+    uint8_t         reserved_at_300[0x580];
+
+    uint8_t         pas[];
 };
 
 #endif
