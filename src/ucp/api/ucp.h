@@ -2810,17 +2810,17 @@ typedef struct ucp_mem_advise_params {
     /**
      * Memory base address.
      */
-     void                   *address;
+    void                    *address;
 
-     /**
-      * Length (in bytes) to allocate or map (register).
-      */
-     size_t                 length;
+    /**
+     * Length (in bytes) to allocate or map (register).
+     */
+    size_t                  length;
 
-     /**
-      * Memory use advice @ref ucp_mem_advice
-      */
-     ucp_mem_advice_t       advice;
+    /**
+     * Memory use advice @ref ucp_mem_advice
+     */
+    ucp_mem_advice_t        advice;
 } ucp_mem_advise_params_t;
 
 
