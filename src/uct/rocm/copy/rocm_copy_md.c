@@ -236,7 +236,7 @@ uct_rocm_copy_rache_region_from_memh(uct_mem_h memh)
 }
 
 static ucs_status_t
-uct_rocm_copy_mem_rcache_reg(uct_md_h md, void *address, size_t length,
+uct_rocm_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
                              const uct_md_mem_reg_params_t *params,
                              uct_mem_h *memh_p)
 {
