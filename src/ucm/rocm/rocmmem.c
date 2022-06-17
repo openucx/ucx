@@ -111,24 +111,14 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     hsa_amd_memory_pool_t memory_pool, size_t size,
     uint32_t flags, void** ptr)
 {
-    ucs_memory_type_t type = UCS_MEMORY_TYPE_ROCM;
-    uint32_t pool_flags    = 0;
     hsa_status_t status;
-
-    status = hsa_amd_memory_pool_get_info(memory_pool,
-                                          HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS,
-                                          &pool_flags);
-    if (status == HSA_STATUS_SUCCESS &&
-        !(pool_flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED)) {
-        type = UCS_MEMORY_TYPE_ROCM_MANAGED;
-    }
 
     ucm_event_enter();
 
     status = ucm_orig_hsa_amd_memory_pool_allocate(memory_pool, size, flags, ptr);
     if (status == HSA_STATUS_SUCCESS) {
         ucm_trace("ucm_hsa_amd_memory_pool_allocate(ptr=%p size:%lu)", *ptr, size);
-        ucm_dispatch_mem_type_alloc(*ptr, size, type);
+        ucm_dispatch_mem_type_alloc(*ptr, size, UCS_MEMORY_TYPE_UNKNOWN);
     }
 
     ucm_event_leave();
