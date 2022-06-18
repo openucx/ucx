@@ -317,17 +317,33 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
         [ucs_ilog2(UCP_OP_ATTR_FLAG_FAST_CMPL)]  = "fast-completion",
         [ucs_ilog2(UCP_OP_ATTR_FLAG_MULTI_SEND)] = "multi",
     };
+    static const uint64_t op_flag_bits = UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG |
+                                         UCP_PROTO_SELECT_OP_FLAG_AM_EAGER |
+                                         UCP_PROTO_SELECT_OP_FLAG_AM_RNDV;
+    static const char *op_flag_names[] = {
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)] = "frag",
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)]  = "egr",
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)]   = "rndv",
+    };
+    unsigned op_flags                  = select_param->op_flags;
     const char *sysdev_name;
     uint32_t op_attr_mask;
 
     ucs_string_buffer_appendf(strb, "%s", operation_names[select_param->op_id]);
 
-    op_attr_mask = ucp_proto_select_op_attr_from_flags(select_param->op_flags);
+    op_attr_mask = ucp_proto_select_op_attr_from_flags(op_flags);
     ucs_string_buffer_appendf(strb, "(");
     if (op_attr_mask & op_attr_bits) {
         ucs_string_buffer_append_flags(strb, op_attr_mask & op_attr_bits,
                                        op_attr_names);
+        ucs_string_buffer_appendf(strb, ",");
     }
+    if (op_flags & op_flag_bits) {
+        ucs_string_buffer_append_flags(strb, op_flags & op_flag_bits,
+                                       op_flag_names);
+        ucs_string_buffer_appendf(strb, ",");
+    }
+    ucs_string_buffer_rtrim(strb, ",");
     ucs_string_buffer_appendf(strb, ")");
 
     if (ucp_proto_op_is_fetch(select_param->op_id)) {
