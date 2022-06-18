@@ -35,20 +35,22 @@ typedef struct {
 static ucs_status_t
 ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
 {
-    static const double ppln_frag_overhead       = 30e-9;
+    static const double frag_overhead            = 30e-9;
     ucp_worker_h worker                          = init_params->worker;
     ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
-    ucp_proto_caps_t *caps                       = init_params->caps;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     const ucp_proto_threshold_elem_t *thresh_elem;
     const ucp_proto_select_elem_t *select_elem;
     const ucp_proto_perf_range_t *frag_range;
     size_t frag_min_length, frag_max_length;
     ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_proto_init_params_t ppln_params;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
     ucs_linear_func_t ppln_overhead;
+    ucp_proto_caps_t ppln_caps;
     char frag_size_str[32];
+    ucs_status_t status;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         ((select_param->op_id != UCP_OP_ID_RNDV_SEND) &&
@@ -58,7 +60,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     }
 
     /* Select a protocol for rndv recv */
-    sel_param          = *init_params->select_param;
+    sel_param          = *select_param;
     sel_param.op_flags = UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG |
                          UCP_PROTO_SELECT_OP_FLAG_INTERNAL |
                          ucp_proto_select_op_attr_to_flags(
@@ -89,30 +91,34 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     thresh_elem = ucp_proto_select_thresholds_search(select_elem,
                                                      frag_max_length);
 
-    /* Initialize private data */
-    *init_params->priv_size = sizeof(*rpriv);
-    rpriv->frag_proto       = *select_elem;
-    rpriv->frag_size        = frag_max_length;
-    caps->cfg_thresh        = thresh_elem->proto_config.cfg_thresh;
-    caps->cfg_priority      = 0;
-    caps->min_length        = frag_max_length + 1;
-    caps->num_ranges        = 0;
-
     ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
               ucs_memunits_to_str(rpriv->frag_size, frag_size_str,
                                   sizeof(frag_size_str)),
               UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
 
-    /* Add the single range of the pipeline protocol */
-    ucp_proto_common_add_ppln_range(init_params, frag_range, SIZE_MAX);
+    /* Add the single range of the pipeline protocol to ppln_caps */
+    ppln_params            = *init_params;
+    ppln_params.caps       = &ppln_caps;
+    ppln_caps.cfg_thresh   = thresh_elem->proto_config.cfg_thresh;
+    ppln_caps.cfg_priority = 0;
+    ppln_caps.min_length   = frag_max_length + 1;
+    ppln_caps.num_ranges   = 0;
+    ucp_proto_common_add_ppln_range(&ppln_params, frag_range, SIZE_MAX);
 
-    /* Add overheads: PPLN overhead */
-    ppln_overhead = ucs_linear_func_make(ppln_frag_overhead,
-                                         ppln_frag_overhead / rpriv->frag_size);
-    ucp_proto_perf_add(caps->ranges[0].perf, ppln_overhead);
+    /* Initialize private data */
+    *init_params->priv_size = sizeof(*rpriv);
+    rpriv->frag_proto       = *select_elem;
+    rpriv->frag_size        = frag_max_length;
 
-    /* Add overheads: ack time */
-    return ucp_proto_rndv_ack_init(init_params, &rpriv->ack);
+    /* Add ATS overhead */
+    ppln_overhead = ucs_linear_func_make(frag_overhead,
+                                         frag_overhead / frag_max_length);
+    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
+                                     &ppln_caps, ppln_overhead, &rpriv->ack);
+
+    ucp_proto_select_caps_cleanup(&ppln_caps);
+
+    return status;
 }
 
 static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,

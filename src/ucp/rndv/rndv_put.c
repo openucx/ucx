@@ -251,7 +251,9 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_rndv_bulk_init(&params, &rpriv->bulk, &bulk_priv_size);
+    status = ucp_proto_rndv_bulk_init(&params, &rpriv->bulk,
+                                      UCP_PROTO_RNDV_PUT_DESC,
+                                      UCP_PROTO_RNDV_ATP_NAME, &bulk_priv_size);
     if (status != UCS_OK) {
         return status;
     }
