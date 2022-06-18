@@ -177,7 +177,8 @@ static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array, unsigned new_size)
 }
 
 unsigned
-ucs_ptr_array_bulk_alloc(ucs_ptr_array_t *ptr_array, unsigned element_count)
+ucs_ptr_array_bulk_alloc(ucs_ptr_array_t *ptr_array, unsigned element_count,
+                         void *init_value)
 {
     unsigned free_iter, new_size, element_index;
 
@@ -215,7 +216,7 @@ alloc_grow:
 alloc_init:
     for (free_iter = 0; free_iter < element_count; free_iter++) {
         /* set the value and remove from the free-list */
-        ucs_ptr_array_set(ptr_array, element_index + free_iter, 0);
+        ucs_ptr_array_set(ptr_array, element_index + free_iter, init_value);
     }
 
     return element_index;
@@ -223,7 +224,7 @@ alloc_init:
 
 unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value)
 {
-    unsigned ret = ucs_ptr_array_bulk_alloc(ptr_array, 1);
+    unsigned ret = ucs_ptr_array_bulk_alloc(ptr_array, 1, NULL);
 
     ucs_assert(((uintptr_t)value & UCS_PTR_ARRAY_FLAG_FREE) == 0);
 
@@ -276,29 +277,37 @@ void ucs_ptr_array_set(ucs_ptr_array_t *ptr_array, unsigned element_index,
     }
 }
 
-void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned element_index)
+void ucs_ptr_array_bulk_remove(ucs_ptr_array_t *ptr_array,
+                               unsigned element_index,
+                               unsigned element_count)
 {
     ucs_ptr_array_elem_t *next_elem;
-    uint32_t size_free_ahead;
+    uint32_t i, free_ahead;
 
-    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, element_index));
-    ucs_assert(ptr_array->count > 0);
-
-    if (ucs_ptr_array_is_free(ptr_array, element_index + 1)) {
-        next_elem = &ptr_array->start[element_index + 1];
-        size_free_ahead = ucs_ptr_array_size_free_get_free_ahead(*next_elem) + 1;
+    next_elem = &ptr_array->start[element_index + element_count];
+    if (__ucs_ptr_array_is_free(*next_elem)) {
+        free_ahead = ucs_ptr_array_size_free_get_free_ahead(*next_elem) + 1;
     } else {
-        size_free_ahead = 1;
+        free_ahead = 1;
     }
 
-    ucs_ptr_array_freelist_element_set(&ptr_array->start[element_index],
-                                       size_free_ahead, ptr_array->freelist);
+    ucs_assert(!__ucs_ptr_array_is_free(*(next_elem - 1)));
+    ucs_ptr_array_freelist_element_set(next_elem - 1, free_ahead++,
+                                       ptr_array->freelist);
 
-    /* Make sure the next element is free */
-    ucs_assert(__ucs_ptr_array_is_free(ptr_array->start[element_index + size_free_ahead - 1]));
+    for (i = 2; i <= element_count; i++, free_ahead++) {
+        ucs_assert(!__ucs_ptr_array_is_free(*(next_elem - i)));
+        ucs_ptr_array_freelist_element_set(next_elem - i, free_ahead,
+                                           element_index + element_count - i);
+    }
 
     ptr_array->freelist = element_index;
-    ptr_array->count--;
+    ptr_array->count   -= element_count;
+}
+
+void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned element_index)
+{
+    ucs_ptr_array_bulk_remove(ptr_array, element_index, 1);
 }
 
 void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned element_index,
@@ -362,14 +371,15 @@ unsigned ucs_ptr_array_locked_insert(ucs_ptr_array_locked_t *locked_ptr_array,
 
 unsigned
 ucs_ptr_array_locked_bulk_alloc(ucs_ptr_array_locked_t *locked_ptr_array,
-                                unsigned element_count)
+                                unsigned element_count,
+                                void *init_value)
 {
     unsigned element_index;
 
     ucs_recursive_spin_lock(&locked_ptr_array->lock);
     /* Call unlocked function */
     element_index = ucs_ptr_array_bulk_alloc(&locked_ptr_array->super,
-                                             element_count);
+                                             element_count, init_value);
     ucs_recursive_spin_unlock(&locked_ptr_array->lock);
 
     return element_index;
@@ -390,6 +400,17 @@ void ucs_ptr_array_locked_remove(ucs_ptr_array_locked_t *locked_ptr_array,
     ucs_recursive_spin_lock(&locked_ptr_array->lock);
     /* Call unlocked function */
     ucs_ptr_array_remove(&locked_ptr_array->super, element_index);
+    ucs_recursive_spin_unlock(&locked_ptr_array->lock);
+}
+
+void ucs_ptr_array_locked_bulk_remove(ucs_ptr_array_locked_t *locked_ptr_array,
+                                      unsigned element_index,
+                                      unsigned element_count)
+{
+    ucs_recursive_spin_lock(&locked_ptr_array->lock);
+    /* Call unlocked function */
+    ucs_ptr_array_bulk_remove(&locked_ptr_array->super, element_index,
+                              element_count);
     ucs_recursive_spin_unlock(&locked_ptr_array->lock);
 }
 

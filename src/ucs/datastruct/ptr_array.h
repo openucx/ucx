@@ -326,7 +326,8 @@ unsigned ucs_ptr_array_locked_insert(ucs_ptr_array_locked_t *locked_ptr_array,
  * Allocate a number of contiguous slots in the locked array.
  *
  * @param [in] locked_ptr_array  Pointer to a locked ptr array.
- * @param [in] element_count     Number of slots to allocate
+ * @param [in] element_count     Number of slots to allocate.
+ * @param [in] init_value     Value to set in every allocated slot.
  *
  * @return The index of the requested amount of slots (initialized to zero).
  *
@@ -337,7 +338,8 @@ unsigned ucs_ptr_array_locked_insert(ucs_ptr_array_locked_t *locked_ptr_array,
  */
 unsigned
 ucs_ptr_array_locked_bulk_alloc(ucs_ptr_array_locked_t *locked_ptr_array,
-                                unsigned element_count);
+                                unsigned element_count,
+                                void *init_value);
 
 
 /**
@@ -363,6 +365,20 @@ void ucs_ptr_array_locked_set(ucs_ptr_array_locked_t *locked_ptr_array,
  */
 void ucs_ptr_array_locked_remove(ucs_ptr_array_locked_t *locked_ptr_array,
                                  unsigned element_index);
+
+
+/**
+ * Release a number of contiguous locked array slots.
+ *
+ * @param [in] ptr_array      Pointer to a locked ptr array.
+ * @param [in] element_index  Index to remove from.
+ * @param [in] element_count  Number of slots to release.
+ *
+ * Complexity: O(n)
+ */
+void ucs_ptr_array_locked_bulk_remove(ucs_ptr_array_locked_t *locked_ptr_array,
+                                      unsigned element_index,
+                                      unsigned element_count);
 
 
 /**

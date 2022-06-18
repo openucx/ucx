@@ -547,7 +547,7 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
 
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 7);
 
-    index = ucs_ptr_array_bulk_alloc(&pa, 200);
+    index = ucs_ptr_array_bulk_alloc(&pa, 200, NULL);
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 207);
 
     EXPECT_EQ(301u, pa.size);
@@ -605,47 +605,38 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     ucs_ptr_array_cleanup(&pa, 1);
 }
 
-UCS_TEST_F(test_datatype, ptr_array_bulk_alloc) {
+UCS_TEST_F(test_datatype, ptr_array_bulk) {
     ucs_ptr_array_t pa;
-    unsigned idx, alloc1, alloc2;
+    unsigned alloc1, alloc2;
 
     ucs_ptr_array_init(&pa, "ptr_array alloc test");
 
-    alloc1 = ucs_ptr_array_bulk_alloc(&pa, 10);
+    alloc1 = ucs_ptr_array_bulk_alloc(&pa, 10, NULL);
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 10);
 
     EXPECT_GE(pa.size, 10u);
     EXPECT_EQ(alloc1, 0u);
 
-    alloc2 = ucs_ptr_array_bulk_alloc(&pa, 100);
+    alloc2 = ucs_ptr_array_bulk_alloc(&pa, 100, NULL);
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
 
     EXPECT_GE(pa.size, 110u);
     EXPECT_EQ(alloc2, alloc1 + 10u);
 
-    for (idx = 0; idx < alloc2; idx++) {
-        ucs_ptr_array_remove(&pa, idx);
-    }
+    ucs_ptr_array_bulk_remove(&pa, 0, alloc2);
 
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 100);
-    EXPECT_EQ(alloc1, ucs_ptr_array_bulk_alloc(&pa, 10));
+    EXPECT_EQ(alloc1, ucs_ptr_array_bulk_alloc(&pa, 10, NULL));
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
 
-    for (idx = alloc1 + 10; idx > alloc1; idx--) {
-        ucs_ptr_array_remove(&pa, idx - 1);
-    }
+    ucs_ptr_array_bulk_remove(&pa, alloc1, 10);
 
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 100);
-    EXPECT_EQ(alloc1, ucs_ptr_array_bulk_alloc(&pa, 10));
+    EXPECT_EQ(alloc1, ucs_ptr_array_bulk_alloc(&pa, 10, NULL));
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
 
-    for (idx = alloc1; idx < alloc1 + 10; idx++) {
-        ucs_ptr_array_remove(&pa, idx);
-    }
-
-    for (idx = alloc2; idx < alloc2 + 100; idx++) {
-        ucs_ptr_array_remove(&pa, idx);
-    }
+    ucs_ptr_array_bulk_remove(&pa, alloc1, 10);
+    ucs_ptr_array_bulk_remove(&pa, alloc2, 100);
 
     EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 1);
 
@@ -833,7 +824,7 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
 
     ucs_ptr_array_locked_set(&pa, 100, &g);
 
-    index = ucs_ptr_array_locked_bulk_alloc(&pa, 200);
+    index = ucs_ptr_array_locked_bulk_alloc(&pa, 200, NULL);
     EXPECT_EQ(301u, pa.super.size);
     EXPECT_EQ(101u, index);
 
