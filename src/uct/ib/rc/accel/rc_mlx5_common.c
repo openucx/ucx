@@ -113,6 +113,30 @@ uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_mlx5_iface_srq_set_seg_sge(uct_rc_mlx5_iface_common_t *iface,
+                              uct_ib_mlx5_srq_seg_t *seg)
+{
+    uct_ib_iface_recv_desc_t *desc;
+    void* hdr;
+    void* payload;
+
+    UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
+                                 desc, return UCS_ERR_NO_MEMORY);
+    hdr     = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+    payload = uct_ib_iface_recv_desc_payload(&iface->super.super, desc);
+    /* Set receive data segment pointer. Length is pre-initialized. */
+    seg->srq.desc                                 = desc; /* Optimization for non-MP case (1 stride) */
+    seg->dptr[UCT_IB_RECV_SGE_TL_HEADER_IDX].lkey = htonl(desc->lkey);    
+    seg->dptr[UCT_IB_RECV_SGE_TL_HEADER_IDX].addr = htobe64((uintptr_t)hdr);
+    seg->dptr[UCT_IB_RECV_SGE_PAYLOAD_IDX].lkey   = htonl(desc->lkey);
+    seg->dptr[UCT_IB_RECV_SGE_PAYLOAD_IDX].addr   = htobe64((uintptr_t)payload);
+    VALGRIND_MAKE_MEM_NOACCESS(hdr, seg->dptr[UCT_IB_RECV_SGE_TL_HEADER_IDX].byte_count);
+    VALGRIND_MAKE_MEM_NOACCESS(payload, seg->dptr[UCT_IB_RECV_SGE_PAYLOAD_IDX].byte_count);
+
+    return UCS_OK;
+}
+
 /* Update resources and write doorbell record */
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_update_srq_res(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq,
@@ -137,6 +161,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
     uct_rc_iface_t *rc_iface = &iface->super;
     uct_ib_mlx5_srq_seg_t *seg;
     uint16_t count, wqe_index, next_index;
+    ucs_status_t status;
 
     /* Make sure the union is right */
     UCS_STATIC_ASSERT(ucs_offsetof(uct_ib_mlx5_srq_seg_t, mlx5_srq.next_wqe_index) ==
@@ -161,7 +186,13 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
             srq->free_idx  = next_index;
         }
 
-        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+        if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+            status = uct_rc_mlx5_iface_srq_set_seg(iface, seg);
+        } else {
+            status = uct_rc_mlx5_iface_srq_set_seg_sge(iface, seg);
+        }
+
+        if (status != UCS_OK) {
             break;
         }
 
@@ -551,6 +582,9 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
     ucs_status_t status;
+    size_t sge_sizes[UCT_IB_RECV_SGE_LIST_LEN];
+    uint32_t head;
+    uint32_t tail;
 
     ucs_assert(iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC);
 
@@ -561,8 +595,23 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
     }
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
-                                        iface->super.super.config.seg_size,
-                                        iface->tm.mp.num_strides);
+                                        iface->tm.mp.num_strides, &head, &tail);
+    if (status != UCS_OK) {
+        goto err_free_srq;
+    }
+
+    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+        uct_ib_mlx5_srq_buff_init(&iface->rx.srq, head, tail,
+                                  iface->super.super.config.seg_size, iface->tm.mp.num_strides);
+    } else {
+        sge_sizes[UCT_IB_RECV_SGE_TL_HEADER_IDX] = iface->super.super.config.rx_payload_offset -
+                                                   iface->super.super.config.rx_hdr_offset;
+        sge_sizes[UCT_IB_RECV_SGE_PAYLOAD_IDX]   = iface->super.super.config.seg_size -
+                                                   sge_sizes[UCT_IB_RECV_SGE_TL_HEADER_IDX];
+        uct_ib_mlx5_srq_buff_init_sge(&iface->rx.srq, head, tail,
+                                      sge_sizes, iface->tm.mp.num_strides);
+    }
+
     if (status != UCS_OK) {
         goto err_free_srq;
     }
@@ -857,6 +906,8 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
     ucs_status_t status;
+    uint32_t head;
+    uint32_t tail;
 
     ucs_assert(iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC);
 
@@ -890,11 +941,13 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     iface->super.rx.srq.quota = srq_attr->attr.max_wr;
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
-                                        iface->super.super.config.seg_size,
-                                        iface->tm.mp.num_strides);
+                                        iface->tm.mp.num_strides, &head, &tail);
     if (status != UCS_OK) {
         goto err_free_srq;
     }
+
+    uct_ib_mlx5_srq_buff_init(&iface->rx.srq, head, tail,
+                              iface->super.super.config.seg_size, iface->tm.mp.num_strides);
 
     iface->rx.srq.type        = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.num_tags);

@@ -185,8 +185,10 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
         ucs_prefetch(rx_wqes + next_pi);
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, break);
-        rx_wqes[pi].lkey = htonl(desc->lkey);
-        rx_wqes[pi].addr = htobe64((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
+        rx_wqes[pi*2].lkey = htonl(desc->lkey);
+        rx_wqes[pi*2].addr = htobe64((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
+        rx_wqes[pi*2+1].lkey = htonl(desc->lkey);
+        rx_wqes[pi*2+1].addr = htobe64((uintptr_t)uct_ib_iface_recv_desc_payload(&iface->super.super, desc));
         pi = next_pi;
     }
     if (ucs_unlikely(count == 0)) {
@@ -472,6 +474,7 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     ptrdiff_t rx_hdr_offset;
 
     ci            = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
+    ci *= UCT_IB_RECV_SGE_LIST_LEN;
     packet        = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
     ucs_prefetch(UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN));
     rx_hdr_offset = iface->super.super.config.rx_hdr_offset;
@@ -832,6 +835,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
                                                         uct_ud_mlx5_iface_config_t);
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
+    size_t hdr_len;
     int i;
 
     ucs_trace_func("");
@@ -886,8 +890,10 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     /* write buffer sizes */
     for (i = 0; i <= self->rx.wq.mask; i++) {
-        self->rx.wq.wqes[i].byte_count = htonl(self->super.super.config.rx_payload_offset +
-                                               self->super.super.config.seg_size);
+        hdr_len = self->super.super.config.rx_payload_offset -
+                  self->super.super.config.rx_hdr_offset;
+        self->rx.wq.wqes[i*2].byte_count = htonl(hdr_len);
+        self->rx.wq.wqes[i*2+1].byte_count = htonl(self->super.super.config.seg_size - hdr_len);
     }
 
     while (self->super.rx.available >= self->super.super.config.rx_max_batch) {

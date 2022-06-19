@@ -28,7 +28,6 @@
 #define UCT_IB_ADDRESS_INVALID_PKEY        0
 #define UCT_IB_ADDRESS_DEFAULT_PKEY        0xffff
 #define UCT_IB_SL_NUM                      16
-#define UCT_IB_RECV_SGE_LIST_LEN           2
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -49,6 +48,16 @@ enum {
     UCT_IB_SPEED_HDR     = 64,
     UCT_IB_SPEED_NDR     = 128,
     UCT_IB_SPEED_LAST
+};
+
+
+/**
+ * IB RX segments scatter gather list entries.
+ */
+enum {
+    UCT_IB_RECV_SGE_TL_HEADER_IDX = 0,
+    UCT_IB_RECV_SGE_PAYLOAD_IDX   = 1,
+    UCT_IB_RECV_SGE_LIST_LEN
 };
 
 
@@ -518,7 +527,7 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
 static inline void* uct_ib_iface_recv_desc_payload(uct_ib_iface_t *iface,
                                                uct_ib_iface_recv_desc_t *desc)
 {
-    return (void*)((char *)desc + iface->config.rx_payload_offset);
+    return UCS_PTR_BYTE_OFFSET(desc, iface->config.rx_payload_offset);
 }
 
 typedef struct uct_ib_recv_wr {

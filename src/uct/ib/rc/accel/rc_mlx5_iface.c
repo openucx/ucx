@@ -554,7 +554,7 @@ out_tm_disabled:
 #endif
     init_attr->cq_len[UCT_IB_DIR_RX] = rc_config->super.rx.queue_len;
     init_attr->seg_size              = rc_config->super.seg_size;
-    iface->tm.mp.num_strides         = 1;
+    iface->tm.mp.num_strides         = UCT_IB_RECV_SGE_LIST_LEN;
 
 #if IBV_HW_TM
 out_mp_disabled:
