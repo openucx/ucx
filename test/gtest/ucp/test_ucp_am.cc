@@ -820,6 +820,27 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 
+class test_ucp_am_nbx_send_flag : public test_ucp_am_nbx {
+public:
+    virtual ucs_status_t
+    am_data_handler(const void *header, size_t header_length, void *data,
+                    size_t length, const ucp_am_recv_param_t *rx_param)
+    {
+        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+
+        return test_ucp_am_nbx::am_data_handler(header, header_length, data,
+                                                length, rx_param);
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_send_flag, eager, "RNDV_THRESH=128")
+{
+    test_am_send_recv(256, 0, UCP_AM_SEND_FLAG_EAGER);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_send_flag)
+
+
 class test_ucp_am_nbx_reply : public test_ucp_am_nbx {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -1021,24 +1042,14 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, short)
     test_data_release(1);
 }
 
-UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single_bcopy, "ZCOPY_THRESH=inf")
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single)
 {
     test_data_release(fragment_size() / 2);
 }
 
-UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single_zcopy, "ZCOPY_THRESH=0")
-{
-    test_data_release(fragment_size() / 2);
-}
-
-UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi_bcopy, "ZCOPY_THRESH=inf")
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi)
 {
     test_data_release(fragment_size() * 2);
-}
-
-UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi_zcopy, "ZCOPY_THRESH=0")
-{
-    test_data_release(UCS_MBYTE);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_eager_data_release)
@@ -1242,11 +1253,6 @@ UCS_TEST_P(test_ucp_am_nbx_dts, long_zcopy_send, "ZCOPY_THRESH=1",
                                                  "RNDV_THRESH=-1")
 {
     test_am(64 * UCS_KBYTE);
-}
-
-UCS_TEST_P(test_ucp_am_nbx_dts, send_eager_flag, "RNDV_THRESH=128")
-{
-    test_am(64 * UCS_KBYTE, UCP_AM_SEND_FLAG_EAGER);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)
