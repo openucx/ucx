@@ -212,6 +212,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
     uct_ib_mlx5_srq_seg_t *seg = NULL;
     uint16_t count             = 0;
     uint16_t wqe_index, next_index;
+    ucs_status_t status;
 
     ucs_assert(rc_iface->rx.srq.available > 0);
 
@@ -225,7 +226,13 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
         }
         seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
 
-        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+        if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+            status = uct_rc_mlx5_iface_srq_set_seg(iface, seg);
+        } else {
+            status = uct_rc_mlx5_iface_srq_set_seg_sge(iface, seg);
+        }
+
+        if (status != UCS_OK) {
             break;
         }
 
