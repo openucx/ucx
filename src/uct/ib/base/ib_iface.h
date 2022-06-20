@@ -650,7 +650,6 @@ size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)
 static UCS_F_ALWAYS_INLINE size_t
 uct_ib_iface_tl_hdr_length(uct_ib_iface_t *iface)
 {
-    ucs_assert(uct_ib_iface_is_roce(iface));
     return iface->config.rx_payload_offset - iface->config.rx_hdr_offset;
 }
 

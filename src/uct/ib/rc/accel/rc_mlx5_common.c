@@ -126,7 +126,7 @@ uct_rc_mlx5_iface_srq_set_seg_sge(uct_rc_mlx5_iface_common_t *iface,
     hdr     = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
     payload = uct_ib_iface_recv_desc_payload(&iface->super.super, desc);
     /* Set receive data segment pointer. Length is pre-initialized. */
-    seg->srq.desc                                 = desc; /* Optimization for non-MP case (1 stride) */
+    seg->srq.desc                              = desc; /* Optimization for non-MP case (1 stride) */
     seg->dptr[UCT_IB_RX_SG_TL_HEADER_IDX].lkey = htonl(desc->lkey);
     seg->dptr[UCT_IB_RX_SG_TL_HEADER_IDX].addr = htobe64((uintptr_t)hdr);
     seg->dptr[UCT_IB_RX_SG_PAYLOAD_IDX].lkey   = htonl(desc->lkey);
@@ -589,12 +589,12 @@ ucs_status_t
 uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                  const uct_rc_iface_common_config_t *rc_config)
 {
+    const size_t hdr_len = uct_ib_iface_tl_hdr_length(&iface->super.super);
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
     ucs_status_t status;
     size_t sge_sizes[UCT_IB_RECV_SG_LIST_LEN];
     uint32_t head;
     uint32_t tail;
-    size_t hdr_len;
 
     ucs_assert(iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC);
 
@@ -615,7 +615,6 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                   iface->super.super.config.seg_size,
                                   iface->tm.mp.num_strides);
     } else {
-        hdr_len = uct_ib_iface_tl_hdr_length(&iface->super.super);
         sge_sizes[UCT_IB_RX_SG_TL_HEADER_IDX] = hdr_len;
         sge_sizes[UCT_IB_RX_SG_PAYLOAD_IDX]   = iface->super.super.config.seg_size -
                                                 hdr_len;

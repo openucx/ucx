@@ -144,10 +144,10 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 const uct_rc_iface_common_config_t *config,
                                 const struct mlx5dv_pd *dvpd, void *wq)
 {
+    const size_t hdr_len = uct_ib_iface_tl_hdr_length(&iface->super.super);
     ucs_status_t status  = UCS_ERR_NO_MEMORY;
     int len, max, stride, log_num_of_strides, wq_type;
     size_t sge_sizes[UCT_IB_RECV_SG_LIST_LEN];
-    size_t hdr_len;
 
     stride = uct_ib_mlx5_srq_stride(iface->tm.mp.num_strides);
     max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
@@ -204,7 +204,6 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                   iface->super.super.config.seg_size,
                                   iface->tm.mp.num_strides);
     } else {
-        hdr_len = uct_ib_iface_tl_hdr_length(&iface->super.super);
         sge_sizes[UCT_IB_RX_SG_TL_HEADER_IDX] = hdr_len;
         sge_sizes[UCT_IB_RX_SG_PAYLOAD_IDX]   = iface->super.super.config.seg_size -
                                                 hdr_len;

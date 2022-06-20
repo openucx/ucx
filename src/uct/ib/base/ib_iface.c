@@ -1416,16 +1416,15 @@ UCS_CLASS_DEFINE(uct_ib_iface_t, uct_base_iface_t);
 int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n)
 {
+    const size_t hdr_len = uct_ib_iface_tl_hdr_length(iface);
     uct_ib_iface_recv_desc_t *desc;
     unsigned count;
     void *hdr;
     void *payload;
-    size_t hdr_len;
 
     count = 0;
     while (count < n) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);
-        hdr_len = uct_ib_iface_tl_hdr_length(iface);
         hdr     = uct_ib_iface_recv_desc_hdr(iface, desc);
         payload = uct_ib_iface_recv_desc_payload(iface, desc);
 
