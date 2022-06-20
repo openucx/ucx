@@ -146,7 +146,8 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
 {
     ucs_status_t status  = UCS_ERR_NO_MEMORY;
     int len, max, stride, log_num_of_strides, wq_type;
-    size_t sge_sizes[UCT_IB_RECV_SGE_LIST_LEN];
+    size_t sge_sizes[UCT_IB_RECV_SG_LIST_LEN];
+    size_t hdr_len;
 
     stride = uct_ib_mlx5_srq_stride(iface->tm.mp.num_strides);
     max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
@@ -203,11 +204,11 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                   iface->super.super.config.seg_size,
                                   iface->tm.mp.num_strides);
     } else {
-        sge_sizes[UCT_IB_RECV_SGE_TL_HEADER_IDX] = iface->super.super.config.rx_payload_offset -
-                                                   iface->super.super.config.rx_hdr_offset;
-        sge_sizes[UCT_IB_RECV_SGE_PAYLOAD_IDX]   = iface->super.super.config.seg_size -
-                                                   sge_sizes[UCT_IB_RECV_SGE_TL_HEADER_IDX];
-        uct_ib_mlx5_srq_buff_init_sge(&iface->rx.srq, 0, max - 1,
+        hdr_len = uct_ib_iface_tl_hdr_length(&iface->super.super);
+        sge_sizes[UCT_IB_RX_SG_TL_HEADER_IDX] = hdr_len;
+        sge_sizes[UCT_IB_RX_SG_PAYLOAD_IDX]   = iface->super.super.config.seg_size -
+                                                hdr_len;
+        uct_ib_mlx5_srq_buff_init_sg(&iface->rx.srq, 0, max - 1,
                                       sge_sizes, iface->tm.mp.num_strides);
     }
     iface->super.rx.srq.quota = max - 1;

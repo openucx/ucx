@@ -475,7 +475,7 @@ typedef struct uct_ib_mlx5_txwq {
 
 /* Receive wqe */
 typedef struct uct_ib_mlx5_rx_wqe {
-    struct mlx5_wqe_data_seg sg_list[UCT_IB_RECV_SGE_LIST_LEN];
+    struct mlx5_wqe_data_seg sg_list[UCT_IB_RECV_SG_LIST_LEN];
 } uct_ib_mlx5_rx_wqe_t;
 
 
@@ -699,8 +699,8 @@ uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
                                uint32_t tail, size_t sg_byte_count, int num_sge);
 
-void uct_ib_mlx5_srq_buff_init_sge(uct_ib_mlx5_srq_t *srq, uint32_t head,
-                                   uint32_t tail, size_t *sg_byte_count, int num_sge);
+void uct_ib_mlx5_srq_buff_init_sg(uct_ib_mlx5_srq_t *srq, uint32_t head,
+                                  uint32_t tail, size_t *sg_byte_count, int num_sge);
 
 void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 

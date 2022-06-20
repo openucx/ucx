@@ -55,9 +55,9 @@ enum {
  * IB RX segments scatter gather list entries.
  */
 enum {
-    UCT_IB_RECV_SGE_TL_HEADER_IDX = 0,
-    UCT_IB_RECV_SGE_PAYLOAD_IDX   = 1,
-    UCT_IB_RECV_SGE_LIST_LEN
+    UCT_IB_RX_SG_TL_HEADER_IDX = 0,
+    UCT_IB_RX_SG_PAYLOAD_IDX   = 1,
+    UCT_IB_RECV_SG_LIST_LEN
 };
 
 
@@ -532,7 +532,7 @@ static inline void* uct_ib_iface_recv_desc_payload(uct_ib_iface_t *iface,
 
 typedef struct uct_ib_recv_wr {
     struct ibv_recv_wr ibwr;
-    struct ibv_sge     sg[UCT_IB_RECV_SGE_LIST_LEN];
+    struct ibv_sge     sg[UCT_IB_RECV_SG_LIST_LEN];
 } uct_ib_recv_wr_t;
 
 /**
@@ -645,6 +645,13 @@ static UCS_F_ALWAYS_INLINE
 size_t uct_ib_iface_hdr_size(size_t max_inline, size_t min_size)
 {
     return (size_t)ucs_max((ssize_t)(max_inline - min_size), 0);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+uct_ib_iface_tl_hdr_length(uct_ib_iface_t *iface)
+{
+    ucs_assert(uct_ib_iface_is_roce(iface));
+    return iface->config.rx_payload_offset - iface->config.rx_hdr_offset;
 }
 
 static UCS_F_ALWAYS_INLINE void

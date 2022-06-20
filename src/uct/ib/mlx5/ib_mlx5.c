@@ -780,7 +780,7 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
 
     if (!ucs_is_pow2(qp_info.dv.rq.wqe_cnt) ||
         (qp_info.dv.rq.stride != 
-         sizeof(struct mlx5_wqe_data_seg)*UCT_IB_RECV_SGE_LIST_LEN)) {
+         sizeof(struct mlx5_wqe_data_seg)*UCT_IB_RECV_SG_LIST_LEN)) {
         ucs_error("mlx5 rx wq [count=%d stride=%d] has invalid parameters",
                   qp_info.dv.rq.wqe_cnt,
                   qp_info.dv.rq.stride);
@@ -792,7 +792,9 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
     rxwq->mask            = qp_info.dv.rq.wqe_cnt - 1;
     /* cppcheck-suppress autoVariables */
     rxwq->dbrec           = &qp_info.dv.dbrec[MLX5_RCV_DBR];
-    memset(rxwq->wqes, 0, qp_info.dv.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg)*UCT_IB_RECV_SGE_LIST_LEN);
+    memset(rxwq->wqes, 0, (qp_info.dv.rq.wqe_cnt *
+                           sizeof(struct mlx5_wqe_data_seg) *
+                           UCT_IB_RECV_SG_LIST_LEN));
 
     return UCS_OK;
 }
@@ -873,7 +875,7 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     }
 }
 
-void uct_ib_mlx5_srq_buff_init_sge(uct_ib_mlx5_srq_t *srq, uint32_t head,
+void uct_ib_mlx5_srq_buff_init_sg(uct_ib_mlx5_srq_t *srq, uint32_t head,
                                    uint32_t tail, size_t *sg_byte_count, int num_sge)
 {
     uct_ib_mlx5_srq_seg_t *seg;
