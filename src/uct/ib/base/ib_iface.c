@@ -1432,8 +1432,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
         wrs[count].sg[UCT_IB_RX_SG_TL_HEADER_IDX].length = hdr_len;
         wrs[count].sg[UCT_IB_RX_SG_TL_HEADER_IDX].lkey   = desc->lkey;
         wrs[count].sg[UCT_IB_RX_SG_PAYLOAD_IDX].addr     = (uintptr_t)payload;
-        wrs[count].sg[UCT_IB_RX_SG_PAYLOAD_IDX].length   =
-                                             iface->config.seg_size + hdr_len;
+        wrs[count].sg[UCT_IB_RX_SG_PAYLOAD_IDX].length   = iface->config.seg_size;
         wrs[count].sg[UCT_IB_RX_SG_PAYLOAD_IDX].lkey = desc->lkey;
 
         wrs[count].ibwr.num_sge = UCT_IB_RECV_SG_LIST_LEN;
