@@ -113,28 +113,27 @@ uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_mlx5_iface_srq_set_seg_sge(uct_rc_mlx5_iface_common_t *iface,
-                              uct_ib_mlx5_srq_seg_t *seg)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_iface_srq_set_seg_sge(
+        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_srq_seg_t *seg)
 {
     uct_ib_iface_recv_desc_t *desc;
-    void* hdr;
-    void* payload;
+    void *hdr;
+    void *payload;
 
     UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
-                                 desc, return UCS_ERR_NO_MEMORY);
-    hdr     = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-    payload = uct_ib_iface_recv_desc_payload(&iface->super.super, desc);
+                             desc, return UCS_ERR_NO_MEMORY);
+    hdr           = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+    payload       = uct_ib_iface_recv_desc_payload(&iface->super.super, desc);
     /* Set receive data segment pointer. Length is pre-initialized. */
-    seg->srq.desc                              = desc; /* Optimization for non-MP case (1 stride) */
+    seg->srq.desc = desc; /* Optimization for non-MP case (1 stride) */
     seg->dptr[UCT_IB_RX_SG_TL_HEADER_IDX].lkey = htonl(desc->lkey);
     seg->dptr[UCT_IB_RX_SG_TL_HEADER_IDX].addr = htobe64((uintptr_t)hdr);
     seg->dptr[UCT_IB_RX_SG_PAYLOAD_IDX].lkey   = htonl(desc->lkey);
     seg->dptr[UCT_IB_RX_SG_PAYLOAD_IDX].addr   = htobe64((uintptr_t)payload);
-    VALGRIND_MAKE_MEM_NOACCESS(hdr,
-            seg->dptr[UCT_IB_RX_SG_TL_HEADER_IDX].byte_count);
+    VALGRIND_MAKE_MEM_NOACCESS(
+            hdr, seg->dptr[UCT_IB_RX_SG_TL_HEADER_IDX].byte_count);
     VALGRIND_MAKE_MEM_NOACCESS(payload,
-            seg->dptr[UCT_IB_RX_SG_PAYLOAD_IDX].byte_count);
+                               seg->dptr[UCT_IB_RX_SG_PAYLOAD_IDX].byte_count);
 
     return UCS_OK;
 }
@@ -616,10 +615,10 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                   iface->tm.mp.num_strides);
     } else {
         sge_sizes[UCT_IB_RX_SG_TL_HEADER_IDX] = hdr_len;
-        sge_sizes[UCT_IB_RX_SG_PAYLOAD_IDX]   = iface->super.super.config.seg_size -
-                                                hdr_len;
-        uct_ib_mlx5_srq_buff_init_sg(&iface->rx.srq, head, tail,
-                                      sge_sizes, iface->tm.mp.num_strides);
+        sge_sizes[UCT_IB_RX_SG_PAYLOAD_IDX] =
+                iface->super.super.config.seg_size - hdr_len;
+        uct_ib_mlx5_srq_buff_init_sg(&iface->rx.srq, head, tail, sge_sizes,
+                                     iface->tm.mp.num_strides);
     }
 
     if (status != UCS_OK) {

@@ -447,8 +447,8 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
 
 #define UCT_RC_MLX5_TM_ENABLED(_iface) (_iface)->tm.enabled
 
-#define UCT_RC_MLX5_MP_ENABLED(_iface) ((_iface)->tm.mp.num_strides > \
-                                        UCT_IB_RECV_SG_LIST_LEN)
+#define UCT_RC_MLX5_MP_ENABLED(_iface) \
+    ((_iface)->tm.mp.num_strides > UCT_IB_RECV_SG_LIST_LEN)
 
 /* TMH can carry 2 bytes of data in its reserved filed */
 #define UCT_RC_MLX5_TMH_PRIV_LEN       ucs_field_sizeof(uct_rc_mlx5_tmh_priv_data_t, \

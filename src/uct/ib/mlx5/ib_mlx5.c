@@ -779,8 +779,8 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
     }
 
     if (!ucs_is_pow2(qp_info.dv.rq.wqe_cnt) ||
-        (qp_info.dv.rq.stride != 
-         sizeof(struct mlx5_wqe_data_seg)*UCT_IB_RECV_SG_LIST_LEN)) {
+        (qp_info.dv.rq.stride !=
+         sizeof(struct mlx5_wqe_data_seg) * UCT_IB_RECV_SG_LIST_LEN)) {
         ucs_error("mlx5 rx wq [count=%d stride=%d] has invalid parameters",
                   qp_info.dv.rq.wqe_cnt,
                   qp_info.dv.rq.stride);
@@ -792,16 +792,16 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
     rxwq->mask            = qp_info.dv.rq.wqe_cnt - 1;
     /* cppcheck-suppress autoVariables */
     rxwq->dbrec           = &qp_info.dv.dbrec[MLX5_RCV_DBR];
-    memset(rxwq->wqes, 0, (qp_info.dv.rq.wqe_cnt *
-                           sizeof(struct mlx5_wqe_data_seg) *
-                           UCT_IB_RECV_SG_LIST_LEN));
+    memset(rxwq->wqes, 0,
+           (qp_info.dv.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg) *
+            UCT_IB_RECV_SG_LIST_LEN));
 
     return UCS_OK;
 }
 
-ucs_status_t
-uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                           int sge_num, uint32_t *head, uint32_t *tail)
+ucs_status_t uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq,
+                                        struct ibv_srq *verbs_srq, int sge_num,
+                                        uint32_t *head, uint32_t *tail)
 {
     uct_ib_mlx5dv_srq_t srq_info = {};
     uct_ib_mlx5dv_t obj          = {};
@@ -844,8 +844,8 @@ uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
 
     srq->buf = srq_info.dv.buf;
     srq->db  = srq_info.dv.dbrec;
-    *head = srq_info.dv.head;
-    *tail = srq_info.dv.tail;
+    *head    = srq_info.dv.head;
+    *tail    = srq_info.dv.tail;
 
     return UCS_OK;
 }
@@ -876,7 +876,8 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
 }
 
 void uct_ib_mlx5_srq_buff_init_sg(uct_ib_mlx5_srq_t *srq, uint32_t head,
-                                   uint32_t tail, size_t *sg_byte_count, int num_sge)
+                                  uint32_t tail, size_t *sg_byte_count,
+                                  int num_sge)
 {
     uct_ib_mlx5_srq_seg_t *seg;
     unsigned i, j;
@@ -888,7 +889,7 @@ void uct_ib_mlx5_srq_buff_init_sg(uct_ib_mlx5_srq_t *srq, uint32_t head,
     srq->stride    = uct_ib_mlx5_srq_stride(num_sge);
 
     for (i = head; i <= tail; ++i) {
-        seg = uct_ib_mlx5_srq_get_wqe(srq, i);
+        seg                     = uct_ib_mlx5_srq_get_wqe(srq, i);
         seg->srq.next_wqe_index = htons((i + 1) & tail);
         seg->srq.ptr_mask       = 0;
         seg->srq.free           = 0;

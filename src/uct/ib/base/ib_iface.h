@@ -524,8 +524,9 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
     return (void*)((char *)desc + iface->config.rx_hdr_offset);
 }
 
-static inline void* uct_ib_iface_recv_desc_payload(uct_ib_iface_t *iface,
-                                               uct_ib_iface_recv_desc_t *desc)
+static inline void *
+uct_ib_iface_recv_desc_payload(uct_ib_iface_t *iface,
+                               uct_ib_iface_recv_desc_t *desc)
 {
     return UCS_PTR_BYTE_OFFSET(desc, iface->config.rx_payload_offset);
 }
