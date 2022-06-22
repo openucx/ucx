@@ -836,11 +836,11 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    const size_t hdr_len = uct_ib_iface_tl_hdr_length(&self->super.super);
     uct_ud_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_ud_mlx5_iface_config_t);
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
+    size_t hdr_len;
     int i;
 
     ucs_trace_func("");
@@ -894,6 +894,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     }
 
     /* write buffer sizes */
+    hdr_len = uct_ib_iface_tl_hdr_length(&self->super.super);
     for (i = 0; i <= self->rx.wq.mask; i++) {
         self->rx.wq.wqes[i].sg_list[UCT_IB_RX_SG_TL_HEADER_IDX].byte_count =
                 htonl(hdr_len);
