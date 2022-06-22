@@ -5,6 +5,7 @@
 # See file LICENSE for terms.
 #
 
+
 SUBDIRS = vfs/sock . vfs/fuse signal
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
