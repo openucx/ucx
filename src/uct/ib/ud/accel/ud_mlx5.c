@@ -669,16 +669,19 @@ uct_ud_mlx5_iface_peer_address_str(const uct_ud_iface_t *iface,
 }
 
 static ucs_status_t
-uct_ud_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+uct_ud_mlx5_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
                       const uct_ib_iface_config_t *ib_config,
                       const uct_ib_iface_init_attr_t *init_attr,
                       int preferred_cpu, size_t inl)
 {
     uct_ud_mlx5_iface_config_t *ud_mlx5_config =
             ucs_derived_of(ib_config, uct_ud_mlx5_iface_config_t);
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+    uct_ib_mlx5_cq_t *uct_cq   = &iface->cq[dir];
 
-    return uct_ib_mlx5_create_cq(iface, dir, &ud_mlx5_config->mlx5_common,
-                                 ib_config, init_attr, preferred_cpu, inl);
+    return uct_ib_mlx5_create_cq(ib_iface, dir, &ud_mlx5_config->mlx5_common,
+                                 ib_config, init_attr, uct_cq, preferred_cpu,
+                                 inl);
 }
 
 static ucs_status_t uct_ud_mlx5_iface_arm_cq(uct_ib_iface_t *ib_iface,
@@ -852,16 +855,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     status = uct_ib_mlx5_iface_select_sl(&self->super.super,
                                          &config->mlx5_common,
                                          &config->super.super);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX], &self->cq[UCT_IB_DIR_TX]);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_RX], &self->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         return status;
     }

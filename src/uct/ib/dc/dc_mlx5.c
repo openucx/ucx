@@ -328,8 +328,11 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         attr.full_handshake   = full_handshake;
         attr.rdma_wr_disabled = (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
                                 (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
-        status = uct_ib_mlx5_devx_create_qp(ib_iface, &dci->txwq.super,
-                                            &dci->txwq, &attr);
+        status = uct_ib_mlx5_devx_create_qp(ib_iface,
+                                            &iface->super.cq[UCT_IB_DIR_TX],
+                                            &iface->super.cq[UCT_IB_DIR_RX],
+                                            &dci->txwq.super, &dci->txwq,
+                                            &attr);
         if (status != UCS_OK) {
             return status;
         }
@@ -1157,17 +1160,21 @@ static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
 }
 
 static ucs_status_t
-uct_dc_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+uct_dc_mlx5_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
                       const uct_ib_iface_config_t *ib_config,
                       const uct_ib_iface_init_attr_t *init_attr,
                       int preferred_cpu, size_t inl)
 {
     uct_dc_mlx5_iface_config_t *dc_mlx5_config =
             ucs_derived_of(ib_config, uct_dc_mlx5_iface_config_t);
+    uct_rc_mlx5_iface_common_t *rc_mlx5_iface_common =
+            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_cq_t *uct_cq = &rc_mlx5_iface_common->cq[dir];
 
-    return uct_ib_mlx5_create_cq(iface, dir,
+    return uct_ib_mlx5_create_cq(ib_iface, dir,
                                  &dc_mlx5_config->rc_mlx5_common.super,
-                                 ib_config, init_attr, preferred_cpu, inl);
+                                 ib_config, init_attr, uct_cq, preferred_cpu,
+                                 inl);
 }
 
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,

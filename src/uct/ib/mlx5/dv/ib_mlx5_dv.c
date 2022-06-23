@@ -11,6 +11,7 @@
 #include "ib_mlx5_ifc.h"
 
 #include <uct/ib/mlx5/ib_mlx5.h>
+#include <uct/ib/mlx5/ib_mlx5.inl>
 #include <ucs/arch/bitops.h>
 
 #if HAVE_DECL_MLX5DV_INIT_OBJ
@@ -30,6 +31,8 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 
 #if HAVE_DEVX
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+                                        const uct_ib_mlx5_cq_t *send_cq,
+                                        const uct_ib_mlx5_cq_t *recv_cq,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_mlx5_qp_attr_t *attr)
@@ -37,8 +40,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     uct_ib_mlx5_md_t *md   = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev   = &md->super.dev;
     struct mlx5dv_pd dvpd  = {};
-    struct mlx5dv_cq dvscq = {};
-    struct mlx5dv_cq dvrcq = {};
     struct mlx5dv_obj dv   = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_in)]           = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out)]         = {};
@@ -101,13 +102,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     dv.pd.in  = attr->super.ibv.pd;
     dv.pd.out = &dvpd;
-    dv.cq.in  = attr->super.ibv.send_cq;
-    dv.cq.out = &dvscq;
-    dvflags   = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
+    dvflags   = MLX5DV_OBJ_PD;
     mlx5dv_init_obj(&dv, dvflags);
-    dv.cq.in  = attr->super.ibv.recv_cq;
-    dv.cq.out = &dvrcq;
-    mlx5dv_init_obj(&dv, MLX5DV_OBJ_CQ);
 
     UCT_IB_MLX5DV_SET(create_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_QP);
     qpc = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, in, qpc);
@@ -128,8 +124,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, !!attr->super.srq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, attr->super.srq_num);
-    UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, dvscq.cqn);
-    UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, dvrcq.cqn);
+    UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, send_cq->cq_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, recv_cq->cq_num);
     /* cppcheck-suppress internalAstError */
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sq_size, ucs_ilog2_or0(max_tx));
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rq_size, ucs_ilog2_or0(max_rx));

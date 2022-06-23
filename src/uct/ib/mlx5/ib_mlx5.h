@@ -593,7 +593,7 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                       const uct_ib_mlx5_iface_config_t *mlx5_config,
                       const uct_ib_iface_config_t *ib_config,
                       const uct_ib_iface_init_attr_t *init_attr,
-                      int preferred_cpu, size_t inl);
+                      uct_ib_mlx5_cq_t *mlx5_cq, int preferred_cpu, size_t inl);
 
 extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 
@@ -719,6 +719,8 @@ void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
 #if HAVE_DEVX
 
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+                                        const uct_ib_mlx5_cq_t *send_cq,
+                                        const uct_ib_mlx5_cq_t *recv_cq,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_mlx5_qp_attr_t *attr);
@@ -833,6 +835,8 @@ uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t
 
 static inline ucs_status_t
 uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+                           const uct_ib_mlx5_cq_t *send_cq,
+                           const uct_ib_mlx5_cq_t *recv_cq,
                            uct_ib_mlx5_qp_t *qp,
                            uct_ib_mlx5_txwq_t *tx,
                            uct_ib_mlx5_qp_attr_t *attr)
