@@ -1228,6 +1228,50 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc, "rc")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, ud, "ud")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc_dc, "rc,dc")
 
+class select_ep_transport : public test_ucp_wireup {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_RMA, "rma");
+    }
+
+    const char *rma_transport(const entity *e)
+    {
+        const ucp_ep_config_t *config = ucp_ep_config(e->ep());
+        ucp_lane_index_t lane_index   = config->key.rma_lanes[0];
+        return ucp_ep_get_tl_rsc(e->ep(), lane_index)->tl_name;
+    }
+
+    void verify_symmetric_tl_selection(const std::string &num_eps1,
+                                       const std::string &num_eps2)
+    {
+        /* First context initialized with num_eps above threshold */
+        modify_config("NUM_EPS", num_eps1);
+        entity *e1 = create_entity();
+
+        /* Second context initialized with num_eps below threshold */
+        modify_config("NUM_EPS", num_eps2);
+        entity *e2 = create_entity();
+
+        e1->connect(e2, get_ep_params());
+        e2->connect(e1, get_ep_params());
+
+        /* Verify that selection is the same for both eps */
+        ASSERT_STREQ(rma_transport(e1), rma_transport(e2));
+    }
+};
+
+UCS_TEST_P(select_ep_transport, fp8_modify_result_v2)
+{
+    /* num_eps threshold for selecting DC over RC is 60 */
+    modify_config("ADDRESS_VERSION", "v2");
+    verify_symmetric_tl_selection("65", "55");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(select_ep_transport, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(select_ep_transport, ib_shm, "ib,shm")
+UCP_INSTANTIATE_TEST_CASE_TLS(select_ep_transport, all, "all")
+
 class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
 protected:
     void init() {
