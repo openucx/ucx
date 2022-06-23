@@ -263,13 +263,6 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
-        name: docker
-        demands:
-          - ucx_docker -equals yes
-          - ucx_amd -equals no
-        container: centos7
-    - template: tests.yml
-      parameters:
         name: BlueField
         demands: ucx_bf -equals yes
         test_perf: 0
