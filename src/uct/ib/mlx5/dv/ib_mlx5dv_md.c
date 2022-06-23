@@ -35,6 +35,7 @@ typedef struct uct_ib_mlx5_mem {
     uct_ib_mlx5_mr_t           mrs[];
 } uct_ib_mlx5_mem_t;
 
+
 static ucs_status_t uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address,
                                         size_t length, uint64_t access_flags,
                                         uct_ib_mem_t *ib_memh,
@@ -1119,18 +1120,14 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 {
     ucs_status_t status = UCS_OK;
 #if HAVE_DC_DV
-    struct ibv_srq_init_attr srq_attr = {};
-    struct ibv_context *ctx = dev->ibv_context;
-    struct ibv_qp_init_attr_ex qp_attr = {};
+    struct ibv_context *ctx            = dev->ibv_context;
+    uct_ib_qp_init_attr_t qp_init_attr = {};
     struct mlx5dv_qp_init_attr dv_attr = {};
-    struct ibv_qp_attr attr = {};
-    struct ibv_srq *srq;
+    struct ibv_qp_attr attr            = {};
+    uct_ib_mlx5dv_qp_tmp_objs_t qp_tmp_objs;
     struct ibv_pd *pd;
-    struct ibv_cq *cq;
     struct ibv_qp *qp;
     int ret;
-    char message[128];
-    int cq_errno;
 
     pd = ibv_alloc_pd(ctx);
     if (pd == NULL) {
@@ -1139,43 +1136,22 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
         goto out;
     }
 
-    cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
-    if (cq == NULL) {
-        cq_errno = errno;
-        ucs_snprintf_safe(message, sizeof(message), "%s: ibv_create_cq()",
-                          uct_ib_device_name(dev));
-        uct_ib_mem_lock_limit_msg(message, cq_errno, UCS_LOG_LEVEL_ERROR);
-        status = UCS_ERR_IO_ERROR;
+    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, pd, &qp_tmp_objs);
+    if (status != UCS_OK) {
         goto out_dealloc_pd;
     }
 
-    srq_attr.attr.max_sge   = 1;
-    srq_attr.attr.max_wr    = 1;
-    srq = ibv_create_srq(pd, &srq_attr);
-    if (srq == NULL) {
-        ucs_error("%s: ibv_create_srq() failed: %m", uct_ib_device_name(dev));
-        status = UCS_ERR_IO_ERROR;
-        goto out_destroy_cq;
-    }
-
-    qp_attr.send_cq              = cq;
-    qp_attr.recv_cq              = cq;
-    qp_attr.qp_type              = IBV_QPT_DRIVER;
-    qp_attr.comp_mask            = IBV_QP_INIT_ATTR_PD;
-    qp_attr.pd                   = pd;
-    qp_attr.srq                  = srq;
-
-    dv_attr.comp_mask            = MLX5DV_QP_INIT_ATTR_MASK_DC;
-    dv_attr.dc_init_attr.dc_type = MLX5DV_DCTYPE_DCT;
-    dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
+    uct_ib_mlx5dv_dct_qp_init_attr(&qp_init_attr, &dv_attr, pd, qp_tmp_objs.cq,
+                                   qp_tmp_objs.srq);
 
     /* create DCT qp successful means DC is supported */
-    qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, ctx, &qp_attr, &dv_attr);
+    qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, ctx, &qp_init_attr,
+                                 &dv_attr);
     if (qp == NULL) {
         ucs_debug("%s: mlx5dv_create_qp(DCT) failed: %m",
                   uct_ib_device_name(dev));
         status = UCS_OK;
-        goto out_destroy_srq;
+        goto out_qp_tmp_objs_close;
     }
 
     attr.qp_state        = IBV_QPS_INIT;
@@ -1222,10 +1198,8 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 
 out_destroy_qp:
     uct_ib_destroy_qp(qp);
-out_destroy_srq:
-    uct_ib_destroy_srq(srq);
-out_destroy_cq:
-    ibv_destroy_cq(cq);
+out_qp_tmp_objs_close:
+    uct_ib_mlx5dv_qp_tmp_objs_destroy(&qp_tmp_objs);
 out_dealloc_pd:
     ibv_dealloc_pd(pd);
 out:
@@ -1344,4 +1318,3 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
 };
 
 UCT_IB_MD_DEFINE_ENTRY(dv, uct_ib_mlx5_md_ops);
-

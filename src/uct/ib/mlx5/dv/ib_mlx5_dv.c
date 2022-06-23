@@ -28,6 +28,108 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 }
 #endif
 
+void uct_ib_mlx5dv_dc_qp_init_attr(struct mlx5dv_qp_init_attr *dv_attr,
+                                   enum mlx5dv_dc_type dc_type)
+{
+    dv_attr->comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
+    dv_attr->dc_init_attr.dc_type        = dc_type;
+    dv_attr->dc_init_attr.dct_access_key = UCT_IB_KEY;
+}
+
+void uct_ib_mlx5dv_dct_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
+                                    struct mlx5dv_qp_init_attr *dv_attr,
+                                    struct ibv_pd *pd, struct ibv_cq *cq,
+                                    struct ibv_srq *srq)
+{
+    qp_attr->comp_mask = IBV_QP_INIT_ATTR_PD;
+    qp_attr->pd        = pd;
+    qp_attr->recv_cq   = cq;
+    /* DCT can't send, but send_cq have to point to valid CQ */
+    qp_attr->send_cq   = cq;
+    qp_attr->srq       = srq;
+    qp_attr->qp_type   = IBV_QPT_DRIVER;
+    uct_ib_mlx5dv_dc_qp_init_attr(dv_attr, MLX5DV_DCTYPE_DCT);
+}
+
+ucs_status_t
+uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
+                                 uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs)
+{
+    struct ibv_srq_init_attr srq_attr = {};
+    ucs_status_t status;
+    int cq_errno;
+    char message[128];
+
+    qp_tmp_objs->cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
+    if (qp_tmp_objs->cq == NULL) {
+        cq_errno = errno;
+        ucs_snprintf_safe(message, sizeof(message), "%s: ibv_create_cq()",
+                          uct_ib_device_name(dev));
+        uct_ib_mem_lock_limit_msg(message, cq_errno, UCS_LOG_LEVEL_ERROR);
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    srq_attr.attr.max_sge = 1;
+    srq_attr.attr.max_wr  = 1;
+    qp_tmp_objs->srq      = ibv_create_srq(pd, &srq_attr);
+    if (qp_tmp_objs->srq == NULL) {
+        ucs_error("%s: ibv_create_srq() failed: %m", uct_ib_device_name(dev));
+        status = UCS_ERR_IO_ERROR;
+        goto out_destroy_cq;
+    }
+
+    return UCS_OK;
+
+out_destroy_cq:
+    ibv_destroy_cq(qp_tmp_objs->cq);
+out:
+    return status;
+}
+
+void uct_ib_mlx5dv_qp_tmp_objs_destroy(uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs)
+{
+    uct_ib_destroy_srq(qp_tmp_objs->srq);
+    ibv_destroy_cq(qp_tmp_objs->cq);
+}
+
+size_t uct_ib_mlx5dv_calc_tx_wqe_ratio(struct ibv_qp *qp, uint32_t max_send_wr,
+                                       size_t *tx_wqe_ratio_p)
+{
+    uct_ib_mlx5dv_qp_t qp_info = {};
+    uct_ib_mlx5dv_t obj        = {};
+    ucs_status_t status;
+
+    obj.dv.qp.in  = qp;
+    obj.dv.qp.out = &qp_info.dv;
+
+    status = uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_QP);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *tx_wqe_ratio_p = qp_info.dv.sq.wqe_cnt / max_send_wr;
+    return UCS_OK;
+}
+
+void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
+                                struct ibv_pd *pd,
+                                const uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs,
+                                enum ibv_qp_type qp_type, uint32_t max_recv_wr)
+{
+    qp_init_attr->send_cq         = qp_tmp_objs->cq;
+    qp_init_attr->recv_cq         = qp_tmp_objs->cq;
+    qp_init_attr->srq             = qp_tmp_objs->srq;
+    qp_init_attr->qp_type         = qp_type;
+    qp_init_attr->sq_sig_all      = 0;
+#if HAVE_DECL_IBV_CREATE_QP_EX
+    qp_init_attr->comp_mask       = IBV_QP_INIT_ATTR_PD;
+    qp_init_attr->pd              = pd;
+#endif
+    qp_init_attr->cap.max_send_wr = 128;
+    qp_init_attr->cap.max_recv_wr = max_recv_wr;
+}
+
 #if HAVE_DEVX
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_qp_t *qp,
@@ -48,7 +150,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     int max_tx, max_rx, len_tx, len;
     uct_ib_mlx5_devx_uar_t *uar;
     ucs_status_t status;
-    int wqe_size;
     int dvflags;
     void *qpc;
 
@@ -71,15 +172,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err;
     }
 
-    wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
-               sizeof(struct mlx5_wqe_umr_ctrl_seg) +
-               sizeof(struct mlx5_wqe_mkey_context_seg) +
-               ucs_max(sizeof(struct mlx5_wqe_umr_klm_seg), 64) +
-               ucs_max(attr->super.cap.max_send_sge * sizeof(struct mlx5_wqe_data_seg),
-                       ucs_align_up(sizeof(struct mlx5_wqe_inl_data_seg) +
-                                    attr->super.cap.max_inline_data, 16));
-    len_tx = ucs_roundup_pow2_or0(attr->super.cap.max_send_wr * wqe_size);
-    max_tx = len_tx / MLX5_SEND_WQE_BB;
+    max_tx = uct_ib_mlx5_devx_sq_length(attr->super.cap.max_send_wr);
+    len_tx = max_tx * MLX5_SEND_WQE_BB;
     max_rx = ucs_roundup_pow2_or0(attr->super.cap.max_recv_wr);
     len    = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
 
