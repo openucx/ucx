@@ -125,7 +125,7 @@ build() {
 	config_args="--prefix=$ucx_inst --without-java"
 	if [ "X$have_cuda" == "Xyes" ]
 	then
-		config_args+="--with-iodemo-cuda"
+		config_args+=" --with-iodemo-cuda"
 	fi
 
 	../contrib/configure-${mode} ${config_args} "$@"
