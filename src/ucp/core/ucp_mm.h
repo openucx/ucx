@@ -31,6 +31,7 @@ typedef struct ucp_mem {
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocated the memory */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
+    uint32_t            map_count;      /* ucp_mem_map/unmap referrence count */
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
 
