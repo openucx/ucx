@@ -593,16 +593,33 @@ enum ucp_am_cb_flags {
  * routines.
  */
 enum ucp_send_am_flags {
-    UCP_AM_SEND_FLAG_REPLY = UCS_BIT(0),             /**< Force relevant reply
-                                                          endpoint to be passed to
-                                                          the data callback on the
-                                                          receiver. */
-    UCP_AM_SEND_FLAG_EAGER = UCS_BIT(1),             /**< Force UCP to use only
-                                                          eager protocol for AM sends. */
-    UCP_AM_SEND_FLAG_RNDV  = UCS_BIT(2),             /**< Force UCP to use only
-                                                          rendezvous protocol for
-                                                          AM sends. */
-    UCP_AM_SEND_REPLY      = UCP_AM_SEND_FLAG_REPLY  /**< Backward compatibility. */
+    /**
+     * Force relevant reply endpoint to be passed to the data callback on the receiver.
+     */
+    UCP_AM_SEND_FLAG_REPLY       = UCS_BIT(0),
+
+    /**
+     * Force UCP to use only eager protocol for AM sends.
+     */
+    UCP_AM_SEND_FLAG_EAGER       = UCS_BIT(1),
+
+    /**
+     * Force UCP to use only rendezvous protocol for AM sends.
+     */
+    UCP_AM_SEND_FLAG_RNDV        = UCS_BIT(2),
+
+    /** 
+     * The flag indicates that the header should be copied to an internal buffer
+     * in case it's needed after the send function returns. If this flag is
+     * specified, the header can be released immediately after the send
+     * function returns, even if the non-blocking send request is not completed.
+     */                                                                
+    UCP_AM_SEND_FLAG_COPY_HEADER = UCS_BIT(3),
+    
+    /**
+     * Backward compatibility.
+     */
+    UCP_AM_SEND_REPLY            = UCP_AM_SEND_FLAG_REPLY
 };
 
 
@@ -3020,7 +3037,12 @@ ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
  *                            callback to run.
  * @param [in]  header        User defined Active Message header. NULL value is
  *                            allowed if no header needed. In this case
- *                            @a header_length should be set to 0.
+ *                            @a header_length must be set to 0.
+ *                            By default the header must be valid until
+ *                            the active message send operation completes.
+ *                            If the flag @ref UCP_AM_SEND_FLAG_COPY_HEADER
+ *                            is specified, the header is only required to be 
+ *                            valid until this function call returns.
  * @param [in]  header_length Active message header length in bytes.
  * @param [in]  buffer        Pointer to the data to be sent to the target node
  *                            of the Active Message.
