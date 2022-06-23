@@ -218,7 +218,6 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                                            uct_ib_mlx5_md_t);
     uct_ib_device_t *dev  = &md->super.dev;
     struct mlx5dv_pd dvpd = {};
-    struct mlx5dv_cq dvcq = {};
     struct mlx5dv_obj dv  = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_xrq_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_xrq_out)] = {};
@@ -228,10 +227,8 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_init_rx_tm_common(iface, config, rndv_hdr_len);
 
     dv.pd.in  = uct_ib_iface_md(&iface->super.super)->pd;
-    dv.cq.in  = iface->super.super.cq[UCT_IB_DIR_RX];
     dv.pd.out = &dvpd;
-    dv.cq.out = &dvcq;
-    mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ);
+    mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD);
 
     UCT_IB_MLX5DV_SET(create_xrq_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_XRQ);
     xrqc = UCT_IB_MLX5DV_ADDR_OF(create_xrq_in, in, xrq_context);
@@ -241,7 +238,7 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(xrqc, xrqc, tag_matching_topology_context.log_matching_list_sz,
                                   ucs_ilog2(iface->tm.num_tags) + 1);
     UCT_IB_MLX5DV_SET(xrqc, xrqc, dc,       dc);
-    UCT_IB_MLX5DV_SET(xrqc, xrqc, cqn,      dvcq.cqn);
+    UCT_IB_MLX5DV_SET(xrqc, xrqc, cqn,      iface->cq[UCT_IB_DIR_RX].cq_num);
 
     status = uct_rc_mlx5_devx_init_rx_common(iface, md, config, &dvpd,
                                              UCT_IB_MLX5DV_ADDR_OF(xrqc, xrqc, wq));

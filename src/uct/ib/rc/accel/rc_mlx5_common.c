@@ -287,6 +287,8 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     attr.super.port             = dev->first_port;
     attr.mmio_mode              = iface->tx.mmio_mode;
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
+                                        &iface->cq[UCT_IB_DIR_RX],
+                                        &iface->cq[UCT_IB_DIR_RX],
                                         &iface->tm.cmd_wq.super.super,
                                         &iface->tm.cmd_wq.super,
                                         &attr);

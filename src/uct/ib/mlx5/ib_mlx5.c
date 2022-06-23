@@ -111,15 +111,15 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                       const uct_ib_mlx5_iface_config_t *mlx5_config,
                       const uct_ib_iface_config_t *ib_config,
                       const uct_ib_iface_init_attr_t *init_attr,
-                      int preferred_cpu, size_t inl)
+                      uct_ib_mlx5_cq_t *mlx5_cq, int preferred_cpu, size_t inl)
 {
+    ucs_status_t status                = UCS_OK;
 #if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
     uct_ib_device_t *dev               = uct_ib_iface_device(iface);
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};
     uct_ib_mlx5_md_t *md               = ucs_derived_of(iface->super.md,
                                                         uct_ib_mlx5_md_t);
-    ucs_status_t status;
     struct ibv_cq *cq;
     char message[128];
     int cq_errno;
@@ -146,11 +146,20 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     iface->cq[dir]                 = cq;
     iface->config.max_inl_cqe[dir] = (inl > 0) ? (dv_attr.cqe_size / 2) : 0;
-    return UCS_OK;
 #else
-    return uct_ib_verbs_create_cq(iface, dir, ib_config, init_attr,
-                                  preferred_cpu, inl);
+    status = uct_ib_verbs_create_cq(iface, dir, ib_config, init_attr,
+                                    preferred_cpu, inl);
+    if (status != UCS_OK) {
+        return status;
+    }
 #endif
+
+    status = uct_ib_mlx5_get_cq(iface->cq[dir], mlx5_cq);
+    if (status != UCS_OK) {
+        ibv_destroy_cq(iface->cq[dir]);
+    }
+
+    return status;
 }
 
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)

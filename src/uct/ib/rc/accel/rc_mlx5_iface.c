@@ -240,17 +240,21 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 }
 
 static ucs_status_t
-uct_rc_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+uct_rc_mlx5_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
                       const uct_ib_iface_config_t *ib_config,
                       const uct_ib_iface_init_attr_t *init_attr,
                       int preferred_cpu, size_t inl)
 {
     uct_rc_mlx5_iface_config_t *rc_mlx5_config =
             ucs_derived_of(ib_config, uct_rc_mlx5_iface_config_t);
+    uct_rc_mlx5_iface_common_t *rc_mlx5_iface_common =
+            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_cq_t *uct_cq = &rc_mlx5_iface_common->cq[dir];
 
-    return uct_ib_mlx5_create_cq(iface, dir,
+    return uct_ib_mlx5_create_cq(ib_iface, dir,
                                  &rc_mlx5_config->rc_mlx5_common.super,
-                                 ib_config, init_attr, preferred_cpu, inl);
+                                 ib_config, init_attr, uct_cq, preferred_cpu,
+                                 inl);
 }
 
 static void
@@ -326,7 +330,10 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
         attr->uidx      = 0xffffff;
-        status = uct_ib_mlx5_devx_create_qp(ib_iface, qp, txwq, attr);
+        status          = uct_ib_mlx5_devx_create_qp(ib_iface,
+                                                     &iface->cq[UCT_IB_DIR_TX],
+                                                     &iface->cq[UCT_IB_DIR_RX],
+                                                     qp, txwq, attr);
         if (status != UCS_OK) {
             return status;
         }
@@ -732,18 +739,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     status = uct_ib_mlx5_iface_select_sl(&self->super.super,
                                          &mlx5_config->super,
                                          &rc_config->super);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX],
-                                &self->cq[UCT_IB_DIR_TX]);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_RX],
-                                &self->cq[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         return status;
     }
