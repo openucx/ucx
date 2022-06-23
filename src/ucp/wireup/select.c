@@ -566,17 +566,30 @@ out:
     return UCS_OK;
 }
 
-static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
-                                                 const uct_iface_attr_t *iface_attr,
-                                                 const ucp_address_iface_attr_t *remote_iface_attr)
+static double ucp_wireup_fp8_pack_unpack_latency(double latency)
 {
+    ucs_fp8_t packed_lat = UCS_FP8_PACK(LATENCY, latency);
+    return UCS_FP8_UNPACK(LATENCY, packed_lat) / UCS_NSEC_PER_SEC;
+}
+
+static inline double
+ucp_wireup_tl_iface_latency(ucp_context_h context,
+                            const uct_iface_attr_t *iface_attr,
+                            const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    double local_lat, lat_nsec;
+
     if (remote_iface_attr->addr_version == UCP_OBJECT_VERSION_V1) {
         /* Address v1 contains just latency overhead */
         return ucs_max(iface_attr->latency.c, remote_iface_attr->lat_ovh) +
                (iface_attr->latency.m * context->config.est_num_eps);
     } else {
-        return ucs_max(remote_iface_attr->lat_ovh,
-                       ucp_tl_iface_latency(context, &iface_attr->latency));
+        /* FP8 is a lossy compression method, so in order to create a symmetric
+         * calculation we pack/unpack the local latency as well */
+        lat_nsec  = ucp_tl_iface_latency(context, &iface_attr->latency) *
+                    UCS_NSEC_PER_SEC;
+        local_lat = ucp_wireup_fp8_pack_unpack_latency(lat_nsec);
+        return ucs_max(remote_iface_attr->lat_ovh, local_lat);
     }
 }
 
