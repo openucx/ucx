@@ -1,0 +1,90 @@
+parameters:
+  - name: name
+    type: string
+    default: "subtest"
+  - name: demands
+    type: string
+    default: "ucx_iodemo -equals yes"
+  - name: initial_delay
+    type: number
+    default: 20
+  - name: cycles
+    type: number
+    default: 100
+  - name: duration
+    type: number
+    default: 600
+  - name: interference
+    type: string
+    default: 'Yes'
+  - name: downtime
+    type: number
+    default: 5
+  - name: uptime
+    type: number
+    default: 180
+  - name: tests
+    type: object
+    default: []
+  - name: ece
+    type: string
+    default: "0"
+
+jobs:  
+  - job: test_${{ parameters.name }}
+    dependsOn: io_build
+    workspace:
+      clean: all
+
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
+    strategy:
+      matrix:
+        ${{ each test in parameters.tests }}:
+          ${{ test.Key }}:
+            test_name: ${{ test.Value.test_name }}
+            test_args: ${{ test.Value.args }}
+            test_time: ${{ parameters.duration }}
+            test_intefrafe: ${{ test.Value.interface }}
+            test_ucx_tls: ${{ test.Value.tls }}
+            test_extra_run_args: ${{ test.Value.extra_run_args }}
+            initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
+            test_interference: ${{ parameters.interference }}
+            test_with_ece: ${{ coalesce(test.Value.ece, parameters.ece) }}
+      maxParallel: 1
+
+    variables:
+      workspace: drop_$(Build.BuildId)
+      io_demo_exe: drop_$(Build.BuildId)/install/bin/io_demo
+      cycles: ${{ parameters.cycles }}
+      downtime: ${{ parameters.downtime }}
+      uptime: ${{ parameters.uptime }}
+
+    displayName: "Test "
+    steps:
+      - checkout: none
+        clean: true
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: drop_$(Build.BuildId)
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: chmod u+rwx $(workspace) -R
+      - template: az-stage-io-demo.yaml
+        parameters:
+          name: $(test_name)
+          iodemo_args: $(test_args)
+          duration: $(test_time)
+          roce_iface: $(test_intefrafe)
+          iodemo_tls: $(test_ucx_tls)
+          initial_delay: $(initial_delay)
+          interference: $(test_interference)
+          extra_run_args: $(test_extra_run_args)
+          ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+            analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
+      - bash: |
+          rm -rf $(workspace)
+        displayName: Remove artifacts
+        condition: succeeded()
