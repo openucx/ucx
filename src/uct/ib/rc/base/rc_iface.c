@@ -938,7 +938,7 @@ ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
     int arm_rx_solicited, arm_rx_all;
     ucs_status_t status;
 
-    status = uct_ib_iface_pre_arm(&iface->super);
+    status = iface->super.ops->pre_arm(&iface->super);
     if (status != UCS_OK) {
         return status;
     }

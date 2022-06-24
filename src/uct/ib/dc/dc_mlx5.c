@@ -1172,8 +1172,21 @@ uct_dc_mlx5_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
             ucs_derived_of(ib_config, uct_dc_mlx5_iface_config_t);
     uct_rc_mlx5_iface_common_t *rc_mlx5_iface_common =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md     = ucs_derived_of(ib_iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_mlx5_cq_t *uct_cq = &rc_mlx5_iface_common->cq[dir];
 
+#if HAVE_DEVX
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
+        uct_cq->type      = UCT_IB_MLX5_OBJ_TYPE_DEVX;
+        ib_iface->cq[dir] = NULL;
+        return uct_ib_mlx5_devx_create_cq(ib_iface, dir,
+                                          &dc_mlx5_config->rc_mlx5_common.super,
+                                          ib_config, init_attr, uct_cq,
+                                          preferred_cpu, inl);
+    }
+#endif
+
+    uct_cq->type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     return uct_ib_mlx5_create_cq(ib_iface, dir,
                                  &dc_mlx5_config->rc_mlx5_common.super,
                                  ib_config, init_attr, uct_cq, preferred_cpu,
@@ -1207,7 +1220,9 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
             .ep_invalidate       = uct_dc_mlx5_ep_invalidate
         },
         .create_cq      = uct_dc_mlx5_create_cq,
+        .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
+        .pre_arm        = uct_rc_mlx5_iface_common_pre_arm,
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
         .handle_failure = uct_dc_mlx5_iface_handle_failure,
     },
@@ -1253,7 +1268,7 @@ static uct_iface_ops_t uct_dc_mlx5_iface_tl_ops = {
     .iface_progress_enable    = uct_dc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
-    .iface_event_fd_get       = uct_ib_iface_event_fd_get,
+    .iface_event_fd_get       = uct_rc_mlx5_iface_event_fd_get,
     .iface_event_arm          = uct_rc_iface_event_arm,
     .ep_create                = uct_dc_mlx5_ep_create_connected,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_ep_t),

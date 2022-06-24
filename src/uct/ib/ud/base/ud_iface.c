@@ -270,7 +270,7 @@ static void uct_ud_iface_async_handler(int fd, ucs_event_set_types_t events,
      * if user asks to provide notifications for all completion
      * events by calling uct_iface_event_arm(), RX CQ will be
      * armed again with solicited flag = 0 */
-    uct_ib_iface_pre_arm(&iface->super);
+    iface->super.ops->pre_arm(&iface->super);
     iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 1);
 
     ucs_assert(iface->async.event_cb != NULL);
@@ -931,7 +931,7 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 
     uct_ud_enter(iface);
 
-    status = uct_ib_iface_pre_arm(&iface->super);
+    status = iface->super.ops->pre_arm(&iface->super);
     if (status != UCS_OK) {
         ucs_trace("iface %p: pre arm failed status %s", iface,
                   ucs_status_string(status));

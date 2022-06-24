@@ -1028,6 +1028,15 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     return UCS_OK;
 }
 
+void uct_ib_verbs_destroy_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir)
+{
+    int ret = ibv_destroy_cq(iface->cq[dir]);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_cq(%s) returned %d: %m",
+                 (dir == UCT_IB_DIR_RX) ? "RX" : "TX", ret);
+    }
+}
+
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
@@ -1376,7 +1385,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     return UCS_OK;
 
 err_destroy_send_cq:
-    ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
+    self->ops->destroy_cq(self, UCT_IB_DIR_TX);
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
 err_destroy_comp_channel:
@@ -1391,15 +1400,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
 
-    ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_cq(recv_cq) returned %d: %m", ret);
-    }
-
-    ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_cq(send_cq) returned %d: %m", ret);
-    }
+    self->ops->destroy_cq(self, UCT_IB_DIR_RX);
+    self->ops->destroy_cq(self, UCT_IB_DIR_TX);
 
     UCS_STATS_NODE_FREE(self->stats);
 

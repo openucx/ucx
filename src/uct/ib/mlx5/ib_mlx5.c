@@ -162,6 +162,21 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     return status;
 }
 
+void uct_ib_mlx5_destroy_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t* cq, 
+                            uct_ib_dir_t dir)
+{
+#if HAVE_DEVX
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md,
+                                          uct_ib_mlx5_md_t);
+
+    if (cq->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
+        uct_ib_mlx5_devx_destroy_cq(md, cq);
+        return;
+    }
+#endif
+    uct_ib_verbs_destroy_cq(iface, dir);
+}
+
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 {
     uct_ib_mlx5dv_cq_t dcq = {};

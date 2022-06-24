@@ -407,6 +407,7 @@ typedef struct uct_rc_mlx5_iface_common {
 #endif
 #if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
     struct mlx5dv_devx_event_channel   *event_channel;
+    struct mlx5dv_devx_event_channel   *cq_event_channel;
 #endif
     struct {
         uint8_t                        atomic_fence_flag;
@@ -598,8 +599,13 @@ ucs_status_t
 uct_rc_mlx5_iface_common_arm_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
                                 int solicited_only);
 
+ucs_status_t uct_rc_mlx5_iface_common_pre_arm(uct_ib_iface_t *ib_iface);
+
 void uct_rc_mlx5_iface_common_event_cq(uct_ib_iface_t *ib_iface,
                                        uct_ib_dir_t dir);
+
+void uct_rc_mlx5_iface_common_destroy_cq(uct_ib_iface_t *iface,
+                                         uct_ib_dir_t dir);
 
 int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn);
@@ -702,6 +708,14 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          enum ibv_mtu path_mtu,
                                          uint8_t path_index);
 
+ucs_status_t
+uct_rc_mlx5_iface_common_devx_create_cq(
+        uct_ib_iface_t *iface, uct_ib_dir_t dir,
+        const uct_ib_mlx5_iface_config_t *mlx5_config,
+        const uct_ib_iface_config_t *ib_config,
+        const uct_ib_iface_init_attr_t *init_attr,
+        uct_ib_mlx5_cq_t* cq, int preferred_cpu, size_t inl);
+
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
@@ -713,17 +727,28 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 {
     return UCS_ERR_UNSUPPORTED;
 }
+
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_iface_common_devx_create_cq(
+        uct_ib_iface_t *iface, uct_ib_dir_t dir,
+        const uct_ib_mlx5_iface_config_t *mlx5_config,
+        const uct_ib_iface_config_t *ib_config,
+        const uct_ib_iface_init_attr_t *init_attr,
+        uct_ib_mlx5_cq_t* cq, int preferred_cpu, size_t inl)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
 #endif
 
 ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_devx_iface_free_events(uct_rc_mlx5_iface_common_t *iface);
 
-ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
-                                                    uct_ib_mlx5_qp_t *qp,
-                                                    unsigned event_num,
-                                                    enum ibv_event_type event_type,
-                                                    unsigned event_data);
+ucs_status_t
+uct_rc_mlx5_devx_iface_subscribe_event(struct mlx5dv_devx_event_channel *channel,
+                                       struct mlx5dv_devx_obj *obj,
+                                       uint16_t event, uint64_t cookie,
+                                       char* msg_arg);
 
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_qp_attr_t *qp_attr,

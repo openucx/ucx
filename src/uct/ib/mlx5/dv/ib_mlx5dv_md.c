@@ -848,6 +848,18 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err;
     }
 
+    if ((md_config->devx_objs & (1 << UCT_IB_DEVX_OBJ_CQ)) &&
+        !ucs_test_all_flags(md_config->devx_objs, (1 << UCT_IB_DEVX_OBJ_RCQP) |
+                                                  (1 << UCT_IB_DEVX_OBJ_RCSRQ) |
+                                                  (1 << UCT_IB_DEVX_OBJ_DCT) |
+                                                  (1 << UCT_IB_DEVX_OBJ_DCSRQ) |
+                                                  (1 << UCT_IB_DEVX_OBJ_DCI))) {
+        status = UCS_ERR_IO_ERROR;
+        ucs_error("Specifying cq in DEVX_OBJS requires creation all other "
+                  "entities(rcqp,rcsrq,dct,dcsrq,dci,cq) using DEVX too");
+        goto err;
+    }
+
     ctx = uct_ib_mlx5_devx_open_device(ibv_device);
     if (ctx == NULL) {
         if (md_config->devx == UCS_YES) {

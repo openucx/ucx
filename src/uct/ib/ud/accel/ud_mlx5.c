@@ -680,6 +680,7 @@ uct_ud_mlx5_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
     uct_ib_mlx5_cq_t *uct_cq   = &iface->cq[dir];
 
+    uct_cq->type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     return uct_ib_mlx5_create_cq(ib_iface, dir, &ud_mlx5_config->mlx5_common,
                                  ib_config, init_attr, uct_cq, preferred_cpu,
                                  inl);
@@ -791,7 +792,9 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
             .ep_invalidate       = uct_ud_ep_invalidate
         },
         .create_cq      = uct_ud_mlx5_create_cq,
+        .destroy_cq     = uct_ib_verbs_destroy_cq,
         .arm_cq         = uct_ud_mlx5_iface_arm_cq,
+        .pre_arm        = uct_ib_iface_pre_arm,
         .event_cq       = uct_ud_mlx5_iface_event_cq,
         .handle_failure = uct_ud_mlx5_iface_handle_failure,
     },

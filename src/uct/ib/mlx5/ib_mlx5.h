@@ -194,6 +194,7 @@ enum {
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
     UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCI         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCI),
+    UCT_IB_MLX5_MD_FLAG_DEVX_CQ          = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(CQ),
 };
 
 
@@ -385,20 +386,6 @@ typedef struct {
 } uct_ib_mlx5_cq_unzip_t;
 
 
-/* Completion queue */
-typedef struct uct_ib_mlx5_cq {
-    void                   *cq_buf;
-    unsigned               cq_ci;
-    unsigned               cq_sn;
-    unsigned               cq_length;
-    unsigned               cqe_size_log;
-    unsigned               cq_num;
-    void                   *uar;
-    volatile uint32_t      *dbrec;
-    uct_ib_mlx5_cq_unzip_t cq_unzip;
-} uct_ib_mlx5_cq_t;
-
-
 /* Blue flame register */
 typedef struct uct_ib_mlx5_mmio_reg {
     uct_worker_tl_data_t        super;
@@ -418,6 +405,39 @@ typedef struct uct_ib_mlx5_devx_uar {
 #endif
     struct ibv_context          *ctx;
 } uct_ib_mlx5_devx_uar_t;
+
+
+/* Completion queue */
+typedef struct uct_ib_mlx5_cq {
+    uct_ib_mlx5_obj_type_t type;
+    void                   *cq_buf;
+    unsigned               cq_ci;
+    unsigned               cq_sn;
+    unsigned               cq_length;
+    unsigned               cqe_size_log;
+    unsigned               cq_num;
+    void                   *uar;
+    volatile uint32_t      *dbrec;
+    uct_ib_mlx5_cq_unzip_t cq_unzip;
+    union {
+        struct {
+            /* At this moment it is just a duplicate of the cq member
+             * from uct_ib_iface that is never used. It will be useful after
+             * introducing mlx5 related common iface.
+             */
+            struct ibv_cq             *cq;
+        } verbs;
+#if HAVE_DEVX
+        struct {
+            void                       *cq_buf;
+            uct_ib_mlx5_dbrec_t        *dbrec;
+            uct_ib_mlx5_devx_umem_t    mem;
+            struct mlx5dv_devx_obj     *obj;
+            uct_ib_mlx5_devx_uar_t     *uar;
+        } devx;
+#endif
+    };
+} uct_ib_mlx5_cq_t;
 
 
 /* resource domain */
@@ -607,6 +627,12 @@ extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
 
 /**
+ * Destroy CQ.
+ */
+void uct_ib_mlx5_destroy_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t* cq,
+                            uct_ib_dir_t dir);
+
+/**
  * Get flag indicating compact AV support.
  */
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av);
@@ -768,6 +794,15 @@ ucs_status_t
 uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
                                     struct ibv_ah_attr *ah_attr,
                                     uint32_t *dest_qpn);
+
+ucs_status_t
+uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                           const uct_ib_mlx5_iface_config_t *mlx5_config,
+                           const uct_ib_iface_config_t *ib_config,
+                           const uct_ib_iface_init_attr_t *init_attr,
+                           uct_ib_mlx5_cq_t* cq, int preferred_cpu, size_t inl);
+
+void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t* cq);
 
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,

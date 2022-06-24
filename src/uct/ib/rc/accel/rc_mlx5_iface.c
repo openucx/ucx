@@ -249,8 +249,21 @@ uct_rc_mlx5_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
             ucs_derived_of(ib_config, uct_rc_mlx5_iface_config_t);
     uct_rc_mlx5_iface_common_t *rc_mlx5_iface_common =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(ib_iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_mlx5_cq_t *uct_cq = &rc_mlx5_iface_common->cq[dir];
 
+#if HAVE_DEVX
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
+        uct_cq->type       = UCT_IB_MLX5_OBJ_TYPE_DEVX;
+        ib_iface->cq[dir]  = NULL;
+        return uct_ib_mlx5_devx_create_cq(ib_iface, dir,
+                                          &rc_mlx5_config->rc_mlx5_common.super,
+                                          ib_config, init_attr, uct_cq,
+                                          preferred_cpu, inl);
+    }
+#endif
+
+    uct_cq->type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     return uct_ib_mlx5_create_cq(ib_iface, dir,
                                  &rc_mlx5_config->rc_mlx5_common.super,
                                  ib_config, init_attr, uct_cq, preferred_cpu,
@@ -327,6 +340,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 #if HAVE_DECL_MLX5DV_CREATE_QP
     uct_ib_device_t *dev               = &md->super.dev;
     struct mlx5dv_qp_init_attr dv_attr = {};
+    uint64_t cookie;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
         attr->uidx      = 0xffffff;
@@ -338,9 +352,11 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
             return status;
         }
 
-        status = uct_rc_mlx5_devx_iface_subscribe_event(iface, qp,
-                UCT_IB_MLX5_EVENT_TYPE_SRQ_LAST_WQE,
-                IBV_EVENT_QP_LAST_WQE_REACHED, qp->qp_num);
+        cookie = IBV_EVENT_QP_LAST_WQE_REACHED |
+                 ((uint64_t)qp->qp_num << UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT);
+        status = uct_rc_mlx5_devx_iface_subscribe_event(
+                iface->event_channel, qp->devx.obj,
+                UCT_IB_MLX5_EVENT_TYPE_SRQ_LAST_WQE, cookie, "QP");
         if (status != UCS_OK) {
             goto err_destory_qp;
         }
@@ -696,6 +712,53 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
     return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
 }
 
+ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
+            tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
+                                          uct_ib_mlx5_md_t);
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
+        *fd_p = iface->cq_event_channel->fd;
+        return UCS_OK;
+    }
+
+    return uct_ib_iface_event_fd_get(tl_iface, fd_p);
+}
+
+static ucs_status_t
+uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface) {
+    ucs_status_t status   = UCS_OK;
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
+    uct_ib_mlx5_cq_t *scq = &iface->cq[UCT_IB_DIR_TX];
+    uct_ib_mlx5_cq_t *rcq = &iface->cq[UCT_IB_DIR_RX];
+    uct_ib_mlx5_md_t *md  = ucs_derived_of(iface->super.super.super.md,
+                                           uct_ib_mlx5_md_t);
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ)) {
+        return status;
+    }
+
+    if (scq->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
+        status = uct_rc_mlx5_devx_iface_subscribe_event(iface->cq_event_channel,
+                                                        scq->devx.obj,
+                                                        0, UCT_IB_DIR_TX,
+                                                        "SCQ");
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+    if (rcq->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
+        status = uct_rc_mlx5_devx_iface_subscribe_event(iface->cq_event_channel,
+                                                        rcq->devx.obj,
+                                                        0, UCT_IB_DIR_RX,
+                                                        "RCQ");
+    }
+#endif
+    return status;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
@@ -805,7 +868,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 #if HAVE_DEVX
     status = uct_rc_mlx5_devx_iface_init_events(self);
     if (status != UCS_OK) {
-        goto cleanup_dm;
+        goto cleanup_mpool;
+    }
+
+    status = uct_rc_mlx5_iface_subscribe_cqs(self);
+    if (status != UCS_OK) {
+        goto free_events;
     }
 #endif
 
@@ -824,6 +892,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     return UCS_OK;
 
+free_events:
+    uct_rc_mlx5_devx_iface_free_events(self);
+cleanup_mpool:
+    ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
 cleanup_dm:
     uct_rc_mlx5_iface_common_dm_cleanup(self);
 cleanup_tm:
@@ -912,7 +984,9 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_invalidate       = uct_rc_mlx5_ep_invalidate
         },
         .create_cq      = uct_rc_mlx5_create_cq,
+        .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
+        .pre_arm        = uct_rc_mlx5_iface_common_pre_arm,
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
         .handle_failure = uct_rc_mlx5_iface_handle_failure,
     },
@@ -965,7 +1039,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .iface_progress_enable    = uct_rc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
-    .iface_event_fd_get       = uct_ib_iface_event_fd_get,
+    .iface_event_fd_get       = uct_rc_mlx5_iface_event_fd_get,
     .iface_event_arm          = uct_rc_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_query              = uct_rc_mlx5_iface_query,

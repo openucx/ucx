@@ -559,7 +559,9 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
             .ep_invalidate       = uct_ud_ep_invalidate
         },
         .create_cq      = uct_ib_verbs_create_cq,
+        .destroy_cq     = uct_ib_verbs_destroy_cq,
         .arm_cq         = uct_ib_iface_arm_cq,
+        .pre_arm        = uct_ib_iface_pre_arm,
         .event_cq       = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
         .handle_failure = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert,
     },
