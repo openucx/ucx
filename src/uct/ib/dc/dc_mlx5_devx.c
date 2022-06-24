@@ -17,20 +17,18 @@
 
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 {
-    uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super.super.super);
-    struct mlx5dv_pd dvpd = {};
-    struct mlx5dv_cq dvcq = {};
-    struct mlx5dv_obj dv  = {};
+    uct_ib_device_t *dev        = uct_ib_iface_device(&iface->super.super.super);
+    const uct_ib_mlx5_cq_t *cq  = &iface->super.cq[UCT_IB_DIR_RX];
+    struct mlx5dv_pd dvpd       = {};
+    struct mlx5dv_obj dv        = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_out)] = {};
     int dvflags;
     void *dctc;
 
-    dvflags   = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
+    dvflags   = MLX5DV_OBJ_PD;
     dv.pd.in  = uct_ib_iface_md(&iface->super.super.super)->pd;
     dv.pd.out = &dvpd;
-    dv.cq.in  = iface->super.super.super.cq[UCT_IB_DIR_RX];
-    dv.cq.out = &dvcq;
     mlx5dv_init_obj(&dv, dvflags);
 
     UCT_IB_MLX5DV_SET(create_dct_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_DCT);
@@ -41,7 +39,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
         UCT_IB_MLX5DV_SET(dctc, dctc, offload_type, UCT_IB_MLX5_QPC_OFFLOAD_TYPE_RNDV);
     }
-    UCT_IB_MLX5DV_SET(dctc, dctc, cqn, dvcq.cqn);
+    UCT_IB_MLX5DV_SET(dctc, dctc, cqn, cq->cq_num);
     UCT_IB_MLX5DV_SET64(dctc, dctc, dc_access_key, UCT_IB_KEY);
 
     UCT_IB_MLX5DV_SET(dctc, dctc, rre, true);
