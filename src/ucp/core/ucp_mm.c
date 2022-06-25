@@ -280,12 +280,6 @@ ucp_mem_map_params2uct_flags(const ucp_mem_map_params_t *params)
     return flags;
 }
 
-static inline int ucp_mem_map_is_allocate(const ucp_mem_map_params_t *params)
-{
-    return (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) &&
-           (params->flags & UCP_MEM_MAP_ALLOCATE);
-}
-
 static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map)
 {
@@ -417,6 +411,7 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
         memh->super.super.end   = (uintptr_t)reg_address + reg_length;
         memh->alloc_md_index    = UCP_NULL_RESOURCE;
         memh->alloc_method      = UCT_ALLOC_METHOD_LAST;
+        memh->map_count         = 0;
     } else {
         status = ucs_rcache_get_unsafe(context->rcache, reg_address, reg_length,
                                        PROT_READ | PROT_WRITE, NULL, &rregion);
@@ -573,7 +568,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         memory_type = params->memory_type;
     }
 
-    if (ucp_mem_map_is_allocate(params)) {
+    if (flags & UCP_MEM_MAP_ALLOCATE) {
         status = ucp_memh_alloc(context, address, params->length, memory_type,
                                 ucp_mem_map_params2uct_flags(params),
                                 "user memory", memh_p);
@@ -583,13 +578,17 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
                               ucp_mem_map_params2uct_flags(params), memh_p);
     }
 
+    if (status == UCS_OK) {
+        (*memh_p)->map_count++;
+    }
+
 out:
     return status;
 }
 
 ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
 {
-    ucp_memh_put(context, memh, 1);
+    ucp_memh_put(context, memh, !--memh->map_count);
     return UCS_OK;
 }
 
@@ -975,6 +974,7 @@ static ucs_status_t ucp_mem_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcach
     memh->md_map         = 0;
     memh->alloc_md_index = UCP_NULL_RESOURCE;
     memh->alloc_method   = UCT_ALLOC_METHOD_LAST;
+    memh->map_count      = 0;
 
     return UCS_OK;
 }

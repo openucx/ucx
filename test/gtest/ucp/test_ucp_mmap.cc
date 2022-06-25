@@ -416,6 +416,58 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
     }
 }
 
+UCS_TEST_P(test_ucp_mmap, rereg)
+{
+    ucs_status_t status;
+
+    for (int i = 0; i < (100 / ucs::test_time_multiplier()); ++i) {
+        size_t size = ucs::rand() % UCS_MBYTE;
+        mem_buffer buf(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer::pattern_fill(buf.ptr(), size, 0, UCS_MEMORY_TYPE_HOST);
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+        params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                             UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address     = buf.ptr();
+        params.length      = size;
+        params.flags       = mem_map_flags();
+
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            UCS_TEST_SKIP_R("memory sharing is unsupported");
+        }
+        ASSERT_UCS_OK(status);
+
+        if (get_variant_value() != VARIANT_NO_RCACHE) {
+            const int num_iters     = 4;
+            const void *end_address = UCS_PTR_BYTE_OFFSET(buf.ptr(), size);
+
+            for (int i = 0; i < num_iters; ++i) {
+                size_t offset       = ucs::rand() % size;
+                void *start_address = UCS_PTR_BYTE_OFFSET(buf.ptr(), offset);
+                ucp_mem_h test_memh;
+
+                params.address = start_address;
+                params.length  = UCS_PTR_BYTE_DIFF(start_address, end_address);
+                status         = ucp_mem_map(sender().ucph(), &params,
+                                             &test_memh);
+                ASSERT_UCS_OK(status);
+
+                // Check that the same memory handle was returned from RCACHE
+                EXPECT_EQ(memh, test_memh);
+
+                status = ucp_mem_unmap(sender().ucph(), test_memh);
+                ASSERT_UCS_OK(status);
+            }
+        }
+
+        status = ucp_mem_unmap(sender().ucph(), memh);
+        ASSERT_UCS_OK(status);
+    }
+}
+
 void test_ucp_mmap::test_length0(unsigned flags)
 {
     ucs_status_t status;
