@@ -108,6 +108,9 @@ ucp_proto_rndv_rtr_hdr_pack(ucp_request_t *req, ucp_rndv_rtr_hdr_t *rtr,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_common_complete(ucp_request_t *req, unsigned dt_mask)
 {
+    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
+                                &req->send.state.dt_iter, dt_mask);
+
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, dt_mask);
     if (req->send.rndv.rkey != NULL) {
         ucp_proto_rndv_rkey_destroy(req);
@@ -116,26 +119,10 @@ ucp_proto_rndv_rtr_common_complete(ucp_request_t *req, unsigned dt_mask)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_rtr_data_received_common(ucp_request_t *req, unsigned dt_mask)
+ucp_proto_rndv_rtr_data_received(ucp_request_t *req, int in_buffer)
 {
     ucp_send_request_id_release(req);
-    ucp_proto_rndv_rtr_common_complete(req, dt_mask);
-}
-
-static void
-ucp_proto_rndv_rtr_data_received_bcopy(ucp_request_t *req, int in_buffer)
-{
-    ucp_proto_rndv_rtr_data_received_common(req, UCP_DT_MASK_ALL);
-}
-
-static void
-ucp_proto_rndv_rtr_data_received_zcopy(ucp_request_t *req, int in_buffer)
-{
-    static const unsigned dt_mask = UCS_BIT(UCP_DATATYPE_CONTIG);
-
-    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter, dt_mask);
-    ucp_proto_rndv_rtr_data_received_common(req, dt_mask);
+    ucp_proto_rndv_rtr_common_complete(req, UCP_DT_MASK_ALL);
 }
 
 static size_t ucp_proto_rndv_rtr_pack_without_rkey(void *dest, void *arg)
@@ -180,16 +167,14 @@ static ucs_status_t ucp_proto_rndv_rtr_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        if (rpriv->super.md_map != 0) {
-            status = ucp_datatype_iter_mem_reg(req->send.ep->worker->context,
-                                               &req->send.state.dt_iter,
-                                               rpriv->super.md_map,
-                                               UCT_MD_MEM_ACCESS_REMOTE_PUT,
-                                               UCS_BIT(UCP_DATATYPE_CONTIG));
-            if (status != UCS_OK) {
-                ucp_proto_request_abort(req, status);
-                return UCS_OK;
-            }
+        status = ucp_datatype_iter_mem_reg(req->send.ep->worker->context,
+                                           &req->send.state.dt_iter,
+                                           rpriv->super.md_map,
+                                           UCT_MD_MEM_ACCESS_REMOTE_PUT,
+                                           UCP_DT_MASK_ALL);
+        if (status != UCS_OK) {
+            ucp_proto_request_abort(req, status);
+            return UCS_OK;
         }
 
         ucp_proto_rtr_common_request_init(req);
@@ -219,12 +204,12 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
         return status;
     }
 
+    rpriv->data_received = ucp_proto_rndv_rtr_data_received;
+
     if (rpriv->super.md_map == 0) {
-        rpriv->pack_cb       = ucp_proto_rndv_rtr_pack_without_rkey;
-        rpriv->data_received = ucp_proto_rndv_rtr_data_received_bcopy;
+        rpriv->pack_cb = ucp_proto_rndv_rtr_pack_without_rkey;
     } else {
-        rpriv->pack_cb       = ucp_proto_rndv_rtr_pack_with_rkey;
-        rpriv->data_received = ucp_proto_rndv_rtr_data_received_zcopy;
+        rpriv->pack_cb = ucp_proto_rndv_rtr_pack_with_rkey;
     }
 
     return UCS_OK;

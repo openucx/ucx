@@ -46,7 +46,8 @@ ucp_proto_rndv_rts_request_init(ucp_request_t *req)
     }
 
     status = ucp_datatype_iter_mem_reg(ep->worker->context,
-                                       &req->send.state.dt_iter, rpriv->md_map,
+                                       &req->send.state.dt_iter,
+                                       rpriv->md_map,
                                        UCT_MD_MEM_ACCESS_RMA |
                                                UCT_MD_MEM_FLAG_HIDE_ERRORS,
                                        UCP_DT_MASK_ALL);
@@ -81,7 +82,9 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
     }
 
     ucp_send_request_id_release(req);
-    ucp_proto_request_zcopy_complete(req, status);
+    ucp_proto_request_zcopy_cleanup(req, UCP_DT_MASK_ALL);
+    ucp_request_complete_send(req, status);
+
     return UCS_OK;
 }
 
