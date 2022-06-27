@@ -9,6 +9,7 @@
 #endif
 #include "parser.h"
 
+#include <ucs/algorithm/string_distance.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
@@ -1851,6 +1852,60 @@ void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
     }
 }
 
+static void ucs_config_parser_search_similar_variables(
+        const ucs_config_field_t *config_table, const char *env_prefix,
+        const char *table_prefix, const char *unused_var,
+        ucs_string_buffer_t *matches_buffer, size_t max_distance)
+{
+    char var_name[128];
+    const ucs_config_field_t *field;
+
+    for (field = config_table; !ucs_config_field_is_last(field); ++field) {
+        if (ucs_config_is_table_field(field)) {
+            ucs_config_parser_search_similar_variables(field->parser.arg,
+                                                       env_prefix, table_prefix,
+                                                       unused_var,
+                                                       matches_buffer,
+                                                       max_distance);
+        } else {
+            ucs_snprintf_safe(var_name, sizeof(var_name), "%s%s%s", env_prefix,
+                              table_prefix ? table_prefix : "", field->name);
+            if (ucs_string_distance(unused_var, var_name) <= max_distance) {
+                ucs_string_buffer_appendf(matches_buffer, "%s, ", var_name);
+            }
+        }
+    }
+}
+
+static void ucs_config_parser_append_similar_vars_message(
+        const char *env_prefix, const char *unused_var,
+        ucs_string_buffer_t *unused_vars_buffer)
+{
+    const size_t max_fuzzy_distance    = 3;
+    ucs_string_buffer_t matches_buffer = UCS_STRING_BUFFER_INITIALIZER;
+    const ucs_config_global_list_entry_t *entry;
+
+    ucs_list_for_each(entry, &ucs_config_global_list, list) {
+        if ((entry->table == NULL) ||
+            ucs_config_field_is_last(&entry->table[0])) {
+            continue;
+        }
+
+        ucs_config_parser_search_similar_variables(entry->table, env_prefix,
+                                                   entry->prefix, unused_var,
+                                                   &matches_buffer,
+                                                   max_fuzzy_distance);
+    }
+
+    if (ucs_string_buffer_length(&matches_buffer) > 0) {
+        ucs_string_buffer_rtrim(&matches_buffer, ", ");
+        ucs_string_buffer_appendf(unused_vars_buffer, " (maybe: %s?)",
+                                  ucs_string_buffer_cstr(&matches_buffer));
+    }
+
+    ucs_string_buffer_cleanup(&matches_buffer);
+}
+
 static void ucs_config_parser_print_env_vars(const char *prefix)
 {
     int num_unused_vars, num_used_vars;
@@ -1890,7 +1945,10 @@ static void ucs_config_parser_print_env_vars(const char *prefix)
         iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, var_name);
         if (iter == kh_end(&ucs_config_parser_env_vars)) {
             if (ucs_global_opts.warn_unused_env_vars) {
-                ucs_string_buffer_appendf(&unused_vars_strb, "%s,", var_name);
+                ucs_string_buffer_appendf(&unused_vars_strb, "%s", var_name);
+                ucs_config_parser_append_similar_vars_message(
+                        prefix, var_name, &unused_vars_strb);
+                ucs_string_buffer_appendf(&unused_vars_strb, "; ");
                 ++num_unused_vars;
             }
         } else {
@@ -1904,8 +1962,9 @@ static void ucs_config_parser_print_env_vars(const char *prefix)
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
 
     if (num_unused_vars > 0) {
-        ucs_string_buffer_rtrim(&unused_vars_strb, ",");
-        ucs_warn("unused env variable%s: %s (set %s%s=n to suppress this warning)",
+        ucs_string_buffer_rtrim(&unused_vars_strb, "; ");
+        ucs_warn("unused environment variable%s: %s\n"
+                 "(set %s%s=n to suppress this warning)",
                  (num_unused_vars > 1) ? "s" : "",
                  ucs_string_buffer_cstr(&unused_vars_strb),
                  UCS_DEFAULT_ENV_PREFIX, UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
