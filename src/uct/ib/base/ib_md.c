@@ -274,6 +274,7 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.reg_mem_types    = md->reg_mem_types;
+    md_attr->cap.cache_mem_types  = md->reg_mem_types;
     md_attr->rkey_packed_size     = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost             = md->reg_cost;
     ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);

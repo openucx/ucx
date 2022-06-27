@@ -76,6 +76,7 @@ void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, uint64_t max_alloc)
     md_attr->cap.max_reg          = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cap.cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
 
