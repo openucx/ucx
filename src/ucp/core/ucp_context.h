@@ -264,6 +264,9 @@ typedef struct ucp_context {
        ucp_mem_map() will register memory for all those domains. */
     ucp_md_map_t                  reg_md_map[UCS_MEMORY_TYPE_LAST];
 
+    /* Map of MDs that require caching registrations for given memory type. */
+    ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
+
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */

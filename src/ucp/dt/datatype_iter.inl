@@ -507,6 +507,13 @@ ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
 {
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
         ucs_assert(dt_iter->type.contig.memh == NULL);
+        /* Iterator may work with cacheable MDs only */
+        ucs_assertv(ucs_test_all_flags(
+                    context->cache_md_map[dt_iter->mem_info.type], md_map),
+                    "iterator mem_type=%s cache_md_map=0x%" PRIx64
+                    "md_map=0x%" PRIx64,
+                    ucs_memory_type_names[dt_iter->mem_info.type],
+                    context->cache_md_map[dt_iter->mem_info.type], md_map);
         return ucp_memh_get(context, dt_iter->type.contig.buffer,
                             dt_iter->length,
                             (ucs_memory_type_t)dt_iter->mem_info.type, md_map,
