@@ -568,28 +568,66 @@ uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
     return UCS_OK;
 }
 
+static void
+uct_ib_mlx5_devx_fill_cq(uct_ib_mlx5_cq_t *cq, unsigned cq_size, int cqe_size,
+                        void *out) {
+    struct mlx5_cqe64 *cqe;
+    int i;
+
+    cq->cq_buf    = cq->devx.cq_buf;
+    cq->cq_ci     = 0;
+    cq->cq_sn     = 0;
+    cq->cq_length = cq_size;
+    cq->cq_num    = UCT_IB_MLX5DV_GET(create_cq_out, out, cqn);
+    cq->uar       = cq->devx.uar->uar->base_addr;
+    cq->dbrec     = cq->devx.dbrec->db;
+
+    /* Initializing memory is required for checking the cq_unzip.current_idx */
+    memset(&cq->cq_unzip, 0, sizeof(uct_ib_mlx5_cq_unzip_t));
+
+    /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
+     * 64b when polling.
+     */
+    cq->cq_buf = UCS_PTR_BYTE_OFFSET(cq->cq_buf,
+                                     cqe_size - sizeof(struct mlx5_cqe64));
+
+    cq->cqe_size_log = ucs_ilog2(cqe_size);
+    ucs_assert_always((1ul << cq->cqe_size_log) == cqe_size);
+
+    /* Set owner bit for all CQEs, so that CQE would look like it is in HW
+     * ownership. In this case CQ polling functions will return immediately if
+     * no any CQE ready, there is no need to check opcode for
+     * MLX5_CQE_INVALID value anymore.
+     */
+    for (i = 0; i < cq->cq_length; ++i) {
+        cqe = uct_ib_mlx5_get_cqe(cq, i);
+        cqe->op_own |= MLX5_CQE_OWNER_MASK;
+        cqe->op_own |= MLX5_CQE_INVALID << 4;
+    }
+}
+
 ucs_status_t
 uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                            const uct_ib_mlx5_iface_config_t *mlx5_config,
                            const uct_ib_iface_config_t *ib_config,
                            const uct_ib_iface_init_attr_t *init_attr,
-                           uct_ib_mlx5_cq_t* cq, int preferred_cpu, size_t inl)
+                           uct_ib_mlx5_cq_t *cq, int preferred_cpu,
+                           size_t inl)
 {
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_cq_in)] = {0};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_cq_out)] = {0};
     void *cqctx = UCT_IB_MLX5DV_ADDR_OF(create_cq_in, in, cqc);
 
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev  = uct_ib_iface_device(iface);
-    ucs_status_t status = UCS_OK;
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
-    int cq_size = ucs_roundup_pow2(uct_ib_cq_size(iface, init_attr, dir));
-    int log_cq_size = ucs_ilog2(cq_size);
-    int cqe_size = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
+    unsigned cq_size   = ucs_roundup_pow2(uct_ib_cq_size(iface, init_attr, dir));
+    int log_cq_size    = ucs_ilog2(cq_size);
+    int cqe_size       = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
     size_t cq_umem_len = cqe_size * cq_size;
+
+    ucs_status_t status;
     uint32_t eqn;
-    int i;
-    struct mlx5_cqe64 *cqe;
 
     UCT_IB_MLX5DV_SET(create_cq_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_CQ);
 
@@ -639,7 +677,7 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     UCT_IB_MLX5DV_SET(cqc, cqctx, log_cq_size, log_cq_size);
     UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_sz, (cqe_size == 128) ? 1 : 0);
-	UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_en, mlx5_config->cqe_zipping_enable);
+    UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_en, mlx5_config->cqe_zipping_enable);
     if (!UCS_ENABLE_ASSERT && (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN)) {
         UCT_IB_MLX5DV_SET(cqc, cqctx, oi, 1);
     }
@@ -651,37 +689,7 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
         goto err_free_mem;
     }
 
-    /* Fill the CQ structure */
-    cq->cq_buf    = cq->devx.cq_buf;
-    cq->cq_ci     = 0;
-    cq->cq_sn     = 0;
-    cq->cq_length = cq_size;
-    cq->cq_num    = UCT_IB_MLX5DV_GET(create_cq_out, out, cqn);
-    cq->uar       = cq->devx.uar->uar->base_addr;
-    cq->dbrec     = cq->devx.dbrec->db;
-
-    /* initializing memory is required for checking the cq_unzip.current_idx */
-    memset(&cq->cq_unzip, 0, sizeof(uct_ib_mlx5_cq_unzip_t));
-
-    /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
-     * 64b when polling.
-     */
-    cq->cq_buf = UCS_PTR_BYTE_OFFSET(cq->cq_buf,
-                                     cqe_size - sizeof(struct mlx5_cqe64));
-
-    cq->cqe_size_log = ucs_ilog2(cqe_size);
-    ucs_assert_always((1ul << cq->cqe_size_log) == cqe_size);
-
-    /* Set owner bit for all CQEs, so that CQE would look like it is in HW
-     * ownership. In this case CQ polling functions will return immediately if
-     * no any CQE ready, there is no need to check opcode for
-     * MLX5_CQE_INVALID value anymore.
-     */
-    for (i = 0; i < cq->cq_length; ++i) {
-        cqe = uct_ib_mlx5_get_cqe(cq, i);
-        cqe->op_own |= MLX5_CQE_OWNER_MASK;
-        cqe->op_own |= MLX5_CQE_INVALID << 4;
-    }
+    uct_ib_mlx5_devx_fill_cq(cq, cq_size, cqe_size, out);
 
     iface->config.max_inl_cqe[dir] = (inl > 0) ? (cqe_size / 2) : 0;
 

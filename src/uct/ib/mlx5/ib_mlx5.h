@@ -624,7 +624,7 @@ extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 /**
  * Get internal CQ information.
  */
-ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
+ucs_status_t uct_ib_mlx5_fill_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
 
 /**
  * Destroy CQ.

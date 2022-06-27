@@ -154,7 +154,7 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 #endif
 
-    status = uct_ib_mlx5_get_cq(iface->cq[dir], mlx5_cq);
+    status = uct_ib_mlx5_fill_cq(iface->cq[dir], mlx5_cq);
     if (status != UCS_OK) {
         ibv_destroy_cq(iface->cq[dir]);
     }
@@ -177,7 +177,7 @@ void uct_ib_mlx5_destroy_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t* cq,
     uct_ib_verbs_destroy_cq(iface, dir);
 }
 
-ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
+ucs_status_t uct_ib_mlx5_fill_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 {
     uct_ib_mlx5dv_cq_t dcq = {};
     uct_ib_mlx5dv_t obj = {};
