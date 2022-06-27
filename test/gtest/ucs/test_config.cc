@@ -561,7 +561,7 @@ UCS_TEST_F(test_config, unused) {
     /* set to warn about unused env vars */
     ucs_global_opts.warn_unused_env_vars = 1;
 
-    const std::string warn_str    = "unused env variable";
+    const std::string warn_str    = "unused environment variable";
     const std::string unused_var1 = "UCX_UNUSED_VAR1";
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1(unused_var1.c_str(), "unused");
