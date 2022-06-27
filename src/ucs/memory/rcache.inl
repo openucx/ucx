@@ -45,9 +45,9 @@ ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 }
 
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucs_rcache_get_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
-                      int prot, void *arg, ucs_rcache_region_t **region_p)
+static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
+ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
+                         int prot)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -57,25 +57,26 @@ ucs_rcache_get_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
                    length);
 
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_GETS, 1);
-    if (ucs_queue_is_empty(&rcache->inv_q)) {
-        pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &rcache->pgtable,
-                                      start);
-        if (ucs_likely(pgt_region != NULL)) {
-            region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
-            if (((start + length) <= region->super.end) &&
-                ucs_rcache_region_test(region, prot))
-            {
-                region->refcount++;
-                ucs_rcache_region_lru_remove(rcache, region);
-                *region_p = region;
-                UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
-                return UCS_OK;
-            }
-        }
+    if (ucs_unlikely(!ucs_queue_is_empty(&rcache->inv_q))) {
+        return NULL;
     }
 
-    return UCS_PROFILE_CALL(ucs_rcache_create_region, rcache, address, length,
-                            prot, arg, region_p);
+    pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &rcache->pgtable, start);
+    if (ucs_unlikely(pgt_region == NULL)) {
+        return NULL;
+    }
+
+    region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
+    if (((start + length) > region->super.end) ||
+        !ucs_rcache_region_test(region, prot))
+    {
+        return NULL;
+    }
+
+    region->refcount++;
+    ucs_rcache_region_lru_remove(rcache, region);
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
+    return region;
 }
 
 
