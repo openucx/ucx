@@ -973,6 +973,10 @@ test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
 	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
+	
+	# Check that suggestions for similar ucx env vars are printed
+	echo "==== Running fuzzy match test ===="
+	../test/apps/test_fuzzy_match.py --ucx_info ./src/tools/info/ucx_info
 }
 
 test_env_var_aliases() {

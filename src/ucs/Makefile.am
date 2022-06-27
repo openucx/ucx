@@ -26,6 +26,7 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/bitops.h \
 	algorithm/crc.h \
 	algorithm/qsort_r.h \
+	algorithm/string_distance.h \
 	async/async_fwd.h \
 	config/global_opts.h \
 	config/ini.h \
@@ -133,6 +134,7 @@ noinst_HEADERS = \
 libucs_la_SOURCES = \
 	algorithm/crc.c \
 	algorithm/qsort_r.c \
+	algorithm/string_distance.c \
 	arch/aarch64/cpu.c \
 	arch/aarch64/global_opts.c \
 	arch/ppc64/timebase.c \

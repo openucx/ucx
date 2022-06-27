@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucs/algorithm/crc.h>
 #include <ucs/algorithm/qsort_r.h>
+#include <ucs/algorithm/string_distance.h>
 }
 #include <vector>
 
@@ -119,4 +120,38 @@ UCS_TEST_F(test_algorithm, crc32) {
 
     test_str = "0123456789";
     EXPECT_EQ(0xa684c7c6ul, ucs_crc32(0, test_str.c_str(), test_str.size()));
+}
+
+UCS_TEST_F(test_algorithm, string_distance) {
+    // Empty strings
+    EXPECT_EQ(0u, ucs_string_distance("", ""));
+
+    // First string empty
+    EXPECT_EQ(8u, ucs_string_distance("", "aabbccdd"));
+
+    // Second string empty
+    EXPECT_EQ(8u, ucs_string_distance("aabbccdd", ""));
+
+    // 2 identical strings
+    EXPECT_EQ(0u, ucs_string_distance("aabbccdd", "aabbccdd"));
+
+    // No common chars
+    EXPECT_EQ(8u, ucs_string_distance("aabbccdd", "eeffgghh"));
+
+    // Replace
+    EXPECT_EQ(2u, ucs_string_distance("aabbccdd", "aabeccfd"));
+
+    // Swap
+    EXPECT_EQ(2u, ucs_string_distance("aabbccdd", "aabcbcdd"));
+
+    // Subtract
+    EXPECT_EQ(2u, ucs_string_distance("aabbccdd", "aabcdd"));
+
+    // Add
+    EXPECT_EQ(2u, ucs_string_distance("aabbccdd", "aabbeeccdd"));
+
+    // Combinations
+    EXPECT_EQ(4u, ucs_string_distance("aabbccddee", "afbccdede"));
+    EXPECT_EQ(4u, ucs_string_distance("aabbccddeeff", "ababccdgedeff"));
+    EXPECT_EQ(6u, ucs_string_distance("aabbccddeeff", "aagbbhddefefii"));
 }
