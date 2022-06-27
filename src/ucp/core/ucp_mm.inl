@@ -38,10 +38,10 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
 
     if (ucs_likely(context->rcache != NULL)) {
         UCP_THREAD_CS_ENTER(&context->mt_lock);
-        status = ucs_rcache_get_unsafe(context->rcache, address, length,
-                                       PROT_READ | PROT_WRITE, NULL, &rregion);
-        if (status != UCS_OK) {
-            goto out_unlock;
+        rregion = ucs_rcache_lookup_unsafe(context->rcache, address, length,
+                                           PROT_READ | PROT_WRITE);
+        if (rregion == NULL) {
+            goto not_found;
         }
 
         memh = ucs_derived_of(rregion, ucp_mem_t);
@@ -57,6 +57,7 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
         }
 
         ucs_rcache_region_put_unsafe(context->rcache, rregion);
+not_found:
         UCP_THREAD_CS_EXIT(&context->mt_lock);
     }
 
@@ -68,28 +69,26 @@ out_unlock:
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_memh_put(ucp_context_h context, ucp_mem_h memh, int invalidate)
+ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
 {
-    ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64
-              " invalidate: %d", memh, ucp_memh_address(memh),
-              ucp_memh_length(memh), memh->md_map, invalidate);
+    ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64,
+              memh, ucp_memh_address(memh), ucp_memh_length(memh),
+              memh->md_map);
 
     if (ucs_unlikely(ucp_memh_is_zero_length(memh))) {
         return;
     }
 
-    if (ucs_unlikely(context->rcache == NULL)) {
-        ucp_memh_unmap(context, memh, memh->md_map);
+    /* User memory handle, or rcache was disabled */
+    if (ucs_unlikely(memh->parent != NULL)) {
+        ucp_memh_cleanup(context, memh);
         ucs_free(memh);
         return;
     }
 
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-    if (invalidate) {
-        ucs_rcache_region_invalidate(context->rcache, &memh->super,
-                (ucs_rcache_invalidate_comp_func_t)ucs_empty_function, NULL);
-    }
+    ucs_assert(context->rcache != NULL);
 
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
     ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 }

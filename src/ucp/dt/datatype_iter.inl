@@ -492,7 +492,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_datatype_memh_dereg(ucp_context_h context, ucp_mem_h *memh_p)
 {
     if (*memh_p != NULL) {
-        ucp_memh_put(context, *memh_p, 0);
+        ucp_memh_put(context, *memh_p);
         *memh_p = NULL;
     }
 }
