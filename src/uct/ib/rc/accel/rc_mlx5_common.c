@@ -1140,7 +1140,8 @@ uct_rc_mlx5_iface_common_arm_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
 #endif
 }
 
-static ucs_status_t uct_rc_mlx5_iface_devx_pre_arm(uct_ib_iface_t *ib_iface) {
+static ucs_status_t uct_rc_mlx5_iface_devx_pre_arm(uct_ib_iface_t *ib_iface)
+{
     ucs_status_t status = UCS_OK;
 #if HAVE_DEVX
     uct_rc_mlx5_iface_common_t *iface =
@@ -1168,7 +1169,8 @@ static ucs_status_t uct_rc_mlx5_iface_devx_pre_arm(uct_ib_iface_t *ib_iface) {
     return status;
 }
 
-ucs_status_t uct_rc_mlx5_iface_common_pre_arm(uct_ib_iface_t *iface) {
+ucs_status_t uct_rc_mlx5_iface_common_pre_arm(uct_ib_iface_t *iface)
+{
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
@@ -1185,11 +1187,12 @@ void uct_rc_mlx5_iface_common_event_cq(uct_ib_iface_t *ib_iface,
     iface->cq[dir].cq_sn++;
 }
 
-void uct_rc_mlx5_iface_common_destroy_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir)
+void uct_rc_mlx5_iface_common_destroy_cq(uct_ib_iface_t *iface,
+                                         uct_ib_dir_t dir)
 {
     uct_rc_mlx5_iface_common_t *rc_mlx5_iface_common =
             ucs_derived_of(iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_cq_t* cq = &rc_mlx5_iface_common->cq[dir];
+    uct_ib_mlx5_cq_t *cq = &rc_mlx5_iface_common->cq[dir];
     uct_ib_mlx5_destroy_cq(iface, cq, dir);
 }
 

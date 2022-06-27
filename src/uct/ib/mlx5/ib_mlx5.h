@@ -425,15 +425,15 @@ typedef struct uct_ib_mlx5_cq {
              * from uct_ib_iface that is never used. It will be useful after
              * introducing mlx5 related common iface.
              */
-            struct ibv_cq             *cq;
+            struct ibv_cq *cq;
         } verbs;
 #if HAVE_DEVX
         struct {
-            void                       *cq_buf;
-            uct_ib_mlx5_dbrec_t        *dbrec;
-            uct_ib_mlx5_devx_umem_t    mem;
-            struct mlx5dv_devx_obj     *obj;
-            uct_ib_mlx5_devx_uar_t     *uar;
+            void                    *cq_buf;
+            uct_ib_mlx5_dbrec_t     *dbrec;
+            uct_ib_mlx5_devx_umem_t mem;
+            struct mlx5dv_devx_obj  *obj;
+            uct_ib_mlx5_devx_uar_t  *uar;
         } devx;
 #endif
     };
@@ -629,7 +629,7 @@ ucs_status_t uct_ib_mlx5_fill_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
 /**
  * Destroy CQ.
  */
-void uct_ib_mlx5_destroy_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t* cq,
+void uct_ib_mlx5_destroy_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
                             uct_ib_dir_t dir);
 
 /**
@@ -800,9 +800,9 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                            const uct_ib_mlx5_iface_config_t *mlx5_config,
                            const uct_ib_iface_config_t *ib_config,
                            const uct_ib_iface_init_attr_t *init_attr,
-                           uct_ib_mlx5_cq_t* cq, int preferred_cpu, size_t inl);
+                           uct_ib_mlx5_cq_t *cq, int preferred_cpu, size_t inl);
 
-void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t* cq);
+void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t *cq);
 
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,

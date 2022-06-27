@@ -16,11 +16,10 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 
-ucs_status_t
-uct_rc_mlx5_devx_iface_subscribe_event(struct mlx5dv_devx_event_channel *channel,
-                                       struct mlx5dv_devx_obj *obj,
-                                       uint16_t event, uint64_t cookie,
-                                       char* msg_arg) {
+ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(
+        struct mlx5dv_devx_event_channel *channel, struct mlx5dv_devx_obj *obj,
+        uint16_t event, uint64_t cookie, char *msg_arg)
+{
 #if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
     int ret;
 
@@ -75,13 +74,13 @@ uct_rc_mlx5_devx_iface_event_handler(int fd, ucs_event_set_types_t events,
 
 #if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
 static ucs_status_t uct_rc_mlx5_devx_create_event_channel(
-    uct_rc_mlx5_iface_common_t *iface,
-    struct mlx5dv_devx_event_channel **event_channel_ptr,
-    int create_async_handler)
+        uct_rc_mlx5_iface_common_t *iface,
+        struct mlx5dv_devx_event_channel **event_channel_ptr,
+        int create_async_handler)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_ib_iface_md(&iface->super.super),
                                           uct_ib_mlx5_md_t);
-    ucs_status_t status  = UCS_OK;
+    ucs_status_t status;
 
     *event_channel_ptr = mlx5dv_devx_create_event_channel(
             md->super.dev.ibv_context,
@@ -91,7 +90,6 @@ static ucs_status_t uct_rc_mlx5_devx_create_event_channel(
         ucs_error("mlx5dv_devx_create_event_channel() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
-
     }
 
     status = ucs_sys_fcntl_modfl((*event_channel_ptr)->fd, O_NONBLOCK, 0);
@@ -119,10 +117,12 @@ err:
 }
 #endif
 
-ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface)
+ucs_status_t
+uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface)
 {
+    ucs_status_t status = UCS_OK;
     uct_ib_mlx5_md_t *md;
-    ucs_status_t status     = UCS_OK;
+
     iface->event_channel    = NULL;
     iface->cq_event_channel = NULL;
 #if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT

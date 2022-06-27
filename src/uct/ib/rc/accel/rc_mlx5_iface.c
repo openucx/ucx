@@ -254,8 +254,8 @@ uct_rc_mlx5_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
 
 #if HAVE_DEVX
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
-        uct_cq->type       = UCT_IB_MLX5_OBJ_TYPE_DEVX;
-        ib_iface->cq[dir]  = NULL;
+        uct_cq->type      = UCT_IB_MLX5_OBJ_TYPE_DEVX;
+        ib_iface->cq[dir] = NULL;
         return uct_ib_mlx5_devx_create_cq(ib_iface, dir,
                                           &rc_mlx5_config->rc_mlx5_common.super,
                                           ib_config, init_attr, uct_cq,
@@ -714,8 +714,8 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
 
 ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
-            tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
                                           uct_ib_mlx5_md_t);
 
@@ -728,8 +728,9 @@ ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 }
 
 static ucs_status_t
-uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface) {
-    ucs_status_t status   = UCS_OK;
+uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
+{
+    ucs_status_t status = UCS_OK;
 #if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
     uct_ib_mlx5_cq_t *scq = &iface->cq[UCT_IB_DIR_TX];
     uct_ib_mlx5_cq_t *rcq = &iface->cq[UCT_IB_DIR_RX];
@@ -742,18 +743,16 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface) {
 
     if (scq->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
         status = uct_rc_mlx5_devx_iface_subscribe_event(iface->cq_event_channel,
-                                                        scq->devx.obj,
-                                                        0, UCT_IB_DIR_TX,
-                                                        "SCQ");
+                                                        scq->devx.obj, 0,
+                                                        UCT_IB_DIR_TX, "SCQ");
         if (status != UCS_OK) {
             return status;
         }
     }
     if (rcq->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
         status = uct_rc_mlx5_devx_iface_subscribe_event(iface->cq_event_channel,
-                                                        rcq->devx.obj,
-                                                        0, UCT_IB_DIR_RX,
-                                                        "RCQ");
+                                                        rcq->devx.obj, 0,
+                                                        UCT_IB_DIR_RX, "RCQ");
     }
 #endif
     return status;
