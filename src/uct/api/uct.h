@@ -1453,11 +1453,17 @@ typedef enum uct_md_mem_attr_field {
     UCT_MD_MEM_ATTR_FIELD_DMABUF_FD     = UCS_BIT(4), /**< Request a cross-device dmabuf file
                                                            descriptor that represents a memory
                                                            region, and can be used to register
-                                                           the region with another memory domain */
+                                                           the region with another memory domain.
+                                                           When UCT_MD_MEM_ATTR_FIELD_DMABUF_FD is
+                                                           set, UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET
+                                                           must also be set. */
     UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5)  /**< Request a cross-device dmabuf file
                                                            descriptor that represents a memory
                                                            region, and can be used to register
-                                                           the region with another memory domain */
+                                                           the region with another memory domain.
+                                                           When UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET
+                                                           is set, UCT_MD_MEM_ATTR_FIELD_DMABUF_FD
+                                                           must also be set. */
 } uct_md_mem_attr_field_t;
 
 
