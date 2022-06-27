@@ -1231,27 +1231,15 @@ UCS_TEST_P(test_ucp_am_nbx_dts, short_send, "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
     test_am(1);
 }
 
-UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
-                                                  "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, bcopy_send, "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
 {
     test_am(4 * UCS_KBYTE);
-}
-
-UCS_TEST_P(test_ucp_am_nbx_dts, long_bcopy_send, "ZCOPY_THRESH=-1",
-                                                 "RNDV_THRESH=-1")
-{
     test_am(64 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_am_nbx_dts, short_zcopy_send, "ZCOPY_THRESH=1",
-                                                  "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, zcopy_send, "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 {
     test_am(4 * UCS_KBYTE);
-}
-
-UCS_TEST_P(test_ucp_am_nbx_dts, long_zcopy_send, "ZCOPY_THRESH=1",
-                                                 "RNDV_THRESH=-1")
-{
     test_am(64 * UCS_KBYTE);
 }
 
