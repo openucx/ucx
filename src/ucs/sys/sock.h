@@ -599,7 +599,7 @@ ucs_status_t ucs_sockaddr_get_ip_local_port_range(ucs_range_spec_t *port_range);
 
 
 /**
- * Get IP address of a given sockaddr structure.
+ * Get string representation of IP address of a given sockaddr structure.
  *
  * @param [in]  addr     Pointer to the sockaddr structure.
  * @param [out] str      A string filled with the IP address.
