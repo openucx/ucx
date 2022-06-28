@@ -538,7 +538,7 @@ make_scripts()
 			}
 
 			kill_iodemo() {
-			    pids="\$(list_pids)"
+			    pids="\$(list_pids_with_role all)"
 			    [ -n "\${pids}" ] && kill -9 \${pids}
 			}
 
