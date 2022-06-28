@@ -317,6 +317,12 @@ bool is_interface_usable(struct ifaddrs *ifa);
 
 
 /**
+ * Return the name of the given network device if it is supported by rdmacm.
+ */
+std::string get_rdmacm_netdev(const char *ifa_name);
+
+
+/**
  * Check if the given network device is supported by rdmacm.
  */
 bool is_rdmacm_netdev(const char *ifa_name);
@@ -370,10 +376,13 @@ public:
     sock_addr_storage();
 
     sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr,
-                      bool is_rdmacm_netdev = false);
+                      bool is_rdmacm_netdev = false,
+                      std::string netdev_name = "",
+                      std::string rdmacm_netdev_name = "");
 
     void set_sock_addr(const struct sockaddr &addr, const size_t size,
-                       bool is_rdmacm_netdev = false);
+                       bool is_rdmacm_netdev = false,
+                       std::string netdev_name = "");
 
     void reset_to_any();
 
@@ -384,6 +393,8 @@ public:
     uint16_t get_port() const;
 
     bool is_rdmacm_netdev() const;
+
+    std::string netdev_name() const;
 
     size_t get_addr_size() const;
 
@@ -400,6 +411,7 @@ private:
     size_t                  m_size;
     bool                    m_is_valid;
     bool                    m_is_rdmacm_netdev;
+    std::string             m_netdev_name;
 };
 
 

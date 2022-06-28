@@ -122,7 +122,7 @@ protected:
             std::vector<ucp_request_t*> pending_reqs;
 
             if (i < wireup_ep_count) {
-                status = ucp_wireup_ep_create(m_ucp_ep, &discard_ep);
+                status = ucp_wireup_ep_create(m_ucp_ep, NULL, &discard_ep);
                 ASSERT_UCS_OK(status);
 
                 wireup_eps.push_back(discard_ep);

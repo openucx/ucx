@@ -67,7 +67,9 @@ struct ucp_wireup_ep {
 /**
  * Create a proxy endpoint for wireup.
  */
-ucs_status_t ucp_wireup_ep_create(ucp_ep_h ep, uct_ep_h *ep_p);
+ucs_status_t ucp_wireup_ep_create(ucp_ep_h ep,
+                                  const ucp_rsc_index_t *dst_rsc_indices,
+                                  uct_ep_h *ep_p);
 
 
 /**

@@ -608,6 +608,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     size_t address_length;
     ucp_tl_bitmap_t mem_access_tls;
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
+    unsigned addr_indices[UCP_MAX_LANES];
 
     ucs_memory_type_for_each(mem_type) {
         ucp_context_get_mem_access_tls(context, mem_type, &mem_access_tls);
@@ -639,7 +640,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
                                               &local_address,
                                               UCP_EP_INIT_FLAG_MEM_TYPE |
                                               UCP_EP_INIT_FLAG_INTERNAL,
-                                              ep_name,
+                                              ep_name, addr_indices,
                                               &worker->mem_type_ep[mem_type]);
         if (status != UCS_OK) {
             UCS_ASYNC_UNBLOCK(&worker->async);
@@ -726,7 +727,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
 
-    status = ucp_wireup_ep_create(ep, &uct_ep);
+    status = ucp_wireup_ep_create(ep, NULL, &uct_ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -741,9 +742,8 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                              const ucp_tl_bitmap_t *local_tl_bitmap,
                              const ucp_unpacked_address_t *remote_address,
                              unsigned ep_init_flags, const char *message,
-                             ucp_ep_h *ep_p)
+                             unsigned *addr_indices, ucp_ep_h *ep_p)
 {
-    unsigned addr_indices[UCP_MAX_LANES];
     ucp_tl_bitmap_t ep_tl_bitmap;
     ucs_status_t status;
     ucp_ep_h ep;
@@ -894,9 +894,9 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          const ucp_conn_request_h conn_request,
                                          ucp_ep_h *ep_p)
 {
+    unsigned addr_flags = ucp_cm_address_pack_flags(worker);
     ucp_unpacked_address_t remote_addr;
     unsigned ep_init_flags;
-    uint64_t addr_flags;
     ucs_status_t status;
     const void *worker_addr;
     unsigned i;
@@ -909,9 +909,6 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         UCS_ASYNC_UNBLOCK(&worker->async);
         return status;
     }
-
-    addr_flags = ucp_worker_common_address_pack_flags(worker) |
-                 UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
 
     if (ucp_address_is_am_only(worker_addr)) {
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE_ONLY;
@@ -966,6 +963,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 {
     ucp_context_h context  = worker->context;
     unsigned ep_init_flags = ucp_ep_init_flags(worker, params);
+    unsigned addr_indices[UCP_MAX_LANES];
     ucp_unpacked_address_t remote_address;
     ucp_ep_match_conn_sn_t conn_sn;
     ucs_status_t status;
@@ -1015,7 +1013,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
                                           &remote_address, ep_init_flags,
-                                          "from api call", &ep);
+                                          "from api call", addr_indices, &ep);
     if (status != UCS_OK) {
         goto out_free_address;
     }
