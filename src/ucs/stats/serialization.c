@@ -9,7 +9,7 @@
 #  include "config.h"
 #endif
 
-#include "libstats.h"
+#include "stats.h"
 
 #include <ucs/debug/log.h>
 #include <ucs/datastruct/sglib_wrapper.h>
@@ -138,9 +138,8 @@ static void ucs_stats_write_str(const char *str, FILE *stream)
     FWRITE(str, tmp, stream);
 }
 
-static void ucs_stats_read_counters(ucs_stats_counter_t *counters,
-                                    unsigned num_counters,
-                                    FILE *stream)
+static void ucs_stats_read_counters(ucs_stats_node_t *node,
+                                    unsigned num_counters, FILE *stream)
 {
     const unsigned counters_per_byte = 8 / UCS_STATS_BITS_PER_COUNTER;
     uint16_t value16;
@@ -159,19 +158,19 @@ static void ucs_stats_read_counters(ucs_stats_counter_t *counters,
                         ((i % counters_per_byte) * UCS_STATS_BITS_PER_COUNTER)) & 0x3;
         switch (v) {
         case UCS_STATS_COUNTER_ZERO:
-            counters[i] = 0;
+            UCS_STATS_SET_COUNTER(node, i, 0);
             break;
         case UCS_STATS_COUNTER_U16:
             FREAD_ONE(&value16, stream);
-            counters[i] = value16;
+            UCS_STATS_SET_COUNTER(node, i, value16);
             break;
         case UCS_STATS_COUNTER_U32:
             FREAD_ONE(&value32, stream);
-            counters[i] = value32;
+            UCS_STATS_SET_COUNTER(node, i, value32);
             break;
         case UCS_STATS_COUNTER_U64:
             FREAD_ONE(&value64, stream);
-            counters[i] = value64;
+            UCS_STATS_SET_COUNTER(node, i, value64);
             break;
         }
     }
@@ -255,7 +254,8 @@ ucs_stats_serialize_binary_recurs(FILE *stream, ucs_stats_node_t *node,
     /* Filter output */
     ucs_for_each_bit(counter_index, filter_node->counters_bitmask) {
         ucs_list_for_each(temp_node, &filter_node->type_list_head, type_list) {
-            filtered_counters[filtered_counter_index] += temp_node->counters[counter_index];
+            filtered_counters[filtered_counter_index] +=
+                    UCS_STATS_GET_COUNTER(temp_node, counter_index);
         }
         filtered_counter_index++;
     }
@@ -382,7 +382,7 @@ ucs_stats_serialize_text_recurs_filtered(FILE *stream,
         if (filter_node->counters_bitmask & UCS_BIT(i)) {
             ucs_stats_node_t * temp_node;
             ucs_list_for_each(temp_node, &filter_node->type_list_head, type_list) {
-                counters_acc += temp_node->counters[i];
+                counters_acc += UCS_STATS_GET_COUNTER(temp_node, i);
             }
 
             fprintf(stream, "%*s%s:%s%"PRIu64"%s",
@@ -432,8 +432,8 @@ ucs_status_t ucs_stats_serialize(FILE *stream, ucs_stats_node_t *root, int optio
 
 static ucs_status_t
 ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
-                             unsigned num_classes, size_t headroom,
-                             ucs_stats_node_t **p_root)
+                             unsigned num_classes, ucs_ptr_array_t *counters,
+                             size_t headroom, ucs_stats_node_t **p_root)
 {
     ucs_stats_node_t *node, *child;
     ucs_stats_class_t *cls;
@@ -467,7 +467,7 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
     }
 
     cls = classes[clsid];
-    ptr = malloc(headroom + sizeof *node + sizeof(ucs_stats_counter_t) * cls->num_counters);
+    ptr = malloc(headroom + sizeof *node);
     if (ptr == NULL) {
         ucs_error("Failed to allocate statistics counters (headroom %zu, %u counters)",
                   headroom, cls->num_counters);
@@ -481,20 +481,25 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
     node->name[namelen] = '\0';
     ucs_list_head_init(&node->children[UCS_STATS_INACTIVE_CHILDREN]);
     ucs_list_head_init(&node->children[UCS_STATS_ACTIVE_CHILDREN]);
+    node->base_counter_index = ucs_ptr_array_bulk_alloc(counters,
+                                                        cls->num_counters,
+                                                        NULL);
 
     /* Read counters */
-    ucs_stats_read_counters(node->counters, cls->num_counters, stream);
+    ucs_stats_read_counters(node, cls->num_counters, stream);
 
     /* Read children */
     do {
-        status = ucs_stats_deserialize_recurs(stream, classes, num_classes, 0,
-                                              &child);
+        status = ucs_stats_deserialize_recurs(stream, classes, num_classes,
+                                              counters, 0, &child);
         if (status == UCS_OK) {
-            ucs_list_add_tail(&node->children[UCS_STATS_ACTIVE_CHILDREN], &child->list);
+            ucs_list_add_tail(&node->children[UCS_STATS_ACTIVE_CHILDREN],
+                              &child->list);
         } else if (status == UCS_ERR_NO_MESSAGE) {
             break; /* Sentinel */
         } else {
-            ucs_error("ucs_stats_deserialize_recurs returned %s", ucs_status_string(status));
+            ucs_error("ucs_stats_deserialize_recurs returned %s",
+                      ucs_status_string(status));
             free(ptr); /* Error TODO free previous children */
             return status;
         }
@@ -504,7 +509,8 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
     return UCS_OK;
 }
 
-static void ucs_stats_free_classes(ucs_stats_class_t **classes, unsigned num_classes)
+static void ucs_stats_free_classes(ucs_stats_class_t **classes,
+                                   unsigned num_classes)
 {
     unsigned i, j;
 
@@ -518,7 +524,9 @@ static void ucs_stats_free_classes(ucs_stats_class_t **classes, unsigned num_cla
     free(classes);
 }
 
-ucs_status_t ucs_stats_deserialize(FILE *stream, ucs_stats_node_t **p_root)
+ucs_status_t ucs_stats_deserialize(FILE *stream,
+                                   ucs_ptr_array_t *counters,
+                                   ucs_stats_node_t **p_root)
 {
     ucs_stats_data_header_t hdr;
     ucs_stats_root_storage_t *s;
@@ -546,6 +554,8 @@ ucs_status_t ucs_stats_deserialize(FILE *stream, ucs_stats_node_t **p_root)
         goto err;
     }
 
+    ucs_ptr_array_init(counters, "libstats_deserialize_counters");
+
     /* Read classes */
     classes = malloc(hdr.num_classes * sizeof(*classes));
     for (i = 0; i < hdr.num_classes; ++i) {
@@ -562,13 +572,14 @@ ucs_status_t ucs_stats_deserialize(FILE *stream, ucs_stats_node_t **p_root)
             cls->counter_names[j] = ucs_stats_read_str(stream);
         }
         classes[i] = cls;
-
     }
 
     /* Read nodes */
     status = ucs_stats_deserialize_recurs(stream, classes, hdr.num_classes,
-                                         sizeof(ucs_stats_root_storage_t) - sizeof(ucs_stats_node_t),
-                                         p_root);
+                                          counters,
+                                          sizeof(ucs_stats_root_storage_t) -
+                                                  sizeof(ucs_stats_node_t),
+                                          p_root);
     if (status != UCS_OK) {
         if (status == UCS_ERR_NO_MESSAGE) {
             ucs_error("Error parsing statistics - misplaced sentinel");
