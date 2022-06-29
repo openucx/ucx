@@ -25,6 +25,17 @@
                                    UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
+enum {
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
+
+    /* Tag Matching address. It additionally contains QP number which
+     * is used for hardware offloads. */
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_TM,
+    UCT_RC_MLX5_IFACE_ADDR_TYPE_MASK = UCS_MASK(UCT_RC_MLX5_IFACE_ADDR_TYPE_TM),
+    UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_REMOTE = UCS_BIT(1)
+};
+
+
 /**
  * RC remote endpoint
  */

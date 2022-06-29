@@ -15,6 +15,9 @@
 
 #define RC_UNSIGNALED_INF UINT16_MAX
 
+#define UCT_RC_EP_ADD_FLUSH_REMOTE(_ep) \
+    (_ep)->flush_remote.state |= UCT_RC_EP_FLUSH_REMOTE_STATE_REQUESTED;
+
 enum {
     UCT_RC_FC_STAT_NO_CRED,
     UCT_RC_FC_STAT_TX_GRANT,
@@ -74,6 +77,15 @@ enum {
     UCT_RC_EP_FC_PURE_GRANT            = (UCT_RC_EP_FLAG_FC_HARD_REQ |
                                           UCT_RC_EP_FLAG_FC_SOFT_REQ |
                                           UCT_RC_EP_FLAG_FC_GRANT)
+};
+
+enum {
+    /* EP supports flush remote operation */
+    UCT_RC_EP_FLUSH_REMOTE_STATE_ENABLED   = UCS_BIT(0),
+
+    /* There are put/atomic operations in progress, need flush remote
+     * operation */
+    UCT_RC_EP_FLUSH_REMOTE_STATE_REQUESTED = UCS_BIT(1)
 };
 
 /*
@@ -217,6 +229,10 @@ struct uct_rc_ep {
     uint16_t            atomic_mr_offset;
     uint8_t             path_index;
     uint8_t             flags;
+    struct {
+        uint32_t        rkey;
+        uint8_t         state;
+    } flush_remote;
 };
 
 
@@ -234,6 +250,9 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp);
+
+void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
+                                    const void *resp);
 
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp);

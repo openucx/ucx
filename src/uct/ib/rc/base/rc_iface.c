@@ -102,6 +102,10 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "              the transport implementation.\n",
    ucs_offsetof(uct_rc_iface_common_config_t, ece), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"FLUSH_REMOTE", "y",
+   "Enable remote flush operation.",
+   ucs_offsetof(uct_rc_iface_common_config_t, flush_remote), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -577,6 +581,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->tx.cq_available       = tx_cq_size - 1;
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
+    self->config.flush_remote   = config->flush_remote;
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
@@ -1064,3 +1069,15 @@ static void ucp_send_op_mpool_obj_str(ucs_mpool_t *mp, void *obj,
 #endif
 }
 
+void uct_rc_iface_set_flush_remote(uct_rc_iface_t *iface,
+                                   const uct_iface_params_t *params)
+{
+    uct_ib_md_t *md = ucs_derived_of(iface->super.super.md, uct_ib_md_t);
+
+    if ((md->cap_flags & UCT_MD_FLAG_FLUSH_REMOTE) &&
+        iface->config.flush_remote &&
+        UCT_IFACE_PARAM_FEATURE(params, GET) &&
+        UCT_IFACE_PARAM_FEATURE(params, PUT)) {
+        iface->flags |= UCT_RC_IFACE_FLAG_FLUSH_REMOTE;
+    }
+}

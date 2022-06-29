@@ -37,7 +37,7 @@ struct ibv_ravh {
 #define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 8
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
-    (!!((_addr)->flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))
+    (!!((_addr)->super.flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))
 
 #define UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, _dci, _txqp, _txwq) \
     { \
@@ -68,11 +68,12 @@ typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
 
 
 typedef enum {
-    UCT_DC_MLX5_IFACE_ADDR_HW_TM   = UCS_BIT(0),
-    UCT_DC_MLX5_IFACE_ADDR_DC_V1   = UCS_BIT(1),
-    UCT_DC_MLX5_IFACE_ADDR_DC_V2   = UCS_BIT(2),
-    UCT_DC_MLX5_IFACE_ADDR_DC_VERS = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
-                                     UCT_DC_MLX5_IFACE_ADDR_DC_V2
+    UCT_DC_MLX5_IFACE_ADDR_HW_TM        = UCS_BIT(0),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V1        = UCS_BIT(1),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V2        = UCS_BIT(2),
+    UCT_DC_MLX5_IFACE_ADDR_FLUSH_REMOTE = UCS_BIT(3),
+    UCT_DC_MLX5_IFACE_ADDR_DC_VERS      = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
+                                          UCT_DC_MLX5_IFACE_ADDR_DC_V2
 } uct_dc_mlx5_iface_addr_flags_t;
 
 
@@ -99,14 +100,20 @@ typedef enum {
     UCT_DC_MLX5_IFACE_FLAG_DCT_FULL_HANDSHAKE       = UCS_BIT(6),
 
     /** Disable PUT capability (RDMA_WRITE) */
-    UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT              = UCS_BIT(7)
+    UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT              = UCS_BIT(7),
 } uct_dc_mlx5_iface_flags_t;
 
 
+typedef struct uct_dc_mlx5_iface_base_addr {
+    uct_ib_uint24_t qp_num;
+    uint8_t         atomic_mr_id;
+    uint8_t         flags;
+} UCS_S_PACKED uct_dc_mlx5_iface_base_addr_t;
+
+
 typedef struct uct_dc_mlx5_iface_addr {
-    uct_ib_uint24_t   qp_num;
-    uint8_t           atomic_mr_id;
-    uint8_t           flags;
+    uct_dc_mlx5_iface_base_addr_t super;
+    uint16_t                      flush_remote_rkey;
 } UCS_S_PACKED uct_dc_mlx5_iface_addr_t;
 
 
@@ -296,7 +303,7 @@ struct uct_dc_mlx5_iface {
     uint8_t                       version_flag;
 
     /* iface flags, see uct_dc_mlx5_iface_flags_t */
-    uint8_t                       flags;
+    uint16_t                      flags;
 
     uint8_t                       keepalive_dci;
 

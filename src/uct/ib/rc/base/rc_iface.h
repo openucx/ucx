@@ -13,6 +13,7 @@
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/arbiter.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/debug/log.h>
@@ -114,6 +115,11 @@ enum {
 };
 
 
+enum {
+    UCT_RC_IFACE_FLAG_FLUSH_REMOTE = UCS_BIT(0)
+};
+
+
 typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *resp);
 
 
@@ -149,6 +155,7 @@ typedef struct uct_rc_iface_common_config {
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
     unsigned long            ece;
+    int                      flush_remote;
 
     struct {
         double               timeout;
@@ -290,6 +297,7 @@ struct uct_rc_iface {
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
         uct_rc_fence_mode_t  fence_mode;
+        int                  flush_remote;
         unsigned             exp_backoff;
         uint32_t             ece;
         size_t               max_get_zcopy;
@@ -299,6 +307,8 @@ struct uct_rc_iface {
         uct_rc_send_handler_t  atomic32_ext_handler;  /* 32bit extended */
         uct_rc_send_handler_t  atomic64_ext_handler;  /* 64bit extended */
     } config;
+
+    uint16_t                 flags;
 
     UCS_STATS_NODE_DECLARE(stats)
 
@@ -387,6 +397,8 @@ void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface);
 
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
 
+void uct_rc_iface_set_flush_remote(uct_rc_iface_t *iface,
+                                   const uct_iface_params_t *params);
 
 /**
  * Creates an RC or DCI QP
@@ -617,6 +629,12 @@ uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
 #if ENABLE_DEBUG_DATA
     op->name = name;
 #endif
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_iface_is_flush_remote(uct_rc_iface_t *iface)
+{
+    return iface->flags & UCT_RC_IFACE_FLAG_FLUSH_REMOTE;
 }
 
 #endif

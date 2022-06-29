@@ -143,6 +143,14 @@ typedef struct uct_ib_md {
     uint64_t                 reg_mem_types;
     uint64_t                 cap_flags;
     char                     *name;
+    union {
+        uint32_t             flush_remote_rkey;
+        struct {
+            uint8_t          dummy; /* must be zero */
+            uint8_t          atomic_mr_id;
+            uint16_t         flush_remote_pack;
+        };
+    };
 } uct_ib_md_t;
 
 

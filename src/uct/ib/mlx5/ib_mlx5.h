@@ -280,6 +280,8 @@ typedef struct uct_ib_mlx5_md {
     } dv_tx_wqe_ratio;
     /* The maximum number of outstanding RDMA Read/Atomic operations per DC QP. */
     uint8_t                  max_rd_atomic_dc;
+    struct ibv_mr*           flush_remote_mr;
+    struct mlx5dv_devx_obj   *flush_remote_devx_mr;
 } uct_ib_mlx5_md_t;
 
 
