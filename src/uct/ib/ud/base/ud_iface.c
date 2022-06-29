@@ -1015,7 +1015,6 @@ void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
             ucs_fatal("iface(%p): unable to add iface timer handler - %s",
                       iface, ucs_status_string(status));
         }
-        ucs_assert(iface->async.timer_id != 0);
     }
 
     uct_ud_leave(iface);

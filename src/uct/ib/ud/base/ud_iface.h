@@ -200,7 +200,7 @@ struct uct_ud_iface {
     ucs_ptr_array_t       eps;
     struct {
         ucs_time_t                tick;
-        int                       timer_id;
+        unsigned                  timer_id;
         void                      *event_arg;
         uct_async_event_cb_t      event_cb;
         unsigned                  disable;

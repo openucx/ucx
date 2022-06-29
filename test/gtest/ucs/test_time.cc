@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -54,8 +55,8 @@ UCS_TEST_SKIP_COND_F(test_time, get_time,
 #endif
 
 UCS_TEST_F(test_time, timerq) {
-    static const int TIMER_ID_1  = 100;
-    static const int TIMER_ID_2  = 200;
+    unsigned timer_id1;
+    unsigned timer_id2;
 
     ucs_timer_queue_t timerq;
     ucs_status_t status;
@@ -69,7 +70,7 @@ UCS_TEST_F(test_time, timerq) {
         ucs_timer_t *timer;
         unsigned counter1, counter2;
 
-        status = ucs_timerq_init(&timerq);
+        status = ucs_timerq_init(&timerq, "timer_test");
         ASSERT_UCS_OK(status);
 
         EXPECT_TRUE(ucs_timerq_is_empty(&timerq));
@@ -77,8 +78,8 @@ UCS_TEST_F(test_time, timerq) {
 
         ucs_time_t current_time = time_base;
 
-        ucs_timerq_add(&timerq, TIMER_ID_1, interval1);
-        ucs_timerq_add(&timerq, TIMER_ID_2, interval2);
+        ucs_timerq_add(&timerq, interval1, &timer_id1);
+        ucs_timerq_add(&timerq, interval2, &timer_id2);
 
         EXPECT_FALSE(ucs_timerq_is_empty(&timerq));
         EXPECT_EQ(std::min(interval1, interval2), ucs_timerq_min_interval(&timerq));
@@ -91,8 +92,8 @@ UCS_TEST_F(test_time, timerq) {
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
             ucs_timerq_for_each_expired(timer, &timerq, current_time, {
-                if (timer->id == TIMER_ID_1) ++counter1;
-                if (timer->id == TIMER_ID_2) ++counter2;
+                if (_index == timer_id1) ++counter1;
+                if (_index == timer_id2) ++counter2;
             })
         }
         EXPECT_NEAR(test_time / interval1, counter1, 1);
@@ -103,13 +104,13 @@ UCS_TEST_F(test_time, timerq) {
          */
         counter1 = 0;
         counter2 = 0;
-        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
+        status = ucs_timerq_remove(&timerq, timer_id1);
         ASSERT_UCS_OK(status);
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
             ucs_timerq_for_each_expired(timer, &timerq, current_time, {
-                if (timer->id == TIMER_ID_1) ++counter1;
-                if (timer->id == TIMER_ID_2) ++counter2;
+                if (_index == timer_id1) ++counter1;
+                if (_index == timer_id2) ++counter2;
             })
         }
         EXPECT_EQ(0u, counter1);
@@ -119,23 +120,23 @@ UCS_TEST_F(test_time, timerq) {
         /*
          * Check that after rescheduling, both timers are invoked again
          */
-        ucs_timerq_add(&timerq, TIMER_ID_1, interval1);
+        ucs_timerq_add(&timerq, interval1, &timer_id1);
 
         counter1 = 0;
         counter2 = 0;
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
             ucs_timerq_for_each_expired(timer, &timerq, current_time, {
-                if (timer->id == TIMER_ID_1) ++counter1;
-                if (timer->id == TIMER_ID_2) ++counter2;
+                if (_index == timer_id1) ++counter1;
+                if (_index == timer_id2) ++counter2;
             })
         }
         EXPECT_NEAR(test_time / interval1, counter1, 1);
         EXPECT_NEAR(test_time / interval2, counter2, 1);
 
-        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
+        status = ucs_timerq_remove(&timerq, timer_id1);
         ASSERT_UCS_OK(status);
-        status = ucs_timerq_remove(&timerq, TIMER_ID_2);
+        status = ucs_timerq_remove(&timerq, timer_id2);
         ASSERT_UCS_OK(status);
 
         ucs_timerq_cleanup(&timerq);

@@ -63,19 +63,19 @@ ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
  *
  * Add timer handler.
  *
- * @param mode            Thread or signal.
- * @param interval        Timer interval.
- * @param cb              Callback function to execute.
- * @param arg             Argument to callback.
- * @param async           Async context to which events are delivered.
- *                        If NULL, safety is up to the user.
- * @param timer_id_p      Filled with timer id.
+ * @param mode      Thread or signal.
+ * @param interval  Timer interval.
+ * @param cb        Callback function to execute.
+ * @param arg       Argument to callback.
+ * @param async     Async context to which events are delivered.
+ *                  If NULL, safety is up to the user.
+ * @param id_p      Filled with timer id.
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
                                  ucs_async_event_cb_t cb, void *arg,
-                                 ucs_async_context_t *async, int *timer_id_p);
+                                 ucs_async_context_t *async, unsigned *id_p);
 
 
 /**
@@ -91,7 +91,7 @@ ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
  *
  * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t ucs_async_remove_handler(int id, int sync);
+ucs_status_t ucs_async_remove_handler(unsigned id, int sync);
 
 
 /**

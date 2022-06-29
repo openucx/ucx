@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -10,21 +11,22 @@
 #include "async.h"
 
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/time/timerq.h>
 
 
 /* Async event handler */
 typedef struct ucs_async_handler ucs_async_handler_t;
 struct ucs_async_handler {
-    int                        id;      /* Event/Timer ID */
-    ucs_async_mode_t           mode;    /* Event delivery mode */
-    ucs_event_set_types_t      events;  /* Bitmap of events */
-    pthread_t                  caller;  /* Thread which invokes the callback */
-    ucs_async_event_cb_t       cb;      /* Callback function */
-    void                       *arg;    /* Callback argument */
-    ucs_async_context_t        *async;  /* Async context for the handler. Can be NULL */
-    volatile uint32_t          missed;  /* Protect against adding to miss queue multiple times */
-    volatile uint32_t          refcount;
+    khint_t                    id;       /* Event/Timer ID */
+    ucs_async_mode_t           mode;     /* Event delivery mode */
+    ucs_event_set_types_t      events;   /* Bitmap of events */
+    pthread_t                  caller;   /* Thread which invokes the callback */
+    ucs_async_event_cb_t       cb;       /* Callback function */
+    void                       *arg;     /* Callback argument */
+    ucs_async_context_t        *async;   /* Async context for the handler. Can be NULL */
+    volatile uint32_t          missed;   /* Protect against adding to miss queue multiple times */
+    volatile uint32_t          refcount; /* Counts references for destroy flow */
 };
 
 
@@ -35,7 +37,7 @@ struct ucs_async_handler {
  * @param count         Number of events
  * @param events        Events to pass to the handler
  */
-ucs_status_t ucs_async_dispatch_handlers(int *handler_ids, size_t count,
+ucs_status_t ucs_async_dispatch_handlers(unsigned *handler_ids, size_t count,
                                          ucs_event_set_types_t events);
 
 
@@ -43,9 +45,11 @@ ucs_status_t ucs_async_dispatch_handlers(int *handler_ids, size_t count,
  * Dispatch timers from a timer queue.
  *
  * @param timerq        Timer queue whose timers to dispatch.
+ * @param base_index    Minimal index for the timer index to be added to.
  * @param current_time  Current time for checking timer expiration.
  */
 ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
+                                       unsigned base_index,
                                        ucs_time_t current_time);
 
 
@@ -79,11 +83,11 @@ typedef ucs_status_t (*ucs_async_modify_event_fd_t)(ucs_async_context_t *async,
                                                     ucs_event_set_types_t events);
 
 typedef ucs_status_t (*ucs_async_add_timer_t)(ucs_async_context_t *async,
-                                              int timer_id,
-                                              ucs_time_t interval);
+                                              ucs_time_t interval,
+                                              unsigned *timer_id_p);
 
 typedef ucs_status_t (*ucs_async_remove_timer_t)(ucs_async_context_t *async,
-                                                 int timer_id);
+                                                 unsigned timer_id);
 
 
 /**
