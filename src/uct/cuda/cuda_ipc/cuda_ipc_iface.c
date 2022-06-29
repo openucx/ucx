@@ -84,9 +84,13 @@ static double uct_cuda_ipc_iface_get_bw()
     int major_version;
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
+    status = UCT_CUDA_FUNC_LOG_ERR(cuCtxGetDevice(&cu_device));
     if (status != UCS_OK) {
-        return 0;
+        /* did not find a context with the calling thread, try device 0 */
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
+        if (status != UCS_OK) {
+            return 0;
+        }
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
