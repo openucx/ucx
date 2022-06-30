@@ -42,7 +42,13 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
 
         memh = ucs_derived_of(rregion, ucp_mem_t);
 
-        if (ucs_likely(ucs_test_all_flags(memh->md_map, reg_md_map))) {
+        if ((reg_md_map & context->dont_cache_md_map) &&
+            (mem_type == UCS_MEMORY_TYPE_HOST) &&
+            ((ucp_memh_address(memh) != address) ||
+             (ucp_memh_length(memh) != length))) {
+            ucs_rcache_region_invalidate(context->rcache, &memh->super,
+                    (ucs_rcache_invalidate_comp_func_t)ucs_empty_function, NULL);
+        } else if (ucs_likely(ucs_test_all_flags(memh->md_map, reg_md_map))) {
             *memh_p = memh;
             status = UCS_OK;
             goto out_unlock;
@@ -67,7 +73,7 @@ ucp_memh_put(ucp_context_h context, ucp_mem_h memh, int invalidate)
     }
 
     if (ucs_unlikely(context->rcache == NULL)) {
-        ucp_memh_unmap(context, memh, memh->md_map);
+        ucp_memh_cleanup(context, memh);
         ucs_free(memh);
         return;
     }
@@ -76,6 +82,14 @@ ucp_memh_put(ucp_context_h context, ucp_mem_h memh, int invalidate)
     if (invalidate) {
         ucs_rcache_region_invalidate(context->rcache, &memh->super,
                 (ucs_rcache_invalidate_comp_func_t)ucs_empty_function, NULL);
+    }
+
+    if ((memh->super.flags & UCS_RCACHE_REGION_FLAG_PGTABLE) &&
+        (memh->super.refcount == 2) &&
+        (memh->mem_type == UCS_MEMORY_TYPE_HOST)) {
+        ucp_memh_dereg(context, memh,
+                       memh->md_map & context->dont_cache_md_map);
+        memh->md_map &= ~context->dont_cache_md_map;
     }
 
     ucs_rcache_region_put_unsafe(context->rcache, &memh->super);

@@ -1368,6 +1368,10 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                 }
             }
 
+            if (md_attr->cap.flags & UCT_MD_FLAG_DONT_CACHE) {
+                context->dont_cache_md_map |= UCS_BIT(md_index);
+            }
+
             ++context->num_mds;
         } else {
             /* If the MD does not have transport resources (device or sockaddr),
@@ -1408,6 +1412,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_tls                  = 0;
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
+    context->dont_cache_md_map        = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
         context->reg_md_map[i] = 0;

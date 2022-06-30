@@ -280,8 +280,7 @@ ucp_mem_map_params2uct_flags(const ucp_mem_map_params_t *params)
     return flags;
 }
 
-static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
-                           ucp_md_map_t md_map)
+void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map)
 {
     ucp_md_index_t md_index;
     ucs_status_t status;
@@ -306,8 +305,9 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
     }
 }
 
-void ucp_memh_unmap(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map)
+void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
 {
+    ucp_md_map_t md_map = memh->md_map;
     uct_allocated_memory_t mem;
     ucs_status_t status;
 
@@ -411,7 +411,7 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
         memh->super.super.end   = (uintptr_t)reg_address + reg_length;
         memh->alloc_md_index    = UCP_NULL_RESOURCE;
         memh->alloc_method      = UCT_ALLOC_METHOD_LAST;
-        memh->map_count         = 0;
+        memh->map_count         = 1;
     } else {
         status = ucs_rcache_get_unsafe(context->rcache, reg_address, reg_length,
                                        PROT_READ | PROT_WRITE, NULL, &rregion);
@@ -576,10 +576,10 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         status = ucp_memh_get(context, address, params->length, memory_type,
                               context->reg_md_map[memory_type],
                               ucp_mem_map_params2uct_flags(params), memh_p);
-    }
 
-    if (status == UCS_OK) {
-        (*memh_p)->map_count++;
+        if (status == UCS_OK) {
+            (*memh_p)->map_count++;
+        }
     }
 
 out:
@@ -780,7 +780,7 @@ ucp_mpool_free(ucp_worker_h worker, ucs_mpool_t *mp, void *chunk)
     ucp_mem_desc_t *chunk_hdr;
 
     chunk_hdr = (ucp_mem_desc_t*)chunk - 1;
-    ucp_memh_put(worker->context, chunk_hdr->memh, 0);
+    ucp_memh_put(worker->context, chunk_hdr->memh, 1);
 }
 
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
@@ -830,7 +830,7 @@ ucp_rndv_frag_free_mpools(ucs_mpool_t *mp, void *chunk)
     ucp_rndv_frag_mp_chunk_hdr_t *chunk_hdr;
 
     chunk_hdr = (ucp_rndv_frag_mp_chunk_hdr_t*)chunk - 1;
-    ucp_memh_put(mpriv->worker->context, chunk_hdr->memh, 0);
+    ucp_memh_put(mpriv->worker->context, chunk_hdr->memh, 1);
     ucs_free(chunk_hdr);
 }
 
@@ -974,7 +974,7 @@ static ucs_status_t ucp_mem_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcach
     memh->md_map         = 0;
     memh->alloc_md_index = UCP_NULL_RESOURCE;
     memh->alloc_method   = UCT_ALLOC_METHOD_LAST;
-    memh->map_count      = 0;
+    memh->map_count      = 1;
 
     return UCS_OK;
 }
@@ -984,7 +984,7 @@ static void ucp_mem_rcache_mem_dereg_cb(void *ctx, ucs_rcache_t *rcache,
 {
     ucp_mem_h memh = ucs_derived_of(rregion, ucp_mem_t);
 
-    ucp_memh_unmap((ucp_context_h)ctx, memh, memh->md_map);
+    ucp_memh_cleanup((ucp_context_h)ctx, memh);
 }
 
 static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
