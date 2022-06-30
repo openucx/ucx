@@ -404,28 +404,18 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
+            request = ucp_tag_send_nbx(ep, buffer, length, TAG, param);
+            break;
         case UCX_PERF_CMD_TAG_SYNC:
+            request = ucp_tag_send_sync_nbx(ep, buffer, length, TAG, param);
+            break;
         case UCX_PERF_CMD_STREAM:
+            request = ucp_stream_send_nbx(ep, buffer, length, param);
+            break;
         case UCX_PERF_CMD_AM:
-            /* coverity[switch_selector_expr_is_constant] */
-            switch (CMD) {
-            case UCX_PERF_CMD_TAG:
-                request = ucp_tag_send_nbx(ep, buffer, length, TAG, param);
-                break;
-            case UCX_PERF_CMD_TAG_SYNC:
-                request = ucp_tag_send_sync_nbx(ep, buffer, length, TAG, param);
-                break;
-            case UCX_PERF_CMD_STREAM:
-                request = ucp_stream_send_nbx(ep, buffer, length, param);
-                break;
-            case UCX_PERF_CMD_AM:
-                request = ucp_am_send_nbx(ep, AM_ID, m_perf.ucp.am_hdr,
-                                          m_perf.params.ucp.am_hdr_size, buffer,
-                                          length, param);
-                break;
-            default:
-                return UCS_ERR_INVALID_PARAM;
-            }
+            request = ucp_am_send_nbx(ep, AM_ID, m_perf.ucp.am_hdr,
+                                      m_perf.params.ucp.am_hdr_size, buffer,
+                                      length, param);
             break;
         case UCX_PERF_CMD_PUT:
             /* coverity[switch_selector_expr_is_constant] */
