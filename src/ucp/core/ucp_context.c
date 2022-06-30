@@ -1223,8 +1223,6 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
                                             const char **sockaddr_cm_names,
                                             ucp_rsc_index_t num_sockaddr_cms)
 {
-    ucp_tl_bitmap_t cm_cmpts_bitmap = context->config.cm_cmpts_bitmap;
-    ucp_tl_bitmap_t cm_cmpts_bitmap_safe;
     ucp_rsc_index_t cmpt_idx, cm_idx;
 
     memset(&context->config.cm_cmpt_idxs, UCP_NULL_RESOURCE, UCP_MAX_RESOURCES);
@@ -1235,14 +1233,12 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
         /* go over the priority list and find the CM's cm_idx in the
          * sockaddr CMs bitmap. Save the cmpt_idx for the client/server usage
          * later */
-        cm_cmpts_bitmap_safe = cm_cmpts_bitmap;
-        UCS_BITMAP_FOR_EACH_BIT(cm_cmpts_bitmap_safe, cmpt_idx) {
+        UCS_BITMAP_FOR_EACH_BIT(context->config.cm_cmpts_bitmap, cmpt_idx) {
             if (!strcmp(sockaddr_cm_names[cm_idx], "*") ||
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
                          UCT_COMPONENT_NAME_MAX)) {
                 context->config.cm_cmpt_idxs[context->config.num_cm_cmpts++] = cmpt_idx;
-                UCS_BITMAP_UNSET(cm_cmpts_bitmap, cmpt_idx);
             }
         }
     }
