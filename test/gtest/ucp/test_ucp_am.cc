@@ -350,6 +350,8 @@ public:
         m_rx_memh     = NULL;
     }
 
+    void test_datatypes(std::function<void()> test_f);
+
 protected:
     virtual ucs_memory_type_t tx_memtype() const
     {
@@ -640,6 +642,26 @@ protected:
     void                            *m_rx_buf;
     ucp_mem_h                       m_rx_memh;
 };
+
+void test_ucp_am_nbx::test_datatypes(std::function<void()> test_f)
+{
+    static const std::vector<int> datatypes{UCP_DATATYPE_CONTIG,
+                                            UCP_DATATYPE_IOV,
+                                            UCP_DATATYPE_GENERIC};
+
+    for (const auto &dt_it : datatypes) {
+        m_dt = make_dt(dt_it);
+
+        for (const auto &rx_dt_it : datatypes) {
+            m_rx_dt = make_dt(rx_dt_it);
+            test_f();
+            destroy_dt(m_rx_dt);
+        }
+
+        destroy_dt(m_dt);
+    }
+}
+
 
 UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
 {
@@ -1158,10 +1180,6 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_seg_size)
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx_reply {
 public:
-    static const uint64_t dts_bitmap = UCS_BIT(UCP_DATATYPE_CONTIG) |
-                                       UCS_BIT(UCP_DATATYPE_IOV) |
-                                       UCS_BIT(UCP_DATATYPE_GENERIC);
-
     virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
@@ -1171,42 +1189,12 @@ public:
         return ep_params;
     }
 
-    static void get_test_dts(std::vector<ucp_test_variant> &variants)
-    {
-        /* coverity[overrun-buffer-val] */
-        add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
-                           dts_bitmap, ucp_datatype_class_names);
-    }
-
-    static void base_test_generator(std::vector<ucp_test_variant> &variants)
-    {
-        /* push variant for the receive type, on top of existing dts variants */
-        /* coverity[overrun-buffer-val] */
-        add_variant_values(variants, get_test_dts, dts_bitmap,
-                           ucp_datatype_class_names);
-    }
-
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_values(variants, base_test_generator,
+        add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
                            UCP_ERR_HANDLING_MODE_NONE);
-        add_variant_values(variants, base_test_generator,
+        add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
                            UCP_ERR_HANDLING_MODE_PEER, "errh");
-    }
-
-    void init()
-    {
-        test_ucp_am_nbx::init();
-
-        m_dt    = make_dt(get_variant_value(3));
-        m_rx_dt = make_dt(get_variant_value(4));
-    }
-
-    void cleanup()
-    {
-        destroy_dt(m_dt);
-        destroy_dt(m_rx_dt);
-        test_ucp_am_nbx::cleanup();
     }
 
     virtual ucs_status_t
@@ -1222,25 +1210,26 @@ public:
 private:
     ucp_err_handling_mode_t get_err_mode() const
     {
-        return static_cast<ucp_err_handling_mode_t>(get_variant_value(5));
+        return static_cast<ucp_err_handling_mode_t>(get_variant_value(3));
     }
 };
 
-UCS_TEST_P(test_ucp_am_nbx_dts, short_send, "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
+           "RNDV_THRESH=-1")
 {
-    test_am(1);
-}
-
-UCS_TEST_P(test_ucp_am_nbx_dts, bcopy_send, "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
-{
-    test_am(4 * UCS_KBYTE);
-    test_am(64 * UCS_KBYTE);
+    test_datatypes([&]() {
+        test_am(1);
+        test_am(4 * UCS_KBYTE);
+        test_am(64 * UCS_KBYTE);
+    });
 }
 
 UCS_TEST_P(test_ucp_am_nbx_dts, zcopy_send, "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 {
-    test_am(4 * UCS_KBYTE);
-    test_am(64 * UCS_KBYTE);
+    test_datatypes([&]() {
+        test_am(4 * UCS_KBYTE);
+        test_am(64 * UCS_KBYTE);
+    });
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)
@@ -1445,51 +1434,12 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, deferred_reject_rndv)
     EXPECT_EQ(UCS_OK, request_wait(sptr));
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv)
-
-
-class test_ucp_am_nbx_rndv_dts : public test_ucp_am_nbx_rndv {
-public:
-    static void get_test_variants_dts(std::vector<ucp_test_variant> &variants)
-    {
-        /* coverity[overrun-buffer-val] */
-        add_variant_values(variants, test_ucp_am_nbx_rndv::get_test_variants,
-                           test_ucp_am_nbx_dts::dts_bitmap,
-                           ucp_datatype_class_names);
-    }
-
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        /* push variant for the receive type, on top of existing dts variants */
-        /* coverity[overrun-buffer-val] */
-        add_variant_values(variants, get_test_variants_dts,
-                           test_ucp_am_nbx_dts::dts_bitmap,
-                           ucp_datatype_class_names);
-    }
-
-    void init()
-    {
-        test_ucp_am_nbx::init();
-
-        m_dt    = make_dt(get_variant_value(2));
-        m_rx_dt = make_dt(get_variant_value(3));
-    }
-
-    void cleanup()
-    {
-        destroy_dt(m_dt);
-        destroy_dt(m_rx_dt);
-
-        test_ucp_am_nbx::cleanup();
-    }
-};
-
-UCS_TEST_P(test_ucp_am_nbx_rndv_dts, rndv, "RNDV_THRESH=256")
+UCS_TEST_P(test_ucp_am_nbx_rndv, dts, "RNDV_THRESH=256")
 {
-    test_am_send_recv(64 * UCS_KBYTE);
+    test_datatypes([&]() { test_am_send_recv(64 * UCS_KBYTE); });
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv_dts);
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv);
 
 
 class test_ucp_am_nbx_rndv_memtype : public test_ucp_am_nbx_rndv {
