@@ -31,18 +31,18 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
 
 static ucs_status_t uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->cap.flags            = UCT_MD_FLAG_REG       |
-                                    UCT_MD_FLAG_NEED_RKEY |
-                                    UCT_MD_FLAG_INVALIDATE;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->cap.alloc_mem_types  = 0;
-    md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->cap.detect_mem_types = 0;
-    md_attr->cap.dmabuf_mem_types = 0;
-    md_attr->cap.max_alloc        = 0;
-    md_attr->cap.max_reg          = ULONG_MAX;
-    md_attr->rkey_packed_size     = sizeof(uct_cuda_ipc_key_t);
-    md_attr->reg_cost             = UCS_LINEAR_FUNC_ZERO;
+    md_attr->flags            = UCT_MD_FLAG_REG       |
+                                UCT_MD_FLAG_NEED_RKEY |
+                                UCT_MD_FLAG_INVALIDATE;
+    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->alloc_mem_types  = 0;
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->detect_mem_types = 0;
+    md_attr->dmabuf_mem_types = 0;
+    md_attr->max_alloc        = 0;
+    md_attr->max_reg          = ULONG_MAX;
+    md_attr->rkey_packed_size = sizeof(uct_cuda_ipc_key_t);
+    md_attr->reg_cost         = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }

@@ -99,10 +99,10 @@ static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     uct_mm_md_query(md, md_attr, 0);
 
-    md_attr->cap.flags        |= UCT_MD_FLAG_REG;
+    md_attr->flags            |= UCT_MD_FLAG_REG;
     md_attr->reg_cost          = ucs_linear_func_make(60.0e-9, 0);
-    md_attr->cap.max_reg       = ULONG_MAX;
-    md_attr->cap.reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->max_reg           = ULONG_MAX;
+    md_attr->reg_mem_types     = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->rkey_packed_size  = sizeof(uct_xpmem_packed_rkey_t);
 
     return UCS_OK;

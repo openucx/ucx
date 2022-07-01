@@ -1514,15 +1514,18 @@ typedef struct uct_md_mem_attr {
      * Dmabuf file descriptor to expose memory regions across devices. Refer
      * (https://01.org/linuxgraphics/gfx-docs/drm/driver-api/dma-buf.html).
      * If the md does not support querying fd object associated with the region,
-     * then UCT_DMABUF_FD_INVALID is returned. It is responsibility of the
-     * user to close returned fd once used using close().
+     * then dmabuf_fd is set to UCT_DMABUF_FD_INVALID by uct_md_mem_query(). It
+     * is the responsibility of the user to close returned fd once used using
+     * close().
      */
     int               dmabuf_fd;
 
     /**
-     * Offset of given address from the start of the memory object (identified
-     * by dmabuf_fd) backing the memory region being queried. This offset may
-     * not be used if UCT_DMABUF_FD_INVALID is retured as dmabuf_fd.
+     * Offset of the given address from the start of the memory object (identified
+     * by dmabuf_fd) backing the memory region being queried. If the associated
+     * dmabuf_fd is set to UCT_DMABUF_FD_INVALID or if offset cannot be
+     * determined then dmabuf_offset is set to UCT_DMABUF_OFFSET_INVALID by
+     * uct_md_mem_query().
      */
     size_t            dmabuf_offset;
 } uct_md_mem_attr_t;

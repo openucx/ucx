@@ -388,17 +388,17 @@ static uct_iface_ops_t uct_self_iface_ops = {
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    attr->cap.flags            = UCT_MD_FLAG_REG |
-                                 UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->cap.alloc_mem_types  = 0;
-    attr->cap.detect_mem_types = 0;
-    attr->cap.dmabuf_mem_types = 0;
-    attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->cap.max_alloc        = 0;
-    attr->cap.max_reg          = ULONG_MAX;
-    attr->rkey_packed_size     = 0;
-    attr->reg_cost             = UCS_LINEAR_FUNC_ZERO;
+    attr->flags            = UCT_MD_FLAG_REG |
+                             UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
+    attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->alloc_mem_types  = 0;
+    attr->detect_mem_types = 0;
+    attr->dmabuf_mem_types = 0;
+    attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->max_alloc        = 0;
+    attr->max_reg          = ULONG_MAX;
+    attr->rkey_packed_size = 0;
+    attr->reg_cost         = UCS_LINEAR_FUNC_ZERO;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }

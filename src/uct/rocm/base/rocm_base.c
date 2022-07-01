@@ -232,6 +232,11 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         mem_attr->dmabuf_fd = UCT_DMABUF_FD_INVALID;
     }
 
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+        /* unsupported */
+        mem_attr->dmabuf_offset = UCT_DMABUF_OFFSET_INVALID;
+    }
+
     return UCS_OK;
 }
 

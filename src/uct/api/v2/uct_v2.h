@@ -436,6 +436,36 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
 
 /**
  * @ingroup UCT_MD
+ * @brief UCT MD attributes field mask
+ *
+ * The enumeration allows specifying which fields in @ref uct_md_attr_v2_t
+ * are present.
+ */
+typedef enum uct_md_attr_field {
+    UCT_MD_ATTR_FIELD_MAX_ALLOC        = UCS_BIT(0),  /**< Indicate max allocation size. */
+    UCT_MD_ATTR_FIELD_MAX_REG          = UCS_BIT(1),  /**< Indicate max registration size. */
+    UCT_MD_ATTR_FIELD_FLAGS            = UCS_BIT(2),  /**< Indicate capability flags. */
+    UCT_MD_ATTR_FIELD_REG_MEM_TYPES    = UCS_BIT(3),  /**< Indicate memory types
+                                                           that the MD can register. */
+    UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES = UCS_BIT(4),  /**< Indicate memory types
+                                                           that the MD can detect. */
+    UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES  = UCS_BIT(5),  /**< Indicate memory types
+                                                           that the MD can allocate. */
+    UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES = UCS_BIT(6),  /**< Indicate memory types
+                                                           that the MD can access. */
+    UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES = UCS_BIT(7),  /**< Indicate memory types
+                                                           for which the MD can
+                                                           return a dmabuf_fd. */
+    UCT_MD_ATTR_FIELD_REG_COST         = UCS_BIT(8),  /**< Indicate registration cost. */
+    UCT_MD_ATTR_FIELD_COMPONENT_NAME   = UCS_BIT(9),  /**< Indicate component name. */
+    UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE = UCS_BIT(10), /**< Indicate size of buffer needed
+                                                           for packed rkey. */
+    UCT_MD_ATTR_FIELD_LOCAL_CPUS       = UCS_BIT(11)  /**< Indicate CPUs near the resource. */
+} uct_md_attr_field_t;
+
+
+/**
+ * @ingroup UCT_MD
  * @brief  Memory domain attributes.
  *
  * This structure defines the attributes of a Memory Domain which includes
@@ -445,24 +475,73 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
  * memory types for which dmabuf attributes can be returned.
  */
 typedef struct {
-    struct {
-        uint64_t             max_alloc;        /**< Maximal allocation size */
-        size_t               max_reg;          /**< Maximal registration size */
-        uint64_t             flags;            /**< UCT_MD_FLAG_xx */
-        uint64_t             reg_mem_types;    /**< Bitmap of memory types that Memory Domain can be registered with */
-        uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
-        uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on */
-        uint64_t             access_mem_types; /**< Memory types that Memory Domain can access */
-        uint64_t             dmabuf_mem_types; /**< Memory types for which MD can provide DMABUF fd */
-    } cap;
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_md_attr_field_t.
+     */
+    uint64_t          field_mask;
 
-    ucs_linear_func_t        reg_cost;         /**< Memory registration cost estimation
-                                                    (time,seconds) as a linear function
-                                                    of the buffer size. */
+    /**
+     * Maximal allocation size.
+     */
+    uint64_t          max_alloc;
 
-    char                     component_name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
-    size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
-    ucs_cpu_set_t            local_cpus;       /**< Mask of CPUs near the resource */
+    /**
+     * Maximal registration size.
+     */
+    size_t            max_reg;
+
+    /**
+     * UCT_MD_FLAG_xx.
+     */
+    uint64_t          flags;
+
+    /**
+     * Bitmap of memory types which the Memory Domain can be register.
+     */
+    uint64_t          reg_mem_types;
+
+    /**
+     * Bitmap of memory types that Memory Domain can detect if address belongs
+     * to it.
+     */
+    uint64_t          detect_mem_types;
+
+    /**
+     * Bitmap of memory types that Memory Domain can allocate memory on.
+     */
+    uint64_t          alloc_mem_types;
+
+    /**
+     * Memory types that Memory Domain can access.
+     */
+    uint64_t          access_mem_types;
+
+    /**
+     * Memory types for which MD can provide DMABUF fd.
+     */
+    uint64_t          dmabuf_mem_types;
+
+    /**
+     * Memory registration cost estimation (time,seconds) as a linear function
+     * of the buffer size.
+     */
+    ucs_linear_func_t reg_cost;
+
+    /**
+     * Component name.
+     */
+    char              component_name[UCT_COMPONENT_NAME_MAX];
+
+    /**
+     * Size of buffer needed for packed rkey.
+     */
+    size_t            rkey_packed_size;
+
+    /**
+     * Mask of CPUs near the resource.
+     */
+    ucs_cpu_set_t     local_cpus;
 } uct_md_attr_v2_t;
 
 

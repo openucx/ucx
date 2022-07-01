@@ -27,6 +27,7 @@
 #define UCT_INVALID_RKEY           ((uintptr_t)(-1))
 #define UCT_INLINE_API             static UCS_F_ALWAYS_INLINE
 #define UCT_DMABUF_FD_INVALID      -1
+#define UCT_DMABUF_OFFSET_INVALID  -1
 
 
 /**

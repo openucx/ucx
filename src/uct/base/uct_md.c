@@ -383,25 +383,38 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     ucs_status_t status;
     uct_md_attr_v2_t md_attr_v2;
 
+    md_attr_v2.field_mask = UCT_MD_ATTR_FIELD_MAX_ALLOC        |
+                            UCT_MD_ATTR_FIELD_MAX_REG          |
+                            UCT_MD_ATTR_FIELD_FLAGS            |
+                            UCT_MD_ATTR_FIELD_REG_MEM_TYPES    |
+                            UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES |
+                            UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES  |
+                            UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES |
+                            UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES |
+                            UCT_MD_ATTR_FIELD_REG_COST         |
+                            UCT_MD_ATTR_FIELD_COMPONENT_NAME   |
+                            UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE |
+                            UCT_MD_ATTR_FIELD_LOCAL_CPUS;
+
     status = md->ops->query(md, &md_attr_v2);
     if (status != UCS_OK) {
         return status;
     }
 
-    md_attr->cap.max_alloc        = md_attr_v2.cap.max_alloc;
-    md_attr->cap.max_reg          = md_attr_v2.cap.max_reg;
-    md_attr->cap.flags            = md_attr_v2.cap.flags;
-    md_attr->cap.reg_mem_types    = md_attr_v2.cap.reg_mem_types;
-    md_attr->cap.detect_mem_types = md_attr_v2.cap.detect_mem_types;
-    md_attr->cap.alloc_mem_types  = md_attr_v2.cap.alloc_mem_types;
-    md_attr->cap.access_mem_types = md_attr_v2.cap.access_mem_types;
+    md_attr->cap.max_alloc        = md_attr_v2.max_alloc;
+    md_attr->cap.max_reg          = md_attr_v2.max_reg;
+    md_attr->cap.flags            = md_attr_v2.flags;
+    md_attr->cap.reg_mem_types    = md_attr_v2.reg_mem_types;
+    md_attr->cap.detect_mem_types = md_attr_v2.detect_mem_types;
+    md_attr->cap.alloc_mem_types  = md_attr_v2.alloc_mem_types;
+    md_attr->cap.access_mem_types = md_attr_v2.access_mem_types;
     md_attr->reg_cost             = md_attr_v2.reg_cost;
     md_attr->rkey_packed_size     = md_attr_v2.rkey_packed_size;
 
-    memcpy(&md_attr->local_cpus, &md_attr_v2.local_cpus, sizeof(ucs_cpu_set_t));
+    memcpy(&md_attr->local_cpus, &md_attr_v2.local_cpus, sizeof(md_attr->local_cpus));
 
     /* Component name + data */
-    memcpy(md_attr->component_name, md->component->name, UCT_COMPONENT_NAME_MAX);
+    memcpy(md_attr->component_name, md->component->name, sizeof(md_attr->component_name));
 
     return UCS_OK;
 }
