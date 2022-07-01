@@ -645,12 +645,14 @@ uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_ep_t *cep)
     conn_req_args.client_address = client_saddr;
     ucs_strncpy_safe(conn_req_args.dev_name, ifname_str, UCT_DEVICE_NAME_MAX);
 
-    ucs_debug("fd %d: remote_data: (field_mask=%"PRIu64") "
-              "dev_addr: %s (length=%zu), conn_priv_data_length=%zu",
-              cep->fd, remote_data.field_mask,
-              ucs_sockaddr_str((const struct sockaddr*)remote_data.dev_addr,
-                               peer_str, UCS_SOCKADDR_STRING_LEN),
-              remote_data.dev_addr_length, remote_data.conn_priv_data_length);
+    status = ucs_sockaddr_get_ipstr(client_saddr.addr, peer_str,
+                                    UCS_SOCKADDR_STRING_LEN);
+    ucs_assert(status == UCS_OK);
+    ucs_debug("fd %d, dev_addr: flags 0x%x length %zu %s %s,"
+              " conn_priv_data_length=%zu",
+              cep->fd, remote_dev_addr->flags, remote_data.dev_addr_length,
+              ucs_sockaddr_address_family_str(remote_dev_addr->sa_family),
+              peer_str, remote_data.conn_priv_data_length);
 
     /* the endpoint, passed as the conn_request to the callback, will be passed
      * to uct_ep_create() which will be invoked by the user and therefore moving
