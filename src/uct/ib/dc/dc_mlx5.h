@@ -68,11 +68,12 @@ typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
 
 
 typedef enum {
-    UCT_DC_MLX5_IFACE_ADDR_HW_TM   = UCS_BIT(0),
-    UCT_DC_MLX5_IFACE_ADDR_DC_V1   = UCS_BIT(1),
-    UCT_DC_MLX5_IFACE_ADDR_DC_V2   = UCS_BIT(2),
-    UCT_DC_MLX5_IFACE_ADDR_DC_VERS = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
-                                     UCT_DC_MLX5_IFACE_ADDR_DC_V2
+    UCT_DC_MLX5_IFACE_ADDR_HW_TM      = UCS_BIT(0),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V1      = UCS_BIT(1),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V2      = UCS_BIT(2),
+    UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY = UCS_BIT(3),
+    UCT_DC_MLX5_IFACE_ADDR_DC_VERS    = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
+                                        UCT_DC_MLX5_IFACE_ADDR_DC_V2
 } uct_dc_mlx5_iface_addr_flags_t;
 
 
@@ -108,6 +109,15 @@ typedef struct uct_dc_mlx5_iface_addr {
     uint8_t           atomic_mr_id;
     uint8_t           flags;
 } UCS_S_PACKED uct_dc_mlx5_iface_addr_t;
+
+
+typedef struct uct_dc_mlx5_iface_flush_addr {
+    uct_dc_mlx5_iface_addr_t super;
+    /* this is upper 16 bit of rkey used for flush_remote operation,
+     * middle 8 bit is stored in atomic_mr_id of uct_dc_mlx5_iface_addr_t
+     * structure, the lowest 8 bit must be 0 (not stored) */
+    uint16_t                 flush_rkey_hi;
+} UCS_S_PACKED uct_dc_mlx5_iface_flush_addr_t;
 
 
 /**
@@ -296,7 +306,7 @@ struct uct_dc_mlx5_iface {
     uint8_t                       version_flag;
 
     /* iface flags, see uct_dc_mlx5_iface_flags_t */
-    uint8_t                       flags;
+    uint16_t                      flags;
 
     uint8_t                       keepalive_dci;
 

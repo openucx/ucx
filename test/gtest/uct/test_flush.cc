@@ -147,6 +147,16 @@ public:
         }
     }
 
+    void check_skip_test_flush_remote() {
+        if ((GetParam()->tl_name != "dc_mlx5") &&
+            (GetParam()->tl_name != "rc_verbs") &&
+            (GetParam()->tl_name != "rc_mlx5")) {
+            UCS_TEST_SKIP_R("not supported");
+        }
+
+        m_flush_flags = UCT_FLUSH_FLAG_REMOTE;
+    }
+
     void test_flush_put_bcopy(flush_func_t flush) {
         const size_t length = 8;
         mapped_buffer sendbuf(length, SEED1, sender());
@@ -219,6 +229,36 @@ public:
         uct_iface_set_am_handler(receiver().iface(), get_am_id(), NULL, NULL, 0);
 
         recvbuf.pattern_check(SEED3);
+    }
+
+    void test_flush_put_zcopy(flush_func_t flush) {
+        const size_t length  = 10 * UCS_MBYTE;
+        mapped_buffer sendbuf(length, SEED1, sender());
+        mapped_buffer recvbuf(length, SEED2, receiver());
+
+        uct_completion_t zcomp;
+        zcomp.count  = 2;
+        zcomp.status = UCS_OK;
+        zcomp.func   = NULL;
+
+        ucs_status_t status;
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), 1);
+        do {
+            status = uct_ep_put_zcopy(sender().ep(0), iov, iovcnt,
+                                      recvbuf.addr(), recvbuf.rkey(), &zcomp);
+            progress();
+        } while (status == UCS_ERR_NO_RESOURCE);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            --zcomp.count;
+        }
+
+        (this->*flush)();
+
+        EXPECT_EQ(1, zcomp.count); /* Zero copy op should be already completed
+                                      since flush returned */
+        recvbuf.pattern_check(SEED1);
     }
 
     void test_flush_am_disconnect(flush_func_t flush, bool destroy_ep) {
@@ -442,6 +482,20 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
         test_flush_put_bcopy(&uct_flush_test::flush_ep_no_comp);
     }
+}
+
+UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_remote,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY) ||
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY)) {
+    check_skip_test_flush_remote();
+    test_flush_put_bcopy(&uct_flush_test::flush_ep_nb);
+}
+
+UCS_TEST_SKIP_COND_P(uct_flush_test, put_zcopy_flush_ep_remote,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY) ||
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY)) {
+    check_skip_test_flush_remote();
+    test_flush_put_zcopy(&uct_flush_test::flush_ep_nb);
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_iface_no_comp,

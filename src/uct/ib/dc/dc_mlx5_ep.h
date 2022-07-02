@@ -46,14 +46,20 @@ enum uct_dc_mlx5_ep_flags {
 
     /* Error handler already called or flush(CANCEL) disabled it */
     UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(7),
+
+    /* EP supports flush remote operation */
+    UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY          = UCS_BIT(8),
+
+    /* Flush remote operation should be invoked */
+    UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(9),
+
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(8)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(10)
 #else
     UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
 #endif
 };
-
 
 struct uct_dc_mlx5_ep {
     /*
@@ -63,17 +69,18 @@ struct uct_dc_mlx5_ep {
      */
     union {
         struct {
-            uct_base_ep_t         super;
-            ucs_arbiter_group_t   arb_group;
+            uct_base_ep_t       super;
+            ucs_arbiter_group_t arb_group;
         };
-        ucs_list_link_t           list;
+        ucs_list_link_t         list;
     };
 
-    uint8_t                       dci;
-    uint16_t                      flags;
-    uint16_t                      atomic_mr_offset;
-    uct_rc_fc_t                   fc;
-    uct_ib_mlx5_base_av_t         av;
+    uint8_t                     dci;
+    uint8_t                     atomic_mr_id;
+    uint16_t                    flags;
+    uint16_t                    flush_rkey_hi;
+    uct_rc_fc_t                 fc;
+    uct_ib_mlx5_base_av_t       av;
 };
 
 typedef struct {
