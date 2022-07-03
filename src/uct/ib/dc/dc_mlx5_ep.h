@@ -62,25 +62,14 @@ enum uct_dc_mlx5_ep_flags {
 };
 
 struct uct_dc_mlx5_ep {
-    /*
-     * per value of 'flags':
-     * INVALID   - 'list' is added to iface->tx.gc_list.
-     * Otherwise - 'super' and 'arb_group' are used.
-     */
-    union {
-        struct {
-            uct_base_ep_t       super;
-            ucs_arbiter_group_t arb_group;
-        };
-        ucs_list_link_t         list;
-    };
-
-    uint8_t                     dci;
-    uint8_t                     atomic_mr_id;
-    uint16_t                    flags;
-    uint16_t                    flush_rkey_hi;
-    uct_rc_fc_t                 fc;
-    uct_ib_mlx5_base_av_t       av;
+    uct_base_ep_t         super;
+    ucs_arbiter_group_t   arb_group;
+    uint8_t               dci;
+    uint8_t               atomic_mr_id;
+    uint16_t              flags;
+    uint16_t              flush_rkey_hi;
+    uct_rc_fc_t           fc;
+    uct_ib_mlx5_base_av_t av;
 };
 
 typedef struct {
