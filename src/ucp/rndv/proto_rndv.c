@@ -74,9 +74,11 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
-        mem_sys_dev   = params->super.super.select_param->sys_dev;
         *sys_dev_map |= UCS_BIT(ep_sys_dev);
+    }
 
+    mem_sys_dev = params->super.super.select_param->sys_dev;
+    ucs_for_each_bit(ep_sys_dev, *sys_dev_map) {
         status = ucs_topo_get_distance(mem_sys_dev, ep_sys_dev, sys_distance);
         ucs_assertv_always(status == UCS_OK, "mem_info->sys_dev=%d sys_dev=%d",
                            mem_sys_dev, ep_sys_dev);
