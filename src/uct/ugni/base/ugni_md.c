@@ -36,19 +36,52 @@ uct_ugni_query_md_resources(uct_component_h component,
 
 static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->rkey_packed_size = 3 * sizeof(uint64_t);
-    md_attr->flags            = UCT_MD_FLAG_REG       |
-                                UCT_MD_FLAG_NEED_MEMH |
-                                UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->alloc_mem_types  = 0;
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->detect_mem_types = 0;
-    md_attr->dmabuf_mem_types = 0;
-    md_attr->max_alloc        = 0;
-    md_attr->max_reg          = ULONG_MAX;
-    md_attr->reg_cost         = ucs_linear_func_make(1000.0e-9, 0.007e-9);
-    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_FLAGS) {
+        md_attr->flags            = UCT_MD_FLAG_REG       |
+                                    UCT_MD_FLAG_NEED_MEMH |
+                                    UCT_MD_FLAG_NEED_RKEY;
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE) {
+        md_attr->rkey_packed_size = 3 * sizeof(uint64_t);
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_REG_MEM_TYPES) {
+        md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES) {
+        md_attr->alloc_mem_types  = 0;
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES) {
+        md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES) {
+        md_attr->detect_mem_types = 0;
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES) {
+        md_attr->dmabuf_mem_types = 0;
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_MAX_ALLOC) {
+        md_attr->max_alloc        = 0;
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_MAX_REG) {
+        md_attr->max_reg          = ULONG_MAX;
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_REG_COST) {
+        md_attr->reg_cost         = ucs_linear_func_make(1000.0e-9, 0.007e-9);
+    }
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_LOCAL_CPUS) {
+        memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+    }
+
     return UCS_OK;
 }
 

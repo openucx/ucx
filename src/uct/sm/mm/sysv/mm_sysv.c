@@ -45,7 +45,11 @@ static ucs_config_field_t uct_sysv_iface_config_table[] = {
 static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     uct_mm_md_query(md, md_attr, ULONG_MAX);
-    md_attr->rkey_packed_size = sizeof(uct_sysv_packed_rkey_t);
+
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE) {
+        md_attr->rkey_packed_size = sizeof(uct_sysv_packed_rkey_t);
+    }
+
     return UCS_OK;
 }
 

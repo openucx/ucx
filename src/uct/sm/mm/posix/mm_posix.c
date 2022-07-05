@@ -131,8 +131,10 @@ static ucs_status_t uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr
     uct_mm_md_query(&md->super, md_attr,
                     shm_statvfs.f_bsize * shm_statvfs.f_bavail);
 
-    md_attr->rkey_packed_size = sizeof(uct_posix_packed_rkey_t) +
-                                uct_posix_iface_addr_length(md);
+    if (md_attr->field_mask & UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE) {
+        md_attr->rkey_packed_size = sizeof(uct_posix_packed_rkey_t) +
+                                    uct_posix_iface_addr_length(md);
+    }
     return UCS_OK;
 }
 
