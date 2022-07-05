@@ -1574,7 +1574,7 @@ static unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
     kh_foreach_key(&iface->tx.fc_hash, ep_key, {
         ep     = (uct_dc_mlx5_ep_t*)ep_key;
         status = uct_dc_mlx5_ep_check_fc(iface, ep);
-        if ((status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE)) {
+        if ((status != UCS_OK) && (status != UCS_ERR_NO_RESOURCE)) {
             ucs_warn("ep %p: flow-control check failed: %s", ep,
                      ucs_status_string(status));
         }

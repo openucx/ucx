@@ -461,23 +461,12 @@ public:
     {
         uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->ep(ep_idx)->iface,
                                                     uct_dc_mlx5_iface_t);
+        uct_dc_mlx5_ep_t *ep       = ucs_derived_of(e->ep(ep_idx),
+                                                    uct_dc_mlx5_ep_t);
 
         get_fc_ptr(e, ep_idx)->fc_wnd = fc_wnd;
-
-        if (fc_wnd <= iface->super.super.config.fc_hard_thresh) {
-            int ret;
-            khiter_t it = kh_put(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash,
-                                 (uint64_t)e->ep(ep_idx), &ret);
-            if ((ret == UCS_KH_PUT_FAILED) || (ret == UCS_KH_PUT_KEY_PRESENT)) {
-                return;
-            }
-
-            uct_dc_mlx5_ep_fc_entry_t *fc_entry = &kh_value(&iface->tx.fc_hash,
-                                                            it);
-
-            fc_entry->seq       = iface->tx.fc_seq++;
-            fc_entry->send_time = ucs_get_time();
-        }
+        ucs_status_t status           = uct_dc_mlx5_ep_check_fc(iface, ep);
+        ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE));
     }
 
     virtual void disable_entity(entity *e) {
@@ -507,6 +496,16 @@ public:
 
         iface->flags |= UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER;
     }
+
+    virtual void test_pending_grant(int wnd, uint64_t *wait_fc_seq = NULL)
+    {
+        /* Test uses manipulation with available TX resources which may break
+           DCI allocation ordering. allow out-of-order DCI waitq */
+        ignore_dci_waitq_reorder(m_e2);
+
+        test_rc_flow_control::test_pending_grant(wnd, wait_fc_seq);
+        flush();
+    }
 };
 
 UCS_TEST_P(test_dc_flow_control, general_enabled)
@@ -524,12 +523,15 @@ UCS_TEST_P(test_dc_flow_control, general_disabled)
 
 UCS_TEST_P(test_dc_flow_control, pending_grant)
 {
-    /* test uses manipulation with available TX resources which may break
-       DCI allocation ordering. allow out-of-order DCI waitq */
-    ignore_dci_waitq_reorder(m_e2);
-
     test_pending_grant(5);
-    flush();
+}
+
+UCS_TEST_P(test_dc_flow_control, pending_grant_and_resend_hard_req,
+           "DC_FC_HARD_REQ_TIMEOUT=0.1s")
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(m_e1->iface(),
+                                                uct_dc_mlx5_iface_t);
+    test_pending_grant(5, &iface->tx.fc_seq);
 }
 
 UCS_TEST_P(test_dc_flow_control, fc_disabled_flush)
