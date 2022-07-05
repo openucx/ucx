@@ -25,6 +25,16 @@
                                    UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
+enum {
+    /* Tag Matching address. It additionally contains QP number which
+     * is used for hardware offloads. */
+    UCT_RC_MLX5_IFACE_ADDR_FLAG_TM         = UCS_BIT(0),
+
+    /* Address contains flush remote rkey */
+    UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_RKEY = UCS_BIT(1)
+};
+
+
 /**
  * RC remote endpoint
  */
