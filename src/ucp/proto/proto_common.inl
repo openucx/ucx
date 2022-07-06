@@ -70,17 +70,18 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_zcopy_cleanup(ucp_request_t *req, unsigned dt_mask)
+ucp_proto_request_zcopy_clean(ucp_request_t *req, unsigned dt_mask)
 {
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter, dt_mask);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, dt_mask);
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_proto_request_zcopy_cleanup(req, UCP_DT_MASK_CONTIG_IOV);
+    ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_CONTIG_IOV);
     ucp_request_complete_send(req, status);
 }
 

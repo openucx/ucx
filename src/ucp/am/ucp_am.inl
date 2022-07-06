@@ -30,4 +30,10 @@ ucp_am_check_init_params(const ucp_proto_init_params_t *init_params,
            !(init_params->select_param->op_flags & exclude_flags);
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_config_is_am(const ucp_proto_config_t *proto_config)
+{
+    return UCS_BIT(proto_config->select_param.op_id) & UCP_AM_OP_ID_MASK_ALL;
+}
+
 #endif

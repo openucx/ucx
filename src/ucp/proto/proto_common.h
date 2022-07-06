@@ -262,10 +262,16 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
+ucs_status_t ucp_proto_request_init(ucp_request_t *req);
+
+void ucp_proto_request_restart(ucp_request_t *req);
 
 void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status);
 
+void ucp_proto_request_bcopy_reset(ucp_request_t *request);
 
 void ucp_proto_request_zcopy_abort(ucp_request_t *request, ucs_status_t status);
+
+void ucp_proto_request_zcopy_reset(ucp_request_t *request);
 
 #endif

@@ -59,10 +59,10 @@ ucp_am_eager_zcopy_pack_user_header(ucp_request_t *req)
 {
     ucp_mem_desc_t *reg_desc;
 
-    /* reg_desc could already be allocated for a replayed request */
-    if (req->send.msg_proto.am.header.reg_desc != NULL) {
-        return UCS_OK;
-    }
+    /* Request must be in initial state or after @ref ucp_proto_t::reset */
+    ucs_assertv(req->send.msg_proto.am.header.reg_desc == NULL,
+                "request %p: am.header.reg_desc=%p", req,
+                req->send.msg_proto.am.header.reg_desc);
 
     reg_desc = ucp_worker_mpool_get(&req->send.ep->worker->reg_mp);
     if (ucs_unlikely(reg_desc == NULL)) {

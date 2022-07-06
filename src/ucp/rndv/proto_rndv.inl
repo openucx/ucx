@@ -82,7 +82,7 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
     }
 
     ucp_send_request_id_release(req);
-    ucp_proto_request_zcopy_cleanup(req, UCP_DT_MASK_ALL);
+    ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, status);
 
     return UCS_OK;

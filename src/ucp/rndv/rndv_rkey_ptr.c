@@ -179,6 +179,7 @@ ucp_proto_t ucp_rndv_rkey_ptr_proto = {
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_FETCH] = ucp_proto_rndv_rkey_ptr_fetch_progress,
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
