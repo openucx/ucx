@@ -544,8 +544,9 @@ void ucp_proto_perf_node_deref(ucp_proto_perf_node_t **perf_node_p)
     --perf_node->refcount;
     if (perf_node->refcount == 0) {
         ucp_proto_perf_node_free(perf_node);
-        *perf_node_p = NULL;
     }
+
+    *perf_node_p = NULL;
 }
 
 static void
@@ -580,6 +581,16 @@ void ucp_proto_perf_node_add_child(ucp_proto_perf_node_t *perf_node,
 
     ucp_proto_perf_node_append_child(perf_node, child_perf_node);
     ucp_proto_perf_node_ref(child_perf_node);
+}
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_get_child(ucp_proto_perf_node_t *perf_node, unsigned n)
+{
+    if ((perf_node == NULL) || (n >= ucs_array_length(&perf_node->children))) {
+        return NULL;
+    }
+
+    return ucs_array_elem(&perf_node->children, n);
 }
 
 void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
@@ -626,6 +637,22 @@ const char *ucp_proto_perf_node_name(ucp_proto_perf_node_t *perf_node)
 const char *ucp_proto_perf_node_desc(ucp_proto_perf_node_t *perf_node)
 {
     return (perf_node == NULL) ? "(null)" : perf_node->desc;
+}
+
+void ucp_proto_perf_node_replace(ucp_proto_perf_node_t **old_perf_node_p,
+                                 ucp_proto_perf_node_t **new_perf_node_p)
+{
+    ucp_proto_perf_node_t **child_elem;
+
+    if (*old_perf_node_p != NULL) {
+        ucs_array_for_each(child_elem, &(*old_perf_node_p)->children) {
+            ucp_proto_perf_node_add_child(*new_perf_node_p, *child_elem);
+        }
+    }
+
+    ucp_proto_perf_node_deref(old_perf_node_p);
+    *old_perf_node_p = *new_perf_node_p;
+    *new_perf_node_p = NULL;
 }
 
 static void
