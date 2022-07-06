@@ -11,6 +11,7 @@
 #include "proto_debug.h"
 #include "proto_common.inl"
 
+#include <ucp/am/ucp_am.inl>
 #include <uct/api/v2/uct_v2.h>
 
 
@@ -631,13 +632,13 @@ ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params)
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.state.uct_comp);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
 
     /* request should NOT be on pending queue because when we decrement the last
      * refcount the request is not on the pending queue any more
      */
-    ucp_proto_request_zcopy_cleanup(req, UCP_DT_MASK_ALL);
-    ucp_request_complete_send(req, req->send.state.uct_comp.status);
+    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
 
 void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)
@@ -692,6 +693,57 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
     }
 }
 
+ucs_status_t ucp_proto_request_init(ucp_request_t *req)
+{
+    ucp_ep_h ep         = req->send.ep;
+    ucp_worker_h worker = ep->worker;
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_proto_select_t *proto_select;
+    size_t msg_length;
+    ucs_status_t status;
+
+    proto_select = ucp_proto_select_get(worker, ep->cfg_index,
+                                        req->send.proto_config->rkey_cfg_index,
+                                        &rkey_cfg_index);
+    if (proto_select == NULL) {
+        return UCS_OK;
+    }
+
+    msg_length = req->send.state.dt_iter.length;
+    if (ucp_proto_config_is_am(req->send.proto_config)) {
+        msg_length += req->send.msg_proto.am.header.length;
+    }
+
+    /* Select from protocol hash according to saved request parameters */
+    status = ucp_proto_request_lookup_proto(
+            worker, ep, req, proto_select, rkey_cfg_index,
+            &req->send.proto_config->select_param, msg_length);
+    if (status != UCS_OK) {
+        /* will try again later */
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    return UCS_OK;
+}
+
+void ucp_proto_request_restart(ucp_request_t *req)
+{
+    ucs_status_t status;
+
+    ucs_assertv_always(
+            ucp_datatype_iter_is_begin(&req->send.state.dt_iter),
+            "req %p: request restart from the middle state is not implemented",
+            req);
+
+    req->send.proto_config->proto->clean(req);
+
+    status = ucp_proto_request_init(req);
+    ucs_assertv_always((status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE),
+                       "req %p: invalid protocol initialization, status %s",
+                       req, ucs_status_string(status));
+    ucp_request_send(req);
+}
+
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucs_assert(UCS_STATUS_IS_ERR(status));
@@ -707,9 +759,22 @@ void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status)
     ucp_request_complete_send(request, status);
 }
 
+void ucp_proto_request_bcopy_clean(ucp_request_t *request)
+{
+    ucs_assert(ucp_datatype_iter_is_begin(&request->send.state.dt_iter));
+    ucp_datatype_iter_cleanup(&request->send.state.dt_iter, UCP_DT_MASK_ALL);
+    request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+}
+
 void ucp_proto_request_zcopy_abort(ucp_request_t *request, ucs_status_t status)
 {
     ucp_invoke_uct_completion(&request->send.state.uct_comp, status);
+}
+
+void ucp_proto_request_zcopy_clean(ucp_request_t *request)
+{
+    ucs_assert(ucp_datatype_iter_is_begin(&request->send.state.dt_iter));
+    ucp_proto_request_zcopy_clean_by_mask(request, UCP_DT_MASK_ALL);
 }
 
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)

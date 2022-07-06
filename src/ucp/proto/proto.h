@@ -270,6 +270,14 @@ typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
 
 
 /**
+ * Clean UCP request to initial stage to be ready to start with other
+ * protocol or aborted.
+ *
+ * @param [in]  request Request to clean up.
+ */
+typedef void (*ucp_request_clean_func_t)(ucp_request_t *request);
+
+/**
  * UCP base protocol definition
  */
 struct ucp_proto {
@@ -290,6 +298,13 @@ struct ucp_proto {
      * resources, such as memory handles, remote keys, request ID, etc.
      */
     ucp_request_abort_func_t abort;
+
+    /*
+     * Clean up a request (which is scheduled to a pending queue).
+     * The method should release associated resources, such as memory handles,
+     * remote keys, request ID, etc.
+     */
+    ucp_request_clean_func_t clean;
 };
 
 
