@@ -259,7 +259,7 @@ UCS_TEST_P(test_perf_node, basic)
     ucp_proto_perf_node_t *n2_ref = n2;
     ucp_proto_perf_node_ref(n2_ref);
     ucp_proto_perf_node_own_child(NULL, &n2_ref);
-    EXPECT_NE(nullptr, n2_ref); /* n2 still not released */
+    EXPECT_EQ(nullptr, n2_ref);
 
     /* NULL node is ignored */
     ucp_proto_perf_node_add_data(NULL, "ignored", UCS_LINEAR_FUNC_ZERO);
@@ -270,9 +270,77 @@ UCS_TEST_P(test_perf_node, basic)
     ucp_proto_perf_node_add_child(n1, n2);  /* Have 2 references to n2 */
 
     ucp_proto_perf_node_deref(&n2); /* n3 should still be alive */
+    EXPECT_EQ(nullptr, n2);
     EXPECT_EQ(std::string("node3"), ucp_proto_perf_node_desc(n3));
 
     ucp_proto_perf_node_deref(&n1); /* Release n1,n2,n3 */
+    EXPECT_EQ(nullptr, n1);
+}
+
+UCS_TEST_P(test_perf_node, replace_node)
+{
+    ucp_proto_perf_node_t *parent1 = ucp_proto_perf_node_new_data("parent1", "");
+    ucp_proto_perf_node_t *child1 = ucp_proto_perf_node_new_data("child1", "");
+    ucp_proto_perf_node_t *child2 = ucp_proto_perf_node_new_data("child2", "");
+
+    ucp_proto_perf_node_add_child(parent1, child1);
+    ucp_proto_perf_node_add_child(parent1, child2);
+    EXPECT_EQ(child1, ucp_proto_perf_node_get_child(parent1, 0));
+    EXPECT_EQ(child2, ucp_proto_perf_node_get_child(parent1, 1));
+
+    ucp_proto_perf_node_t *parent2 = ucp_proto_perf_node_new_data("parent2", "");
+    ucp_proto_perf_node_t *parent2_ptr = parent2;
+    ASSERT_NE(parent2_ptr, parent1);
+
+    ucp_proto_perf_node_replace(&parent1, &parent2);
+
+    /* parent2 variable should be set to NULL */
+    EXPECT_EQ(nullptr, parent2);
+
+    /* parent1 variable should be set to parent2 */
+    EXPECT_EQ(parent2_ptr, parent1);
+
+    /* Children should be reassigned */
+    EXPECT_EQ(child1, ucp_proto_perf_node_get_child(parent2_ptr, 0));
+    EXPECT_EQ(child2, ucp_proto_perf_node_get_child(parent2_ptr, 1));
+
+    ucp_proto_perf_node_deref(&parent1);
+    ucp_proto_perf_node_deref(&child1);
+    ucp_proto_perf_node_deref(&child2);
+}
+
+
+UCS_TEST_P(test_perf_node, replace_null)
+{
+    /* Replacing NULL with NULL is a no-op */
+    {
+        ucp_proto_perf_node_t *n1 = nullptr;
+        ucp_proto_perf_node_t *n2 = nullptr;
+        ucp_proto_perf_node_replace(&n1, &n2);
+    }
+
+    /* Replacing a node by NULL should release the node (without leaks) */
+    {
+        ucp_proto_perf_node_t *parent1 = ucp_proto_perf_node_new_data("parent1", "");
+        ucp_proto_perf_node_t *child1 = ucp_proto_perf_node_new_data("child1", "");
+        ucp_proto_perf_node_t *child2 = ucp_proto_perf_node_new_data("child2", "");
+        ucp_proto_perf_node_own_child(parent1, &child1);
+        ucp_proto_perf_node_own_child(parent1, &child2);
+
+        ucp_proto_perf_node_t *null_node = nullptr;
+        ucp_proto_perf_node_replace(&parent1, &null_node);
+        EXPECT_EQ(nullptr, parent1);
+    }
+
+    /* Replacing a NULL should swap variables */
+    {
+        ucp_proto_perf_node_t *node = ucp_proto_perf_node_new_data("node", "");
+        ucp_proto_perf_node_t *null_node = nullptr;
+        ucp_proto_perf_node_replace(&null_node, &node);
+        EXPECT_EQ(nullptr, node);
+        EXPECT_NE(nullptr, null_node);
+        ucp_proto_perf_node_deref(&null_node);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_perf_node, all, "all")
