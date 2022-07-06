@@ -50,7 +50,7 @@ ucp_proto_put_offload_short_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
-        .super.latency       = -150e-9,
+        .super.latency       = 0,
         .super.overhead      = 0,
         .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,

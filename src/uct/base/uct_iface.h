@@ -975,11 +975,29 @@ void uct_tl_register(uct_component_t *component, uct_tl_t *tl);
 
 void uct_tl_unregister(uct_tl_t *tl);
 
+static UCS_F_ALWAYS_INLINE int uct_ep_op_is_short(uct_ep_operation_t op)
+{
+    return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_AM_SHORT) |
+                          UCS_BIT(UCT_EP_OP_PUT_SHORT) |
+                          UCS_BIT(UCT_EP_OP_GET_SHORT) |
+                          UCS_BIT(UCT_EP_OP_EAGER_SHORT) |
+                          UCS_BIT(UCT_EP_OP_ATOMIC_POST));
+}
+
+static UCS_F_ALWAYS_INLINE int uct_ep_op_is_bcopy(uct_ep_operation_t op)
+{
+    return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_AM_BCOPY) |
+                          UCS_BIT(UCT_EP_OP_PUT_BCOPY) |
+                          UCS_BIT(UCT_EP_OP_GET_BCOPY) |
+                          UCS_BIT(UCT_EP_OP_EAGER_BCOPY));
+}
+
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_zcopy(uct_ep_operation_t op)
 {
     return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_AM_ZCOPY) |
                           UCS_BIT(UCT_EP_OP_PUT_ZCOPY) |
                           UCS_BIT(UCT_EP_OP_GET_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_ATOMIC_FETCH) |
                           UCS_BIT(UCT_EP_OP_EAGER_ZCOPY));
 }
 
