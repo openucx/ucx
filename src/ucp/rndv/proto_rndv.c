@@ -66,8 +66,8 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
-        ucs_trace_req("lane[%d]: selected md %s\n", lane,
-                      worker->context->tl_mds[md_index].rsc.md_name);
+        ucs_trace_req("lane[%d]: selected md %s index %u", lane,
+                      worker->context->tl_mds[md_index].rsc.md_name, md_index);
         *md_map |= UCS_BIT(md_index);
 
         if (ep_sys_dev >= UCP_MAX_SYS_DEVICES) {
@@ -84,6 +84,29 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                            mem_sys_dev, ep_sys_dev);
         ++sys_distance;
     }
+}
+
+static ucp_md_map_t
+ucp_proto_rndv_md_map_to_remote(const ucp_proto_rndv_ctrl_init_params_t *params,
+                                ucp_md_map_t md_map)
+{
+    ucp_worker_h worker   = params->super.super.worker;
+    ucp_context_h context = worker->context;
+    const ucp_ep_config_key_lane_t *lane_cfg;
+    const ucp_ep_config_t *ep_config;
+    uint64_t remote_md_map;
+
+    ep_config     = &worker->ep_config[params->super.super.ep_cfg_index];
+    remote_md_map = 0;
+
+    ucs_carray_for_each(lane_cfg, ep_config->key.lanes,
+                        ep_config->key.num_lanes) {
+        if (md_map & UCS_BIT(context->tl_rscs[lane_cfg->rsc_index].md_index)) {
+            remote_md_map |= UCS_BIT(lane_cfg->dst_md_index);
+        }
+    }
+
+    return remote_md_map;
 }
 
 /*
@@ -111,7 +134,8 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
      * buffer properties (since remote side is expected to access the local
      * buffer)
      */
-    rkey_config_key.md_map       = rpriv->md_map;
+    rkey_config_key.md_map       = ucp_proto_rndv_md_map_to_remote(params,
+                                                                   rpriv->md_map);
     rkey_config_key.ep_cfg_index = ep_cfg_index;
     rkey_config_key.sys_dev      = params->mem_info.sys_dev;
     rkey_config_key.mem_type     = params->mem_info.type;
@@ -126,6 +150,9 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     if (status != UCS_OK) {
         return status;
     }
+
+    ucs_trace("rndv select remote protocol rkey_config->md_map=0x%" PRIx64,
+              rkey_config_key.md_map);
 
     rkey_config = &worker->rkey_config[rkey_cfg_index];
     select_elem = ucp_proto_select_lookup_slow(worker,
