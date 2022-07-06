@@ -217,7 +217,8 @@ ucp_proto_t ucp_rndv_get_zcopy_proto = {
          [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_zcopy_fetch_progress,
          [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
-    .abort    = ucp_rndv_get_zcopy_proto_abort
+    .abort    = ucp_rndv_get_zcopy_proto_abort,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(
@@ -328,5 +329,6 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress,
     },
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };

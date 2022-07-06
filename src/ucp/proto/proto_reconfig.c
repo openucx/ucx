@@ -19,25 +19,10 @@
 static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_h ep         = req->send.ep;
-    ucp_worker_h worker = ep->worker;
-    ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_select_t *proto_select;
     ucs_status_t status;
 
-    proto_select = ucp_proto_select_get(worker, ep->cfg_index,
-                                        req->send.proto_config->rkey_cfg_index,
-                                        &rkey_cfg_index);
-    if (proto_select == NULL) {
-        return UCS_OK;
-    }
-
-    /* Select from protocol hash according to saved request parameters */
-    status = ucp_proto_request_lookup_proto(
-            worker, ep, req, proto_select, rkey_cfg_index,
-            &req->send.proto_config->select_param,
-            req->send.state.dt_iter.length);
-    if (status != UCS_OK) {
+    status = ucp_proto_request_init(req);
+    if (ucs_unlikely(status != UCS_OK)) {
         /* will try again later */
         return UCS_ERR_NO_RESOURCE;
     }
@@ -97,5 +82,6 @@ ucp_proto_t ucp_reconfig_proto = {
     .init     = ucp_proto_reconfig_init,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_reconfig_progress},
-    .abort    = ucp_request_complete_send
+    .abort    = ucp_request_complete_send,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function
 };

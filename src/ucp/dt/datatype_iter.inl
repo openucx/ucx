@@ -480,6 +480,15 @@ ucp_datatype_iter_is_end_position(const ucp_datatype_iter_t *dt_iter,
 }
 
 /*
+ * Check if the iterator has start position
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_datatype_iter_is_begin(const ucp_datatype_iter_t *dt_iter)
+{
+    return dt_iter->offset == 0;
+}
+
+/*
  * Check if the iterator has reached the end
  */
 static UCS_F_ALWAYS_INLINE int

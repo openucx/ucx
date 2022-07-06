@@ -270,6 +270,15 @@ typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
 
 
 /**
+ * Reset UCP request to its initial state and release any resources related to
+ * the specific protocol. Used to switch a send request to a different protocol.
+ *
+ * @param [in]  request Request to reset.
+ */
+typedef void (*ucp_request_reset_func_t)(ucp_request_t *request);
+
+
+/**
  * UCP base protocol definition
  */
 struct ucp_proto {
@@ -290,6 +299,13 @@ struct ucp_proto {
      * resources, such as memory handles, remote keys, request ID, etc.
      */
     ucp_request_abort_func_t abort;
+
+    /*
+     * Reset a request (which is scheduled to a pending queue).
+     * The method should release associated resources, such as memory handles,
+     * remote keys, request ID, etc.
+     */
+    ucp_request_reset_func_t reset;
 };
 
 

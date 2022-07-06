@@ -163,5 +163,6 @@ ucp_proto_t ucp_tag_rndv_proto = {
     .init     = ucp_tag_rndv_rts_init,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_tag_rndv_rts_progress},
-    .abort    = ucp_proto_rndv_rts_abort
+    .abort    = ucp_proto_rndv_rts_abort,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
