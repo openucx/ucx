@@ -1095,6 +1095,10 @@ UCS_TEST_F(test_array, dynamic_array_int_append) {
     ucs_array_set_length(&test_array, NUM_ELEMS);
     EXPECT_EQ(NUM_ELEMS, ucs_array_length(&test_array));
 
+    /* test pop_back */
+    ucs_array_pop_back(&test_array);
+    EXPECT_EQ(NUM_ELEMS - 1, ucs_array_length(&test_array));
+
     /* set length to max capacity */
     new_length = ucs_array_capacity(&test_array);
     ucs_array_set_length(&test_array, new_length);
