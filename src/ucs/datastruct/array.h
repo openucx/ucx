@@ -321,6 +321,18 @@ BEGIN_C_DECLS
 
 
 /**
+ * Remove the last element in the array (decrease length by 1)
+ *
+ * @param _array    Array from which to remove the last element
+ */
+#define ucs_array_pop_back(_array) \
+    ({ \
+        ucs_assert(ucs_array_length(_array) > 0); \
+        --(_array)->length; \
+    })
+
+
+/**
  * Extract array contents and reset the array
  */
 #define ucs_array_extract_buffer(_name, _array) \
