@@ -203,16 +203,11 @@ public:
             UCS_TEST_SKIP_R("No interface for testing");
         }
 
-        static const std::string dc_tls[] = { "dc", "dc_x", "dc_mlx5", "ib" };
-
-        bool has_dc = has_any_transport(
-            std::vector<std::string>(dc_tls,
-                                     dc_tls + ucs_static_array_size(dc_tls)));
-
         /* FIXME: select random interface, except for DC transport, which do not
                   yet support having different gid_index for different UCT
                   endpoints on same iface */
-        int saddr_idx = has_dc ? 0 : (ucs::rand() % saddrs.size());
+        int saddr_idx = has_any_transport( { "dc", "dc_x", "dc_mlx5", "ib" } ) ?
+                        0 : (ucs::rand() % saddrs.size());
         m_test_addr   = saddrs[saddr_idx];
     }
 
