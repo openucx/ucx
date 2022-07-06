@@ -1620,12 +1620,12 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
-    uct_ep_operation_t op = UCT_ATTR_VALUE(PERF, perf_attr, operation,
-                                           OPERATION, UCT_EP_OP_LAST);
-    uct_iface_attr_t iface_attr;
-    double send_post_overhead_bcopy;
+    uct_ep_operation_t op  = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                            OPERATION, UCT_EP_OP_LAST);
+    const double wqe_fetch = 350e-9;
+    double send_pre_overhead, send_post_overhead;
     double send_post_overhead_zcopy;
-    double send_pre_overhead;
+    uct_iface_attr_t iface_attr;
     ucs_status_t status;
 
     status = uct_iface_query(iface, &iface_attr);
@@ -1636,23 +1636,28 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     switch (ucs_arch_get_cpu_vendor()) {
     case UCS_CPU_VENDOR_FUJITSU_ARM:
         send_pre_overhead        = 100e-9;
-        send_post_overhead_bcopy = 400e-9;
-        send_post_overhead_zcopy = 450e-9;
+        send_post_overhead       = 400e-9;
+        send_post_overhead_zcopy = 50e-9;
         break;
     default:
         send_pre_overhead        = iface_attr.overhead;
-        send_post_overhead_bcopy = send_post_overhead_zcopy = 0;
+        /* Doorbell write effect on CPU operations pipeline */
+        send_post_overhead       = 40e-9;
+        /* Completion for every operation */
+        send_post_overhead_zcopy = 20e-9;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
         perf_attr->send_pre_overhead = send_pre_overhead;
+        if (uct_ep_op_is_bcopy(op)) {
+            perf_attr->send_pre_overhead += 5e-9; /* Allocate send desc */
+        }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
+        perf_attr->send_post_overhead = send_post_overhead;
         if (uct_ep_op_is_zcopy(op)) {
-            perf_attr->send_post_overhead = send_post_overhead_zcopy;
-        } else {
-            perf_attr->send_post_overhead = send_post_overhead_bcopy;
+            perf_attr->send_post_overhead += send_post_overhead_zcopy;
         }
     }
 
@@ -1666,6 +1671,9 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         perf_attr->latency = iface_attr.latency;
+        if (uct_ep_op_is_bcopy(op) || uct_ep_op_is_zcopy(op)) {
+            perf_attr->latency.c += wqe_fetch;
+        }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
