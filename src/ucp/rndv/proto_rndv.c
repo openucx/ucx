@@ -267,8 +267,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
         return status;
     }
 
-    ucp_proto_common_memreg_time(&params->super, rpriv->md_map, &memreg_time,
-                                 &memreg_perf_node);
+    ucp_proto_init_memreg_time(&params->super, rpriv->md_map, &memreg_time,
+                               &memreg_perf_node);
     ucp_proto_perf_node_own_child(ctrl_perf.node, &memreg_perf_node);
 
     ctrl_latency = send_time + receive_time + params->super.overhead * 2;
