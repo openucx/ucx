@@ -70,7 +70,6 @@ static ucs_status_t
 ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_perf_range_t *perf_range = &init_params->caps->ranges[0];
-    ucp_proto_perf_type_t perf_type;
 
     /* Default reconfiguration protocol is a fallback for any case protocol
      * selection is unsuccessful. The protocol keeps queuing requests until they
@@ -85,9 +84,7 @@ ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
 
     /* Set the performance estimation as worse than any other protocol */
     perf_range->max_length = SIZE_MAX;
-    for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
-        perf_range->perf[perf_type] = ucs_linear_func_make(INFINITY, 0);
-    }
+    ucp_proto_perf_set(perf_range->perf, ucs_linear_func_make(INFINITY, 0));
 
     perf_range->node = ucp_proto_perf_node_new_data("dummy", "");
     return UCS_OK;

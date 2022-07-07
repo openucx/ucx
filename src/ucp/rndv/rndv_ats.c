@@ -24,14 +24,13 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
 
     *init_params->priv_size = sizeof(ucp_proto_rndv_ack_priv_t);
 
-    caps.cfg_thresh                          = 0;
-    caps.cfg_priority                        = 1;
-    caps.min_length                          = 0;
-    caps.num_ranges                          = 1;
-    range0                                   = &caps.ranges[0];
-    range0->perf[UCP_PROTO_PERF_TYPE_SINGLE] = UCS_LINEAR_FUNC_ZERO;
-    range0->perf[UCP_PROTO_PERF_TYPE_MULTI]  = UCS_LINEAR_FUNC_ZERO;
-    range0->node                             = NULL;
+    caps.cfg_thresh   = 0;
+    caps.cfg_priority = 1;
+    caps.min_length   = 0;
+    caps.num_ranges   = 1;
+    range0            = &caps.ranges[0];
+    range0->node      = NULL;
+    ucp_proto_perf_set(range0->perf, UCS_LINEAR_FUNC_ZERO);
 
     /* This protocols supports either a regular rendezvous receive but without
      * data, or a rendezvous receive which should ignore the data.
