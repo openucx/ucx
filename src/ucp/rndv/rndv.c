@@ -899,7 +899,7 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
         md_map = 0;
         ucs_for_each_bit(lane, rndv_req->send.rndv.lanes_map_all) {
             ucs_assert(lane < UCP_MAX_LANES);
-            md_map |= ucp_ep_md_index(ep, lane);
+            md_map |= UCS_BIT(ucp_ep_md_index(ep, lane));
         }
 
         ucp_request_init_dt_reg_from_memh(rndv_req, md_map,
