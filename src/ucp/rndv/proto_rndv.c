@@ -275,7 +275,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucs_trace("rndv" UCP_PROTO_TIME_FMT(ctrl_latency),
               UCP_PROTO_TIME_ARG(ctrl_latency));
     ctrl_perf.perf[UCP_PROTO_PERF_TYPE_SINGLE] =
-    ctrl_perf.perf[UCP_PROTO_PERF_TYPE_MULTI]  = ucs_linear_func_add3(
+    ctrl_perf.perf[UCP_PROTO_PERF_TYPE_MULTI]  =
+    ctrl_perf.perf[UCP_PROTO_PERF_TYPE_CPU] = ucs_linear_func_add3(
             memreg_time, ucs_linear_func_make(ctrl_latency, 0.0),
             params->unpack_time);
     ucp_proto_perf_range_add_data(&ctrl_perf);
@@ -306,9 +307,9 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
 
         parallel_stages[0] = &ctrl_perf;
         parallel_stages[1] = &remote_perf;
-        status = ucp_proto_init_parallel_stages(&params->super.super,
-                                                min_length, range_max_length,
-                                                SIZE_MAX, params->perf_bias,
+        status = ucp_proto_init_parallel_stages(&params->super, min_length,
+                                                range_max_length, SIZE_MAX,
+                                                params->perf_bias,
                                                 parallel_stages, 2);
         if (status != UCS_OK) {
             goto out_deref_perf_node;
@@ -400,7 +401,9 @@ ucp_proto_rndv_ack_perf(const ucp_proto_init_params_t *init_params,
 
     ack_perf[UCP_PROTO_PERF_TYPE_SINGLE] =
             ucs_linear_func_make(send_time + receive_time, 0);
-    ack_perf[UCP_PROTO_PERF_TYPE_MULTI] = ucs_linear_func_make(send_time, 0);
+    ack_perf[UCP_PROTO_PERF_TYPE_MULTI] =
+    ack_perf[UCP_PROTO_PERF_TYPE_CPU] =
+            ucs_linear_func_make(send_time, 0);
 
     return UCS_OK;
 }
@@ -440,6 +443,8 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
                                  ack_perf[UCP_PROTO_PERF_TYPE_SINGLE]);
     ucp_proto_perf_node_add_data(ack_perf_node, "mult",
                                  ack_perf[UCP_PROTO_PERF_TYPE_MULTI]);
+    ucp_proto_perf_node_add_data(ack_perf_node, "cpu",
+                                 ack_perf[UCP_PROTO_PERF_TYPE_CPU]);
 
     /* Copy basic capabilities from bulk protocol */
     init_params->caps->cfg_thresh   = bulk_caps->cfg_thresh;

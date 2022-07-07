@@ -79,7 +79,7 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
  * @param [in] num_stages    Number of parallel stages in the protocol.
  */
 ucs_status_t
-ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
+ucp_proto_init_parallel_stages(const ucp_proto_common_init_params_t *params,
                                size_t range_start, size_t range_end,
                                size_t frag_size, double bias,
                                const ucp_proto_perf_range_t **stages,
