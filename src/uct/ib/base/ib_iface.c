@@ -1036,20 +1036,22 @@ void uct_ib_verbs_destroy_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir)
     }
 }
 
-static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
-                                       const uct_ib_iface_config_t *config)
+static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
+    return (dev->lag_level != 0) ? dev->lag_level :
+           uct_ib_device_get_roce_lag_level(dev, iface->config.port_num,
+                                            iface->gid_info.gid_index);
+}
+
+static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
+                                       const uct_ib_iface_config_t *config)
+{
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
-            if (dev->lag_level == 0) {
-                iface->num_paths = uct_ib_device_get_roce_lag_level(
-                        dev, iface->config.port_num, iface->gid_info.gid_index);
-            } else {
-                iface->num_paths = dev->lag_level;
-            }
+            iface->num_paths = uct_ib_iface_roce_lag_level(iface);
         } else {
             /* IB - number of paths is LMC level */
             ucs_assert(iface->path_bits_count > 0);
@@ -1508,6 +1510,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     size_t mtu, extra_pkt_len;
     ucs_status_t status;
     double numa_latency;
+    unsigned num_path;
 
     uct_base_iface_query(&iface->super, iface_attr);
 
@@ -1594,8 +1597,10 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     iface_attr->latency.c += numa_latency;
     iface_attr->latency.m  = 0;
 
-    /* Wire speed calculation: Width * SignalRate * Encoding */
-    wire_speed = (width * signal_rate * encoding) / 8.0;
+    /* Wire speed calculation: Width * SignalRate * Encoding * Num_paths */
+    num_path   = uct_ib_iface_is_roce(iface) ?
+                 uct_ib_iface_roce_lag_level(iface) : 1;
+    wire_speed = (width * signal_rate * encoding * num_path) / 8.0;
 
     /* Calculate packet overhead  */
     mtu = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
@@ -1611,7 +1616,9 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         extra_pkt_len += UCT_IB_LRH_LEN;
     }
 
-    iface_attr->bandwidth.shared    = ucs_min((wire_speed * mtu) / (mtu + extra_pkt_len), md->pci_bw);
+    iface_attr->bandwidth.shared    = ucs_min((wire_speed * mtu) /
+                                              (mtu + extra_pkt_len),
+                                              md->pci_bw);
     iface_attr->bandwidth.dedicated = 0;
     iface_attr->priority            = uct_ib_device_spec(dev)->priority;
 
