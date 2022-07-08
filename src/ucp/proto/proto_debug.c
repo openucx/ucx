@@ -638,7 +638,7 @@ static void
 ucp_proto_perf_graph_str_append_perf(const ucp_proto_perf_node_data_t *data,
                                      ucs_string_buffer_t *strb)
 {
-    double mbps;
+    double kbps;
 
     if (data->name[0] != '\0') {
         /* Show only non-empty name */
@@ -646,11 +646,13 @@ ucp_proto_perf_graph_str_append_perf(const ucp_proto_perf_node_data_t *data,
     }
 
     if (data->value.m > UCP_PROTO_PERF_EPSILON) {
-        mbps = 1.0 / (data->value.m * UCS_MBYTE);
-        if (mbps < 1e4) {
-            ucs_string_buffer_appendf(strb, "%.0fMBs", mbps);
+        kbps = 1.0 / (data->value.m * UCS_KBYTE);
+        if (kbps < 1e4) {
+            ucs_string_buffer_appendf(strb, "%.0fKBs", kbps);
+        } else if (kbps < 1e7) {
+            ucs_string_buffer_appendf(strb, "%.0fMBs", kbps / 1024);
         } else {
-            ucs_string_buffer_appendf(strb, "%.1fGBs", mbps / 1024);
+            ucs_string_buffer_appendf(strb, "%.1fGBs", kbps / 1024 / 1024);
         }
         if (data->value.c > UCP_PROTO_PERF_EPSILON) {
             ucs_string_buffer_appendf(strb, "+");
