@@ -430,6 +430,9 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
                                        reg_address, reg_length,
                                        uct_flags);
     if (status == UCS_OK) {
+        ucs_trace("memh %p: registered address %p/%p length %zu/%zu md_map %"
+                  PRIx64 "/%" PRIx64, memh, reg_address, ucp_memh_address(memh),
+                  reg_length, ucp_memh_length(memh), reg_md_map, memh->md_map);
         *memh_p = memh;
     }
 
