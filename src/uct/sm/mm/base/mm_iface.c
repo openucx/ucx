@@ -27,7 +27,7 @@
 #define UCT_MM_IFACE_LATENCY  ucs_linear_func_make(80e-9, 0)
 
 ucs_config_field_t uct_mm_iface_config_table[] = {
-    {"SM_", "ALLOC=md,mmap,heap", NULL,
+    {"SM_", "ALLOC=md,mmap,heap;BW=15360MBs", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
 
