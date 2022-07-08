@@ -207,10 +207,10 @@ static void ucp_proto_common_update_lane_perf_by_distance(
     ucp_proto_perf_node_own_child(perf_node, &sys_perf_node);
 }
 
-static void ucp_proto_common_lane_perf_node(ucp_context_h context,
-                                            ucp_rsc_index_t rsc_index,
-                                            const uct_perf_attr_t *perf_attr,
-                                            ucp_proto_perf_node_t **perf_node_p)
+void ucp_proto_common_lane_perf_node(ucp_context_h context,
+                                     ucp_rsc_index_t rsc_index,
+                                     const uct_perf_attr_t *perf_attr,
+                                     ucp_proto_perf_node_t **perf_node_p)
 {
     const uct_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index].tl_rsc;
     ucp_proto_perf_node_t *perf_node;
@@ -627,153 +627,6 @@ ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params)
     ucs_assert(num_lanes == 1);
 
     return lane;
-}
-
-void ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
-                                  ucp_md_map_t reg_md_map,
-                                  ucs_linear_func_t *memreg_time,
-                                  ucp_proto_perf_node_t **perf_node_p)
-{
-    ucp_context_h context = params->super.worker->context;
-    ucp_proto_perf_node_t *perf_node;
-    const uct_md_attr_t *md_attr;
-    ucp_md_index_t md_index;
-    const char *md_name;
-
-    *memreg_time = UCS_LINEAR_FUNC_ZERO;
-
-    if (reg_md_map == 0) {
-        *perf_node_p = NULL;
-        return;
-    }
-
-    perf_node = ucp_proto_perf_node_new_data("mem reg", "");
-
-    /* Go over all memory domains */
-    ucs_for_each_bit(md_index, reg_md_map) {
-        md_attr = &context->tl_mds[md_index].attr;
-        md_name = context->tl_mds[md_index].rsc.md_name;
-        ucs_linear_func_add_inplace(memreg_time, md_attr->reg_cost);
-        ucs_trace("md %s" UCP_PROTO_PERF_FUNC_FMT(reg_cost), md_name,
-                  UCP_PROTO_PERF_FUNC_ARG(&md_attr->reg_cost));
-
-        ucp_proto_perf_node_add_data(perf_node, md_name, md_attr->reg_cost);
-    }
-
-    if (!ucs_is_pow2(reg_md_map)) {
-        /* Multiple memory domains */
-        ucp_proto_perf_node_add_data(perf_node, "total", *memreg_time);
-    }
-
-    *perf_node_p = perf_node;
-}
-
-ucs_status_t
-ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
-                                  ucs_memory_type_t local_mem_type,
-                                  ucs_memory_type_t remote_mem_type,
-                                  uct_ep_operation_t memtype_op,
-                                  ucs_linear_func_t *copy_time,
-                                  ucp_proto_perf_node_t **perf_node_p)
-{
-    ucp_context_h context = worker->context;
-    ucs_memory_type_t src_mem_type, dst_mem_type;
-    ucp_proto_perf_node_t *perf_node, *tl_perf_node;
-    const ucp_ep_config_t *ep_config;
-    ucp_worker_iface_t *wiface;
-    uct_perf_attr_t perf_attr;
-    ucp_rsc_index_t rsc_index;
-    ucp_lane_index_t lane;
-    ucs_status_t status;
-
-    if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
-        *copy_time = ucs_linear_func_make(0,
-                                          1.0 / context->config.ext.bcopy_bw);
-
-        perf_node = ucp_proto_perf_node_new_data("memcpy", "");
-        ucp_proto_perf_node_add_bandwidth(perf_node, "bcopy_bw",
-                                          context->config.ext.bcopy_bw);
-        *perf_node_p = perf_node;
-        return UCS_OK;
-    }
-
-    if (worker->mem_type_ep[local_mem_type] != NULL) {
-        ep_config = ucp_ep_config(worker->mem_type_ep[local_mem_type]);
-    } else if (worker->mem_type_ep[remote_mem_type] != NULL) {
-        ep_config = ucp_ep_config(worker->mem_type_ep[remote_mem_type]);
-    } else {
-        ucs_debug("cannot copy memory between %s and %s",
-                  ucs_memory_type_names[local_mem_type],
-                  ucs_memory_type_names[remote_mem_type]);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    /* Use the v2 API to query overhead and BW */
-    perf_attr.local_memory_type  = local_mem_type;
-    perf_attr.remote_memory_type = remote_mem_type;
-    perf_attr.operation          = memtype_op;
-
-    switch (memtype_op) {
-    case UCT_EP_OP_PUT_SHORT:
-    case UCT_EP_OP_GET_SHORT:
-        lane = ep_config->key.rma_lanes[0];
-        break;
-    case UCT_EP_OP_PUT_ZCOPY:
-    case UCT_EP_OP_GET_ZCOPY:
-        lane = ep_config->key.rma_bw_lanes[0];
-        break;
-    case UCT_EP_OP_LAST:
-        return UCS_ERR_UNSUPPORTED;
-    default:
-        ucs_fatal("invalid UCT copy operation: %d", memtype_op);
-    }
-
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
-                           UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
-                           UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
-                           UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_BANDWIDTH |
-                           UCT_PERF_ATTR_FIELD_LATENCY;
-    perf_attr.operation  = memtype_op;
-
-    rsc_index = ep_config->key.lanes[lane].rsc_index;
-    wiface    = ucp_worker_iface(worker, rsc_index);
-    status    = uct_iface_estimate_perf(wiface->iface, &perf_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* all allowed copy operations are one-sided */
-    ucs_assert(perf_attr.recv_overhead < 1e-15);
-    copy_time->c = ucp_tl_iface_latency(context, &perf_attr.latency) +
-                   perf_attr.send_pre_overhead + perf_attr.send_post_overhead +
-                   perf_attr.recv_overhead;
-    copy_time->m = 1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
-
-    if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
-        (memtype_op == UCT_EP_OP_GET_ZCOPY)) {
-        src_mem_type = remote_mem_type;
-        dst_mem_type = local_mem_type;
-    } else {
-        src_mem_type = local_mem_type;
-        dst_mem_type = remote_mem_type;
-    }
-
-    perf_node = ucp_proto_perf_node_new_data(
-            title, "%s to %s", ucs_memory_type_names[src_mem_type],
-            ucs_memory_type_names[dst_mem_type]);
-
-    ucp_proto_perf_node_add_data(perf_node, "", *copy_time);
-
-    ucp_proto_common_lane_perf_node(context, rsc_index, &perf_attr,
-                                    &tl_perf_node);
-    ucp_proto_perf_node_own_child(perf_node, &tl_perf_node);
-
-    *perf_node_p = perf_node;
-
-    return UCS_OK;
 }
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self)
