@@ -22,7 +22,7 @@
 #include <ucp/core/ucp_request.inl>
 
 
-UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h);
+UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h, const ucp_rsc_index_t*);
 
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(ucp_wireup_ep_t, uct_ep_t);
@@ -257,7 +257,7 @@ static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
 
 
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
-                                ucp_ep_h);
+                                ucp_ep_h, const ucp_rsc_index_t*);
 
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
                            ucp_rsc_index_t rsc_index, int is_p2p)
@@ -404,7 +404,8 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
 }
 
 
-UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
+UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
+                    const ucp_rsc_index_t *dst_rsc_indices)
 {
     static uct_iface_ops_t ops = {
         .ep_connect_to_ep    = ucp_wireup_ep_connect_to_ep,
@@ -448,7 +449,9 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
 
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
-        self->dst_rsc_indices[lane] = UCP_NULL_RESOURCE;
+        self->dst_rsc_indices[lane] = (dst_rsc_indices != NULL) ?
+                                      dst_rsc_indices[lane] :
+                                      UCP_NULL_RESOURCE;
     }
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);

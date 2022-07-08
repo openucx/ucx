@@ -645,7 +645,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                              const ucp_tl_bitmap_t *local_tl_bitmap,
                              const ucp_unpacked_address_t *remote_address,
                              unsigned ep_init_flags, const char *message,
-                             ucp_ep_h *ep_p);
+                             unsigned *addr_indices, ucp_ep_h *ep_p);
 
 ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          const ucp_conn_request_h conn_request,

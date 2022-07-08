@@ -251,10 +251,15 @@ ucp_cm_priv_data_length(size_t addr_size, ucp_object_version_t sa_data_version)
     return addr_size + ucp_cm_sa_data_length(sa_data_version);
 }
 
-static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
+unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
 {
     return ucp_worker_common_address_pack_flags(worker) |
-           UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
+           UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT |
+           /* Pack TL resource indices into CM private data to use them inside
+            * ucp_wireup_init_lanes() for checking intersection of endpoint
+            * configurations */
+           (worker->context->config.ext.cm_use_all_devices ?
+            UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX : 0);
 }
 
 static void*
@@ -396,7 +401,7 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
             continue;
         }
 
-        status = ucp_wireup_ep_create(ep, &uct_ep);
+        status = ucp_wireup_ep_create(ep, NULL, &uct_ep);
         if (status != UCS_OK) {
             goto out;
         }
@@ -1211,6 +1216,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     char client_addr_str[UCS_SOCKADDR_STRING_LEN];
     ucp_wireup_sockaddr_data_base_t *sa_data;
     ucp_object_version_t sa_data_version;
+    unsigned addr_indices[UCP_MAX_LANES];
 
     ep_init_flags |= UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
 
@@ -1230,7 +1236,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     /* Create and connect TL part */
     status = ucp_ep_create_to_worker_addr(worker, &tl_bitmap, remote_addr,
                                           ep_init_flags,
-                                          "conn_request on uct_listener", &ep);
+                                          "conn_request on uct_listener",
+                                          addr_indices, &ep);
     if (status != UCS_OK) {
         ucs_warn("failed to create server ep and connect to worker address on "
                  "device %s, tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
@@ -1255,7 +1262,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     status          = ucp_ep_cm_connect_server_lane(
                           ep, conn_request->uct_listener, conn_request->uct_req,
                           conn_request->cm_idx, conn_request->dev_name,
-                          ep_init_flags, sa_data_version);
+                          ep_init_flags, sa_data_version, remote_addr,
+                          addr_indices);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect CM lane on device %s, "
                  "tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
@@ -1379,24 +1387,30 @@ static void ucp_cm_server_conn_notify_cb(
     }
 }
 
-ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
-                                           uct_listener_h uct_listener,
-                                           uct_conn_request_h uct_conn_req,
-                                           ucp_rsc_index_t cm_idx,
-                                           const char *dev_name,
-                                           unsigned ep_init_flags,
-                                           ucp_object_version_t sa_data_version)
+ucs_status_t
+ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
+                              uct_conn_request_h uct_conn_req,
+                              ucp_rsc_index_t cm_idx, const char *dev_name,
+                              unsigned ep_init_flags,
+                              ucp_object_version_t sa_data_version,
+                              const ucp_unpacked_address_t *remote_address,
+                              const unsigned *addr_indices)
 {
     ucp_worker_h worker   = ep->worker;
     ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
+    ucp_rsc_index_t dst_rsc_indices[UCP_MAX_LANES];
     uct_ep_params_t uct_ep_params;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
     ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
 
+    ucp_wireup_get_dst_rsc_indices(ep, &ucp_ep_config(ep)->key,
+                                   remote_address, addr_indices,
+                                   dst_rsc_indices);
+
     /* TODO: split CM and wireup lanes */
-    status = ucp_wireup_ep_create(ep, &uct_ep);
+    status = ucp_wireup_ep_create(ep, dst_rsc_indices, &uct_ep);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to create wireup CM lane, status %s",
                  ep, ucs_status_string(status));

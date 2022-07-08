@@ -192,9 +192,14 @@ public:
             saddrs.push_back(ucs::sock_addr_storage());
             status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
             ASSERT_UCS_OK(status);
-            saddrs.back().set_sock_addr(*ifa->ifa_addr, size,
-                                        ucs::is_rdmacm_netdev(ifa->ifa_name));
-            saddrs.back().set_port(0); /* listen on any port then update */
+
+            std::string rdmacm_netdev_name =
+                    ucs::get_rdmacm_netdev(ifa->ifa_name);
+            bool is_rdmacm_netdev          = !rdmacm_netdev_name.empty();
+            saddrs.back().set_sock_addr(*ifa->ifa_addr, size, is_rdmacm_netdev,
+                                        ifa->ifa_name);
+            /* listen on any port then update */
+            saddrs.back().set_port(0);
         }
 
         freeifaddrs(ifaddrs);
@@ -2755,6 +2760,98 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_diff_config)
+
+
+class test_ucp_sockaddr_protocols_diff_net_devices :
+        public test_ucp_sockaddr_protocols
+{
+public:
+    void init()
+    {
+        m_err_count = 0;
+
+        // Set number of Eager/RNDV lanes to be 1 to create only 1 UCT endpoint
+        modify_config("MAX_EAGER_LANES", "1");
+        modify_config("MAX_RNDV_LANES", "1");
+
+        modify_config("RNDV_THRESH", "0");
+
+        get_sockaddr();
+        test_base::init();
+    }
+
+    enum {
+        TEST_MODIFIER_CLIENT_RESTRICT_NETDEV = UCS_BIT(0),
+        TEST_MODIFIER_SERVER_RESTRICT_NETDEV = UCS_BIT(1)
+    };
+
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants) {
+        uint64_t features = UCP_FEATURE_TAG;
+
+        add_variant_with_value(variants, features,
+                               TEST_MODIFIER_CLIENT_RESTRICT_NETDEV,
+                               "restrict_client");
+        add_variant_with_value(variants, features,
+                               TEST_MODIFIER_SERVER_RESTRICT_NETDEV,
+                               "restrict_server");
+        add_variant_with_value(variants, features,
+                               TEST_MODIFIER_CLIENT_RESTRICT_NETDEV |
+                               TEST_MODIFIER_SERVER_RESTRICT_NETDEV,
+                               "restrict_client_server");
+    }
+
+    void modify_net_devices(bool only_net_device)
+    {
+        std::string value;
+
+        if (only_net_device) {
+            value = m_test_addr.netdev_name();
+
+            std::string rdmacm_netdev_name =
+                    ucs::get_rdmacm_netdev(value.c_str());
+            if (!rdmacm_netdev_name.empty()) {
+                value += "," + rdmacm_netdev_name;
+            }
+        } else {
+            value = "all";
+        }
+
+        modify_config("NET_DEVICES", value, SKIP_IF_NOT_EXIST);
+    }
+
+    /* Create one or both entities with UCX_NET_DEVICES set to the device which
+     * is used by CM, while another entity could be created with
+     * UCX_NET_DEVICES=all
+     * So, it checks whether the configurations of client and server could be
+     * agreed during WIREUP_MSG phase in case of UCX_CM_USE_ALL_DEVICES=y
+     */
+    void create_entities_and_connect()
+    {
+        modify_net_devices(get_variant_value() &
+                           TEST_MODIFIER_CLIENT_RESTRICT_NETDEV);
+        create_entity(); // client
+
+        modify_net_devices(get_variant_value() &
+                           TEST_MODIFIER_SERVER_RESTRICT_NETDEV);
+        create_entity(); // server
+
+        start_listener(cb_type());
+        client_ep_connect();
+    }
+};
+
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_diff_net_devices,
+           restricted_net_devices)
+{
+    create_entities_and_connect();
+    for (unsigned i = 0; i < 2; ++i) {
+        test_tag_send_recv(4 * UCS_KBYTE, false, false);
+    }
+}
+
+UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_diff_net_devices)
 
 
 class test_ucp_sockaddr_protocols_err : public test_ucp_sockaddr_protocols {

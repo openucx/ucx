@@ -935,7 +935,7 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
              * is WIREUP MSG lane) until CM and WIREUP_MSG phases are done. The
              * lane is added during WIREUP_MSG exchange or created as an initial
              * configuration after a connection request on a server side */
-            status = ucp_wireup_ep_create(ep, &wireup_ep);
+            status = ucp_wireup_ep_create(ep, NULL, &wireup_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */
                 return status;
@@ -975,7 +975,7 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_status_t status;
 
     if (ucp_ep_get_lane(ep, lane) == NULL) {
-        status = ucp_wireup_ep_create(ep, &uct_ep);
+        status = ucp_wireup_ep_create(ep, NULL, &uct_ep);
         if (status != UCS_OK) {
             /* coverity[leaked_storage] */
             return status;
@@ -1175,6 +1175,43 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     key->reachable_md_map = dst_md_map;
 }
 
+void
+ucp_wireup_get_dst_rsc_indices(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
+                               const ucp_unpacked_address_t *remote_address,
+                               const unsigned *addr_indices,
+                               ucp_rsc_index_t *dst_rsc_indices)
+{
+    ucp_lane_index_t lane;
+    unsigned addr_index;
+    ucp_rsc_index_t dst_rsc_index;
+    ucp_address_entry_t *ae;
+
+    for (lane = 0; lane < new_key->num_lanes; ++lane) {
+        addr_index = addr_indices[lane];
+
+        if (lane == ucp_ep_get_cm_lane(ep)) {
+            ucs_assert(addr_index == UINT_MAX);
+            dst_rsc_index = UCP_NULL_RESOURCE;
+        } else {
+            ucs_assert(addr_index != UINT_MAX);
+            ae            = &remote_address->address_list[addr_index];
+            dst_rsc_index = ae->iface_attr.dst_rsc_index;
+            if (ep->worker->context->config.ext.cm_use_all_devices) {
+                ucs_assert(dst_rsc_index != UCP_NULL_RESOURCE);
+            }
+        }
+
+        /* Save destination resource index in the CM wireup EP for doing
+         * further intersections, if needed */
+        dst_rsc_indices[lane] = dst_rsc_index;
+    }
+
+    /* Fill remaining elements of 'dst_rsc_indices' by UCP_NULL_RESOURCE */
+    for (lane = new_key->num_lanes; lane < UCP_MAX_LANES; ++lane) {
+        dst_rsc_indices[lane] = UCP_NULL_RESOURCE;
+    }
+}
+
 static void
 ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                                   const ucp_unpacked_address_t *remote_address,
@@ -1185,13 +1222,9 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     uct_ep_h new_uct_eps[UCP_MAX_LANES]                = { NULL };
     ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES]     = { UCP_NULL_LANE };
     ucp_rsc_index_t old_dst_rsc_indices[UCP_MAX_LANES] = { UCP_NULL_RESOURCE };
-    ucp_rsc_index_t new_dst_rsc_indices[UCP_MAX_LANES] = { UCP_NULL_RESOURCE };
     ucp_wireup_ep_t *cm_wireup_ep                      = NULL;
     ucp_ep_config_key_t *old_key;
     ucp_lane_index_t lane, reuse_lane;
-    ucp_address_entry_t *ae;
-    unsigned addr_index;
-    ucp_rsc_index_t dst_rsc_index;
     uct_ep_h uct_ep;
 
     *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
@@ -1214,28 +1247,14 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
 
     memcpy(old_dst_rsc_indices, cm_wireup_ep->dst_rsc_indices,
            sizeof(old_dst_rsc_indices));
-    for (lane = 0; lane < new_key->num_lanes; ++lane) {
-        addr_index = addr_indices[lane];
-
-        if (lane == ucp_ep_get_cm_lane(ep)) {
-            ucs_assert(addr_index == UINT_MAX);
-            dst_rsc_index = UCP_NULL_RESOURCE;
-        } else {
-            ucs_assert(addr_index != UINT_MAX);
-            ae            = &remote_address->address_list[addr_index];
-            dst_rsc_index = ae->iface_attr.dst_rsc_index;
-        }
-
-        /* save destination resource index in the CM wireup EP for doing
-         * further intersections, if needed */
-        cm_wireup_ep->dst_rsc_indices[lane] = dst_rsc_index;
-        new_dst_rsc_indices[lane]           = dst_rsc_index;
-    }
+    ucp_wireup_get_dst_rsc_indices(ep, new_key, remote_address, addr_indices,
+                                   cm_wireup_ep->dst_rsc_indices);
 
     old_key = &ucp_ep_config(ep)->key;
 
     ucp_ep_config_lanes_intersect(old_key, old_dst_rsc_indices, new_key,
-                                  new_dst_rsc_indices, reuse_lane_map);
+                                  cm_wireup_ep->dst_rsc_indices,
+                                  reuse_lane_map);
 
     /* CM lane has to be re-used by the new EP configuration */
     ucs_assert(reuse_lane_map[ucp_ep_get_cm_lane(ep)] != UCP_NULL_LANE);
@@ -1492,7 +1511,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 
     ucs_trace("ep %p: connect lane %d to remote peer with wireup ep", ep, lane);
 
-    status = ucp_wireup_ep_create(ep, &wireup_ep);
+    status = ucp_wireup_ep_create(ep, NULL, &wireup_ep);
     if (status != UCS_OK) {
         goto err;
     }
