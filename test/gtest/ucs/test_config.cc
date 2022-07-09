@@ -444,7 +444,7 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ(UCS_MBYTE * 128.0, opts->bw_mbits);
     EXPECT_EQ(UCS_GBYTE * 128.0, opts->bw_gbits);
     EXPECT_EQ(UCS_TBYTE * 128.0, opts->bw_tbits);
-    EXPECT_TRUE(UCS_CONFIG_BW_IS_AUTO(opts->bw_auto));
+    EXPECT_TRUE(UCS_CONFIG_DBL_IS_AUTO(opts->bw_auto));
 
     EXPECT_EQ(UCS_TBYTE * 128.0, opts->can_pci_bw.bw);
     EXPECT_EQ(std::string("mlx5_0"), opts->can_pci_bw.name);

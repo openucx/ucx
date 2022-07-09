@@ -1535,9 +1535,9 @@ static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
 
 static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 {
-    ucp_context_h context    = worker->context;
-    ucp_tl_bitmap_t supp_tls = UCS_BITMAP_ZERO;
-    ucp_address_iface_attr_t dummy_iface_attr;
+    ucp_context_h context        = worker->context;
+    ucp_tl_bitmap_t supp_tls     = UCS_BITMAP_ZERO;
+    ucp_address_entry_t dummy_ae = {};
     ucp_tl_resource_desc_t *rsc, *best_rsc;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t rsc_index;
@@ -1554,12 +1554,12 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     iface_cap_flags = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-    dummy_iface_attr.bandwidth    = 1e12;
-    dummy_iface_attr.flags        = UINT64_MAX;
-    dummy_iface_attr.overhead     = 0;
-    dummy_iface_attr.priority     = 0;
-    dummy_iface_attr.lat_ovh      = 0;
-    dummy_iface_attr.addr_version = UCP_OBJECT_VERSION_V1;
+    dummy_ae.iface_attr.bandwidth    = 1e12;
+    dummy_ae.iface_attr.flags        = UINT64_MAX;
+    dummy_ae.iface_attr.overhead     = 0;
+    dummy_ae.iface_attr.priority     = 0;
+    dummy_ae.iface_attr.lat_ovh      = 0;
+    dummy_ae.iface_attr.addr_version = UCP_OBJECT_VERSION_V1;
 
     best_score    = -1;
     best_rsc      = NULL;
@@ -1587,7 +1587,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         UCS_BITMAP_SET(supp_tls, rsc_index);
         priority  = iface_attr->priority;
 
-        score = ucp_wireup_amo_score_func(wiface, md_attr, &dummy_iface_attr);
+        score = ucp_wireup_amo_score_func(wiface, md_attr, &dummy_ae, NULL);
         if (ucp_is_scalable_transport(worker->context,
                                       iface_attr->max_num_eps) &&
             ((score > best_score) ||

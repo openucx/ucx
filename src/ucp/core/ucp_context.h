@@ -55,6 +55,8 @@ typedef struct ucp_context_config {
     /** Maximal allowed ratio between slowest and fastest lane in a multi-lane
      *  protocol. Lanes slower than the specified ratio will not be used */
     double                                 multi_lane_max_ratio;
+    /* Bandwidth efficiency ratio */
+    double                                 multi_path_ratio;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
     /** Communication scheme in RNDV protocol */
@@ -99,6 +101,9 @@ typedef struct ucp_context_config {
     unsigned                               max_eager_lanes;
     /** Rendezvous-get multi-lane support */
     unsigned                               max_rndv_lanes;
+    /** Minimum allowed chunk size when splitting rndv message over multiple
+     *  lanes */
+    size_t                                 min_rndv_chunk_size;
     /** Estimated number of endpoints */
     size_t                                 estimated_num_eps;
     /** Estimated number of processes per node */

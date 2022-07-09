@@ -157,6 +157,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "protocol. Lanes slower than the specified ratio will not be used.",
    ucs_offsetof(ucp_context_config_t, multi_lane_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
 
+  {"MULTI_PATH_RATIO", "auto",
+   "Bandwidth efficiency ratio when more than one path per device is used.\n"
+   "This value represents the fraction of bandwidth taken by each connection\n"
+   "on the same device. A value of 'auto' means that fraction is calculated\n"
+   "based on the maximal number of paths supported by the device.",
+   ucs_offsetof(ucp_context_config_t, multi_path_ratio),
+   UCS_CONFIG_TYPE_POS_DOUBLE},
+
   {"MAX_EAGER_LANES", NULL, "",
    ucs_offsetof(ucp_context_config_t, max_eager_lanes), UCS_CONFIG_TYPE_UINT},
 
@@ -170,6 +178,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"MAX_RNDV_RAILS", "2",
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
    ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"MIN_RNDV_CHUNK_SIZE", "16k",
+   "Minimum chunk size to split the message sent with rendezvous protocol on\n"
+   "multiple rails. Must be greater than 0.",
+   ucs_offsetof(ucp_context_config_t, min_rndv_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_SCHEME", "auto",
    "Communication scheme in RNDV protocol.\n"
@@ -1648,7 +1661,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucs_debug("estimated number of endpoints per node is %d",
               context->config.est_num_ppn);
 
-    if (UCS_CONFIG_BW_IS_AUTO(context->config.ext.bcopy_bw)) {
+    if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
         context->config.ext.bcopy_bw = ucs_cpu_get_memcpy_bw();
     }
@@ -1668,6 +1681,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                 context->proto_bitmap |= UCS_BIT(proto_id);
             }
         }
+    }
+
+    if (context->config.ext.min_rndv_chunk_size == 0) {
+        ucs_error("minimum chunk size for rendezvous protocol must be greater"
+                  " than 0");
+        return UCS_ERR_INVALID_PARAM;
     }
 
     /* Save environment prefix to later notify user for unused variables */

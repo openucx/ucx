@@ -167,6 +167,29 @@ ucs_status_t ucs_config_clone_ulong(const void *src, void *dest, const void *arg
     return UCS_OK;
 }
 
+int ucs_config_sscanf_pos_double(const char *buf, void *dest, const void *arg)
+{
+    if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
+        *(double*)dest = UCS_CONFIG_DBL_AUTO;
+        return 1;
+    }
+
+    return ucs_config_sscanf_double(buf, dest, arg) && (*(double*)dest > 0);
+}
+
+int ucs_config_sprintf_pos_double(char *buf, size_t max, const void *src,
+                                  const void *arg)
+{
+    double value = *(double*)src;
+
+    if (UCS_CONFIG_DBL_IS_AUTO(value)) {
+        ucs_strncpy_safe(buf, UCS_VALUE_AUTO_STR, max);
+        return 1;
+    }
+
+    return ucs_config_sprintf_double(buf, max, src, arg);
+}
+
 int ucs_config_sscanf_double(const char *buf, void *dest, const void *arg)
 {
     return sscanf(buf, "%lf", (double*)dest);
@@ -497,7 +520,7 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     int     num_fields;
 
     if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
-        *dst = UCS_CONFIG_BW_AUTO;
+        *dst = UCS_CONFIG_DBL_AUTO;
         return 1;
     }
 
@@ -545,7 +568,7 @@ int ucs_config_sprintf_bw(char *buf, size_t max, const void *src,
     double value                  = *(double*)src;
     const char **suffix;
 
-    if (UCS_CONFIG_BW_IS_AUTO(value)) {
+    if (UCS_CONFIG_DBL_IS_AUTO(value)) {
         ucs_strncpy_safe(buf, UCS_VALUE_AUTO_STR, max);
         return 1;
     }
