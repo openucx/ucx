@@ -424,10 +424,10 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 ucs_status_t uct_rc_init_fc_thresh(uct_rc_iface_config_t *rc_cfg,
                                    uct_rc_iface_t *iface);
 
-ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events);
+uint64_t uct_rc_iface_arm_cq_check(uct_rc_iface_t *iface, unsigned events,
+                                   int *solicited_p);
 
-ucs_status_t uct_rc_iface_common_event_arm(uct_iface_h tl_iface,
-                                           unsigned events, int force_rx_all);
+ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 
 ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
                                   const uct_rc_iface_common_config_t *config,

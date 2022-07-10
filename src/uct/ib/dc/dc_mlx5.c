@@ -360,6 +360,11 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         goto init_qp;
     }
 
+    if (iface->super.cq[UCT_IB_DIR_TX].type != UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+        ucs_error("cannot create verbs DCI with DEVX CQ");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     status = uct_ib_mlx5_iface_get_res_domain(ib_iface, &dci->txwq.super);
     if (status != UCS_OK) {
         return status;
@@ -529,6 +534,11 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCT) {
         return uct_dc_mlx5_iface_devx_create_dct(iface);
+    }
+
+    if (iface->super.cq[UCT_IB_DIR_RX].type != UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+        ucs_error("cannot create verbs DCT with DEVX CQ");
+        return UCS_ERR_INVALID_PARAM;
     }
 
     uct_ib_mlx5dv_dct_qp_init_attr(&init_attr, &dv_init_attr, md->super.pd,
@@ -1170,24 +1180,6 @@ static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
     uct_dc_mlx5_ep_handle_failure(ep, cqe, status);
 }
 
-static ucs_status_t
-uct_dc_mlx5_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
-                      const uct_ib_iface_config_t *ib_config,
-                      const uct_ib_iface_init_attr_t *init_attr,
-                      int preferred_cpu, size_t inl)
-{
-    uct_dc_mlx5_iface_config_t *dc_mlx5_config =
-            ucs_derived_of(ib_config, uct_dc_mlx5_iface_config_t);
-    uct_rc_mlx5_iface_common_t *rc_mlx5_iface_common =
-            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_cq_t *uct_cq = &rc_mlx5_iface_common->cq[dir];
-
-    return uct_ib_mlx5_create_cq(ib_iface, dir,
-                                 &dc_mlx5_config->rc_mlx5_common.super,
-                                 ib_config, init_attr, uct_cq, preferred_cpu,
-                                 inl);
-}
-
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                              void *arg, ucs_status_t status)
 {
@@ -1214,8 +1206,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_dc_mlx5_ep_invalidate
         },
-        .create_cq      = uct_dc_mlx5_create_cq,
-        .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
+        .create_cq      = uct_rc_mlx5_iface_common_create_cq,
+        .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
         .handle_failure = uct_dc_mlx5_iface_handle_failure,
     },
@@ -1261,8 +1253,8 @@ static uct_iface_ops_t uct_dc_mlx5_iface_tl_ops = {
     .iface_progress_enable    = uct_dc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
-    .iface_event_fd_get       = uct_ib_iface_event_fd_get,
-    .iface_event_arm          = uct_rc_iface_event_arm,
+    .iface_event_fd_get       = uct_rc_mlx5_iface_event_fd_get,
+    .iface_event_arm          = uct_rc_mlx5_iface_devx_arm,
     .ep_create                = uct_dc_mlx5_ep_create_connected,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_ep_t),
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
@@ -1374,6 +1366,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
 
     init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * num_dcis;
+    uct_ib_mlx5_parse_cqe_zipping(md, &config->rc_mlx5_common.super,
+                                  &init_attr);
 
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
@@ -1597,15 +1591,8 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 
     ucs_assert(!uct_dc_mlx5_iface_dci_has_outstanding(iface, dci_index));
 
-    /* Synchronize CQ index with the driver, since it would remove pending
-     * completions for this QP (both send and receive) during ibv_destroy_qp().
-     */
-    uct_rc_mlx5_iface_common_update_cqs_ci(&iface->super,
-                                           &iface->super.super.super);
     status = uct_ib_mlx5_modify_qp_state(&iface->super.super.super,
                                          &txwq->super, IBV_QPS_RESET);
-    uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->super,
-                                         &iface->super.super.super);
 
     uct_rc_mlx5_iface_commom_clean(&iface->super.cq[UCT_IB_DIR_TX], NULL,
                                    txwq->super.qp_num);

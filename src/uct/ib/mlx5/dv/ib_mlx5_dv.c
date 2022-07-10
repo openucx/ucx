@@ -568,9 +568,112 @@ uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                           const uct_ib_iface_init_attr_t *init_attr,
+                           uct_ib_mlx5_cq_t *cq, int preferred_cpu, size_t inl)
+{
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_cq_in)]   = {0};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_cq_out)] = {0};
+    void *cqctx = UCT_IB_MLX5DV_ADDR_OF(create_cq_in, in, cqc);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    unsigned cq_size = ucs_roundup_pow2(uct_ib_cq_size(iface, init_attr, dir));
+    int log_cq_size  = ucs_ilog2(cq_size);
+    int cqe_size     = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
+    size_t umem_len  = cqe_size * cq_size;
+    ucs_status_t status;
+    uint32_t eqn;
+
+    UCT_IB_MLX5DV_SET(create_cq_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_CQ);
+
+    /* Set DB record umem related bits */
+    cq->devx.dbrec = uct_ib_mlx5_get_dbrec(md);
+    if (cq->devx.dbrec == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+    UCT_IB_MLX5DV_SET(cqc, cqctx, dbr_umem_id, cq->devx.dbrec->mem_id);
+    UCT_IB_MLX5DV_SET64(cqc, cqctx, dbr_addr, cq->devx.dbrec->offset);
+
+    /* Set EQN related bits */
+    if (mlx5dv_devx_query_eqn(dev->ibv_context, preferred_cpu, &eqn) != 0) {
+        status = UCS_ERR_IO_ERROR;
+        goto err_free_db;
+    }
+
+    UCT_IB_MLX5DV_SET(cqc, cqctx, c_eqn, eqn);
+
+    /* Set UAR related bits */
+    cq->devx.uar = uct_worker_tl_data_get(iface->super.worker,
+                                          UCT_IB_MLX5_DEVX_UAR_KEY,
+                                          uct_ib_mlx5_devx_uar_t,
+                                          uct_ib_mlx5_devx_uar_cmp,
+                                          uct_ib_mlx5_devx_uar_init, md,
+                                          UCT_IB_MLX5_MMIO_MODE_DB);
+    if (UCS_PTR_IS_ERR(cq->devx.uar)) {
+        status = UCS_PTR_STATUS(cq->devx.uar);
+        goto err_free_db;
+    }
+    UCT_IB_MLX5DV_SET(cqc, cqctx, uar_page, cq->devx.uar->uar->page_id);
+
+    /* Set CQ umem related bits */
+    status = uct_ib_mlx5_md_buf_alloc(md, umem_len, 0, &cq->devx.cq_buf,
+                                      &cq->devx.mem, IBV_ACCESS_LOCAL_WRITE,
+                                      "cq umem");
+    if (status != UCS_OK) {
+        goto err_uar;
+    }
+    memset(cq->devx.cq_buf, 0, umem_len);
+
+    UCT_IB_MLX5DV_SET(create_cq_in, in, cq_umem_id, cq->devx.mem.mem->umem_id);
+    UCT_IB_MLX5DV_SET64(create_cq_in, in, cq_umem_offset, 0);
+
+    UCT_IB_MLX5DV_SET(cqc, cqctx, log_cq_size, log_cq_size);
+    UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_sz, (cqe_size == 128) ? 1 : 0);
+    UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_en,
+                      !!(init_attr->cqe_zip_sizes & cqe_size));
+    if (!UCS_ENABLE_ASSERT && (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN)) {
+        UCT_IB_MLX5DV_SET(cqc, cqctx, oi, 1);
+    }
+
+    cq->devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in, sizeof(in),
+                                               out, sizeof(out), "CQ");
+    if (cq->devx.obj == NULL) {
+        status = UCS_ERR_IO_ERROR;
+        goto err_free_mem;
+    }
+
+    uct_ib_mlx5_fill_cq_common(cq, cq_size, cqe_size,
+                               UCT_IB_MLX5DV_GET(create_cq_out, out, cqn),
+                               cq->devx.cq_buf, cq->devx.uar->uar->base_addr,
+                               cq->devx.dbrec->db);
+
+    iface->config.max_inl_cqe[dir] = uct_ib_mlx5_inl_cqe(inl, cqe_size);
+    iface->cq[dir]                 = NULL;
+    cq->type                       = UCT_IB_MLX5_OBJ_TYPE_DEVX;
+    return UCS_OK;
+
+err_free_mem:
+    uct_ib_mlx5_md_buf_free(md, cq->devx.cq_buf, &cq->devx.mem);
+err_uar:
+    uct_worker_tl_data_put(cq->devx.uar, uct_ib_mlx5_devx_uar_cleanup);
+err_free_db:
+    uct_ib_mlx5_put_dbrec(cq->devx.dbrec);
+err:
+    return status;
+}
+
+void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t *cq)
+{
+    uct_ib_mlx5_devx_obj_destroy(cq->devx.obj, "CQ");
+    uct_ib_mlx5_put_dbrec(cq->devx.dbrec);
+    uct_worker_tl_data_put(cq->devx.uar, uct_ib_mlx5_devx_uar_cleanup);
+    uct_ib_mlx5_md_buf_free(md, cq->devx.cq_buf, &cq->devx.mem);
+}
 #endif
 
-ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
+void uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
 {
     uint64_t doorbell, sn_ci_cmd;
     uint32_t sn, ci, cmd;
@@ -589,8 +692,6 @@ ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
     *(uint64_t *)((uint8_t *)cq->uar + MLX5_CQ_DOORBELL) = htobe64(doorbell);
 
     ucs_memory_bus_store_fence();
-
-    return UCS_OK;
 }
 
 #if HAVE_DECL_MLX5DV_OBJ_AH
