@@ -80,16 +80,6 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
                                 enum ibv_qp_type qp_type, uint32_t max_recv_wr);
 
 /**
- * Update CI to support req_notify_cq
- */
-void uct_ib_mlx5_update_cq_ci(struct ibv_cq *cq, unsigned cq_ci);
-
-/**
- * Retrieve CI from the driver
- */
-unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq);
-
-/**
  * Get internal AV information.
  */
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);

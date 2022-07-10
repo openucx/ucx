@@ -194,7 +194,8 @@ enum {
     /* Indicates that TX cq len in uct_ib_iface_init_attr_t is specified per
      * each IB path. Therefore IB interface constructor would need to multiply
      * TX CQ len by the number of IB paths (when it is properly initialized). */
-    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2)
+    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2),
+    UCT_IB_FORCE_CQE_ZIPPING         = UCS_BIT(3),
 };
 
 
@@ -208,6 +209,7 @@ typedef struct uct_ib_iface_init_attr {
     int         flags;                  /* Various flags (see enum) */
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
     unsigned    max_rd_atomic;
+    uint8_t     cqe_zip_sizes;
 } uct_ib_iface_init_attr_t;
 
 
@@ -232,14 +234,18 @@ typedef struct uct_ib_qp_attr {
 
 typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
                                                       uct_ib_dir_t dir,
-                                                      const uct_ib_iface_config_t *config,
                                                       const uct_ib_iface_init_attr_t *init_attr,
                                                       int preferred_cpu,
                                                       size_t inl);
 
+typedef void (*uct_ib_iface_destroy_cq_func_t)(uct_ib_iface_t *iface,
+                                               uct_ib_dir_t dir);
+
 typedef ucs_status_t (*uct_ib_iface_arm_cq_func_t)(uct_ib_iface_t *iface,
                                                    uct_ib_dir_t dir,
                                                    int solicited_only);
+
+typedef ucs_status_t (*uct_ib_iface_pre_arm_func_t)(uct_ib_iface_t *iface);
 
 typedef void (*uct_ib_iface_event_cq_func_t)(uct_ib_iface_t *iface,
                                              uct_ib_dir_t dir);
@@ -254,7 +260,7 @@ typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface,
 struct uct_ib_iface_ops {
     uct_iface_internal_ops_t           super;
     uct_ib_iface_create_cq_func_t      create_cq;
-    uct_ib_iface_arm_cq_func_t         arm_cq;
+    uct_ib_iface_destroy_cq_func_t     destroy_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
     uct_ib_iface_handle_failure_func_t handle_failure;
 };
@@ -556,9 +562,10 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  int solicited_only);
 
 ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
-                                    const uct_ib_iface_config_t *config,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl);
+
+void uct_ib_verbs_destroy_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir);
 
 ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
                                     uct_ib_qp_attr_t *attr,

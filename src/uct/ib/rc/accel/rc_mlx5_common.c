@@ -268,9 +268,8 @@ static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
 static ucs_status_t UCS_F_MAYBE_UNUSED
 uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
-    uct_ib_mlx5_md_t *md  = ucs_derived_of(iface->super.super.super.md,
-                                           uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev  = &md->super.dev;
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    uct_ib_device_t *dev = &md->super.dev;
     struct ibv_ah_attr ah_attr = {};
     uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
@@ -281,8 +280,6 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     attr.super.cap.max_send_wr  = iface->tm.cmd_qp_len;
     attr.super.cap.max_send_sge = 1;
     attr.super.ibv.pd           = md->super.pd;
-    attr.super.ibv.send_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
-    attr.super.ibv.recv_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
     attr.super.srq_num          = iface->rx.srq.srq_num;
     attr.super.port             = dev->first_port;
     attr.mmio_mode              = iface->tx.mmio_mode;
@@ -484,8 +481,7 @@ err_tag_cleanup:
 
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
-                                          uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
     uct_rc_mlx5_mp_hash_key_t key_gid;
     uint64_t key_lid;
     void *recv_buffer;
@@ -551,7 +547,7 @@ ucs_status_t
 uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                  const uct_rc_iface_common_config_t *rc_config)
 {
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
     ucs_status_t status;
 
     ucs_assert(iface->config.srq_topo != UCT_RC_MLX5_SRQ_TOPO_CYCLIC);
@@ -1103,37 +1099,26 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     uct_rc_mlx5_tag_query(iface, iface_attr, max_inline, max_tag_eager_iov);
 }
 
-void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
-                                            uct_ib_iface_t *ib_iface)
-{
-#if !HAVE_DECL_MLX5DV_INIT_OBJ
-    uct_ib_mlx5_update_cq_ci(ib_iface->cq[UCT_IB_DIR_TX], iface->cq[UCT_IB_DIR_TX].cq_ci);
-    uct_ib_mlx5_update_cq_ci(ib_iface->cq[UCT_IB_DIR_RX], iface->cq[UCT_IB_DIR_RX].cq_ci);
-#endif
-}
-
-void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
-                                          uct_ib_iface_t *ib_iface)
-{
-#if !HAVE_DECL_MLX5DV_INIT_OBJ
-    iface->cq[UCT_IB_DIR_TX].cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_TX]);
-    iface->cq[UCT_IB_DIR_RX].cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_RX]);
-#endif
-}
-
 ucs_status_t
-uct_rc_mlx5_iface_common_arm_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
-                                int solicited_only)
+uct_rc_mlx5_iface_common_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
+                                   const uct_ib_iface_init_attr_t *init_attr,
+                                   int preferred_cpu, size_t inl)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
-                                                       uct_rc_mlx5_iface_common_t);
-#if HAVE_DECL_MLX5DV_INIT_OBJ
-    return uct_ib_mlx5dv_arm_cq(&iface->cq[dir], solicited_only);
-#else
-    uct_ib_mlx5_update_cq_ci(iface->super.super.cq[dir],
-                             iface->cq[dir].cq_ci);
-    return uct_ib_iface_arm_cq(ib_iface, dir, solicited_only);
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md              = uct_ib_mlx5_iface_md(ib_iface);
+    uct_ib_mlx5_cq_t *uct_cq          = &iface->cq[dir];
+
+#if HAVE_DEVX
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
+        return uct_ib_mlx5_devx_create_cq(ib_iface, dir, init_attr, uct_cq,
+                                          preferred_cpu, inl);
+    }
 #endif
+
+    uct_cq->type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
+    return uct_ib_mlx5_create_cq(ib_iface, dir, init_attr, uct_cq,
+                                 preferred_cpu, inl);
 }
 
 void uct_rc_mlx5_iface_common_event_cq(uct_ib_iface_t *ib_iface,
@@ -1142,6 +1127,15 @@ void uct_rc_mlx5_iface_common_event_cq(uct_ib_iface_t *ib_iface,
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
                                                        uct_rc_mlx5_iface_common_t);
     iface->cq[dir].cq_sn++;
+}
+
+void uct_rc_mlx5_iface_common_destroy_cq(uct_ib_iface_t *ib_iface,
+                                         uct_ib_dir_t dir)
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
+
+    uct_ib_mlx5_destroy_cq(ib_iface, &iface->cq[dir], dir);
 }
 
 int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,

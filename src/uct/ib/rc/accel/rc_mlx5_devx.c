@@ -16,35 +16,31 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 
-ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
-                                                    uct_ib_mlx5_qp_t *qp,
-                                                    unsigned event_num,
-                                                    enum ibv_event_type event_type,
-                                                    unsigned event_data)
+
+ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(
+        uct_rc_mlx5_iface_common_t *iface,
+        struct mlx5dv_devx_event_channel *event_channel,
+        struct mlx5dv_devx_obj *obj, uint16_t event, uint64_t cookie,
+        char *msg_arg)
 {
-#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
-    uint64_t cookie;
-    uint16_t event;
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
     int ret;
 
-    if (iface->event_channel == NULL) {
+    if (event_channel == NULL) {
         return UCS_OK;
     }
 
-    event  = event_num;
-    cookie = event_type | ((uint64_t)event_data << UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT);
-    ret    = mlx5dv_devx_subscribe_devx_event(iface->event_channel, qp->devx.obj,
-                                              sizeof(event), &event, cookie);
+    ret = mlx5dv_devx_subscribe_devx_event(event_channel, obj, sizeof(event),
+                                           &event, cookie);
     if (ret) {
-        ucs_error("mlx5dv_devx_subscribe_devx_event() failed: %m");
+        ucs_error("mlx5dv_devx_subscribe_devx_event(%s) failed on %s: %m",
+                  msg_arg, ibv_get_device_name(md->dev.ibv_context->device));
         return UCS_ERR_IO_ERROR;
     }
-#endif
 
     return UCS_OK;
 }
 
-#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
 static void
 uct_rc_mlx5_devx_iface_event_handler(int fd, ucs_event_set_types_t events,
                                      void *arg)
@@ -58,7 +54,8 @@ uct_rc_mlx5_devx_iface_event_handler(int fd, ucs_event_set_types_t events,
     ret = mlx5dv_devx_get_event(iface->event_channel, &devx_event, sizeof(devx_event));
     if (ret < 0) {
         if (errno != EAGAIN) {
-            ucs_warn("mlx5dv_devx_get_event() failed: %m");
+            ucs_warn("mlx5dv_devx_get_event(QP) failed on %s: %m",
+                     ibv_get_device_name(md->dev.ibv_context->device));
         }
         return;
     }
@@ -76,20 +73,70 @@ uct_rc_mlx5_devx_iface_event_handler(int fd, ucs_event_set_types_t events,
 
     uct_ib_handle_async_event(&md->dev, &event);
 }
-#endif
 
-ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface)
+ucs_status_t uct_rc_mlx5_iface_devx_pre_arm(uct_rc_mlx5_iface_common_t *iface)
 {
-    ucs_status_t status   = UCS_OK;
-#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
-    uct_ib_mlx5_md_t *md  = ucs_derived_of(uct_ib_iface_md(&iface->super.super),
-                                           uct_ib_mlx5_md_t);
-    struct mlx5dv_devx_event_channel *event_channel;
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
+    ucs_status_t status;
+    struct mlx5dv_devx_async_event_hdr event;
+    int ret;
 
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) || !md->super.dev.async_events) {
-        iface->event_channel = NULL;
-        return UCS_OK;
+    status = UCS_OK;
+    for (;;) {
+        ret = mlx5dv_devx_get_event(iface->cq_event_channel, &event,
+                                    sizeof(event));
+        if (ret < 0) {
+            break;
+        }
+
+        iface->super.super.ops->event_cq(&iface->super.super, event.cookie);
+        status = UCS_ERR_BUSY;
     }
+
+    if (errno != EAGAIN) {
+        ucs_warn("mlx5dv_devx_get_event(CQ) failed on %s: %m",
+                 ibv_get_device_name(md->dev.ibv_context->device));
+        status = UCS_ERR_IO_ERROR;
+    }
+
+    return status;
+}
+
+ucs_status_t uct_rc_mlx5_iface_devx_arm(uct_iface_h tl_iface, unsigned events)
+{
+    uct_rc_mlx5_iface_common_t *iface =
+        ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md              =
+        uct_ib_mlx5_iface_md(&iface->super.super);
+    int solicited[UCT_IB_DIR_NUM], dir;
+    ucs_status_t status;
+    uint64_t dirs;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ)) {
+        return uct_rc_iface_event_arm(tl_iface, events);
+    }
+
+    status = uct_rc_mlx5_iface_devx_pre_arm(iface);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    dirs = uct_rc_iface_arm_cq_check(&iface->super, events, solicited);
+    ucs_for_each_bit(dir, dirs) {
+        ucs_assert(dir < UCT_IB_DIR_NUM);
+        uct_ib_mlx5dv_arm_cq(&iface->cq[dir], solicited[dir]);
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_rc_mlx5_devx_create_event_channel(
+        uct_rc_mlx5_iface_common_t *iface,
+        struct mlx5dv_devx_event_channel **event_channel_p)
+{
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    struct mlx5dv_devx_event_channel *event_channel;
+    ucs_status_t status;
 
     event_channel = mlx5dv_devx_create_event_channel(
             md->super.dev.ibv_context,
@@ -99,7 +146,6 @@ ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *ifac
         ucs_error("mlx5dv_devx_create_event_channel() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
-
     }
 
     status = ucs_sys_fcntl_modfl(event_channel->fd, O_NONBLOCK, 0);
@@ -107,35 +153,78 @@ ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *ifac
         goto err_destroy_channel;
     }
 
-    status = ucs_async_set_event_handler(iface->super.super.super.worker->async->mode,
-                                         event_channel->fd, UCS_EVENT_SET_EVREAD,
-                                         uct_rc_mlx5_devx_iface_event_handler, iface,
-                                         iface->super.super.super.worker->async);
-    if (status != UCS_OK) {
-        goto err_destroy_channel;
-    }
-
-    iface->event_channel = event_channel;
+    *event_channel_p = event_channel;
     return UCS_OK;
 
 err_destroy_channel:
     mlx5dv_devx_destroy_event_channel(event_channel);
-    iface->event_channel = NULL;
 err:
-#endif
+    return status;
+}
+
+ucs_status_t
+uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface)
+{
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    ucs_status_t status;
+
+    iface->event_channel    = NULL;
+    iface->cq_event_channel = NULL;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+        return UCS_OK;
+    }
+
+    if (md->super.dev.async_events) {
+        status = uct_rc_mlx5_devx_create_event_channel(iface,
+                                                       &iface->event_channel);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = ucs_async_set_event_handler(
+                iface->super.super.super.worker->async->mode,
+                iface->event_channel->fd, UCS_EVENT_SET_EVREAD,
+                uct_rc_mlx5_devx_iface_event_handler, iface,
+                iface->super.super.super.worker->async);
+        if (status != UCS_OK) {
+            goto err_destroy_channel;
+        }
+    }
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
+        status = uct_rc_mlx5_devx_create_event_channel(iface,
+                &iface->cq_event_channel);
+        if (status != UCS_OK) {
+            goto err_free_events;
+        }
+    }
+
+    return UCS_OK;
+
+err_free_events:
+    if (iface->event_channel != NULL) {
+        ucs_async_remove_handler(iface->event_channel->fd, 1);
+    }
+
+err_destroy_channel:
+    if (iface->event_channel != NULL) {
+        mlx5dv_devx_destroy_event_channel(iface->event_channel);
+    }
+
     return status;
 }
 
 void uct_rc_mlx5_devx_iface_free_events(uct_rc_mlx5_iface_common_t *iface)
 {
-#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
-    if (iface->event_channel == NULL) {
-        return;
+    if (iface->event_channel != NULL) {
+        ucs_async_remove_handler(iface->event_channel->fd, 1);
+        mlx5dv_devx_destroy_event_channel(iface->event_channel);
     }
 
-    ucs_async_remove_handler(iface->event_channel->fd, 1);
-    mlx5dv_devx_destroy_event_channel(iface->event_channel);
-#endif
+    if (iface->cq_event_channel != NULL) {
+        mlx5dv_devx_destroy_event_channel(iface->cq_event_channel);
+    }
 }
 
 static ucs_status_t
@@ -214,8 +303,7 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
                             int dc, unsigned rndv_hdr_len)
 {
-    uct_ib_mlx5_md_t *md  = ucs_derived_of(uct_ib_iface_md(&iface->super.super),
-                                           uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md  = uct_ib_mlx5_iface_md(&iface->super.super);
     uct_ib_device_t *dev  = &md->super.dev;
     struct mlx5dv_pd dvpd = {};
     struct mlx5dv_obj dv  = {};
@@ -268,8 +356,7 @@ err_cleanup_srq:
 ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                       const uct_rc_iface_common_config_t *config)
 {
-    uct_ib_mlx5_md_t *md  = ucs_derived_of(uct_ib_iface_md(&iface->super.super),
-                                           uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md  = uct_ib_mlx5_iface_md(&iface->super.super);
     uct_ib_device_t *dev  = &md->super.dev;
     struct mlx5dv_pd dvpd = {};
     struct mlx5dv_obj dv  = {};
@@ -324,8 +411,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          enum ibv_mtu path_mtu,
                                          uint8_t path_index)
 {
-    uct_ib_mlx5_md_t *md = ucs_derived_of(uct_ib_iface_md(&iface->super.super),
-                                          uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
     char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
     char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
