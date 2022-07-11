@@ -362,7 +362,7 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
  *
  */
 typedef struct uct_ib_iface_recv_desc {
-    void    *payload;
+    void     *payload;
     uint32_t payload_lkey;
     uint32_t lkey;
 } UCS_S_PACKED uct_ib_iface_recv_desc_t;
@@ -375,10 +375,11 @@ extern const char *uct_ib_mtu_values[];
 /**
  * Create memory pool of receive sg descs.
  */
-ucs_status_t uct_ib_iface_recv_sg_mpools_init(uct_ib_iface_t *iface,
-                                              const uct_ib_iface_config_t *config,
-                                              const uct_iface_params_t *params,
-                                              const char *name, ucs_mpool_t *mp);
+ucs_status_t
+uct_ib_iface_recv_sg_mpools_init(uct_ib_iface_t *iface,
+                                 const uct_ib_iface_config_t *config,
+                                 const uct_iface_params_t *params,
+                                 const char *name, ucs_mpool_t *mp);
 
 /**
  * Create memory pool of receive descriptors.
@@ -540,7 +541,8 @@ static inline void *
 uct_ib_iface_recv_desc_payload(uct_ib_iface_t *iface,
                                uct_ib_iface_recv_desc_t *desc)
 {
-    return UCS_PTR_BYTE_OFFSET(desc, iface->config.rx_payload_offset + sizeof(uct_ib_iface_recv_desc_t));
+    return UCS_PTR_BYTE_OFFSET(desc, iface->config.rx_payload_offset +
+                                             sizeof(uct_ib_iface_recv_desc_t));
 }
 
 typedef struct uct_ib_recv_wr {

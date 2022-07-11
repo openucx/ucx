@@ -611,7 +611,8 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
         return UCS_OK;
     } else if ((length < zcopy_max) &&
-               ucs_likely(length < msg_config->max_zcopy - proto->only_hdr_size)) {
+               ucs_likely(length <
+                          msg_config->max_zcopy - proto->only_hdr_size)) {
         /* zcopy */
         ucp_request_send_state_reset(req, proto->zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_ZCOPY_AM);

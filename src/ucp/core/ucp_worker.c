@@ -212,8 +212,8 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
     }
 }
 
-static ucs_status_t ucp_stub_am_handler(void *arg, void *data, void *payload, size_t length,
-                                        unsigned flags)
+static ucs_status_t ucp_stub_am_handler(void *arg, void *data, void *payload,
+                                        size_t length, unsigned flags)
 {
     ucp_worker_h worker = arg;
     ucs_trace("worker %p: drop message", worker);
@@ -881,7 +881,7 @@ static uint64_t ucp_worker_get_exclude_caps(ucp_worker_h worker)
 */
 
 typedef struct dummy_mem_allocator_obj {
-    ucs_mpool_t mpool;
+    ucs_mpool_t  mpool;
     ucp_worker_h worker;
 } dummy_mem_allocator_obj_t;
 
@@ -889,7 +889,7 @@ typedef struct dummy_mem_allocator_obj {
  * Memory buffers chunk header for shared mpool chunk.
  */
 typedef struct ucp_shared_mpool_chunk_hdr {
-    ucp_mem_h                     memh;
+    ucp_mem_h memh;
 } ucp_shared_mpool_chunk_hdr_t;
 
 /**
@@ -900,9 +900,10 @@ typedef struct ucp_shared_mpool_buf_hdr {
     uct_mem_h uct_memh;
 } ucp_shared_mpool_buf_hdr_t;
 
-UCS_PROFILE_FUNC(ucs_status_t, dummy_mem_allocator_mp_chunk_alloc, (mp, size_p, chunk_p),
-                 ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
-{   
+UCS_PROFILE_FUNC(ucs_status_t, dummy_mem_allocator_mp_chunk_alloc,
+                 (mp, size_p, chunk_p), ucs_mpool_t *mp, size_t *size_p,
+                 void **chunk_p)
+{
     const dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)mp;
     const ucp_context_h context                = allocator->worker->context;
     ucs_status_t status;
@@ -910,9 +911,10 @@ UCS_PROFILE_FUNC(ucs_status_t, dummy_mem_allocator_mp_chunk_alloc, (mp, size_p, 
     ucp_mem_h memh = NULL;
     ucp_shared_mpool_chunk_hdr_t *chunk_hdr;
     size_t chunk_size;
-    
+
     chunk_size        = (*size_p) + sizeof(*chunk_hdr);
-    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     params.flags      = UCP_MEM_MAP_ALLOCATE;
     params.length     = chunk_size;
     params.address    = NULL;
@@ -920,9 +922,9 @@ UCS_PROFILE_FUNC(ucs_status_t, dummy_mem_allocator_mp_chunk_alloc, (mp, size_p, 
         return status;
     }
 
-    chunk_hdr = ucp_memh_address(memh);
+    chunk_hdr       = ucp_memh_address(memh);
     chunk_hdr->memh = memh;
-    *chunk_p = chunk_hdr + 1;
+    *chunk_p        = chunk_hdr + 1;
     return status;
 }
 
@@ -930,14 +932,17 @@ UCS_PROFILE_FUNC_VOID(dummy_mem_allocator_mp_chunk_release, (mp, chunk),
                       ucs_mpool_t *mp, void *chunk)
 {
     const dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)mp;
-    ucp_shared_mpool_chunk_hdr_t *chunk_hdr = UCS_PTR_BYTE_OFFSET(chunk, -sizeof(ucp_shared_mpool_chunk_hdr_t));
+    ucp_shared_mpool_chunk_hdr_t *chunk_hdr =
+            UCS_PTR_BYTE_OFFSET(chunk, -sizeof(ucp_shared_mpool_chunk_hdr_t));
 
     ucp_mem_unmap(allocator->worker->context, chunk_hdr->memh);
 }
 
-static void dummy_mem_allocator_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+static void
+dummy_mem_allocator_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    const ucp_shared_mpool_chunk_hdr_t *chunk_hdr = UCS_PTR_BYTE_OFFSET(chunk, -sizeof(ucp_shared_mpool_chunk_hdr_t));
+    const ucp_shared_mpool_chunk_hdr_t *chunk_hdr =
+            UCS_PTR_BYTE_OFFSET(chunk, -sizeof(ucp_shared_mpool_chunk_hdr_t));
     ucp_shared_mpool_buf_hdr_t *buf_hdr = obj;
 
     buf_hdr->ucp_memh = chunk_hdr->memh;
@@ -951,22 +956,24 @@ static ucs_mpool_ops_t ucp_worker_ifaces_mpool_ops = {
     .obj_str       = NULL
 };
 
-UCS_PROFILE_FUNC(ucs_status_t, user_dummy_memory_allocator_init, (worker, buffer_size, allocator_obj),
-                 ucp_worker_h worker, size_t buffer_size, void **allocator_obj)
+UCS_PROFILE_FUNC(ucs_status_t, user_dummy_memory_allocator_init,
+                 (worker, buffer_size, allocator_obj), ucp_worker_h worker,
+                 size_t buffer_size, void **allocator_obj)
 {
-    dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)malloc(sizeof(dummy_mem_allocator_obj_t));
+    dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)malloc(
+            sizeof(dummy_mem_allocator_obj_t));
     ucs_mpool_params_t mp_params;
     ucs_status_t status;
-    
+
     allocator->worker = worker;
     ucs_mpool_params_reset(&mp_params);
-    mp_params.priv_size = sizeof(ucp_shared_mpool_buf_hdr_t);
-    mp_params.elem_size = buffer_size+sizeof(ucp_shared_mpool_buf_hdr_t);
+    mp_params.priv_size    = sizeof(ucp_shared_mpool_buf_hdr_t);
+    mp_params.elem_size    = buffer_size + sizeof(ucp_shared_mpool_buf_hdr_t);
     mp_params.align_offset = sizeof(ucp_shared_mpool_buf_hdr_t);
-    mp_params.ops = &ucp_worker_ifaces_mpool_ops;
-    mp_params.name = "dummy_mem_allocator_mpool";
-    status = ucs_mpool_init(&mp_params, &allocator->mpool);
-    
+    mp_params.ops          = &ucp_worker_ifaces_mpool_ops;
+    mp_params.name         = "dummy_mem_allocator_mpool";
+    status                 = ucs_mpool_init(&mp_params, &allocator->mpool);
+
     if (status != UCS_OK) {
         return status;
     }
@@ -978,11 +985,12 @@ UCS_PROFILE_FUNC(ucs_status_t, user_dummy_memory_allocator_init, (worker, buffer
 }
 
 UCS_PROFILE_FUNC(void*, user_dummy_memory_allocator_get, (allocator_obj, memh),
-                 void *allocator_obj, ucp_mem_h* memh)
+                 void *allocator_obj, ucp_mem_h *memh)
 {
-    dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)allocator_obj;
+    dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)
+            allocator_obj;
     ucp_shared_mpool_buf_hdr_t *m_buf_hdr;
-    void* obj;
+    void *obj;
 
     obj = ucs_mpool_get_inline(&allocator->mpool);
 
@@ -994,19 +1002,17 @@ UCS_PROFILE_FUNC(void*, user_dummy_memory_allocator_get, (allocator_obj, memh),
     m_buf_hdr = (ucp_shared_mpool_buf_hdr_t*)obj;
 
     *memh = m_buf_hdr->ucp_memh;
-    return m_buf_hdr+1;
+    return m_buf_hdr + 1;
 }
 
-UCS_PROFILE_FUNC_VOID(user_dummy_memory_allocator_put, (obj),
-                      void *obj)
-{   
+UCS_PROFILE_FUNC_VOID(user_dummy_memory_allocator_put, (obj), void *obj)
+{
     obj = UCS_PTR_BYTE_OFFSET(obj, -sizeof(uct_mem_h));
     ucs_mpool_put_inline((void*)obj);
-    VALGRIND_MAKE_MEM_UNDEFINED(obj, sizeof(*(obj))); \
+    VALGRIND_MAKE_MEM_UNDEFINED(obj, sizeof(*(obj)));
 }
 
-UCS_PROFILE_FUNC_VOID(user_dummy_memory_allocator_clean, (obj),
-                      void *obj)
+UCS_PROFILE_FUNC_VOID(user_dummy_memory_allocator_clean, (obj), void *obj)
 {
     dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)obj;
     ucs_mpool_cleanup(&allocator->mpool, 0);
@@ -1019,8 +1025,10 @@ UCS_PROFILE_FUNC_VOID(user_dummy_memory_allocator_clean, (obj),
 * End
 */
 
-static UCS_F_ALWAYS_INLINE
-ucs_status_t ucp_worker_get_uct_memh(ucp_mem_h ucp_memh, unsigned md_index, uct_mem_h* uct_memh) {
+static UCS_F_ALWAYS_INLINE ucs_status_t 
+ucp_worker_get_uct_memh(ucp_mem_h ucp_memh, unsigned md_index, 
+                        uct_mem_h *uct_memh)
+{
     ucp_md_map_t md_map_p;
 
     if (md_index >= UCP_MD_INDEX_BITS) {
@@ -1037,8 +1045,9 @@ ucs_status_t ucp_worker_get_uct_memh(ucp_mem_h ucp_memh, unsigned md_index, uct_
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_rx_buffers_agent_get, (agent, arg, buf),
-                 void *agent, void* arg, ucs_buffers_agent_buffer_t* buf)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_rx_buffers_agent_get,
+                 (agent, arg, buf), void *agent, void *arg,
+                 ucs_buffers_agent_buffer_t *buf)
 {
     const ucp_worker_iface_t *wiface = (ucp_worker_iface_t*)arg;
     const ucp_worker_h worker        = wiface->worker;
@@ -1046,7 +1055,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_rx_buffers_agent_get, (agent, arg, buf
     ucp_tl_resource_desc_t *resource;
     unsigned md_index;
     ucp_mem_h ucp_memh;
-    void* obj;
+    void *obj;
 
     if (buf == NULL) {
         //TODO - alert/log maybe?
@@ -1054,7 +1063,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_rx_buffers_agent_get, (agent, arg, buf
     }
 
     obj = worker->user_mem_allocator.ops.get_buf(agent, &ucp_memh);
-    
+
     if (obj == NULL) {
         //TODO - alert/log maybe?
         return UCS_ERR_NO_ELEM;
@@ -1063,9 +1072,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_rx_buffers_agent_get, (agent, arg, buf
     resource = &context->tl_rscs[wiface->rsc_index];
     md_index = resource->md_index;
 
-    if (ucp_worker_get_uct_memh(ucp_memh,
-                                md_index,
-                                &buf->memh) != UCS_OK) {
+    if (ucp_worker_get_uct_memh(ucp_memh, md_index, &buf->memh) != UCS_OK) {
         return UCS_ERR_NO_ELEM;
     }
 
@@ -1074,19 +1081,23 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_rx_buffers_agent_get, (agent, arg, buf
     return UCS_OK;
 }
 
-static ucs_status_t ucp_worker_create_ifaces_rx_buffers_agent(ucp_worker_h worker) {
+static ucs_status_t
+ucp_worker_create_ifaces_rx_buffers_agent(ucp_worker_h worker)
+{
     ucs_status_t status;
 
     if (worker->user_mem_allocator.ops.init_memory_allocator == NULL) {
         return UCS_OK;
     }
-    
+
     worker->rx_buffers_agent_ops.get_buf = ucp_worker_rx_buffers_agent_get;
-    worker->rx_buffers_agent_ops.put_buf = worker->user_mem_allocator.ops.put_buf;
-    
+    worker->rx_buffers_agent_ops.put_buf =
+            worker->user_mem_allocator.ops.put_buf;
+
     worker->user_mem_allocator.obj = NULL;
     //TODO - check for error
-    status = worker->user_mem_allocator.ops.init_memory_allocator(worker, 8196, &worker->user_mem_allocator.obj);
+    status = worker->user_mem_allocator.ops.init_memory_allocator(
+            worker, 8196, &worker->user_mem_allocator.obj);
     return status;
 }
 
@@ -1299,8 +1310,9 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     worker->num_ifaces = num_ifaces;
     iface_id           = 0;
 
-    ucp_worker_create_ifaces_rx_buffers_agent(worker); //TODO - check and handle error
-    iface_params.rx_buffers_agent = worker->user_mem_allocator.obj;
+    //TODO - check and handle error
+    ucp_worker_create_ifaces_rx_buffers_agent(worker);
+    iface_params.rx_buffers_agent     = worker->user_mem_allocator.obj;
     iface_params.rx_buffers_agent_ops = &worker->rx_buffers_agent_ops;
 
     UCS_BITMAP_FOR_EACH_BIT(tl_bitmap, tl_id) {
@@ -2564,10 +2576,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     //TODO - init user memory allocator according to worker's params
-    worker->user_mem_allocator.ops.get_buf               = user_dummy_memory_allocator_get;
-    worker->user_mem_allocator.ops.put_buf               = user_dummy_memory_allocator_put;
-    worker->user_mem_allocator.ops.cleanup               = user_dummy_memory_allocator_clean;
-    worker->user_mem_allocator.ops.init_memory_allocator = user_dummy_memory_allocator_init;
+    worker->user_mem_allocator.ops.get_buf = user_dummy_memory_allocator_get;
+    worker->user_mem_allocator.ops.put_buf = user_dummy_memory_allocator_put;
+    worker->user_mem_allocator.ops.cleanup = user_dummy_memory_allocator_clean;
+    worker->user_mem_allocator.ops.init_memory_allocator =
+            user_dummy_memory_allocator_init;
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,

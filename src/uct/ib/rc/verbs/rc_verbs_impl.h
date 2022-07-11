@@ -55,7 +55,7 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
     uct_rc_iface_ops_t *rc_ops;
     ucs_status_t status;
     void *udesc;
-    void* payload;
+    void *payload;
 
     desc = (uct_ib_iface_recv_desc_t *)wr_id;
     payload = desc->payload;
@@ -64,9 +64,9 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
         status = rc_ops->fc_handler(iface, qp_num, hdr, length - sizeof(*hdr),
                                     imm_data, slid, UCT_CB_PARAM_FLAG_DESC);
     } else {
-        status = uct_iface_invoke_am(&iface->super.super, hdr->am_id, 
-                                     hdr + 1, payload,
-                                     length - sizeof(*hdr), UCT_CB_PARAM_FLAG_DESC);
+        status = uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
+                                     payload, length - sizeof(*hdr),
+                                     UCT_CB_PARAM_FLAG_DESC);
     }
 
     if (ucs_likely(status != UCS_INPROGRESS)) {

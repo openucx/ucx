@@ -15,7 +15,7 @@ BEGIN_C_DECLS
 
 typedef struct ucs_buffers_agent_buffer {
     uct_mem_h memh;
-    void* buf;
+    void      *buf;
 } ucs_buffers_agent_buffer_t;
 
 typedef struct ucs_buffers_agent_ops {
@@ -28,14 +28,15 @@ typedef struct ucs_buffers_agent_ops {
      *
      * @return            Error code as defined by @ref ucs_status_t
      */
-    ucs_status_t (*get_buf)(void* agent, void* arg, ucs_buffers_agent_buffer_t* buf);
+    ucs_status_t (*get_buf)(void *agent, void *arg,
+                            ucs_buffers_agent_buffer_t *buf);
 
     /**
      * Return buffer to the memory allocation instance.
      *
      * @param buff         to return.
      */
-    void  (*put_buf)(void *buff);
+    void (*put_buf)(void *buff);
 } ucs_buffers_agent_ops_t;
 
 END_C_DECLS

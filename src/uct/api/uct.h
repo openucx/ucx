@@ -676,9 +676,9 @@ enum uct_iface_params_field {
 
     /** Enables @ref uct_iface_params_t::features */
     UCT_IFACE_PARAM_FIELD_FEATURES           = UCS_BIT(18),
-    
+
     /** Enables @ref uct_iface_params_t::rx_buffers_agent */
-    UCT_IFACE_PARAM_FIELD_RX_BUFFERS_AGENT    = UCS_BIT(19)
+    UCT_IFACE_PARAM_FIELD_RX_BUFFERS_AGENT   = UCS_BIT(19)
 };
 
 /**
@@ -1178,13 +1178,13 @@ struct uct_iface_params {
     uint64_t                                     features;
 
     /* RX Buffers Agent Ops */
-    ucs_buffers_agent_ops_t*                     rx_buffers_agent_ops;
-    
+    ucs_buffers_agent_ops_t                      *rx_buffers_agent_ops;
+
     /* RX Buffers Agent */
-    void*                                        rx_buffers_agent;
+    void                                         *rx_buffers_agent;
 
     /* RX Buffers Agent Arg */
-    void*                                        rx_buffers_agent_arg;    
+    void                                         *rx_buffers_agent_arg;
 };
 
 

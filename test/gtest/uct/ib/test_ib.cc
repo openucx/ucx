@@ -32,8 +32,9 @@ void test_uct_ib::init() {
     test_uct_ib::m_ib_am_handler_counter = 0;
 }
 
-ucs_status_t test_uct_ib::ib_am_handler(void *arg, void *data, void* payload,
-                                        size_t length, unsigned flags) {
+ucs_status_t test_uct_ib::ib_am_handler(void *arg, void *data, void *payload,
+                                        size_t length, unsigned flags)
+{
     recv_desc_t *my_desc  = (recv_desc_t *) arg;
     uint64_t *test_ib_hdr = (uint64_t *) data;
     uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;
@@ -1022,8 +1023,9 @@ public:
         m_e2->connect(0, *m_e1, 0);
     }
 
-    static ucs_status_t
-    ib_am_bcopy_handler(void *arg, void *data, void *payload, size_t length, unsigned flags)
+    static ucs_status_t ib_am_bcopy_handler(void *arg, void *data,
+                                            void *payload, size_t length,
+                                            unsigned flags)
     {
         EXPECT_EQ((size_t)arg, length);
         ++test_uct_ib::m_ib_am_handler_counter;

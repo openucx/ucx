@@ -142,12 +142,11 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                   const void *rkey_buffer, size_t rkey_length);
 
 
-ucs_status_t
-ucp_proto_rndv_handle_rtr(void *arg, void *data, void *payload,
-                          size_t length, unsigned flags);
+ucs_status_t ucp_proto_rndv_handle_rtr(void *arg, void *data, void *payload,
+                                       size_t length, unsigned flags);
 
 
-ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, void* payload,
+ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, void *payload,
                                            size_t length, unsigned flags);
 
 

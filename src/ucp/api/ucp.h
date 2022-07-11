@@ -3956,8 +3956,10 @@ typedef struct ucp_user_mem_allocator_ops {
      *
      * @return                    Error code as defined by @ref ucs_status_t
      */
-    ucs_status_t (*init_memory_allocator)(ucp_worker_h worker, size_t buffer_size, void **allocator_obj);
-    
+    ucs_status_t (*init_memory_allocator)(ucp_worker_h worker,
+                                          size_t buffer_size,
+                                          void **allocator_obj);
+
     /**
      * Get buffer and memory handle from user allocator
      *
@@ -3966,21 +3968,21 @@ typedef struct ucp_user_mem_allocator_ops {
      * 
      * @return pointer to buffer
      */
-    void* (*get_buf)(void *allocator_obj, ucp_mem_h* memh);
+    void *(*get_buf)(void *allocator_obj, ucp_mem_h *memh);
 
     /**
      * Return buffer to the memory allocation instance.
      *
      * @param buff buffer to release.
      */
-    void  (*put_buf)(void *buff);
+    void (*put_buf)(void *buff);
 
     /**
      * Clean memory allocator object
      *
      * @param allocator_obj User defined memory allocator object.
      */
-    void  (*cleanup)(void *allocator_obj);
+    void (*cleanup)(void *allocator_obj);
 } ucp_user_mem_allocator_ops_t;
 
 END_C_DECLS

@@ -289,13 +289,13 @@ typedef struct uct_base_iface {
     } config;
 
     /* RX Buffers Agent */
-    void*                        rx_buffers_agent;
-    
+    void                    *rx_buffers_agent;
+
     /* RX Buffers Agent Ops */
-    ucs_buffers_agent_ops_t*     rx_buffers_agent_ops;
+    ucs_buffers_agent_ops_t *rx_buffers_agent_ops;
 
     /* RX Buffers Agent Arg */
-    void*                        rx_buffers_agent_arg;
+    void                    *rx_buffers_agent_arg;
 
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
 } uct_base_iface_t;
@@ -595,12 +595,16 @@ void uct_iface_mpool_config_copy(ucs_mpool_params_t *mp_params,
         ucs_status_t _status; \
         _desc = ucs_mpool_get_inline((&_mp[UCT_IB_RX_SG_TL_HEADER_IDX])); \
         if (ucs_unlikely((_desc) == NULL)) { \
-            uct_iface_mpool_empty_warn(_iface, &_mp[UCT_IB_RX_SG_TL_HEADER_IDX]); \
+            uct_iface_mpool_empty_warn(_iface, \
+                                       &_mp[UCT_IB_RX_SG_TL_HEADER_IDX]); \
             _failure; \
         } \
-        _status = _base_iface->rx_buffers_agent_ops->get_buf(_base_iface->rx_buffers_agent, _base_iface->rx_buffers_agent_arg, &_agent_buf); \
+        _status = _base_iface->rx_buffers_agent_ops->get_buf( \
+                _base_iface->rx_buffers_agent, \
+                _base_iface->rx_buffers_agent_arg, &_agent_buf); \
         if (ucs_unlikely(_status != UCS_OK)) { \
-            uct_iface_mpool_empty_warn(_iface, &_mp[UCT_IB_RX_SG_PAYLOAD_IDX]); \
+            uct_iface_mpool_empty_warn(_iface, \
+                                       &_mp[UCT_IB_RX_SG_PAYLOAD_IDX]); \
             _failure; \
         } \
         _desc->payload_lkey = uct_ib_memh_get_lkey(_agent_buf.memh); \
@@ -904,7 +908,7 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
  */
 static inline ucs_status_t
 uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
-                    void* payload, unsigned length, unsigned flags)
+                    void *payload, unsigned length, unsigned flags)
 {
     ucs_status_t     status;
     uct_am_handler_t *handler;
@@ -916,7 +920,7 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
 
     handler = &iface->am[id];
-    status = handler->cb(handler->arg, data, payload, length, flags);
+    status  = handler->cb(handler->arg, data, payload, length, flags);
     ucs_assertv((status == UCS_OK) ||
                 ((status == UCS_INPROGRESS) && (flags &
                                                 UCT_CB_PARAM_FLAG_DESC)),

@@ -253,7 +253,7 @@ UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
 typedef struct ucp_worker_user_mem_allocator {
-    void* obj;
+    void                         *obj;
     ucp_user_mem_allocator_ops_t ops;
 } ucp_worker_user_mem_allocator_t;
 

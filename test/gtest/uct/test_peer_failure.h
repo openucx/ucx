@@ -43,8 +43,8 @@ public:
         return m_sender->ep(0);
     }
 
-    static ucs_status_t am_dummy_handler(void *arg, void *data, void *payload, size_t length,
-                                         unsigned flags);
+    static ucs_status_t am_dummy_handler(void *arg, void *data, void *payload,
+                                         size_t length, unsigned flags);
     static ucs_status_t pending_cb(uct_pending_req_t *self);
     static void purge_cb(uct_pending_req_t *self, void *arg);
     static ucs_status_t err_cb(void *arg, uct_ep_h ep, ucs_status_t status);

@@ -470,20 +470,20 @@ struct ucp_request {
  */
 struct ucp_recv_desc {
     union {
-        ucs_list_link_t     tag_list[2];     /* Hash list TAG-element */
-        ucs_queue_elem_t    stream_queue;    /* Queue STREAM-element */
-        ucs_queue_elem_t    tag_frag_queue;  /* Tag fragments queue */
-        ucp_am_first_desc_t am_first;        /* AM first fragment data needed
-                                                for assembling the message */
-        ucs_queue_elem_t    am_mid_queue;    /* AM middle fragments queue */
+        ucs_list_link_t     tag_list[2];         /* Hash list TAG-element */
+        ucs_queue_elem_t    stream_queue;        /* Queue STREAM-element */
+        ucs_queue_elem_t    tag_frag_queue;      /* Tag fragments queue */
+        ucp_am_first_desc_t am_first;            /* AM first fragment data needed
+                                                    for assembling the message */
+        ucs_queue_elem_t    am_mid_queue;        /* AM middle fragments queue */
     };
-    uint32_t                length;          /* Received length */
+    uint32_t                length;              /* Received length */
     union {
-        uint32_t            payload_offset;  /* Offset from end of the
-                                                descriptor to AM data */
-        void*               payload;         /* pointer to payload */
+        uint32_t payload_offset; /* Offset from end of the
+                                    descriptor to AM data */
+        void     *payload;       /* pointer to payload */
     };
-    uint16_t                flags;           /* Flags */
+    uint16_t                flags;               /* Flags */
     int16_t                 release_desc_offset; /* Offset which needs to be
                                                     substructed from rdesc when
                                                     releasing it back to UCT or

@@ -122,8 +122,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_iface_srq_set_seg_sge(
 
     UCT_TL_IFACE_GET_RX_DESC_SG(&iface->super.super.super, iface->super.rx.mps,
                                 desc, return UCS_ERR_NO_MEMORY);
-    hdr     = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-    payload = desc->payload;
+    hdr           = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+    payload       = desc->payload;
     /* Set receive data segment pointer. Length is pre-initialized. */
     seg->srq.desc = desc; /* Optimization for non-MP case (1 stride) */
     seg->dptr[UCT_IB_RX_SG_TL_HEADER_IDX].lkey = htonl(desc->lkey);

@@ -206,8 +206,9 @@ DEFINE_AMO_SW_OP(64)
 DEFINE_AMO_SW_FOP(32)
 DEFINE_AMO_SW_FOP(64)
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, payload, length, am_flags),
-                 void *arg, void *data, void *payload, size_t length, unsigned am_flags)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler,
+                 (arg, data, payload, length, am_flags), void *arg, void *data,
+                 void *payload, size_t length, unsigned am_flags)
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
@@ -278,8 +279,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, payload, leng
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, payload, length, am_flags),
-                 void *arg, void *data, void *payload, size_t length, unsigned am_flags)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler,
+                 (arg, data, payload, length, am_flags), void *arg, void *data,
+                 void *payload, size_t length, unsigned am_flags)
 {
     ucp_worker_h worker    = arg;
     ucp_rma_rep_hdr_t *hdr = data;
@@ -296,9 +298,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, payload, leng
     return UCS_OK;
 }
 
-static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type,
-                                   uint8_t id, const void *data, const void *payload, size_t length,
-                                   char *buffer, size_t max)
+static void ucp_amo_sw_dump_packet(ucp_worker_h worker,
+                                   uct_am_trace_type_t type, uint8_t id,
+                                   const void *data, const void *payload,
+                                   size_t length, char *buffer, size_t max)
 {
     const ucp_atomic_req_hdr_t *atomich;
     const ucp_rma_rep_hdr_t *reph;

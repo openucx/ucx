@@ -1786,8 +1786,8 @@ err:
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
-                 (arg, data, payload, length, tl_flags),
-                 void *arg, void *data, void *payload, size_t length, unsigned tl_flags)
+                 (arg, data, payload, length, tl_flags), void *arg, void *data,
+                 void *payload, size_t length, unsigned tl_flags)
 {
     ucp_worker_h worker = arg;
     ucp_rndv_rts_hdr_t rts_hdr;
@@ -1802,8 +1802,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
-                 (arg, data, payload, length, flags),
-                 void *arg, void *data, void *payload, size_t length, unsigned flags)
+                 (arg, data, payload, length, flags), void *arg, void *data,
+                 void *payload, size_t length, unsigned flags)
 {
     ucp_worker_h worker = arg;
     ucp_reply_hdr_t rep_hdr;
@@ -2262,8 +2262,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
-                 (arg, data, payload, length, flags),
-                 void *arg, void *data, void *payload, size_t length, unsigned flags)
+                 (arg, data, payload, length, flags), void *arg, void *data,
+                 void *payload, size_t length, unsigned flags)
 {
     ucp_worker_h worker = arg;
     ucp_request_t *rtr_sreq, *req;
@@ -2299,8 +2299,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
-                 (arg, data, payload, length, flags),
-                 void *arg, void *data, void *payload, size_t length, unsigned flags)
+                 (arg, data, payload, length, flags), void *arg, void *data,
+                 void *payload, size_t length, unsigned flags)
 {
     ucp_worker_h worker   = arg;
     ucp_context_h context = worker->context;
@@ -2325,8 +2325,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ep_config = ucp_ep_config(ep);
     put_zcopy = &ep_config->rndv.put_zcopy;
 
-    ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id"
-                  "0x%"PRIx64, rndv_rtr_hdr.address, rndv_rtr_hdr.rreq_id);
+    ucp_trace_req(sreq,
+                  "received rtr address 0x%" PRIx64 " remote rreq_id"
+                  "0x%" PRIx64,
+                  rndv_rtr_hdr.address, rndv_rtr_hdr.rreq_id);
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_rtr_recv", 0);
 
     if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
@@ -2339,10 +2341,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) && rndv_rtr_hdr.address) {
         is_put_supported = ucp_rndv_test_zcopy_scheme_support(sreq->send.length,
                                                               put_zcopy);
-        is_put_pipeline = ((!UCP_MEM_IS_HOST(sreq->send.mem_type) ||
-                            (sreq->send.length != rndv_rtr_hdr.size)) &&
-                           (context->config.ext.rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY)) &&
-                          is_put_supported;
+        is_put_pipeline  = ((!UCP_MEM_IS_HOST(sreq->send.mem_type) ||
+                             (sreq->send.length != rndv_rtr_hdr.size)) &&
+                            (context->config.ext.rndv_mode !=
+                             UCP_RNDV_MODE_PUT_ZCOPY)) &&
+                           is_put_supported;
 
         /*
          * Try pipeline protocol for non-host memory, if PUT_ZCOPY protocol is
@@ -2426,8 +2429,8 @@ out_send:
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
-                 (arg, data, payload, length, flags),
-                 void *arg, void *data, void *payload, size_t length, unsigned flags)
+                 (arg, data, payload, length, flags), void *arg, void *data,
+                 void *payload, size_t length, unsigned flags)
 {
     ucp_worker_h worker = arg;
     ucp_request_t *rreq, *rndv_req;
@@ -2472,8 +2475,8 @@ static void ucp_rndv_dump_rkey(const void *rkey_buf, const void *rkey_end,
 }
 
 static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
-                          uint8_t id, const void *data, const void *payload, size_t length,
-                          char *buffer, size_t max)
+                          uint8_t id, const void *data, const void *payload,
+                          size_t length, char *buffer, size_t max)
 {
     UCS_STRING_BUFFER_FIXED(strb, buffer, max);
     const ucp_rndv_rts_hdr_t *rndv_rts_hdr    = data;

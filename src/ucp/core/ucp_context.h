@@ -396,9 +396,10 @@ typedef struct ucp_tl_iface_atomic_flags {
  */
 #define UCP_DEFINE_AM_WITH_PROXY(_features, _id, _cb, _tracer, _flags) \
     \
-    static ucs_status_t \
-    ucp_am_##_id##_counting_proxy(void *arg, void *data, void* payload, size_t length, \
-                                  unsigned flags) \
+    static ucs_status_t ucp_am_##_id##_counting_proxy(void *arg, void *data, \
+                                                      void *payload, \
+                                                      size_t length, \
+                                                      unsigned flags) \
     { \
         ucp_worker_iface_t *wiface = arg; \
         wiface->proxy_recv_count++; \

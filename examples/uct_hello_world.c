@@ -215,8 +215,8 @@ static void print_strings(const char *label, const char *local_str,
 }
 
 /* Callback to handle receive active message */
-static ucs_status_t hello_world(void *arg, void *data, void *payload, size_t length,
-                                unsigned flags)
+static ucs_status_t
+hello_world(void *arg, void *data, void *payload, size_t length, unsigned flags)
 {
     func_am_t func_am_type = *(func_am_t *)arg;
     recv_desc_t *rdesc;

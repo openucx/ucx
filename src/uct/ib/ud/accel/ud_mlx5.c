@@ -191,8 +191,8 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
         rx_wqes[pi].sg_list[UCT_IB_RX_SG_TL_HEADER_IDX].addr = htobe64(
                 (uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super,
                                                       desc));
-        rx_wqes[pi].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].lkey   = htonl(desc->lkey);
-        rx_wqes[pi].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].addr   = htobe64(
+        rx_wqes[pi].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].lkey = htonl(desc->lkey);
+        rx_wqes[pi].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].addr = htobe64(
                 (uintptr_t)uct_ib_iface_recv_desc_payload(&iface->super.super,
                                                           desc));
         pi = next_pi;
@@ -962,7 +962,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
     for (i = 0; i <= self->rx.wq.mask; i++) {
         self->rx.wq.wqes[i].sg_list[UCT_IB_RX_SG_TL_HEADER_IDX].byte_count =
                 htonl(hdr_len);
-        self->rx.wq.wqes[i].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].byte_count   =
+        self->rx.wq.wqes[i].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].byte_count =
                 htonl(self->super.super.config.seg_size);
     }
 

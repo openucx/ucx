@@ -427,8 +427,8 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
 out:
     return uct_iface_invoke_am(&iface->super.super,
-                               (hdr->am_id & ~UCT_RC_EP_FC_MASK),
-                               hdr + 1, NULL, length, flags);
+                               (hdr->am_id & ~UCT_RC_EP_FC_MASK), hdr + 1, NULL,
+                               length, flags);
 }
 
 static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
@@ -653,8 +653,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     }
 
     /* Create RX TL HDR buffers mempool */
-    status = uct_ib_iface_recv_sg_mpools_init(&self->super, &config->super, params,
-                                              "rc_recv_sg_descs", self->rx.mps);
+    status = uct_ib_iface_recv_sg_mpools_init(&self->super, &config->super,
+                                              params, "rc_recv_sg_descs",
+                                              self->rx.mps);
     if (status != UCS_OK) {
         goto err;
     }

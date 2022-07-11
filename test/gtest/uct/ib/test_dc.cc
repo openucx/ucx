@@ -93,15 +93,16 @@ protected:
         comp->e->destroy_eps();
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, void *payload, size_t length,
-                                   unsigned flags)
+    static ucs_status_t am_handler(void *arg, void *data, void *payload,
+                                   size_t length, unsigned flags)
     {
         ++m_am_rx_count;
         return UCS_OK;
     }
 
-    static ucs_status_t am_dummy_handler(void *arg, void *data, void *payload, size_t length,
-                                         unsigned flags) {
+    static ucs_status_t am_dummy_handler(void *arg, void *data, void *payload,
+                                         size_t length, unsigned flags)
+    {
         return UCS_OK;
     }
 

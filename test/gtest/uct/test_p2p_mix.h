@@ -23,8 +23,8 @@ public:
     uct_p2p_mix_test();
 
 protected:
-    static ucs_status_t am_callback(void *arg, void *data, void *payload, size_t length,
-                                    unsigned flags);
+    static ucs_status_t am_callback(void *arg, void *data, void *payload,
+                                    size_t length, unsigned flags);
 
     static void completion_callback(uct_completion_t *comp);
 
