@@ -1057,10 +1057,14 @@ static double ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
     /* highest bandwidth with lowest overhead - test a message size of 256KB,
      * a size which is likely to be used for high-bw memory access protocol, for
      * how long it would take to transfer it with a certain transport. */
-    return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
-                ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
-                                               &wiface->attr.bandwidth),
-                        remote_iface_attr->bandwidth)) +
+    double eps       = 1e-3;
+    double local_bw  = ucp_tl_iface_bandwidth(wiface->worker->context,
+                                              &wiface->attr.bandwidth);
+    double remote_bw = remote_iface_attr->bandwidth;
+    double lane_bw   = ucs_min(local_bw, remote_bw) +
+                       (eps * (local_bw + remote_bw));
+
+    return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE / lane_bw) +
                 ucp_wireup_tl_iface_latency(wiface->worker->context,
                                             &wiface->attr, remote_iface_attr) +
                 wiface->attr.overhead +
