@@ -1099,6 +1099,7 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
 {
     ucp_context_h context     = wiface->worker->context;
     ucp_rsc_index_t dev_index = context->tl_rscs[wiface->rsc_index].dev_index;
+    double eps                = 1e-3;
     double local_bw, remote_bw;
 
     local_bw = ucp_tl_iface_bandwidth(context, &wiface->attr.bandwidth) *
@@ -1110,7 +1111,7 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
                     context, remote_dev_count[remote_addr->dev_index],
                     remote_addr->dev_num_paths);
 
-    return ucs_min(local_bw, remote_bw);
+    return ucs_min(local_bw, remote_bw) + (eps * (local_bw + remote_bw));
 }
 
 static double
