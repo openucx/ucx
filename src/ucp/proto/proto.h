@@ -113,14 +113,31 @@ typedef struct {
  *                                        +---------+---------------+
  */
 typedef enum {
+    UCP_PROTO_PERF_TYPE_FIRST,
+
     /* Time to complete this operation assuming it's the only one. */
-    UCP_PROTO_PERF_TYPE_SINGLE,
+    UCP_PROTO_PERF_TYPE_SINGLE = UCP_PROTO_PERF_TYPE_FIRST,
 
     /* Time to complete this operation after all previous ones complete. */
     UCP_PROTO_PERF_TYPE_MULTI,
 
+    /* CPU time the operation consumes (it would be less than or equal to the
+     * SINGLE and MULTI times).
+     */
+    UCP_PROTO_PERF_TYPE_CPU,
+
     UCP_PROTO_PERF_TYPE_LAST
 } ucp_proto_perf_type_t;
+
+
+/*
+ * Iterate over performance types.
+ *
+ * @param _perf_type  Performance type iterator variable.
+ */
+#define UCP_PROTO_PERF_TYPE_FOREACH(_perf_type) \
+    for (_perf_type = UCP_PROTO_PERF_TYPE_FIRST; \
+         _perf_type < UCP_PROTO_PERF_TYPE_LAST; ++(_perf_type))
 
 
 /*
@@ -312,20 +329,16 @@ unsigned ucp_protocols_count(void);
 void ucp_proto_default_query(const ucp_proto_query_params_t *params,
                              ucp_proto_query_attr_t *attr);
 
-static inline void
-ucp_proto_perf_copy(ucs_linear_func_t dest[UCP_PROTO_PERF_TYPE_LAST],
-                    const ucs_linear_func_t src[UCP_PROTO_PERF_TYPE_LAST])
-{
-    dest[UCP_PROTO_PERF_TYPE_SINGLE] = src[UCP_PROTO_PERF_TYPE_SINGLE];
-    dest[UCP_PROTO_PERF_TYPE_MULTI]  = src[UCP_PROTO_PERF_TYPE_MULTI];
-}
 
-static inline void
-ucp_proto_perf_add(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
-                   ucs_linear_func_t func)
-{
-    ucs_linear_func_add_inplace(&perf[UCP_PROTO_PERF_TYPE_SINGLE], func);
-    ucs_linear_func_add_inplace(&perf[UCP_PROTO_PERF_TYPE_MULTI], func);
-}
+void ucp_proto_perf_set(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
+                        ucs_linear_func_t func);
+
+
+void ucp_proto_perf_copy(ucs_linear_func_t dest[UCP_PROTO_PERF_TYPE_LAST],
+                         const ucs_linear_func_t src[UCP_PROTO_PERF_TYPE_LAST]);
+
+
+void ucp_proto_perf_add(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
+                        ucs_linear_func_t func);
 
 #endif

@@ -63,6 +63,9 @@ void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
     ppln_range->perf[UCP_PROTO_PERF_TYPE_MULTI] =
             frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI];
 
+    ppln_range->perf[UCP_PROTO_PERF_TYPE_CPU] =
+            frag_range->perf[UCP_PROTO_PERF_TYPE_CPU];
+
     ppln_range->max_length = max_length;
 
     ucp_proto_perf_range_add_data(ppln_range);
@@ -97,6 +100,8 @@ void ucp_proto_perf_range_add_data(const ucp_proto_perf_range_t *range)
                                  range->perf[UCP_PROTO_PERF_TYPE_SINGLE]);
     ucp_proto_perf_node_add_data(range->node, "mult",
                                  range->perf[UCP_PROTO_PERF_TYPE_MULTI]);
+    ucp_proto_perf_node_add_data(range->node, "cpu",
+                                 range->perf[UCP_PROTO_PERF_TYPE_CPU]);
 }
 
 ucs_status_t
@@ -184,23 +189,24 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
 }
 
 ucs_status_t
-ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
+ucp_proto_init_parallel_stages(const ucp_proto_common_init_params_t *params,
                                size_t range_start, size_t range_end,
                                size_t frag_size, double bias,
                                const ucp_proto_perf_range_t **stages,
                                unsigned num_stages)
 {
-    ucp_proto_caps_t *caps      = params->caps;
+    ucp_proto_caps_t *caps      = params->super.caps;
     ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
-    UCS_ARRAY_DEFINE_ONSTACK(stage_list, ucp_proto_perf_list, 4);
-    UCS_ARRAY_DEFINE_ONSTACK(concave, ucp_proto_perf_envelope, 4);
-    const ucs_linear_func_t *single_perf, *multi_perf;
+    UCS_ARRAY_DEFINE_ONSTACK(stage_list, ucp_proto_perf_list, 16);
+    UCS_ARRAY_DEFINE_ONSTACK(concave, ucp_proto_perf_envelope, 16);
+    ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST];
+    ucs_linear_func_t sum_single_perf, sum_cpu_perf;
     const ucp_proto_perf_range_t **stage_elem;
     ucp_proto_perf_envelope_elem_t *elem;
     ucp_proto_perf_node_t *stage_node;
+    ucp_proto_perf_type_t perf_type;
     ucp_proto_perf_range_t *range;
     ucs_linear_func_t *perf_elem;
-    ucs_linear_func_t sum_perf;
     char frag_size_str[64];
     ucs_status_t status;
     char range_str[64];
@@ -212,18 +218,30 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
               frag_size_str, bias * 100.0);
 
     ucs_log_indent(1);
-    sum_perf = UCS_LINEAR_FUNC_ZERO;
+    sum_single_perf = UCS_LINEAR_FUNC_ZERO;
+    sum_cpu_perf    = UCS_LINEAR_FUNC_ZERO;
     ucs_carray_for_each(stage_elem, stages, num_stages) {
-        /* Single-fragment is adding overheads and transfer time */
-        single_perf = &(*stage_elem)->perf[UCP_PROTO_PERF_TYPE_SINGLE];
-        ucs_linear_func_add_inplace(&sum_perf, *single_perf);
+        UCP_PROTO_PERF_TYPE_FOREACH(perf_type) {
+            perf[perf_type] = (*stage_elem)->perf[perf_type];
+            /* For multi-fragment protocols, we need to apply the fragment
+             * size to the performance function linear factor.
+             */
+            if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
+                perf[perf_type].m += perf[perf_type].c / frag_size;
+            }
+        }
 
-        /* account for the overhead of each fragment of a multi-fragment message */
-        multi_perf   = &(*stage_elem)->perf[UCP_PROTO_PERF_TYPE_MULTI];
-        perf_elem    = ucs_array_append(ucp_proto_perf_list, &stage_list,
-                                        status = UCS_ERR_NO_MEMORY; goto out);
-        perf_elem->c = multi_perf->c;
-        perf_elem->m = multi_perf->m + (multi_perf->c / frag_size);
+        /* Summarize single and CPU time */
+        ucs_linear_func_add_inplace(&sum_single_perf,
+                                    perf[UCP_PROTO_PERF_TYPE_SINGLE]);
+        ucs_linear_func_add_inplace(&sum_cpu_perf,
+                                    perf[UCP_PROTO_PERF_TYPE_CPU]);
+
+        /* Add all multi perf ranges to envelope array */
+        perf_elem  = ucs_array_append(ucp_proto_perf_list, &stage_list,
+                                      status = UCS_ERR_NO_MEMORY;
+                                      goto out);
+        *perf_elem = perf[UCP_PROTO_PERF_TYPE_MULTI];
 
         ucs_trace("stage[%zu] %s " UCP_PROTO_PERF_FUNC_TYPES_FMT
                   UCP_PROTO_PERF_FUNC_FMT(perf_elem),
@@ -232,6 +250,12 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
                   UCP_PROTO_PERF_FUNC_TYPES_ARG((*stage_elem)->perf),
                   UCP_PROTO_PERF_FUNC_ARG(perf_elem));
     }
+
+    /* Add CPU time as another parallel stage */
+    perf_elem  = ucs_array_append(ucp_proto_perf_list, &stage_list,
+                                  status = UCS_ERR_NO_MEMORY;
+                                  goto out);
+    *perf_elem = sum_cpu_perf;
 
     /* Multi-fragment is pipelining overheads and network transfer */
     status = ucp_proto_perf_envelope_make(&stage_list, range_start, range_end,
@@ -243,16 +267,19 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
     ucs_array_for_each(elem, &concave) {
         range             = &caps->ranges[caps->num_ranges];
         range->max_length = elem->max_length;
-        range->node       = ucp_proto_perf_node_new_data(params->proto_name, "");
+        range->node       = ucp_proto_perf_node_new_data(params->super.proto_name,
+                                                         "");
 
         /* "single" performance estimation is sum of "stages" with the bias */
         range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
-                ucs_linear_func_compose(bias_func, sum_perf);
+                ucs_linear_func_compose(bias_func, sum_single_perf);
 
         /* "multiple" performance estimation is concave envelope of "stages" */
-        multi_perf = &ucs_array_elem(&stage_list, elem->index);
-        range->perf[UCP_PROTO_PERF_TYPE_MULTI] =
-                ucs_linear_func_compose(bias_func, *multi_perf);
+        range->perf[UCP_PROTO_PERF_TYPE_MULTI] = ucs_linear_func_compose(
+                bias_func, ucs_array_elem(&stage_list, elem->index));
+
+        /* CPU overhead is the sum of all stages */
+        range->perf[UCP_PROTO_PERF_TYPE_CPU] = sum_cpu_perf;
 
         ucp_proto_perf_range_add_data(range);
 
@@ -479,11 +506,13 @@ ucp_proto_common_init_send_perf(const ucp_proto_common_init_params_t *params,
         ucp_proto_perf_node_own_child(send_perf->node, &child_perf_node);
     }
 
-    /* Add constant CPU overhead */
-    send_overhead.c                              += tl_perf->send_pre_overhead;
-    send_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE]   = send_overhead;
-    send_perf->perf[UCP_PROTO_PERF_TYPE_MULTI]    = send_overhead;
-    send_perf->perf[UCP_PROTO_PERF_TYPE_MULTI].c += tl_perf->send_post_overhead;
+    send_overhead.c                            += tl_perf->send_pre_overhead;
+    send_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE] = send_overhead;
+
+    send_overhead.c                           += tl_perf->send_post_overhead;
+    send_perf->perf[UCP_PROTO_PERF_TYPE_MULTI] = send_overhead;
+    send_perf->perf[UCP_PROTO_PERF_TYPE_CPU]   = send_overhead;
+
     ucp_proto_perf_range_add_data(send_perf);
 
     return UCS_OK;
@@ -516,6 +545,7 @@ ucp_proto_common_init_xfer_perf(const ucp_proto_common_init_params_t *params,
     xfer_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE].c += tl_perf->latency +
                                                      tl_perf->sys_latency;
     xfer_perf->perf[UCP_PROTO_PERF_TYPE_MULTI]     = xfer_time;
+    xfer_perf->perf[UCP_PROTO_PERF_TYPE_CPU]       = UCS_LINEAR_FUNC_ZERO;
 
     /*
      * Add the latency of response/ACK back from the receiver.
@@ -596,6 +626,8 @@ ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
 
     recv_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE] = recv_overhead;
     recv_perf->perf[UCP_PROTO_PERF_TYPE_MULTI]  = recv_overhead;
+    recv_perf->perf[UCP_PROTO_PERF_TYPE_CPU]    = UCS_LINEAR_FUNC_ZERO;
+
     ucp_proto_perf_range_add_data(recv_perf);
 
     return UCS_OK;
@@ -651,8 +683,8 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     parallel_stages[2] = &recv_perf;
 
     /* Add ranges representing sending single fragment */
-    status = ucp_proto_init_parallel_stages(&params->super, 0, frag_size,
-                                            frag_size, 0.0, parallel_stages, 3);
+    status = ucp_proto_init_parallel_stages(params, 0, frag_size, frag_size,
+                                            0.0, parallel_stages, 3);
     if (status != UCS_OK) {
         goto out_deref_recv_perf;
     }
