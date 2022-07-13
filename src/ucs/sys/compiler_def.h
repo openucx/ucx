@@ -215,4 +215,17 @@
 #define ucs_carray_for_each(_elem, _array, _length) \
     for ((_elem) = (_array); (_elem) < ((_array) + (_length)); ++(_elem))
 
+/*
+ * Swap two variables values
+ */
+#define ucs_swap(_a, _b) \
+    { \
+        ucs_typeof(*(_a)) __tmp; \
+        \
+        UCS_STATIC_ASSERT(ucs_same_type(ucs_typeof(*(_a)), ucs_typeof(*(_b)))); \
+        __tmp = *(_a); \
+        *(_a) = *(_b); \
+        *(_b) = __tmp; \
+    }
+
 #endif /* UCS_COMPILER_DEF_H */

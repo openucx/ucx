@@ -319,39 +319,51 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 static ucs_status_t
 uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+    uct_cuda_copy_iface_t *iface   = ucs_derived_of(tl_iface,
+                                                    uct_cuda_copy_iface_t);
+    uct_ep_operation_t op          = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                                    OPERATION, UCT_EP_OP_LAST);
+    ucs_memory_type_t src_mem_type = UCT_ATTR_VALUE(PERF, perf_attr,
+                                                    local_memory_type,
+                                                    LOCAL_MEMORY_TYPE,
+                                                    UCS_MEMORY_TYPE_UNKNOWN);
+    ucs_memory_type_t dst_mem_type = UCT_ATTR_VALUE(PERF, perf_attr,
+                                                    remote_memory_type,
+                                                    REMOTE_MEMORY_TYPE,
+                                                    UCS_MEMORY_TYPE_UNKNOWN);
+    int zcopy                      = uct_ep_op_is_zcopy(op);
+    const double latency           = 1.8e-6;
+    const double overhead          = 4.0e-6;
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        if (uct_ep_op_is_fetch(op)) {
+            ucs_swap(&src_mem_type, &dst_mem_type);
+        }
+
         perf_attr->bandwidth.dedicated = 0;
-        if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
-            perf_attr->bandwidth.shared = iface->config.bandwidth;
+        if ((src_mem_type == UCS_MEMORY_TYPE_HOST) &&
+            (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
+            perf_attr->bandwidth.shared = (zcopy ? 8300.0 : 7900.0) * UCS_MBYTE;
+        } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
+                   (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
+            perf_attr->bandwidth.shared = (zcopy ? 11660.0 : 9320.0) *
+                                          UCS_MBYTE;
+        } else if ((src_mem_type == UCS_MEMORY_TYPE_CUDA) &&
+                   (dst_mem_type == UCS_MEMORY_TYPE_CUDA)) {
+            perf_attr->bandwidth.shared = 320.0 * UCS_GBYTE;
         } else {
-            switch (perf_attr->operation) {
-            case UCT_EP_OP_GET_SHORT:
-                perf_attr->bandwidth.shared = 9320.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_GET_ZCOPY:
-                perf_attr->bandwidth.shared = 11660.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_PUT_SHORT:
-                perf_attr->bandwidth.shared = 8110.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_PUT_ZCOPY:
-                perf_attr->bandwidth.shared = 9980.0 * UCS_MBYTE;
-                break;
-            default:
-                perf_attr->bandwidth.shared = iface->config.bandwidth;
-                break;
-            }
+            perf_attr->bandwidth.shared = iface->config.bandwidth;
         }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
-        perf_attr->send_pre_overhead = UCT_CUDA_COPY_IFACE_OVERHEAD;
+        perf_attr->send_pre_overhead = overhead;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
-        perf_attr->send_post_overhead = 0;
+        /* In case of sync mem copy, the send operation CPU overhead includes
+           the latency of waiting for the copy to complete */
+        perf_attr->send_post_overhead = zcopy ? 0 : latency;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
@@ -359,7 +371,9 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
-        perf_attr->latency = UCT_CUDA_COPY_IFACE_LATENCY;
+        /* In case of async mem copy, the latency is not part of the overhead
+           and it's a standalone property */
+        perf_attr->latency = ucs_linear_func_make(zcopy ? latency : 0.0, 0.0);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
