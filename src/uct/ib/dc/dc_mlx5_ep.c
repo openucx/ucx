@@ -1561,6 +1561,9 @@ static unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
     uint64_t ep_key;
     uct_dc_mlx5_ep_t *ep;
     ucs_status_t UCS_V_UNUSED status;
+    ucs_arbiter_t *waitq;
+    ucs_arbiter_group_t *group;
+    uint8_t pool_index;
 
     if (ucs_likely(now < iface->tx.fc_hard_req_resend_time)) {
         return 0;
@@ -1572,7 +1575,14 @@ static unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
      * resend FC_HARD_REQ packet to make sure a peer will resend FC_PURE_GRANT
      * packet in case of failure on the remote FC endpoint */
     kh_foreach_key(&iface->tx.fc_hash, ep_key, {
-        ep     = (uct_dc_mlx5_ep_t*)ep_key;
+        ep = (uct_dc_mlx5_ep_t*)ep_key;
+        uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
+        if (ucs_arbiter_group_is_scheduled(group)) {
+            /* Don't force resending of FC_HARD_REQ here, it will be posted
+             * upon dispatching a pending queue */
+            continue;
+        }
+
         status = uct_dc_mlx5_ep_check_fc(iface, ep);
         if ((status != UCS_OK) && (status != UCS_ERR_NO_RESOURCE)) {
             ucs_warn("ep %p: flow-control check failed: %s", ep,
