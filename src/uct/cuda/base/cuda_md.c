@@ -20,6 +20,7 @@
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
+#include <cudaTypedefs.h>
 
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
 #define UCT_CUDA_MAX_DEVICES      32
@@ -204,6 +205,86 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
     return UCS_OK;
 }
 
+ucs_status_t uct_cuda_base_get_dmabuf_fd(const void *ptr, int *dmabuf_fd,
+                                         size_t *dmabuf_offset)
+{
+    static int dmabuf_enabled = -1;
+    size_t host_page_size     = sysconf(_SC_PAGESIZE);
+    CUdevice cuda_device;
+    CUdeviceptr mapping_base_addr;
+    CUdeviceptr aligned_ptr;
+    size_t aligned_size;
+    size_t mapping_size;
+    CUresult cu_err;
+#if CUDA_VERSION >= 11070
+    PFN_cuMemGetHandleForAddressRange pfn_cuMemGetHandleForAddressRange_11070;
+#endif
+
+    *dmabuf_fd     = UCT_DMABUF_FD_INVALID;
+    *dmabuf_offset = UCT_DMABUF_OFFSET_INVALID;
+
+#if CUDA_VERSION >= 11070
+
+    /* get fxn ptr for gethandlforaddressrange in case installed libcuda does
+     * not have the definition for it even though 11.7 header includes the
+     * declaration and avoid link error */
+    cu_err = cuGetProcAddress("cuMemGetHandleForAddressRange",
+                               (void**)&pfn_cuMemGetHandleForAddressRange_11070,
+                               11070,
+                               CU_GET_PROC_ADDRESS_DEFAULT);
+    if (cu_err != CUDA_SUCCESS) {
+        ucs_debug("cuMemGetHandleForAddressRange not found");
+        goto out;
+    }
+
+    cu_err = cuPointerGetAttribute((void*)&cuda_device,
+                                   CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
+                                   (CUdeviceptr)ptr);
+    if (cu_err != CUDA_SUCCESS) {
+        goto out;
+    }
+
+    cu_err = cuDeviceGetAttribute(&dmabuf_enabled,
+                                  CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, cuda_device);
+    if (cu_err != CUDA_SUCCESS) {
+        ucs_debug("device does not support dmabuf");
+        goto out;
+    }
+
+    if (dmabuf_enabled) {
+        cu_err = cuPointerGetAttribute((void*)&mapping_size,
+                                       CU_POINTER_ATTRIBUTE_MAPPING_SIZE,
+                                       (CUdeviceptr)ptr);
+        if (cu_err != CUDA_SUCCESS) {
+            ucs_debug("could not determine mapping size");
+            goto out;
+        }
+
+        cu_err = cuPointerGetAttribute((void*)&mapping_base_addr,
+                                       CU_POINTER_ATTRIBUTE_MAPPING_BASE_ADDR,
+                                       (CUdeviceptr)ptr);
+        if (cu_err != CUDA_SUCCESS) {
+            ucs_debug("could not determine mapping base address");
+            goto out;
+        }
+
+        /* these should already be aligned but the API explicitly asks for host
+         * page aligned ptr and size */
+        aligned_ptr  = mapping_base_addr & ~(host_page_size - 1);
+        aligned_size = mapping_size & ~(host_page_size - 1);
+
+        cu_err = pfn_cuMemGetHandleForAddressRange_11070((void*)dmabuf_fd,
+                                                         aligned_ptr, aligned_size,
+                                                         CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
+                                                         0);
+        *dmabuf_offset = (char*)ptr - (char*)mapping_base_addr;
+    }
+#endif
+
+out:
+    return UCS_OK;
+}
+
 ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
                                      size_t length, uct_md_mem_attr_t *mem_attr)
 {
@@ -266,14 +347,13 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
         mem_attr->alloc_length = addr_mem_info.alloc_length;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
-        /* unsupported */
-        mem_attr->dmabuf_fd = UCT_DMABUF_FD_INVALID;
-    }
-
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
-        /* unsupported */
-        mem_attr->dmabuf_offset = UCT_DMABUF_OFFSET_INVALID;
+    if ((mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) ||
+        (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET)) {
+        status = uct_cuda_base_get_dmabuf_fd(address, &mem_attr->dmabuf_fd,
+                                             &mem_attr->dmabuf_offset);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;
