@@ -116,7 +116,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_bcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter)
 {
-    size_t user_hdr_size = req->send.msg_proto.am.header_length;
+    size_t user_hdr_size = req->send.msg_proto.am.header.length;
 
     return ucp_proto_eager_bcopy_multi_common_send_func(
             req, lpriv, next_iter, UCP_AM_ID_AM_FIRST,
@@ -209,7 +209,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter)
 {
-    size_t user_hdr_size = req->send.msg_proto.am.header_length;
+    size_t user_hdr_size = req->send.msg_proto.am.header.length;
     union {
         ucp_am_hdr_t     first;
         ucp_am_mid_hdr_t middle;
@@ -229,7 +229,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
         ucp_am_fill_header(&hdr.first, req);
         /* The method also fills middle/last fragment footer. The footer can be
            reused by all fragments because it is immutable. */
-        ftr = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.reg_desc + 1,
+        ftr = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.header.reg_desc + 1,
                                   user_hdr_size);
         ucp_am_eager_fill_first_footer(ftr, req);
     } else {

@@ -24,7 +24,7 @@ static size_t ucp_am_rndv_rts_pack(void *dest, void *arg)
     rts_size        = ucp_proto_rndv_rts_pack(req, rts_hdr, sizeof(*rts_hdr));
     ucp_am_pack_user_header(UCS_PTR_BYTE_OFFSET(rts_hdr, rts_size), req);
 
-    return rts_size + req->send.msg_proto.am.header_length;
+    return rts_size + req->send.msg_proto.am.header.length;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_am_rndv_proto_progress, (self),
@@ -43,7 +43,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_rndv_proto_progress, (self),
     }
 
     max_rts_size = sizeof(ucp_rndv_rts_hdr_t) + rpriv->packed_rkey_size +
-                   req->send.msg_proto.am.header_length;
+                   req->send.msg_proto.am.header.length;
     return UCS_PROFILE_CALL(ucp_proto_am_bcopy_single_progress, req,
                             UCP_AM_ID_RNDV_RTS, rpriv->lane,
                             ucp_am_rndv_rts_pack, req, max_rts_size, NULL);
