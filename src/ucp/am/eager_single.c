@@ -28,7 +28,7 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
-    uint32_t header_length               = req->send.msg_proto.am.header_length;
+    uint32_t header_length               = req->send.msg_proto.am.header.length;
     size_t iov_cnt                       = 0ul;
     uct_iov_t iov[3];
     ucp_am_hdr_t am_hdr;
@@ -45,8 +45,8 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
                          &iov_cnt);
 
     if (header_length != 0) {
-        ucp_add_uct_iov_elem(iov,req->send.msg_proto.am.header, header_length,
-                             UCT_MEM_HANDLE_NULL, &iov_cnt);
+        ucp_add_uct_iov_elem(iov,req->send.msg_proto.am.header.usr_ptr,
+                             header_length, UCT_MEM_HANDLE_NULL, &iov_cnt);
     }
 
     if (is_reply) {
@@ -348,7 +348,7 @@ ucp_am_eager_single_zcopy_send_func(ucp_request_t *req,
     ucp_am_fill_header(&hdr, req);
 
     ucp_am_eager_zcopy_add_footer(req, 0, spriv->super.md_index, iov, &iovcnt,
-                                  req->send.msg_proto.am.header_length);
+                                  req->send.msg_proto.am.header.length);
 
     return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, spriv->super.lane),
                            UCP_AM_ID_AM_SINGLE, &hdr, sizeof(hdr), iov, iovcnt,
@@ -408,14 +408,14 @@ ucp_am_eager_single_zcopy_reply_send_func(ucp_request_t *req,
     ucp_am_reply_ftr_t *ftr;
 
     ucp_am_fill_header(&hdr, req);
-    ucs_assert(req->send.msg_proto.am.reg_desc != NULL);
+    ucs_assert(req->send.msg_proto.am.header.reg_desc != NULL);
 
-    ftr = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.reg_desc + 1,
-                              req->send.msg_proto.am.header_length);
+    ftr = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.header.reg_desc + 1,
+                              req->send.msg_proto.am.header.length);
     ucp_am_eager_fill_reply_footer(ftr, req);
 
     ucp_am_eager_zcopy_add_footer(req, 0, spriv->super.md_index, iov, &iovcnt,
-                                  req->send.msg_proto.am.header_length +
+                                  req->send.msg_proto.am.header.length +
                                           sizeof(*ftr));
 
     return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, spriv->super.lane),

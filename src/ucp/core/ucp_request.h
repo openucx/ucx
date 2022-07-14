@@ -183,15 +183,14 @@ struct ucp_request {
                         ucp_tag_t tag;
 
                         struct {
-                            union {
-                                /* Can be union, because once header is packed to
-                                 * reg_desc, it is not accessed anymore. */
-                                void           *header;
+                            struct {
+                                void           *usr_ptr;
                                 ucp_mem_desc_t *reg_desc; /* pointer to pre-registered buffer,
                                                              used for sending header with
                                                              zcopy protocol */
-                            };
-                            uint32_t       header_length;
+                                uint32_t       length;
+                            } header UCS_S_PACKED; /* packed to avoid 32-bit
+                                                      padding */
                             uint16_t       am_id;
                             uint16_t       flags;
                         } am;

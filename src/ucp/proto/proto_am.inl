@@ -612,8 +612,9 @@ ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
     hdr_state.offset = 0ul;
 
     ucp_dt_pack(req->send.ep->worker, ucp_dt_make_contig(1),
-                UCS_MEMORY_TYPE_HOST, buffer, req->send.msg_proto.am.header,
-                &hdr_state, req->send.msg_proto.am.header_length);
+                UCS_MEMORY_TYPE_HOST, buffer,
+                req->send.msg_proto.am.header.usr_ptr, &hdr_state,
+                req->send.msg_proto.am.header.length);
 }
 
 #endif
