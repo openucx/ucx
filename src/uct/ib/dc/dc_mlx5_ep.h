@@ -592,10 +592,8 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     }
 
     if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-        if (!(iface->flags & UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER)) {
-            waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
-            ucs_assert(ucs_arbiter_is_empty(waitq));
-        }
+        waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
+        ucs_assert(ucs_arbiter_is_empty(waitq));
 
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
