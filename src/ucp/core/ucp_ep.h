@@ -219,6 +219,9 @@ struct ucp_ep_config_key {
      * since these are the MDs used by remote side for accessing our memory. */
     ucp_md_map_t             rma_bw_md_map;
 
+    /* Local memory domains to use for RMA protocol. */
+    ucp_md_map_t             rma_md_map;
+
     /* Bitmap of remote mds which are reachable from this endpoint (with any set
      * of transports which could be selected in the future).
      */
