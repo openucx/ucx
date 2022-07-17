@@ -90,17 +90,14 @@ typedef enum {
     /** Flow control endpoint is using a DCI in error state */
     UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3),
 
-    /** Ignore DCI allocation reorder */
-    UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER      = UCS_BIT(4),
-
     /** Enable full handshake for DCI */
-    UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE       = UCS_BIT(5),
+    UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE       = UCS_BIT(4),
 
     /** Enable full handshake for DCT */
-    UCT_DC_MLX5_IFACE_FLAG_DCT_FULL_HANDSHAKE       = UCS_BIT(6),
+    UCT_DC_MLX5_IFACE_FLAG_DCT_FULL_HANDSHAKE       = UCS_BIT(5),
 
     /** Disable PUT capability (RDMA_WRITE) */
-    UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT              = UCS_BIT(7)
+    UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT              = UCS_BIT(6)
 } uct_dc_mlx5_iface_flags_t;
 
 
