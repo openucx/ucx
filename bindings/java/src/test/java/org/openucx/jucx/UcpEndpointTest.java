@@ -81,11 +81,11 @@ public class UcpEndpointTest extends UcxTest {
         src2.setData(UcpMemoryTest.RANDOM_TEXT + UcpMemoryTest.RANDOM_TEXT);
 
         // Register source buffers on context2
-        UcpMemory memory1 = src1.getMemory();
-        UcpMemory memory2 = src2.getMemory();
+        UcpMemory remote_memory1 = src1.getMemory();
+        UcpMemory remote_memory2 = src2.getMemory();
 
-        UcpRemoteKey rkey1 = endpoint.unpackRemoteKey(memory1.getRemoteKeyBuffer());
-        UcpRemoteKey rkey2 = endpoint.unpackRemoteKey(memory2.getRemoteKeyBuffer());
+        UcpRemoteKey rkey1 = endpoint.unpackRemoteKey(remote_memory1.getRemoteKeyBuffer());
+        UcpRemoteKey rkey2 = endpoint.unpackRemoteKey(remote_memory2.getRemoteKeyBuffer());
 
         AtomicInteger numCompletedRequests = new AtomicInteger(0);
 
@@ -96,13 +96,17 @@ public class UcpEndpointTest extends UcxTest {
             }
         };
 
+        // Register destination buffers on context1
+        UcpMemory local_memory1 = dst1.getMemory();
+        UcpMemory local_memory2 = dst2.getMemory();
+
         // Submit 2 get requests
-        UcpRequest request1 = endpoint.getNonBlocking(memory1.getAddress(), rkey1,
-            dst1.getMemory().getAddress(), dst1.getMemory().getLength(), callback,
-            new UcpRequestParams().setMemoryHandle(memory1).setMemoryType(memType));
-        UcpRequest request2 = endpoint.getNonBlocking(memory2.getAddress(), rkey2,
-            dst2.getMemory().getAddress(), dst2.getMemory().getLength(), callback,
-            new UcpRequestParams().setMemoryHandle(memory2).setMemoryType(memType));
+        UcpRequest request1 = endpoint.getNonBlocking(remote_memory1.getAddress(), rkey1,
+            local_memory1.getAddress(), local_memory1.getLength(), callback,
+            new UcpRequestParams().setMemoryHandle(local_memory1).setMemoryType(memType));
+        UcpRequest request2 = endpoint.getNonBlocking(remote_memory2.getAddress(), rkey2,
+            local_memory2.getAddress(), local_memory2.getLength(), callback,
+            new UcpRequestParams().setMemoryHandle(local_memory2).setMemoryType(memType));
 
         // Wait for 2 get operations to complete
         while (numCompletedRequests.get() != 2) {
