@@ -382,13 +382,12 @@ static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 
 static UCS_F_ALWAYS_INLINE
 void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface,
-                                          uct_dc_mlx5_ep_t *ep, int force)
+                                          uct_dc_mlx5_ep_t *ep)
 {
     ucs_arbiter_t *waitq;
 
-    /* If FC window is empty and force scheduling wasn't requested, the group
-     * will be scheduled when grant is received */
-    if (force || uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
+    /* If FC window is empty the group will be scheduled when grant is received */
+    if (uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
         waitq = uct_dc_mlx5_iface_dci_waitq(iface, uct_dc_mlx5_ep_pool_index(ep));
         ucs_arbiter_group_schedule(waitq, &ep->arb_group);
     }
@@ -476,7 +475,7 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
      * move the group to the 'wait for dci alloc' state
      */
     ucs_arbiter_group_desched(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group);
-    uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep, 0);
+    uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
 }
 
 static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
@@ -601,10 +600,8 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     }
 
     if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-        if (!(iface->flags & UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER)) {
-            waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
-            ucs_assert(ucs_arbiter_is_empty(waitq));
-        }
+        waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
+        ucs_assert(ucs_arbiter_is_empty(waitq));
 
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
