@@ -45,7 +45,7 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
                          &iov_cnt);
 
     if (header_length != 0) {
-        ucp_add_uct_iov_elem(iov,req->send.msg_proto.am.header.usr_ptr,
+        ucp_add_uct_iov_elem(iov,req->send.msg_proto.am.header.user_ptr,
                              header_length, UCT_MEM_HANDLE_NULL, &iov_cnt);
     }
 

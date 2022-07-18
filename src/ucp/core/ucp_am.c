@@ -370,7 +370,7 @@ ucp_am_zcopy_pack_user_header(ucp_request_t *req)
     }
 
     if (req->send.msg_proto.am.header.length != 0) {
-        ucs_assert(req->send.msg_proto.am.header.usr_ptr != NULL);
+        ucs_assert(req->send.msg_proto.am.header.user_ptr != NULL);
         ucp_am_pack_user_header(reg_desc + 1, req);
     }
 
@@ -576,7 +576,7 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
     req->send.lane = ucp_ep_get_am_lane(ep);
     status         = ucp_am_send_short(ep, req->send.msg_proto.am.am_id,
                                        req->send.msg_proto.am.flags,
-                                       req->send.msg_proto.am.header.usr_ptr,
+                                       req->send.msg_proto.am.header.user_ptr,
                                        req->send.msg_proto.am.header.length,
                                        req->send.buffer, req->send.length, 0);
     return ucp_am_short_handle_status_from_pending(req, status);
@@ -591,7 +591,7 @@ static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
     req->send.lane = ucp_ep_get_am_lane(ep);
     status         = ucp_am_send_short(ep, req->send.msg_proto.am.am_id,
                                        req->send.msg_proto.am.flags,
-                                       req->send.msg_proto.am.header.usr_ptr,
+                                       req->send.msg_proto.am.header.user_ptr,
                                        req->send.msg_proto.am.header.length,
                                        req->send.buffer, req->send.length, 1);
     return ucp_am_short_handle_status_from_pending(req, status);
@@ -794,7 +794,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.ep                           = ep;
     req->send.msg_proto.am.am_id           = am_id;
     req->send.msg_proto.am.flags           = flags;
-    req->send.msg_proto.am.header.usr_ptr  = (void*)header;
+    req->send.msg_proto.am.header.user_ptr = (void*)header;
     req->send.msg_proto.am.header.reg_desc = NULL;
     req->send.msg_proto.am.header.length   = header_length;
     req->send.buffer                       = (void*)buffer;
@@ -1018,7 +1018,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     if (worker->context->config.ext.proto_enable) {
         req->send.msg_proto.am.am_id           = id;
         req->send.msg_proto.am.flags           = flags;
-        req->send.msg_proto.am.header.usr_ptr  = (void*)header;
+        req->send.msg_proto.am.header.user_ptr = (void*)header;
         req->send.msg_proto.am.header.reg_desc = NULL;
         req->send.msg_proto.am.header.length   = header_length;
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,

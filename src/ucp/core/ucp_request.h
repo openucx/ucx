@@ -184,7 +184,7 @@ struct ucp_request {
 
                         struct {
                             struct {
-                                void           *usr_ptr;
+                                void           *user_ptr;
                                 ucp_mem_desc_t *reg_desc; /* pointer to pre-registered buffer,
                                                              used for sending header with
                                                              zcopy protocol */
