@@ -208,6 +208,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
 ucs_status_t uct_cuda_base_get_dmabuf_fd(const void *ptr, int *dmabuf_fd,
                                          size_t *dmabuf_offset)
 {
+#if CUDA_VERSION >= 11070
     static int dmabuf_enabled = -1;
     size_t host_page_size     = sysconf(_SC_PAGESIZE);
     CUdevice cuda_device;
@@ -216,7 +217,6 @@ ucs_status_t uct_cuda_base_get_dmabuf_fd(const void *ptr, int *dmabuf_fd,
     size_t aligned_size;
     size_t mapping_size;
     CUresult cu_err;
-#if CUDA_VERSION >= 11070
     PFN_cuMemGetHandleForAddressRange pfn_cuMemGetHandleForAddressRange_11070;
 #endif
 
