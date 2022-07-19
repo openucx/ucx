@@ -19,7 +19,7 @@ ucp_am_fill_header(ucp_am_hdr_t *hdr, ucp_request_t *req)
 {
     hdr->am_id         = req->send.msg_proto.am.am_id;
     hdr->flags         = req->send.msg_proto.am.flags;
-    hdr->header_length = req->send.msg_proto.am.header_length;
+    hdr->header_length = req->send.msg_proto.am.header.length;
 }
 
 static UCS_F_ALWAYS_INLINE int
