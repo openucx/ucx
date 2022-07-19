@@ -69,7 +69,11 @@ ucs_status_t uct_mm_seg_new(void *address, size_t length, uct_mm_seg_t **seg_p)
 
 void uct_mm_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr, uint64_t max_alloc)
 {
+    uint64_t field_mask = md_attr->field_mask;
+
     memset(md_attr, 0, sizeof(*md_attr));
+
+    md_attr->field_mask = field_mask;
 
     if (md_attr->field_mask & UCT_MD_ATTR_FIELD_FLAGS) {
         md_attr->flags            = UCT_MD_FLAG_RKEY_PTR | UCT_MD_FLAG_NEED_RKEY;
