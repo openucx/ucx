@@ -20,7 +20,9 @@
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
+#if CUDA_VERSION >= 11070
 #include <cudaTypedefs.h>
+#endif
 
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
 #define UCT_CUDA_MAX_DEVICES      32
