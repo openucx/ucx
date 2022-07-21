@@ -319,12 +319,12 @@ static ucs_status_t setup_sock_rte_loobkack(struct perftest_context *ctx)
 
 static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 {
-    int optval = 1;
+    int optval  = 1;
     int sockfd = -1;
+    int connfd = -1;
     char addr_str[UCS_SOCKADDR_STRING_LEN];
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len;
-    int connfd;
     struct addrinfo hints, *res, *t;
     ucs_status_t status;
     int ret;
@@ -358,22 +358,26 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 
         if (ctx->server_addr != NULL) {
             if (connect(sockfd, t->ai_addr, t->ai_addrlen) == 0) {
+                connfd = sockfd;
+                sockfd = -1;
                 break;
             }
+
             snprintf(err_str, 64, "connect() failed: %m");
         } else {
             status = ucs_socket_setopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
                                        &optval, sizeof(optval));
             if (status != UCS_OK) {
-                status = UCS_ERR_IO_ERROR;
+                snprintf(err_str, 64, "ucs_socket_setopt() failed: %s",
+                         ucs_status_string(status));
                 goto err_close_sockfd;
             }
 
-            if (bind(sockfd, t->ai_addr, t->ai_addrlen) == 0) {
+            ret = bind(sockfd, t->ai_addr, t->ai_addrlen);
+            if (ret == 0) {
                 ret = listen(sockfd, 10);
                 if (ret < 0) {
-                    ucs_error("listen() failed: %m");
-                    status = UCS_ERR_IO_ERROR;
+                    snprintf(err_str, 64, "accept() failed: %m");
                     goto err_close_sockfd;
                 }
 
@@ -384,28 +388,26 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
                 connfd          = accept(sockfd, (struct sockaddr*)&client_addr,
                                          &client_addr_len);
                 if (connfd < 0) {
-                    ucs_error("accept() failed: %m");
-                    status = UCS_ERR_IO_ERROR;
+                    snprintf(err_str, 64, "accept() failed: %m");
                     goto err_close_sockfd;
                 }
 
                 ucs_sockaddr_str((struct sockaddr*)&client_addr, addr_str,
                                  sizeof(addr_str));
                 printf("Accepted connection from %s\n", addr_str);
-                close(sockfd);
+                ucs_close_fd(&sockfd);
                 break;
             }
+
             snprintf(err_str, 64, "bind() failed: %m");
         }
-        close(sockfd);
-        sockfd = -1;
+
+        ucs_close_fd(&sockfd);
     }
 
-    if (sockfd < 0) {
-        ucs_error("%s failed. %s",
-                  (ctx->server_addr != NULL) ? "client" : "server", err_str);
+    if (connfd < 0) {
         status = UCS_ERR_IO_ERROR;
-        goto out_free_res;
+        goto err_close_sockfd;
     }
 
     if (ctx->server_addr == NULL) {
@@ -431,7 +433,7 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 
             ret = safe_recv(connfd, ctx->params.super.msg_size_list,
                             sizeof(*ctx->params.super.msg_size_list) *
-                            ctx->params.super.msg_size_cnt,
+                                    ctx->params.super.msg_size_cnt,
                             NULL, NULL);
             if (ret) {
                 status = UCS_ERR_IO_ERROR;
@@ -439,26 +441,24 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
             }
         }
 
-        ctx->sock_rte_group.sendfd    = connfd;
-        ctx->sock_rte_group.recvfd    = connfd;
         ctx->sock_rte_group.peer      = 1;
         ctx->sock_rte_group.is_server = 1;
     } else {
-        safe_send(sockfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
+        safe_send(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
         if (ctx->params.super.msg_size_cnt != 0) {
-            safe_send(sockfd, ctx->params.super.msg_size_list,
+            safe_send(connfd, ctx->params.super.msg_size_list,
                       sizeof(*ctx->params.super.msg_size_list) *
                       ctx->params.super.msg_size_cnt,
                       NULL, NULL);
         }
 
-        ctx->sock_rte_group.sendfd     = sockfd;
-        ctx->sock_rte_group.recvfd     = sockfd;
-        ctx->sock_rte_group.peer       = 0;
-        ctx->sock_rte_group.is_server  = 0;
+        ctx->sock_rte_group.peer      = 0;
+        ctx->sock_rte_group.is_server = 0;
     }
 
-    ctx->sock_rte_group.size = 2;
+    ctx->sock_rte_group.sendfd = connfd;
+    ctx->sock_rte_group.recvfd = connfd;
+    ctx->sock_rte_group.size   = 2;
 
     if (ctx->sock_rte_group.is_server) {
         ctx->flags |= TEST_FLAG_PRINT_TEST;
@@ -471,8 +471,9 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 
 err_close_connfd:
     ucs_close_fd(&connfd);
-    goto out_free_res;
 err_close_sockfd:
+    ucs_error("%s failed. %s",
+              (ctx->server_addr != NULL) ? "client" : "server", err_str);
     ucs_close_fd(&sockfd);
 out_free_res:
     freeaddrinfo(res);
