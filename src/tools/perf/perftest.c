@@ -295,7 +295,7 @@ static ucx_perf_rte_t sock_rte = {
     .report        = sock_rte_report,
 };
 
-static ucs_status_t setup_sock_rte_loobkack(struct perftest_context *ctx)
+static ucs_status_t setup_sock_rte_loopback(struct perftest_context *ctx)
 {
     int connfds[2];
     int ret;
@@ -485,7 +485,7 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
     ucs_status_t status;
 
     if (ctx->params.super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
-        status = setup_sock_rte_loobkack(ctx);
+        status = setup_sock_rte_loopback(ctx);
     } else {
         status = setup_sock_rte_p2p(ctx);
     }
