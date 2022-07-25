@@ -469,7 +469,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 
 #if HAVE_TL_DC
     if (qp_type == UCT_IB_QPT_DCI) {
-        uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, qp_type);
+        uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, grh_av, UCT_IB_QPT_DCI);
     }
 #endif
 
