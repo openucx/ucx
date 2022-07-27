@@ -157,6 +157,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->rkey_ptr_lane    = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
+    key->rma_md_map       = 0;
     key->reachable_md_map = 0;
     key->dst_md_cmpts     = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
@@ -1779,6 +1780,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                sizeof(key1->rma_bw_lanes)) ||
         memcmp(key1->amo_lanes, key2->amo_lanes, sizeof(key1->amo_lanes)) ||
         (key1->rma_bw_md_map != key2->rma_bw_md_map) ||
+        (key1->rma_md_map != key2->rma_md_map) ||
         (key1->reachable_md_map != key2->reachable_md_map) ||
         (key1->am_lane != key2->am_lane) ||
         (key1->tag_lane != key2->tag_lane) ||
@@ -3034,11 +3036,16 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
         }
     }
 
-    if (context->config.features &
-        (UCP_FEATURE_TAG | UCP_FEATURE_RMA | UCP_FEATURE_AM)) {
+    if (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
         fprintf(stream, "#\n");
         fprintf(stream, "# %23s: mds ", "rma_bw");
         ucs_for_each_bit(md_index, config->key.rma_bw_md_map) {
+            fprintf(stream, "[%d] ", md_index);
+        }
+
+        fprintf(stream, "#\n");
+        fprintf(stream, "# %23s: mds ", "rma");
+        ucs_for_each_bit(md_index, config->key.rma_md_map) {
             fprintf(stream, "[%d] ", md_index);
         }
     }
