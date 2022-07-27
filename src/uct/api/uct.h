@@ -902,16 +902,29 @@ enum uct_ep_connect_params_field {
  * during @ref uct_iface_open "UCT iface initialization" process.
  */
 enum uct_iface_feature {
-    UCT_IFACE_FEATURE_AM    = UCS_BIT(0), /**< Request Active Message support */
-    UCT_IFACE_FEATURE_PUT   = UCS_BIT(1), /**< Request PUT support */
-    UCT_IFACE_FEATURE_GET   = UCS_BIT(2), /**< Request GET support */
-    UCT_IFACE_FEATURE_AMO32 = UCS_BIT(3), /**< Request 32-bit atomic
-                                               operations support */
-    UCT_IFACE_FEATURE_AMO64 = UCS_BIT(4), /**< Request 64-bit atomic
-                                               operations support */
-    UCT_IFACE_FEATURE_TAG   = UCS_BIT(5), /**< Request tag matching offload support */
-    UCT_IFACE_FEATURE_LAST  = UCS_BIT(6)  /**< Used to determine the number
-                                               of features */
+    /** Request Active Message support */ 
+    UCT_IFACE_FEATURE_AM           = UCS_BIT(0),
+
+    /** Request PUT support */
+    UCT_IFACE_FEATURE_PUT          = UCS_BIT(1),
+
+    /** Request GET support */
+    UCT_IFACE_FEATURE_GET          = UCS_BIT(2),
+
+    /** Request 32-bit atomic operations support */
+    UCT_IFACE_FEATURE_AMO32        = UCS_BIT(3),
+
+    /** Request 64-bit atomic operations support */ 
+    UCT_IFACE_FEATURE_AMO64        = UCS_BIT(4),
+
+    /** Request tag matching offload support */ 
+    UCT_IFACE_FEATURE_TAG          = UCS_BIT(5),
+
+    /** Request remote flush support */ 
+    UCT_IFACE_FEATURE_FLUSH_REMOTE = UCS_BIT(6),
+
+    /** Used to determine the number of features */ 
+    UCT_IFACE_FEATURE_LAST         = UCS_BIT(7)
 };
 
 /*
