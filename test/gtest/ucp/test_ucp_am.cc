@@ -511,29 +511,9 @@ protected:
         EXPECT_LE(max_short, ep_cfg->rndv.rma_thresh.local);
     }
 
-    virtual ucs_status_t am_data_handler(const void *header,
-                                         size_t header_length,
-                                         void *data, size_t length,
-                                         const ucp_am_recv_param_t *rx_param)
+    ucs_status_t am_data_rndv_handler(void *data, size_t length)
     {
         ucs_status_t status;
-
-        EXPECT_FALSE(m_am_received);
-
-        check_header(header, header_length);
-
-        bool has_reply_ep = get_send_flag();
-
-        EXPECT_EQ(has_reply_ep, rx_param->recv_attr &
-                                UCP_AM_RECV_ATTR_FIELD_REPLY_EP);
-        EXPECT_EQ(has_reply_ep, rx_param->reply_ep != NULL);
-
-        if (!(rx_param->recv_attr &
-              (UCP_AM_RECV_ATTR_FLAG_RNDV | UCP_AM_RECV_ATTR_FLAG_DATA))) {
-            mem_buffer::pattern_check(data, length, SEED);
-            m_am_received = true;
-            return UCS_OK;
-        }
 
         m_rx_buf = mem_buffer::allocate(length, rx_memtype());
         mem_buffer::pattern_fill(m_rx_buf, length, 0ul, rx_memtype());
@@ -542,16 +522,16 @@ protected:
 
         uint32_t imm_compl_flag = UCP_OP_ATTR_FLAG_NO_IMM_CMPL *
                                   (ucs::rand() % 2);
-        size_t rx_length = SIZE_MAX;
+        size_t rx_length        = SIZE_MAX;
         ucp_request_param_t params;
-        params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
-                              UCP_OP_ATTR_FIELD_USER_DATA |
-                              UCP_OP_ATTR_FIELD_DATATYPE |
-                              UCP_OP_ATTR_FIELD_RECV_INFO |
-                              imm_compl_flag;
-        params.datatype     = m_rx_dt_desc.dt();
-        params.cb.recv_am   = am_data_recv_cb;
-        params.user_data    = this;
+        params.op_attr_mask     = UCP_OP_ATTR_FIELD_CALLBACK |
+                                  UCP_OP_ATTR_FIELD_USER_DATA |
+                                  UCP_OP_ATTR_FIELD_DATATYPE |
+                                  UCP_OP_ATTR_FIELD_RECV_INFO |
+                                  imm_compl_flag;
+        params.datatype         = m_rx_dt_desc.dt();
+        params.cb.recv_am       = am_data_recv_cb;
+        params.user_data        = this;
         params.recv_info.length = &rx_length;
 
         if (prereg()) {
@@ -575,6 +555,31 @@ protected:
         }
 
         return status;
+    }
+
+    virtual ucs_status_t am_data_handler(const void *header,
+                                         size_t header_length,
+                                         void *data, size_t length,
+                                         const ucp_am_recv_param_t *rx_param)
+    {
+        EXPECT_FALSE(m_am_received);
+
+        check_header(header, header_length);
+
+        bool has_reply_ep = get_send_flag();
+
+        EXPECT_EQ(has_reply_ep, rx_param->recv_attr &
+                                UCP_AM_RECV_ATTR_FIELD_REPLY_EP);
+        EXPECT_EQ(has_reply_ep, rx_param->reply_ep != NULL);
+
+        if (!(rx_param->recv_attr &
+              (UCP_AM_RECV_ATTR_FLAG_RNDV | UCP_AM_RECV_ATTR_FLAG_DATA))) {
+            mem_buffer::pattern_check(data, length, SEED);
+            m_am_received = true;
+            return UCS_OK;
+        }
+
+        return am_data_rndv_handler(data, length);
     }
 
     void am_recv_check_data(size_t length)
@@ -1244,7 +1249,8 @@ public:
 
     test_ucp_am_nbx_rndv()
     {
-        m_status = UCS_OK;
+        m_status             = UCS_OK;
+        m_am_recv_cb_invoked = false;
         modify_config("RNDV_THRESH", "128");
     }
 
@@ -1277,17 +1283,21 @@ public:
         return self->m_status;
     }
 
-    static ucs_status_t am_data_deferred_reject_rndv_cb(void *arg,
-                                                        const void *header,
-                                                        size_t header_length,
-                                                        void *data, size_t length,
-                                                        const ucp_am_recv_param_t *param)
+    static ucs_status_t am_data_deferred_rndv_cb(void *arg, const void *header,
+                                                 size_t header_length,
+                                                 void *data, size_t length,
+                                                 const ucp_am_recv_param_t *param)
     {
-        void **data_desc_p = reinterpret_cast<void**>(arg);
+        EXPECT_TRUE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
 
-        EXPECT_EQ(NULL, *data_desc_p);
-        *data_desc_p = data;
+        struct am_cb_args *args    = reinterpret_cast<am_cb_args*>(arg);
+        test_ucp_am_nbx_rndv *self = args->self;
+        void **data_desc_p         = args->desc;
 
+        *data_desc_p               = data;
+        self->m_am_recv_cb_invoked = true;
+
+        /* Return UCS_INPROGRESS to defer handling of RNDV data */
         return UCS_INPROGRESS;
     }
 
@@ -1309,7 +1319,46 @@ public:
         return UCS_OK;
     }
 
+    void test_am_send_deferred_recv(size_t size)
+    {
+        void *data_desc = NULL;
+        ucp_mem_h memh  = NULL;
+
+        mem_buffer sbuf(size, tx_memtype());
+        sbuf.pattern_fill(SEED);
+
+        struct am_cb_args args = { this,  &data_desc };
+        set_am_data_handler(receiver(), TEST_AM_NBX_ID,
+                            am_data_deferred_rndv_cb, &args, 0);
+
+        if (prereg()) {
+            memh = sender().mem_map(sbuf.ptr(), size);
+        }
+
+        ucp::data_type_desc_t sdt_desc(m_dt, sbuf.ptr(), size);
+        ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag(), NULL, 0,
+                                        memh);
+
+        /* Wait for AM receive callback to be invoked */
+        wait_for_flag(&m_am_recv_cb_invoked);
+        EXPECT_TRUE(m_am_recv_cb_invoked);
+
+        /* Handle RNDV desc from AM receive callback */
+        ucs_status_t status = am_data_rndv_handler(data_desc, size);
+        ASSERT_TRUE((status == UCS_OK) || (status == UCS_INPROGRESS));
+        wait_for_flag(&m_am_received);
+        EXPECT_TRUE(m_am_received);
+
+        request_wait(sptr);
+
+        if (prereg()) {
+            sender().mem_unmap(memh);
+        }
+    }
+
+protected:
     ucs_status_t m_status;
+    bool         m_am_recv_cb_invoked;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
@@ -1340,6 +1389,11 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_flag_send, "RNDV_THRESH=inf")
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_zero_send, "RNDV_THRESH=0")
 {
     test_am_send_recv(0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_zero_send_deferred_recv, "RNDV_THRESH=0")
+{
+    test_am_send_deferred_recv(0);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, just_header_rndv, "RNDV_THRESH=1")
@@ -1420,8 +1474,9 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, deferred_reject_rndv)
 
     param.op_attr_mask = 0ul;
 
-    set_am_data_handler(receiver(), TEST_AM_NBX_ID,
-                        am_data_deferred_reject_rndv_cb, &data_desc);
+    struct am_cb_args args = { this,  &data_desc };
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_deferred_rndv_cb,
+                        &args);
 
     ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID,
                                             NULL, 0ul, sbuf.data(),

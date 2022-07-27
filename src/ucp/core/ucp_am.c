@@ -1178,12 +1178,17 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
         ret = UCS_STATUS_PTR(status);
     }
 
-    /* Clear this flag, because receive operation is already completed and desc
-     * is not needed anymore. If receive operation was invoked from UCP AM
-     * callback, UCT AM handler would release this desc (by returning UCS_OK)
-     * back to UCT.
-     */
-    desc->flags &= ~UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+    ucs_assert(status != UCS_INPROGRESS);
+    if (desc->flags & UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS) {
+        /* Clear this flag, because receive operation is already completed and
+         * desc is not needed anymore. If receive operation was invoked from
+         * UCP AM callback, UCT AM handler would release this desc (by
+         * returning UCS_OK) back to UCT.
+         */
+        desc->flags &= ~UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS;
+    } else {
+        ucp_recv_desc_release(desc);
+    }
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
