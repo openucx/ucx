@@ -370,6 +370,7 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
             if (status != UCS_OK) {
                 snprintf(err_str, 64, "ucs_socket_setopt() failed: %s",
                          ucs_status_string(status));
+                status = UCS_ERR_IO_ERROR;
                 goto err_close_sockfd;
             }
 
@@ -378,6 +379,7 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
                 ret = listen(sockfd, 10);
                 if (ret < 0) {
                     snprintf(err_str, 64, "accept() failed: %m");
+                    status = UCS_ERR_IO_ERROR;
                     goto err_close_sockfd;
                 }
 
@@ -389,6 +391,7 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
                                          &client_addr_len);
                 if (connfd < 0) {
                     snprintf(err_str, 64, "accept() failed: %m");
+                    status = UCS_ERR_IO_ERROR;
                     goto err_close_sockfd;
                 }
 
@@ -433,7 +436,7 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 
             ret = safe_recv(connfd, ctx->params.super.msg_size_list,
                             sizeof(*ctx->params.super.msg_size_list) *
-                                    ctx->params.super.msg_size_cnt,
+                            ctx->params.super.msg_size_cnt,
                             NULL, NULL);
             if (ret) {
                 status = UCS_ERR_IO_ERROR;
