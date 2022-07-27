@@ -1,6 +1,6 @@
 #!/usr/bin/python2
 #
-# Copyright (C) Mellanox Technologies Ltd. 2017-.  ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #

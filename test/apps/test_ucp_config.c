@@ -1,5 +1,5 @@
 /**
- * Copyright © 2021 NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
