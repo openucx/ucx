@@ -111,24 +111,30 @@ jobject c2jInetSockAddr(JNIEnv *env, const sockaddr_storage* ss)
 {
     jbyteArray buff;
     int port = 0;
-
-    // 1. Construct InetAddress object
-    jclass inet_address_cls = env->FindClass("java/net/InetAddress");
-    jmethodID getByAddress = env->GetStaticMethodID(inet_address_cls, "getByAddress",
-                                                    "([B)Ljava/net/InetAddress;");
+    jobject inet_address_obj;
+    
     if(ss->ss_family == AF_INET6) {
         const sockaddr_in6* sin6 = reinterpret_cast<const sockaddr_in6*>(ss);
+        int scope_id = sin6->sin6_scope_id;
         buff = env->NewByteArray(16);
         env->SetByteArrayRegion(buff, 0, 16, (jbyte*)&sin6->sin6_addr.s6_addr);
         port = ntohs(sin6->sin6_port);
+        jclass inet_address_cls = env->FindClass("java/net/Inet6Address");
+        jmethodID getByAddress = env->GetStaticMethodID(inet_address_cls, "getByAddress",
+                                                        "(Ljava/lang/String;[BI)Ljava/net/Inet6Address;");
+        inet_address_obj = env->CallStaticObjectMethod(inet_address_cls, getByAddress, NULL,
+            buff, scope_id);
     } else {
         const sockaddr_in* sin = reinterpret_cast<const sockaddr_in*>(ss);
         buff = env->NewByteArray(4);
         env->SetByteArrayRegion(buff, 0, 4, (jbyte*)&sin->sin_addr);
         port = ntohs(sin->sin_port);
+        jclass inet_address_cls = env->FindClass("java/net/InetAddress");
+        jmethodID getByAddress = env->GetStaticMethodID(inet_address_cls, "getByAddress",
+                                                        "([B)Ljava/net/InetAddress;");
+        inet_address_obj = env->CallStaticObjectMethod(inet_address_cls, getByAddress, buff);
     }
-
-    jobject inet_address_obj = env->CallStaticObjectMethod(inet_address_cls, getByAddress, buff);
+     
     // 2. Construct InetSocketAddress object from InetAddress, port
     jclass inet_socket_address_cls = env->FindClass("java/net/InetSocketAddress");
     jmethodID inetSocketAddress_constructor = env->GetMethodID(inet_socket_address_cls,
