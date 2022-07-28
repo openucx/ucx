@@ -1737,3 +1737,12 @@ const ucp_request_send_proto_t ucp_am_reply_proto = {
     .zcopy_completion       = ucp_am_zcopy_completion,
     .only_hdr_size          = sizeof(ucp_am_hdr_t) + sizeof(ucp_am_reply_ftr_t)
 };
+
+void ucp_am_proto_request_zcopy_reset(ucp_request_t *request)
+{
+    ucs_assert(request->send.msg_proto.am.header.reg_desc != NULL);
+    ucs_mpool_put_inline(request->send.msg_proto.am.header.reg_desc);
+    request->send.msg_proto.am.header.reg_desc = NULL;
+
+    ucp_proto_request_zcopy_reset(request);
+}
