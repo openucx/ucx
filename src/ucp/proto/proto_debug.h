@@ -119,6 +119,11 @@ void ucp_proto_perf_node_add_child(ucp_proto_perf_node_t *perf_node,
                                    ucp_proto_perf_node_t *child_perf_node);
 
 
+/* Return the n-th child, or NULL if not exists */
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_get_child(ucp_proto_perf_node_t *perf_node, unsigned n);
+
+
 void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
                                   const char *name,
                                   const ucs_linear_func_t value);
@@ -136,6 +141,11 @@ const char *ucp_proto_perf_node_name(ucp_proto_perf_node_t *perf_node);
 
 
 const char *ucp_proto_perf_node_desc(ucp_proto_perf_node_t *perf_node);
+
+
+/* Replace old_perf_node by new_perf_node and reassign child nodes to it */
+void ucp_proto_perf_node_replace(ucp_proto_perf_node_t **old_perf_node_p,
+                                 ucp_proto_perf_node_t **new_perf_node_p);
 
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,
