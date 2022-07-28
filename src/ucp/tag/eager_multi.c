@@ -72,8 +72,9 @@ static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
-        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
+        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
 
     return ucp_proto_eager_multi_init_common(&params, op_id);
@@ -107,7 +108,8 @@ ucp_proto_eager_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_eager_bcopy_multi_send_func(ucp_request_t *req,
                                       const ucp_proto_multi_lane_priv_t *lpriv,
-                                      ucp_datatype_iter_t *next_iter)
+                                      ucp_datatype_iter_t *next_iter,
+                                      ucp_lane_index_t *lane_shift)
 {
     return ucp_proto_eager_bcopy_multi_common_send_func(
             req, lpriv, next_iter, UCP_AM_ID_EAGER_FIRST,
@@ -162,7 +164,7 @@ static size_t ucp_eager_sync_bcopy_pack_first(void *dest, void *arg)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_eager_sync_bcopy_multi_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter)
+        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
     return ucp_proto_eager_bcopy_multi_common_send_func(
             req, lpriv, next_iter, UCP_AM_ID_EAGER_SYNC_FIRST,
@@ -234,8 +236,9 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
-        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
+        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
     return ucp_proto_eager_multi_init_common(&params, UCP_OP_ID_TAG_SEND);
@@ -244,7 +247,8 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
                                       const ucp_proto_multi_lane_priv_t *lpriv,
-                                      ucp_datatype_iter_t *next_iter)
+                                      ucp_datatype_iter_t *next_iter,
+                                      ucp_lane_index_t *lane_shift)
 {
     union {
         ucp_eager_first_hdr_t  first;
