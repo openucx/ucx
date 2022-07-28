@@ -77,7 +77,10 @@ have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 #
 # Set initial port number for client/server applications
 #
-server_port=$((10000 + (1000 * EXECUTOR_NUMBER)))
+server_port_range=1000
+server_port_min=$((33000 + EXECUTOR_NUMBER * server_port_range))
+server_port_max=$((server_port_min + server_port_range))
+server_port=${server_port_min}
 
 #
 # Override maven repository path, to cache the downloaded packages accross tests
@@ -417,6 +420,11 @@ run_loopback_app() {
 	wait ${pid} || true
 }
 
+step_server_port() {
+	# Cycle server_port between (server_port_min)..(server_port_max-1)
+	server_port=$((server_port + 1))
+	server_port=$((server_port >= server_port_max ? server_port_min : server_port))
+}
 
 run_client_server_app() {
 	test_exe=$1
@@ -426,7 +434,7 @@ run_client_server_app() {
 	error_emulation=$5
 
 	server_port_arg="-p $server_port"
-	server_port=$((server_port + 1))
+	step_server_port
 
 	affinity_server=$(slice_affinity 0)
 	affinity_client=$(slice_affinity 1)
@@ -1241,7 +1249,7 @@ run_release_mode_tests() {
 run_tests() {
 	export UCX_HANDLE_ERRORS=bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
-	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 100))"-"$((34000 + EXECUTOR_NUMBER * 100))"
+	export UCX_TCP_PORT_RANGE="${server_port_min}-${server_port_max}"
 	export UCX_TCP_CM_REUSEADDR=y
 
 	# Don't cross-connect RoCE devices
