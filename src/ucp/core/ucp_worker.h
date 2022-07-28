@@ -252,6 +252,13 @@ struct ucp_worker_cm {
 UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
+//TODO - move to iface's worker
+typedef struct ucp_worker_user_mem_allocator {
+    void                   *obj;
+    size_t                 payload_length;
+    ucp_mem_allocator_cb_t get_buf;
+    unsigned               uct_memh_idx_mem[UCP_MD_INDEX_BITS];
+} ucp_worker_user_mem_allocator_t;
 
 /**
  * UCP worker (thread context).
@@ -294,6 +301,8 @@ typedef struct ucp_worker {
                                                              one for each resource */
     unsigned                         num_ifaces;          /* Number of elements in ifaces array  */
     unsigned                         num_active_ifaces;   /* Number of activated ifaces  */
+
+    ucp_worker_user_mem_allocator_t  user_mem_allocator;
     ucp_tl_bitmap_t                  scalable_tl_bitmap;  /* Map of scalable tl resources */
     ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
     ucs_mpool_set_t                  am_mps;              /* Memory pool set for AM receives */

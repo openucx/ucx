@@ -283,6 +283,8 @@ typedef struct uct_base_iface {
         size_t               max_num_eps;
     } config;
 
+    uct_rx_allocator_t       rx_allocator;
+
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
 } uct_base_iface_t;
 
