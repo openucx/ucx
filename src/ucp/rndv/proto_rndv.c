@@ -517,6 +517,9 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          ucp_proto_rndv_bulk_priv_t *rpriv, const char *name,
                          const char *ack_name, size_t *priv_size_p)
 {
+    ucp_context_t *context        = init_params->super.super.worker->context;
+    size_t rndv_align_thresh      = context->config.ext.rndv_align_thresh;
+    ucp_proto_multi_priv_t *mpriv = &rpriv->mpriv;
     ucp_proto_multi_init_params_t bulk_params;
     ucp_proto_caps_t multi_caps;
     ucs_status_t status;
@@ -530,6 +533,10 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     if (status != UCS_OK) {
         return status;
     }
+
+    /* Adjust align split threshold by user configuration */
+    mpriv->align_thresh = ucs_max(rndv_align_thresh,
+                                  mpriv->align_thresh + mpriv->min_frag);
 
     /* Update private data size based of ucp_proto_multi_priv_t variable size */
     *priv_size_p = ucs_offsetof(ucp_proto_rndv_bulk_priv_t, mpriv) + mpriv_size;

@@ -142,6 +142,8 @@ typedef struct ucp_context_config {
     int                                    rkey_mpool_max_md;
     /** Worker address format version */
     ucp_object_version_t                   worker_addr_version;
+    /** Threshold for enabling RNDV data split alignment */
+    size_t                                 rndv_align_thresh;
     /** Print protocols information */
     int                                    proto_info;
     /** MD to compare for transport selection scores */
