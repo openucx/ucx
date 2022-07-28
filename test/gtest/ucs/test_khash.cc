@@ -1,5 +1,5 @@
 /**
-* Copyright (C) NVIDIA Corporation. 2021.  ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
 */
 
 #include <common/test.h>
