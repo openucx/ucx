@@ -132,7 +132,8 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
             /* do not report error in silent mode: it called from rcache
              * internals, rcache will try to register memory again with
              * more accurate data */
-            ucs_error("KNEM create region failed: %m");
+            ucs_error("KNEM failed to create region address %p length %zi: %m",
+                      address, length);
         }
         return UCS_ERR_IO_ERROR;
     }

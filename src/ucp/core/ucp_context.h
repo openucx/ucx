@@ -260,12 +260,6 @@ typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_md_index_t                num_mds;    /* Number of memory domains */
 
-    /* Map of memory domains that have valid memory keys for host memory
-       allocated with ucp_mem_mmap_common().
-       It's initialized on first access. */
-    int                           alloc_md_map_initialized;
-    ucp_md_map_t                  alloc_md_map;
-
     /* Map of MDs that provide registration for given memory type,
        ucp_mem_map() will register memory for all those domains. */
     ucp_md_map_t                  reg_md_map[UCS_MEMORY_TYPE_LAST];

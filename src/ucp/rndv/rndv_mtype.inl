@@ -17,8 +17,8 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
                           ucp_md_map_t *mdesc_md_map_p, size_t *frag_size_p)
 {
     ucp_worker_h worker        = init_params->worker;
+    ucp_context_h context      = worker->context;
     ucs_memory_type_t mem_type = init_params->select_param->mem_type;
-    ucs_status_t status;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         (worker->mem_type_ep[mem_type] == NULL)) {
@@ -30,12 +30,8 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_mm_get_alloc_md_map(worker->context, mdesc_md_map_p);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    *frag_size_p = worker->context->config.ext.rndv_frag_size[UCS_MEMORY_TYPE_HOST];
+    *mdesc_md_map_p = context->reg_md_map[UCS_MEMORY_TYPE_HOST];
+    *frag_size_p    = context->config.ext.rndv_frag_size[UCS_MEMORY_TYPE_HOST];
     return UCS_OK;
 }
 

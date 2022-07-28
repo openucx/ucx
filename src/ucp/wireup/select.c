@@ -307,6 +307,26 @@ ucp_wireup_init_select_info(double score, unsigned addr_index,
 }
 
 /**
+ * Get bitmap of memory types that Memory Domain can be registered with taking
+ * into account context's maps of Memory Domains that provide registration for
+ * given memory type.
+ */
+static uint64_t
+ucp_wireup_select_reg_mem_types(ucp_context_h context, ucp_md_index_t md_index)
+{
+    uint64_t reg_mem_types = 0;
+    ucs_memory_type_t mem_type;
+
+    ucs_memory_type_for_each(mem_type) {
+        if (context->reg_md_map[mem_type] & UCS_BIT(md_index)) {
+            reg_mem_types |= UCS_BIT(mem_type);
+        }
+    }
+
+    return reg_mem_types;
+}
+
+/**
  * Select a local and remote transport
  */
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
@@ -343,6 +363,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score;
     uint8_t priority;
+    uint64_t reg_mem_types;
+    ucp_md_index_t md_index;
 
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
@@ -413,8 +435,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         dev_index      = context->tl_rscs[rsc_index].dev_index;
         wiface         = ucp_worker_iface(worker, rsc_index);
         iface_attr     = ucp_worker_iface_get_attr(worker, rsc_index);
-        md_attr        =
-                &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+        md_index       = context->tl_rscs[rsc_index].md_index;
+        md_attr        = &context->tl_mds[md_index].attr;
 
         if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
             !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
@@ -429,6 +451,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             local_md_flags &= ~UCT_MD_FLAG_INVALIDATE;
         }
 
+        reg_mem_types = ucp_wireup_select_reg_mem_types(context, md_index);
+
         /* Check that local md and interface satisfy the criteria */
         if (!ucp_wireup_check_flags(resource, md_attr->cap.flags,
                                     local_md_flags, criteria->title,
@@ -436,7 +460,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             !ucp_wireup_check_flags(resource, md_attr->cap.alloc_mem_types,
                                     criteria->alloc_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
-            !ucp_wireup_check_flags(resource, md_attr->cap.reg_mem_types,
+            !ucp_wireup_check_flags(resource, reg_mem_types,
                                     criteria->reg_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
             !ucp_wireup_check_flags(resource, iface_attr->cap.flags,
