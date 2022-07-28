@@ -521,9 +521,11 @@ void ucp_stream_ep_activate(ucp_ep_h ep)
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
-                      unsigned am_flags)
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_stream_am_handler(void *am_arg,
+                                                              void *am_data,
+                                                              void *payload,
+                                                              size_t am_length,
+                                                              unsigned am_flags)
 {
     ucp_worker_h          worker    = am_arg;
     ucp_stream_am_data_t *data      = am_data;
@@ -555,8 +557,9 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
 }
 
 static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
-                               uint8_t id, const void *data, size_t length,
-                               char *buffer, size_t max)
+                               uint8_t id, const void *data,
+                               const void *payload, size_t length, char *buffer,
+                               size_t max)
 {
     const ucp_stream_am_hdr_t *hdr    = data;
     size_t                    hdr_len = sizeof(*hdr);

@@ -395,8 +395,8 @@ ucp_proto_t ucp_rndv_rtr_mtype_proto = {
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 
-ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
-                                           unsigned flags)
+ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, void *payload,
+                                           size_t length, unsigned flags)
 {
     ucp_worker_h worker     = arg;
     ucp_rndv_ack_hdr_t *atp = data;
@@ -417,8 +417,8 @@ ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
     return UCS_OK;
 }
 
-ucs_status_t
-ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
+ucs_status_t ucp_proto_rndv_handle_data(void *arg, void *data, void *payload,
+                                        size_t length, unsigned flags)
 {
     ucp_worker_h worker                   = arg;
     ucp_request_data_hdr_t *rndv_data_hdr = data;

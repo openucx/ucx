@@ -253,7 +253,7 @@ uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
     ucs_status_t status;
     void         *desc;
 
-    status = uct_iface_invoke_am(&iface->super.super, am_id, data, length,
+    status = uct_iface_invoke_am(&iface->super.super, am_id, data, NULL, length,
                                  flags);
 
     if (status == UCS_INPROGRESS) {

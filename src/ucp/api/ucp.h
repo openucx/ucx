@@ -1835,6 +1835,13 @@ struct ucp_am_recv_param {
      * Endpoint, which can be used for the reply to this message.
      */
     ucp_ep_h           reply_ep;
+
+    /**
+     * Pointer to UCP data_desc.
+     * User should pass this field as data_desc parameter
+     * when calling ucp_am_recv_data_nbx.
+     */
+    void               *data_desc;
 };
 
 
@@ -3943,6 +3950,7 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr);
  * @example ucp_client_server.c
  * UCP client / server example using different APIs (tag, stream, am) utility.
  */
+
 
 END_C_DECLS
 

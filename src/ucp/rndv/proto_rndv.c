@@ -756,8 +756,8 @@ static void ucp_proto_rndv_send_complete_one(void *request, ucs_status_t status,
     ucp_proto_request_zcopy_complete(req, status);
 }
 
-ucs_status_t
-ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
+ucs_status_t ucp_proto_rndv_handle_rtr(void *arg, void *data, void *payload,
+                                       size_t length, unsigned flags)
 {
     ucp_worker_h worker           = arg;
     const ucp_rndv_rtr_hdr_t *rtr = data;

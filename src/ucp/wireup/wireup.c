@@ -794,7 +794,7 @@ void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_wireup_remote_connected(ep);
 }
 
-static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
+static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data, void *payload,
                                            size_t length, unsigned flags)
 {
     ucp_worker_h worker   = arg;
@@ -1560,7 +1560,8 @@ out_unlock:
 }
 
 static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
-                                uint8_t id, const void *data, size_t length,
+                                uint8_t id, const void *data,
+                                const void *payload, size_t length,
                                 char *buffer, size_t max)
 {
     ucp_context_h context       = worker->context;

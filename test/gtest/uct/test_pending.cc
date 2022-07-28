@@ -121,9 +121,9 @@ public:
         return i;
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   unsigned flags) {
-
+    static ucs_status_t am_handler(void *arg, void *data, void *payload,
+                                   size_t length, unsigned flags)
+    {
         volatile unsigned *counter = (volatile unsigned*) arg;
         uint64_t test_hdr          = *(uint64_t *) data;
         uint64_t actual_data       = *(unsigned*)((char*)data + sizeof(test_hdr));
@@ -140,20 +140,24 @@ public:
         return UCS_OK;
     }
 
-    static ucs_status_t am_handler_count(void *arg, void *data, size_t length,
-                                         unsigned flags) {
+    static ucs_status_t am_handler_count(void *arg, void *data, void *payload,
+                                         size_t length, unsigned flags)
+    {
         volatile unsigned *counter = (volatile unsigned*) arg;
         ucs_atomic_add32(counter, 1);
         return UCS_OK;
     }
 
-    static ucs_status_t am_handler_simple(void *arg, void *data, size_t length,
-                                          unsigned flags) {
+    static ucs_status_t am_handler_simple(void *arg, void *data, void *payload,
+                                          size_t length, unsigned flags)
+    {
         return UCS_OK;
     }
 
     static ucs_status_t am_handler_check_rx_order(void *arg, void *data,
-                                                  size_t length, unsigned flags) {
+                                                  void *payload, size_t length,
+                                                  unsigned flags)
+    {
         volatile bool *comp_received = (volatile bool*)arg;
         uint64_t hdr                 = *(uint64_t*)data;
 

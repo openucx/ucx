@@ -211,8 +211,8 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
     }
 }
 
-static ucs_status_t ucp_stub_am_handler(void *arg, void *data, size_t length,
-                                        unsigned flags)
+static ucs_status_t ucp_stub_am_handler(void *arg, void *data, void *payload,
+                                        size_t length, unsigned flags)
 {
     ucp_worker_h worker = arg;
     ucs_trace("worker %p: drop message", worker);
@@ -259,7 +259,7 @@ static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
     if ((id < UCP_AM_ID_LAST) && (id >= UCP_AM_ID_FIRST)) {
         tracer = ucp_am_handlers[id]->tracer;
         if (tracer != NULL) {
-            tracer(worker, type, id, data, length, buffer, max);
+            tracer(worker, type, id, data, NULL, length, buffer, max);
         }
     }
 }
