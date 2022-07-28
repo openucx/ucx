@@ -419,9 +419,12 @@ out:
 
 void ucp_wireup_remote_connect_lanes(ucp_ep_h ep, int ready)
 {
-    ucp_lane_index_t lane;
+    ucp_lane_index_t i, lane;
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+    for (i = 0; i < ucp_ep_num_lanes(ep);) {
+        /* Connect lanes in reverse ordering to avoid replaying requests with
+         * multi fragment protocol from one to other wireup lane. */
+        lane = ucp_ep_num_lanes(ep) - (++i);
         if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
             ucp_wireup_ep_remote_connected(ucp_ep_get_lane(ep, lane), ready);
         }
