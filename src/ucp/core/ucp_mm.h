@@ -85,8 +85,9 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
-ucs_status_t
-ucp_mm_get_alloc_md_map(ucp_context_h context, ucp_md_map_t *md_map_p);
+ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address, size_t length,
+                            ucs_memory_type_t memory_type, unsigned uct_flags,
+                            const char *alloc_name, ucp_mem_h *memh_p);
 
 
 /**

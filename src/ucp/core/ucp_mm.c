@@ -333,12 +333,21 @@ void ucp_memh_unmap(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map)
     }
 }
 
+static void ucp_memh_register_log_fail(ucs_log_level_t log_level, void *address,
+                                       size_t length, ucp_md_index_t md_index,
+                                       ucp_context_h context,
+                                       ucs_status_t status)
+{
+    ucs_log(log_level, "failed to register %p length %zu on md[%d]=%s: %s",
+            address, length, md_index, context->tl_mds[md_index].rsc.md_name,
+            ucs_status_string(status));
+}
+
 static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                       ucp_md_map_t md_map, void *address,
                                       size_t length, unsigned uct_flags)
 {
     ucp_md_map_t md_map_registered = 0;
-    ucs_log_level_t log_level;
     ucp_md_index_t md_index;
     ucs_status_t status;
 
@@ -347,14 +356,14 @@ static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                 address, length, uct_flags,
                                 &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
-            log_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
-                UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
-            ucs_log(log_level,
-                    "failed to register %p length %zu on md[%d]=%s: %s",
-                    address, length, md_index,
-                    context->tl_mds[md_index].rsc.md_name,
-                    ucs_status_string(status));
+            if (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) {
+                ucp_memh_register_log_fail(UCS_LOG_LEVEL_DIAG, address, length,
+                                           md_index, context, status);
+                continue;
+            }
 
+            ucp_memh_register_log_fail(UCS_LOG_LEVEL_ERROR, address, length,
+                                       md_index, context, status);
             ucp_memh_dereg(context, memh, md_map_registered);
 
             if (context->rcache != NULL) {
@@ -441,10 +450,9 @@ out:
     return status;
 }
 
-static ucs_status_t
-ucp_memh_alloc(ucp_context_h context, void *address, size_t length,
-               ucs_memory_type_t memory_type, unsigned uct_flags,
-               const char *alloc_name, ucp_mem_h *memh_p)
+ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address, size_t length,
+                            ucs_memory_type_t memory_type, unsigned uct_flags,
+                            const char *alloc_name, ucp_mem_h *memh_p)
 {
     ucp_md_map_t reg_md_map       = context->reg_md_map[memory_type];
     ucp_md_index_t alloc_md_index = UCP_NULL_RESOURCE;
@@ -875,30 +883,6 @@ ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk
 void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
 {
     ucp_rndv_frag_free_mpools(mp, chunk);
-}
-
-ucs_status_t
-ucp_mm_get_alloc_md_map(ucp_context_h context, ucp_md_map_t *md_map_p)
-{
-    ucs_status_t status;
-    ucp_mem_h memh;
-
-    if (!context->alloc_md_map_initialized) {
-        /* Allocate dummy 1-byte buffer to get the expected md_map */
-        status = ucp_memh_alloc(context, NULL, 1, UCS_MEMORY_TYPE_HOST,
-                                UCT_MD_MEM_ACCESS_ALL, "get_alloc_md_map",
-                                &memh);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        context->alloc_md_map_initialized = 1;
-        context->alloc_md_map             = memh->md_map;
-        ucp_memh_put(context, memh, 1);
-    }
-
-    *md_map_p = context->alloc_md_map;
-    return UCS_OK;
 }
 
 void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)
