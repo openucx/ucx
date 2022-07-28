@@ -31,6 +31,11 @@
 #include "ucp_util.h"
 
 #include <ucp/api/ucp.h>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wvariadic-macros"
+#include <ucs/datastruct/mpool.h>
+#include <ucs/debug/log_def.h>
+#pragma GCC diagnostic pop
 
 #include <string.h>    /* memset */
 #include <arpa/inet.h> /* inet_addr */
@@ -90,6 +95,7 @@ static struct {
     int          is_rndv;
     void         *desc;
     void         *recv_buf;
+    void         *data_desc;
 } am_data_desc = {0, 0, NULL, NULL};
 
 
@@ -97,6 +103,11 @@ static struct {
  * Print this application's usage help message.
  */
 static void usage(void);
+
+/* 
+ * User memory allocator put
+ */
+static void user_dummy_memory_allocator_put(void *obj);
 
 void buffer_free(ucp_dt_iov_t *iov)
 {
@@ -493,8 +504,9 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
          * which has to be passed to ucp_am_recv_data_nbx function to confirm
          * data transfer.
          */
-        am_data_desc.is_rndv = 1;
-        am_data_desc.desc    = data;
+        am_data_desc.is_rndv   = 1;
+        am_data_desc.desc      = data;
+        am_data_desc.data_desc = param->data_desc;
         return UCS_INPROGRESS;
     }
 
@@ -510,6 +522,7 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
                         iov[idx].length);
         offset += iov[idx].length;
     }
+    user_dummy_memory_allocator_put(data);
 
     return UCS_OK;
 }
@@ -554,7 +567,7 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
             params.op_attr_mask |= UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
             params.cb.recv_am    = am_recv_cb,
             request              = ucp_am_recv_data_nbx(ucp_worker,
-                                                        am_data_desc.desc,
+                                                        am_data_desc.data_desc,
                                                         msg, msg_length,
                                                         &params);
         } else {
@@ -747,10 +760,178 @@ static int client_server_communication(ucp_worker_h worker, ucp_ep_h ep,
     return ret;
 }
 
+/*
+*
+* Dummy implementation of user memory allocator based on ucs mpool
+* Begin
+*/
+
+typedef struct dummy_mem_allocator_obj {
+    ucs_mpool_t   mpool;
+    ucp_context_h context;
+    size_t        payload_length;
+} dummy_mem_allocator_obj_t;
+
+/**
+ * Memory buffers chunk header for shared mpool chunk.
+ */
+typedef struct ucp_shared_mpool_chunk_hdr {
+    ucp_mem_h memh;
+} ucp_shared_mpool_chunk_hdr_t;
+
+/**
+ * Memory buffer header for shared mpool buffer.
+ */
+typedef struct ucp_shared_mpool_buf_hdr {
+    ucp_mem_h ucp_memh;
+} ucp_shared_mpool_buf_hdr_t;
+
+ucs_status_t dummy_mem_allocator_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
+                                                void **chunk_p)
+{
+    const dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)mp;
+    const ucp_context_h context                = allocator->context;
+    ucs_status_t status;
+    ucp_mem_map_params_t params;
+    ucp_mem_h memh                          = NULL;
+    ucp_shared_mpool_chunk_hdr_t *chunk_hdr = NULL;
+    size_t chunk_size;
+    ucp_mem_attr_t memh_attr;
+
+    chunk_size        = (*size_p) + sizeof(*chunk_hdr);
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.length     = chunk_size;
+    params.address    = malloc(chunk_size);
+    if (params.address == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    /* change to map only */
+    if ((status = ucp_mem_map(context, &params, &memh)) != UCS_OK) {
+        return status;
+    }
+
+    memh_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    if ((status = ucp_mem_query(memh, &memh_attr)) != UCS_OK) {
+        return status;
+    }
+
+    chunk_hdr       = memh_attr.address;
+    chunk_hdr->memh = memh;
+    *chunk_p        = chunk_hdr + 1;
+    return status;
+}
+
+void dummy_mem_allocator_mp_chunk_release(ucs_mpool_t *mp, void *chunk)
+{
+    const dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)mp;
+    ucp_shared_mpool_chunk_hdr_t *chunk_hdr =
+            UCS_PTR_BYTE_OFFSET(chunk, -sizeof(ucp_shared_mpool_chunk_hdr_t));
+    ucp_mem_attr_t memh_attr;
+
+    memh_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    ucp_mem_query(chunk_hdr->memh, &memh_attr);
+    ucp_mem_unmap(allocator->context, chunk_hdr->memh);
+    free(memh_attr.address);
+}
+
+static void
+dummy_mem_allocator_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    const ucp_shared_mpool_chunk_hdr_t *chunk_hdr =
+            UCS_PTR_BYTE_OFFSET(chunk, -sizeof(ucp_shared_mpool_chunk_hdr_t));
+    ucp_shared_mpool_buf_hdr_t *buf_hdr = obj;
+
+    buf_hdr->ucp_memh = chunk_hdr->memh;
+}
+
+static ucs_mpool_ops_t ucp_worker_ifaces_mpool_ops = {
+    dummy_mem_allocator_mp_chunk_alloc,
+    dummy_mem_allocator_mp_chunk_release,
+    dummy_mem_allocator_mp_obj_init,
+    NULL,
+    NULL
+};
+
+ucs_status_t
+user_dummy_memory_allocator_init(ucp_context_h context,
+                                 const size_t buffer_size,
+                                 dummy_mem_allocator_obj_t **allocator_obj)
+{
+    dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)malloc(
+            sizeof(dummy_mem_allocator_obj_t));
+    ucs_mpool_params_t mp_params;
+    ucs_status_t status;
+
+    ucs_mpool_params_reset(&mp_params);
+    allocator->context        = context;
+    allocator->payload_length = buffer_size;
+    mp_params.priv_size       = sizeof(ucp_shared_mpool_buf_hdr_t);
+    mp_params.elem_size       = buffer_size + sizeof(ucp_shared_mpool_buf_hdr_t);
+    mp_params.align_offset    = sizeof(ucp_shared_mpool_buf_hdr_t);
+    mp_params.elems_per_chunk = 4096;
+    mp_params.ops             = &ucp_worker_ifaces_mpool_ops;
+    mp_params.name            = "dummy_mem_allocator_mpool";
+    status                    = ucs_mpool_init(&mp_params, &allocator->mpool);
+    if (status != UCS_OK) {
+        return status;
+    }
+    ucs_mpool_grow(&allocator->mpool, allocator->mpool.data->elems_per_chunk);
+
+    *allocator_obj = allocator;
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+user_dummy_memory_allocator_get(void *allocator_obj, size_t num_of_buffers,
+                                void **buffers, ucp_mem_h *memh)
+{
+    dummy_mem_allocator_obj_t *allocator = (dummy_mem_allocator_obj_t*)
+            allocator_obj;
+    ucp_shared_mpool_buf_hdr_t *m_buf_hdr;
+    void *obj;
+    size_t buff_idx;
+
+    for (buff_idx = 0; buff_idx < num_of_buffers; buff_idx++) {
+        obj = ucs_mpool_get(&allocator->mpool);
+        if (obj == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        m_buf_hdr         = (ucp_shared_mpool_buf_hdr_t*)obj;
+        *memh             = m_buf_hdr->ucp_memh;
+        buffers[buff_idx] = m_buf_hdr + 1;
+    }
+
+    return UCS_OK;
+}
+
+static void user_dummy_memory_allocator_put(void *obj)
+{
+    obj = UCS_PTR_BYTE_OFFSET(obj, -sizeof(ucp_shared_mpool_buf_hdr_t));
+    ucs_mpool_put((void*)obj);
+}
+
+void user_dummy_memory_allocator_clean(dummy_mem_allocator_obj_t *allocator)
+{
+    ucs_mpool_cleanup(&allocator->mpool, 0);
+    free(allocator);
+}
+
+/*
+*
+* Dummy implementation of user memory allocator based on ucs mpool
+* End
+*/
+
 /**
  * Create a ucp worker on the given ucp context.
  */
-static int init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker)
+static int init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker,
+                       dummy_mem_allocator_obj_t *allocator_obj)
 {
     ucp_worker_params_t worker_params;
     ucs_status_t status;
@@ -760,6 +941,13 @@ static int init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker)
 
     worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
     worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+
+    if (allocator_obj != NULL) {
+        worker_params.field_mask  |= UCP_WORKER_PARAM_FIELD_USER_ALLOCATOR;
+        worker_params.allocator_cb = user_dummy_memory_allocator_get;
+        worker_params.allocator_payload_length = allocator_obj->payload_length;
+        worker_params.allocator_obj            = allocator_obj;
+    }
 
     status = ucp_worker_create(ucp_context, &worker_params, ucp_worker);
     if (status != UCS_OK) {
@@ -906,6 +1094,8 @@ out:
 static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
                       char *listen_addr, send_recv_type_t send_recv_type)
 {
+    dummy_mem_allocator_obj_t *allocator_obj = NULL;
+    const size_t payload_length              = 8196;
     ucx_server_ctx_t context;
     ucp_worker_h     ucp_data_worker;
     ucp_am_handler_param_t param;
@@ -913,11 +1103,19 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
     ucs_status_t     status;
     int              ret;
 
+    status = user_dummy_memory_allocator_init(ucp_context, payload_length,
+                                              &allocator_obj);
+    if (status != UCS_OK) {
+        fprintf(stderr, "failed to create memory allocator (%s)\n",
+                ucs_status_string(status));
+        goto err;
+    }
+
     /* Create a data worker (to be used for data exchange between the server
      * and the client after the connection between them was established) */
-    ret = init_worker(ucp_context, &ucp_data_worker);
+    ret = init_worker(ucp_context, &ucp_data_worker, allocator_obj);
     if (ret != 0) {
-        goto err;
+        goto err_allocator;
     }
 
     if (send_recv_type == CLIENT_SERVER_SEND_RECV_AM) {
@@ -993,6 +1191,8 @@ err_listener:
     ucp_listener_destroy(context.listener);
 err_worker:
     ucp_worker_destroy(ucp_data_worker);
+err_allocator:
+    user_dummy_memory_allocator_clean(allocator_obj);
 err:
     return ret;
 }
@@ -1051,7 +1251,7 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker,
         goto err;
     }
 
-    ret = init_worker(*ucp_context, ucp_worker);
+    ret = init_worker(*ucp_context, ucp_worker, NULL);
     if (ret != 0) {
         goto err_cleanup;
     }
