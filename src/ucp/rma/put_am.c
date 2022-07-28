@@ -33,7 +33,8 @@ static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_am_bcopy_send_func(ucp_request_t *req,
                                  const ucp_proto_multi_lane_priv_t *lpriv,
-                                 ucp_datatype_iter_t *next_iter)
+                                 ucp_datatype_iter_t *next_iter,
+                                 ucp_lane_index_t *lane_shift)
 {
     ucp_proto_multi_pack_ctx_t pack_ctx = {
         .req         = req,
@@ -97,6 +98,7 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM,
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);

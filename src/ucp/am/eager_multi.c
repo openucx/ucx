@@ -47,7 +47,8 @@ ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
-        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
+        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     if (!ucp_am_check_init_params(init_params, UCP_AM_OP_ID_MASK_ALL,
@@ -114,7 +115,7 @@ static size_t ucp_am_eager_multi_bcopy_pack_args_mid(void *dest, void *arg)
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_bcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter)
+        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
     size_t user_hdr_size = req->send.msg_proto.am.header.length;
 
@@ -207,7 +208,7 @@ ucp_am_eager_fill_middle_header(ucp_am_mid_hdr_t *hdr, ucp_request_t *req)
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_zcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter)
+        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
     size_t user_hdr_size = req->send.msg_proto.am.header.length;
     union {

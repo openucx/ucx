@@ -48,6 +48,9 @@ typedef struct {
 
     /* Sum of 'weight' on all previous lanes, inclusive */
     uint32_t                     weight_sum;
+
+    /* Optimal alignment for zero-copy buffer address */
+    size_t                       opt_align;
 } ucp_proto_multi_lane_priv_t;
 
 
@@ -60,6 +63,8 @@ typedef struct {
     size_t                      max_frag_sum; /* 'max_frag' sum of all lanes */
     ucp_lane_map_t              lane_map;     /* Map of used lanes */
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
+    size_t                      align_thresh; /* Cached value of threshold for
+                                                 enabling data split alignment */
     ucp_proto_multi_lane_priv_t lanes[0];     /* Array of lanes */
 } ucp_proto_multi_priv_t;
 
@@ -76,6 +81,12 @@ typedef struct {
     /* MDs on which the buffer is expected to be already registered, so no need
        to account for the overhead of registering on them */
     ucp_md_map_t                   initial_reg_md_map;
+
+    /* Offset in uct_iface_attr_t structure of the field which specifies the
+     * optimal alignment for buffer address for the UCT operation used
+     * by this protocol */
+    ptrdiff_t                      opt_align_offs;
+
     struct {
         /* Required iface capabilities */
         uint64_t        tl_cap_flags;
@@ -98,7 +109,7 @@ typedef struct {
 
 typedef ucs_status_t (*ucp_proto_send_multi_cb_t)(
                 ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-                ucp_datatype_iter_t *next_iter);
+                ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift);
 
 
 /**

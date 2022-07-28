@@ -55,6 +55,8 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_ZCOPY,
+        .opt_align_offs      = ucs_offsetof(uct_iface_attr_t,
+                                            cap.get.opt_zcopy_align),
     };
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
@@ -127,7 +129,8 @@ ucp_proto_rndv_get_zcopy_query(const ucp_proto_query_params_t *params,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
                                    const ucp_proto_multi_lane_priv_t *lpriv,
-                                   ucp_datatype_iter_t *next_iter)
+                                   ucp_datatype_iter_t *next_iter,
+                                   ucp_lane_index_t *lane_shift)
 {
     /* coverity[tainted_data_downcast] */
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
@@ -135,7 +138,8 @@ ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
     size_t max_payload;
     uct_iov_t iov;
 
-    max_payload = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv);
+    max_payload = ucp_proto_rndv_bulk_max_payload_align(req, rpriv, lpriv,
+                                                        lane_shift);
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter, max_payload,
                                lpriv->super.md_index,
                                UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
@@ -218,7 +222,7 @@ ucp_proto_t ucp_rndv_get_zcopy_proto = {
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter)
+        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
     /* coverity[tainted_data_downcast] */
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;

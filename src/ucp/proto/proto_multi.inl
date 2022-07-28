@@ -12,6 +12,19 @@
 #include <ucp/proto/proto_common.inl>
 
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_multi_get_lane_opt_align(const ucp_proto_multi_init_params_t *params,
+                                   ucp_lane_index_t lane)
+{
+    ucp_worker_h worker        = params->super.super.worker;
+    ucp_rsc_index_t rsc_index  = ucp_proto_common_get_rsc_index(&params->super.super,
+                                                                lane);
+    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+
+    return ucp_proto_common_get_iface_attr_field(&wiface->attr,
+                                                 params->opt_align_offs, 1);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_multi_set_send_lane(ucp_request_t *req)
 {
@@ -120,6 +133,23 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_handle_send_error(
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_multi_advance_lane_idx(ucp_request_t *req, ucp_lane_index_t num_lanes,
+                                 ucp_lane_index_t lane_shift)
+{
+    ucp_lane_index_t lane_idx;
+
+    ucs_assertv(req->send.multi_lane_idx < num_lanes,
+                "req=%p lane_idx=%d num_lanes=%d", req,
+                req->send.multi_lane_idx, num_lanes);
+
+    lane_idx = req->send.multi_lane_idx + lane_shift;
+    if (lane_idx >= num_lanes) {
+        lane_idx = 0;
+    }
+    req->send.multi_lane_idx = lane_idx;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_multi_progress(ucp_request_t *req,
                          const ucp_proto_multi_priv_t *mpriv,
@@ -127,6 +157,7 @@ ucp_proto_multi_progress(ucp_request_t *req,
                          ucp_proto_complete_cb_t complete_func,
                          unsigned dt_mask)
 {
+    ucp_lane_index_t lane_shift = 1;
     const ucp_proto_multi_lane_priv_t *lpriv;
     ucp_datatype_iter_t next_iter;
     ucp_lane_index_t lane_idx;
@@ -140,7 +171,7 @@ ucp_proto_multi_progress(ucp_request_t *req,
     lpriv    = &mpriv->lanes[lane_idx];
 
     /* send the next fragment */
-    status = send_func(req, lpriv, &next_iter);
+    status = send_func(req, lpriv, &next_iter, &lane_shift);
     if (ucs_likely(status == UCS_OK)) {
         /* fast path is OK */
     } else if (status == UCS_INPROGRESS) {
@@ -159,11 +190,7 @@ ucp_proto_multi_progress(ucp_request_t *req,
     }
 
     /* move to the next lane, in a round-robin fashion */
-    lane_idx = req->send.multi_lane_idx + 1;
-    if (lane_idx >= mpriv->num_lanes) {
-        lane_idx = 0;
-    }
-    req->send.multi_lane_idx = lane_idx;
+    ucp_proto_multi_advance_lane_idx(req, mpriv->num_lanes, lane_shift);
 
     return UCS_INPROGRESS;
 }

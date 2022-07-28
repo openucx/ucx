@@ -100,7 +100,8 @@ static size_t ucp_proto_put_offload_bcopy_pack(void *dest, void *arg)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
                                       const ucp_proto_multi_lane_priv_t *lpriv,
-                                      ucp_datatype_iter_t *next_iter)
+                                      ucp_datatype_iter_t *next_iter,
+                                      ucp_lane_index_t *lane_shift)
 {
     ucp_ep_t *ep                        = req->send.ep;
     ucp_proto_multi_pack_ctx_t pack_ctx = {
@@ -156,7 +157,7 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
-                                            cap.put.max_bcopy),
+                                           cap.put.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_PUT_BCOPY,
@@ -169,6 +170,7 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_RMA,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_PUT_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA,
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);
@@ -190,7 +192,8 @@ ucp_proto_t ucp_put_offload_bcopy_proto = {
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                                       const ucp_proto_multi_lane_priv_t *lpriv,
-                                      ucp_datatype_iter_t *next_iter)
+                                      ucp_datatype_iter_t *next_iter,
+                                      ucp_lane_index_t *lane_shift)
 {
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
@@ -235,7 +238,7 @@ ucp_proto_put_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.max_length    = SIZE_MAX,
         .super.min_iov       = 1,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
-                                            cap.put.min_zcopy),
+                                           cap.put.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.max_zcopy),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.put.max_iov),
@@ -251,6 +254,7 @@ ucp_proto_put_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_RMA,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_PUT_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA,
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
     };
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);

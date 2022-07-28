@@ -127,6 +127,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     mpriv->num_lanes    = 0;
     mpriv->min_frag     = 0;
     mpriv->max_frag_sum = 0;
+    mpriv->align_thresh = 1;
     perf.max_frag       = SIZE_MAX;
     perf.min_length     = 0;
     weight_sum          = 0;
@@ -200,6 +201,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         mpriv->max_frag_sum += lpriv->max_frag;
         lpriv->weight_sum    = weight_sum;
         lpriv->max_frag_sum  = mpriv->max_frag_sum;
+        lpriv->opt_align     = ucp_proto_multi_get_lane_opt_align(params, lane);
+        mpriv->align_thresh  = ucs_max(mpriv->align_thresh,
+                                       lpriv->opt_align);
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(lane_map));
 
