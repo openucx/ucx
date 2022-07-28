@@ -146,7 +146,7 @@ ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_bcopy_proto_progress},
     .abort    = ucp_request_complete_send,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_bcopy_reset
 };
 
 static ucs_status_t
@@ -279,5 +279,5 @@ ucp_proto_t ucp_am_eager_multi_zcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_zcopy_proto_progress},
     .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_am_proto_request_zcopy_reset
 };
