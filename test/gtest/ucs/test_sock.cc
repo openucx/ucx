@@ -310,6 +310,7 @@ UCS_TEST_F(test_socket, sockaddr_is_inaddr) {
 
 UCS_TEST_F(test_socket, str_sockaddr_str) {
     const uint16_t port        = 65534;
+    const uint32_t scope_id    = 1;
     const char *ipv4_addr      = "192.168.122.157";
     const char *ipv6_addr      = "fe80::218:e7ff:fe16:fb97";
     struct sockaddr_storage ss = {0};
@@ -318,7 +319,7 @@ UCS_TEST_F(test_socket, str_sockaddr_str) {
     ucs_status_t status;
 
     sprintf(ipv4_addr_out, "%s:%d", ipv4_addr, port);
-    sprintf(ipv6_addr_out, "%s:%d", ipv6_addr, port);
+    sprintf(ipv6_addr_out, "%s%%%d:%d", ipv6_addr, scope_id, port);
 
     /* Check `str_len` with IPv4 address */
     {
@@ -342,7 +343,8 @@ UCS_TEST_F(test_socket, str_sockaddr_str) {
     /* Check `str_len` with IPv6 address */
     {
         saddr->sa_family                         = AF_INET6;
-        ((struct sockaddr_in6*)saddr)->sin6_port = htons(port);
+        ((struct sockaddr_in6*)saddr)->sin6_port     = htons(port);
+        ((struct sockaddr_in6*)saddr)->sin6_scope_id = scope_id;
         status = ucs_sock_ipstr_to_sockaddr(ipv6_addr, &ss);
         ASSERT_EQ(UCS_OK, status);
 
