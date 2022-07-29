@@ -270,12 +270,13 @@ typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
 
 
 /**
- * Clean UCP request to initial stage to be ready to start with other
- * protocol or aborted.
+ * Reset UCP request to its initial state and release any resources related to
+ * the specific protocol. Used to switch a send request to a different protocol.
  *
  * @param [in]  request Request to clean up.
  */
 typedef void (*ucp_request_clean_func_t)(ucp_request_t *request);
+
 
 /**
  * UCP base protocol definition

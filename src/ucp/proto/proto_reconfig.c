@@ -23,7 +23,8 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
 
     status = ucp_proto_request_init(req);
     if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+        /* will try again later */
+        return UCS_ERR_NO_RESOURCE;
     }
 
     return req->send.uct.func(&req->send.uct);

@@ -700,7 +700,6 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_t *proto_select;
     size_t msg_length;
-    ucs_status_t status;
 
     proto_select = ucp_proto_select_get(worker, ep->cfg_index,
                                         req->send.proto_config->rkey_cfg_index,
@@ -715,33 +714,38 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
     }
 
     /* Select from protocol hash according to saved request parameters */
-    status = ucp_proto_request_lookup_proto(
+    return ucp_proto_request_lookup_proto(
             worker, ep, req, proto_select, rkey_cfg_index,
             &req->send.proto_config->select_param, msg_length);
-    if (status != UCS_OK) {
-        /* will try again later */
-        return UCS_ERR_NO_RESOURCE;
-    }
+}
 
-    return UCS_OK;
+/**
+ * Current implementation of @ref ucp_proto_t::clean supports the only case if
+ * no any data was sent.
+ *
+ * @param req   request to check
+ */
+static void ucp_proto_request_check_clean_state(const ucp_request_t *req)
+{
+    ucs_assertv_always(
+            ucp_datatype_iter_is_begin(&req->send.state.dt_iter),
+            "req %p: request clean from the middle state is not implemented, "
+            "offset %zu", req, req->send.state.dt_iter.offset);
 }
 
 void ucp_proto_request_restart(ucp_request_t *req)
 {
     ucs_status_t status;
 
-    ucs_assertv_always(
-            ucp_datatype_iter_is_begin(&req->send.state.dt_iter),
-            "req %p: request restart from the middle state is not implemented",
-            req);
-
+    ucp_proto_request_check_clean_state(req);
     req->send.proto_config->proto->clean(req);
 
     status = ucp_proto_request_init(req);
-    ucs_assertv_always((status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE),
-                       "req %p: invalid protocol initialization, status %s",
-                       req, ucs_status_string(status));
-    ucp_request_send(req);
+    if (ucs_likely(status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE)) {
+        ucp_request_send(req);
+    } else {
+        ucp_proto_request_abort(req, status);
+    }
 }
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
@@ -761,7 +765,7 @@ void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status)
 
 void ucp_proto_request_bcopy_clean(ucp_request_t *request)
 {
-    ucs_assert(ucp_datatype_iter_is_begin(&request->send.state.dt_iter));
+    ucp_proto_request_check_clean_state(request);
     ucp_datatype_iter_cleanup(&request->send.state.dt_iter, UCP_DT_MASK_ALL);
     request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 }
@@ -773,7 +777,7 @@ void ucp_proto_request_zcopy_abort(ucp_request_t *request, ucs_status_t status)
 
 void ucp_proto_request_zcopy_clean(ucp_request_t *request)
 {
-    ucs_assert(ucp_datatype_iter_is_begin(&request->send.state.dt_iter));
+    ucp_proto_request_check_clean_state(request);
     ucp_proto_request_zcopy_clean_by_mask(request, UCP_DT_MASK_ALL);
 }
 

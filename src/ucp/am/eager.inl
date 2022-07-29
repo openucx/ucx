@@ -59,7 +59,9 @@ ucp_am_eager_zcopy_pack_user_header(ucp_request_t *req)
 {
     ucp_mem_desc_t *reg_desc;
 
-    ucs_assert(req->send.msg_proto.am.header.reg_desc == NULL);
+    /* Request must be in initial state or after cleanup */
+    ucs_assertv(req->send.msg_proto.am.header.reg_desc == NULL,
+                "req %p, double initialization of reg_desc", req);
 
     reg_desc = ucp_worker_mpool_get(&req->send.ep->worker->reg_mp);
     if (ucs_unlikely(reg_desc == NULL)) {

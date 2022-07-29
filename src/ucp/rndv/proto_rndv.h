@@ -116,6 +116,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 
+
 ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *params,
                                      const char *name,
                                      const ucp_proto_caps_t *bulk_caps,
