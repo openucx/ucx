@@ -275,7 +275,7 @@ typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
  *
  * @param [in]  request Request to clean up.
  */
-typedef void (*ucp_request_clean_func_t)(ucp_request_t *request);
+typedef void (*ucp_request_reset_func_t)(ucp_request_t *request);
 
 
 /**
@@ -301,11 +301,11 @@ struct ucp_proto {
     ucp_request_abort_func_t abort;
 
     /*
-     * Clean up a request (which is scheduled to a pending queue).
+     * Reset a request (which is scheduled to a pending queue).
      * The method should release associated resources, such as memory handles,
      * remote keys, request ID, etc.
      */
-    ucp_request_clean_func_t clean;
+    ucp_request_reset_func_t reset;
 };
 
 

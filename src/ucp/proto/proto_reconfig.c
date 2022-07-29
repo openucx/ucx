@@ -83,5 +83,5 @@ ucp_proto_t ucp_reconfig_proto = {
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_reconfig_progress},
     .abort    = ucp_request_complete_send,
-    .clean    = (ucp_request_clean_func_t)ucs_empty_function
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function
 };

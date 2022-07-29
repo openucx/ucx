@@ -720,28 +720,28 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
 }
 
 /**
- * Current implementation of @ref ucp_proto_t::clean supports the only case if
- * no any data was sent.
+ * Current implementation of @ref ucp_proto_t::reset supports the only case if
+ * no data was sent yet.
  *
  * @param req   request to check
  */
-static void ucp_proto_request_check_clean_state(const ucp_request_t *req)
+static void ucp_proto_request_check_reset_state(const ucp_request_t *req)
 {
     ucs_assertv_always(
             ucp_datatype_iter_is_begin(&req->send.state.dt_iter),
-            "req %p: request clean from the middle state is not implemented, "
-            "offset %zu", req, req->send.state.dt_iter.offset);
+            "request %p: cannot reset the state after sending %zu bytes", req,
+            req->send.state.dt_iter.offset);
 }
 
 void ucp_proto_request_restart(ucp_request_t *req)
 {
     ucs_status_t status;
 
-    ucp_proto_request_check_clean_state(req);
-    req->send.proto_config->proto->clean(req);
+    ucp_proto_request_check_reset_state(req);
+    req->send.proto_config->proto->reset(req);
 
     status = ucp_proto_request_init(req);
-    if (ucs_likely(status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE)) {
+    if (status == UCS_OK) {
         ucp_request_send(req);
     } else {
         ucp_proto_request_abort(req, status);
@@ -763,9 +763,9 @@ void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status)
     ucp_request_complete_send(request, status);
 }
 
-void ucp_proto_request_bcopy_clean(ucp_request_t *request)
+void ucp_proto_request_bcopy_reset(ucp_request_t *request)
 {
-    ucp_proto_request_check_clean_state(request);
+    ucp_proto_request_check_reset_state(request);
     ucp_datatype_iter_cleanup(&request->send.state.dt_iter, UCP_DT_MASK_ALL);
     request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 }
@@ -775,10 +775,10 @@ void ucp_proto_request_zcopy_abort(ucp_request_t *request, ucs_status_t status)
     ucp_invoke_uct_completion(&request->send.state.uct_comp, status);
 }
 
-void ucp_proto_request_zcopy_clean(ucp_request_t *request)
+void ucp_proto_request_zcopy_reset(ucp_request_t *request)
 {
-    ucp_proto_request_check_clean_state(request);
-    ucp_proto_request_zcopy_clean_by_mask(request, UCP_DT_MASK_ALL);
+    ucp_proto_request_check_reset_state(request);
+    ucp_proto_request_zcopy_clean(request, UCP_DT_MASK_ALL);
 }
 
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)

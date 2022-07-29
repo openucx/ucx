@@ -136,7 +136,7 @@ ucp_proto_t ucp_am_eager_short_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_short_proto_progress},
     .abort    = ucp_proto_request_bcopy_abort,
-    .clean    = (ucp_request_clean_func_t)ucs_empty_function_do_assert_void
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
 static ucs_status_t
@@ -162,7 +162,7 @@ ucp_proto_t ucp_am_eager_short_reply_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_short_reply_proto_progress},
     .abort    = ucp_proto_request_bcopy_abort,
-    .clean    = (ucp_request_clean_func_t)ucs_empty_function_do_assert_void
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
 static UCS_F_ALWAYS_INLINE size_t
@@ -261,7 +261,7 @@ ucp_proto_t ucp_am_eager_single_bcopy_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_bcopy_proto_progress},
     .abort    = ucp_request_complete_send,
-    .clean    = (ucp_request_clean_func_t)ucs_empty_function_do_assert_void
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
 static ucs_status_t ucp_am_eager_single_bcopy_reply_proto_init(
@@ -296,7 +296,7 @@ ucp_proto_t ucp_am_eager_single_bcopy_reply_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_bcopy_reply_proto_progress},
     .abort    = ucp_request_complete_send,
-    .clean    = (ucp_request_clean_func_t)ucs_empty_function_do_assert_void
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
 static ucs_status_t ucp_am_eager_single_zcopy_proto_init_common(
@@ -393,7 +393,7 @@ ucp_proto_t ucp_am_eager_single_zcopy_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_zcopy_proto_progress},
     .abort    = ucp_proto_request_zcopy_abort,
-    .clean    = (ucp_request_clean_func_t)ucs_empty_function_do_assert_void
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
 static ucs_status_t ucp_am_eager_single_zcopy_reply_proto_init(
@@ -448,5 +448,5 @@ ucp_proto_t ucp_am_eager_single_zcopy_reply_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_zcopy_reply_proto_progress},
     .abort    = ucp_proto_request_bcopy_abort,
-    .clean    = (ucp_request_clean_func_t)ucs_empty_function_do_assert_void
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
