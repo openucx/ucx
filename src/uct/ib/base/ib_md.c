@@ -236,15 +236,17 @@ extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(exp);
 static uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(verbs);
 
 static uct_ib_md_ops_entry_t *uct_ib_ops[] = {
-#if defined (HAVE_MLX5_DV) && defined (HAVE_DEVX)
+#if defined (HAVE_MLX5_HW)
+#  if defined (HAVE_MLX5_DV) && defined (HAVE_DEVX)
     &UCT_IB_MD_OPS_NAME(devx),
-#endif
-#if defined (HAVE_MLX5_DV)
+#  endif
+#  if defined (HAVE_MLX5_DV)
     &UCT_IB_MD_OPS_NAME(dv),
-#endif
-#if defined (HAVE_MLX5_HW) && defined (HAVE_VERBS_EXP_H)
+#  endif
+#  if defined (HAVE_VERBS_EXP_H)
     &UCT_IB_MD_OPS_NAME(exp),
-#endif
+#  endif
+#endif /* HAVE_MLX5_HW */
     &UCT_IB_MD_OPS_NAME(verbs)
 };
 
