@@ -366,19 +366,10 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
 
 void *ucm_brk_syscall(void *addr)
 {
-    void *result;
+    /* Return type is equivalent to full pointer size */
+    UCS_STATIC_ASSERT(sizeof(syscall(0)) == sizeof(void*));
 
-#ifdef __x86_64__
-    asm volatile("mov %1, %%rdi\n\t"
-                 "mov $0xc, %%eax\n\t"
-                 "syscall\n\t"
-                 : "=a"(result)
-                 : "m"(addr));
-#else
-    /* TODO implement 64-bit syscall for aarch64, ppc64le */
-    result = (void*)syscall(SYS_brk, addr);
-#endif
-    return result;
+    return (void*)syscall(SYS_brk, addr);
 }
 
 pid_t ucm_get_tid()
