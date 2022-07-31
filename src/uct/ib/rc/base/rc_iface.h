@@ -260,6 +260,7 @@ struct uct_rc_iface {
 
     struct {
         ucs_mpool_t          mp;
+        ucs_mpool_t          mps[UCT_IB_RECV_SG_LIST_LEN];
         uct_rc_srq_t         srq;
     } rx;
 

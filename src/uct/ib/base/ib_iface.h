@@ -51,6 +51,17 @@ enum {
 };
 
 
+#define UCT_IB_IFACE_TERMINATE_SCATTER_LIST_MKEY 0x100
+/**
+ * IB RX segments scatter gather list entries.
+ */
+enum {
+    UCT_IB_RX_SG_TL_HEADER_IDX = 0,
+    UCT_IB_RX_SG_PAYLOAD_IDX   = 1,
+    UCT_IB_RECV_SG_LIST_LEN
+};
+
+
 /**
  * IB port/path MTU.
  */
@@ -352,9 +363,10 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
  *
  */
 typedef struct uct_ib_iface_recv_desc {
-    uint32_t                lkey;
+    void     *payload;
+    uint32_t payload_lkey;
+    uint32_t lkey;
 } UCS_S_PACKED uct_ib_iface_recv_desc_t;
-
 
 
 extern ucs_config_field_t uct_ib_iface_config_table[];
@@ -519,7 +531,7 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
 
 typedef struct uct_ib_recv_wr {
     struct ibv_recv_wr ibwr;
-    struct ibv_sge     sg;
+    struct ibv_sge     sg[UCT_IB_RECV_SG_LIST_LEN];
 } uct_ib_recv_wr_t;
 
 /**

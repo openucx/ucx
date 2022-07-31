@@ -479,6 +479,12 @@ typedef struct uct_ib_mlx5_txwq {
 } uct_ib_mlx5_txwq_t;
 
 
+/* Receive wqe */
+typedef struct uct_ib_mlx5_rx_wqe {
+    struct mlx5_wqe_data_seg sg_list[0];
+} uct_ib_mlx5_rx_wqe_t;
+
+
 /* Receive work-queue */
 typedef struct uct_ib_mlx5_rxwq {
     /* producer index. It updated when new receive wqe is posted */
@@ -489,7 +495,7 @@ typedef struct uct_ib_mlx5_rxwq {
     uint16_t                    cq_wqe_counter;
     uint16_t                    mask;
     volatile uint32_t           *dbrec;
-    struct mlx5_wqe_data_seg    *wqes;
+    uct_ib_mlx5_rx_wqe_t        *wqes;
 } uct_ib_mlx5_rxwq_t;
 
 
