@@ -95,8 +95,9 @@ public:
         m_e2->connect(0, *m_e1, 0);
     }
 
-    static ucs_status_t mm_am_handler(void *arg, void *data, size_t length,
-                                      unsigned flags) {
+    static ucs_status_t mm_am_handler(void *arg, void *data, void *payload,
+                                      size_t length, unsigned flags)
+    {
         recv_desc_t *my_desc = (recv_desc_t *) arg;
         uint64_t *test_mm_hdr = (uint64_t *) data;
         uint64_t *actual_data = (uint64_t *) test_mm_hdr + 1;

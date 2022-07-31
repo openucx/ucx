@@ -83,7 +83,8 @@ static ucs_stats_class_t uct_iface_stats_class = {
 
 
 static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
-                                              size_t length, unsigned flags)
+                                              void *payload, size_t length,
+                                              unsigned flags)
 {
     const size_t dump_len = 64;
     uint8_t id            = (uintptr_t)arg;

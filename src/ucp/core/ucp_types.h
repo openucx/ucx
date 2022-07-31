@@ -236,7 +236,8 @@ typedef enum {
  * Active message tracer.
  */
 typedef void (*ucp_am_tracer_t)(ucp_worker_h worker, uct_am_trace_type_t type,
-                                uint8_t id, const void *data, size_t length,
+                                uint8_t id, const void *data,
+                                const void *payload, size_t length,
                                 char *buffer, size_t max);
 
 

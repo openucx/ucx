@@ -1284,7 +1284,8 @@ uct_tcp_ep_comp_recv_am(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                        hdr + 1, hdr->length,
                        "RECV: ep %p fd %d received %zu/%zu bytes",
                        ep, ep->fd, ep->rx.offset, ep->rx.length);
-    uct_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1, hdr->length, 0);
+    uct_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1, NULL, hdr->length,
+                        0);
 }
 
 static inline ucs_status_t

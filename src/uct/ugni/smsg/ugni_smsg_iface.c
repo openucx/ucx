@@ -95,7 +95,7 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
                            tag, user_data, header->length, "RX: AM");
 
-        uct_iface_invoke_am(&iface->super.super, tag, user_data,
+        uct_iface_invoke_am(&iface->super.super, tag, user_data, NULL,
                             header->length, 0);
         uct_ugni_cdm_lock(&iface->super.cdm);
         ugni_rc = GNI_SmsgRelease(ep->super.ep);
