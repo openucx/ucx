@@ -718,7 +718,7 @@ static void uct_ud_mlx5_qp_update_caps(struct ibv_qp_cap *qp_caps)
 {
     /* Set minimal possible values for max_send_sge, max_recv_sge and
      * max_inline_data to minimize WQE length */
-    qp_caps->max_recv_sge    = 1;
+    qp_caps->max_recv_sge    = UCT_IB_RECV_SG_LIST_LEN;
     qp_caps->max_send_sge    = 2; /* UD header + payload */
     qp_caps->max_inline_data = 0;
 }
