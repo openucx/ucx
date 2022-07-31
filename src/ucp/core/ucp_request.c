@@ -593,7 +593,6 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     const ucp_request_param_t *param)
 {
     ucs_status_t status;
-    int          multi;
 
     req->status = UCS_INPROGRESS;
 
@@ -602,20 +601,18 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         req->send.uct.func = proto->contig_short;
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
         return UCS_OK;
-    } else if (length < zcopy_thresh) {
+    } else if ((length < zcopy_thresh) &&
+               (length <= (msg_config->max_bcopy - proto->only_hdr_size))) {
         /* bcopy */
         ucp_request_send_state_reset(req, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
         ucs_assert(msg_config->max_bcopy >= proto->only_hdr_size);
-        if (length <= (msg_config->max_bcopy - proto->only_hdr_size)) {
-            req->send.uct.func = proto->bcopy_single;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
-        } else {
-            ucp_request_init_multi_proto(req, proto->bcopy_multi,
-                                         "start_bcopy_multi");
-        }
+        req->send.uct.func = proto->bcopy_single;
+        UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
 
         return UCS_OK;
-    } else if (length < zcopy_max) {
+    } else if ((length < zcopy_max) &&
+               ucs_likely(length <
+                          msg_config->max_zcopy - proto->only_hdr_size)) {
         /* zcopy */
         ucp_request_send_state_reset(req, proto->zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_ZCOPY_AM);
@@ -630,26 +627,8 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             return status;
         }
 
-        if (ucs_unlikely(length > msg_config->max_zcopy - proto->only_hdr_size)) {
-            multi = 1;
-        } else if (ucs_unlikely(UCP_DT_IS_IOV(req->send.datatype))) {
-            if (dt_count <= (msg_config->max_iov - priv_iov_count)) {
-                multi = 0;
-            } else {
-                multi = ucp_dt_iov_count_nonempty(req->send.buffer, dt_count) >
-                        (msg_config->max_iov - priv_iov_count);
-            }
-        } else {
-            multi = 0;
-        }
-
-        if (multi) {
-            ucp_request_init_multi_proto(req, proto->zcopy_multi,
-                                         "start_zcopy_multi");
-        } else {
-            req->send.uct.func = proto->zcopy_single;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
-        }
+        req->send.uct.func = proto->zcopy_single;
+        UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
 
         return UCS_OK;
     }

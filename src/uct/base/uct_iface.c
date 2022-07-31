@@ -489,6 +489,56 @@ UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
+static ucs_status_t
+uct_base_iface_default_get_buff_cb(void *arg, uct_user_allocator_buffs_t *buf)
+{
+    ucs_mpool_t *mp = arg;
+    uct_iface_recv_desc_t *obj;
+    size_t i;
+
+    for (i = 0; i < buf->num_of_buffers; i++) {
+        obj = ucs_mpool_get_inline(mp);
+        if (ucs_unlikely(obj == NULL)) {
+            return UCS_ERR_NO_ELEM;
+        }
+        buf->memh       = obj->uct_memh;
+        buf->buffers[i] = obj + 1;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_base_iface_init_rx_buffers_allocator(uct_base_iface_t *iface,
+                                         const uct_iface_params_t *params)
+{
+    iface->rx_allocator.arg = NULL;
+    iface->rx_allocator.cb  = uct_base_iface_default_get_buff_cb;
+    //TODO - ask Yossi about default value...
+    iface->rx_allocator.proto_header_length =
+            params->rx_allocator.proto_header_length ?
+                    params->rx_allocator.proto_header_length :
+                    8;
+
+    if ((params->field_mask & UCT_IFACE_PARAM_FIELD_USER_ALLOCATOR) != 0) {
+        if (params->rx_allocator.cb == NULL ||
+            params->rx_allocator.arg == NULL ||
+            params->rx_allocator.size == 0) {
+            ucs_error("invalid user allocator: user_allocator_arg %p, "
+                      "get_buff_cb %p, user_allocator_payload_length %lu\n",
+                      (void*)params->rx_allocator.arg,
+                      (void*)params->rx_allocator.cb,
+                      params->rx_allocator.size);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        iface->rx_allocator.size = params->rx_allocator.size;
+        iface->rx_allocator.cb   = params->rx_allocator.cb;
+        iface->rx_allocator.arg  = params->rx_allocator.arg;
+    }
+
+    return UCS_OK;
+}
 
 UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
                     uct_iface_internal_ops_t *internal_ops, uct_md_h md,
@@ -526,6 +576,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
                                                     ERR_HANDLER_ARG, NULL);
     self->progress_flags    = 0;
     uct_worker_progress_init(&self->prog);
+    uct_base_iface_init_rx_buffers_allocator(self, params);
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         uct_iface_set_stub_am_handler(self, id);
@@ -889,4 +940,10 @@ void uct_tl_unregister(uct_tl_t *tl)
 {
     ucs_list_del(&tl->config.list);
     /* TODO: add list_del from ucs_config_global_list */
+}
+
+void uct_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
+{
+    uct_iface_recv_desc_t *desc = obj;
+    desc->uct_memh              = memh;
 }

@@ -400,10 +400,11 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_mlx5_srq_seg_t *seg;
     uint32_t qp_num;
     ucs_status_t status;
+    void* payload;
 
     wqe_ctr = ntohs(cqe->wqe_counter);
     seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
-
+    payload = seg->srq.desc->payload;
     uct_ib_mlx5_log_rx(&iface->super.super, cqe, hdr,
                        uct_rc_mlx5_common_packet_dump);
 
@@ -417,7 +418,7 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
                                     cqe->imm_inval_pkey, cqe->slid, flags);
     } else {
         status = uct_iface_invoke_am(&iface->super.super.super, hdr->rc_hdr.am_id,
-                                     hdr + 1, NULL,
+                                     hdr + 1, payload,
                                      byte_len - sizeof(*hdr),
                                      flags);
     }
@@ -1412,6 +1413,24 @@ uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
 #endif /* IBV_HW_TM */
 
 static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_mlx5_iface_srq_common_post_recv(uct_rc_mlx5_iface_common_t *iface) {
+    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+        return uct_rc_mlx5_iface_srq_post_recv(iface);
+    } else {
+        return uct_rc_mlx5_iface_srq_post_recv_sge(iface);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_mlx5_iface_srq_common_post_recv_ll(uct_rc_mlx5_iface_common_t *iface) {
+    if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+        return uct_rc_mlx5_iface_srq_post_recv_ll(iface);
+    } else {
+        return uct_rc_mlx5_iface_srq_post_recv_ll_sge(iface);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
                                  int poll_flags)
 {
@@ -1549,9 +1568,11 @@ out:
     max_batch = iface->super.super.config.rx_max_batch;
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
         if (poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) {
-            uct_rc_mlx5_iface_srq_post_recv_ll(iface);
+            if (UCT_RC_MLX5_MP_ENABLED(iface)) {
+            }
+            uct_rc_mlx5_iface_srq_common_post_recv_ll(iface);
         } else {
-            uct_rc_mlx5_iface_srq_post_recv(iface);
+            uct_rc_mlx5_iface_srq_common_post_recv(iface);
         }
     }
     return count;

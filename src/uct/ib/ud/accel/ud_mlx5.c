@@ -174,7 +174,7 @@ static UCS_F_NOINLINE void
 uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
 {
     unsigned batch = iface->super.super.config.rx_max_batch;
-    struct mlx5_wqe_data_seg *rx_wqes;
+    uct_ib_mlx5_rx_wqe_t *rx_wqes;
     uint16_t pi, next_pi, count;
     uct_ib_iface_recv_desc_t *desc;
 
@@ -186,8 +186,16 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
         ucs_prefetch(rx_wqes + next_pi);
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, break);
-        rx_wqes[pi].lkey = htonl(desc->lkey);
-        rx_wqes[pi].addr = htobe64((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
+        desc->payload = UCS_PTR_BYTE_OFFSET(
+                desc, iface->super.super.config.rx_payload_offset);
+        rx_wqes[pi].sg_list[UCT_IB_RX_SG_TL_HEADER_IDX].lkey = htonl(
+                desc->lkey);
+        rx_wqes[pi].sg_list[UCT_IB_RX_SG_TL_HEADER_IDX].addr = htobe64(
+                (uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super,
+                                                      desc));
+        rx_wqes[pi].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].lkey   = htonl(
+                UCT_IB_IFACE_TERMINATE_SCATTER_LIST_MKEY);
+        rx_wqes[pi].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].addr   = htobe64(0);
         pi = next_pi;
     }
     if (ucs_unlikely(count == 0)) {
@@ -473,7 +481,8 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     ptrdiff_t rx_hdr_offset;
 
     ci            = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
-    packet        = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
+    packet        = (void*)be64toh(
+            iface->rx.wq.wqes[ci].sg_list[UCT_IB_RX_SG_TL_HEADER_IDX].addr);
     ucs_prefetch(UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN));
     rx_hdr_offset = iface->super.super.config.rx_hdr_offset;
     desc          = UCS_PTR_BYTE_OFFSET(packet, -rx_hdr_offset);
@@ -950,8 +959,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
 
     /* write buffer sizes */
     for (i = 0; i <= self->rx.wq.mask; i++) {
-        self->rx.wq.wqes[i].byte_count = 
+        self->rx.wq.wqes[i].sg_list[UCT_IB_RX_SG_TL_HEADER_IDX].byte_count =
                 htonl(self->super.super.config.seg_size);
+        self->rx.wq.wqes[i].sg_list[UCT_IB_RX_SG_PAYLOAD_IDX].byte_count = 0;
     }
 
     while (self->super.rx.available >= self->super.super.config.rx_max_batch) {

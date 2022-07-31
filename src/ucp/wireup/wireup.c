@@ -798,13 +798,14 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data, void *payload,
                                            size_t length, unsigned flags)
 {
     ucp_worker_h worker   = arg;
-    ucp_wireup_msg_t *msg = data;
+    ucp_wireup_msg_t *msg;
     ucp_ep_h ep           = NULL;
     ucp_unpacked_address_t remote_address;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    ucp_am_concat_msg_hdr(data, payload, length, msg, (ucp_wireup_msg_t*));
     if (msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID) {
         UCP_WORKER_GET_EP_BY_ID(
                 &ep, worker, msg->dst_ep_id,
@@ -819,9 +820,11 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data, void *payload,
         }
     }
 
-    status = ucp_address_unpack(worker, msg + 1,
-                                UCP_ADDRESS_PACK_FLAGS_ALL,
-                                &remote_address);
+    status = ucp_address_unpack(
+            worker,
+            UCS_PTR_BYTE_OFFSET(payload, sizeof(ucp_wireup_msg_t) -
+                                                 sizeof(ucp_am_hdr_t)),
+            UCP_ADDRESS_PACK_FLAGS_ALL, &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;

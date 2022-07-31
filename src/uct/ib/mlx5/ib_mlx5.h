@@ -698,12 +698,16 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 /**
  * Initialize srq structure.
  */
-ucs_status_t
-uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                           size_t sg_byte_count, int num_sge);
+ucs_status_t uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq,
+                                        struct ibv_srq *verbs_srq, int sge_num,
+                                        uint32_t *head, uint32_t *tail);
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
                                uint32_t tail, size_t sg_byte_count, int num_sge);
+
+void uct_ib_mlx5_srq_buff_init_sg(uct_ib_mlx5_srq_t *srq, uint32_t head,
+                                  uint32_t tail, size_t *sg_byte_count,
+                                  int num_sge);
 
 void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 

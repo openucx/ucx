@@ -1351,7 +1351,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     unsigned tx_cq_size;
 
     ucs_trace_func("");
-
+    //TODO - check with Yossi
+    config->super.super.inl[UCT_IB_DIR_RX] = 0;
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);
