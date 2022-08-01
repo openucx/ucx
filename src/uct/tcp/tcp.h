@@ -303,7 +303,8 @@ typedef struct uct_tcp_device_addr {
     uint8_t flags; /* Flags of type @ref uct_tcp_device_addr_flags_t */
     uint8_t sa_family; /* Address family of packed address */
     /* The following packed fields follow:
-     * 1. in_addr/in6_addr structure in case of non-loopback interface
+     * 1. in_addr/in6_addr structure in case of non-loopback interface +
+     *    uint32_t scope_id in case of in6_addr link-local address
      * 2. @ref uct_iface_local_addr_ns_t in case of loopback interface
      */
 } UCS_S_PACKED uct_tcp_device_addr_t;
@@ -661,6 +662,12 @@ static inline void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
     iface->outstanding--;
 }
 
+static inline int uct_tcp_is_in6_link_local_addr(const struct sockaddr *saddr)
+{
+    return (saddr->sa_family == AF_INET6) &&
+           IN6_IS_ADDR_LINKLOCAL(&UCS_SOCKET_INET6_ADDR(saddr));
+}
+
 /**
  * Query for active network devices under /sys/class/net, as determined by
  * ucs_netif_is_active().
@@ -668,5 +675,7 @@ static inline void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
 ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p);
+
+ucs_status_t uct_tcp_pack_inet_addr(void *ptr, const struct sockaddr *saddr);
 
 #endif

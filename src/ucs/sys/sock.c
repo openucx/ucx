@@ -106,7 +106,6 @@ ucs_status_t ucs_netif_get_addr(const char *if_name, sa_family_t af,
     ucs_status_t status = UCS_ERR_NO_DEVICE;
     struct ifaddrs *ifa;
     struct ifaddrs *ifaddrs;
-    const struct sockaddr_in6 *saddr6;
     size_t addrlen;
 
     if (getifaddrs(&ifaddrs)) {
@@ -128,13 +127,6 @@ ucs_status_t ucs_netif_get_addr(const char *if_name, sa_family_t af,
 
         if (!ucs_netif_flags_is_active(ifa->ifa_flags)) {
             continue;
-        }
-
-        if (ifa->ifa_addr->sa_family == AF_INET6) {
-            saddr6 = (const struct sockaddr_in6*)ifa->ifa_addr;
-            if (IN6_IS_ADDR_LINKLOCAL(&saddr6->sin6_addr)) {
-                continue;
-            }
         }
 
         if ((af == AF_UNSPEC) || (ifa->ifa_addr->sa_family == af)) {

@@ -773,6 +773,11 @@ ucs_status_t uct_tcp_ep_set_dest_addr(const uct_device_addr_t *dev_addr,
         return status;
     }
 
+    if (uct_tcp_is_in6_link_local_addr(dest_addr)) {
+        UCS_SOCKET_INET6_SCOPE_ID(dest_addr) =
+            *(uint32_t*)UCS_PTR_BYTE_OFFSET(in_addr, UCS_IPV6_ADDR_LEN);
+    }
+
     return ucs_sockaddr_set_port(dest_addr, ntohs(tcp_iface_addr->port));
 }
 

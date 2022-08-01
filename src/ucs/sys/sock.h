@@ -34,6 +34,8 @@ BEGIN_C_DECLS
 
 #define UCS_SOCKET_INET6_ADDR(_addr) (((struct sockaddr_in6*)(_addr))->sin6_addr)
 #define UCS_SOCKET_INET6_PORT(_addr) (((struct sockaddr_in6*)(_addr))->sin6_port)
+#define UCS_SOCKET_INET6_SCOPE_ID(_addr) \
+    (((struct sockaddr_in6*)(_addr))->sin6_scope_id)
 
 
 /**
