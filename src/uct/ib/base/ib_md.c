@@ -1579,17 +1579,15 @@ out:
 void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
                                    const uct_ib_md_config_t *md_config)
 {
+#if HAVE_DECL_IBV_ACCESS_RELAXED_ORDERING
+    md->relaxed_order = (md_config->mr_relaxed_order == UCS_CONFIG_ON) ||
+                        ((md_config->mr_relaxed_order == UCS_CONFIG_AUTO) &&
+                         ucs_cpu_prefer_relaxed_order());
+#else
     if (md_config->mr_relaxed_order == UCS_CONFIG_ON) {
-        if (IBV_ACCESS_RELAXED_ORDERING) {
-            md->relaxed_order = 1;
-        } else {
-            ucs_warn("relaxed order memory access requested but not supported");
-        }
-    } else if (md_config->mr_relaxed_order == UCS_CONFIG_AUTO) {
-        if (ucs_cpu_prefer_relaxed_order()) {
-            md->relaxed_order = 1;
-        }
+        ucs_warn("relaxed order memory access requested but not supported");
     }
+#endif
 }
 
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
