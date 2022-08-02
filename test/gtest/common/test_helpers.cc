@@ -438,8 +438,7 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
         /* Skip IPv6 link-local and loopback address, that could not be used for
            connection establishment */
         auto saddr6 = (const struct sockaddr_in6*)ifa_addr;
-        return !IN6_IS_ADDR_LOOPBACK(&saddr6->sin6_addr) &&
-               !IN6_IS_ADDR_LINKLOCAL(&saddr6->sin6_addr);
+        return !IN6_IS_ADDR_LOOPBACK(&saddr6->sin6_addr);
     } else {
         return ifa_addr->sa_family == AF_INET;
     }
