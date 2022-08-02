@@ -78,7 +78,7 @@ have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 # Set initial port number for client/server applications
 #
 server_port_range=1000
-server_port_min=$((33000 + EXECUTOR_NUMBER * server_port_range))
+server_port_min=$((10500 + EXECUTOR_NUMBER * server_port_range))
 server_port_max=$((server_port_min + server_port_range))
 server_port=${server_port_min}
 
