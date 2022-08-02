@@ -542,53 +542,6 @@ err:
     return status;
 }
 
-static ucs_status_t uct_tcp_iface_set_port_range(uct_tcp_iface_t *iface,
-                                                 uct_tcp_iface_config_t *config)
-{
-    ucs_range_spec_t system_port_range;
-    unsigned start_range, end_range;
-    ucs_status_t status;
-
-    if ((config->port_range.first == 0) && (config->port_range.last == 0)) {
-        /* using a random port */
-        goto out_set_config;
-    }
-
-    /* get the system configuration for usable ports range */
-    status = ucs_sockaddr_get_ip_local_port_range(&system_port_range);
-    if (status != UCS_OK) {
-        /* using the user's config */
-        goto out_set_config;
-    }
-
-    /* find a common range between the user's ports range and the one on the system */
-    start_range = ucs_max(system_port_range.first, config->port_range.first);
-    end_range   = ucs_min(system_port_range.last, config->port_range.last);
-
-    if (start_range > end_range) {
-        /* there is no common range */
-        ucs_error("the requested TCP port range (%d-%d) is outside of system's "
-                  "configured port range (%d-%d)",
-                  config->port_range.first, config->port_range.last,
-                  system_port_range.first, system_port_range.last);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out;
-    }
-
-    iface->port_range.first = start_range;
-    iface->port_range.last  = end_range;
-    ucs_debug("using TCP port range: %d-%d", iface->port_range.first, iface->port_range.last);
-    return UCS_OK;
-
-out_set_config:
-    iface->port_range.first = config->port_range.first;
-    iface->port_range.last  = config->port_range.last;
-    ucs_debug("using TCP port range: %d-%d", iface->port_range.first, iface->port_range.last);
-    return UCS_OK;
-out:
-    return status;
-}
-
 static ucs_mpool_ops_t uct_tcp_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -681,6 +634,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
+    self->port_range.first         = config->port_range.first;
+    self->port_range.last          = config->port_range.last;
 
     if (config->keepalive.idle != UCS_MEMUNITS_AUTO) {
         /* TCP iface configuration sets the keepalive interval */
@@ -694,15 +649,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
             ucs_time_from_sec(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE);
     }
 
-    status = uct_tcp_iface_set_port_range(self, config);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
     if (self->config.tx_seg_size > self->config.rx_seg_size) {
         ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
                   self->config.rx_seg_size, self->config.tx_seg_size);
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
     }
 
     ucs_mpool_params_reset(&mp_params);
