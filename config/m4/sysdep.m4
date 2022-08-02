@@ -185,6 +185,8 @@ AC_MSG_CHECKING([malloc hooks])
 SAVE_CFLAGS=$CFLAGS
 CFLAGS="$CFLAGS $CFLAGS_NO_DEPRECATED"
 CHECK_CROSS_COMP([AC_LANG_SOURCE([#include <malloc.h>
+                                  #include <unistd.h>
+                                  #include <fcntl.h>
                                   static int rc = 1;
                                   void *ptr;
                                   void *myhook(size_t size, const void *caller) {
@@ -194,6 +196,9 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([#include <malloc.h>
                                   int main(int argc, char** argv) {
                                       __malloc_hook = myhook;
                                       ptr = malloc(1);
+                                      /* Keep the malloc call even with LTO */
+                                      write(open("/dev/null", O_WRONLY),
+                                            &ptr, sizeof(ptr));
                                       return rc;
                                   }])],
                  [AC_MSG_RESULT([yes])
