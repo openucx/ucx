@@ -114,6 +114,11 @@ typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
         uct_md_h md, uct_mem_h memh, const uct_md_mkey_pack_params_t *params,
         void *rkey_buffer);
 
+typedef ucs_status_t
+(*uct_md_mem_attach_func_t)(uct_md_h md, void *mkey_buffer,
+                            uct_md_mem_attach_params_t *params,
+                            uct_mem_h *memh_p);
+
 typedef int (*uct_md_is_sockaddr_accessible_func_t)(uct_md_h md,
                                                     const ucs_sock_addr_t *sockaddr,
                                                     uct_sockaddr_accessibility_t mode);
@@ -137,6 +142,7 @@ struct uct_md_ops {
     uct_md_mem_dereg_func_t              mem_dereg;
     uct_md_mem_query_func_t              mem_query;
     uct_md_mkey_pack_func_t              mkey_pack;
+    uct_md_mem_attach_func_t             mem_attach;
     uct_md_is_sockaddr_accessible_func_t is_sockaddr_accessible;
     uct_md_detect_memory_type_func_t     detect_memory_type;
 };
