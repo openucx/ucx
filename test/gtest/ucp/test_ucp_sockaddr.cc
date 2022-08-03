@@ -465,15 +465,17 @@ public:
     }
 
     struct rx_am_msg_arg {
-        entity &receiver;
-        bool received;
-        void *hdr;
-        void *buf;
-        void *rreq;
+        entity    &receiver;
+        bool      received;
+        void      *hdr;
+        void      *buf;
+        ucp_mem_h memh;
+        void      *rreq;
 
-        rx_am_msg_arg(entity &_receiver, void *_hdr, void *_buf) :
+        rx_am_msg_arg(entity &_receiver, void *_hdr, void *_buf,
+                      ucp_mem_h _memh) :
                 receiver(_receiver), received(false), hdr(_hdr), buf(_buf),
-                rreq(NULL) { }
+                memh(_memh), rreq(NULL) { }
     };
 
     static void rx_am_msg_data_recv_cb(void *request, ucs_status_t status,
@@ -501,6 +503,11 @@ public:
                                       UCP_OP_ATTR_FIELD_USER_DATA;
             recv_param.cb.recv_am   = rx_am_msg_data_recv_cb;
             recv_param.user_data    = const_cast<rx_am_msg_arg*>(rx_arg);
+
+            if (rx_arg->memh != NULL) {
+                recv_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+                recv_param.memh          = rx_arg->memh;
+            }
 
             void *rreq = ucp_am_recv_data_nbx(rx_arg->receiver.worker(), data,
                                               rx_arg->buf, length, &recv_param);
@@ -538,7 +545,7 @@ public:
     {
         const uint64_t send_data = ucs_generate_uuid(0);
         uint64_t recv_data       = 0;
-        rx_am_msg_arg am_rx_arg(to, NULL, &recv_data);
+        rx_am_msg_arg am_rx_arg(to, NULL, &recv_data, NULL);
         ucs_status_t send_status;
 
         if (send_recv_type == SEND_RECV_AM) {
@@ -2432,17 +2439,34 @@ protected:
         }
     }
 
-    void test_am_send_recv(size_t size, size_t hdr_size = 0ul)
+    void test_am_send_recv(size_t size, size_t hdr_size = 0ul,
+                           size_t num_iters = m_num_iters,
+                           bool recv_prereg_memh = false,
+                           std::vector<uct_md_h> *recv_mds = NULL)
     {
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
-        for (int i = 0; i < m_num_iters; i++) {
+        for (int i = 0; i < num_iters; i++) {
             std::string sb(size, 'x');
             std::string rb(size, 'y');
             std::string shdr(hdr_size, 'x');
             std::string rhdr(hdr_size, 'y');
+            ucp_mem_h rmemh(NULL);
 
-            rx_am_msg_arg arg(receiver(), &rhdr[0], &rb[0]);
+            if (recv_prereg_memh) {
+                rmemh = receiver().mem_map(&rb[0], size);
+            }
+            
+            if (recv_mds != NULL) {
+                ucp_tl_md_t *tl_md;
+                ucs_carray_for_each(tl_md, receiver().ucph()->tl_mds,
+                                    receiver().ucph()->num_mds) {
+                    recv_mds->push_back(tl_md->md);
+                    tl_md->md = NULL;
+                }
+            }
+
+            rx_am_msg_arg arg(receiver(), &rhdr[0], &rb[0], rmemh);
             set_am_data_handler(receiver(), 0, rx_am_msg_cb, &arg);
 
             ucp_request_param_t param = {};
@@ -2460,6 +2484,19 @@ protected:
             compare_buffers(shdr, rhdr);
 
             set_am_data_handler(receiver(), 0, NULL, NULL);
+
+            if (recv_mds != NULL) {
+                unsigned i = 0;
+                ucp_tl_md_t *tl_md;
+                ucs_carray_for_each(tl_md, receiver().ucph()->tl_mds,
+                                    receiver().ucph()->num_mds) {
+                    tl_md->md = (*recv_mds)[i++];
+                }
+            }
+
+            if (recv_prereg_memh) {
+                receiver().mem_unmap(rmemh);
+            }
         }
     }
 
@@ -2656,6 +2693,17 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_64k,
 UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_64k, "RNDV_THRESH=0")
 {
     test_am_send_recv(64 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols,
+           am_rndv_64k_recv_prereg_single_rndv_get_zcopy_lane, "RNDV_THRESH=0",
+           "MAX_RNDV_LANES=1", "RNDV_SCHEME=get_zcopy")
+{
+    /* The test checks that memory registration won't happen during RNDV GET
+     * Zcopy if a memory buffer was preregistered */
+    std::vector<uct_md_h> recv_mds;
+    test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, true,
+                      &recv_mds);
 }
 
 
