@@ -46,6 +46,7 @@ public class UcpListenerTest  extends UcxTest {
         UcpListener result = null;
         List<InetAddress> addresses = getInterfaces().flatMap(iface ->
             Collections.list(iface.getInetAddresses()).stream())
+            .filter(addr -> !addr.isLinkLocalAddress())
             .collect(Collectors.toList());
         Collections.reverse(addresses);
         for (InetAddress address : addresses) {
