@@ -1143,7 +1143,8 @@ void uct_test::entity::connect_p2p_ep(uct_ep_h from, uct_ep_h to)
     free(dev_addr);
 }
 
-void uct_test::entity::create_ep(unsigned index) {
+void uct_test::entity::create_ep(unsigned index, unsigned path_index)
+{
     uct_ep_h ep = NULL;
     uct_ep_params_t ep_params;
     ucs_status_t status;
@@ -1154,8 +1155,10 @@ void uct_test::entity::create_ep(unsigned index) {
         UCS_TEST_ABORT("ep[" << index << "] already exists");
     }
 
-    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                           UCT_EP_PARAM_FIELD_PATH_INDEX;
     ep_params.iface      = m_iface;
+    ep_params.path_index = path_index;
     status = uct_ep_create(&ep_params, &ep);
     ASSERT_UCS_OK(status);
     m_eps[index].reset(ep, uct_ep_destroy);
