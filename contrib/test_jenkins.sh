@@ -426,12 +426,21 @@ step_server_port() {
 	server_port=$((server_port >= server_port_max ? server_port_min : server_port))
 }
 
+run_netstat() {
+	# For debug
+	netstat -lntp || true
+}
+
 run_client_server_app() {
+	export UCX_LOG_PRINT_ENABLE=y
+
 	test_exe=$1
 	test_args=$2
 	server_addr_arg=$3
 	kill_server=$4
 	error_emulation=$5
+
+	run_netstat
 
 	server_port_arg="-p $server_port"
 	step_server_port
@@ -442,7 +451,11 @@ run_client_server_app() {
 	taskset -c $affinity_server ${test_exe} ${test_args} ${server_port_arg} &
 	server_pid=$!
 
+	run_netstat
+
 	sleep 15
+
+	run_netstat
 
 	if [ $error_emulation -eq 1 ]
 	then
@@ -464,6 +477,8 @@ run_client_server_app() {
 		kill -9 ${server_pid}
 	fi
 	wait ${server_pid} || true
+
+	unset UCX_LOG_PRINT_ENABLE
 }
 
 run_hello() {
