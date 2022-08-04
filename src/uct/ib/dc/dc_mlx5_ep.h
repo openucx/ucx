@@ -61,6 +61,12 @@ enum uct_dc_mlx5_ep_flags {
 #endif
 };
 
+/* Address-vector for link-local scope */
+typedef struct uct_dc_mlx5_base_av {
+    uint32_t              dqp_dct;
+    uint16_t              rlid;
+} UCS_S_PACKED uct_dc_mlx5_base_av_t;
+
 struct uct_dc_mlx5_ep {
     uct_base_ep_t         super;
     ucs_arbiter_group_t   arb_group;
@@ -69,7 +75,7 @@ struct uct_dc_mlx5_ep {
     uint16_t              flags;
     uint16_t              flush_rkey_hi;
     uct_rc_fc_t           fc;
-    uct_ib_mlx5_base_av_t av;
+    uct_dc_mlx5_base_av_t av;
 };
 
 typedef struct {
