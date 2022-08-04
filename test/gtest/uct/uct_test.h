@@ -182,7 +182,7 @@ protected:
         size_t num_eps() const;
         void reserve_ep(unsigned index);
 
-        void create_ep(unsigned index);
+        void create_ep(unsigned index = 0, unsigned path_index = 0);
         void destroy_ep(unsigned index);
         void revoke_ep(unsigned index);
         void destroy_eps();
