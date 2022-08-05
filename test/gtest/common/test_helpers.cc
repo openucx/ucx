@@ -488,33 +488,48 @@ out_close:
 static std::map<std::string, std::string> get_all_rdmacm_net_devices()
 {
     static const std::string sysfs_ib_dir  = "/sys/class/infiniband";
-    static const std::string sysfs_net_dir = "/sys/class/net";
     static const std::string ndevs_fmt     = sysfs_ib_dir +
                                              "/%s/ports/%d/gid_attrs/ndevs/0";
     static const std::string node_guid_fmt = sysfs_ib_dir + "/%s/node_guid";
+    static const std::string gid_fmt       = "%s/%s";
+    static const std::string ndev_fmt      = "%s/%s/gid_attrs/ndevs/%s";
+    static const std::string zero_gid      = "0000:0000:0000:0000:0000:0000:0000:0000";
+    static const std::string linklocal_gid = "fe80:0000:0000:0000:0000:0000:0000:0000";
     std::map<std::string, std::string> devices;
     char dev_name[32];
     char guid_buf[32];
+    char gid_buf[64];
+    char ndev_buf[256];
     ssize_t nread;
     int port_num;
-
-    std::vector<std::string> ndevs = read_dir(sysfs_net_dir);
 
     /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA
      * device.
      */
-    for (size_t i = 0; i < ndevs.size(); ++i) {
-        std::string infiniband_dir          = sysfs_net_dir + "/" + ndevs[i] +
-                                              "/device/infiniband";
-        std::vector<std::string> ib_devices = read_dir(infiniband_dir);
+    for (const auto &dev: read_dir(sysfs_ib_dir)) {
+        const auto ports_dir = sysfs_ib_dir + "/" + dev + "/ports";
+        for (const auto &port: read_dir(ports_dir)) {
+            const auto port_dir = ports_dir + "/" + port;
+            const auto gids_dir = port_dir + "/gids";
+            for (const auto &gid: read_dir(gids_dir)) {
+                nread = ucs_read_file_str(gid_buf, sizeof(gid_buf), 1,
+                                          gid_fmt.c_str(), gids_dir.c_str(),
+                                          gid.c_str());
+                if ((nread < 0) ||
+                    (zero_gid == gid_buf) || (linklocal_gid == gid_buf)) {
+                    continue;
+                }
 
-        if (!ib_devices.empty()) {
-            std::string ib_device = ib_devices.front();
-            std::string ports_dir = infiniband_dir + "/" + ib_device +
-                                    "/ports";
-            std::string ib_port   = read_dir(ports_dir).front();
+                nread = ucs_read_file_str(ndev_buf, sizeof(ndev_buf), 1,
+                                          ndev_fmt.c_str(), ports_dir.c_str(),
+                                          port.c_str(), gid.c_str());
+                if (nread < 0) {
+                    continue;
+                }
 
-            devices.emplace(ndevs[i], ib_device + ":" + ib_port);
+                ucs_strtrim(ndev_buf); // there is '\n' at end of buffer
+                devices.emplace(ndev_buf, dev + ":" + port);
+            }
         }
     }
 
