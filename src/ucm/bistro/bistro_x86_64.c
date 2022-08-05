@@ -68,13 +68,6 @@ typedef struct {
     uint8_t        ret;
 } UCS_S_PACKED ucm_bistro_jcc_xlt_t;
 
-typedef struct {
-    const void *src_p;   /* Pointer to current source instruction */
-    const void *src_end; /* Upper limit for source instructions */
-    void       *dst_p;   /* Pointer to current destination instruction */
-    void       *dst_end; /* Upper limit for destination instructions */
-} ucm_bistro_relocate_context_t;
-
 
 /* REX prefix */
 #define UCM_BISTRO_X86_REX_MASK  0xF0 /* Mask */
@@ -131,8 +124,7 @@ typedef struct {
 #define UCM_BISTRO_X86_JCC_LAST  0x7F
 
 
-static ucs_status_t
-ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
+ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
 {
     const void *copy_src     = ctx->src_p;
     ucm_bistro_cmp_xlt_t cmp = {
@@ -267,68 +259,15 @@ out_copy:
     return UCS_OK;
 }
 
-/*
- * Relocate at least 'min_src_length' code instructions from 'src' to 'dst',
- * possibly changing some of them to new instructions.
- * Uses a  simplified disassembler which supports only typical instructions
- * found in function prologue.
- */
-static ucs_status_t
-ucm_bistro_relocate_code(void *dst, const void *src, size_t min_src_length,
-                         size_t max_dst_length, size_t *dst_length_p,
-                         size_t *src_length_p)
-{
-    ucm_bistro_relocate_context_t ctx = {
-        .src_p   = src,
-        .dst_p   = dst,
-        .dst_end = UCS_PTR_BYTE_OFFSET(dst, max_dst_length),
-        .src_end = (void*)UINTPTR_MAX
-    };
-    ucs_status_t status;
-
-    while (ctx.src_p < UCS_PTR_BYTE_OFFSET(src, min_src_length)) {
-        status = ucm_bistro_relocate_one(&ctx);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        if (ctx.src_p > ctx.src_end) {
-            return UCS_ERR_UNSUPPORTED;
-        }
-    }
-
-    *src_length_p = UCS_PTR_BYTE_DIFF(src, ctx.src_p);
-    *dst_length_p = UCS_PTR_BYTE_DIFF(dst, ctx.dst_p);
-    return UCS_OK;
-}
-
-static const char *
-ucm_bistro_dump_code(const void *code, size_t length, char *str, size_t max)
-{
-    const void *code_p = code;
-    char *p            = str;
-    char *endp         = str + max;
-
-    while (code_p < UCS_PTR_BYTE_OFFSET(code, length)) {
-        snprintf(p, endp - p, " %02X",
-                 *ucs_serialize_next(&code_p, const uint8_t));
-        p += strlen(p);
-    }
-
-    return str;
-}
-
 static ucs_status_t
 ucm_bistro_construct_orig_func(const void *func_ptr, size_t patch_len,
                                const char *symbol, void **orig_func_p)
 {
     size_t code_len, prefix_len, max_code_len;
     ucm_bistro_jmp_indirect_t *jmp_back;
+    ucm_bistro_relocate_context_t ctx;
     ucm_bistro_orig_func_t *orig_func;
     ucs_status_t status;
-    char code_buf[64];
-    int dladdr_ret;
-    Dl_info dli;
 
     /* Allocate executable page */
     max_code_len = ucs_max(patch_len + sizeof(ucm_bistro_cmp_xlt_t) +
@@ -344,13 +283,9 @@ ucm_bistro_construct_orig_func(const void *func_ptr, size_t patch_len,
        'code_len' is the code size at destination buffer, and 'prefix_len' is
        how many bytes were translated from 'func_ptr'. */
     status = ucm_bistro_relocate_code(orig_func->code, func_ptr, patch_len,
-                                      max_code_len, &code_len, &prefix_len);
+                                      max_code_len, &code_len, &prefix_len,
+                                      symbol, &ctx);
     if (status != UCS_OK) {
-        dladdr_ret = dladdr(func_ptr, &dli);
-        ucm_diag("failed to patch '%s' from %s length %zu code:%s", symbol,
-                 (dladdr_ret != 0) ? dli.dli_fname : "(unknown)", patch_len,
-                 ucm_bistro_dump_code(func_ptr, 16, code_buf,
-                                      sizeof(code_buf)));
         return UCS_ERR_UNSUPPORTED;
     }
 
