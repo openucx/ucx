@@ -16,8 +16,9 @@
 #include <ucs/memory/numa.h>
 #include <ucs/memory/rcache.h>
 
-#define UCT_IB_MD_MAX_MR_SIZE       0x80000000UL
-#define UCT_IB_MD_PACKED_RKEY_SIZE  sizeof(uint64_t)
+#define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
+#define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)
+#define UCT_IB_MD_INVALID_FLUSH_RKEY 0xff
 
 #define UCT_IB_MD_DEFAULT_GID_INDEX 0   /**< The gid index used by default for an IB/RoCE port */
 
@@ -146,10 +147,10 @@ typedef struct uct_ib_md {
     uint64_t                 cap_flags;
     char                     *name;
     /* flush_remote rkey is used as atomic_mr_id value (8-16 bits of rkey)
-     * when UMR regions can be created. Dummy value must be zero always
-     * (assuming that lowest byte is mkey tag which is not used).
-     * flush_remote_pack and atomic_mr_id values are passed in iface address to
-     * implement flush remote operation. */
+     * when UMR regions can be created. Bits 0-7 must be zero always (assuming
+     * that lowest byte is mkey tag which is not used). Non-zero bits 0-7
+     * means that flush_rkey is invalid and flush_remote operation could not
+     * be initiated.  */
     uint32_t                 flush_rkey;
 } uct_ib_md_t;
 
@@ -487,6 +488,12 @@ uct_ib_md_mem_dereg_params_invalidate_check(
     }
 
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
+    /* Valid flush_rkey should have 0 in the LSB */
+    return (flush_rkey & UCT_IB_MD_INVALID_FLUSH_RKEY) == 0;
 }
 
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
