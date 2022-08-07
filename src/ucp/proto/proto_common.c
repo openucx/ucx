@@ -720,8 +720,8 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
 }
 
 /**
- * Current implementation of @ref ucp_proto_t::reset supports the only case if
- * no data was sent yet.
+ * Current implementation of @ref ucp_proto_t::reset supports only the case
+ * that no data was sent yet.
  *
  * @param req   request to check
  */
