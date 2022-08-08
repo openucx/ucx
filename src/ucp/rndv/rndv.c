@@ -242,22 +242,22 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
 ucs_status_t
 ucp_rndv_reg_send_buffer(ucp_request_t *sreq, const ucp_request_param_t *param)
 {
-    ucp_ep_h ep = sreq->send.ep;
-    ucp_md_map_t md_map;
+    ucp_ep_h ep         = sreq->send.ep;
+    ucp_md_map_t md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
     ucs_status_t status;
 
-    if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq, ep->worker->context)) {
+    if (!UCP_DT_IS_CONTIG(sreq->send.datatype)) {
+        return UCS_OK;
+    }
 
-        /* register a contiguous buffer for rma_get */
-        md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
-        ucp_rndv_memtype_direct_update_md_map(ep->worker->context, sreq, &md_map);
+    ucp_rndv_memtype_direct_update_md_map(ep->worker->context, sreq, &md_map);
 
-        status = ucp_send_request_set_user_memh(sreq, md_map, param);
-        if (status != UCS_OK) {
-            return status;
-        }
+    status = ucp_send_request_set_user_memh(sreq, md_map, param);
+    if (status != UCS_OK) {
+        return status;
+    }
 
+    if (ucp_rndv_is_get_zcopy(sreq, ep->worker->context)) {
         /* Pass UCT_MD_MEM_FLAG_HIDE_ERRORS flag, because registration may fail
          * if md does not support send memory type (e.g. CUDA memory). In this
          * case RTS will be sent with empty key, and sender will fallback to
