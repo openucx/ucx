@@ -686,7 +686,6 @@ uct_dc_mlx5_ep_flush_remote(uct_dc_mlx5_ep_t *ep, uct_completion_t *comp)
     return UCS_INPROGRESS;
 }
 
-
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
@@ -710,10 +709,12 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         goto out;
     }
 
-    if ((flags & UCT_FLUSH_FLAG_REMOTE) &&
-        ucs_test_all_flags(ep->flags, UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY |
-                                      UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE)) {
-        return uct_dc_mlx5_ep_flush_remote(ep, comp);
+    if (flags & UCT_FLUSH_FLAG_REMOTE) {
+        UCT_RC_IFACE_CHECK_FLUSH_REMOTE(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY,
+                                        ep, &iface->super.super, dcx);
+        if (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE) {
+            return uct_dc_mlx5_ep_flush_remote(ep, comp);
+        }
     }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {

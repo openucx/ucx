@@ -87,6 +87,16 @@
     _desc->super.user_comp = _comp;
 
 
+#define UCT_RC_IFACE_CHECK_FLUSH_REMOTE(_condition, _ep, _iface, _name) \
+    if (ENABLE_PARAMS_CHECK && !(_condition)) { \
+        ucs_error("%s endpoint %p on %s: flush(remote) is not supported", \
+                  UCS_PP_QUOTE(_name), \
+                  _ep, \
+                  uct_ib_device_name(uct_ib_iface_device(&(_iface)->super))); \
+        return UCS_ERR_UNSUPPORTED; \
+    }
+
+
 enum {
     UCT_RC_IFACE_STAT_NO_CQE,
     UCT_RC_IFACE_STAT_NO_READS,

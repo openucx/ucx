@@ -547,10 +547,4 @@ uct_rc_ep_enable_flush_remote(uct_rc_ep_t *ep)
     ep->flags |= UCT_RC_EP_FLAG_FLUSH_REMOTE;
 }
 
-static UCS_F_ALWAYS_INLINE int uct_rc_ep_is_flush_remote(uct_rc_ep_t *ep)
-{
-    return (ep->flags & UCT_RC_EP_FLAG_FLUSH_REMOTE) &&
-           uct_ib_md_is_flush_rkey_valid(ep->flush_rkey);
-}
-
 #endif
