@@ -1249,7 +1249,7 @@ run_release_mode_tests() {
 run_tests() {
 	export UCX_HANDLE_ERRORS=bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
-	export UCX_TCP_PORT_RANGE="${server_port_min}-${server_port_max}"
+	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
 	export UCX_TCP_CM_REUSEADDR=y
 
 	# Don't cross-connect RoCE devices
