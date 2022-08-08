@@ -730,9 +730,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
         self->config.fc_hard_thresh = 0;
     }
 
-    self->config.flush_remote = UCT_IFACE_PARAM_FEATURE(params, PUT) ||
-                                UCT_IFACE_PARAM_FEATURE(params, AMO32) ||
-                                UCT_IFACE_PARAM_FEATURE(params, AMO64);
+    self->config.flush_remote = UCT_IFACE_PARAM_FEATURE(params, FLUSH_REMOTE);
 
     return UCS_OK;
 

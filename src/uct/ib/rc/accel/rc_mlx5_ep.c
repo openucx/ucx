@@ -599,9 +599,13 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                                UCT_FLUSH_FLAG_REMOTE),
                     "flush flags CANCEL and REMOTE are mutually exclusive");
 
-    if ((flags & UCT_FLUSH_FLAG_REMOTE) &&
-        uct_rc_ep_is_flush_remote(&ep->super)) {
-        return uct_rc_mlx5_ep_flush_remote(tl_ep, comp);
+    if (flags & UCT_FLUSH_FLAG_REMOTE) {
+        UCT_RC_IFACE_CHECK_FLUSH_REMOTE(
+                uct_ib_md_is_flush_rkey_valid(ep->super.flush_rkey), ep,
+                &iface->super, rcx);
+        if (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_REMOTE) {
+            return uct_rc_mlx5_ep_flush_remote(tl_ep, comp);
+        }
     }
 
     status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max, flags);
