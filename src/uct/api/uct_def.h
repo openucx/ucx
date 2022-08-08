@@ -488,7 +488,7 @@ enum uct_am_callback_params_field {
     /** Enables @ref uct_am_callback_params_t::payload
      *  Indicates that payload field in uct_am_callback_params_t is valid.
      */
-    UCT_AM_CALLBACK_PARAM_FIELD_PAYLOAD  = UCS_BIT(0),
+    UCT_AM_CALLBACK_PARAM_FIELD_PAYLOAD = UCS_BIT(0),
 };
 
 
@@ -541,7 +541,9 @@ typedef struct uct_am_callback_params {
  *                          released later by their owner.
  *
  */
-typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length, unsigned flags, uct_am_callback_params_t *params);
+typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length,
+                                          unsigned flags,
+                                          uct_am_callback_params_t *params);
 
 
 /**

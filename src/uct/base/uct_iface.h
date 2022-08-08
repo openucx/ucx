@@ -866,10 +866,10 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
  * @param length   Length of received data.
  * @param flags    Mask with @ref uct_cb_param_flags
  */
-static inline ucs_status_t
-uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
-                    unsigned length, unsigned flags,
-                    uct_am_callback_params_t *params)
+static inline ucs_status_t uct_iface_invoke_am(uct_base_iface_t *iface,
+                                               uint8_t id, void *data,
+                                               unsigned length, unsigned flags,
+                                               uct_am_callback_params_t *params)
 {
     ucs_status_t     status;
     uct_am_handler_t *handler;
