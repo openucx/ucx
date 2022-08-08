@@ -2866,16 +2866,36 @@ ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
 
 /**
  * @ingroup UCP_MEM
- * @brief Pack memory region remote access key.
+ * @brief Memory handle pack parameters passed to @ref ucp_memh_pack.
  *
- * This routine allocates memory buffer and packs into the buffer
- * a remote access key (RKEY) object. RKEY is an opaque object that provides
- * the information that is necessary for remote memory access.
- * This routine packs the RKEY object in a portable format such that the
- * object can be @ref ucp_ep_rkey_unpack "unpacked" on any platform supported by the
- * UCP library. In order to release the memory buffer allocated by this routine
- * the application is responsible for calling the @ref ucp_rkey_buffer_release
- * "ucp_rkey_buffer_release()" routine.
+ * This structure defines the parameters that are used for packing the
+ * UCP memory handle during the @ref ucp_memh_pack "ucp_memh_pack"
+ * routine.
+ */
+typedef struct ucp_memh_pack_params {
+    /**
+     * Mask of valid fields in this structure. Fields not specified in this
+     * mask will be ignored. Provides ABI compatibility with respect to adding
+     * new fields.
+     */
+    uint64_t                field_mask;
+} ucp_memh_pack_params_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Pack a memory handle to a buffer specified by the user.
+ *
+ * This routine allocates a memory buffer and packs a memory handle into the
+ * buffer. A packed memory key is an opaque object that provides
+ * the information that is necessary for a peer.
+ * This routine packs the memory handle in a portable format such that the
+ * object can be unpacked on any platform supported by the UCP library, e.g.
+ * if the memory handle was packed as a remote memory key (RKEY), it should be
+ * unpacked by @ref ucp_ep_rkey_unpack "ucp_ep_rkey_unpack()".
+ * In order to release the memory buffer allocated by this routine,
+ * the application is responsible for calling the @ref ucp_memh_buffer_release
+ * "ucp_memh_buffer_release()" routine.
  *
  *
  * @note
@@ -2885,36 +2905,58 @@ ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
  * with the memory handle the application is responsible for sharing the RKEY with
  * the peers that will initiate the access.
  *
- * @param [in]  context       Application @ref ucp_context_h "context" which was
- *                            used to allocate/map the memory.
  * @param [in]  memh          @ref ucp_mem_h "Handle" to memory region.
- * @param [out] rkey_buffer_p Memory buffer allocated by the library.
- *                            The buffer contains packed RKEY.
- * @param [out] size_p        Size (in bytes) of the packed RKEY.
+ * @param [in]  params        Memory handle packing parameters, as defined by
+ *                            @ref ucp_memh_pack_params_t.
+ * @param [out] buffer_p      Memory buffer allocated by the library.
+ *                            The buffer contains the packed memory handle.
+ * @param [out] buffer_size_p Size (in bytes) of the buffer which contains
+ *                            packed memory handle.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
-                           void **rkey_buffer_p, size_t *size_p);
+ucs_status_t ucp_memh_pack(ucp_mem_h memh, ucp_memh_pack_params_t *params,
+                           void **buffer_p, size_t *buffer_size_p);
 
 
 /**
  * @ingroup UCP_MEM
- * @brief Release packed remote key buffer.
+ * @brief Memory handle release parameters passed to
+ * @ref ucp_memh_buffer_release.
  *
- * This routine releases the buffer that was allocated using @ref ucp_rkey_pack
- * "ucp_rkey_pack()".
+ * This structure defines the parameters that are used for releasing the
+ * UCP memory handle buffer during the @ref ucp_memh_buffer_release
+ * "ucp_memh_buffer_release" routine.
+ */
+typedef struct ucp_memh_buffer_release_params {
+    /**
+     * Mask of valid fields in this structure. All fields are mandatory.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+} ucp_memh_buffer_release_params_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Release packed memory handle buffer.
+ *
+ * This routine releases the buffer that was allocated using @ref ucp_memh_pack
+ * "ucp_memh_pack()".
  *
  * @warning
- * @li Once memory is released an access to the memory may cause a
- * failure.
+ * @li Once memory is released, an access to the memory may cause undefined
+ * behavior.
  * @li If the input memory address was not allocated using
- * @ref ucp_rkey_pack "ucp_rkey_pack()" routine the behaviour of this routine
+ * @ref ucp_memh_pack "ucp_memh_pack()" routine, the behavior of this routine
  * is undefined.
  *
- * @param [in]  rkey_buffer   Buffer to release.
+ * @param [in]  buffer   Buffer to release.
+ * @param [in]  params   Memory handle buffer release parameters, as defined by
+ *                       @ref ucp_memh_buffer_release_params_t.
  */
-void ucp_rkey_buffer_release(void *rkey_buffer);
+void ucp_memh_buffer_release(void *buffer,
+                             ucp_memh_buffer_release_params_t *params);
 
 
 /**
