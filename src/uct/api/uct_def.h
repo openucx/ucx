@@ -541,9 +541,7 @@ typedef struct uct_am_callback_params {
  *                          released later by their owner.
  *
  */
-typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data,
-                                          size_t length, unsigned flags,
-                                          uct_am_callback_params_t *params);
+typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length, unsigned flags, uct_am_callback_params_t *params);
 
 
 /**
