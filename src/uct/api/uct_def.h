@@ -461,32 +461,74 @@ typedef struct uct_cm_ep_server_conn_notify_args {
 
 /**
  * @ingroup UCT_AM
+ * @brief UCT AM Callback params.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref uct_cm_ep_server_conn_notify_args are present, for backward compatibility
+ * support.
+ */
+enum uct_am_callback_params_field {
+    /** Enables @ref uct_am_callback_params_t::payload
+     *  Indicates that payload field in uct_am_callback_params_t is valid.
+     */
+    UCT_AM_CALLBACK_PARAM_FIELD_PAYLOAD = UCS_BIT(0)
+};
+
+
+typedef struct uct_am_callback_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_am_callback_params_field.
+     * Fields not specified by this mask should not be accessed by the callback.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Holds a pointer to the start of the message data descriptor.
+     * The owner of the data descriptor can be the callee
+     * or the application.
+     * When the cb returns @ref UCS_INPROGRESS this descriptor 
+     * must be released later by his owner, by calling 
+     * @ref uct_iface_release_desc or the application's release
+     * method, depends on the owner.
+     */
+    void     *payload;
+} uct_am_callback_params_t;
+
+
+/**
+ * @ingroup UCT_AM
  * @brief Callback to process incoming active message
  *
- * When the callback is called, @a flags indicates how @a data should be handled.
- * If @a flags contain @ref UCT_CB_PARAM_FLAG_DESC value, it means @a data is part of
+ * When the callback is called, @a flags indicates how @a msg_header should be handled.
+ * If @a flags contain @ref UCT_CB_PARAM_FLAG_DESC value, it means @a msg_header is part of
  * a descriptor which must be released later by @ref uct_iface_release_desc by
  * the user if the callback returns @ref UCS_INPROGRESS.
+ * See @ref uct_am_callback_params_t for more information about @a param.
  *
  * @param [in]  arg      User-defined argument.
- * @param [in]  data     Points to the received data. This may be a part of
+ * @param [in]  msg_hdr  Points to the received message header. This may be a part of
  *                       a descriptor which may be released later.
  * @param [in]  length   Length of data.
  * @param [in]  flags    Mask with @ref uct_cb_param_flags
+ * @param [in]  params   Optional params.
  *
  * @note This callback could be set and released
  *       by @ref uct_iface_set_am_handler function.
  *
  * @retval UCS_OK         - descriptor was consumed, and can be released
  *                          by the caller.
- * @retval UCS_INPROGRESS - descriptor is owned by the callee, and would be
- *                          released later. Supported only if @a flags contain
- *                          @ref UCT_CB_PARAM_FLAG_DESC value. Otherwise, this is
- *                          an error.
+ * @retval UCS_INPROGRESS - message header descriptor is owned by the callee,
+ *                          and would be released later. Supported only if @a flags
+ *                          contain @ref UCT_CB_PARAM_FLAG_DESC value.
+ *                          Otherwise, this is an error.
+ *                          Optional descriptors passed in with @a params will be
+ *                          released later by their owner.
  *
  */
-typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length,
-                                          unsigned flags);
+typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *msg_hdr, size_t length,
+                                          unsigned flags,
+                                          uct_am_callback_params_t *params);
 
 
 /**
