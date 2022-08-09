@@ -14,6 +14,19 @@
 #include <ucs/arch/bitops.h>
 
 
+/**
+ * Flags for wireup select criteria, that include mandatory and optional flags
+ */
+typedef struct {
+    /* All flags specified by this field must be set. */
+    uint64_t mandatory;
+
+    /* In addition to all mandatory flags, at least one of the flags
+       defined by it must be present. */
+    uint64_t optional;
+} ucp_wireup_select_flags_t;
+
+
 /* Peer name to show when we don't have debug information, or the name was not
  * packed in the worker address */
 #define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
@@ -37,15 +50,32 @@ enum {
  * Criteria for transport selection.
  */
 typedef struct {
-    const char  *title;             /* Name of the criteria for debugging */
-    uint64_t    local_md_flags;     /* Required local MD flags */
-    uint64_t    local_iface_flags;  /* Required local interface flags */
-    uint64_t    remote_iface_flags; /* Required remote interface flags */
-    uint64_t    local_event_flags;  /* Required local event flags */
-    uint64_t    remote_event_flags; /* Required remote event flags */
-    uint64_t    alloc_mem_types;    /* Mandatory memory types for allocation */
-    uint64_t    reg_mem_types;      /* Mandatory memory types for registration */
-    int         is_keepalive;       /* Required support of keepalive mechanism */
+    /* Name of the criteria for debugging */
+    const char                 *title;
+
+    /* Required local MD flags */
+    uint64_t                    local_md_flags;
+
+    /* Required local interface flags */
+    ucp_wireup_select_flags_t   local_iface_flags;
+
+    /* Required remote interface flags */
+    ucp_wireup_select_flags_t   remote_iface_flags;
+
+    /* Required local event flags */
+    uint64_t                    local_event_flags;
+
+    /* Required remote event flags */
+    uint64_t                    remote_event_flags;
+
+    /* Mandatory memory types for allocation */
+    uint64_t                    alloc_mem_types;
+
+    /* Mandatory memory types for registration */
+    uint64_t                    reg_mem_types;
+
+    /* Required support of keepalive mechanism */
+    int                         is_keepalive;
 
     /**
      * Calculates score of a potential transport.
@@ -57,14 +87,19 @@ typedef struct {
      *
      * @return Transport score, the higher the better.
      */
-    double      (*calc_score)(const ucp_worker_iface_t *wiface,
-                              const uct_md_attr_t *md_attr,
-                              const ucp_address_entry_t *remote_addr,
-                              void *arg);
-    void        *arg; /* Custom argument of @a calc_score function */
-    uint8_t     tl_rsc_flags; /* Flags that describe TL specifics */
+    double                      (*calc_score)(const ucp_worker_iface_t *wiface,
+                                              const uct_md_attr_t *md_attr,
+                                              const ucp_address_entry_t *remote_addr,
+                                              void *arg);
+
+    /* Custom argument of @a calc_score function */
+    void                       *arg;
+
+    /* Flags that describe TL specifics */
+    uint8_t                     tl_rsc_flags;
 
     ucp_tl_iface_atomic_flags_t local_atomic_flags;
+
     ucp_tl_iface_atomic_flags_t remote_atomic_flags;
 } ucp_wireup_criteria_t;
 
