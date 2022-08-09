@@ -1272,6 +1272,49 @@ UCP_INSTANTIATE_TEST_CASE_TLS(select_ep_transport, ib, "ib")
 UCP_INSTANTIATE_TEST_CASE_TLS(select_ep_transport, ib_shm, "ib,shm")
 UCP_INSTANTIATE_TEST_CASE_TLS(select_ep_transport, all, "all")
 
+
+class select_transport_rndv : public test_ucp_wireup {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, TEST_TAG, "tag");
+    }
+
+    bool has_resource(const ucp_test_base::entity *e, const char *tl_name)
+    {
+        std::string tl_name_str(tl_name);
+
+        for (int i = 0; i < e->ucph()->num_tls; ++i) {
+            if (tl_name_str == e->ucph()->tl_rscs[i].tl_rsc.tl_name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+};
+
+/* This test checks that DC transport is selected for scaled communication,
+ * even if RNDV_PUT is disabled (default behavior) */
+UCS_TEST_P(select_transport_rndv, select_dc, "NUM_EPS=300")
+{
+    ucs::scoped_setenv max_num_eps("UCX_RC_MAX_NUM_EPS", "1024");
+    ucp_test_base::entity *e1 = create_entity();
+
+    if (!has_resource(e1, "dc_mlx5")) {
+        UCS_TEST_SKIP_R("dc_mlx5 transport is not present");
+    }
+
+    e1->connect(&receiver(), get_ep_params());
+    const ucp_ep_config_t *config = ucp_ep_config(e1->ep());
+    ucp_lane_index_t lane_index   = config->key.rma_bw_lanes[0];
+    const char *transport = ucp_ep_get_tl_rsc(e1->ep(), lane_index)->tl_name;
+
+    ASSERT_STREQ(transport, "dc_mlx5");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(select_transport_rndv, ib, "ib")
+
 class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
 protected:
     void init() {
