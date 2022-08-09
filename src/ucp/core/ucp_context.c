@@ -1403,25 +1403,6 @@ out:
     return status;
 }
 
-static ucs_status_t ucp_context_reg_md_map_alloc(ucp_context_h context)
-{
-    ucs_status_t status;
-    ucp_mem_h memh;
-
-    /* Allocate dummy 1-byte buffer to get the expected md_map */
-    status = ucp_memh_alloc(context, NULL, 1, UCS_MEMORY_TYPE_HOST,
-                            UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_HIDE_ERRORS,
-                            "get_alloc_md_map", &memh);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    context->reg_md_map[UCS_MEMORY_TYPE_HOST] &= memh->md_map;
-    ucp_memh_put(context, memh, 1);
-
-    return UCS_OK;
-}
-
 static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                        const ucp_config_t *config)
 {
@@ -1521,8 +1502,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     /* Update registration memory domain map for host memory type taking into
-     * account result of ucp_memh_alloc. */
-    status = ucp_context_reg_md_map_alloc(context);
+     * account result of uct_md_mem_reg. */
+    status = ucp_mem_reg_md_map_update(context);
     if (status != UCS_OK) {
         ucs_error("could not update reg md map: %s", ucs_status_string(status));
         goto err_free_resources;

@@ -31,7 +31,9 @@ typedef struct ucp_mem {
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocated the memory */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
-    uint32_t            map_count;      /* ucp_mem_map/unmap referrence count */
+    ucp_mem_h           parent;         /* - NULL if entry should be returned to rcache
+                                           - pointer to self if rcache disabled
+                                           - pointer to rcache memh if entry is a user memh */
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
 
@@ -85,10 +87,6 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
-ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address, size_t length,
-                            ucs_memory_type_t memory_type, unsigned uct_flags,
-                            const char *alloc_name, ucp_mem_h *memh_p);
-
 
 /**
  * Update memory registration to a specified set of memory domains.
@@ -136,12 +134,13 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                ucp_md_map_t reg_md_map, unsigned uct_flags,
                                ucp_mem_h *memh_p);
 
-void ucp_memh_unmap(ucp_context_h context, ucp_mem_h memh,
-                    ucp_md_map_t md_map);
+void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh);
 
 ucs_status_t ucp_mem_rcache_init(ucp_context_h context);
 
 void ucp_mem_rcache_cleanup(ucp_context_h context);
+
+ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)

@@ -72,6 +72,7 @@ uct_rc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer, unsigned len
                                  MLX5_OPCODE_RDMA_WRITE,
                                  buffer, length, 0, 0, 0, remote_addr, rkey,
                                  0, 0, INT_MAX);
+    uct_rc_ep_enable_flush_remote(&ep->super);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     return UCS_OK;
 }
@@ -142,6 +143,7 @@ uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
         return status;
     }
 
+    uct_rc_ep_enable_flush_remote(&ep->super);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     return UCS_OK;
 #endif
@@ -164,6 +166,7 @@ ssize_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                                        length, remote_addr, rkey, 0,
                                        MLX5_WQE_CTRL_CQ_UPDATE, 0, desc,
                                        desc + 1, NULL);
+    uct_rc_ep_enable_flush_remote(&ep->super);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
 
     return length;
@@ -192,6 +195,7 @@ ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
                                        comp);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY,
                                  uct_iov_total_length(iov, iovcnt));
+    uct_rc_ep_enable_flush_remote(&ep->super);
     return status;
 }
 
@@ -393,6 +397,7 @@ uct_rc_mlx5_ep_atomic_post(uct_ep_h tl_ep, unsigned opcode,
                                compare_mask, compare, swap_mask, swap_add,
                                0, MLX5_WQE_CTRL_CQ_UPDATE, 0, INT_MAX, NULL);
 
+    uct_rc_ep_enable_flush_remote(&ep->super);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super);
 }
@@ -448,6 +453,7 @@ uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
 
     uct_rc_mlx5_ep_atomic_post(tl_ep, op, desc, size, remote_addr, rkey,
                                compare_mask, compare, swap_mask, swap);
+    uct_rc_ep_enable_flush_remote(&ep->super);
     return UCS_OK;
 }
 
@@ -557,12 +563,44 @@ void uct_rc_mlx5_ep_vfs_populate(uct_rc_ep_t *rc_ep)
     uct_rc_txqp_vfs_populate(&ep->super.txqp, ep);
 }
 
+static ucs_status_t
+uct_rc_mlx5_ep_flush_remote(uct_ep_h tl_ep, uct_completion_t *comp)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_rc_iface_send_desc_t *desc;
+
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+
+    UCT_RC_IFACE_GET_TX_DESC(iface, &iface->super.tx.mp, desc);
+    desc->super.handler   = uct_rc_ep_flush_remote_handler;
+    desc->super.user_comp = comp;
+
+    uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
+                                       &ep->tx.wq, MLX5_OPCODE_RDMA_READ,
+                                       UCT_IB_MD_FLUSH_REMOTE_LENGTH, 0,
+                                       ep->super.flush_rkey, 0,
+                                       MLX5_WQE_CTRL_CQ_UPDATE, 0, desc,
+                                       desc + 1, NULL);
+    ep->super.flags &= ~UCT_RC_EP_FLAG_FLUSH_REMOTE;
+
+    return UCS_INPROGRESS;
+}
+
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
+
+    UCT_CHECK_PARAM(!ucs_test_all_flags(flags, UCT_FLUSH_FLAG_CANCEL |
+                                               UCT_FLUSH_FLAG_REMOTE),
+                    "flush flags CANCEL and REMOTE are mutually exclusive");
+
+    if ((flags & UCT_FLUSH_FLAG_REMOTE) &&
+        uct_rc_ep_is_flush_remote(&ep->super)) {
+        return uct_rc_mlx5_ep_flush_remote(tl_ep, comp);
+    }
 
     status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max, flags);
     if (status != UCS_INPROGRESS) {
@@ -745,6 +783,10 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
     ep->super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
 
+    if (uct_ib_md_is_flush_rkey_valid(ep->super.flush_rkey)) {
+        ep->super.flush_rkey |= (uint32_t)rc_addr->atomic_mr_id << 8;
+    }
+
     return UCS_OK;
 }
 
@@ -926,7 +968,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
                                                        uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
                                                        uct_ib_mlx5_md_t);
-    uct_ib_mlx5_qp_attr_t attr = {};
+    uct_ib_mlx5_qp_attr_t attr        = {};
+    uct_rc_mlx5_iface_flush_addr_t *addr;
     ucs_status_t status;
 
     /* Need to create QP before super constructor to get QP number */
@@ -967,6 +1010,19 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         }
 
         uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.qp_num);
+    }
+
+    addr = (uct_rc_mlx5_iface_flush_addr_t*)UCT_EP_PARAM_VALUE(params,
+                                                               iface_addr,
+                                                               IFACE_ADDR,
+                                                               NULL);
+    /* if iface address is not provided or address doesn't contain
+     * FLUSH_RKEY flag - mark flush_rkey as invalid */
+    if ((addr != NULL) &&
+        (addr->super.flags & UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_RKEY)) {
+        self->super.flush_rkey = (uint32_t)addr->flush_rkey_hi << 16;
+    } else {
+        self->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);

@@ -1539,6 +1539,7 @@ UCS_TEST_P(test_uct_sockaddr_legacy, cm_open_listen_close)
     params.field_mask         = UCT_EP_PARAM_FIELD_CM                         |
                                 UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT |
                                 UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB     |
+                                UCT_EP_PARAM_FIELD_CM_RESOLVE_CB              |
                                 UCT_EP_PARAM_FIELD_USER_DATA                  |
                                 UCT_EP_PARAM_FIELD_SOCKADDR                   |
                                 UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS          |
@@ -1550,6 +1551,7 @@ UCS_TEST_P(test_uct_sockaddr_legacy, cm_open_listen_close)
     params.sockaddr           = &ucs_remote_addr;
     params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
     params.sockaddr_pack_cb   = client_priv_data_cb;
+    params.cm_resolve_cb      = client_resolve_cb;
 
     ucs_status_t status       = uct_ep_create(&params, &ep);
     ASSERT_UCS_OK(status);

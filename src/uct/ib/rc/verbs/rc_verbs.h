@@ -35,10 +35,17 @@ enum {
 };
 
 
-typedef struct uct_rc_verbs_ep_address {
+typedef struct uct_rc_verbs_ep_addr {
     uint8_t          flags;
     uct_ib_uint24_t  qp_num;
-} UCS_S_PACKED uct_rc_verbs_ep_address_t;
+} UCS_S_PACKED uct_rc_verbs_ep_addr_t;
+
+
+typedef struct uct_rc_verbs_ep_flush_addr {
+    uct_rc_verbs_ep_addr_t super;
+    uint8_t                atomic_mr_id;
+    uint16_t               flush_rkey_hi;
+} UCS_S_PACKED uct_rc_verbs_ep_flush_addr_t;
 
 
 typedef struct uct_rc_verbs_txcnt {

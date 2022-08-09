@@ -132,9 +132,9 @@ static void uct_ib_mlx5_parse_relaxed_order(uct_ib_mlx5_md_t *md,
                                 (sizeof(uct_ib_mlx5_mr_t) * num_mrs);
 }
 
-static uint8_t uct_ib_mlx5_get_mr_id()
+static uint32_t uct_ib_mlx5_flush_rkey_make()
 {
-    return getpid() & 0xff;
+    return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
 }
 
 #if HAVE_DEVX
@@ -1127,8 +1127,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     if (md->flags & UCT_IB_MLX5_MD_FLAG_KSM) {
         status = uct_ib_mlx5_devx_init_flush_mr(md);
         if (status != UCS_OK) {
-            md->super.flush_rkey = uct_ib_mlx5_get_mr_id() << 8;
+            md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
         }
+    } else {
+        md->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
     }
 
     *p_md = &md->super;
@@ -1361,7 +1363,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    md->super.flush_rkey = uct_ib_mlx5_get_mr_id() << 8;
+    md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 
     /* cppcheck-suppress autoVariables */
     *p_md = &md->super;

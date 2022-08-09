@@ -455,8 +455,8 @@ UCS_TEST_P(test_ucp_mmap, rereg)
                                              &test_memh);
                 ASSERT_UCS_OK(status);
 
-                // Check that the same memory handle was returned from RCACHE
-                EXPECT_EQ(memh, test_memh);
+                // Check that unique memory handle was returned
+                EXPECT_NE(memh, test_memh);
 
                 status = ucp_mem_unmap(sender().ucph(), test_memh);
                 ASSERT_UCS_OK(status);

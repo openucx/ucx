@@ -53,6 +53,9 @@ enum {
     /* Error handler already called or flush(CANCEL) disabled it */
     UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(3),
 
+    /* Flush remote needs to be executed on the EP */
+    UCT_RC_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(4),
+
     /* Soft Credit Request: indicates that peer needs to piggy-back credits
      * grant to counter AM (if any). Can be bundled with
      * UCT_RC_EP_FLAG_FC_GRANT  */
@@ -213,6 +216,7 @@ struct uct_rc_ep {
     uct_rc_txqp_t       txqp;
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
+    uint32_t            flush_rkey;
     uct_rc_fc_t         fc;
     uint16_t            atomic_mr_offset;
     uint8_t             path_index;
@@ -535,6 +539,18 @@ uct_rc_ep_fence_put(uct_rc_iface_t *iface, uct_ib_fence_info_t *fi,
     } else {
         *rkey = uct_ib_md_direct_rkey(*rkey);
     }
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_enable_flush_remote(uct_rc_ep_t *ep)
+{
+    ep->flags |= UCT_RC_EP_FLAG_FLUSH_REMOTE;
+}
+
+static UCS_F_ALWAYS_INLINE int uct_rc_ep_is_flush_remote(uct_rc_ep_t *ep)
+{
+    return (ep->flags & UCT_RC_EP_FLAG_FLUSH_REMOTE) &&
+           uct_ib_md_is_flush_rkey_valid(ep->flush_rkey);
 }
 
 #endif
