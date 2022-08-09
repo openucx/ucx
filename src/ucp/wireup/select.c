@@ -665,15 +665,15 @@ ucp_wireup_tl_iface_latency(ucp_context_h context,
 
     if (remote_iface_attr->addr_version == UCP_OBJECT_VERSION_V1) {
         /* Address v1 contains just latency overhead */
-        return ucs_max(iface_attr->latency.c, remote_iface_attr->lat_ovh) +
-               (iface_attr->latency.m * context->config.est_num_eps);
+        return ((iface_attr->latency.c + remote_iface_attr->lat_ovh) / 2) +
+                (iface_attr->latency.m * context->config.est_num_eps);
     } else {
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local latency as well */
         lat_nsec  = ucp_tl_iface_latency(context, &iface_attr->latency) *
                     UCS_NSEC_PER_SEC;
         local_lat = ucp_wireup_fp8_pack_unpack_latency(lat_nsec);
-        return ucs_max(remote_iface_attr->lat_ovh, local_lat);
+        return (remote_iface_attr->lat_ovh + local_lat) / 2;
     }
 }
 
