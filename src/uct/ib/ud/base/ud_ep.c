@@ -835,9 +835,24 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
                        "creq->conn_sn=%d ep->conn_sn=%d",
                        ctl->conn_req.conn_sn, ep->conn_sn);
 
-    ucs_assertv_always(ctl->conn_req.path_index == ep->path_index,
-                       "creq->path_index=%d ep->path_index=%d",
-                       ctl->conn_req.path_index, ep->path_index);
+    if (uct_ib_iface_is_roce(&iface->super)) {
+        /* When roce_path_factor is non-zero, local and remote path indices
+         * must be the same on local and remote ep */
+        if (iface->super.config.roce_path_factor > 0) {
+            ucs_assertv_always(ctl->conn_req.path_index == ep->path_index,
+                               "creq->path_index=%d ep->path_index=%d",
+                               ctl->conn_req.path_index, ep->path_index);
+        }
+    } else {
+        /* With IB, path_bits component must be same on local and remote ep */
+        ucs_assertv_always((ctl->conn_req.path_index %
+                                    iface->super.path_bits_count) ==
+                           (ep->path_index % iface->super.path_bits_count),
+                           "creq->path_index=%d ep->path_index=%d"
+                           " path_bits_count=%u",
+                           ctl->conn_req.path_index, ep->path_index,
+                           iface->super.path_bits_count);
+    }
 
     ucs_assertv_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) ==
                        ep->dest_ep_id,
