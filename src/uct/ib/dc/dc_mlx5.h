@@ -294,6 +294,8 @@ struct uct_dc_mlx5_iface {
         uct_worker_cb_id_t        dci_release_prog_id;
 
         uint8_t                   dci_pool_release_bitmap;
+
+        uint8_t                   av_fl_mlid;
     } tx;
 
     struct {

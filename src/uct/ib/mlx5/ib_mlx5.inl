@@ -290,24 +290,12 @@ uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_radd
 }
 
 
-static UCS_F_ALWAYS_INLINE void
-uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
-                          uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
-                          int qp_type)
+static UCS_F_ALWAYS_INLINE size_t
+uct_ib_mlx5_set_dgram_seg_grh(struct mlx5_wqe_datagram_seg *seg,
+                              struct mlx5_grh_av *grh_av)
 {
     struct mlx5_base_av *to_av    = mlx5_av_base(&seg->av);
     struct mlx5_grh_av *to_grh_av = mlx5_av_grh(&seg->av);
-
-    if (qp_type == IBV_QPT_UD) {
-        to_av->key.qkey.qkey = htonl(UCT_IB_KEY);
-#if HAVE_TL_DC
-    } else if (qp_type == UCT_IB_QPT_DCI) {
-        to_av->key.dc_key    = htobe64(UCT_IB_KEY);
-#endif
-    }
-    ucs_assert(av != NULL);
-    /* cppcheck-suppress ctunullpointer */
-    UCT_IB_MLX5_SET_BASE_AV(to_av, av);
 
     if (grh_av != NULL) {
         ucs_assert(to_av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
@@ -318,9 +306,17 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
         to_grh_av->hop_limit  = grh_av->hop_limit;
         to_grh_av->grh_gid_fl = grh_av->grh_gid_fl;
         memcpy(to_grh_av->rgid, grh_av->rgid, sizeof(to_grh_av->rgid));
-    } else if (av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
-        to_grh_av->grh_gid_fl = 0;
+
+        return UCT_IB_MLX5_AV_FULL_SIZE;
     }
+    
+    if (to_av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
+        to_grh_av->grh_gid_fl = 0;
+
+        return UCT_IB_MLX5_AV_FULL_SIZE;
+    }
+
+    return UCT_IB_MLX5_AV_BASE_SIZE;
 }
 
 static UCS_F_ALWAYS_INLINE void

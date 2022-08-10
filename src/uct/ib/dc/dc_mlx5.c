@@ -1404,6 +1404,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.num_dci_pools                 = 1;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     self->flags                            = 0;
+    self->tx.av_fl_mlid                    = self->super.super.super.path_bits[0] & 0x7f;
+
     kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
 
     self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);

@@ -52,7 +52,8 @@ static UCS_F_ALWAYS_INLINE size_t
 uct_ud_mlx5_ep_ctrl_av_size(uct_ud_mlx5_ep_t *ep)
 {
     return sizeof(struct mlx5_wqe_ctrl_seg) +
-           uct_ib_mlx5_wqe_av_size(&ep->peer_address.av);
+          ((ep->peer_address.av.dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) ?
+           UCT_IB_MLX5_AV_FULL_SIZE : UCT_IB_MLX5_AV_BASE_SIZE);
 }
 
 static UCS_F_ALWAYS_INLINE size_t uct_ud_mlx5_max_am_iov()
@@ -63,6 +64,22 @@ static UCS_F_ALWAYS_INLINE size_t uct_ud_mlx5_max_am_iov()
 static UCS_F_ALWAYS_INLINE size_t uct_ud_mlx5_max_inline()
 {
     return UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
+                          uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av)
+{
+    struct mlx5_base_av *to_av = mlx5_av_base(&seg->av);
+
+    ucs_assert(av != NULL);
+    to_av->key.qkey.qkey = htonl(UCT_IB_KEY);
+    /* cppcheck-suppress ctunullpointer */
+    UCT_IB_MLX5_SET_BASE_AV(to_av, av);
+
+    ucs_assert((grh_av == NULL) ||
+               (to_av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV));
+    uct_ib_mlx5_set_dgram_seg_grh(seg, grh_av);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -79,10 +96,9 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     uct_ib_mlx5_set_ctrl_seg(ctrl, iface->tx.wq.sw_pi, MLX5_OPCODE_SEND, 0,
                              iface->super.qp->qp_num,
                              uct_ud_mlx5_tx_moderation(iface, ce_se), wqe_size);
-    uct_ib_mlx5_set_dgram_seg(dgram, &ep->peer_address.av,
+    uct_ud_mlx5_set_dgram_seg(dgram, &ep->peer_address.av,
                               ep->peer_address.is_global ?
-                              &ep->peer_address.grh_av : NULL,
-                              IBV_QPT_UD);
+                              &ep->peer_address.grh_av : NULL);
 
     uct_ib_mlx5_log_tx(&iface->super.super, ctrl, iface->tx.wq.qstart,
                        iface->tx.wq.qend, max_log_sge, NULL, uct_ud_dump_packet);
