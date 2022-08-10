@@ -818,15 +818,16 @@ static uint64_t ucp_worker_get_uct_features(ucp_context_h context)
     }
 
     if (context->config.features & UCP_FEATURE_RMA) {
-        features |= UCT_IFACE_FEATURE_PUT | UCT_IFACE_FEATURE_GET;
+        features |= UCT_IFACE_FEATURE_PUT | UCT_IFACE_FEATURE_GET |
+                    UCT_IFACE_FEATURE_FLUSH_REMOTE;
     }
 
     if (context->config.features & UCP_FEATURE_AMO32) {
-        features |= UCT_IFACE_FEATURE_AMO32;
+        features |= UCT_IFACE_FEATURE_AMO32 | UCT_IFACE_FEATURE_FLUSH_REMOTE;
     }
 
     if (context->config.features & UCP_FEATURE_AMO64) {
-        features |= UCT_IFACE_FEATURE_AMO64;
+        features |= UCT_IFACE_FEATURE_AMO64 | UCT_IFACE_FEATURE_FLUSH_REMOTE;
     }
 
     if (context->num_mem_type_detect_mds > 0) {
