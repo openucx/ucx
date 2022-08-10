@@ -30,6 +30,7 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
                                     UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
     attr->cap.max_alloc           = 0;
     attr->cap.reg_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->cap.cache_mem_types     = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.alloc_mem_types     = 0;
     attr->cap.access_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.detect_mem_types    = 0;

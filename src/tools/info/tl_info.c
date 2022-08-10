@@ -387,8 +387,10 @@ static void print_md_info(uct_component_h component,
                           ucs_config_print_flags_t print_flags,
                           const char *req_tl_name)
 {
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
     uct_tl_resource_desc_t *resources, tmp;
     unsigned resource_index, j, num_resources, count;
+    ucs_memory_type_t mem_type;
     ucs_status_t status;
     const char *tl_name;
     uct_md_config_t *md_config;
@@ -460,6 +462,36 @@ static void print_md_info(uct_component_h component,
         if (md_attr.cap.flags & UCT_MD_FLAG_INVALIDATE) {
             printf("#           memory invalidation is supported\n");
         }
+
+        ucs_memory_type_for_each(mem_type) {
+            if (!(UCS_BIT(mem_type) & (md_attr.cap.reg_mem_types |
+                                       md_attr.cap.alloc_mem_types))) {
+                continue;
+            }
+
+            ucs_string_buffer_appendf(&strb, "%s",
+                                      ucs_memory_type_names[mem_type]);
+            if (UCS_BIT(mem_type) & (md_attr.cap.cache_mem_types &
+                                     ~md_attr.cap.alloc_mem_types)) {
+                ucs_string_buffer_appendf(&strb, ", ");
+                continue;
+            }
+
+            ucs_string_buffer_appendf(&strb, " (");
+            if (md_attr.cap.alloc_mem_types & UCS_BIT(mem_type)) {
+                ucs_string_buffer_appendf(&strb, "alloc, ");
+            }
+
+            if (!(md_attr.cap.cache_mem_types & UCS_BIT(mem_type))) {
+                ucs_string_buffer_appendf(&strb, "nocache, ");
+            }
+
+            ucs_string_buffer_rtrim(&strb, ", ");
+            ucs_string_buffer_appendf(&strb, "), ");
+        }
+
+        ucs_string_buffer_rtrim(&strb, ", ");
+        printf("#         memory types: %s\n", ucs_string_buffer_cstr(&strb));
     }
 
     if (num_resources == 0) {

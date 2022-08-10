@@ -1383,6 +1383,10 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                     if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
                     }
+
+                    if (md_attr->cap.cache_mem_types & UCS_BIT(mem_type)) {
+                        context->cache_md_map[mem_type] |= UCS_BIT(md_index);
+                    }
                 }
             }
 
@@ -1426,7 +1430,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_mem_type_detect_mds  = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
-        context->reg_md_map[i] = 0;
+        context->reg_md_map[i]   = 0;
+        context->cache_md_map[i] = 0;
     }
 
     ucs_string_set_init(&avail_tls);
