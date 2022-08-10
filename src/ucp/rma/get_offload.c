@@ -115,7 +115,8 @@ ucp_proto_t ucp_get_offload_bcopy_proto = {
     .init     = ucp_proto_get_offload_bcopy_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_bcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -204,5 +205,6 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .init     = ucp_proto_get_offload_zcopy_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_zcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };

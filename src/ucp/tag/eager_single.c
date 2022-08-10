@@ -84,7 +84,8 @@ ucp_proto_t ucp_eager_short_proto = {
     .init     = ucp_proto_eager_short_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_eager_short_progress},
-    .abort    = ucp_proto_request_bcopy_abort
+    .abort    = ucp_proto_request_bcopy_abort,
+    .reset    = ucp_proto_request_bcopy_reset
 };
 
 static size_t ucp_eager_single_pack(void *dest, void *arg)
@@ -153,7 +154,8 @@ ucp_proto_t ucp_eager_bcopy_single_proto = {
     .init     = ucp_proto_eager_bcopy_single_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_eager_bcopy_single_progress},
-    .abort    = ucp_proto_request_bcopy_abort
+    .abort    = ucp_proto_request_bcopy_abort,
+    .reset    = ucp_proto_request_bcopy_reset
 };
 
 static ucs_status_t
@@ -222,5 +224,6 @@ ucp_proto_t ucp_eager_zcopy_single_proto = {
     .init     = ucp_proto_eager_zcopy_single_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_zcopy_single_progress},
-    .abort    = ucp_proto_request_zcopy_abort
+    .abort    = ucp_proto_request_zcopy_abort,
+    .reset    = ucp_proto_request_zcopy_reset
 };

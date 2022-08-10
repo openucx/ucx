@@ -13,16 +13,18 @@
 #include "wireup_cm.h"
 #include "wireup_ep.h"
 
-#include <ucp/core/ucp_ep.h>
-#include <ucp/core/ucp_request.inl>
-#include <ucp/core/ucp_proxy_ep.h>
-#include <ucp/core/ucp_worker.h>
-#include <ucp/core/ucp_listener.h>
-#include <ucp/proto/proto_am.inl>
-#include <ucp/tag/eager.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/queue.h>
+#include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_listener.h>
+#include <ucp/core/ucp_proxy_ep.h>
+#include <ucp/core/ucp_worker.h>
+#include <ucp/proto/proto_common.h>
 #include <ucs/sys/iovec.h>
+#include <ucp/tag/eager.h>
+
+#include <ucp/core/ucp_request.inl>
+#include <ucp/proto/proto_am.inl>
 
 /*
  * Description of the protocol in UCX wiki:
@@ -866,12 +868,18 @@ uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
 }
 
 static void
-ucp_wireup_replay_pending_request(uct_pending_req_t *self, void *arg)
+ucp_wireup_replay_pending_request(uct_pending_req_t *self, ucp_ep_h ucp_ep)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    ucs_assert(req->send.ep == (ucp_ep_h)arg);
-    ucp_request_send(req);
+    ucs_assert(req->send.ep == ucp_ep);
+
+    if ((req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
+        (ucp_ep->cfg_index != req->send.proto_config->ep_cfg_index)) {
+        ucp_proto_request_restart(req);
+    } else {
+        ucp_request_send(req);
+    }
 }
 
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,

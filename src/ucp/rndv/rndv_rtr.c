@@ -242,9 +242,9 @@ ucp_proto_t ucp_rndv_rtr_proto = {
     .init     = ucp_proto_rndv_rtr_init,
     .query    = ucp_proto_rndv_rtr_query,
     .progress = {ucp_proto_rndv_rtr_progress},
-    .abort    = ucp_proto_rndv_rtr_abort
+    .abort    = ucp_proto_rndv_rtr_abort,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
-
 
 static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
 {
@@ -392,7 +392,8 @@ ucp_proto_t ucp_rndv_rtr_mtype_proto = {
     .init     = ucp_proto_rndv_rtr_mtype_init,
     .query    = ucp_proto_rndv_rtr_mtype_query,
     .progress = {ucp_proto_rndv_rtr_mtype_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
 
 ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
