@@ -1025,12 +1025,14 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_CQE_V1;
     }
 
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_compression_128b)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_CQE128_ZIP;
-    }
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, enhanced_cqe_compression)) {
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_compression_128b)) {
+            md->flags |= UCT_IB_MLX5_MD_FLAG_CQE128_ZIP;
+        }
 
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_compression)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_CQE64_ZIP;
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_compression)) {
+            md->flags |= UCT_IB_MLX5_MD_FLAG_CQE64_ZIP;
+        }
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,

@@ -1151,17 +1151,21 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
     pi = mlx5_cq->cq_ci;
     for (;;) {
         cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
-        if (uct_ib_mlx5_cqe_is_hw_owned(cqe->op_own, pi, mlx5_cq->cq_length)) {
+
+        if (uct_ib_mlx5_cqe_is_hw_owned(mlx5_cq, cqe, pi,
+                                        UCT_IB_MLX5_POLL_FLAG_CQE_ZIP)) {
             break;
         } else if (uct_ib_mlx5_check_and_init_zipped(mlx5_cq, cqe)) {
             unzipped_cqe = uct_ib_mlx5_iface_cqe_unzip(mlx5_cq);
             memcpy(cqe, unzipped_cqe, sizeof(*cqe));
+        } else {
+            mlx5_cq->cq_unzip.title_cqe_valid = 0;
         }
 
         ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
 
         ++pi;
-        if (pi == (mlx5_cq->cq_ci + mlx5_cq->cq_length - 1)) {
+        if (pi == (mlx5_cq->cq_ci + (1 << mlx5_cq->cq_length_log) - 1)) {
             break;
         }
     }

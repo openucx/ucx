@@ -8,13 +8,13 @@
 
 extern "C" {
 #include <uct/api/uct.h>
+#include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/base/ib_iface.h>
 }
 
 #define UCT_INSTANTIATE_MLX5_TEST_CASE(_test_case) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, ud_mlx5)
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 class test_cqe_zipping : public test_uct_ib_with_specific_port {
 public:
@@ -73,6 +73,10 @@ public:
         test_uct_ib_with_specific_port::init();
         test_uct_ib::init();
 
+        if (!check_cqe_zip_caps()) {
+            UCS_TEST_SKIP_R("unsupported");
+        }
+
         uct_iface_set_am_handler(receiver()->iface(), 0, am_cb, &m_recv_cnt, 0);
         m_send_buf = new mapped_buffer(m_buf_size, 0, *sender());
     }
@@ -81,6 +85,19 @@ public:
     {
         uct_test::flush();
         m_send_cnt = m_recv_cnt = 0;
+    }
+
+    bool check_cqe_zip_caps()
+    {
+        uct_ib_mlx5_md_t *md = NULL;
+        FOR_EACH_ENTITY(entity) {
+            md = ucs_derived_of((*entity)->md(), uct_ib_mlx5_md_t);
+            if (!(ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_CQE64_ZIP |
+                                     UCT_IB_MLX5_MD_FLAG_CQE128_ZIP))) {
+                return false;
+            }
+        }
+        return true;
     }
 
 private:

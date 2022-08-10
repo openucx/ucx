@@ -71,7 +71,7 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
     {"CQE_ZIPPING_ENABLE", "no",
      "Enable CQE zipping feature. CQE zipping reduces PCI utilization by\n"
      "merging several similar CQEs to a single CQE written by the device.",
-     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zipping_enable), UCS_CONFIG_TYPE_TERNARY},
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zipping_enable), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -80,7 +80,7 @@ void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
                                    const uct_ib_mlx5_iface_config_t *mlx5_config,
                                    uct_ib_iface_init_attr_t *init_attr)
 {
-    if (mlx5_config->cqe_zipping_enable == UCS_NO) {
+    if (!mlx5_config->cqe_zipping_enable) {
         return;
     }
 
@@ -90,10 +90,6 @@ void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE128_ZIP) {
         init_attr->cqe_zip_sizes |= 128;
-    }
-
-    if (mlx5_config->cqe_zipping_enable == UCS_YES) {
-        init_attr->flags |= UCT_IB_FORCE_CQE_ZIPPING;
     }
 }
 
@@ -116,18 +112,6 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     dv_attr.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE;
     dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
-
-#if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_COMPRESSED_CQE
-    if (init_attr->cqe_zip_sizes & dv_attr.cqe_size) {
-        dv_attr.comp_mask          |= MLX5DV_CQ_INIT_ATTR_MASK_COMPRESSED_CQE;
-        dv_attr.cqe_comp_res_format = MLX5DV_CQE_RES_FORMAT_CSUM;
-    } else
-#endif
-    if (init_attr->flags == UCT_IB_FORCE_CQE_ZIPPING) {
-        ucs_error("%s: CQE_ZIPPING_ENABLE option set to \"yes\", but this "
-                  "feature is unsupported by device.", uct_ib_device_name(dev));
-        return UCS_ERR_UNSUPPORTED;
-    }
 
     cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (cq == NULL) {
@@ -192,13 +176,13 @@ ucs_status_t uct_ib_mlx5_fill_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 #endif
 
     uct_ib_mlx5_fill_cq_common(mlx5_cq, dcq.dv.cqe_cnt, dcq.dv.cqe_size,
-                               dcq.dv.cqn, dcq.dv.buf, uar, dcq.dv.dbrec);
+                               dcq.dv.cqn, dcq.dv.buf, uar, dcq.dv.dbrec, 0);
     return UCS_OK;
 }
 
 void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
                                 unsigned cqe_size, uint32_t cqn, void *cq_buf,
-                                void* uar, volatile void *dbrec)
+                                void *uar, volatile void *dbrec, int zip)
 {
     struct mlx5_cqe64 *cqe;
     int i;
@@ -206,10 +190,10 @@ void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
     cq->cq_buf    = cq_buf;
     cq->cq_ci     = 0;
     cq->cq_sn     = 0;
-    cq->cq_length = cq_size;
     cq->cq_num    = cqn;
     cq->uar       = uar;
     cq->dbrec     = dbrec;
+    cq->zip       = zip;
 
     /* Initializing memory is required for checking the cq_unzip.current_idx */
     memset(&cq->cq_unzip, 0, sizeof(uct_ib_mlx5_cq_unzip_t));
@@ -222,14 +206,29 @@ void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
     cq->cqe_size_log = ucs_ilog2(cqe_size);
     ucs_assert_always(UCS_BIT(cq->cqe_size_log) == cqe_size);
 
+    cq->cq_length_log = ucs_ilog2(cq_size);
+    ucs_assert_always(UCS_BIT(cq->cq_length_log) == cq_size);
+
+    cq->cq_length_mask = UCS_MASK(cq->cq_length_log);
+
+    if (cq->zip) {
+        /* signature is in union with validity_iteration_count */
+        cq->own_field_offset = ucs_offsetof(struct mlx5_cqe64, signature);
+        cq->own_mask         = 0xff;
+    } else {
+        cq->own_field_offset = ucs_offsetof(struct mlx5_cqe64, op_own);
+        cq->own_mask         = MLX5_CQE_OWNER_MASK;
+    }
+
     /* Set owner bit for all CQEs, so that CQE would look like it is in HW
      * ownership. In this case CQ polling functions will return immediately if
      * no any CQE ready, there is no need to check opcode for
      * MLX5_CQE_INVALID value anymore.  */
-    for (i = 0; i < cq->cq_length; ++i) {
-        cqe          = uct_ib_mlx5_get_cqe(cq, i);
-        cqe->op_own |= MLX5_CQE_OWNER_MASK;
-        cqe->op_own |= MLX5_CQE_INVALID << 4;
+    for (i = 0; i < cq_size; ++i) {
+        cqe            = uct_ib_mlx5_get_cqe(cq, i);
+        cqe->op_own   |= MLX5_CQE_OWNER_MASK;
+        cqe->op_own   |= MLX5_CQE_INVALID << 4;
+        cqe->signature = 0xff;
     }
 }
 
@@ -381,20 +380,25 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 }
 #endif
 
-void uct_ib_mlx5_iface_cqe_unzip_init(struct mlx5_cqe64 *title_cqe,
-                                      uct_ib_mlx5_cq_t *cq)
+void uct_ib_mlx5_iface_cqe_unzip_init(uct_ib_mlx5_cq_t *cq)
 {
     uct_ib_mlx5_cq_unzip_t *cq_unzip = &cq->cq_unzip;
-    struct mlx5_cqe64 *mini_cqe      = uct_ib_mlx5_get_cqe(cq, cq->cq_ci + 1);
+    struct mlx5_cqe64 *title_cqe     = uct_ib_mlx5_get_cqe(cq, cq->cq_ci - 1);
+    struct mlx5_cqe64 *mini_cqe      = uct_ib_mlx5_get_cqe(cq, cq->cq_ci);
 
-    memcpy(&cq_unzip->title, title_cqe, sizeof(cq_unzip->title));
-    memcpy(&cq_unzip->mini_arr, mini_cqe, sizeof(cq_unzip->mini_arr));
-    cq_unzip->block_size    = ntohl(title_cqe->byte_cnt);
-    cq_unzip->wqe_counter   = ntohs(title_cqe->wqe_counter);
-    cq_unzip->title_cq_idx  = cq->cq_ci;
-
-    /* Clear the title CQE format */
-    cq_unzip->title.op_own &= ~UCT_IB_MLX5_CQE_FORMAT_MASK;
+    if (cq->cq_unzip.title_cqe_valid == 0) {
+        memcpy(&cq_unzip->title, title_cqe, sizeof(cq_unzip->title));
+        cq_unzip->wqe_counter        = ntohs(title_cqe->wqe_counter);
+        cq->cq_unzip.title_cqe_valid = 1;
+    } else {
+        cq_unzip->wqe_counter += cq_unzip->block_size;
+    }
+    memcpy(&cq_unzip->mini_arr, mini_cqe,
+           sizeof(uct_ib_mlx5_mini_cqe8_t) * UCT_IB_MLX5_MINICQE_ARR_MAX_SIZE);
+    cq_unzip->block_size = (mini_cqe->op_own >> 4) + 1;
+    ucs_assertv(cq_unzip->block_size <= 7, "block_size=%u",
+                cq_unzip->block_size);
+    cq_unzip->miniarr_cq_idx = cq->cq_ci;
 }
 
 static void
@@ -427,29 +431,22 @@ struct mlx5_cqe64 *uct_ib_mlx5_iface_cqe_unzip(uct_ib_mlx5_cq_t *cq)
     struct mlx5_cqe64 *title_cqe      = &cq_unzip->title;
     uct_ib_mlx5_mini_cqe8_t *mini_cqe = &cq_unzip->mini_arr[mini_cqe_idx];
     struct mlx5_cqe64 *cqe;
-    unsigned next_arr_size;
-
-    uct_ib_mlx5_iface_cqe_unzip_fill_unique(title_cqe, mini_cqe, cq_unzip);
+    unsigned next_cqe_idx;
 
     cq_unzip->current_idx++;
 
+    uct_ib_mlx5_iface_cqe_unzip_fill_unique(title_cqe, mini_cqe, cq_unzip);
+
     if (cq_unzip->current_idx < cq_unzip->block_size) {
-        cqe = uct_ib_mlx5_get_cqe(cq, cq_unzip->title_cq_idx +
-                                  cq_unzip->current_idx);
+        next_cqe_idx = cq_unzip->miniarr_cq_idx + cq_unzip->current_idx;
+        cqe          = uct_ib_mlx5_get_cqe(cq, next_cqe_idx);
 
-        if (mini_cqe_idx == (UCT_IB_MLX5_MINICQE_ARR_MAX_SIZE - 1)) {
-            /* Get the next mini_cqe array */
-            next_arr_size = ucs_min(sizeof(*mini_cqe) * cq_unzip->current_idx,
-                                    sizeof(*cqe));
-            memcpy(&cq_unzip->mini_arr, cqe, next_arr_size);
-        }
-
-        /* Update opcode and CQE format in the next CQE buffer
-         * (title shouldn't be updated).
-         * CQE format is used for simplifying the zipped CQE detection
-         * during the poll
+        /* Update opcode and signature in the next CQE buffer.
+         * Signature is used for simplifying the zipped CQE detection
+         * during the poll.
          */
-        cqe->op_own = title_cqe->op_own | UCT_IB_MLX5_CQE_FORMAT_MASK;
+        cqe->op_own    = UCT_IB_MLX5_CQE_FORMAT_MASK;
+        cqe->signature = title_cqe->signature;
     } else {
         cq_unzip->current_idx = 0;
     }
@@ -459,10 +456,8 @@ struct mlx5_cqe64 *uct_ib_mlx5_iface_cqe_unzip(uct_ib_mlx5_cq_t *cq)
 
 struct mlx5_cqe64 *
 uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
-                             struct mlx5_cqe64 *cqe)
+                             struct mlx5_cqe64 *cqe, int flags)
 {
-    ucs_memory_cpu_load_fence();
-
     if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
         ++cq->cq_ci;
         uct_ib_mlx5_update_cqe_zipping_stats(iface, cq);
