@@ -493,7 +493,8 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     rx_hdr_offset = iface->super.super.config.rx_hdr_offset;
     desc          = UCS_PTR_BYTE_OFFSET(packet, -rx_hdr_offset);
 
-    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX]);
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX],
+                              0, uct_ib_mlx5_check_completion);
     if (cqe == NULL) {
         count = 0;
         goto out;
@@ -548,7 +549,8 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface, int is_async)
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
 
-    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX]);
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX],
+                              0, uct_ib_mlx5_check_completion);
     if (cqe == NULL) {
         return 0;
     }

@@ -130,7 +130,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
 
     ++iface->super.rx.srq.available;
 
-    if (poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) {
+    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) {
         seg                     = uct_ib_mlx5_srq_get_wqe(srq, srq->free_idx);
         seg->srq.next_wqe_index = htons(wqe_index);
         srq->free_idx           = wqe_index;
@@ -264,26 +264,12 @@ uct_rc_mlx5_iface_rx_mp_context_from_hash(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 {
-    uct_ib_mlx5_cq_t *cq = &iface->cq[UCT_IB_DIR_RX];
-    struct mlx5_cqe64 *cqe;
-    unsigned idx;
-    uint8_t op_own;
-
     /* Prefetch the descriptor if it was scheduled */
     ucs_prefetch(iface->rx.pref_ptr);
 
-    idx    = cq->cq_ci;
-    cqe    = uct_ib_mlx5_get_cqe(cq, idx);
-    op_own = cqe->op_own;
-
-    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, idx, cq->cq_length))) {
-        return NULL;
-    } else if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(op_own))) {
-        return uct_rc_mlx5_iface_check_rx_completion(iface, cqe, poll_flags);
-    }
-
-    cq->cq_ci = idx + 1;
-    return cqe; /* TODO optimize - let complier know cqe is not null */
+    return uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX],
+                               poll_flags,
+                               uct_rc_mlx5_iface_check_rx_completion);
 }
 
 static UCS_F_ALWAYS_INLINE void*
@@ -354,10 +340,10 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
     ucs_assert(byte_len <= UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK);
     *flags = 0;
 
-    if (ucs_test_all_flags(poll_flags, UCT_RC_MLX5_POLL_FLAG_HAS_EP |
-                                       UCT_RC_MLX5_POLL_FLAG_TAG_CQE)) {
+    if (ucs_test_all_flags(poll_flags, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
+                                       UCT_IB_MLX5_POLL_FLAG_TAG_CQE)) {
         *context_p = uct_rc_mlx5_iface_rx_mp_context_from_ep(iface, cqe, flags);
-    } else if (poll_flags & UCT_RC_MLX5_POLL_FLAG_TAG_CQE) {
+    } else if (poll_flags & UCT_IB_MLX5_POLL_FLAG_TAG_CQE) {
         *context_p = uct_rc_mlx5_iface_rx_mp_context_from_hash(iface, cqe, flags);
     } else {
         /* Non-tagged messages (AM, RNDV Fin) should always arrive in
@@ -1292,7 +1278,7 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
 
     tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, byte_len, &flags,
                                            poll_flags |
-                                           UCT_RC_MLX5_POLL_FLAG_TAG_CQE,
+                                           UCT_IB_MLX5_POLL_FLAG_TAG_CQE,
                                            &msg_ctx);
 
     /* Fast path: single fragment eager message */
@@ -1425,7 +1411,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_mp_context_t UCS_V_UNUSED *dummy_ctx;
 #endif
 
-    ucs_assert((poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) ||
+    ucs_assert((poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) ||
                (uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,
                                         iface->rx.srq.mask)->srq.next_wqe_index == 0));
 
@@ -1448,7 +1434,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     byte_len = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
     count    = 1;
 
-    if (!(poll_flags & UCT_RC_MLX5_POLL_FLAG_TM)) {
+    if (!(poll_flags & UCT_IB_MLX5_POLL_FLAG_TM)) {
         rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
         uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags,
                                             byte_len, poll_flags);
@@ -1543,7 +1529,7 @@ out_update_db:
 out:
     max_batch = iface->super.super.config.rx_max_batch;
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
-        if (poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) {
+        if (poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) {
             uct_rc_mlx5_iface_srq_post_recv_ll(iface);
         } else {
             uct_rc_mlx5_iface_srq_post_recv(iface);

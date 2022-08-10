@@ -129,14 +129,6 @@ enum {
     UCT_RC_MLX5_CQE_APP_OP_TM_CONSUMED_MSG   = 0xA
 };
 
-enum {
-    UCT_RC_MLX5_POLL_FLAG_TM                 = UCS_BIT(0),
-    UCT_RC_MLX5_POLL_FLAG_HAS_EP             = UCS_BIT(1),
-    UCT_RC_MLX5_POLL_FLAG_TAG_CQE            = UCS_BIT(2),
-    UCT_RC_MLX5_POLL_FLAG_LINKED_LIST        = UCS_BIT(3)
-};
-
-
 #define UCT_RC_MLX5_RMA_MAX_IOV(_av_size) \
     ((UCT_IB_MLX5_MAX_SEND_WQE_SIZE - ((_av_size) + \
      sizeof(struct mlx5_wqe_raddr_seg) + sizeof(struct mlx5_wqe_ctrl_seg))) / \

@@ -235,7 +235,7 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
+uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
     uint8_t dci_index;
     struct mlx5_cqe64 *cqe;
@@ -243,7 +243,8 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super,
-                              &iface->super.cq[UCT_IB_DIR_TX]);
+                              &iface->super.cq[UCT_IB_DIR_TX], poll_flags,
+                              uct_ib_mlx5_check_completion);
     if (cqe == NULL) {
         return 0;
     }
@@ -287,22 +288,29 @@ uct_dc_mlx5_iface_progress(void *arg, int flags)
         return count;
     }
 
-    return count + uct_dc_mlx5_poll_tx(iface);
+    return count + uct_dc_mlx5_poll_tx(iface, flags);
 }
 
 static unsigned uct_dc_mlx5_iface_progress_cyclic(void *arg)
 {
-    return uct_dc_mlx5_iface_progress(arg, 0);
+    return uct_dc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
 }
 
 static unsigned uct_dc_mlx5_iface_progress_ll(void *arg)
 {
-    return uct_dc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_LINKED_LIST);
+    return uct_dc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_LINKED_LIST);
+}
+
+static unsigned uct_dc_mlx5_iface_progress_ll_zip(void *arg)
+{
+    return uct_dc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_LINKED_LIST |
+                                           UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
 }
 
 static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
 {
-    return uct_dc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_TM);
+    return uct_dc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_TM |
+                                           UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
@@ -680,7 +688,12 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
     }
 
     if (iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
-        iface->super.super.progress = uct_dc_mlx5_iface_progress_ll;
+        if (iface->super.cq[UCT_IB_DIR_RX].zip ||
+            iface->super.cq[UCT_IB_DIR_TX].zip) {
+            iface->super.super.progress = uct_dc_mlx5_iface_progress_ll_zip;
+        } else {
+            iface->super.super.progress = uct_dc_mlx5_iface_progress_ll;
+        }
     } else {
         iface->super.super.progress = uct_dc_mlx5_iface_progress_cyclic;
     }
