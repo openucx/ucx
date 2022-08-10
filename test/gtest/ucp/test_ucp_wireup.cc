@@ -1230,7 +1230,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc_dc, "rc,dc")
 
 class select_ep_transport : public test_ucp_wireup {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_RMA, "rma");
     }

@@ -243,41 +243,6 @@ err_destroy_qp:
     return UCS_ERR_INVALID_PARAM;
 }
 
-static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
-{
-    uct_ud_iface_ops_t *ops =
-        ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
-    unsigned ev_count;
-
-    if (ucs_unlikely(iface->async.disable)) {
-        return;
-    }
-
-    ev_count = ops->async_progress(iface);
-    if (ev_count > 0) {
-        uct_ud_iface_raise_pending_async_ev(iface);
-    }
-}
-
-static void uct_ud_iface_async_handler(int fd, ucs_event_set_types_t events,
-                                       void *arg)
-{
-    uct_ud_iface_t *iface = arg;
-
-    uct_ud_iface_async_progress(iface);
-
-    /* arm for new solicited events
-     * if user asks to provide notifications for all completion
-     * events by calling uct_iface_event_arm(), RX CQ will be
-     * armed again with solicited flag = 0 */
-    uct_ib_iface_pre_arm(&iface->super);
-    iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 1);
-
-    ucs_assert(iface->async.event_cb != NULL);
-    /* notify user */
-    iface->async.event_cb(iface->async.event_arg, 0);
-}
-
 static void uct_ud_iface_timer(int timer_id, ucs_event_set_types_t events,
                                void *arg)
 {
@@ -323,8 +288,6 @@ uct_ud_iface_conn_match_purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
 
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
 {
-    ucs_async_context_t *async          = iface->super.super.worker->async;
-    ucs_async_mode_t async_mode         = async->mode;
     ucs_conn_match_ops_t conn_match_ops = {
         .get_address = uct_ud_ep_get_peer_address,
         .get_conn_sn = uct_ud_iface_conn_match_get_conn_sn,
@@ -332,7 +295,6 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
         .purge_cb    = uct_ud_iface_conn_match_purge_cb
     };
     ucs_status_t status;
-    int event_fd;
 
     ucs_conn_match_init(&iface->conn_match_ctx,
                         uct_iface_invoke_ops_func(&iface->super,
@@ -346,33 +308,31 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
         goto err;
     }
 
-    status = uct_ib_iface_event_fd_get(&iface->super.super.super, &event_fd);
-    if (status != UCS_OK) {
-        goto err_twheel_cleanup;
-    }
-
-    if (iface->async.event_cb != NULL) {
-        status = ucs_async_set_event_handler(async_mode, event_fd,
-                                             UCS_EVENT_SET_EVREAD |
-                                             UCS_EVENT_SET_EVERR,
-                                             uct_ud_iface_async_handler,
-                                             iface, async);
-        if (status != UCS_OK) {
-            goto err_twheel_cleanup;
-        }
-
-        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 1);
-        if (status != UCS_OK) {
-            goto err_twheel_cleanup;
-        }
-    }
-
     return UCS_OK;
 
-err_twheel_cleanup:
-    ucs_twheel_cleanup(&iface->tx.timer);
 err:
     return status;
+}
+
+ucs_status_t
+uct_ud_iface_set_event_cb(uct_ud_iface_t *iface, ucs_async_event_cb_t event_cb)
+{
+    ucs_async_context_t *async  = iface->super.super.worker->async;
+    ucs_async_mode_t async_mode = async->mode;
+    ucs_status_t status;
+    int event_fd;
+
+    ucs_assert(iface->async.event_cb != NULL);
+
+    status = uct_ib_iface_event_fd_get(&iface->super.super.super, &event_fd);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucs_async_set_event_handler(async_mode, event_fd,
+                                       UCS_EVENT_SET_EVREAD |
+                                       UCS_EVENT_SET_EVERR,
+                                       event_cb, iface, async);
 }
 
 void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
@@ -924,18 +884,17 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ud_leave(iface);
 }
 
-ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
+ucs_status_t uct_ud_iface_event_arm_common(uct_ud_iface_t *iface,
+                                           unsigned events, uint64_t *dirs_p)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
     ucs_status_t status;
-
-    uct_ud_enter(iface);
+    uint64_t dirs;
 
     status = uct_ib_iface_pre_arm(&iface->super);
     if (status != UCS_OK) {
         ucs_trace("iface %p: pre arm failed status %s", iface,
                   ucs_status_string(status));
-        goto out;
+        return status;
     }
 
     /* Check if some receives were not delivered yet */
@@ -944,8 +903,7 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     {
         ucs_trace("iface %p: arm failed, has %lu unhandled receives", iface,
                   ucs_queue_length(&iface->rx.pending_q));
-        status = UCS_ERR_BUSY;
-        goto out;
+        return UCS_ERR_BUSY;
     }
 
     if (events & UCT_EVENT_SEND_COMP) {
@@ -953,43 +911,29 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
         if (!ucs_queue_is_empty(&iface->tx.async_comp_q)) {
             ucs_trace("iface %p: arm failed, has %lu async send comp", iface,
                       ucs_queue_length(&iface->tx.async_comp_q));
-            status = UCS_ERR_BUSY;
-            goto out;
+            return UCS_ERR_BUSY;
         }
 
         /* Check if we have pending operations which need to be progressed */
         if (iface->tx.async_before_pending) {
             ucs_trace("iface %p: arm failed, has async-before-pending flag",
                       iface);
-            status = UCS_ERR_BUSY;
-            goto out;
+            return UCS_ERR_BUSY;
         }
     }
 
+    dirs = 0;
     if (events & UCT_EVENT_SEND_COMP) {
-        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_TX, 0);
-        if (status != UCS_OK) {
-            ucs_trace("iface %p: arm cq failed status %s", iface,
-                      ucs_status_string(status));
-            goto out;
-        }
+        dirs |= UCS_BIT(UCT_IB_DIR_TX);
     }
 
     if (events & (UCT_EVENT_SEND_COMP | UCT_EVENT_RECV)) {
         /* we may get send completion through ACKs as well */
-        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 0);
-        if (status != UCS_OK) {
-            ucs_trace("iface %p: arm cq failed status %s", iface,
-                      ucs_status_string(status));
-            goto out;
-        }
+        dirs |= UCS_BIT(UCT_IB_DIR_RX);
     }
 
-    ucs_trace("iface %p: arm cq ok", iface);
-    status = UCS_OK;
-out:
-    uct_ud_leave(iface);
-    return status;
+    *dirs_p = dirs;
+    return UCS_OK;
 }
 
 void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)

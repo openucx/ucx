@@ -992,7 +992,6 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
 }
 
 ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
-                                    const uct_ib_iface_config_t *config,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl)
 {
@@ -1026,6 +1025,15 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     iface->cq[dir]                 = cq;
     iface->config.max_inl_cqe[dir] = inl;
     return UCS_OK;
+}
+
+void uct_ib_verbs_destroy_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir)
+{
+    int ret = ibv_destroy_cq(iface->cq[dir]);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_cq(%s) returned %d: %m",
+                 (dir == UCT_IB_DIR_RX) ? "RX" : "TX", ret);
+    }
 }
 
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
@@ -1344,13 +1352,13 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
         goto err_destroy_comp_channel;
     }
 
-    status = self->ops->create_cq(self, UCT_IB_DIR_TX, config, init_attr,
+    status = self->ops->create_cq(self, UCT_IB_DIR_TX, init_attr,
                                   preferred_cpu, config->inl[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         goto err_destroy_stats;
     }
 
-    status = self->ops->create_cq(self, UCT_IB_DIR_RX, config, init_attr,
+    status = self->ops->create_cq(self, UCT_IB_DIR_RX, init_attr,
                                   preferred_cpu, config->inl[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
@@ -1376,7 +1384,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     return UCS_OK;
 
 err_destroy_send_cq:
-    ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
+    self->ops->destroy_cq(self, UCT_IB_DIR_TX);
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
 err_destroy_comp_channel:
@@ -1391,15 +1399,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
 
-    ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_cq(recv_cq) returned %d: %m", ret);
-    }
-
-    ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_cq(send_cq) returned %d: %m", ret);
-    }
+    self->ops->destroy_cq(self, UCT_IB_DIR_RX);
+    self->ops->destroy_cq(self, UCT_IB_DIR_TX);
 
     UCS_STATS_NODE_FREE(self->stats);
 

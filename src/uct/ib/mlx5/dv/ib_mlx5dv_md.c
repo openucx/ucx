@@ -816,7 +816,6 @@ uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 
     ibv_destroy_cq(cq);
 
-#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
     event_channel = mlx5dv_devx_create_event_channel(
             ctx, MLX5_IB_UAPI_DEVX_CR_EV_CH_FLAGS_OMIT_DATA);
     if (event_channel == NULL) {
@@ -826,7 +825,6 @@ uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
     }
 
     mlx5dv_devx_destroy_event_channel(event_channel);
-#endif
 
     return ctx;
 
