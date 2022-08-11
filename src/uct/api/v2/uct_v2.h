@@ -220,6 +220,16 @@ typedef enum {
 
 
 /**
+ * @ingroup UCT_MD
+ * @brief MD memory attach operation parameters field mask.
+ */
+typedef enum {
+    /** Enables @ref uct_md_mem_attach_params_t.flags field */
+    UCT_MD_MEM_ATTACH_FIELD_FLAGS = UCS_BIT(0)
+} uct_md_mem_attach_field_mask_t;
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief UCT endpoint attributes field mask.
  *
@@ -273,6 +283,16 @@ typedef enum {
      */
     UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0)
 } uct_md_mkey_pack_flags_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Flags used in @ref uct_md_mem_attach
+ */
+typedef enum {
+    /** Hide errors on memory attach. */
+    UCT_MD_MEM_ATTACH_FLAG_HIDE_ERRORS = UCS_BIT(0)
+} uct_md_mem_attach_flags_t;
 
 
 /**
@@ -382,6 +402,27 @@ typedef struct uct_md_mkey_pack_params {
      */
     unsigned flags;
 } uct_md_mkey_pack_params_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Operation parameters passed to @ref uct_md_mem_attach.
+ */
+typedef struct uct_md_mem_attach_params {
+    /**
+     * Mask of valid fields in this structure and operation flags, using
+     * bits from @ref uct_md_mem_attach_field_mask_t. Fields not specified in
+     * this mask will be ignored. Provides ABI compatibility with respect to
+     * adding new fields.
+     */
+    uint64_t                     field_mask;
+
+    /**
+     * Operation specific flags, using bits from
+     * @ref uct_md_mem_attach_flags_t.
+     */
+    uint64_t                     flags;
+} uct_md_mem_attach_params_t;
 
 
 /**
@@ -504,6 +545,30 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
                                  const uct_md_mkey_pack_params_t *params,
                                  void *rkey_buffer);
+
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief Locally attach to a remote memory.
+ * 
+ * This routine attaches a local memory handle to a memory region
+ * registered by @ref uct_md_mem_reg and packed by
+ * @ref uct_md_mem_pack_v2 by a peer to allow performing local operations
+ * on a remote memory.
+ *
+ * @param [in]  md            Handle to memory domain.
+ * @param [in]  mkey_buffer   Buffer with a packed remote memory handle as
+ *                            returned from @ref uct_md_mkey_pack_v2.
+ * @param [in]  params        Attach parameters, see @ref
+ *                            uct_md_mem_attach_params_t.
+ * @param [out] memh_p        Memory handle attached to a remote memory.
+ *
+ * @return                    Error code.
+ */
+ucs_status_t uct_md_mem_attach(uct_md_h md, void *mkey_buffer,
+                               uct_md_mem_attach_params_t *params,
+                               uct_mem_h *memh_p);
 
 
 /**

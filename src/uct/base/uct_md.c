@@ -357,6 +357,13 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
     return uct_md_mkey_pack_v2(md, memh, &params, rkey_buffer);
 }
 
+ucs_status_t uct_md_mem_attach(uct_md_h md, void *mkey_buffer,
+                               uct_md_mem_attach_params_t *params,
+                               uct_mem_h *memh_p)
+{
+    return md->ops->mem_attach(md, mkey_buffer, params, memh_p);
+}
+
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
                              uct_rkey_bundle_t *rkey_ob)
 {
