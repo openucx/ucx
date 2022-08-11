@@ -39,6 +39,12 @@ BEGIN_C_DECLS
 #define ucs_aarch64_isb(_op)          asm volatile ("isb " #_op ::: "memory")
 #define ucs_aarch64_dsb(_op)          asm volatile ("dsb " #_op ::: "memory")
 
+/**
+ * Data Gathering Hint on Arm, see kernel patch:
+ * https://lore.kernel.org/linux-arm-kernel/20211221035556.60346-1-wangxiongfeng2@huawei.com/T/
+ */
+#define ucs_aarch64_dgh()             asm volatile ("hint #6" : : : "memory")
+
 /* The macro is used to serialize stores across Normal NC (or Device) and WB
  * memory, (see Arm Spec, B2.7.2).  Based on recent changes in Linux kernel:
  * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=22ec71615d824f4f11d38d0e55a88d8956b7e45f
@@ -51,14 +57,12 @@ BEGIN_C_DECLS
 #define ucs_memory_bus_load_fence()   ucs_aarch64_dmb(oshld)
 
 /* The macro is used to flush all pending stores from write combining buffer.
- * Some uarch "auto" flush the stores once cache line is full (no need for additional barrier).
+ * Micro-arch "auto" flush the stores once WC buffer is full or on a timeout.
+ * DGH instruction hint provides a formal way to flush the gather buffer.  See
+ * rdma subsystem patch:
+ * https://patchwork.kernel.org/project/linux-rdma/patch/0-v1-c5dade92f363+11-mlx5_io_stop_wc_jgg@nvidia.com/
  */
-#if defined(HAVE_AARCH64_THUNDERX2)
-#define ucs_memory_bus_cacheline_wc_flush()
-#else
-/* The macro is used to flush stores to Normal NC or Device memory */
-#define ucs_memory_bus_cacheline_wc_flush()     ucs_aarch64_dmb(oshst)
-#endif
+#define ucs_memory_bus_cacheline_wc_flush()     ucs_aarch64_dgh()
 
 #define ucs_memory_cpu_fence()        ucs_aarch64_dmb(ish)
 #define ucs_memory_cpu_store_fence()  ucs_aarch64_dmb(ishst)
