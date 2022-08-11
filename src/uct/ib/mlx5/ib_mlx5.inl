@@ -6,6 +6,14 @@
 
 #include "ib_mlx5.h"
 
+typedef struct uct_ib_mlx5_wqe_ctrl_seg {
+    __be32      opmod_idx_opcode;
+    __be32      qpn_ds;
+    uint8_t     signature;
+    __be16      dci_stream_channel_id;
+    uint8_t     fm_ce_se;
+    __be32      imm;
+} UCS_S_PACKED uct_ib_mlx5_wqe_ctrl_seg_t;
 
 static UCS_F_ALWAYS_INLINE UCS_F_NON_NULL struct mlx5_cqe64*
 uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned cqe_index)
@@ -329,7 +337,8 @@ uct_ib_mlx5_set_ctrl_qpn_ds(struct mlx5_wqe_ctrl_seg *ctrl, uint32_t qp_num,
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                          uint8_t opcode, uint8_t opmod, uint32_t qp_num,
-                         uint8_t fm_ce_se, unsigned wqe_size)
+                         uint8_t fm_ce_se, uint16_t dci_channel,
+                         unsigned wqe_size)
 {
     uint8_t ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
 #if defined(__ARM_NEON)
@@ -339,34 +348,38 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                         14, 13, 12,      /* QP num */
                         8,               /* data size */
                         16,              /* signature (set 0) */
-                        16, 16,          /* reserved (set 0) */
+                        11, 10,          /* dci stream channel ID in BE */
                         0,               /* signal/fence_mode */
                         16, 16, 16, 16}; /* immediate (set to 0)*/
-    uint32x4_t data = {(opcode << 16) | (opmod << 8) | (uint32_t)fm_ce_se,
-                       pi, ds, qp_num};
+    uint32x4_t data = {(opcode << 16) | (opmod << 8) | fm_ce_se,
+                       pi, (dci_channel << 16) | ds, qp_num};
+#elif !defined (__SSE4_2__)
+    uct_ib_mlx5_wqe_ctrl_seg_t *uct_ctrl = (uct_ib_mlx5_wqe_ctrl_seg_t*)ctrl;
 #endif
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
+
 #if defined(__SSE4_2__)
     *(__m128i *) ctrl = _mm_shuffle_epi8(
-                    _mm_set_epi32(qp_num, ds, pi,
-                                  (opcode << 16) | (opmod << 8) | fm_ce_se), /* OR of constants */
-                    _mm_set_epi8(0, 0, 0, 0, /* immediate */
-                                 0,          /* signal/fence_mode */
-                                 0, 0,       /* reserved */
-                                 0,          /* signature */
-                                 8,          /* data size */
-                                 12, 13, 14, /* QP num */
-                                 2,          /* opcode */
-                                 4, 5,       /* sw_pi in BE */
-                                 1           /* opmod */
+                    _mm_set_epi32(qp_num, (dci_channel << 16) | ds, pi,
+                                  (ds << 24) | (opcode << 16) | (opmod << 8) | fm_ce_se), /* OR of constants */
+                    _mm_set_epi8(0x80, 0x80, 0x80, 0x80, /* immediate (set 0) */
+                                 0,                      /* signal/fence_mode */
+                                 10, 11,                 /* dci stream channel ID in BE */
+                                 0x80,                   /* signature (set 0) */
+                                 8,                      /* data size */
+                                 12, 13, 14,             /* QP num */
+                                 2,                      /* opcode */
+                                 4, 5,                   /* sw_pi in BE */
+                                 1                       /* opmod */
                                  ));
 #elif defined(__ARM_NEON)
     *(uint8x16_t *)ctrl = vqtbl1q_u8((uint8x16_t)data, table);
 #else
-    ctrl->opmod_idx_opcode = (opcode << 24) | (htons(pi) << 8) | opmod;
+    uct_ctrl->opmod_idx_opcode      = (opcode << 24) | (htons(pi) << 8) | opmod;
     uct_ib_mlx5_set_ctrl_qpn_ds(ctrl, qp_num, ds);
-    ctrl->fm_ce_se         = fm_ce_se;
+    uct_ctrl->dci_stream_channel_id = htons(dci_channel);
+    uct_ctrl->fm_ce_se              = fm_ce_se;
 #endif
 }
 
@@ -374,34 +387,37 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                                   uint8_t opcode, uint8_t opmod, uint32_t qp_num,
-                                  uint8_t fm_ce_se, unsigned wqe_size, uint32_t imm)
+                                  uint8_t fm_ce_se, uint16_t dci_channel,
+                                  unsigned wqe_size, uint32_t imm)
 {
     uint8_t ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
 #if defined(__ARM_NEON)
-    uint8x16_t table = {1,               /* opmod */
-                        5,  4,           /* sw_pi in BE */
-                        2,               /* opcode */
-                        14, 13, 12,      /* QP num */
-                        6,               /* data size */
-                        16,              /* signature (set 0) */
-                        16, 16,          /* reserved (set 0) */
-                        0,               /* signal/fence_mode */
-                        8, 9, 10, 11}; /* immediate (set to 0)*/
-    uint32x4_t data = {(opcode << 16) | (opmod << 8) | (uint32_t)fm_ce_se,
-                       (ds << 16) | pi, imm,  qp_num};
+    uint8x16_t table = {1,             /* opmod */
+                        5,  4,         /* sw_pi in BE */
+                        2,             /* opcode */
+                        14, 13, 12,    /* QP num */
+                        3,             /* data size */
+                        16,            /* signature (set 0) */
+                        7, 6,          /* dci stream channel ID in BE */
+                        0,             /* signal/fence_mode */
+                        8, 9, 10, 11}; /* immediate */
+    uint32x4_t data = {(ds << 24) | (opcode << 16) | (opmod << 8) | fm_ce_se,
+                       (dci_channel << 16) | pi, imm, qp_num};
+#elif !defined (__SSE4_2__)
+    uct_ib_mlx5_wqe_ctrl_seg_t *uct_ctrl = (uct_ib_mlx5_wqe_ctrl_seg_t*)ctrl;
 #endif
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
 
 #if defined(__SSE4_2__)
     *(__m128i *) ctrl = _mm_shuffle_epi8(
-                    _mm_set_epi32(qp_num, imm, (ds << 16) | pi,
-                                  (opcode << 16) | (opmod << 8) | fm_ce_se), /* OR of constants */
+                    _mm_set_epi32(qp_num, imm, (dci_channel << 16) | pi,
+                                  (ds << 24) | (opcode << 16) | (opmod << 8) | fm_ce_se), /* OR of constants */
                     _mm_set_epi8(11, 10, 9, 8, /* immediate */
                                  0,            /* signal/fence_mode */
-                                 0, 0,         /* reserved */
-                                 0,            /* signature */
-                                 6,            /* data size */
+                                 6, 7,         /* dci stream channel id in BE */
+                                 0x80,         /* signature (set 0) */
+                                 3,            /* data size */
                                  12, 13, 14,   /* QP num */
                                  2,            /* opcode */
                                  4, 5,         /* sw_pi in BE */
@@ -410,10 +426,11 @@ uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
 #elif defined(__ARM_NEON)
     *(uint8x16_t *)ctrl = vqtbl1q_u8((uint8x16_t)data, table);
 #else
-    ctrl->opmod_idx_opcode = (opcode << 24) | (htons(pi) << 8) | opmod;
+    uct_ctrl->opmod_idx_opcode      = (opcode << 24) | (htons(pi) << 8) | opmod;
     uct_ib_mlx5_set_ctrl_qpn_ds(ctrl, qp_num, ds);
-    ctrl->fm_ce_se         = fm_ce_se;
-    ctrl->imm              = imm;
+    uct_ctrl->dci_stream_channel_id = htons(dci_channel);
+    uct_ctrl->fm_ce_se              = fm_ce_se;
+    uct_ctrl->imm                   = imm;
 #endif
 }
 

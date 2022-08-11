@@ -170,6 +170,7 @@ typedef struct uct_dc_mlx5_iface_config {
     unsigned                            rand_seed;
     ucs_time_t                          fc_hard_req_timeout;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
+    unsigned                            num_dci_channels;
 } uct_dc_mlx5_iface_config_t;
 
 
@@ -194,6 +195,8 @@ typedef struct uct_dc_dci {
     };
     uint8_t                       pool_index; /* DCI pool index. */
     uint8_t                       path_index; /* Path index */
+    uint8_t                       next_channel_index; /* next DCI channel index
+                                                         to be used by EP */
 } uct_dc_dci_t;
 
 
@@ -296,6 +299,8 @@ struct uct_dc_mlx5_iface {
         uint8_t                   dci_pool_release_bitmap;
 
         uint8_t                   av_fl_mlid;
+
+        uint8_t                   num_dci_channels;
     } tx;
 
     struct {

@@ -204,6 +204,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     if (attr->super.qp_type == UCT_IB_QPT_DCI) {
         UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_DCI);
         UCT_IB_MLX5DV_SET(qpc, qpc, full_handshake, !!attr->full_handshake);
+        UCT_IB_MLX5DV_SET(qpc, qpc, log_num_dci_stream_channels,
+                          attr->log_num_dci_stream_channels);
     } else if (attr->super.qp_type == IBV_QPT_RC) {
         UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_RC);
     } else {

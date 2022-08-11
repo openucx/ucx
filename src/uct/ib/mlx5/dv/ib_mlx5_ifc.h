@@ -391,7 +391,13 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    num_of_uars_per_page[0x20];
     uint8_t    reserved_at_540[0x40];
 
-    uint8_t    reserved_at_580[0x3b];
+    uint8_t    reserved_at_580[0xb];
+    uint8_t    log_max_dci_stream_channels[0x5];
+    uint8_t    reserved_at_58d[0x3];
+    uint8_t    log_max_dci_errored_streams[0x5];
+    uint8_t    reserved_at_592[0x8];
+
+    uint8_t    reserved_at_5a0[0x1b];
     uint8_t    enhanced_cqe_compression[0x1];
     uint8_t    mini_cqe_resp_stride_index[0x1];
     uint8_t    cqe_128_always[0x1];
@@ -1319,10 +1325,12 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         reserved_at_3c0[0x8];
     uint8_t         next_send_psn[0x18];
 
-    uint8_t         reserved_at_3e0[0x8];
+    uint8_t         reserved_at_3e0[0x4];
+    uint8_t         log_num_dci_stream_channels[0x4];
     uint8_t         cqn_snd[0x18];
 
-    uint8_t         reserved_at_400[0x8];
+    uint8_t         reserved_at_400[0x4];
+    uint8_t         log_num_dci_errored_streams[0x4];
     uint8_t         deth_sqpn[0x18];
 
     uint8_t         reserved_at_420[0x20];

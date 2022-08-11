@@ -76,6 +76,7 @@ struct uct_dc_mlx5_ep {
     uint16_t              flush_rkey_hi;
     uct_rc_fc_t           fc;
     uct_dc_mlx5_base_av_t av;
+    uint8_t               dci_channel_index;
 };
 
 typedef struct {
@@ -307,9 +308,12 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         /* coverity[dont_call] */
-        ep->dci = rand_r(&iface->tx.rand_seed) % iface->tx.ndci;
+        ep->dci               = rand_r(&iface->tx.rand_seed) % iface->tx.ndci;
+        ep->dci_channel_index = iface->tx.dcis[ep->dci].next_channel_index++ %
+                                iface->tx.num_dci_channels;
     } else {
-        ep->dci = UCT_DC_MLX5_EP_NO_DCI;
+        ep->dci               = UCT_DC_MLX5_EP_NO_DCI;
+        ep->dci_channel_index = 0;
     }
 
     return uct_rc_fc_init(&ep->fc, &iface->super.super
