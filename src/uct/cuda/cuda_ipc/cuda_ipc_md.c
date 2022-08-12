@@ -16,6 +16,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
+#include <ucs/memory/rcache.h>
 #include <ucs/profile/profile.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -23,6 +24,16 @@
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_cuda_ipc_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+
+    {"RCACHE", "try", "Enable using memory registration cache",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, rcache_enable), UCS_CONFIG_TYPE_TERNARY},
+
+    {"", "", NULL,
+     ucs_offsetof(uct_cuda_ipc_md_config_t, rcache),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
+
+    {"RCACHE_MAX_RATIO", "1", "Limit the fraction of GPU memory that can be used for caching mappings",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, rcache_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
 
     {NULL}
 };
@@ -134,6 +145,7 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     int num_devices;
     ucs_ternary_auto_value_t *accessible;
     void *d_mapped;
+    uct_cuda_ipc_rcache_region_t *cuda_ipc_region;
 
     status = uct_cuda_ipc_get_unique_index_for_uuid(&peer_idx, mdc->md, rkey);
     if (ucs_unlikely(status != UCS_OK)) {
@@ -169,10 +181,15 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
          * Now, we immediately insert into cache to save on calling
          * OpenMemHandle for the same handle because the cache is globally
          * accessible using rkey->pid. */
-        status = uct_cuda_ipc_map_memhandle(rkey, &d_mapped);
+        status = uct_cuda_ipc_map_memhandle(mdc->md, rkey, &d_mapped,
+                                            &cuda_ipc_region);
 
         *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
                       ? UCS_YES : UCS_NO;
+
+        if (*accessible == UCS_YES) {
+            uct_cuda_ipc_unmap_memhandle(mdc->md, rkey, d_mapped, cuda_ipc_region);
+        }
     }
 
     return (*accessible == UCS_YES) ? UCS_OK : UCS_ERR_UNREACHABLE;
@@ -306,11 +323,17 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         .detect_memory_type     = ucs_empty_function_return_unsupported
     };
 
+
+    uct_cuda_ipc_md_config_t *md_cfg = ucs_derived_of(config,
+                                                      uct_cuda_ipc_md_config_t);
+    ucs_rcache_params_t rcache_params;
     int num_devices;
     uct_cuda_ipc_md_t* md;
     uct_cuda_ipc_component_t* com;
 
     UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
+
+    uct_md_set_rcache_params(&rcache_params, &md_cfg->rcache);
 
     md = ucs_calloc(1, sizeof(uct_cuda_ipc_md_t), "uct_cuda_ipc_md");
     if (md == NULL) {
@@ -325,6 +348,10 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->uuid_map_capacity     = 0;
     md->uuid_map              = NULL;
     md->peer_accessible_cache = NULL;
+    md->rcache_enable         = md_cfg->rcache_enable;
+    md->rcache_max_ratio      = md_cfg->rcache_max_ratio;
+    md->rcache_max_size       = rcache_params.max_size;
+    md->rcache_max_regions    = rcache_params.max_regions;
 
     com     = ucs_derived_of(md->super.component, uct_cuda_ipc_component_t);
     com->md = md;
