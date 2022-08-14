@@ -2439,11 +2439,47 @@ protected:
         }
     }
 
+    enum {
+        SEND_PREREG_MEMH = UCS_BIT(0),
+        RECV_PREREG_MEMH = UCS_BIT(1)
+    };
+
+    void save_and_reset_mds(entity &e, std::vector<uct_md_h> &mds)
+    {
+        if (ucp_ep_config(e.ep())->key.rma_bw_md_map == 0) {
+            return;
+        }
+
+        ucp_tl_md_t *tl_md;
+        ucs_carray_for_each(tl_md, e.ucph()->tl_mds, e.ucph()->num_mds) {
+            mds.push_back(tl_md->md);
+            tl_md->md = NULL;
+        }
+    }
+
+    void restore_mds(entity &e, const std::vector<uct_md_h> &mds)
+    {
+        if (mds.empty()) {
+            return;
+        }
+
+        unsigned i = 0;
+        ucp_tl_md_t *tl_md;
+        ucs_carray_for_each(tl_md, e.ucph()->tl_mds, e.ucph()->num_mds) {
+            tl_md->md = mds[i++];
+        }
+    }
+
     void test_am_send_recv(size_t size, size_t hdr_size = 0ul,
                            size_t num_iters = m_num_iters,
-                           bool recv_prereg_memh = false,
-                           std::vector<uct_md_h> *recv_mds = NULL)
+                           bool send_prereg_memh = false,
+                           bool recv_prereg_memh = false)
     {
+        /* Both send and recv preregistered memory handles are not supported,
+         * since MDs shouldn't be resetted at least on one side to allow RKEY
+         * packing */
+        ASSERT_FALSE(send_prereg_memh & recv_prereg_memh);
+
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
         for (int i = 0; i < num_iters; i++) {
@@ -2451,28 +2487,35 @@ protected:
             std::string rb(size, 'y');
             std::string shdr(hdr_size, 'x');
             std::string rhdr(hdr_size, 'y');
+            ucp_mem_h smemh(NULL);
             ucp_mem_h rmemh(NULL);
+            std::vector<uct_md_h> mds;
 
-            if (recv_prereg_memh) {
-                rmemh = receiver().mem_map(&rb[0], size);
-            }
-            
-            if (recv_mds != NULL) {
-                ucp_tl_md_t *tl_md;
-                ucs_carray_for_each(tl_md, receiver().ucph()->tl_mds,
-                                    receiver().ucph()->num_mds) {
-                    recv_mds->push_back(tl_md->md);
-                    tl_md->md = NULL;
+            if (send_prereg_memh) {
+                smemh = sender().mem_map(&sb[0], size);
+                save_and_reset_mds(sender(), mds);
+            } else if (recv_prereg_memh) {
+                if (i == 0) {
+                    /* Wait for a server endpoint to be created prior resetting
+                     * MDs which requires that a endpoint is valid */
+                    wait_for_server_ep();
                 }
+                rmemh = receiver().mem_map(&rb[0], size);
+                save_and_reset_mds(receiver(), mds);
             }
 
             rx_am_msg_arg arg(receiver(), &rhdr[0], &rb[0], rmemh);
             set_am_data_handler(receiver(), 0, rx_am_msg_cb, &arg);
 
             ucp_request_param_t param = {};
-            ucs_status_ptr_t sreq     = ucp_am_send_nbx(sender().ep(), 0,
-                                                        &shdr[0], hdr_size,
-                                                        &sb[0], size, &param);
+            if (smemh != NULL) {
+                param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
+                param.memh         = smemh;
+            }
+
+            ucs_status_ptr_t sreq = ucp_am_send_nbx(sender().ep(), 0,
+                                                    &shdr[0], hdr_size,
+                                                    &sb[0], size, &param);
             request_wait(sreq);
             wait_for_flag(&arg.received);
             // wait for receive request completion after 'received' flag set to
@@ -2485,16 +2528,11 @@ protected:
 
             set_am_data_handler(receiver(), 0, NULL, NULL);
 
-            if (recv_mds != NULL) {
-                unsigned i = 0;
-                ucp_tl_md_t *tl_md;
-                ucs_carray_for_each(tl_md, receiver().ucph()->tl_mds,
-                                    receiver().ucph()->num_mds) {
-                    tl_md->md = (*recv_mds)[i++];
-                }
-            }
-
-            if (recv_prereg_memh) {
+            if (smemh != NULL) {
+                restore_mds(sender(), mds);
+                sender().mem_unmap(smemh);
+            } else if (rmemh != NULL) {
+                restore_mds(receiver(), mds);
                 receiver().mem_unmap(rmemh);
             }
         }
@@ -2701,9 +2739,16 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
 {
     /* The test checks that memory registration won't happen during RNDV GET
      * Zcopy if a memory buffer was preregistered */
-    std::vector<uct_md_h> recv_mds;
-    test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, true,
-                      &recv_mds);
+    test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, false, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols,
+           am_rndv_64k_recv_prereg_single_rndv_put_zcopy_lane, "RNDV_THRESH=0",
+           "MAX_RNDV_LANES=1", "RNDV_SCHEME=put_zcopy")
+{
+    /* The test checks that memory registration won't happen during RNDV GET
+     * Zcopy if a memory buffer was preregistered */
+    test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, true, false);
 }
 
 
