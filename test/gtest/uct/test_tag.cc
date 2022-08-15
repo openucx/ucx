@@ -567,7 +567,7 @@ UCS_TEST_SKIP_COND_P(test_tag, tag_hold_uct_desc,
     }
 
     std::for_each(m_uct_descs.begin(), m_uct_descs.end(),
-                  uct_iface_release_desc);
+                  [](void *desc) -> void {uct_iface_release_desc(desc);});
 
 }
 
@@ -1242,7 +1242,7 @@ UCS_TEST_P(test_tag_mp_xrq, desc_release)
     }
 
     std::for_each(m_uct_descs.begin(), m_uct_descs.end(),
-                  uct_iface_release_desc);
+                  [](void *desc) -> void {uct_iface_release_desc(desc);});
 }
 
 UCS_TEST_P(test_tag_mp_xrq, am)
