@@ -166,6 +166,29 @@ Java_org_openucx_jucx_ucp_UcpWorker_signalWorkerNative(JNIEnv *env, jclass cls, 
     }
 }
 
+JNIEXPORT void JNICALL
+Java_org_openucx_jucx_ucp_UcpWorker_armWorkerNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+{
+    ucs_status_t status = ucp_worker_arm((ucp_worker_h)ucp_worker_ptr);
+
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+}
+
+JNIEXPORT jint JNICALL
+Java_org_openucx_jucx_ucp_UcpWorker_getEventFDNative(JNIEnv *env, jclass cls, jlong ucp_worker_ptr)
+{
+    int fd;
+    ucs_status_t status = ucp_worker_get_efd((ucp_worker_h)ucp_worker_ptr, &fd);
+
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    return fd;
+}
+
 JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jclass cls,
                                                                 jlong ucp_worker_ptr,
