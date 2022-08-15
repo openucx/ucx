@@ -332,8 +332,8 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
     }
 
     neth = skb->neth;
+    uct_ud_neth_set_packet_type(&ep->super, neth, 0, UCT_UD_PACKET_FLAG_PUT);
     uct_ud_neth_init_data(&ep->super, neth);
-    uct_ud_neth_set_type_put(&ep->super, neth);
     uct_ud_neth_ack_req(&ep->super, neth);
 
     put_hdr = (uct_ud_put_hdr_t *)(neth+1);
