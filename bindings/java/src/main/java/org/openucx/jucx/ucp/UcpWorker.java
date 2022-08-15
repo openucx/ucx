@@ -185,6 +185,50 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * This routine needs to be called before waiting on each notification on this worker,
+     * so will typically be called once the processing of the previous event is over,
+     * as part of the wake-up mechanism.
+     *
+     * The worker must be armed before waiting on an event (must be re-armed after it has been
+     * signaled for re-use) with {@link UcpWorker#arm()}. The events triggering a signal of the
+     * file descriptor from {@link UcpWorker#getEventFD()} depend on the interfaces used by
+     * the worker and defined in the transport layer, and typically represent a request completion
+     * or newly available resources. It can also be triggered by calling {@link UcpWorker#signal()}.
+     *
+     * The file descriptor is guaranteed to become signaled only if new communication events
+     * occur on the worker. Therefore one must drain all existing events before waiting on
+     * the file descriptor. This can be achieved by calling {@link UcpWorker#progress()}
+     * repeatedly until it returns 0.
+     */
+    public void arm() {
+        armWorkerNative(getNativeId());
+    }
+
+    /**
+     * This routine returns a valid file descriptor for polling functions.
+     * The file descriptor will get signaled when an event occurs, as part of the wake-up mechanism.
+     * Signaling means a call to poll() or select() with this file descriptor will return at
+     * this point, with this descriptor marked as the reason (or one of the reasons)
+     * the function has returned. The user does not need to release the obtained file descriptor.
+     *
+     * The wake-up mechanism exists to allow for the user process to register for notifications
+     * on events of the underlying interfaces, and wait until such occur.
+     * This is an alternative to repeated polling for request completion.
+     * The goal is to allow for waiting while consuming minimal resources from the system.
+     * This is recommended for cases where traffic is infrequent,
+     * and latency can be traded for lower resource consumption while waiting for it.
+     *
+     * There are two alternative ways to use the wakeup mechanism:
+     * the first is the file descriptor obtained per worker (this function) and the second is the
+     * {@link UcpWorker#waitForEvents()} function for waiting on the next event internally.
+     *
+     * @return The internal file descriptor, which this worker reports to.
+     */
+    public int getEventFD() {
+        return getEventFDNative(getNativeId());
+    }
+
+    /**
      * Non-blocking tagged-receive operation.
      * This routine receives a messages that is described by the local {@code recvBuffer}
      * buffer on the current worker. The tag value of the receive message has to match
@@ -377,6 +421,10 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native void waitWorkerNative(long workerId);
 
     private static native void signalWorkerNative(long workerId);
+
+    private static native void armWorkerNative(long workerId);
+
+    private static native int getEventFDNative(long workerId);
 
     private static native void setAmRecvHandlerNative(long workerId, int amId,
                                                       Object[] callbackAndWorker,
