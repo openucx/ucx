@@ -246,11 +246,6 @@ static inline uint8_t uct_ud_neth_get_am_id(uct_ud_neth_t *neth)
     return neth->packet_type >> UCT_UD_PACKET_AM_ID_SHIFT;
 }
 
-static inline void uct_ud_neth_set_am_id(uct_ud_neth_t *neth, uint8_t id)
-{
-    neth->packet_type |= (id << UCT_UD_PACKET_AM_ID_SHIFT);
-}
-
 static inline uct_ud_ctl_desc_t *uct_ud_ctl_desc(uct_ud_send_skb_t *skb)
 {
     ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_CTL_ACK |

@@ -337,17 +337,11 @@ void uct_ud_ep_vfs_populate(uct_ud_ep_t *ep);
 
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
+uct_ud_neth_set_packet_type(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id,
+                            uint32_t packet_flags)
 {
-    neth->packet_type = (id << UCT_UD_PACKET_AM_ID_SHIFT) |
-                        ep->dest_ep_id |
-                        UCT_UD_PACKET_FLAG_AM;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_ud_neth_set_type_put(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    neth->packet_type = ep->dest_ep_id | UCT_UD_PACKET_FLAG_PUT;
+    neth->packet_type = (id << UCT_UD_PACKET_AM_ID_SHIFT) | ep->dest_ep_id |
+                        packet_flags;
 }
 
 void uct_ud_ep_process_rx(uct_ud_iface_t *iface,
