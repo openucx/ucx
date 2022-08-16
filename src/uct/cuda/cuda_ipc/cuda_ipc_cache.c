@@ -292,7 +292,10 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md,
     rcache_params.ucm_event_priority = 0;
     rcache_params.ops                = &uct_cuda_ipc_rcache_ops;
     rcache_params.context            = NULL;
-    rcache_params.flags              = UCS_RCACHE_FLAG_NO_PFN_CHECK;
+    rcache_params.flags              = 0;//UCS_RCACHE_FLAG_NO_PFN_CHECK;
+                                         /* TODO: when should PFN_CHECK be
+                                          * added? Not adding this flag for now
+                                          * as this results in no LRU eviction */
     rcache_params.max_regions        = md->rcache_max_regions;
     rcache_params.max_size           = md->rcache_max_size;
 
