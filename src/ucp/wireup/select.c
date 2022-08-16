@@ -442,6 +442,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_EVENT_FLAGS,
                                       criteria->remote_event_flags));
 
+        ucs_string_buffer_reset(&missing_flags_str);
         if (!ucp_wireup_test_select_flags(&criteria->remote_iface_flags,
                                           ae->iface_attr.flags,
                                           ucp_wireup_peer_flags,
