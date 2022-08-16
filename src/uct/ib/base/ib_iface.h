@@ -331,8 +331,8 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
  *                   |
  * uct_recv_desc_t   |
  *               |   |
- *               |   am_callback/tag_unexp_callback
- *               |   |
+ *               |   |           am_callback/tag_unexp_callback
+ *               |   |           |
  * +------+------+---+-----------+---------+
  * | LKey |  ??? | D | Head Room | Payload |
  * +------+------+---+--+--------+---------+
@@ -342,8 +342,8 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
  *                      post_receive
  *
  * (2)
- *            am_callback/tag_unexp_callback
- *            |
+ *                               am_callback/tag_unexp_callback
+ *                               |
  * +------+---+------------------+---------+
  * | LKey | D |     Head Room    | Payload |
  * +------+---+-----+---+--------+---------+
