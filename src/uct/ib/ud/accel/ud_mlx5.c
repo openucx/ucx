@@ -285,10 +285,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     wqe_size       += sizeof(*inl) + inline_size;
 
     /* set network header */
-    neth              = (void*)(inl + 1);
-    neth->packet_type = (am_id << UCT_UD_PACKET_AM_ID_SHIFT) |
-                        ep->super.dest_ep_id |
-                        packet_flags;
+    neth = (void*)(inl + 1);
+    uct_ud_neth_set_packet_type(&ep->super, neth, am_id, packet_flags);
     uct_ud_neth_init_data(&ep->super, neth);
     if (!(packet_flags & UCT_UD_PACKET_FLAG_ACK_REQ)) {
         /* check for ACK_REQ, if not already enabled by packet_flags */

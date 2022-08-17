@@ -211,8 +211,8 @@ uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
                 &ep->tx.pending.elem);
 
     neth = skb->neth;
+    uct_ud_neth_set_packet_type(ep, neth, id, UCT_UD_PACKET_FLAG_AM);
     uct_ud_neth_init_data(ep, neth);
-    uct_ud_neth_set_type_am(ep, neth, id);
     uct_ud_neth_ack_req(ep, neth);
 
     *skb_p = skb;
