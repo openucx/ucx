@@ -436,7 +436,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         return;
     }
 
-    ucs_trace("ep %p: remote connected", ep);
+    ucs_trace("ep %p: remote connected, ep_cfg[%u]", ep, ep->cfg_index);
     if (!(ep->flags & UCP_EP_FLAG_CLOSED)) {
         /* set REMOTE_CONNECTED flag if an EP is not closed, otherwise -
          * just make UCT EPs remote connected to remove WIREUP_EP for them
