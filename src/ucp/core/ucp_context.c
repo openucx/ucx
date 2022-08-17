@@ -179,6 +179,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Maximal number of devices on which a rendezvous operation may be executed in parallel",
    ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
 
+  {"MAX_RMA_LANES", NULL, "",
+   ucs_offsetof(ucp_context_config_t, max_rma_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_RMA_RAILS", "1",
+   "Maximal number of devices on which a RMA operation may be executed in parallel",
+   ucs_offsetof(ucp_context_config_t, max_rma_lanes), UCS_CONFIG_TYPE_UINT},
+
   {"MIN_RNDV_CHUNK_SIZE", "16k",
    "Minimum chunk size to split the message sent with rendezvous protocol on\n"
    "multiple rails. Must be greater than 0.",

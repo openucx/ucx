@@ -32,6 +32,7 @@ public:
     virtual void init() {
         if (enable_proto()) {
             modify_config("PROTO_ENABLE", "y");
+            modify_config("MAX_RMA_LANES", "2");
         }
         test_ucp_memheap::init();
     }

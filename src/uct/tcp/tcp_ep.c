@@ -1418,6 +1418,15 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
         if (ucs_likely(hdr->am_id < UCT_AM_ID_MAX)) {
             uct_tcp_ep_comp_recv_am(iface, ep, hdr);
             handled++;
+            if (ucs_unlikely(ep->rx.buf == NULL)) {
+                /* context was moved to new created EP */
+                ucs_assertv(ep->rx.offset == 0, "ep %p incorrect rx.offset "
+                            "value (must be zero): %zu", ep, ep->rx.offset);
+                ucs_assertv(ep->rx.length == 0, "ep %p incorrect rx.length "
+                            "value (must be zero): %zu", ep, ep->rx.length);
+
+                goto out;
+            }
         } else if (hdr->am_id == UCT_TCP_EP_PUT_REQ_AM_ID) {
             ucs_assert(hdr->length == sizeof(uct_tcp_ep_put_req_hdr_t));
             uct_tcp_ep_handle_put_req(ep, (uct_tcp_ep_put_req_hdr_t*)(hdr + 1),
