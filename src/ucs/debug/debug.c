@@ -272,10 +272,10 @@ static int load_file(struct backtrace_file *file)
         goto err_close;
     }
 
-    symcount = bfd_read_minisymbols(file->abfd, 0, (PTR)&file->syms, &size);
+    symcount = bfd_read_minisymbols(file->abfd, 0, (void *)&file->syms, &size);
     if (symcount == 0) {
         free(file->syms);
-        symcount = bfd_read_minisymbols(file->abfd, 1, (PTR)&file->syms, &size);
+        symcount = bfd_read_minisymbols(file->abfd, 1, (void *)&file->syms, &size);
     }
     if (symcount < 0) {
         goto err_close;
