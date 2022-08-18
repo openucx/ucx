@@ -103,6 +103,12 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, fc_hard_req_timeout),
      UCS_CONFIG_TYPE_TIME_UNITS},
 
+    {"NUM_DCI_CHANNELS", "1",
+     "Number of stream channels per DCI to be used in DCI-rand mode. A value "
+     "of 1 disables DCI multi-channel support.",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
+     UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -342,10 +348,11 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) {
         attr.super.max_inl_cqe[UCT_IB_DIR_RX] = 0;
-        attr.uidx             = htonl(dci_index) >> UCT_IB_UIDX_SHIFT;
-        attr.full_handshake   = full_handshake;
-        attr.rdma_wr_disabled = (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
-                                (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
+        attr.uidx                        = htonl(dci_index) >> UCT_IB_UIDX_SHIFT;
+        attr.full_handshake              = full_handshake;
+        attr.rdma_wr_disabled            = (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
+                                           (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
+        attr.log_num_dci_stream_channels = ucs_ilog2(iface->tx.num_dci_channels);
         status = uct_ib_mlx5_devx_create_qp(ib_iface,
                                             &iface->super.cq[UCT_IB_DIR_TX],
                                             &iface->super.cq[UCT_IB_DIR_RX],
@@ -1341,6 +1348,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     size_t sq_length;
     ucs_status_t status;
     unsigned tx_cq_size;
+    unsigned num_dci_channels;
 
     ucs_trace_func("");
 
@@ -1406,6 +1414,12 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_rand(self) ?
                          uct_dc_mlx5_iface_dci_do_rand_pending_tx :
                          uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
+
+    /* calculate num_dci_channels: select minimum from requested by runtime
+     * and supported by HCA, must be power of two */
+    num_dci_channels = ucs_roundup_pow2(ucs_max(config->num_dci_channels, 1));
+    self->tx.num_dci_channels = ucs_min(num_dci_channels,
+                                        UCS_BIT(md->log_max_dci_stream_channels));
 
     self->tx.dci_pool_release_bitmap = 0;
 

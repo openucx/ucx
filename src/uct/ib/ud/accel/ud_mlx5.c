@@ -95,7 +95,8 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
     uct_ib_mlx5_set_ctrl_seg(ctrl, iface->tx.wq.sw_pi, MLX5_OPCODE_SEND, 0,
                              iface->super.qp->qp_num,
-                             uct_ud_mlx5_tx_moderation(iface, ce_se), wqe_size);
+                             uct_ud_mlx5_tx_moderation(iface, ce_se), 0,
+                             wqe_size);
     uct_ud_mlx5_set_dgram_seg(dgram, &ep->peer_address.av,
                               ep->peer_address.is_global ?
                               &ep->peer_address.grh_av : NULL);

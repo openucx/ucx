@@ -14,6 +14,9 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
 
+/* max log value to store in uint8_t */
+#define UCT_IB_MLX5_MD_MAX_DCI_CHANNELS 8
+
 typedef struct {
     struct mlx5dv_devx_obj     *dvmr;
     int                        mr_num;
@@ -946,6 +949,12 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                 UCT_IB_MLX5DV_GET(query_hca_cap_out, out, syndrome));
         goto err_free;
     }
+
+    UCS_STATIC_ASSERT(UCS_MASK(UCT_IB_MLX5_MD_MAX_DCI_CHANNELS) <= UINT8_MAX);
+    md->log_max_dci_stream_channels = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                                                        log_max_dci_stream_channels);
+    md->log_max_dci_stream_channels = ucs_min(md->log_max_dci_stream_channels,
+                                              UCT_IB_MLX5_MD_MAX_DCI_CHANNELS);
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_msg) !=
         UCT_IB_MLX5_LOG_MAX_MSG_SIZE) {
