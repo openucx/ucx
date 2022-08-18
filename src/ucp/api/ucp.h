@@ -3811,10 +3811,10 @@ ucs_status_t ucp_dt_query(ucp_datatype_t datatype, ucp_datatype_attr_t *attr);
  * @brief Assures ordering between non-blocking operations
  *
  * This routine ensures ordering of non-blocking communication operations on
- * the @ref ucp_worker_h "UCP worker".  Communication operations issued on the
- * @a worker prior to this call are guaranteed to be completed before any
- * subsequent communication operations to the same @ref ucp_worker_h "worker"
- * which follow the call to @ref ucp_worker_fence "fence".
+ * the @ref ucp_worker_h "UCP worker". Communication operations issued on a
+ * particular endpoint created on the @a worker prior to this call are
+ * guaranteed to be completed before any communication operations issued on the
+ * same endpoint after this call.
  *
  * @note The primary difference between @ref ucp_worker_fence "ucp_worker_fence()"
  * and the @ref ucp_worker_flush_nb "ucp_worker_flush_nb()" is the fact the fence
