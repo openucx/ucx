@@ -1712,20 +1712,30 @@ out:
     return status;
 }
 
-void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
-                                   const uct_ib_md_config_t *md_config)
+static void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
+                                          const uct_ib_md_config_t *md_config)
 {
     if (md_config->mr_relaxed_order == UCS_CONFIG_ON) {
         if (IBV_ACCESS_RELAXED_ORDERING) {
             md->relaxed_order = 1;
         } else {
-            ucs_warn("relaxed order memory access requested but not supported");
+            ucs_warn("relaxed order memory access requested, but unsupported");
         }
     } else if (md_config->mr_relaxed_order == UCS_CONFIG_AUTO) {
         if (ucs_cpu_prefer_relaxed_order()) {
             md->relaxed_order = 1;
         }
     }
+}
+
+static void uct_ib_md_init_memh_size(uct_ib_md_t *md, size_t memh_base_size,
+                                     size_t mr_size)
+{
+    int num_mrs = md->relaxed_order ?
+                  2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
+                  1 /* UCT_IB_MR_DEFAULT */;
+
+    md->memh_struct_size = memh_base_size + (mr_size * num_mrs);
 }
 
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
@@ -1769,7 +1779,8 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
-                                   const uct_ib_md_config_t *md_config)
+                                   const uct_ib_md_config_t *md_config,
+                                   size_t memh_base_size, size_t mr_size)
 {
     ucs_status_t status;
 
@@ -1784,6 +1795,9 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
         md->config.odp.max_size = 0;
     }
+
+    uct_ib_md_parse_relaxed_order(md, md_config);
+    uct_ib_md_init_memh_size(md, memh_base_size, mr_size);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
@@ -1810,14 +1824,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         md->check_subnet_filter = 1;
     }
 
-    /* Allocate memory domain */
-    md->pd = ibv_alloc_pd(md->dev.ibv_context);
-    if (md->pd == NULL) {
-        ucs_error("ibv_alloc_pd() failed: %m");
-        status = UCS_ERR_NO_MEMORY;
-        goto err_cleanup_device;
-    }
-
     /* Check for GPU-direct support */
     md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
@@ -1841,12 +1847,12 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                   "is supported.",
                   uct_ib_device_name(&md->dev));
         status = UCS_ERR_UNSUPPORTED;
-        goto err_dealloc_pd;
+        goto err_cleanup_device;
     }
 
     status = uct_ib_md_parse_reg_methods(md, md_config);
     if (status != UCS_OK) {
-        goto err_dealloc_pd;
+        goto err_cleanup_device;
     }
 
     md->dev.max_zcopy_log_sge = INT_MAX;
@@ -1858,8 +1864,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     return UCS_OK;
 
-err_dealloc_pd:
-    ibv_dealloc_pd(md->pd);
 err_cleanup_device:
     uct_ib_device_cleanup(&md->dev);
 err_release_stats:
@@ -1868,21 +1872,67 @@ err:
     return status;
 }
 
+void uct_ib_md_close_common(uct_ib_md_t *md)
+{
+    uct_ib_md_release_reg_method(md);
+    uct_ib_device_cleanup(&md->dev);
+    UCS_STATS_NODE_FREE(md->stats);
+}
+
+void uct_ib_md_device_context_close(struct ibv_context *ctx)
+{
+    int ret = ibv_close_device(ctx);
+    if (ret != 0) {
+        ucs_warn("ibv_close_device(%s) of failed: %m",
+                 ibv_get_device_name(ctx->device));
+    }
+}
+
+uct_ib_md_t* uct_ib_md_alloc(size_t size, const char *name,
+                             struct ibv_context *ctx)
+{
+    uct_ib_md_t *md;
+
+    md = ucs_calloc(1, size, name);
+    if (md == NULL) {
+        ucs_error("failed to allocate memory for md");
+        goto err;
+    }
+
+    md->dev.ibv_context = ctx;
+    md->pd              = ibv_alloc_pd(md->dev.ibv_context);
+    if (md->pd == NULL) {
+        ucs_error("ibv_alloc_pd() failed: %m");
+        goto err_md_free;
+    }
+
+    return md;
+
+err_md_free:
+    ucs_free(md);
+err:
+    return NULL;
+}
+
+void uct_ib_md_free(uct_ib_md_t *md)
+{
+    int ret;
+
+    ret = ibv_dealloc_pd(md->pd);
+    /* Do not print a warning if PD deallocation failed with EINVAL, because
+     * it fails from time to time on BF/ARM (TODO: investigate) */
+    if ((ret != 0) && (errno != EINVAL)) {
+        ucs_warn("ibv_dealloc_pd() failed: %m");
+    }
+
+    ucs_free(md);
+}
+
 void uct_ib_md_close(uct_md_h uct_md)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
-    /* Must be done before md->ops->cleanup, since it can call functions from
-     * md->ops */
-    uct_ib_md_release_reg_method(md);
     md->ops->cleanup(md);
-    uct_ib_md_release_device_config(md);
-    uct_ib_device_cleanup_ah_cached(&md->dev);
-    ibv_dealloc_pd(md->pd);
-    uct_ib_device_cleanup(&md->dev);
-    ibv_close_device(md->dev.ibv_context);
-    UCS_STATS_NODE_FREE(md->stats);
-    ucs_free(md);
 }
 
 ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
@@ -1940,26 +1990,28 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     uct_ib_device_t *dev;
     ucs_status_t status;
     uct_ib_md_t *md;
-    int num_mrs;
-
-    md = ucs_calloc(1, sizeof(*md), "ib_md");
-    if (md == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
+    struct ibv_context *ctx;
 
     /* Open verbs context */
-    dev              = &md->dev;
-    dev->ibv_context = ibv_open_device(ibv_device);
-    if (dev->ibv_context == NULL) {
+    ctx = ibv_open_device(ibv_device);
+    if (ctx == NULL) {
         ucs_diag("ibv_open_device(%s) failed: %m",
                  ibv_get_device_name(ibv_device));
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
 
+    md = uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx);
+    if (md == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_context;
+    }
+
+    dev = &md->dev;
+
     status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
-        goto err_free_context;
+        goto err_md_free;
     }
 
     if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr)) {
@@ -1971,24 +2023,16 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     }
 
     md->ops = &uct_ib_verbs_md_ops;
-    status = uct_ib_md_parse_device_config(md, md_config);
+    status  = uct_ib_md_parse_device_config(md, md_config);
     if (status != UCS_OK) {
-        goto err_free_context;
+        goto err_device_config_release;
     }
 
-    uct_ib_md_parse_relaxed_order(md, md_config);
-    num_mrs = 1;      /* UCT_IB_MR_DEFAULT */
-
-    if (md->relaxed_order) {
-        ++num_mrs;    /* UCT_IB_MR_STRICT_ORDER */
-    }
-
-    md->memh_struct_size = sizeof(uct_ib_verbs_mem_t) +
-                          (sizeof(uct_ib_mr_t) * num_mrs);
-
-    status = uct_ib_md_open_common(md, ibv_device, md_config);
+    status  = uct_ib_md_open_common(md, ibv_device, md_config,
+                                    sizeof(uct_ib_verbs_mem_t),
+                                    sizeof(uct_ib_mr_t));
     if (status != UCS_OK) {
-        goto err_dev_cfg;
+        goto err_md_free;
     }
 
     md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
@@ -1997,19 +2041,35 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
     status = uct_ib_md_ece_check(md);
     if (status != UCS_OK) {
-        goto err_dev_cfg;
+        goto err_md_close_common;
     }
 
     *p_md = md;
     return UCS_OK;
 
-err_dev_cfg:
+err_md_close_common:
+    /* Coverity thinks that this goto label is unreachable, because "status"
+     * variable is always set to UCS_OK in case of ibv_set_ece() is unavailable
+     * in uct_ib_md_ece_check() */
+    /* coverity[unreachable] */
+    uct_ib_md_close_common(md);
+err_device_config_release:
     uct_ib_md_release_device_config(md);
+err_md_free:
+    uct_ib_md_free(md);
 err_free_context:
-    ibv_close_device(dev->ibv_context);
+    uct_ib_md_device_context_close(ctx);
 err:
-    ucs_free(md);
     return status;
+}
+
+void uct_ib_md_cleanup(uct_ib_md_t *md)
+{
+    struct ibv_context *ctx = md->dev.ibv_context;
+
+    uct_ib_md_close_common(md);
+    uct_ib_md_free(md);
+    uct_ib_md_device_context_close(ctx);
 }
 
 static void uct_ib_md_vfs_init(uct_md_h md)
@@ -2023,7 +2083,7 @@ static void uct_ib_md_vfs_init(uct_md_h md)
 
 static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .open                = uct_ib_verbs_md_open,
-    .cleanup             = (uct_ib_md_cleanup_func_t)ucs_empty_function,
+    .cleanup             = uct_ib_md_cleanup,
     .reg_key             = uct_ib_verbs_reg_key,
     .reg_indirect_key    = (uct_ib_md_reg_indirect_key_func_t)ucs_empty_function_return_unsupported,
     .dereg_key           = uct_ib_verbs_dereg_key,
