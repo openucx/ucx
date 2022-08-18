@@ -76,7 +76,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 {
     const char *dev_name = ibv_get_device_name(verbs->device);
 
-#if HAVE_DECL_MLX5DV_IS_SUPPORTED
+#ifdef HAVE_DEVX
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
     uct_rdmacm_cm_reserved_qpn_blk_t *blk;
@@ -110,7 +110,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
         }
     }
 
-#if HAVE_DECL_MLX5DV_IS_SUPPORTED
+#ifdef HAVE_DEVX
     if (cm->config.reserved_qpn == UCS_NO) {
         goto dummy_qp_ctx_init;
     }
@@ -285,7 +285,7 @@ uct_rdmacm_cm_reserved_qpn_blk_alloc(uct_rdmacm_cm_device_context_t *ctx,
 {
     ucs_status_t status = UCS_ERR_UNSUPPORTED;
 
-#if HAVE_DECL_MLX5DV_IS_SUPPORTED
+#ifdef HAVE_DEVX
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_reserved_qpn_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {};
     uct_rdmacm_cm_reserved_qpn_blk_t *blk;
@@ -337,7 +337,7 @@ err_free_blk:
 void uct_rdmacm_cm_reserved_qpn_blk_release(
         uct_rdmacm_cm_reserved_qpn_blk_t *blk)
 {
-#if HAVE_DECL_MLX5DV_IS_SUPPORTED
+#ifdef HAVE_DEVX
     ucs_assert(blk->refcount == 0);
 
     uct_ib_mlx5_devx_obj_destroy(blk->obj, "RESERVED_QPN");
