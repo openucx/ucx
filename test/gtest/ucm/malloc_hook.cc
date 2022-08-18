@@ -1046,12 +1046,13 @@ UCS_TEST_F(malloc_hook_cplusplus, remap_override_multi_threads) {
 typedef int (munmap_f_t)(void *addr, size_t len);
 
 UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
+    const size_t max_patch_size = 32;
+    std::vector<uint8_t> patched(max_patch_size, 0);
+    std::vector<uint8_t> origin(max_patch_size, 0);
     const char *symbol = "munmap";
     munmap_f_t *munmap_f;
     void *ptr;
     int res;
-    uint64_t UCS_V_UNUSED patched;
-    uint64_t UCS_V_UNUSED origin;
 
     /* set hook to mmap call */
     {
@@ -1061,7 +1062,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
         EXPECT_NE((intptr_t)munmap_f, 0);
 
         /* save partial body of patched function */
-        patched = *(uint64_t*)munmap_f;
+        memcpy(&patched[0], (const void*)munmap_f, max_patch_size);
 
         bistro_call_counter = 0;
         ptr                 = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
@@ -1084,7 +1085,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
     EXPECT_EQ(res, 0);
     EXPECT_EQ(bistro_call_counter, 0);  /* hook is not called */
     /* save partial body of restored function */
-    origin = *(uint64_t*)munmap_f;
+    memcpy(&origin[0], (const void*)munmap_f, max_patch_size);
 
 #if !defined (__powerpc64__)
     EXPECT_NE(patched, origin);
