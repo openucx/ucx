@@ -406,21 +406,19 @@ ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 
 unsigned ucp_worker_discard_uct_ep_progress(void *arg);
 
-static UCS_F_ALWAYS_INLINE void
-ucp_worker_flush_ops_count_inc(ucp_worker_h worker)
-{
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
-    ucs_assert(worker->flush_ops_count < UINT_MAX);
-    ++worker->flush_ops_count;
-}
-
 /* must be called with async lock held */
 static UCS_F_ALWAYS_INLINE void
-ucp_worker_flush_ops_count_dec(ucp_worker_h worker)
+ucp_worker_flush_ops_count_add(ucp_worker_h worker, int count)
 {
+    long flush_ops_count = (long)worker->flush_ops_count + count;
+
+    ucs_assertv((flush_ops_count >= 0) && (flush_ops_count < INT_MAX),
+                "worker->flush_ops_count=%d count=%d new_flush_ops_count=%ld",
+                worker->flush_ops_count, count, flush_ops_count);
+
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
-    ucs_assert(worker->flush_ops_count > 0);
-    --worker->flush_ops_count;
+
+    worker->flush_ops_count = flush_ops_count;
 }
 
 #endif

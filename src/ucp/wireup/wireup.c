@@ -419,14 +419,110 @@ out:
     return status;
 }
 
-void ucp_wireup_remote_connect_lanes(ucp_ep_h ep, int ready)
+static int ucp_ep_has_wireup_msg_pending(ucp_ep_h ucp_ep)
 {
+    ucp_wireup_ep_t *wireup_ep;
     ucp_lane_index_t lane;
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
-            ucp_wireup_ep_remote_connected(ucp_ep_get_lane(ep, lane), ready);
+    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
+        if ((wireup_ep != NULL) && (wireup_ep->pending_count != 0)) {
+            return 1;
         }
+    }
+
+    return 0;
+}
+
+static void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep)
+{
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+
+    /* Use one-shot mode to avoid the need to save prog_id */
+    uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                      ucp_wireup_eps_progress, ucp_ep,
+                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+    ucp_worker_signal_internal(ucp_ep->worker);
+}
+
+/*
+ * We switch the endpoints in this function (instead in wireup code) since
+ * this is guaranteed to run from the main thread.
+ */
+unsigned ucp_wireup_eps_progress(void *arg)
+{
+    ucp_ep_h ucp_ep = arg;
+    ucp_wireup_ep_t *wireup_ep;
+    ucs_queue_head_t tmp_pending_queue;
+    int pending_count;
+    ucp_lane_index_t lane;
+
+    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+
+    /* If we still have pending wireup messages, send them out first */
+    if (ucp_ep_has_wireup_msg_pending(ucp_ep)) {
+        /* Reschedule the progress since it's one-shot */
+        ucp_wireup_eps_progress_sched(ucp_ep);
+        goto out_unblock;
+    }
+
+    /* If an error happened on the endpoint (but perhaps the deferred error handler,
+     * ucp_worker_iface_err_handle_progress(), was not called yet, avoid changing
+     * ep state, and let the error handler take care of cleanup.
+     */
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        ucs_trace("ep %p: not switching wireup eps to ready state because of "
+                  "error", ucp_ep);
+        goto out_unblock;
+    }
+
+    /* Move wireup pending queue to temporary queue and remove references to
+     * the wireup progress function
+     */
+    ucs_queue_head_init(&tmp_pending_queue);
+    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
+        if (wireup_ep == NULL) {
+            continue;
+        }
+
+        ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+        ucs_assert(wireup_ep->super.uct_ep != NULL);
+
+        ucs_trace("ep %p: switching wireup_ep %p to ready state", ucp_ep,
+                  wireup_ep);
+        pending_count = ucp_wireup_ep_pending_extract(wireup_ep,
+                                                      &tmp_pending_queue);
+        ucp_worker_flush_ops_count_add(ucp_ep->worker, -pending_count);
+
+        /* Switch to real transport and destroy proxy endpoint (aux_ep as well) */
+        ucp_proxy_ep_replace(&wireup_ep->super);
+    }
+
+    /* Replay pending requests */
+    ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+    return 1;
+
+out_unblock:
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+    return 0;
+}
+
+void ucp_wireup_update_flags(ucp_ep_h ucp_ep, uint32_t new_flags)
+{
+    ucp_lane_index_t lane;
+    ucp_wireup_ep_t *wireup_ep;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
+        if (wireup_ep == NULL) {
+            continue;
+        }
+
+        ucs_trace("ep %p: wireup_ep=%p flags=0x%x new_flags=0x%x", ucp_ep,
+                  wireup_ep, wireup_ep->flags, new_flags);
+        wireup_ep->flags |= new_flags;
     }
 }
 
@@ -447,8 +543,10 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
     }
 
-    ucp_wireup_remote_connect_lanes(ep, 1);
-
+    ucp_wireup_update_flags(ep,
+                            UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED |
+                            UCP_WIREUP_EP_FLAG_READY);
+    ucp_wireup_eps_progress_sched(ep);
     ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
 }
 
@@ -876,8 +974,14 @@ ucp_wireup_replay_pending_request(uct_pending_req_t *self, ucp_ep_h ucp_ep)
 
     if ((req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
         (ucp_ep->cfg_index != req->send.proto_config->ep_cfg_index)) {
+        ucp_trace_req(req, "replay proto %s",
+                      req->send.proto_config->proto->name);
         ucp_proto_request_restart(req);
     } else {
+        ucp_trace_req(req, "replay proto %s lane %d",
+                      (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) ?
+                      req->send.proto_config->proto->name : "N/A",
+                      req->send.lane);
         ucp_request_send(req);
     }
 }
@@ -887,10 +991,12 @@ void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
 {
     uct_pending_req_t *uct_req;
 
+    ucp_ep->flags |= UCP_EP_FLAG_BLOCK_FLUSH;
     /* Replay pending requests */
     ucs_queue_for_each_extract(uct_req, tmp_pending_queue, priv, 1) {
         ucp_wireup_replay_pending_request(uct_req, ucp_ep);
     }
+    ucp_ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
 }
 
 static void

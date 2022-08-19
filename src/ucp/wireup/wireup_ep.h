@@ -54,7 +54,6 @@ struct ucp_wireup_ep {
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
-    uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
     unsigned                  ep_init_flags; /**< UCP wireup EP init flags */
     /**< TLs which are available on client side resolved device */
     ucp_tl_bitmap_t           cm_resolve_tl_bitmap;
@@ -118,8 +117,6 @@ uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 
 void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep);
 
-void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep, int ready);
-
 int ucp_wireup_ep_test(uct_ep_h uct_ep);
 
 int ucp_wireup_aux_ep_is_owner(ucp_wireup_ep_t *wireup_ep, uct_ep_h owned_ep);
@@ -133,5 +130,8 @@ uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep);
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
 
 ucp_wireup_ep_t *ucp_wireup_ep(uct_ep_h uct_ep);
+
+unsigned ucp_wireup_ep_pending_extract(ucp_wireup_ep_t *wireup_ep,
+                                       ucs_queue_head_t *queue);
 
 #endif
