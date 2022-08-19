@@ -413,12 +413,19 @@ static int ucp_ep_set_failed_remove_filter(const ucs_callbackq_elem_t *elem,
     return 0;
 }
 
+static int ucp_ep_wireup_eps_progress_filter(const ucs_callbackq_elem_t *elem,
+                                             void *arg)
+{
+    return (elem->cb == ucp_wireup_eps_progress) && (elem->arg == arg);
+}
+
 static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     if (ucp_wireup_msg_ack_cb_pred(elem, arg) ||
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
-        ucp_ep_set_failed_remove_filter(elem, arg)) {
+        ucp_ep_set_failed_remove_filter(elem, arg) ||
+        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
         return 1;
     }
 

@@ -185,10 +185,8 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
                                         ucs_queue_head_t *tmp_pending_queue);
 
-/* Set lanes which are wireup_ep as remote connected.
-   If 'ready' is true - also mark them as ready and switch them to the real
-   transport uct_ep in the next progress call */
-void ucp_wireup_remote_connect_lanes(ucp_ep_h ep, int ready);
+/* add flags to all wireup_ep->flags */
+void ucp_wireup_update_flags(ucp_ep_h ep, uint32_t new_flags);
 
 void ucp_wireup_remote_connected(ucp_ep_h ep);
 
@@ -204,6 +202,8 @@ ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_lane_index_t *lanes2remote);
 
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
+
+unsigned ucp_wireup_eps_progress(void *arg);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {
