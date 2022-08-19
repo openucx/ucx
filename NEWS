@@ -11,6 +11,16 @@
 ### Features:
 ### Bugfixes:
 
+## 1.13.1-rc1 (August 22, 2022)
+#### Bugfixes
+* Fixed flow control protocol in DC transport
+* Fixed reordering of pending operations in DC transport
+* Fixed relaxed order detection in IB transports
+* Fixed build configuration and IB ops references
+* Fixed bandwidth calculation during wireup phase
+* Fixed TCP transport server port selection
+* Minor fixes in CI testing
+
 ## 1.13.0 (July 7, 2022)
 #### Features
 ##### Core
