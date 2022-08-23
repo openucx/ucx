@@ -23,6 +23,12 @@ ucp_am_eager_fill_reply_footer(ucp_am_reply_ftr_t *ftr, ucp_request_t *req)
     ftr->ep_id = ucp_send_request_get_ep_remote_id(req);
 }
 
+static size_t ucp_am_eager_single_hdr_size(ucp_operation_id_t op_id)
+{
+    return sizeof(ucp_am_hdr_t) +
+           ((op_id == UCP_OP_ID_AM_SEND) ? 0 : sizeof(ucp_am_reply_ftr_t));
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
 {
@@ -96,7 +102,7 @@ ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_short),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
-        .super.hdr_size      = sizeof(ucp_am_hdr_t),
+        .super.hdr_size      = ucp_am_eager_single_hdr_size(op_id),
         .super.send_op       = UCT_EP_OP_AM_SHORT,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
@@ -229,7 +235,7 @@ static ucs_status_t ucp_am_eager_single_bcopy_proto_init_common(
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.hdr_size      = sizeof(ucp_am_hdr_t),
+        .super.hdr_size      = ucp_am_eager_single_hdr_size(op_id),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
@@ -315,7 +321,7 @@ static ucs_status_t ucp_am_eager_single_zcopy_proto_init_common(
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
-        .super.hdr_size      = sizeof(ucp_am_hdr_t),
+        .super.hdr_size      = ucp_am_eager_single_hdr_size(op_id),
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |

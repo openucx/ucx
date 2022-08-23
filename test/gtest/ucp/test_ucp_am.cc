@@ -847,6 +847,66 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 
+class test_ucp_am_nbx_single_multi_reply : public test_ucp_am_nbx {
+public:
+    test_ucp_am_nbx_single_multi_reply()
+    {
+        modify_config("RNDV_THRESH", "inf");
+    }
+
+    bool am_lane_has_caps(uint64_t caps);
+
+protected:
+    virtual unsigned get_send_flag() const
+    {
+        return UCP_AM_SEND_FLAG_REPLY;
+    }
+};
+
+bool test_ucp_am_nbx_single_multi_reply::am_lane_has_caps(uint64_t caps)
+{
+    ucp_ep_config_key_t key  = ucp_ep_config(sender().ep())->key;
+    ucp_lane_index_t am_lane = key.am_lane;
+
+    if (am_lane == UCP_NULL_LANE) {
+        return false;
+    }
+
+    uct_iface_attr_t *iface_attr = ucp_worker_iface_get_attr(
+            sender().worker(), key.lanes[am_lane].rsc_index);
+
+    return ucs_test_all_flags(iface_attr->cap.flags, caps);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_single_multi_reply, bcopy, "ZCOPY_THRESH=inf")
+{
+    if (!am_lane_has_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
+        UCS_TEST_SKIP_R("am_bcopy is not supported");
+    }
+
+    size_t bcopy_fragment_size = fragment_size() - sizeof(ucp_am_reply_ftr_t);
+    test_am_send_recv(bcopy_fragment_size + 1, 0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_single_multi_reply, zcopy, "ZCOPY_THRESH=1")
+{
+    if (!am_lane_has_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
+        UCS_TEST_SKIP_R("am_zcopy is not supported");
+    }
+
+    size_t zcopy_fragment_size = ucp_ep_config(sender().ep())->am.max_zcopy -
+                                 sizeof(ucp_am_hdr_t) -
+                                 sizeof(ucp_am_reply_ftr_t);
+    test_am_send_recv(zcopy_fragment_size + 1, 0);
+}
+
+/* Tests check correctness of AM API when using UCP_AM_SEND_FLAG_REPLY flag.
+ * Tests send messages with size equal to (fragment size + 1). The size should
+ * be less than (fragment size + reply footer size) to check if the switch
+ * between single and multi protocols is correct. */
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_single_multi_reply)
+
+
 class test_ucp_am_nbx_send_flag : public test_ucp_am_nbx {
 public:
     virtual ucs_status_t
