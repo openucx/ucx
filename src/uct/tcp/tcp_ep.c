@@ -483,7 +483,7 @@ static unsigned uct_tcp_ep_destroy_progress(void *arg)
     return 1;
 }
 
-void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
+void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, ucs_status_t status)
 {
     uct_tcp_iface_t *iface   = ucs_derived_of(ep->super.super.iface,
                                               uct_tcp_iface_t);
@@ -505,7 +505,7 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
                   ep->flags);
         uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
         uct_iface_handle_ep_err(ep->super.super.iface, &ep->super.super,
-                                UCS_ERR_ENDPOINT_TIMEOUT);
+                                status);
     } else {
         ep->flags |= UCT_TCP_EP_FLAG_FAILED;
         uct_worker_progress_register_safe(&iface->super.worker->super,
@@ -628,7 +628,7 @@ err:
         /* if this is not the first connection establishment retry (i.e. it
          * is not called from uct_ep_create()/uct_ep_connect_to_ep()), set
          * EP as failed */
-        uct_tcp_ep_set_failed(ep);
+        uct_tcp_ep_set_failed(ep, UCS_ERR_ENDPOINT_TIMEOUT);
     }
     goto out;
 }
@@ -670,7 +670,7 @@ void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep)
      * internal EP in order to destroy it from progress (to not dereference
      * already destroyed EP) */
     ucs_assert(!(from_ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX));
-    uct_tcp_ep_set_failed(from_ep);
+    uct_tcp_ep_set_failed(from_ep, UCS_ERR_ENDPOINT_TIMEOUT);
 }
 
 static ucs_status_t uct_tcp_ep_connect(uct_tcp_ep_t *ep)
@@ -986,7 +986,7 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep, ucs_status_t status
         uct_tcp_ep_tx_completed(ep, ep->tx.length - ep->tx.offset);
     }
 
-    uct_tcp_ep_set_failed(ep);
+    uct_tcp_ep_set_failed(ep, UCS_ERR_CONNECTION_RESET);
 }
 
 static inline ucs_status_t uct_tcp_ep_handle_send_err(uct_tcp_ep_t *ep,
