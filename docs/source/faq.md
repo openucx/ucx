@@ -78,11 +78,11 @@ for various features accordingly.
 If some of the modules UCX was built with are not found during runtime, they will
 be silently disabled.
 
-* **Basic shared memory and TCP support** - always enabled
-* **Optimized shared memory** - requires knem or xpmem drivers. On modern kernels also CMA (cross-memory-attach) mechanism will be used.
-* **RDMA support** - requires rdma-core or libibverbs library.
-* **NVIDIA GPU support** - requires Cuda drives
-* **AMD GPU support** - requires ROCm drivers 
+* **Basic shared memory and TCP support** - always enabled.
+* **Optimized shared memory** - requires knem or xpmem drivers. On modern kernels, CMA (cross-memory-attach) will also be used if available.
+* **RDMA support** - requires rdma-core or libibverbs library. UCX >= 1.12.0 requires rdma-core >= 28.0 or MLNX_OFED >= 5.0.
+* **NVIDIA GPU support** - requires CUDA >= 6.0. UCX >= 1.8 requires CUDA with nv_peer_mem support.
+* **AMD GPU support** - requires ROCm version >= 4.0.
 
 
 #### Does UCX depend on an external runtime environment?
