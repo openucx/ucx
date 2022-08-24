@@ -499,34 +499,27 @@ enum uct_iface_event_types {
  * @brief  Flush modifiers.
  */
 enum uct_flush_flags {
-    UCT_FLUSH_FLAG_LOCAL    = 0,            /**< Guarantees that the data
-                                                 transfer is completed but the
-                                                 target buffer may not be
-                                                 updated yet. */
-    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0),   /**< The library will make a best
-                                                 effort attempt to cancel all
-                                                 uncompleted operations.
-                                                 However, there is a chance that
-                                                 some operations will not be
-                                                 canceled in which case the user
-                                                 will need to handle their
-                                                 completions through
-                                                 the relevant callbacks.
-                                                 After @ref uct_ep_flush
-                                                 with this flag is completed,
-                                                 the endpoint will be set to
-                                                 error state, and it becomes
-                                                 unusable for send operations
-                                                 and should be destroyed. */
-    UCT_FLUSH_FLAG_REMOTE   = UCS_BIT(1)    /**< Guarantees that all previous
-                                                 UCP memory update operations
-                                                 (put, atomics, etc.) are
-                                                 completed, the target memory
-                                                 of these operation was updated,
-                                                 and the updated memory is
-                                                 globally visible for all
-                                                 processing elements in the
-                                                 system. */
+    /** Guarantees that the data transfer is completed but the target buffer
+        may not be updated yet. */ 
+    UCT_FLUSH_FLAG_LOCAL    = 0,
+
+    /** The library will make a best effort attempt to cancel all uncompleted
+        operations.  However, there is a chance that some operations will not
+        be canceled in which case the user will need to handle their
+        completions through the relevant callbacks. After @ref uct_ep_flush
+        with this flag is completed, the endpoint will be set to error state,
+        and it becomes unusable for send operations and should be destroyed. */ 
+    UCT_FLUSH_FLAG_CANCEL   = UCS_BIT(0),
+
+    /** Guarantees that all previous UCP memory update operations (put, atomics,
+        etc.) are completed, the target memory of these operation was updated,
+        and the updated memory is globally visible for all processing elements
+        in the system. */ 
+    UCT_FLUSH_FLAG_REMOTE   = UCS_BIT(1),
+
+    /** Pause EP till remote flush is completed. All outgoing operations will
+        be declained with NO_RESOURCES symptome */
+    UCT_FLUSH_FLAG_PAUSE    = UCS_BIT(2) | UCT_FLUSH_FLAG_REMOTE 
 };
 
 

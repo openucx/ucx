@@ -1245,6 +1245,8 @@ static uct_iface_ops_t uct_dc_mlx5_iface_tl_ops = {
     .ep_flush                 = uct_dc_mlx5_ep_flush,
     .ep_fence                 = uct_dc_mlx5_ep_fence,
     .ep_check                 = uct_dc_mlx5_ep_check,
+    .ep_pause                 = uct_dc_mlx5_ep_pause,
+    .ep_resume                = uct_dc_mlx5_ep_resume,
 #if IBV_HW_TM
     .ep_tag_eager_short       = uct_dc_mlx5_ep_tag_eager_short,
     .ep_tag_eager_bcopy       = uct_dc_mlx5_ep_tag_eager_bcopy,

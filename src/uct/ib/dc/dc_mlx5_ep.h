@@ -53,9 +53,13 @@ enum uct_dc_mlx5_ep_flags {
     /* Flush remote operation should be invoked */
     UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(9),
 
+    /* EP is in paused state: all outgoing RMA operations shold be declained
+     * with NO_RESOURCES reason */
+    UCT_DC_MLX5_EP_FLAG_PAUSED              = UCS_BIT(10),
+
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(10)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(11)
 #else
     UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
 #endif
@@ -158,6 +162,10 @@ ucs_status_t uct_dc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                            uint32_t value, uint32_t *result,
                                            uint64_t remote_addr, uct_rkey_t rkey,
                                            uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_pause(uct_ep_h tl_ep);
+
+ucs_status_t uct_dc_mlx5_ep_resume(uct_ep_h tl_ep);
 
 #if IBV_HW_TM
 ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
@@ -377,7 +385,8 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
 static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
-    return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
+    return (!(ep->flags & (UCT_DC_MLX5_EP_FLAG_TX_WAIT |
+                           UCT_DC_MLX5_EP_FLAG_PAUSED))) &&
            uct_rc_fc_has_resources(&iface->super.super, &ep->fc) &&
            uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci);
 }
@@ -654,6 +663,12 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
  */
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
     { \
+        if (ucs_unlikely((_ep)->flags & UCT_DC_MLX5_EP_FLAG_PAUSED)) { \
+            if ((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI) { \
+                uct_dc_mlx5_iface_dci_put(_iface, (_ep)->dci); \
+            } \
+            return UCS_ERR_NO_RESOURCE; \
+        } \
         UCT_DC_MLX5_CHECK_DCI_RES(_iface, _ep) \
         UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
                                        UCS_ERR_NO_RESOURCE) \

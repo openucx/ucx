@@ -286,6 +286,10 @@ typedef int          (*uct_iface_is_reachable_func_t)(const uct_iface_h iface,
                                                       const uct_device_addr_t *dev_addr,
                                                       const uct_iface_addr_t *iface_addr);
 
+typedef ucs_status_t (*uct_ep_pause_func_t)(uct_ep_h ep);
+
+typedef ucs_status_t (*uct_ep_resume_func_t)(uct_ep_h ep);
+
 
 /**
  * Transport interface operations.
@@ -349,6 +353,10 @@ typedef struct uct_iface_ops {
     uct_ep_connect_to_ep_func_t         ep_connect_to_ep;
     uct_iface_accept_func_t             iface_accept;
     uct_iface_reject_func_t             iface_reject;
+
+    /* endpoint - pause/resume */
+    uct_ep_pause_func_t                 ep_pause;
+    uct_ep_resume_func_t                ep_resume;
 
     /* interface - synchronization */
     uct_iface_flush_func_t              iface_flush;

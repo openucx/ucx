@@ -696,7 +696,8 @@ static uint32_t uct_dc_mlx5_flush_remote_rkey(uct_dc_mlx5_ep_t *ep)
 /* ep_flush_remote generates RDMA GET operation over special indirect rkey by
  * address NULL */
 static ucs_status_t
-uct_dc_mlx5_ep_flush_remote(uct_dc_mlx5_ep_t *ep, uct_completion_t *comp)
+uct_dc_mlx5_ep_flush_remote(uct_dc_mlx5_ep_t *ep, uct_completion_t *comp,
+                            int pause)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
@@ -718,6 +719,9 @@ uct_dc_mlx5_ep_flush_remote(uct_dc_mlx5_ep_t *ep, uct_completion_t *comp)
                                  flush_rkey, desc, 0, 0, desc + 1, NULL);
 
     ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE;
+    if (pause) {
+        ep->flags |= UCT_DC_MLX5_EP_FLAG_PAUSED;
+    }
 
     return UCS_INPROGRESS;
 }
@@ -729,6 +733,8 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                                 uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uint8_t pool_index         = uct_dc_mlx5_ep_pool_index(ep);
+    int pause                  = ucs_test_all_flags(flags,
+                                                    UCT_FLUSH_FLAG_PAUSE);
     ucs_status_t status;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
@@ -748,8 +754,8 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     if (flags & UCT_FLUSH_FLAG_REMOTE) {
         UCT_RC_IFACE_CHECK_FLUSH_REMOTE(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY,
                                         ep, &iface->super.super, dcx);
-        if (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE) {
-            return uct_dc_mlx5_ep_flush_remote(ep, comp);
+        if (pause || (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE)) {
+            return uct_dc_mlx5_ep_flush_remote(ep, comp, pause);
         }
     }
 
@@ -777,6 +783,56 @@ out:
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
     return uct_rc_txqp_add_flush_comp(&iface->super.super, &ep->super, txqp,
                                       comp, txwq->sig_pi);
+}
+
+ucs_status_t uct_dc_mlx5_ep_pause(uct_ep_h tl_ep)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uint8_t pool_index         = uct_dc_mlx5_ep_pool_index(ep);
+
+    ucs_assert(!(ep->flags & UCT_DC_MLX5_EP_FLAG_PAUSED));
+
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+            goto out;
+        }
+
+        return UCS_ERR_NO_RESOURCE; /* there are ops in penging queue, wait
+                                       it */
+    }
+
+    if (!uct_dc_mlx5_iface_has_tx_resources(iface) ||
+        !uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+out:
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_PAUSED;
+    return UCS_OK;
+}
+
+ucs_status_t uct_dc_mlx5_ep_resume(uct_ep_h tl_ep)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    ucs_arbiter_t *waitq;
+    ucs_arbiter_group_t *group;
+    uint8_t pool_index;
+
+    ucs_assert(ep->flags & UCT_DC_MLX5_EP_FLAG_PAUSED);
+
+    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_PAUSED;
+
+    /* To preserve ordering we have to dispatch all pending
+     * operations if current fc_wnd is <= 0 */
+    uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
+    ucs_arbiter_group_schedule(waitq, group);
+    uct_dc_mlx5_iface_progress_pending(iface, pool_index);
+    uct_dc_mlx5_iface_check_tx(iface);
+    return UCS_OK;
 }
 
 ucs_status_t uct_dc_mlx5_ep_qp_to_err(uct_dc_mlx5_ep_t *ep)
