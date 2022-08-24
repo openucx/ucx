@@ -1343,8 +1343,11 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
 {
     ucp_wireup_dev_usage_count *dev_count = arg;
 
-    /* best single MTU bandwidth */
-    double size = wiface->attr.cap.am.max_bcopy;
+    /* Best single MTU bandwidth, take into account remote segment size, which
+     * can be smaller than the local value (supported with worker address v2)
+     */
+    double size = ucs_min(wiface->attr.cap.am.max_bcopy,
+                          remote_addr->iface_attr.seg_size);
     double t    = (size /
                    ucp_wireup_iface_avail_bandwidth(
                        wiface, remote_addr, dev_count->local,
