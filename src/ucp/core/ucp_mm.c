@@ -1022,6 +1022,30 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
     ucp_rndv_frag_free_mpools(mp, chunk);
 }
 
+ucs_status_t
+ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_index_p)
+{
+    ucs_status_t status;
+    ucp_mem_h memh;
+
+    if (!context->alloc_md_index_initialized) {
+        /* Allocate dummy 1-byte buffer to get the expected md_map */
+        status = ucp_memh_alloc(context, NULL, 1, UCS_MEMORY_TYPE_HOST,
+                                UCT_MD_MEM_ACCESS_ALL, "get_alloc_md_map",
+                                &memh);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        context->alloc_md_index_initialized = 1;
+        context->alloc_md_index             = memh->alloc_md_index;
+        ucp_memh_put(context, memh);
+    }
+
+    *md_index_p = context->alloc_md_index;
+    return UCS_OK;
+}
+
 void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)
 {
     size_t min_page_size, max_page_size;

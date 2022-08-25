@@ -19,6 +19,13 @@
 #define UCP_PROTO_RNDV_ATP_NAME "ATP"
 
 
+/* Context for packing ATP message */
+typedef struct {
+    ucp_request_t *req;     /* rndv/put request */
+    size_t        ack_size; /* Size to send in ATP message */
+} ucp_proto_rndv_put_atp_pack_ctx_t;
+
+
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the
@@ -48,6 +55,23 @@ typedef struct {
 } ucp_proto_rndv_ctrl_priv_t;
 
 
+/**
+ * RTR protocol callback, which is called when all incoming data is filled to
+ * the request send buffer.
+ *
+ * @param in_buffer Whether data is already in user buffer (dt_iter), or in the
+ * buffer that we published as the remote address.
+ */
+typedef void (*ucp_proto_rndv_rtr_data_received_cb_t)(ucp_request_t *req,
+                                                      int in_buffer);
+
+typedef struct {
+    ucp_proto_rndv_ctrl_priv_t            super;
+    uct_pack_callback_t                   pack_cb;
+    ucp_proto_rndv_rtr_data_received_cb_t data_received;
+} ucp_proto_rndv_rtr_priv_t;
+
+
 /*
  * Private data for rendezvous protocol which sends an acknowledgement packet
  */
@@ -71,6 +95,17 @@ typedef struct {
      */
     ucp_proto_multi_priv_t mpriv;
 } ucp_proto_rndv_bulk_priv_t;
+
+
+typedef struct ucp_proto_rndv_put_priv {
+    uct_completion_callback_t  put_comp_cb;
+    uct_completion_callback_t  atp_comp_cb;
+    uint8_t                    stage_after_put;
+    ucp_lane_map_t             flush_map;
+    ucp_lane_map_t             atp_map;
+    ucp_lane_index_t           atp_num_lanes;
+    ucp_proto_rndv_bulk_priv_t bulk;
+} ucp_proto_rndv_put_priv_t;
 
 
 /**
@@ -98,6 +133,9 @@ typedef struct {
 
     /* Name of the control message, e.g "RTS" */
     const char                     *ctrl_msg_name;
+
+    /* MD on which the buffer is allocated */
+    ucp_md_index_t                 alloc_md_index;
 
 } ucp_proto_rndv_ctrl_init_params_t;
 
@@ -163,5 +201,7 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack);
 
 
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack);
+
+size_t ucp_proto_rndv_put_common_pack_atp(void *dest, void *arg);
 
 #endif

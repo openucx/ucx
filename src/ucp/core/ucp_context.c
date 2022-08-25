@@ -1427,14 +1427,15 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucs_status_t status;
     unsigned max_mds;
 
-    context->tl_cmpts                 = NULL;
-    context->num_cmpts                = 0;
-    context->tl_mds                   = NULL;
-    context->num_mds                  = 0;
-    context->tl_rscs                  = NULL;
-    context->num_tls                  = 0;
-    context->mem_type_mask            = 0;
-    context->num_mem_type_detect_mds  = 0;
+    context->tl_cmpts                   = NULL;
+    context->num_cmpts                  = 0;
+    context->tl_mds                     = NULL;
+    context->num_mds                    = 0;
+    context->alloc_md_index_initialized = 0;
+    context->tl_rscs                    = NULL;
+    context->num_tls                    = 0;
+    context->mem_type_mask              = 0;
+    context->num_mem_type_detect_mds    = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
         context->reg_md_map[i]   = 0;

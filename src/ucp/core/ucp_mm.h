@@ -88,6 +88,9 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
+ucs_status_t
+ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_index_p);
+
 
 /**
  * Update memory registration to a specified set of memory domains.

@@ -16,28 +16,12 @@
 #include <ucp/proto/proto_single.inl>
 
 
-/**
- * RTR protocol callback, which is called when all incoming data is filled to
- * the request send buffer.
- *
- * @param in_buffer Whether data is already in user buffer (dt_iter), or in the
- * buffer that we published as the remote address.
- */
-typedef void (*ucp_proto_rndv_rtr_data_received_cb_t)(ucp_request_t *req,
-                                                      int in_buffer);
-
-typedef struct {
-    ucp_proto_rndv_ctrl_priv_t            super;
-    uct_pack_callback_t                   pack_cb;
-    ucp_proto_rndv_rtr_data_received_cb_t data_received;
-} ucp_proto_rndv_rtr_priv_t;
-
-
 static ucs_status_t
 ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
                                uint64_t rndv_modes, size_t max_length,
-                               ucs_linear_func_t unpack_time,
+                               unsigned flags, ucs_linear_func_t unpack_time,
                                ucp_proto_perf_node_t *unpack_perf_node,
+                               ucp_md_index_t alloc_md_index,
                                ucs_memory_type_t mem_type,
                                ucs_sys_device_t sys_dev)
 {
@@ -56,14 +40,15 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
         .super.hdr_size      = sizeof(ucp_rndv_rtr_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+        .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .unpack_time         = unpack_time,
         .unpack_perf_node    = unpack_perf_node,
         .perf_bias           = 0.0,
         .mem_info.type       = mem_type,
         .mem_info.sys_dev    = sys_dev,
-        .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME
+        .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
+        .alloc_md_index      = alloc_md_index
     };
     ucs_status_t status;
 
@@ -198,7 +183,8 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
     }
 
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, SIZE_MAX,
-                                            UCS_LINEAR_FUNC_ZERO, NULL,
+                                            0, UCS_LINEAR_FUNC_ZERO, NULL,
+                                            UCP_NULL_RESOURCE,
                                             init_params->select_param->mem_type,
                                             init_params->select_param->sys_dev);
     if (status != UCS_OK) {
@@ -334,8 +320,10 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_rndv_rtr_priv_t *rpriv = init_params->priv;
     const uint64_t rndv_modes        = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
+    ucp_context_h context            = init_params->worker->context;
     ucp_proto_perf_node_t *unpack_perf_node;
     ucs_linear_func_t unpack_time;
+    ucp_md_index_t md_index;
     ucp_md_map_t md_map;
     ucs_status_t status;
     size_t frag_size;
@@ -357,9 +345,15 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
         return status;
     }
 
+    status = ucp_mm_get_alloc_md_index(context, &md_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
+                                            UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR,
                                             unpack_time, unpack_perf_node,
-                                            UCS_MEMORY_TYPE_HOST,
+                                            md_index, UCS_MEMORY_TYPE_HOST,
                                             UCS_SYS_DEVICE_ID_UNKNOWN);
     ucp_proto_perf_node_deref(&unpack_perf_node);
 

@@ -58,11 +58,13 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
-        /* Check the memory domain requires remote key, and capable of
-         * registering the memory type
-         */
-        if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) ||
-            !(md_attr->cap.reg_mem_types & UCS_BIT(params->mem_info.type))) {
+        if (!((params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) &&
+              (params->alloc_md_index == md_index)) &&
+            /* Check the memory domain requires remote key, and capable of
+             * registering the memory type
+             */
+            (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) ||
+             !(md_attr->cap.reg_mem_types & UCS_BIT(params->mem_info.type)))) {
             continue;
         }
 
@@ -385,7 +387,8 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .mem_info.type       = init_params->select_param->mem_type,
         .mem_info.sys_dev    = init_params->select_param->sys_dev,
-        .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME
+        .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
+        .alloc_md_index      = UCP_NULL_RESOURCE
     };
 
     return ucp_proto_rndv_ctrl_init(&params);
@@ -603,10 +606,12 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
     ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
                (op_id < UCP_OP_ID_RNDV_LAST));
 
+    req->send.rndv.rkey_buffer = NULL;
+
     if (rkey_length > 0) {
         ucs_assert(rkey_buffer != NULL);
-        status = ucp_ep_rkey_unpack_reachable(ep, rkey_buffer, rkey_length,
-                                              &rkey);
+        status = ucp_ep_rkey_unpack_reg_reachable(ep, rkey_buffer, rkey_length,
+                                                  &rkey);
         if (status != UCS_OK) {
             goto err;
         }
@@ -630,7 +635,8 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
         goto err_destroy_rkey;
     }
 
-    req->send.rndv.rkey = rkey;
+    req->send.rndv.rkey        = rkey;
+    req->send.rndv.rkey_buffer = (void*)rkey_buffer;
 
     ucp_trace_req(req,
                   "%s rva 0x%" PRIx64 " length %zd rreq_id 0x%" PRIx64 " with protocol %s",
@@ -867,4 +873,11 @@ void ucp_proto_rndv_bulk_request_init_lane_idx(
     }
 
     req->send.multi_lane_idx = lane_idx - 1;
+}
+
+size_t ucp_proto_rndv_put_common_pack_atp(void *dest, void *arg)
+{
+    ucp_proto_rndv_put_atp_pack_ctx_t *pack_ctx = arg;
+
+    return ucp_proto_rndv_pack_ack(pack_ctx->req, dest, pack_ctx->ack_size);
 }

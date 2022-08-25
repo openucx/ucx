@@ -305,7 +305,7 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
 
     data->size     = size;
     data->uct_memh = NULL;
-    ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(md_index),
+    ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(md_index), 0,
                                 &data->rkey);
     return data;
 }
