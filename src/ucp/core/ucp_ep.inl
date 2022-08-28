@@ -17,19 +17,29 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/datastruct/ptr_map.inl>
 
-
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
 {
     ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
     return &ep->worker->ep_config[ep->cfg_index];
 }
 
-static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_lane(ucp_ep_h ep,
-                                                    ucp_lane_index_t lane_index)
+static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,
+                                                         ucp_lane_index_t lane_index)
 {
-    ucs_assert(lane_index != UCP_NULL_LANE);
+    ucs_assertv(lane_index < UCP_MAX_FAST_PATH_LANES, "lane=%d", lane_index);
+    return ep->uct_eps[lane_index];	
+}
 
-    return ep->uct_eps[lane_index];
+static UCS_F_ALWAYS_INLINE uct_ep_h
+ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
+{
+    ucs_assertv(lane_index < UCP_MAX_LANES, "lane=%d", lane_index);
+
+    if (ucs_likely(lane_index < UCP_MAX_FAST_PATH_LANES)) {
+        return ep->uct_eps[lane_index];
+    } else {
+        return ep->ext->uct_eps[lane_index - UCP_MAX_FAST_PATH_LANES];
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
@@ -37,7 +47,11 @@ static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
 {
     ucs_assert(lane_index != UCP_NULL_LANE);
 
-    ep->uct_eps[lane_index] = uct_ep;
+    if (lane_index < UCP_MAX_FAST_PATH_LANES) {
+        ep->uct_eps[lane_index] = uct_ep;
+    } else {
+        ep->ext->uct_eps[lane_index - UCP_MAX_FAST_PATH_LANES] = uct_ep;
+    }
 }
 
 static inline ucp_lane_index_t ucp_ep_get_am_lane(ucp_ep_h ep)
@@ -70,12 +84,12 @@ static inline int ucp_ep_config_key_has_tag_lane(const ucp_ep_config_key_t *key)
 
 static inline uct_ep_h ucp_ep_get_am_uct_ep(ucp_ep_h ep)
 {
-    return ucp_ep_get_lane(ep, ucp_ep_get_am_lane(ep));
+    return ucp_ep_get_fast_lane(ep, ucp_ep_get_am_lane(ep));
 }
 
 static inline uct_ep_h ucp_ep_get_tag_uct_ep(ucp_ep_h ep)
 {
-    return ucp_ep_get_lane(ep, ucp_ep_get_tag_lane(ep));
+    return ucp_ep_get_fast_lane(ep, ucp_ep_get_tag_lane(ep));
 }
 
 static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t lane)

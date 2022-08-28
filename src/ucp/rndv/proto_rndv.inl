@@ -138,7 +138,7 @@ static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
     return ucp_proto_am_bcopy_single_progress(req, am_id, apriv->lane,
                                               pack_func, req,
                                               sizeof(ucp_rndv_ack_hdr_t),
-                                              complete_func);
+                                              complete_func, 0);
 }
 
 static UCS_F_ALWAYS_INLINE void

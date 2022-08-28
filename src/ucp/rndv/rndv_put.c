@@ -137,8 +137,8 @@ ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
 
     return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
                                           ucp_proto_rndv_put_common_pack_atp,
-                                          &pack_ctx,
-                                          sizeof(ucp_rndv_ack_hdr_t));
+                                          &pack_ctx, sizeof(ucp_rndv_ack_hdr_t),
+                                          0);
 }
 
 static ucs_status_t

@@ -1327,8 +1327,9 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
     }
 
-    ucs_assert(sizeof(new_uct_eps) == sizeof(ep->uct_eps));
-    memcpy(ep->uct_eps, new_uct_eps, sizeof(ep->uct_eps));
+    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+        ucp_ep_set_lane(ep, lane, new_uct_eps[lane]);
+    }
 }
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,

@@ -91,7 +91,7 @@ static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
     max_rtr_size = sizeof(ucp_rndv_rtr_hdr_t) + rpriv->super.packed_rkey_size;
     return ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTR,
                                               rpriv->super.lane, rpriv->pack_cb,
-                                              req, max_rtr_size, NULL);
+                                              req, max_rtr_size, NULL, 0);
 }
 
 static UCS_F_ALWAYS_INLINE void

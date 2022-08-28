@@ -492,6 +492,12 @@ typedef struct ucp_ep_ext {
         ucs_queue_head_t          mid_rdesc_q;    /* Queue of middle fragments, which
                                                      arrived before the first one */
     } am;
+
+    /**
+     * UCT endpoints for every slow-path lane that has no room in the base endpoint
+     * structure. TODO allocate this array dynamically.
+     */
+    uct_ep_h                      uct_eps[UCP_MAX_SLOW_PATH_LANES];
 } ucp_ep_ext_t;
 
 
@@ -507,9 +513,8 @@ typedef struct ucp_ep {
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
-
-    /* TODO allocate ep dynamically according to number of lanes */
-    uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
+    /* Transports for every lane */
+    uct_ep_h                      uct_eps[UCP_MAX_FAST_PATH_LANES];
     ucp_ep_ext_t                  *ext;                   /* Endpoint extension */
 
 #if ENABLE_DEBUG_DATA
