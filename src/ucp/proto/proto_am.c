@@ -71,7 +71,7 @@ ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
                     "packed_len=%zd max_packed_size=%zu", packed_len,
                     max_packed_size);
 
-        return uct_ep_am_short(ucp_ep_get_lane(ep, req->send.lane), am_id,
+        return uct_ep_am_short(ucp_ep_get_fast_lane(ep, req->send.lane), am_id,
                                buffer[0], &buffer[1],
                                packed_len - sizeof(uint64_t));
     } else {

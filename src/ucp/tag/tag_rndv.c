@@ -143,7 +143,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
     return UCS_PROFILE_CALL(ucp_proto_am_bcopy_single_progress, req,
                             UCP_AM_ID_RNDV_RTS, rpriv->lane,
                             ucp_tag_rndv_proto_rts_pack, req, max_rts_size,
-                            NULL);
+                            NULL, 0);
 }
 
 ucs_status_t ucp_tag_rndv_rts_init(const ucp_proto_init_params_t *init_params)

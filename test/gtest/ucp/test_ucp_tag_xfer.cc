@@ -14,6 +14,7 @@ extern "C" {
 #include <ucp/core/ucp_resource.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/queue.h>
+#include <uct/base/uct_iface.h>
 }
 
 #include <iostream>
@@ -52,8 +53,13 @@ public:
         } else if (get_variant_value() == VARIANT_PROTO) {
             modify_config("PROTO_ENABLE", "y");
         }
-        modify_config("MAX_EAGER_LANES", "2");
-        modify_config("MAX_RNDV_LANES", "2");
+
+        /* Init number of lanes according to test requirement
+         * (default is 2, for max_lanes test we use max_lanes) */
+        std::string num_lanes_str(std::to_string(num_lanes()));
+
+        modify_config("MAX_EAGER_LANES", num_lanes_str);
+        modify_config("MAX_RNDV_LANES", num_lanes_str);
 
         test_ucp_tag::init();
     }
@@ -122,6 +128,12 @@ protected:
                          bool expected, bool sync);
 
     void test_xfer_len_offset();
+
+    /* Init number of lanes which will be used */
+    virtual unsigned num_lanes()
+    {
+        return 2;
+    }
 
 private:
     request* do_send(const void *sendbuf, size_t count, ucp_datatype_t dt, bool sync);
@@ -1146,5 +1158,59 @@ UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
+
+class multi_rail_max : public test_ucp_tag_xfer {
+public:
+    void init() override
+    {
+        stats_activate();
+        test_ucp_tag_xfer::init();
+    }
+
+    void cleanup() override
+    {
+        test_ucp_tag_xfer::cleanup();
+        stats_restore();
+    }
+
+    uint64_t get_bytes_sent(ucp_ep_h ep, int lane_index)
+    {
+        uct_base_ep_t *uct_ep = ucs_derived_of(ucp_ep_get_lane(ep, lane_index),
+                                               uct_base_ep_t);
+
+        return UCS_STATS_GET_COUNTER(uct_ep->stats, UCT_EP_STAT_BYTES_SHORT) +
+               UCS_STATS_GET_COUNTER(uct_ep->stats, UCT_EP_STAT_BYTES_BCOPY) +
+               UCS_STATS_GET_COUNTER(uct_ep->stats, UCT_EP_STAT_BYTES_ZCOPY);
+    }
+
+    unsigned num_lanes() override
+    {
+        /* Init max lanes for the test */
+        return max_lanes;
+    }
+
+    const uint32_t max_lanes = 8;
+};
+
+UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=8", "TM_SW_RNDV=y",
+           "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1")
+{
+    receiver().connect(&sender(), get_ep_params());
+    test_run_xfer(true, true, true, true, false);
+
+    ucp_lane_index_t num_lanes = ucp_ep_num_lanes(sender().ep());
+    ASSERT_EQ(ucp_ep_num_lanes(receiver().ep()), num_lanes);
+    ASSERT_EQ(num_lanes, max_lanes);
+
+    for (int i = 0; i < num_lanes; ++i) {
+        uint64_t bytes_sent = get_bytes_sent(sender().ep(), i) +
+                              get_bytes_sent(receiver().ep(), i);
+
+        /* Verify that each lane sent something */
+        ASSERT_GE(bytes_sent, 50000 / ucs::test_time_multiplier());
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, ib, "ib")
 
 #endif

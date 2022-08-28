@@ -117,7 +117,7 @@ static ucs_status_t ucp_progress_rma_cmpl(uct_pending_req_t *self)
 
     req->send.lane = ucp_ep_get_am_lane(ep);
 
-    packed_len = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
+    packed_len = uct_ep_am_bcopy(ucp_ep_get_fast_lane(ep, req->send.lane),
                                  UCP_AM_ID_CMPL, ucp_rma_sw_pack_rma_ack, req,
                                  0);
     if (packed_len < 0) {
@@ -207,7 +207,7 @@ static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
     ssize_t packed_len, payload_len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len     = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
+    packed_len     = uct_ep_am_bcopy(ucp_ep_get_fast_lane(ep, req->send.lane),
                                      UCP_AM_ID_GET_REP, ucp_rma_sw_pack_get_reply,
                                      req, 0);
     if (packed_len < 0) {

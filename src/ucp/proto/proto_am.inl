@@ -46,7 +46,7 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
     ssize_t packed_len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len     = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
+    packed_len     = uct_ep_am_bcopy(ucp_ep_get_fast_lane(ep, req->send.lane),
                                      am_id, pack_cb, req, 0);
     if (ucs_unlikely(packed_len < 0)) {
         /* Reset the state to the previous one */

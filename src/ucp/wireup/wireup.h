@@ -101,6 +101,7 @@ typedef struct {
     ucp_tl_iface_atomic_flags_t local_atomic_flags;
 
     ucp_tl_iface_atomic_flags_t remote_atomic_flags;
+    ucp_lane_type_t             lane_type;
 } ucp_wireup_criteria_t;
 
 
@@ -203,5 +204,18 @@ ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_lane_index_t *lanes2remote);
 
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
+
+static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
+{
+    return lane_types &
+           (UCS_BIT(UCP_LANE_TYPE_AM) | UCS_BIT(UCP_LANE_TYPE_RMA) |
+            UCS_BIT(UCP_LANE_TYPE_AMO) | UCS_BIT(UCP_LANE_TYPE_CM) |
+            UCS_BIT(UCP_LANE_TYPE_TAG));
+}
+
+static inline int ucp_wireup_lane_type_is_fast_path(ucp_lane_type_t lane_type)
+{
+    return ucp_wireup_lane_types_has_fast_path(UCS_BIT(lane_type));
+}
 
 #endif
