@@ -8,7 +8,6 @@
 
 #include <uct/base/uct_iface.h>
 #include <ucs/arch/cpu.h>
-#include <cuda_runtime.h>
 #include <cuda.h>
 
 #include "cuda_ipc_md.h"

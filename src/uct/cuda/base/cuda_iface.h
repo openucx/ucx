@@ -9,51 +9,11 @@
 #include <uct/base/uct_iface.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
-#include <cuda_runtime.h>
 #include <cuda.h>
 #include <nvml.h>
 
 
 #define UCT_CUDA_DEV_NAME       "cuda"
-
-#define UCT_CUDAR_CALL(_log_level, _func, ...) \
-    ({ \
-        cudaError_t _result = UCS_PROFILE_CALL(_func, __VA_ARGS__); \
-        ucs_status_t _status; \
-        \
-        if (cudaSuccess != _result) { \
-            ucs_log((_log_level), "%s() failed: %s", \
-                    UCS_PP_MAKE_STRING(_func), cudaGetErrorString(_result)); \
-            _status = UCS_ERR_IO_ERROR; \
-        } else { \
-            _status = UCS_OK; \
-        } \
-        _status; \
-    })
-
-
-#define UCT_CUDAR_CALL_LOG_ERR(_func, ...) \
-    UCT_CUDAR_CALL(UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
-
-
-#define UCT_CUDA_FUNC(_func, _log_level)                        \
-    ({                                                          \
-        ucs_status_t _status = UCS_OK;                          \
-        do {                                                    \
-            cudaError_t _result = (_func);                      \
-            if (cudaSuccess != _result) {                       \
-                ucs_log((_log_level), "%s() failed: %s",        \
-                        UCS_PP_MAKE_STRING(_func),              \
-                        cudaGetErrorString(_result));           \
-                _status = UCS_ERR_IO_ERROR;                     \
-            }                                                   \
-        } while (0);                                            \
-        _status;                                                \
-    })
-
-
-#define UCT_CUDA_FUNC_LOG_ERR(_func) \
-    UCT_CUDA_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
 #define UCT_NVML_FUNC(_func, _log_level)                        \

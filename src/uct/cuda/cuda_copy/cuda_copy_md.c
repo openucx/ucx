@@ -17,7 +17,6 @@
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <uct/cuda/base/cuda_iface.h>
-#include <cuda_runtime.h>
 #include <cuda.h>
 
 
@@ -114,8 +113,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
-    status    = UCT_CUDA_FUNC(cudaHostRegister(address, length,
-                                               cudaHostRegisterPortable),
+    status    = UCT_CUDADRV_FUNC(cuMemHostRegister(address, length,
+                                                   CU_MEMHOSTREGISTER_PORTABLE),
                               log_level);
     if (status != UCS_OK) {
         return status;
@@ -139,7 +138,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
         return UCS_OK;
     }
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaHostUnregister(address));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemHostUnregister(address));
     if (status != UCS_OK) {
         return status;
     }
