@@ -1393,6 +1393,12 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (config->fc_hard_req_timeout == UCS_ULUNITS_AUTO) {
+        ucs_error("timeout for resending of FC_HARD_REQ shouldn't be set to"
+                  " \"auto\"");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     uct_dc_mlx5_iface_init_version(self, tl_md);
 
     self->tx.ndci                          = config->ndci;
