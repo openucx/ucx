@@ -206,6 +206,63 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
     return count;
 }
 
+unsigned uct_rc_mlx5_iface_srq_post_recv_hybrid(uct_rc_mlx5_iface_common_t *iface)
+{
+    uct_ib_mlx5_srq_t *srq     = &iface->rx.srq;
+    uct_rc_iface_t *rc_iface   = &iface->super;
+    uct_ib_mlx5_srq_seg_t *seg = NULL;
+    uint16_t count             = 0;
+    uint16_t wqe_index, next_index;
+
+    ucs_assert(rc_iface->rx.srq.available > 0);
+
+    wqe_index = srq->ready_idx;
+    seg       = uct_ib_mlx5_srq_get_wqe(srq, wqe_index);
+
+    for (;;) {
+        next_index = ntohs(seg->srq.next_wqe_index);
+        if (next_index == (srq->free_idx & srq->mask)) {
+            int free_index = (srq->free_idx + 1) & srq->mask; 
+
+            if ((rc_iface->rx.srq.available - count) <= 1) {
+                /* full */
+                break;
+            }
+
+            seg = uct_ib_mlx5_srq_get_wqe(srq, free_index);
+            if (!seg->srq.free && (srq->free_wait++ < UCT_IB_MLX5_SRQ_HYBRID_WAIT)) {
+                /* wait more time */
+                break;
+            }
+
+            while (free_index != (srq->free_idx & srq->mask)) {
+                seg = uct_ib_mlx5_srq_get_wqe(srq, free_index);
+                if (seg->srq.free) {
+                    seg->srq.free           = 0;
+                    seg                     = uct_ib_mlx5_srq_get_wqe(srq, srq->free_idx);
+                    seg->srq.next_wqe_index = htons(free_index);
+                    srq->free_idx           = free_index;
+                    srq->free_wait          = 0;
+                    
+                    break;
+                }
+                free_index = (free_index + 1) & srq->mask;
+            }
+        }
+        seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
+
+        if (uct_rc_mlx5_iface_srq_set_seg(iface, seg) != UCS_OK) {
+            break;
+        }
+
+        wqe_index = next_index;
+        count++;
+    }
+
+    uct_rc_mlx5_iface_update_srq_res(rc_iface, srq, wqe_index, count);
+    return count;
+}
+
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
 {
     /* prepost recvs only if quota available (recvs were not preposted

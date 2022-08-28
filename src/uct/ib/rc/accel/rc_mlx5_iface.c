@@ -189,6 +189,12 @@ static unsigned uct_rc_mlx5_iface_progress_ll(void *arg)
                                            UCT_RC_MLX5_POLL_FLAG_LINKED_LIST);
 }
 
+static unsigned uct_rc_mlx5_iface_progress_hybrid(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_HAS_EP |
+                                           UCT_RC_MLX5_POLL_FLAG_HYBRID);
+}
+
 static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
 {
     return uct_rc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_HAS_EP |
@@ -433,6 +439,9 @@ uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
         } else if (!strcasecmp(config->srq_topo.types[i], "cyclic_emulated")) {
             *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED;
             return UCS_OK;
+        } else if (!strcasecmp(config->srq_topo.types[i], "hybrid")) {
+            *topo_p = UCT_RC_MLX5_SRQ_TOPO_HYBRID;
+            return UCS_OK;
         }
     }
 
@@ -605,6 +614,8 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 
     if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
         iface->super.progress = uct_rc_mlx5_iface_progress_ll;
+    } else if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_HYBRID) {
+        iface->super.progress = uct_rc_mlx5_iface_progress_hybrid;
     } else {
         iface->super.progress = uct_rc_mlx5_iface_progress_cyclic;
     }
