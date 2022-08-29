@@ -19,6 +19,16 @@
 #include <ucs/type/float8.h>
 #include <inttypes.h>
 
+#define ucp_address_error(_pack_flags, _fmt, ...) \
+    if (!((_pack_flags) & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) { \
+        ucs_error(_fmt, ##__VA_ARGS__); \
+    }
+
+#define ucp_address_trace(_pack_flags, _fmt, ...) \
+    if (!((_pack_flags) & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) { \
+        ucs_trace(_fmt, ##__VA_ARGS__); \
+    }
+
 
 /*
  * Packed address layout:
@@ -872,10 +882,10 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         rsc_idx             = unified->rsc_index & UCP_ADDRESS_IFACE_LEN_MASK;
         iface_attr->lat_ovh = fabs(unified->lat_ovh);
         if (!UCS_BITMAP_GET(worker->context->tl_bitmap, rsc_idx)) {
-            if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-                ucs_error("failed to unpack address, resource[%d] is not valid",
-                          rsc_idx);
-            }
+            ucp_address_error(
+                    unpack_flags,
+                    "failed to unpack address, resource[%d] is not valid",
+                    rsc_idx);
             return UCS_ERR_INVALID_ADDR;
         }
 
@@ -915,6 +925,9 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     iface_attr->addr_version = addr_version;
 
     if (iface_attr->bandwidth <= 0) {
+        ucp_address_error(unpack_flags,
+                          "failed to unpack address, invalid bandwidth %.2f",
+                          iface_attr->bandwidth);
         return UCS_ERR_INVALID_ADDR;
     }
 
@@ -1212,6 +1225,10 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
             status = uct_iface_get_device_address(wiface->iface,
                                                   (uct_device_addr_t*)ptr);
             if (status != UCS_OK) {
+                ucp_address_error(
+                        pack_flags, "failed to get %s device address %s",
+                        context->tl_rscs[dev->rsc_index].tl_rsc.dev_name,
+                        ucs_status_string(status));
                 return status;
             }
 
@@ -1225,6 +1242,12 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
             iface_attr = &wiface->attr;
 
             if (!ucp_worker_iface_can_connect(iface_attr)) {
+                ucp_address_error(pack_flags,
+                                  UCT_TL_RESOURCE_DESC_FMT
+                                  " doesn't have connect caps: 0x%lx",
+                                  UCT_TL_RESOURCE_DESC_ARG(
+                                          &context->tl_rscs[rsc_index].tl_rsc),
+                                  iface_attr->cap.flags);
                 return UCS_ERR_INVALID_ADDR;
             }
 
@@ -1261,6 +1284,13 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                 status = uct_iface_get_address(wiface->iface,
                                                (uct_iface_addr_t*)ptr);
                 if (status != UCS_OK) {
+                    ucp_address_error(
+                            pack_flags,
+                            UCT_TL_RESOURCE_DESC_FMT
+                            " failed to get iface address %s",
+                            UCT_TL_RESOURCE_DESC_ARG(
+                                    &context->tl_rscs[rsc_index].tl_rsc),
+                            ucs_status_string(status));
                     return status;
                 }
 
@@ -1292,6 +1322,13 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     /* pack ep address */
                     status = uct_ep_get_address(ucp_ep_get_lane(ep, lane), ptr);
                     if (status != UCS_OK) {
+                        ucp_address_error(
+                                pack_flags,
+                                UCT_TL_RESOURCE_DESC_FMT
+                                " failed to get ep address %s",
+                                UCT_TL_RESOURCE_DESC_ARG(
+                                        &context->tl_rscs[rsc_index].tl_rsc),
+                                ucs_status_string(status));
                         return status;
                     }
 
@@ -1309,11 +1346,11 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     *ep_lane_ptr = remote_lane;
                     ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
-                    if (!(pack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-                        ucs_trace("pack addr[%d].ep_addr[%d] : len %zu lane %d->%d",
-                                  addr_index, num_ep_addrs, ep_addr_len, lane,
-                                  remote_lane);
-                    }
+                    ucp_address_trace(
+                            pack_flags,
+                            "pack addr[%d].ep_addr[%d] : len %zu lane %d->%d",
+                            addr_index, num_ep_addrs, ep_addr_len, lane,
+                            remote_lane);
 
                     ++num_ep_addrs;
                 }
@@ -1330,27 +1367,26 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
             ucs_assert((num_ep_addrs > 0) ||
                        !(*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAS_EP_ADDR));
 
-            if (!(pack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-                ucs_trace("pack addr[%d] : " UCT_TL_RESOURCE_DESC_FMT
-                          " sysdev %d paths %d eps %u md_flags 0x%" PRIx64
-                          " tl_flags 0x%" PRIx64 " bw %.2f+%.2f/nMBs"
-                          " ovh %.0fns lat_ovh %.0fns dev_priority %d"
-                          " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
-                          "/0x%" PRIx64,
-                          addr_index,
-                          UCT_TL_RESOURCE_DESC_ARG(
-                                  &context->tl_rscs[rsc_index].tl_rsc),
-                          dev->sys_dev, dev->num_paths, num_ep_addrs, md_flags,
-                          iface_attr->cap.flags,
-                          iface_attr->bandwidth.dedicated / UCS_MBYTE,
-                          iface_attr->bandwidth.shared / UCS_MBYTE,
-                          iface_attr->overhead * 1e9,
-                          iface_attr->latency.c * 1e9, iface_attr->priority,
-                          iface_attr->cap.atomic32.op_flags,
-                          iface_attr->cap.atomic32.fop_flags,
-                          iface_attr->cap.atomic64.op_flags,
-                          iface_attr->cap.atomic64.fop_flags);
-            }
+            ucp_address_trace(pack_flags,
+                              "pack addr[%d] : " UCT_TL_RESOURCE_DESC_FMT
+                              " sysdev %d paths %d eps %u md_flags 0x%" PRIx64
+                              " tl_flags 0x%" PRIx64 " bw %.2f+%.2f/nMBs"
+                              " ovh %.0fns lat_ovh %.0fns dev_priority %d"
+                              " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
+                              "/0x%" PRIx64,
+                              addr_index,
+                              UCT_TL_RESOURCE_DESC_ARG(
+                                      &context->tl_rscs[rsc_index].tl_rsc),
+                              dev->sys_dev, dev->num_paths, num_ep_addrs,
+                              md_flags, iface_attr->cap.flags,
+                              iface_attr->bandwidth.dedicated / UCS_MBYTE,
+                              iface_attr->bandwidth.shared / UCS_MBYTE,
+                              iface_attr->overhead * 1e9,
+                              iface_attr->latency.c * 1e9, iface_attr->priority,
+                              iface_attr->cap.atomic32.op_flags,
+                              iface_attr->cap.atomic32.fop_flags,
+                              iface_attr->cap.atomic64.op_flags,
+                              iface_attr->cap.atomic64.fop_flags);
 
             ++addr_index;
             ucs_assert(addr_index <= UCP_MAX_RESOURCES);
@@ -1461,10 +1497,8 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
     ptr = ucp_address_unpack_header(buffer, &addr_version, &addr_flags);
 
-    if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-        ucs_trace("unpack address version %u flags 0x%x",
-                  addr_version, addr_flags);
-    }
+    ucp_address_trace(unpack_flags, "unpack address version %u flags 0x%x",
+                      addr_version, addr_flags);
 
     if (((unpack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) &&
          (addr_version == UCP_OBJECT_VERSION_V1)) ||
@@ -1545,10 +1579,10 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         last_tl = empty_dev;
         while (!last_tl) {
             if (address >= &address_list[UCP_MAX_RESOURCES]) {
-                if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-                    ucs_error("failed to parse address: number of addresses"
-                              " exceeds %d", UCP_MAX_RESOURCES);
-                }
+                ucp_address_error(unpack_flags,
+                                  "failed to parse address: number of addresses"
+                                  " exceeds %d",
+                                  UCP_MAX_RESOURCES);
                 goto err_free;
             }
 
@@ -1583,10 +1617,11 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                       UCP_ADDRESS_FLAG_HAS_EP_ADDR);
             while (!last_ep_addr) {
                 if (address->num_ep_addrs >= UCP_MAX_LANES) {
-                    if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-                        ucs_error("failed to parse address: number of ep addresses"
-                                  " exceeds %d", UCP_MAX_LANES);
-                    }
+                    ucp_address_error(
+                            unpack_flags,
+                            "failed to parse address: number of ep addresses"
+                            " exceeds %d",
+                            UCP_MAX_LANES);
                     goto err_free;
                 }
 
@@ -1601,34 +1636,33 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                 ep_addr->lane = *(uint8_t*)ptr & UCP_ADDRESS_IFACE_LEN_MASK;
                 last_ep_addr  = *(uint8_t*)ptr & UCP_ADDRESS_FLAG_LAST;
 
-                if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-                    ucs_trace("unpack addr[%d].ep_addr[%d] : len %d lane %d",
-                              (int)(address - address_list),
-                              (int)(ep_addr - address->ep_addrs), ep_addr_len,
-                              ep_addr->lane);
-                }
+                ucp_address_trace(
+                        unpack_flags,
+                        "unpack addr[%d].ep_addr[%d] : len %d lane %d",
+                        (int)(address - address_list),
+                        (int)(ep_addr - address->ep_addrs), ep_addr_len,
+                        ep_addr->lane);
 
                 ptr           = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
             }
 
-            if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-                ucs_trace("unpack addr[%d] : sysdev %d paths %d eps %u"
-                          " tl_iface_flags 0x%" PRIx64 " bw %.2f/nMBs"
-                          " ovh %.0fns lat_ovh %.0fns dev_priority %d"
-                          " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
-                          "/0x%" PRIx64,
-                          (int)(address - address_list), address->sys_dev,
-                          address->dev_num_paths, address->num_ep_addrs,
-                          address->iface_attr.flags,
-                          address->iface_attr.bandwidth / UCS_MBYTE,
-                          address->iface_attr.overhead * 1e9,
-                          address->iface_attr.lat_ovh * 1e9,
-                          address->iface_attr.priority,
-                          address->iface_attr.atomic.atomic32.op_flags,
-                          address->iface_attr.atomic.atomic32.fop_flags,
-                          address->iface_attr.atomic.atomic64.op_flags,
-                          address->iface_attr.atomic.atomic64.fop_flags);
-            }
+            ucp_address_trace(unpack_flags,
+                              "unpack addr[%d] : sysdev %d paths %d eps %u"
+                              " tl_iface_flags 0x%" PRIx64 " bw %.2f/nMBs"
+                              " ovh %.0fns lat_ovh %.0fns dev_priority %d"
+                              " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
+                              "/0x%" PRIx64,
+                              (int)(address - address_list), address->sys_dev,
+                              address->dev_num_paths, address->num_ep_addrs,
+                              address->iface_attr.flags,
+                              address->iface_attr.bandwidth / UCS_MBYTE,
+                              address->iface_attr.overhead * 1e9,
+                              address->iface_attr.lat_ovh * 1e9,
+                              address->iface_attr.priority,
+                              address->iface_attr.atomic.atomic32.op_flags,
+                              address->iface_attr.atomic.atomic32.fop_flags,
+                              address->iface_attr.atomic.atomic64.op_flags,
+                              address->iface_attr.atomic.atomic64.fop_flags);
 
             ++address;
         }
