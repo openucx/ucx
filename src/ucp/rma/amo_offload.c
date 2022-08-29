@@ -61,7 +61,7 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
     uct_rkey_t tl_rkey;
 
     req->send.lane = spriv->super.lane;
-    uct_ep         = ucp_ep_get_lane(ep, req->send.lane);
+    uct_ep         = ucp_ep_get_fast_lane(ep, req->send.lane);
     tl_rkey        = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                           spriv->super.rkey_index);
 

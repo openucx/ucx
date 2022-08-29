@@ -43,12 +43,12 @@ static ucs_status_t ucp_amo_basic_progress_post(uct_pending_req_t *self)
     req->send.lane = rkey->cache.amo_lane;
     if (req->send.length == sizeof(uint64_t)) {
         status = UCS_PROFILE_CALL(uct_ep_atomic64_post,
-                                  ucp_ep_get_lane(ep, req->send.lane), op,
+                                  ucp_ep_get_fast_lane(ep, req->send.lane), op,
                                   value, remote_addr, rkey->cache.amo_rkey);
     } else {
         ucs_assert(req->send.length == sizeof(uint32_t));
         status = UCS_PROFILE_CALL(uct_ep_atomic32_post,
-                                  ucp_ep_get_lane(ep, req->send.lane), op,
+                                  ucp_ep_get_fast_lane(ep, req->send.lane), op,
                                   value, remote_addr, rkey->cache.amo_rkey);
     }
 
@@ -68,7 +68,7 @@ static ucs_status_t ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
     ucs_status_t status;
 
     req->send.lane = rkey->cache.amo_lane;
-    uct_ep         = ucp_ep_get_lane(ep, req->send.lane);
+    uct_ep         = ucp_ep_get_fast_lane(ep, req->send.lane);
     if (req->send.length == sizeof(uint64_t)) {
         if (op != UCT_ATOMIC_OP_CSWAP) {
             status = uct_ep_atomic64_fetch(uct_ep, op, value, result,

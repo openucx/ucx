@@ -133,7 +133,7 @@ static ucs_status_t ucp_progress_atomic_reply(uct_pending_req_t *self)
     ssize_t packed_len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len     = uct_ep_am_bcopy(ucp_ep_get_lane(ep, req->send.lane),
+    packed_len     = uct_ep_am_bcopy(ucp_ep_get_fast_lane(ep, req->send.lane),
                                      UCP_AM_ID_ATOMIC_REP,
                                      ucp_amo_sw_pack_atomic_reply, req, 0);
 

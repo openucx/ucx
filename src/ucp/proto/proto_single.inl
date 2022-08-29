@@ -17,13 +17,17 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_am_bcopy_single_send(ucp_request_t *req, ucp_am_id_t am_id,
                                ucp_lane_index_t lane,
                                uct_pack_callback_t pack_func, void *pack_arg,
-                               size_t max_packed_size)
+                               size_t max_packed_size, int fast_path)
 {
     ucp_ep_t *ep                       = req->send.ep;
     const uct_iface_attr_t *iface_attr = ucp_ep_get_iface_attr(ep, lane);
+    uct_ep_h uct_ep;
     ssize_t packed_size;
     uint64_t *buffer;
 
+    uct_ep = fast_path ? ucp_ep_get_fast_lane(ep, lane) : 
+                         ucp_ep_get_lane(ep, lane);
+    
     if ((max_packed_size <= UCS_ALLOCA_MAX_SIZE) &&
         (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) &&
         (max_packed_size <= iface_attr->cap.am.max_short)) {
@@ -34,11 +38,11 @@ ucp_proto_am_bcopy_single_send(ucp_request_t *req, ucp_am_id_t am_id,
         ucs_assertv((packed_size >= 0) && (packed_size <= max_packed_size),
                     "packed_size=%zd max_packed_size=%zu", packed_size,
                     max_packed_size);
-        return uct_ep_am_short(ucp_ep_get_lane(ep, lane), am_id, buffer[0],
+        return uct_ep_am_short(uct_ep, am_id, buffer[0],
                                &buffer[1], packed_size - sizeof(buffer[0]));
     } else {
         /* Send as bcopy */
-        packed_size = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lane), am_id, pack_func,
+        packed_size = uct_ep_am_bcopy(uct_ep, am_id, pack_func,
                                       pack_arg, 0);
         return ucs_likely(packed_size >= 0) ? UCS_OK : packed_size;
     }
@@ -73,12 +77,12 @@ ucp_proto_am_bcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
                                    ucp_lane_index_t lane,
                                    uct_pack_callback_t pack_func, void *pack_arg,
                                    size_t max_packed_size,
-                                   ucp_proto_complete_cb_t complete_func)
+                                   ucp_proto_complete_cb_t complete_func, int fast_path)
 {
     ucs_status_t status;
 
     status = ucp_proto_am_bcopy_single_send(req, am_id, lane, pack_func,
-                                            pack_arg, max_packed_size);
+                                            pack_arg, max_packed_size, fast_path);
     return ucp_proto_single_status_handle(req, 0, complete_func, lane, status);
 }
 

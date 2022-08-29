@@ -69,8 +69,8 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
         am_id = UCP_AM_ID_AM_SINGLE;
     }
 
-    status = uct_ep_am_short_iov(ucp_ep_get_lane(req->send.ep,
-                                                 spriv->super.lane),
+    status = uct_ep_am_short_iov(ucp_ep_get_fast_lane(req->send.ep,
+                                                      spriv->super.lane),
                                  am_id, iov, iov_cnt);
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req->send.lane = spriv->super.lane; /* for pending add */
@@ -216,7 +216,7 @@ ucp_am_eager_single_bcopy_proto_progress(uct_pending_req_t *self)
     return ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_AM_SINGLE, spriv->super.lane,
             ucp_am_eager_single_bcopy_pack, req, SIZE_MAX,
-            ucp_proto_request_bcopy_complete_success);
+            ucp_proto_request_bcopy_complete_success, 1);
 }
 
 static ucs_status_t ucp_am_eager_single_bcopy_proto_init_common(
@@ -291,7 +291,7 @@ ucp_am_eager_single_bcopy_reply_proto_progress(uct_pending_req_t *self)
     return ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_AM_SINGLE_REPLY, spriv->super.lane,
             ucp_am_eager_single_bcopy_reply_pack, req, SIZE_MAX,
-            ucp_proto_request_bcopy_complete_success);
+            ucp_proto_request_bcopy_complete_success, 1);
 }
 
 ucp_proto_t ucp_am_eager_single_bcopy_reply_proto = {
@@ -360,7 +360,8 @@ ucp_am_eager_single_zcopy_send_func(ucp_request_t *req,
     ucp_am_eager_zcopy_add_footer(req, 0, spriv->super.md_index, iov, &iovcnt,
                                   req->send.msg_proto.am.header.length);
 
-    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, spriv->super.lane),
+    return uct_ep_am_zcopy(ucp_ep_get_fast_lane(req->send.ep,
+                                                spriv->super.lane),
                            UCP_AM_ID_AM_SINGLE, &hdr, sizeof(hdr), iov, iovcnt,
                            0, &req->send.state.uct_comp);
 }
@@ -429,7 +430,8 @@ ucp_am_eager_single_zcopy_reply_send_func(ucp_request_t *req,
                                   req->send.msg_proto.am.header.length +
                                           sizeof(*ftr));
 
-    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, spriv->super.lane),
+    return uct_ep_am_zcopy(ucp_ep_get_fast_lane(req->send.ep,
+                                                spriv->super.lane),
                            UCP_AM_ID_AM_SINGLE_REPLY, &hdr, sizeof(hdr), iov,
                            iovcnt, 0, &req->send.state.uct_comp);
 }
