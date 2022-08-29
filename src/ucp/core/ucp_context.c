@@ -195,7 +195,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Communication scheme in RNDV protocol.\n"
    " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
    " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
-   " rkey_ptr  - use rket_ptr in RNDV protocol.\n"
+   " rkey_ptr  - use rkey_ptr in RNDV protocol.\n"
    " auto      - runtime automatically chooses optimal scheme to use.",
    ucs_offsetof(ucp_context_config_t, rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 
@@ -348,7 +348,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RESOLVE_REMOTE_EP_ID", "n",
    "Defines whether resolving remote endpoint ID is required or not when\n"
-   "creating a local endpoint. 'auto' means resolving remote endpint ID only\n"
+   "creating a local endpoint. 'auto' means resolving remote endpoint ID only\n"
    "in case of error handling and keepalive enabled.",
    ucs_offsetof(ucp_context_config_t, resolve_remote_ep_id),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},

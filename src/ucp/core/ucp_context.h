@@ -150,7 +150,7 @@ typedef struct ucp_context_config {
     int                                    proto_info;
     /** MD to compare for transport selection scores */
     char                                   *select_distance_md;
-    /** Directory to write procol selection information */
+    /** Directory to write protocol selection information */
     char                                   *proto_info_dir;
 } ucp_context_config_t;
 
