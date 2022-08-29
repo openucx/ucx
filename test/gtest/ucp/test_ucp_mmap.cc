@@ -445,7 +445,7 @@ UCS_TEST_P(test_ucp_mmap, rereg)
             const void *end_address = UCS_PTR_BYTE_OFFSET(buf.ptr(), size);
 
             for (int i = 0; i < num_iters; ++i) {
-                size_t offset       = ucs::rand() % size;
+                size_t offset       = (size == 0) ? 0 : (ucs::rand() % size);
                 void *start_address = UCS_PTR_BYTE_OFFSET(buf.ptr(), offset);
                 ucp_mem_h test_memh;
 
@@ -456,7 +456,12 @@ UCS_TEST_P(test_ucp_mmap, rereg)
                 ASSERT_UCS_OK(status);
 
                 // Check that unique memory handle was returned
-                EXPECT_NE(memh, test_memh);
+                if (size != 0) {
+                    EXPECT_NE(memh, test_memh);
+                } else {
+                    EXPECT_EQ(memh, test_memh);
+                    EXPECT_EQ(&ucp_mem_dummy_handle.memh, test_memh);
+                }
 
                 status = ucp_mem_unmap(sender().ucph(), test_memh);
                 ASSERT_UCS_OK(status);
