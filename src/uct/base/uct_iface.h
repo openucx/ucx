@@ -247,6 +247,14 @@ typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep, uct_ep_attr_t *ep_attr)
 /* Invalidate the ep to emulate transport level error */
 typedef ucs_status_t (*uct_ep_invalidate_func_t)(uct_ep_h ep, unsigned flags);
 
+/* Connect endpoint to remote endpoint */
+typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
+        uct_ep_h ep,
+        const uct_device_addr_t *device_addr,
+        const uct_iface_addr_t *iface_addr,
+        const uct_ep_addr_t *ep_addr,
+        const uct_ep_connect_to_ep_params_t *params);
+
 
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
@@ -254,6 +262,7 @@ typedef struct uct_iface_internal_ops {
     uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
     uct_ep_query_func_t            ep_query;
     uct_ep_invalidate_func_t       ep_invalidate;
+    uct_ep_connect_to_ep_v2_func_t ep_connect_to_ep_v2;
 } uct_iface_internal_ops_t;
 
 
