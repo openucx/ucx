@@ -113,6 +113,8 @@ typedef struct ucp_context_config {
     size_t                                 estimated_num_ppn;
     /** Enable flushing endpoints while flushing a worker */
     int                                    flush_worker_eps;
+    /** Fence mode */
+    ucp_fence_mode_t                       fence_mode;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
     /** Enable cm wireup message exchange to select the best transports
@@ -326,6 +328,9 @@ typedef struct ucp_context {
 
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
+
+        /* worker_fence implementation method */
+        unsigned                  worker_strong_fence;
 
         struct {
            unsigned               count;

@@ -211,6 +211,17 @@ typedef enum {
 
 
 /**
+ * Fence mode.
+ */
+typedef enum {
+    UCP_FENCE_MODE_WEAK,   /* Use weak fence mode */
+    UCP_FENCE_MODE_STRONG, /* Use strong fence mode */
+    UCP_FENCE_MODE_AUTO,   /* Automatically detect fence mode */
+    UCP_FENCE_MODE_LAST
+} ucp_fence_mode_t;
+
+
+/**
  * Communication scheme in RNDV protocol.
  */
 typedef enum {

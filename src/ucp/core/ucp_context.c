@@ -75,6 +75,13 @@ static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
+static const char *ucp_fence_modes[] = {
+    [UCP_FENCE_MODE_WEAK]   = "weak",
+    [UCP_FENCE_MODE_STRONG] = "strong",
+    [UCP_FENCE_MODE_AUTO]   = "auto",
+    [UCP_FENCE_MODE_LAST]   = NULL
+};
+
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -313,6 +320,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "the flush operation in a bounded time even if there are new requests on\n"
    "another thread, or incoming active messages, but consumes more resources.",
    ucs_offsetof(ucp_context_config_t, flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
+
+  {"FENCE_MODE", "auto",
+   "Fence mode used in ucp_worker_fence routine.\n"
+   " weak   - use weak fence mode.\n"
+   " strong - use strong fence mode.\n"
+   " auto   - automatically detect required fence mode.",
+   ucs_offsetof(ucp_context_config_t, fence_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_fence_modes)},
 
   {"UNIFIED_MODE", "n",
    "Enable various optimizations intended for homogeneous environment.\n"
@@ -1837,6 +1852,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     memcpy(context->config.am_mpools.sizes, config->mpool_sizes.memunits,
            config->mpool_sizes.count * sizeof(size_t));
+
+    context->config.worker_strong_fence =
+            (context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) ||
+            ((context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) &&
+             (context->config.ext.max_rma_lanes > 1));
 
     return UCS_OK;
 
