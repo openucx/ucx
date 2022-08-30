@@ -10,6 +10,7 @@
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
 
+#include "rocm_copy_cache.h"
 
 typedef struct uct_rocm_copy_ep_addr {
     int                ep_id;
@@ -18,6 +19,7 @@ typedef struct uct_rocm_copy_ep_addr {
 typedef struct uct_rocm_copy_ep {
     uct_base_ep_t           super;
     struct uct_rocm_copy_ep *next;
+    uct_rocm_copy_cache_t   *local_memh_cache;
 } uct_rocm_copy_ep_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rocm_copy_ep_t, uct_ep_t, const uct_ep_params_t *);

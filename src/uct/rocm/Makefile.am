@@ -24,11 +24,13 @@ libuct_rocm_la_SOURCES = \
 noinst_HEADERS += \
     copy/rocm_copy_md.h \
     copy/rocm_copy_iface.h \
+    copy/rocm_copy_cache.h \
     copy/rocm_copy_ep.h
 
 libuct_rocm_la_SOURCES += \
     copy/rocm_copy_md.c \
     copy/rocm_copy_iface.c \
+    copy/rocm_copy_cache.c \
     copy/rocm_copy_ep.c
 
 noinst_HEADERS += \
