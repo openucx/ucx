@@ -18,17 +18,30 @@
 
 static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
 
-    {"", "", NULL,
-     ucs_offsetof(uct_rocm_copy_iface_config_t, super),
+    {"", "", NULL, ucs_offsetof(uct_rocm_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    {"D2H_THRESH", "16k",
+    {"D2H_THRESH", "1k",
      "Threshold for switching to hsa memcpy for device-to-host copies",
-     ucs_offsetof(uct_rocm_copy_iface_config_t, d2h_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+     ucs_offsetof(uct_rocm_copy_iface_config_t, d2h_thresh),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
     {"H2D_THRESH", "1m",
      "Threshold for switching to hsa memcpy for host-to-device copies",
-     ucs_offsetof(uct_rocm_copy_iface_config_t, h2d_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+     ucs_offsetof(uct_rocm_copy_iface_config_t, h2d_thresh),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"SHORT_D2H_THRESH", "256",
+     "Threshold for switching to hsa memcpy for device-to-host copies for "
+     "short operations",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, short_d2h_thresh),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"SHORT_H2D_THRESH", "inf",
+     "Threshold for switching to hsa memcpy for host-to-device copies for "
+     "short operations",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, short_h2d_thresh),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
     {NULL}
 };
@@ -203,9 +216,11 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h work
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_COPY_TL_NAME));
 
-    self->id                    = ucs_generate_uuid((uintptr_t)self);
-    self->config.d2h_thresh     = config->d2h_thresh;
-    self->config.h2d_thresh     = config->h2d_thresh;
+    self->id                      = ucs_generate_uuid((uintptr_t)self);
+    self->config.d2h_thresh       = config->d2h_thresh;
+    self->config.h2d_thresh       = config->h2d_thresh;
+    self->config.short_d2h_thresh = config->short_d2h_thresh;
+    self->config.short_h2d_thresh = config->short_h2d_thresh;
     hsa_signal_create(1, 0, NULL, &self->hsa_signal);
 
     return UCS_OK;
