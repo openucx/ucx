@@ -18,15 +18,27 @@ typedef struct uct_ib_mlx5_wqe_ctrl_seg {
 static UCS_F_ALWAYS_INLINE UCS_F_NON_NULL struct mlx5_cqe64*
 uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned cqe_index)
 {
-    return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((cqe_index & (cq->cq_length - 1)) <<
-                                            cq->cqe_size_log));
+    return UCS_PTR_BYTE_OFFSET(cq->cq_buf,
+                               (cqe_index & cq->cq_length_mask) <<
+                                cq->cqe_size_log);
 }
 
+
 static UCS_F_ALWAYS_INLINE int
-uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned cqe_index, unsigned mask)
+uct_ib_mlx5_cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
+                            unsigned cqe_index, int poll_flags)
 {
-    return (op_own & MLX5_CQE_OWNER_MASK) == !(cqe_index & mask);
+    uint8_t sw_it_count = cqe_index >> cq->cq_length_log;
+    uint8_t hw_it_count;
+
+    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_CQE_ZIP) {
+        hw_it_count = ((uint8_t *)cqe)[cq->own_field_offset];
+        return (sw_it_count ^ hw_it_count) & cq->own_mask;
+    } else {
+        return (sw_it_count ^ cqe->op_own) & MLX5_CQE_OWNER_MASK;
+    }
 }
+
 
 /**
  * Checks that cqe_format is equal to 3 (cqe is a part of compression block)
@@ -98,33 +110,49 @@ uct_ib_mlx5_check_and_init_zipped(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe)
     if (cq->cq_unzip.current_idx > 0) {
         return 1;
     } else if ((cqe->op_own & UCT_IB_MLX5_CQE_FORMAT_MASK) == UCT_IB_MLX5_CQE_FORMAT_MASK) {
+        ucs_assert(cq->cq_ci > 0);
         /* First zipped CQE in the sequence */
-        uct_ib_mlx5_iface_cqe_unzip_init(cqe, cq);
+        uct_ib_mlx5_iface_cqe_unzip_init(cq);
         return 1;
     }
+
+    cq->cq_unzip.title_cqe_valid = 0;
     return 0;
 }
 
 
-static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
-uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
+typedef struct mlx5_cqe64 *
+(uct_ib_mlx5_check_compl_cb_t)(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
+                               struct mlx5_cqe64 *cqe, int poll_flags);
+
+
+static UCS_F_ALWAYS_INLINE struct mlx5_cqe64 *
+uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
+                    uct_ib_mlx5_check_compl_cb_t check_cqe_cb)
 {
     struct mlx5_cqe64 *cqe;
-    unsigned cqe_index;
-    uint8_t op_own;
+    unsigned idx;
 
-    cqe_index = cq->cq_ci;
-    cqe       = uct_ib_mlx5_get_cqe(cq, cqe_index);
-    op_own    = cqe->op_own;
+    idx = cq->cq_ci;
+    cqe = uct_ib_mlx5_get_cqe(cq, idx);
 
-    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, cqe_index, cq->cq_length))) {
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(cq, cqe, idx, poll_flags))) {
         return NULL;
-    } else if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(op_own))) {
-        return uct_ib_mlx5_check_completion(iface, cq, cqe);
     }
 
-    cq->cq_ci = cqe_index + 1;
-    return cqe;
+    ucs_memory_cpu_load_fence();
+
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(cqe->op_own))) {
+        return check_cqe_cb(iface, cq, cqe, poll_flags);
+    }
+
+    if (poll_flags & UCT_IB_MLX5_POLL_FLAG_CQE_ZIP) {
+        /* Next zipped CQE should update title CQE */
+        cq->cq_unzip.title_cqe_valid = 0;
+    }
+
+    cq->cq_ci = idx + 1;
+    return cqe; /* TODO optimize - let complier know cqe is not null */
 }
 
 
@@ -136,7 +164,6 @@ uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci)
 #endif
     return wq->bb_max - (wq->prev_sw_pi - hw_ci);
 }
-
 
 
 static UCS_F_ALWAYS_INLINE void

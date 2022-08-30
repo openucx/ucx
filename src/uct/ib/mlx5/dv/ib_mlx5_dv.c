@@ -633,8 +633,12 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     UCT_IB_MLX5DV_SET(cqc, cqctx, log_cq_size, log_cq_size);
     UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_sz, (cqe_size == 128) ? 1 : 0);
-    UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_en,
-                      !!(init_attr->cqe_zip_sizes & cqe_size));
+
+    if (init_attr->cqe_zip_sizes & cqe_size) {
+        UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_en, 1);
+        UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_layout, 1);
+    }
+
     if (!UCS_ENABLE_ASSERT && (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN)) {
         UCT_IB_MLX5DV_SET(cqc, cqctx, oi, 1);
     }
@@ -649,7 +653,8 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     uct_ib_mlx5_fill_cq_common(cq, cq_size, cqe_size,
                                UCT_IB_MLX5DV_GET(create_cq_out, out, cqn),
                                cq->devx.cq_buf, cq->devx.uar->uar->base_addr,
-                               cq->devx.dbrec->db);
+                               cq->devx.dbrec->db,
+                               !!(init_attr->cqe_zip_sizes & cqe_size));
 
     iface->config.max_inl_cqe[dir] = uct_ib_mlx5_inl_cqe(inl, cqe_size);
     iface->cq[dir]                 = NULL;

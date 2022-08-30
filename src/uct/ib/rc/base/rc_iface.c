@@ -574,7 +574,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
 
     tx_cq_size                  = uct_ib_cq_size(&self->super, init_attr,
                                                  UCT_IB_DIR_TX);
-    self->tx.cq_available       = tx_cq_size - 1;
+    /* Prevent title CQE overwriting */
+    self->tx.cq_available       = tx_cq_size - 2;
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
     self->config.tx_qp_len      = config->super.tx.queue_len;

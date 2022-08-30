@@ -74,7 +74,8 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
 
 struct mlx5_cqe64 *
-uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
+uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
+                                      uct_ib_mlx5_cq_t *cq,
                                       struct mlx5_cqe64 *cqe, int poll_flags);
 
 ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
