@@ -87,7 +87,7 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
 
 static ucs_status_t
 ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
-                                     size_t min_iov, ucp_operation_id_t op_id)
+                                     ucp_operation_id_t op_id)
 {
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     ucp_proto_single_init_params_t params        = {
@@ -98,10 +98,10 @@ ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
         .super.cfg_priority  = 0,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
-        .super.min_iov       = min_iov,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_short),
-        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = ucp_am_eager_single_hdr_size(op_id),
         .super.send_op       = UCT_EP_OP_AM_SHORT,
         .super.memtype_op    = UCT_EP_OP_LAST,
@@ -123,10 +123,7 @@ ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
 static ucs_status_t
 ucp_am_eager_short_proto_init(const ucp_proto_init_params_t *init_params)
 {
-    /* 3 iovs are needed to send a message. The iovs contain AM header,
-       payload, user header. */
-    return ucp_am_eager_short_proto_init_common(init_params, 3,
-                                                UCP_OP_ID_AM_SEND);
+    return ucp_am_eager_short_proto_init_common(init_params, UCP_OP_ID_AM_SEND);
 }
 
 static ucs_status_t ucp_am_eager_short_proto_progress(uct_pending_req_t *self)
@@ -148,9 +145,7 @@ ucp_proto_t ucp_am_eager_short_proto = {
 static ucs_status_t
 ucp_am_eager_short_reply_proto_init(const ucp_proto_init_params_t *init_params)
 {
-    /* 4 iovs are needed to send a message. The iovs contain AM header,
-       payload, user header, reply footer. */
-    return ucp_am_eager_short_proto_init_common(init_params, 4,
+    return ucp_am_eager_short_proto_init_common(init_params,
                                                 UCP_OP_ID_AM_SEND_REPLY);
 }
 
