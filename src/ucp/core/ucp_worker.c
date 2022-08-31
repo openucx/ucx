@@ -2638,6 +2638,8 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
         ucs_callbackq_remove_if(&worker->uct->progress_q,
                                 ucp_worker_discard_remove_filter, req);
     })
+
+    worker->flags |= UCP_WORKER_FLAG_DISCARD_DISABLED;
 }
 
 static void ucp_worker_destroy_eps(ucp_worker_h worker,
@@ -3398,8 +3400,12 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.discard_uct_ep.rsc_index      = rsc_index;
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
-    ucp_worker_discard_uct_ep_progress(req);
+    if (worker->flags & UCP_WORKER_FLAG_DISCARD_DISABLED) {
+        ucp_worker_discard_uct_ep_destroy_progress(req);
+        return UCS_OK;
+    }
 
+    ucp_worker_discard_uct_ep_progress(req);
     return UCS_INPROGRESS;
 }
 

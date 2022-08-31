@@ -19,8 +19,15 @@ extern "C" {
 
 class test_ucp_worker_discard : public ucp_test {
 public:
+    enum {
+        TEST_NORMAL           = 0,
+        TEST_DISCARD_DISABLED = 1
+    };
+
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG);
+        add_variant_with_value(variants, UCP_FEATURE_TAG, TEST_NORMAL, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_DISCARD_DISABLED, "discard_disabled");
     }
 
 protected:
@@ -101,6 +108,10 @@ protected:
         ASSERT_LE(wireup_aux_ep_count, wireup_ep_count);
 
         m_ucp_ep = sender().ep();
+
+        if (get_variant_value() & TEST_DISCARD_DISABLED) {
+            m_ucp_ep->worker->flags |= UCP_WORKER_FLAG_DISCARD_DISABLED;
+        }
 
         ops.ep_flush         = (uct_ep_flush_func_t)ep_flush_func;
         ops.ep_pending_add   = (uct_ep_pending_add_func_t)ep_pending_add_func;
@@ -234,20 +245,25 @@ protected:
          * ucp_worker_discard_uct_ep() */
         EXPECT_EQ(ep_count, discarded_count);
 
-        for (unsigned i = 0; i < m_created_ep_count; i++) {
-            ep_test_info_t &test_info = ep_test_info_get(&eps[i]);
+        if (!(get_variant_value() & TEST_DISCARD_DISABLED)) {
+            for (unsigned i = 0; i < m_created_ep_count; i++) {
+                ep_test_info_t &test_info = ep_test_info_get(&eps[i]);
 
-            /* check EP flush counters */
-            if (ep_flush_func == (void*)ep_flush_func_return_3_no_resource_then_ok) {
-                EXPECT_EQ(4, test_info.flush_count);
-            } else if (ep_flush_func == (void*)ep_flush_func_return_in_progress) {
-                EXPECT_EQ(1, test_info.flush_count);
-            }
+                /* check EP flush counters */
+                if (ep_flush_func ==
+                            (void*)ep_flush_func_return_3_no_resource_then_ok) {
+                    EXPECT_EQ(4, test_info.flush_count);
+                } else if (ep_flush_func ==
+                                   (void*)ep_flush_func_return_in_progress) {
+                    EXPECT_EQ(1, test_info.flush_count);
+                }
 
-            /* check EP pending add counters */
-            if (ep_pending_add_func == (void*)ep_pending_add_func_return_ok_then_busy) {
-                /* pending_add has to be called only once per EP */
-                EXPECT_EQ(1, test_info.pending_add_count);
+                /* check EP pending add counters */
+                if (ep_pending_add_func ==
+                            (void*)ep_pending_add_func_return_ok_then_busy) {
+                    /* pending_add has to be called only once per EP */
+                    EXPECT_EQ(1, test_info.pending_add_count);
+                }
             }
         }
 
@@ -263,8 +279,7 @@ protected:
         EXPECT_EQ(1u, m_ucp_ep->refcount);
 
 out:
-        disconnect(sender());
-        sender().cleanup();
+        cleanup();
         EXPECT_EQ(m_created_ep_count, m_destroyed_ep_count);
     }
 

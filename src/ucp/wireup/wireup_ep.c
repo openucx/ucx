@@ -477,20 +477,18 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 
     if (self->aux_ep != NULL) {
         /* No pending operations should be scheduled */
-        uct_ep_pending_purge(self->aux_ep, ucp_destroyed_ep_pending_purge,
-                             ucp_ep);
-        ucp_ep_unprogress_uct_ep(ucp_ep, self->aux_ep, self->aux_rsc_index);
-        uct_ep_destroy(self->aux_ep);
+        ucp_wireup_ep_discard_aux_ep(self, UCT_FLUSH_FLAG_CANCEL,
+                                     ucp_destroyed_ep_pending_purge, ucp_ep);
         self->aux_ep = NULL;
     }
 
     if (self->super.is_owner && (self->super.uct_ep != NULL)) {
         /* No pending operations should be scheduled */
-        uct_ep_pending_purge(self->super.uct_ep,
-                             ucp_destroyed_ep_pending_purge, ucp_ep);
-        ucp_ep_unprogress_uct_ep(ucp_ep, self->super.uct_ep,
-                                 self->super.rsc_index);
-        uct_ep_destroy(self->super.uct_ep);
+        ucp_worker_discard_uct_ep(self->super.ucp_ep, self->super.uct_ep,
+                                  self->super.rsc_index, UCT_FLUSH_FLAG_CANCEL,
+                                  ucp_destroyed_ep_pending_purge, ucp_ep,
+                                  (ucp_send_nbx_callback_t)ucs_empty_function,
+                                  NULL);
         ucp_proxy_ep_set_uct_ep(&self->super, NULL, 0, UCP_NULL_RESOURCE);
     }
 
