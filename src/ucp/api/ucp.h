@@ -138,19 +138,33 @@ enum ucp_params_field {
  * during @ref ucp_init "UCP initialization" process.
  */
 enum ucp_feature {
-    UCP_FEATURE_TAG          = UCS_BIT(0),  /**< Request tag matching
-                                                 support */
-    UCP_FEATURE_RMA          = UCS_BIT(1),  /**< Request remote memory
-                                                 access support */
-    UCP_FEATURE_AMO32        = UCS_BIT(2),  /**< Request 32-bit atomic
-                                                 operations support */
-    UCP_FEATURE_AMO64        = UCS_BIT(3),  /**< Request 64-bit atomic
-                                                 operations support */
-    UCP_FEATURE_WAKEUP       = UCS_BIT(4),  /**< Request interrupt
-                                                 notification support */
-    UCP_FEATURE_STREAM       = UCS_BIT(5),  /**< Request stream support */
-    UCP_FEATURE_AM           = UCS_BIT(6)   /**< Request Active Message
-                                                 support */
+    /** Request tag matching support */
+    UCP_FEATURE_TAG           = UCS_BIT(0),
+
+    /** Request remote memory access support */
+    UCP_FEATURE_RMA           = UCS_BIT(1),
+
+    /** Request 32-bit atomic operations support */
+    UCP_FEATURE_AMO32         = UCS_BIT(2),  
+
+    /** Request 64-bit atomic operations support */
+    UCP_FEATURE_AMO64         = UCS_BIT(3),  
+
+    /** Request interrupt notification support */
+    UCP_FEATURE_WAKEUP        = UCS_BIT(4),  
+
+    /** Request stream support */
+    UCP_FEATURE_STREAM        = UCS_BIT(5),
+
+    /** Request Active Message support */
+    UCP_FEATURE_AM            = UCS_BIT(6),  
+
+    /**
+     * Request support mapping a peer's memory handle that was created by
+     * @ref ucp_mem_map with the flag @ref UCP_MEM_MAP_EXPORT and use it for
+     * local operations
+     */
+    UCP_FEATURE_EXPORTED_MEMH = UCS_BIT(7)
 };
 
 
@@ -383,16 +397,28 @@ typedef enum ucp_ep_perf_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_mem_map_params_field {
-    UCP_MEM_MAP_PARAM_FIELD_ADDRESS     = UCS_BIT(0), /**< Address of the memory that
-                                                           will be used in the
-                                                           @ref ucp_mem_map routine. */
-    UCP_MEM_MAP_PARAM_FIELD_LENGTH      = UCS_BIT(1), /**< The size of memory that
-                                                           will be allocated or
-                                                           registered in the
-                                                           @ref ucp_mem_map routine.*/
-    UCP_MEM_MAP_PARAM_FIELD_FLAGS       = UCS_BIT(2), /**< Allocation flags. */
-    UCP_MEM_MAP_PARAM_FIELD_PROT        = UCS_BIT(3), /**< Memory protection mode. */
-    UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE = UCS_BIT(4)  /**< Memory type. */
+    /**
+     * Address of the memory that will be used in the @ref ucp_mem_map routine.
+     */
+    UCP_MEM_MAP_PARAM_FIELD_ADDRESS              = UCS_BIT(0),
+
+    /**
+     * The size of memory that will be allocated or registered in the
+     * @ref ucp_mem_map routine.
+     */
+    UCP_MEM_MAP_PARAM_FIELD_LENGTH               = UCS_BIT(1),
+
+    /** Allocation flags. */
+    UCP_MEM_MAP_PARAM_FIELD_FLAGS                = UCS_BIT(2),
+
+    /** Memory protection mode. */
+    UCP_MEM_MAP_PARAM_FIELD_PROT                 = UCS_BIT(3),
+
+    /** Memory type. */
+    UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE          = UCS_BIT(4),
+
+    /** Exported memory handle buffer. */
+    UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER = UCS_BIT(5)
 };
 
 /**
@@ -532,19 +558,35 @@ enum ucp_datatype_attr_field {
  * ucp_mem_map() function.
  */
 enum {
-    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0), /**< Complete the mapping faster, possibly by
-                                            not populating the pages in the mapping
-                                            up-front, and mapping them later when
-                                            they are accessed by communication
-                                            routines. */
-    UCP_MEM_MAP_ALLOCATE = UCS_BIT(1), /**< Identify requirement for allocation,
-                                            if passed address is not a null-pointer
-                                            then it will be used as a hint or direct
-                                            address for allocation. */
-    UCP_MEM_MAP_FIXED    = UCS_BIT(2)  /**< Don't interpret address as a hint:
-                                            place the mapping at exactly that
-                                            address. The address must be a multiple
-                                            of the page size. */
+    /**
+     * Complete the mapping faster, possibly by not populating the pages in the
+     * mapping up-front, and mapping them later when they are accessed by
+     * communication routines.
+     */
+    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0),
+
+    /**
+     * Identify requirement for allocation, if passed address is not a
+     * null-pointer, then it will be used as a hint or direct address for
+     * allocation.
+     */
+    UCP_MEM_MAP_ALLOCATE = UCS_BIT(1),
+
+    /**
+     * Don't interpret address as a hint: place the mapping at exactly that
+     * address. The address must be a multiple of the page size.
+     */
+    UCP_MEM_MAP_FIXED    = UCS_BIT(2),
+
+    /**
+     * Create an exported memory handle that could be be packed and used by
+     * peers for their local operations on a memory buffer allocated from same
+     * or another virtual memory space, but physically registered on the
+     * same network device. A peer should call @ref ucp_mem_map with the
+     * flag @ref UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER in order to
+     * import and use the memory handle.
+     */
+    UCP_MEM_MAP_EXPORT = UCS_BIT(3)
 };
 
 
@@ -1600,6 +1642,19 @@ typedef struct ucp_mem_map_params {
       *    internally.
       */
      ucs_memory_type_t      memory_type;
+
+     /**
+      * Exported memory handle buffer as returned by @ref ucp_mem_map
+      * function for a memory handle created with @ref UCP_MEM_MAP_EXPORT flag.
+      * If this field is specified for @ref ucp_mem_map function, a resulting
+      * memory handle will be a mapping of peer memory instead of local
+      * memory.
+      * If the field is not set (along with its corresponding bit in the
+      * field_mask - @ref UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER), the
+      * @ref ucp_mem_map routine will consider the memory handle buffer to be
+      * set to NULL by default.
+      */
+    const void              *exported_memh_buffer;
 } ucp_mem_map_params_t;
 
 
