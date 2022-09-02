@@ -8,8 +8,8 @@
 
 #include <sys/socket.h>
 #include <sys/epoll.h>
-#include <sys/fcntl.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
 #include <cerrno>
