@@ -1093,6 +1093,22 @@ void uct_dc_mlx5_fc_entry_iter_del(uct_dc_mlx5_iface_t *iface, khiter_t it)
     }
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_fc_remove_ep(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
+                         uint64_t seq)
+{
+    khiter_t it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash,
+                         (uint64_t)ep);
+    if ((it != kh_end(&iface->tx.fc_hash)) &&
+        ((seq == UINT64_MAX) ||
+         (kh_value(&iface->tx.fc_hash, it).seq == seq))) {
+        uct_dc_mlx5_fc_entry_iter_del(iface, it);
+        return 1;
+    }
+
+    return 0;
+}
+
 static ucs_status_t
 uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                              uct_rc_hdr_t *hdr, unsigned length,
@@ -1105,7 +1121,6 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
     int16_t cur_wnd;
     ucs_status_t status;
     uct_dc_mlx5_ep_t *ep;
-    khiter_t it;
     ucs_arbiter_t *waitq;
     ucs_arbiter_group_t *group;
     uint8_t pool_index;
@@ -1138,31 +1153,23 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                      ucs_status_string(status));
         }
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
-        sender = (uct_dc_fc_sender_data_t *)(hdr + 1);
-
-        it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, sender->ep);
-        if ((it == kh_end(&iface->tx.fc_hash)) ||
-            (kh_value(&iface->tx.fc_hash, it).seq != sender->payload.seq)) {
-            /* Just ignore, ep was removed. We either not expecting grant on
-             * this EP or this is not the same grant sequence number we are
-             * expecting. */
+        sender = (uct_dc_fc_sender_data_t*)(hdr + 1);
+        ep     = (uct_dc_mlx5_ep_t*)sender->ep;
+        if (!uct_dc_mlx5_fc_remove_ep(iface, ep, sender->payload.seq)) {
+            /* Don't process FC_PURE_GRANT further, if an endpoint doesn't
+             * exist anymore, unexpected grant was received on an endpoint or
+             * this is not the same grant sequence number which was expected */
             return UCS_OK;
         }
 
-        ep      = (uct_dc_mlx5_ep_t *)sender->ep;
         cur_wnd = ep->fc.fc_wnd;
+        uct_rc_fc_restore_wnd(&iface->super.super, &ep->fc);
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT,
+                                 1);
 
-        /* Peer granted resources, so update wnd */
-        uct_rc_fc_restore_wnd(rc_iface, &ep->fc);
-
-        /* Remove FC entry to complete */
-        uct_dc_mlx5_fc_entry_iter_del(iface, it);
-
-        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
-
-        /* To preserve ordering we have to dispatch all pending
-         * operations if current fc_wnd is <= 0 */
-        if (cur_wnd <= 0) {
+        /* To preserve ordering we have to dispatch all pending operations if
+         * current fc_wnd is <= 0 */
+        if (cur_wnd == 0) {
             uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group,
                                            &pool_index);
             ucs_arbiter_group_schedule(waitq, group);
@@ -1663,27 +1670,34 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
      * purged - they need to be rescheduled when DCI will be recovered after an
      * error */
 
-    if (ep->flags & (UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED |
-                     UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL)) {
+    if (ep == iface->tx.fc_ep) {
+        /* Do not report errors on flow control endpoint */
+        if (!(iface->flags & UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED)) {
+            ucs_debug("got error on DC flow-control endpoint, iface %p: %s",
+                      iface, ucs_status_string(ep_status));
+        }
+
+        iface->flags |= UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
         return;
     }
 
-    if (ep == iface->tx.fc_ep) {
-        iface->flags |= UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
-
-        /* Do not report errors on flow control endpoint */
-        ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
-                  ucs_status_string(ep_status));
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED) {
         return;
     }
 
     ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
+
+    uct_dc_mlx5_fc_remove_ep(iface, ep, UINT64_MAX);
     uct_rc_fc_restore_wnd(&iface->super.super, &ep->fc);
 
-    status  = uct_iface_handle_ep_err(&ib_iface->super.super,
-                                      &ep->super.super, ep_status);
-    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
-                                               ep_status);
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL) {
+        return;
+    }
+
+    status     = uct_iface_handle_ep_err(&ib_iface->super.super,
+                                         &ep->super.super, ep_status);
+    log_lvl    = uct_base_iface_failure_log_level(&ib_iface->super, status,
+                                                  ep_status);
     uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe, txwq,
                                     log_lvl);
 }

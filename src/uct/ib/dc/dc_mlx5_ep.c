@@ -1669,6 +1669,10 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
         fc_entry = &kh_value(&iface->tx.fc_hash, it);
     }
 
+    /* Expect that a FC sequence number doesn't reach UINT64_MAX value. So,
+     * uct_dc_mlx5_fc_remove_ep() can rely on "seq != UINT64_MAX" condition to
+     * check that a FC entry's sequnce number needs to be verified */
+    ucs_assert(iface->tx.fc_seq != UINT64_MAX);
     fc_entry->seq       = iface->tx.fc_seq++;
     fc_entry->send_time = now;
 
@@ -1722,6 +1726,10 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
     /* Invoke a user's error callback and release TX/FC resources before
      * releasing DCI, to have DCI for doing possible flush(CANCEL) */
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
+
+    ucs_assertv(ep->fc.fc_wnd == iface->super.super.config.fc_wnd_size,
+                "ep %p: fc_wnd=%d config_fc_wnd=%u", ep, ep->fc.fc_wnd,
+                iface->super.super.config.fc_wnd_size);
 
     if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
         /* If DCI wasn't detached during purging of pending queue inside a
