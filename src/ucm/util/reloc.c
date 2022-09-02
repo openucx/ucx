@@ -17,7 +17,6 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 
-#include <sys/fcntl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
