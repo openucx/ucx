@@ -26,7 +26,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/uio.h>
-#include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/param.h>
@@ -36,6 +35,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
