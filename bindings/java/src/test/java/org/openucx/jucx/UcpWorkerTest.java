@@ -88,6 +88,21 @@ public class UcpWorkerTest extends UcxTest {
     }
 
     @Test
+    public void testWorkerArmAndGetEventFD() {
+        UcpContext context = new UcpContext(new UcpParams()
+                .requestRmaFeature().requestWakeupFeature());
+        UcpWorker worker = context.newWorker(new UcpWorkerParams());
+
+        int eventFD = worker.getEventFD();
+        assertNotEquals(0, eventFD);
+
+        worker.arm(); // Test passes, if no exception is thrown
+
+        worker.close();
+        context.close();
+    }
+
+    @Test
     public void testWorkerSleepWakeup() throws InterruptedException {
         UcpContext context = new UcpContext(new UcpParams()
             .requestRmaFeature().requestWakeupFeature());
