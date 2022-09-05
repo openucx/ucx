@@ -395,7 +395,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_udt_iface_t, uct_md_h md, uct_worker_h worke
     ucs_mpool_params_t mp_params;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params,
-                              &uct_ugni_udt_iface_ops,
+                              &uct_ugni_udt_iface_ops, NULL,
                               &config->super UCS_STATS_ARG(NULL));
 
     /* Setting initial configuration */

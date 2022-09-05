@@ -742,13 +742,18 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 }
 
-ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
-                                          const uct_device_addr_t *dev_addr,
-                                          const uct_ep_addr_t *ep_addr)
+ucs_status_t
+uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
+                                const uct_device_addr_t *device_addr,
+                                const uct_iface_addr_t *iface_addr,
+                                const uct_ep_addr_t *ep_addr,
+                                const uct_ep_connect_to_ep_params_t *params)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
-    const uct_rc_mlx5_ep_address_t *rc_addr = (const uct_rc_mlx5_ep_address_t*)ep_addr;
+    const uct_ib_address_t *ib_addr            = (const uct_ib_address_t *)device_addr;
+    const uct_rc_mlx5_ep_address_t *rc_addr    = (const uct_rc_mlx5_ep_address_t*)ep_addr;
+    uct_rc_mlx5_iface_flush_addr_t *flush_addr =
+            (uct_rc_mlx5_iface_flush_addr_t*)iface_addr;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
@@ -788,8 +793,14 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
     ep->super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
 
-    if (uct_ib_md_is_flush_rkey_valid(ep->super.flush_rkey)) {
-        ep->super.flush_rkey |= (uint32_t)rc_addr->atomic_mr_id << 8;
+    /* if iface address is not provided or address doesn't contain
+     * FLUSH_RKEY flag - mark flush_rkey as invalid */
+    if ((flush_addr != NULL) &&
+        (flush_addr->super.flags & UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_RKEY)) {
+        ep->super.flush_rkey = ((uint32_t)flush_addr->flush_rkey_hi << 16) |
+                               ((uint32_t)rc_addr->atomic_mr_id << 8);
+    } else {
+        ep->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
     }
 
     return UCS_OK;
@@ -974,7 +985,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
                                                        uct_ib_mlx5_md_t);
     uct_ib_mlx5_qp_attr_t attr        = {};
-    uct_rc_mlx5_iface_flush_addr_t *addr;
     ucs_status_t status;
 
     /* Need to create QP before super constructor to get QP number */
@@ -1015,19 +1025,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         }
 
         uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.qp_num);
-    }
-
-    addr = (uct_rc_mlx5_iface_flush_addr_t*)UCT_EP_PARAM_VALUE(params,
-                                                               iface_addr,
-                                                               IFACE_ADDR,
-                                                               NULL);
-    /* if iface address is not provided or address doesn't contain
-     * FLUSH_RKEY flag - mark flush_rkey as invalid */
-    if ((addr != NULL) &&
-        (addr->super.flags & UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_RKEY)) {
-        self->super.flush_rkey = (uint32_t)addr->flush_rkey_hi << 16;
-    } else {
-        self->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);

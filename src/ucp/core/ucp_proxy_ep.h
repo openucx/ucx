@@ -10,6 +10,7 @@
 #include "ucp_types.h"
 
 #include <uct/api/uct.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
 
 
@@ -24,16 +25,16 @@
  * TODO make sure it works with err handling and print_ucp_info
  */
 typedef struct ucp_proxy_ep {
-    uct_ep_t        super;     /**< Derived from uct_ep */
-    uct_iface_t     iface;     /**< Embedded stub interface */
-    ucp_ep_h        ucp_ep;    /**< Pointer to UCP endpoint */
-    uct_ep_h        uct_ep;    /**< Underlying transport endpoint */
-    int             is_owner;  /**< Is uct_ep owned by this proxy ep */
-    ucp_rsc_index_t rsc_index; /**< Resource index of underlying transport endpoint */
+    uct_ep_t         super;     /**< Derived from uct_ep */
+    uct_base_iface_t iface;     /**< Embedded stub interface */
+    ucp_ep_h         ucp_ep;    /**< Pointer to UCP endpoint */
+    uct_ep_h         uct_ep;    /**< Underlying transport endpoint */
+    int              is_owner;  /**< Is uct_ep owned by this proxy ep */
+    ucp_rsc_index_t  rsc_index; /**< Resource index of underlying transport endpoint */
 } ucp_proxy_ep_t;
 
 
-UCS_CLASS_DECLARE(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
+UCS_CLASS_DECLARE(ucp_proxy_ep_t, const uct_base_iface_t *iface, ucp_ep_h ucp_ep,
                   uct_ep_h uct_ep, int is_owner);
 
 

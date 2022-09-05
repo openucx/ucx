@@ -959,7 +959,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .iface_estimate_perf = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh   = uct_rc_iface_vfs_refresh,
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate       = uct_rc_mlx5_ep_invalidate
+            .ep_invalidate       = uct_rc_mlx5_ep_invalidate,
+            .ep_connect_to_ep_v2 = uct_rc_mlx5_ep_connect_to_ep_v2
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -999,7 +1000,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_get_address           = uct_rc_mlx5_ep_get_address,
-    .ep_connect_to_ep         = uct_rc_mlx5_ep_connect_to_ep,
+    .ep_connect_to_ep         = uct_base_ep_connect_to_ep,
 #if IBV_HW_TM
     .ep_tag_eager_short       = uct_rc_mlx5_ep_tag_eager_short,
     .ep_tag_eager_bcopy       = uct_rc_mlx5_ep_tag_eager_bcopy,
