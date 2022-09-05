@@ -2389,7 +2389,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         ucp_rkey_destroy(sreq->send.rndv.rkey);
     }
 
-    ucp_trace_req(sreq, "using rdnv_data protocol");
+    ucp_trace_req(sreq, "using rndv_data protocol");
 
     /* switch to AM */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
