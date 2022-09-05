@@ -1591,6 +1591,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             ptr = UCS_PTR_TYPE_OFFSET(ptr, address->tl_name_csum);
 
             address->dev_addr      = (dev_addr_len > 0) ? dev_addr : NULL;
+            address->dev_addr_len  = dev_addr_len;
             address->md_index      = md_index;
             address->sys_dev       = sys_dev;
             address->dev_index     = dev_index;
@@ -1631,6 +1632,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
                 ep_addr       = &address->ep_addrs[address->num_ep_addrs++];
                 ep_addr->addr = ptr;
+                ep_addr->len  = ep_addr_len;
                 ptr           = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
 
                 ep_addr->lane = *(uint8_t*)ptr & UCP_ADDRESS_IFACE_LEN_MASK;

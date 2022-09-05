@@ -275,7 +275,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
         status = UCS_ERR_NO_DEVICE;
         goto exit;
     }
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops, NULL,
                               &config->super UCS_STATS_ARG(NULL));
     /* Setting initial configuration */
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;
