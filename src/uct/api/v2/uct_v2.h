@@ -475,6 +475,19 @@ typedef struct uct_iface_is_reachable_params {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Parameters for connecting a UCT endpoint by @ref
+ * uct_ep_connect_to_ep_v2.
+ */
+typedef struct uct_ep_connect_to_ep_params {
+    /**
+     * Reserved, must be 0.
+     */
+    uint64_t                      field_mask;
+} uct_ep_connect_to_ep_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Get interface performance attributes, by memory types and operation.
  *        A pointer to uct_perf_attr_t struct must be passed, with the memory
  *        types and operation members initialized. Overhead and bandwidth
@@ -603,6 +616,30 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  */
 int uct_iface_is_reachable_v2(uct_iface_h iface,
                               const uct_iface_is_reachable_params_t *params);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Connect endpoint to a remote endpoint.
+ *
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_EP capability.
+ *
+ * @param [in] ep           Endpoint to connect.
+ * @param [in] device_addr  Remote device address.
+ * @param [in] iface_addr   Remote interface address or NULL if such address is
+ *                          not available.
+ * @param [in] ep_addr      Remote endpoint address.
+ * @param [in] params       Parameters as defined in @ref
+ *                          uct_ep_connect_to_ep_params_t.
+ *
+ * @return UCS_OK           Operation has been initiated successfully.
+ *         Other            Error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
+                                     const uct_device_addr_t *device_addr,
+                                     const uct_iface_addr_t *iface_addr,
+                                     const uct_ep_addr_t *ep_addr,
+                                     const uct_ep_connect_to_ep_params_t *params);
 
 END_C_DECLS
 
