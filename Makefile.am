@@ -62,6 +62,7 @@ endif
 
 EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
+EXTRA_DIST += contrib/configure-release-mt
 EXTRA_DIST += contrib/configure-prof
 EXTRA_DIST += contrib/buildrpm.sh
 EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
@@ -69,7 +70,12 @@ EXTRA_DIST += contrib/ucx_perftest_config/README
 EXTRA_DIST += contrib/ucx_perftest_config/test_types_uct
 EXTRA_DIST += contrib/ucx_perftest_config/test_types_ucp
 EXTRA_DIST += contrib/ucx_perftest_config/transports
-EXTRA_DIST += debian
+EXTRA_DIST += debian/changelog
+EXTRA_DIST += debian/compat
+EXTRA_DIST += debian/copyright
+EXTRA_DIST += debian/control
+EXTRA_DIST += debian/rules
+EXTRA_DIST += debian/source/format
 EXTRA_DIST += ucx.pc.in
 EXTRA_DIST += LICENSE
 endif #!DOCS_ONLY
