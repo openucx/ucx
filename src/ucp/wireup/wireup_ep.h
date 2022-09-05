@@ -134,4 +134,9 @@ ucp_wireup_ep_t *ucp_wireup_ep(uct_ep_h uct_ep);
 unsigned ucp_wireup_ep_pending_extract(ucp_wireup_ep_t *wireup_ep,
                                        ucs_queue_head_t *queue);
 
+ucs_status_t
+ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
+                               const ucp_address_entry_t *address_entry,
+                               const ucp_address_entry_ep_addr_t *ep_entry);
+
 #endif

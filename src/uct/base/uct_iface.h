@@ -983,6 +983,11 @@ void uct_tl_register(uct_component_t *component, uct_tl_t *tl);
 
 void uct_tl_unregister(uct_tl_t *tl);
 
+ucs_status_t
+uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
+                          const uct_device_addr_t *device_addr,
+                          const uct_ep_addr_t *ep_addr);
+
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_short(uct_ep_operation_t op)
 {
     return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_AM_SHORT) |

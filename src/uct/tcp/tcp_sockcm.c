@@ -197,7 +197,8 @@ static uct_iface_internal_ops_t uct_tcp_sockcm_iface_internal_ops = {
     .iface_estimate_perf = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query            = uct_tcp_sockcm_ep_query,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
+    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,

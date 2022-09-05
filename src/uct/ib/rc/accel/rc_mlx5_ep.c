@@ -18,6 +18,7 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/type/serialize.h>
 #include <arpa/inet.h> /* For htonl */
 
 #include "rc_mlx5.inl"
@@ -670,15 +671,25 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    uct_rc_mlx5_ep_address_t *rc_addr = (uct_rc_mlx5_ep_address_t*)addr;
-    uct_ib_md_t *md                   = uct_ib_iface_md(ucs_derived_of(
-                                        tl_ep->iface, uct_ib_iface_t));
+    uct_rc_mlx5_ep_address_t *rc_addr       = (uct_rc_mlx5_ep_address_t*)addr;
+    uct_ib_md_t *md                         = uct_ib_iface_md(ucs_derived_of(
+                                              tl_ep->iface, uct_ib_iface_t));
+    uct_rc_mlx5_ep_ext_address_t *ext_addr;
+    void *ptr;
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->tx.wq.super.qp_num);
     uct_ib_mlx5_md_get_atomic_mr_id(md, &rc_addr->atomic_mr_id);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.qp_num);
+    }
+
+    if (uct_ib_md_is_flush_rkey_valid(md->flush_rkey)) {
+        ext_addr                            = ucs_derived_of(rc_addr,
+                                                             uct_rc_mlx5_ep_ext_address_t);
+        ext_addr->flags                     = UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY;
+        ptr                                 = ext_addr + 1;
+        *ucs_serialize_next(&ptr, uint16_t) = md->flush_rkey >> 16;
     }
 
     return UCS_OK;
@@ -742,16 +753,22 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 }
 
-ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
-                                          const uct_device_addr_t *dev_addr,
-                                          const uct_ep_addr_t *ep_addr)
+ucs_status_t
+uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
+                                const uct_device_addr_t *device_addr,
+                                const uct_ep_addr_t *ep_addr,
+                                const uct_ep_connect_to_ep_params_t *params)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
+    const uct_ib_address_t *ib_addr         = (const uct_ib_address_t *)device_addr;
     const uct_rc_mlx5_ep_address_t *rc_addr = (const uct_rc_mlx5_ep_address_t*)ep_addr;
+    const uct_rc_mlx5_ep_ext_address_t *ext_addr;
+    size_t addr_length;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
+    const void *ptr;
+    uint32_t flush_rkey_hi;
     ucs_status_t status;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
@@ -787,9 +804,24 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
 
     ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
     ep->super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
+    addr_length                = UCS_PARAM_VALUE(UCT_EP_CONNECT_TO_EP_PARAM_FIELD,
+                                                 params, ep_addr_length,
+                                                 EP_ADDR_LENGTH,
+                                                 sizeof(uct_rc_mlx5_ep_address_t));
 
-    if (uct_ib_md_is_flush_rkey_valid(ep->super.flush_rkey)) {
-        ep->super.flush_rkey |= (uint32_t)rc_addr->atomic_mr_id << 8;
+    if (addr_length <= sizeof(uct_rc_mlx5_ep_address_t)) {
+        ep->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
+        return UCS_OK;
+    }
+
+    ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
+    if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY) {
+        ptr                  = ext_addr + 1;
+        flush_rkey_hi        = *ucs_serialize_next(&ptr, uint16_t);
+        ep->super.flush_rkey = (flush_rkey_hi << 16) |
+                               ((uint32_t)rc_addr->atomic_mr_id << 8);
+    } else {
+        ep->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
     }
 
     return UCS_OK;
@@ -974,7 +1006,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
                                                        uct_ib_mlx5_md_t);
     uct_ib_mlx5_qp_attr_t attr        = {};
-    uct_rc_mlx5_iface_flush_addr_t *addr;
     ucs_status_t status;
 
     /* Need to create QP before super constructor to get QP number */
@@ -1015,19 +1046,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         }
 
         uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.qp_num);
-    }
-
-    addr = (uct_rc_mlx5_iface_flush_addr_t*)UCT_EP_PARAM_VALUE(params,
-                                                               iface_addr,
-                                                               IFACE_ADDR,
-                                                               NULL);
-    /* if iface address is not provided or address doesn't contain
-     * FLUSH_RKEY flag - mark flush_rkey as invalid */
-    if ((addr != NULL) &&
-        (addr->super.flags & UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_RKEY)) {
-        self->super.flush_rkey = (uint32_t)addr->flush_rkey_hi << 16;
-    } else {
-        self->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);

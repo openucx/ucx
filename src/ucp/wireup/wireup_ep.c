@@ -619,3 +619,31 @@ unsigned ucp_wireup_ep_pending_extract(ucp_wireup_ep_t *wireup_ep,
 
     return count;
 }
+
+ucs_status_t
+ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
+                               const ucp_address_entry_t *address_entry,
+                               const ucp_address_entry_ep_addr_t *ep_entry)
+{
+    const uct_ep_connect_to_ep_params_t param = {
+        .field_mask = UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH |
+                      UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH,
+        .device_addr_length = address_entry->dev_addr_len,
+        .ep_addr_length     = ep_entry->len
+    };
+    ucp_wireup_ep_t *wireup_ep                = ucp_wireup_ep(tl_ep);
+
+    if (wireup_ep == NULL) {
+        return uct_ep_connect_to_ep_v2(tl_ep, address_entry->dev_addr,
+                                       ep_entry->addr, &param);
+    }
+
+    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) {
+        return UCS_OK;
+    }
+
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
+    return uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep,
+                                   address_entry->dev_addr, ep_entry->addr,
+                                   &param);
+}
