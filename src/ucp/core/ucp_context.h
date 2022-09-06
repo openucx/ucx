@@ -454,6 +454,22 @@ typedef struct ucp_tl_iface_atomic_flags {
     ucs_assert(ucp_memory_type_detect(_context, _buffer, _length) == (_mem_type))
 
 
+#define UCP_CONTEXT_MEM_CAP_TLS(_context, _mem_type, _cap_field, _tl_bitmap) \
+    { \
+        const uct_md_attr_t *md_attr; \
+        ucp_md_index_t md_index; \
+        ucp_rsc_index_t tl_id; \
+        UCS_BITMAP_CLEAR(&(_tl_bitmap)); \
+        UCS_BITMAP_FOR_EACH_BIT((_context)->tl_bitmap, tl_id) { \
+            md_index = (_context)->tl_rscs[tl_id].md_index; \
+            md_attr  = &(_context)->tl_mds[md_index].attr; \
+            if (md_attr->cap._cap_field & UCS_BIT(_mem_type)) { \
+                UCS_BITMAP_SET(_tl_bitmap, tl_id); \
+            } \
+        } \
+    }
+
+
 extern ucp_am_handler_t *ucp_am_handlers[];
 extern const char       *ucp_feature_str[];
 
@@ -615,10 +631,5 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
-
-
-void ucp_context_get_mem_access_tls(ucp_context_h context,
-                                    ucs_memory_type_t mem_type,
-                                    ucp_tl_bitmap_t *tl_bitmap);
 
 #endif
