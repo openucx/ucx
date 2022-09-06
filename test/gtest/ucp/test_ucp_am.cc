@@ -432,13 +432,13 @@ protected:
         EXPECT_EQ(check_pattern, m_hdr);
     }
 
-    ucs_status_ptr_t send_am(const ucp::data_type_desc_t &dt_desc,
-                             unsigned flags = 0, const void *hdr = NULL,
-                             unsigned hdr_length = 0,
-                             const ucp_mem_h memh = NULL)
+    ucs_status_ptr_t
+    send_am(const ucp::data_type_desc_t &dt_desc, unsigned flags = 0,
+            const void *hdr = NULL, unsigned hdr_length = 0,
+            const ucp_mem_h memh = NULL, uint32_t op_attr_mask = 0)
     {
         ucp_request_param_t param;
-        param.op_attr_mask      = UCP_OP_ATTR_FIELD_DATATYPE;
+        param.op_attr_mask      = op_attr_mask | UCP_OP_ATTR_FIELD_DATATYPE;
         param.datatype          = dt_desc.dt();
 
         if (flags != 0) {
@@ -458,13 +458,14 @@ protected:
     }
 
     void test_am_send_recv(size_t size, size_t header_size = 0ul,
-                           unsigned flags = 0, unsigned data_cb_flags = 0)
+                           unsigned flags = 0, unsigned data_cb_flags = 0,
+                           uint32_t op_attr_mask = 0)
     {
         mem_buffer sbuf(size, tx_memtype());
         sbuf.pattern_fill(SEED);
         m_hdr.resize(header_size);
         ucs::fill_random(m_hdr);
-        m_am_received = false;
+        m_am_received  = false;
         ucp_mem_h memh = NULL;
 
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this,
@@ -477,7 +478,8 @@ protected:
         }
 
         ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag() | flags,
-                                        m_hdr.data(), m_hdr.size(), memh);
+                                        m_hdr.data(), m_hdr.size(), memh,
+                                        op_attr_mask);
 
         wait_for_flag(&m_am_received);
         request_wait(sptr);
@@ -847,13 +849,8 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 
-class test_ucp_am_nbx_single_multi_reply : public test_ucp_am_nbx {
+class test_ucp_am_nbx_reply_always : public test_ucp_am_nbx {
 public:
-    test_ucp_am_nbx_single_multi_reply()
-    {
-        modify_config("RNDV_THRESH", "inf");
-    }
-
     bool am_lane_has_caps(uint64_t caps);
 
 protected:
@@ -863,7 +860,7 @@ protected:
     }
 };
 
-bool test_ucp_am_nbx_single_multi_reply::am_lane_has_caps(uint64_t caps)
+bool test_ucp_am_nbx_reply_always::am_lane_has_caps(uint64_t caps)
 {
     ucp_ep_config_key_t key  = ucp_ep_config(sender().ep())->key;
     ucp_lane_index_t am_lane = key.am_lane;
@@ -878,7 +875,13 @@ bool test_ucp_am_nbx_single_multi_reply::am_lane_has_caps(uint64_t caps)
     return ucs_test_all_flags(iface_attr->cap.flags, caps);
 }
 
-UCS_TEST_P(test_ucp_am_nbx_single_multi_reply, bcopy, "ZCOPY_THRESH=inf")
+/* The following two tests, "multi_bcopy" and "multi_zcopy", check correctness
+ * of AM API when using UCP_AM_SEND_FLAG_REPLY flag.
+ * Tests send messages with size equal to (fragment size + 1). The size should
+ * be less than (fragment size + reply footer size) to check if the switch
+ * between single and multi protocols is correct. */
+UCS_TEST_P(test_ucp_am_nbx_reply_always, multi_bcopy, "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
     if (!am_lane_has_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
         UCS_TEST_SKIP_R("am_bcopy is not supported");
@@ -888,7 +891,8 @@ UCS_TEST_P(test_ucp_am_nbx_single_multi_reply, bcopy, "ZCOPY_THRESH=inf")
     test_am_send_recv(bcopy_fragment_size + 1, 0);
 }
 
-UCS_TEST_P(test_ucp_am_nbx_single_multi_reply, zcopy, "ZCOPY_THRESH=1")
+UCS_TEST_P(test_ucp_am_nbx_reply_always, multi_zcopy, "ZCOPY_THRESH=1",
+           "RNDV_THRESH=inf")
 {
     if (!am_lane_has_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
         UCS_TEST_SKIP_R("am_zcopy is not supported");
@@ -900,11 +904,16 @@ UCS_TEST_P(test_ucp_am_nbx_single_multi_reply, zcopy, "ZCOPY_THRESH=1")
     test_am_send_recv(zcopy_fragment_size + 1, 0);
 }
 
-/* Tests check correctness of AM API when using UCP_AM_SEND_FLAG_REPLY flag.
- * Tests send messages with size equal to (fragment size + 1). The size should
- * be less than (fragment size + reply footer size) to check if the switch
- * between single and multi protocols is correct. */
-UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_single_multi_reply)
+UCS_TEST_P(test_ucp_am_nbx_reply_always, short_slow_path)
+{
+    /*
+     * This message is sent with UCP_OP_ATTR_FLAG_NO_IMM_CMPL so it will
+     * always go through AM short slowpath.
+     */
+    test_am_send_recv(8, 8, 0, 0, UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_reply_always)
 
 
 class test_ucp_am_nbx_send_flag : public test_ucp_am_nbx {
