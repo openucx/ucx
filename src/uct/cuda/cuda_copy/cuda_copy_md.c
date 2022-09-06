@@ -34,7 +34,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      ucs_offsetof(uct_cuda_copy_md_config_t, alloc_whole_reg),
      UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
-    {"MAX_REG_RATIO", "0.1",
+    {"MAX_REG_RATIO", "1.0",
      "If the ratio of the length of the allocation to which the user buffer belongs to"
      " to the total GPU memory capacity is below this ratio, then the whole allocation"
      " is registered. Otherwise only the user specified region is registered.",
