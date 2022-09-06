@@ -1600,7 +1600,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucs_memory_type_t mem_type;
     size_t added_lanes;
     uint64_t md_reg_flag;
-    ucp_tl_bitmap_t tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap, mem_type_tl_bitmap;
     uint8_t i;
     ucp_wireup_select_flags_t iface_rma_flags, peer_rma_flags;
 
@@ -1652,8 +1652,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.criteria.lane_type       = UCP_LANE_TYPE_RKEY_PTR;
         bw_info.max_lanes                = 1;
 
-        ucp_context_get_mem_access_tls(context, UCS_MEMORY_TYPE_HOST,
-                                       &tl_bitmap);
+        UCP_CONTEXT_MEM_CAP_TLS(context, UCS_MEMORY_TYPE_HOST, access_mem_types,
+                                tl_bitmap);
         ucp_wireup_add_bw_lanes(select_params, &bw_info, tl_bitmap,
                                 UCP_NULL_LANE, select_ctx);
     }
@@ -1691,11 +1691,20 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
         /* Add lanes that can access the memory by short operations */
         added_lanes = 0;
+        UCS_BITMAP_CLEAR(&tl_bitmap);
+
         for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+            UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, reg_mem_types,
+                                    mem_type_tl_bitmap);
+
             bw_info.criteria.reg_mem_types = UCS_BIT(mem_type);
-            added_lanes += ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                                   ucp_tl_bitmap_max,
-                                                   UCP_NULL_LANE, select_ctx);
+            added_lanes                   += ucp_wireup_add_bw_lanes(
+                                               select_params, &bw_info,
+                                               UCP_TL_BITMAP_AND_NOT(
+                                                 mem_type_tl_bitmap, tl_bitmap),
+                                               UCP_NULL_LANE, select_ctx);
+
+            UCS_BITMAP_OR_INPLACE(&tl_bitmap, mem_type_tl_bitmap);
         }
 
         if (added_lanes /* There are selected lanes */ ||
