@@ -337,10 +337,10 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
 }
 
 static ucs_status_t
-uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
+uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *mkey_buffer)
 {
     if (ENABLE_PARAMS_CHECK) {
-        return ((md != NULL) && (memh != NULL) && (rkey_buffer != NULL)) ?
+        return ((md != NULL) && (memh != NULL) && (mkey_buffer != NULL)) ?
                UCS_OK : UCS_ERR_INVALID_PARAM;
     } else {
         return UCS_OK;
@@ -349,16 +349,16 @@ uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
                                  const uct_md_mkey_pack_params_t *params,
-                                 void *rkey_buffer)
+                                 void *mkey_buffer)
 {
     ucs_status_t status;
 
-    status = uct_md_mkey_pack_params_check(md, memh, rkey_buffer);
+    status = uct_md_mkey_pack_params_check(md, memh, mkey_buffer);
     if (status != UCS_OK) {
         return status;
     }
 
-    return md->ops->mkey_pack(md, memh, params, rkey_buffer);
+    return md->ops->mkey_pack(md, memh, params, mkey_buffer);
 }
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
@@ -370,7 +370,7 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
     return uct_md_mkey_pack_v2(md, memh, &params, rkey_buffer);
 }
 
-ucs_status_t uct_md_mem_attach(uct_md_h md, void *mkey_buffer,
+ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
                                uct_md_mem_attach_params_t *params,
                                uct_mem_h *memh_p)
 {

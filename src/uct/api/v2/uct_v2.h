@@ -281,7 +281,13 @@ typedef enum {
      * in order for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
      * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag must be set.
      */
-    UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0)
+    UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0),
+
+    /**
+     * The flag is used to indicate that the memory region can be accessed
+     * by another process using the same device to perform UCT operations.
+     */
+    UCT_MD_MKEY_PACK_FLAG_EXPORT     = UCS_BIT(1)
 } uct_md_mkey_pack_flags_t;
 
 
@@ -549,43 +555,49 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
  */
 typedef enum uct_md_attr_field {
     /** Indicate max allocation size. */
-    UCT_MD_ATTR_FIELD_MAX_ALLOC        = UCS_BIT(0),
+    UCT_MD_ATTR_FIELD_MAX_ALLOC                 = UCS_BIT(0),
 
     /** Indicate max registration size. */
-    UCT_MD_ATTR_FIELD_MAX_REG          = UCS_BIT(1),
+    UCT_MD_ATTR_FIELD_MAX_REG                   = UCS_BIT(1),
 
     /** Indicate capability flags. */
-    UCT_MD_ATTR_FIELD_FLAGS            = UCS_BIT(2),
+    UCT_MD_ATTR_FIELD_FLAGS                     = UCS_BIT(2),
 
     /** Indicate memory types that the MD can register. */
-    UCT_MD_ATTR_FIELD_REG_MEM_TYPES    = UCS_BIT(3),
+    UCT_MD_ATTR_FIELD_REG_MEM_TYPES             = UCS_BIT(3),
 
-    /** Indicate memory types that the MD can register. */
-    UCT_MD_ATTR_FIELD_CACHE_MEM_TYPES  = UCS_BIT(4),
+    /** Indicate memory types that the MD can cache. */
+    UCT_MD_ATTR_FIELD_CACHE_MEM_TYPES           = UCS_BIT(4),
 
     /** Indicate memory types that the MD can detect. */
-    UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES = UCS_BIT(5),
+    UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES          = UCS_BIT(5),
 
     /** Indicate memory types that the MD can allocate. */
-    UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES  = UCS_BIT(6),
+    UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES           = UCS_BIT(6),
 
     /** Indicate memory types that the MD can access. */
-    UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES = UCS_BIT(7),
+    UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES          = UCS_BIT(7),
 
     /** Indicate memory types for which the MD can return a dmabuf_fd. */
-    UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES = UCS_BIT(8),
+    UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES          = UCS_BIT(8),
 
     /** Indicate registration cost. */
-    UCT_MD_ATTR_FIELD_REG_COST         = UCS_BIT(9),
+    UCT_MD_ATTR_FIELD_REG_COST                  = UCS_BIT(9),
 
     /** Indicate component name. */
-    UCT_MD_ATTR_FIELD_COMPONENT_NAME   = UCS_BIT(10),
+    UCT_MD_ATTR_FIELD_COMPONENT_NAME            = UCS_BIT(10),
 
     /** Indicate size of buffer needed for packed rkey. */
-    UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE = UCS_BIT(11),
+    UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE          = UCS_BIT(11),
 
-    /** Indicate CPUs near the resource. */
-    UCT_MD_ATTR_FIELD_LOCAL_CPUS       = UCS_BIT(12)
+    /** Indicate CPUs closest to the resource. */
+    UCT_MD_ATTR_FIELD_LOCAL_CPUS                = UCS_BIT(12),
+
+    /** Indicate size of buffer needed for packed exported memory key. */
+    UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE = UCS_BIT(13),
+
+    /** Unique global identifier of the memory domain. */
+    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(14)
 } uct_md_attr_field_t;
 
 
@@ -670,9 +682,22 @@ typedef struct {
     size_t            rkey_packed_size;
 
     /**
-     * Mask of CPUs near the resource.
+     * Mask of CPUs closest to the resource.
      */
     ucs_cpu_set_t     local_cpus;
+
+    /**
+     * Size of buffer needed for packing an exported mkey. Valid only if
+     * @ref UCT_MD_FLAG_EXPORTED_MKEY is supported by Memory Domain.
+     */
+    size_t            exported_mkey_packed_size;
+
+    /**
+     * Byte array that holds a globally unique device identifier (for example,
+     * a MAC address or a GUID). If global identifiers are equal, it means that
+     * Memory Domains belong to the same device.
+     */
+    char              global_id[UCT_MD_GLOBAL_ID_MAX];
 } uct_md_attr_v2_t;
 
 
@@ -690,21 +715,26 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
 /**
  * @ingroup UCT_MD
  *
- * @brief Pack a remote key.
+ * @brief Pack a memory key as a remote or shared one.
+ *
+ * This routine packs a local memory handle registered by @ref uct_md_mem_reg
+ * into a memory buffer, which then could be deserialized by a peer and used in
+ * UCT operations.
  *
  * @param [in]  md          Handle to memory domain.
  * @param [in]  memh        Pack a remote key for this memory handle.
  * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mkey_pack_params_t.
- * @param [out] rkey_buffer Pointer to a buffer to hold the packed remote key.
- *                          The size of this buffer has should be at least
- *                          @ref uct_md_attr_t::rkey_packed_size, as returned by
- *                          @ref uct_md_query.
+ * @param [out] mkey_buffer Pointer to a buffer to hold the packed remote key.
+ *                          The size of this buffer should be at least
+ *                          @ref uct_md_attr_t::rkey_packed_size or
+ *                          @ref uct_md_attr_t::shared_mkey_packed_size, as
+ *                          returned by @ref uct_md_query.
  * @return                  Error code.
  */
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
                                  const uct_md_mkey_pack_params_t *params,
-                                 void *rkey_buffer);
+                                 void *mkey_buffer);
 
 
 /**
@@ -726,7 +756,7 @@ ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
  *
  * @return                    Error code.
  */
-ucs_status_t uct_md_mem_attach(uct_md_h md, void *mkey_buffer,
+ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
                                uct_md_mem_attach_params_t *params,
                                uct_mem_h *memh_p);
 

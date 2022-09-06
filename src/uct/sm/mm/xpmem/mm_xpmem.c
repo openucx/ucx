@@ -423,10 +423,10 @@ uct_xmpem_mem_dereg(uct_md_h md,
 static ucs_status_t
 uct_xpmem_mkey_pack(uct_md_h tl_md, uct_mem_h memh,
                     const uct_md_mkey_pack_params_t *params,
-                    void *rkey_buffer)
+                    void *mkey_buffer)
 {
     uct_mm_seg_t                    *seg = memh;
-    uct_xpmem_packed_rkey_t *packed_rkey = rkey_buffer;
+    uct_xpmem_packed_rkey_t *packed_rkey = mkey_buffer;
     xpmem_segid_t xsegid;
     ucs_status_t status;
 

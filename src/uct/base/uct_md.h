@@ -112,10 +112,10 @@ typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
 
 typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
         uct_md_h md, uct_mem_h memh, const uct_md_mkey_pack_params_t *params,
-        void *rkey_buffer);
+        void *buffer);
 
 typedef ucs_status_t
-(*uct_md_mem_attach_func_t)(uct_md_h md, void *mkey_buffer,
+(*uct_md_mem_attach_func_t)(uct_md_h md, const void *mkey_buffer,
                             uct_md_mem_attach_params_t *params,
                             uct_mem_h *memh_p);
 
@@ -247,7 +247,7 @@ extern ucs_config_field_t uct_md_config_table[];
 static inline ucs_log_level_t uct_md_reg_log_lvl(unsigned flags)
 {
     return (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
-            UCS_LOG_LEVEL_ERROR;
+           UCS_LOG_LEVEL_ERROR;
 }
 
 
