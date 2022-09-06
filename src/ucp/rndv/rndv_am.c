@@ -12,7 +12,7 @@
 
 
 static ucs_status_t
-ucp_proto_rdnv_am_init_common(ucp_proto_multi_init_params_t *params)
+ucp_proto_rndv_am_init_common(ucp_proto_multi_init_params_t *params)
 {
     ucp_context_h context = params->super.super.worker->context;
 
@@ -92,7 +92,7 @@ static ucs_status_t ucp_proto_rndv_am_bcopy_progress(uct_pending_req_t *uct_req)
 }
 
 static ucs_status_t
-ucp_proto_rdnv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
+ucp_proto_rndv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
@@ -112,7 +112,7 @@ ucp_proto_rdnv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    return ucp_proto_rdnv_am_init_common(&params);
+    return ucp_proto_rndv_am_init_common(&params);
 }
 
 static void
@@ -129,7 +129,7 @@ ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .name     = "rndv/am/bcopy",
     .desc     = "fragmented " UCP_PROTO_COPY_IN_DESC " " UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
-    .init     = ucp_proto_rdnv_am_bcopy_init,
+    .init     = ucp_proto_rndv_am_bcopy_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_rndv_am_bcopy_progress},
     .abort    = ucp_proto_rndv_am_bcopy_abort,
