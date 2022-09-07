@@ -61,8 +61,8 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
     for (iov_index = 0; iov_index < iov_count; ++iov_index) {
         iov    = ucp_datatype_iter_iov_at(dt_iter, iov_index);
         status = ucp_memh_get(context, iov->buffer, iov->length,
-                              dt_iter->mem_info.type, md_map, uct_flags,
-                              &iov_memh[iov_index]);
+                              dt_iter->mem_info.type, md_map, 0, uct_flags,
+                              UCP_MEM_FLAG_REGISTERED, &iov_memh[iov_index]);
         if (status != UCS_OK) {
             ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
             return status;

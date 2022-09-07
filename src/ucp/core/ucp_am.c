@@ -987,6 +987,21 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         op_id     = UCP_OP_ID_AM_SEND;
     }
 
+    if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
+        /* Suppress Coverity warning that memh could be NULL and dereferenced
+         */
+        ucs_assert(param->memh != NULL);
+
+        if (ucs_unlikely(param->memh->flags & UCP_MEM_FLAG_IMPORTED)) {
+            if (ucs_unlikely(flags & UCP_AM_SEND_FLAG_EAGER)) {
+                ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+                goto out;
+            }
+
+            flags |= UCP_AM_SEND_FLAG_RNDV;
+        }
+    }
+
     if (ucs_likely(attr_mask == 0)) {
         status = ucp_am_try_send_short(ep, id, flags, header, header_length,
                                        buffer, count, max_short);
