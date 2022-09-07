@@ -47,7 +47,7 @@ typedef enum uct_ep_operation {
     UCT_EP_OP_EAGER_SHORT,  /**< Tag matching short eager */
     UCT_EP_OP_EAGER_BCOPY,  /**< Tag matching bcopy eager */
     UCT_EP_OP_EAGER_ZCOPY,  /**< Tag matching zcopy eager */
-    UCT_EP_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous eager */
+    UCT_EP_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous */
     UCT_EP_OP_ATOMIC_POST,  /**< Atomic post */
     UCT_EP_OP_ATOMIC_FETCH, /**< Atomic fetch */
     UCT_EP_OP_LAST
