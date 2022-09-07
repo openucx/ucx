@@ -636,7 +636,6 @@ uct_rc_verbs_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                      ((uint32_t)rc_addr->atomic_mr_id << 8);
     } else {
         ep->super.atomic_mr_offset = 0;
-        ep->super.flush_rkey       = UCT_IB_MD_INVALID_FLUSH_RKEY;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_CONNECTED;
