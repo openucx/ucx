@@ -24,6 +24,7 @@
 #define UCP_WIREUP_UCT_EVENT_CAP_FLAGS     (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
                                             UCT_IFACE_FLAG_EVENT_RECV)
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
+#define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
 
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
@@ -348,7 +349,7 @@ ucp_wireup_init_select_info(double score, unsigned addr_index,
 
     select_info->score      = score;
     select_info->addr_index = addr_index;
-    select_info->path_index = 0;
+    select_info->path_index = UCP_WIREUP_PATH_INDEX_UNDEFINED;
     select_info->rsc_index  = rsc_index;
     select_info->priority   = priority;
 }
@@ -698,6 +699,14 @@ static int ucp_wireup_has_slow_lanes(ucp_wireup_select_context_t *select_ctx)
     return 0;
 }
 
+static int
+ucp_wireup_path_index_is_equal(unsigned path_index1, unsigned path_index2)
+{
+    return (path_index1 == UCP_WIREUP_PATH_INDEX_UNDEFINED) ||
+           (path_index2 == UCP_WIREUP_PATH_INDEX_UNDEFINED) ||
+           (path_index1 == path_index2);
+}
+
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         const ucp_wireup_select_info_t *select_info,
         ucp_md_index_t dst_md_index, ucs_sys_device_t dst_sys_dev,
@@ -714,20 +723,22 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
      */
     for (lane_desc = select_ctx->lane_descs;
          lane_desc < select_ctx->lane_descs + select_ctx->num_lanes; ++lane_desc) {
-        if ((lane_desc->rsc_index  == select_info->rsc_index) &&
+        if ((lane_desc->rsc_index == select_info->rsc_index) &&
             (lane_desc->addr_index == select_info->addr_index) &&
-            (lane_desc->path_index == select_info->path_index))
-        {
+            ucp_wireup_path_index_is_equal(lane_desc->path_index,
+                                           select_info->path_index)) {
+
             lane = lane_desc - select_ctx->lane_descs;
             ucs_assertv_always(dst_md_index == lane_desc->dst_md_index,
                                "lane[%d].dst_md_index=%d, dst_md_index=%d",
                                lane, lane_desc->dst_md_index, dst_md_index);
 
             /* The same pair of local/remote resource is already selected but
-             * with a different usage - update the score and exit
+             * with a different usage - update the score and path (if needed)
+             * and exit
              */
             if (!(lane_desc->lane_types & UCS_BIT(lane_type))) {
-                goto out_update_score;
+                goto out_update;
             }
 
             /* If adding same lane type and usage, expect same score */
@@ -777,7 +788,11 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         UCS_BITMAP_SET(select_ctx->tl_bitmap, select_info->rsc_index);
     }
 
-out_update_score:
+out_update:
+    if (lane_desc->path_index == UCP_WIREUP_PATH_INDEX_UNDEFINED) {
+        lane_desc->path_index = select_info->path_index;
+    }
+
     lane_desc->score[lane_type] = select_info->score;
     lane_desc->lane_types      |= UCS_BIT(lane_type);
 out:
@@ -2004,6 +2019,11 @@ ucp_wireup_is_built_in_keepalive(
                                            select_params->ep_init_flags));
 }
 
+static unsigned ucp_wireup_default_path_index(unsigned path_index)
+{
+    return (path_index == UCP_WIREUP_PATH_INDEX_UNDEFINED) ? 0 : path_index;
+}
+
 static UCS_F_NOINLINE void
 ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                            ucp_wireup_select_context_t *select_ctx,
@@ -2025,13 +2045,14 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
      */
     for (lane = 0; lane < key->num_lanes; ++lane) {
         ucs_assert(select_ctx->lane_descs[lane].lane_types != 0);
+        addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
         key->lanes[lane].rsc_index    = select_ctx->lane_descs[lane].rsc_index;
         key->lanes[lane].dst_md_index = select_ctx->lane_descs[lane].dst_md_index;
         key->lanes[lane].dst_sys_dev  = select_ctx->lane_descs[lane].dst_sys_dev;
-        key->lanes[lane].path_index   = select_ctx->lane_descs[lane].path_index;
         key->lanes[lane].lane_types   = select_ctx->lane_descs[lane].lane_types;
         key->lanes[lane].seg_size     = select_ctx->lane_descs[lane].seg_size;
-        addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
+        key->lanes[lane].path_index   = ucp_wireup_default_path_index(
+                                       select_ctx->lane_descs[lane].path_index);
 
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_CM)) {
             ucs_assert(key->cm_lane == UCP_NULL_LANE);
