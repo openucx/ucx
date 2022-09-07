@@ -179,16 +179,10 @@ stages:
             ubuntu2004:
               CONTAINER: ubuntu2004
               long_test: yes
-              test_static: yes
               extra_modules: ""
-              extra_tls: ""
-              run_tls: ""
             ubuntu1804:
               CONTAINER: ubuntu1804
-              test_static: yes
               extra_modules: ""
-              extra_tls: ""
-              run_tls: ""
             sles15sp2:
               CONTAINER: sles15sp2
             rhel82:
@@ -200,10 +194,6 @@ stages:
               long_test: yes
             centos7:
               CONTAINER: centos7_ib
-              test_static: yes
-              extra_modules: ucx-ib ucx-cma ucx-rdmacm
-              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
-              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
         container: $[ variables['CONTAINER'] ]
         timeoutInMinutes: 340
 
@@ -219,10 +209,6 @@ stages:
               BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
               long_test: $(long_test)
               test_static: $(test_static)
-              EXTRA_MODULES: $(extra_modules)
-              EXTRA_TLS: $(extra_tls)
-              RUN_TLS: $(run_tls)
-              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
 
   - stage: Distro
     dependsOn: [Static_check]
@@ -295,6 +281,49 @@ stages:
         parameters:
             name: gpu
             demands: ucx_gpu -equals yes
+
+  - stage: Build_Static
+    dependsOn: [Static_check]
+    jobs:
+      - job: build_source
+        pool:
+          name: MLNX
+          demands:
+            - ucx_docker -equals yes
+        strategy:
+          matrix:
+            centos7:
+              CONTAINER: centos7_ib
+              extra_modules: ucx-ib ucx-cma ucx-rdmacm
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            ubuntu2004:
+              CONTAINER: ubuntu2004
+              extra_modules: ""
+              extra_tls: ""
+              run_tls: ""
+            ubuntu1804:
+              CONTAINER: ubuntu1804
+              extra_modules: ""
+              extra_tls: ""
+              run_tls: ""
+        container: $[ variables['CONTAINER'] ]
+        timeoutInMinutes: 340
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              ./buildlib/tools/build_static.sh
+            displayName: Build
+            env:
+              EXTRA_TLS: $(extra_tls)
+              RUN_TLS: $(run_tls)
+              EXTRA_MODULES: $(extra_modules)
+              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
+
 
   - stage: Cuda
     dependsOn: [Static_check]
