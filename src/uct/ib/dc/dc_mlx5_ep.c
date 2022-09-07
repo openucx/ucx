@@ -1657,8 +1657,15 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
         ucs_error("failed to create hash entry for fc hard req");
         status = UCS_ERR_NO_MEMORY;
         goto out;
-    } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
-        fc_entry = &kh_value(&iface->tx.fc_hash, it);
+    }
+
+    fc_entry = &kh_value(&iface->tx.fc_hash, it);
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        /* FC entry for a given endpoint should exist in FC hash only if
+         * endpoint's current FC window is lower than FC hard threshold */
+        ucs_assertv(ep->fc.fc_wnd < iface->super.super.config.fc_hard_thresh,
+                    "ep %p: fc_wnd=%d fc_hard_thresh=%d", ep, ep->fc.fc_wnd,
+                    iface->super.super.config.fc_hard_thresh);
 
         /* Do not resend FC request if timeout is not reached */
         if (ucs_likely((now - fc_entry->send_time) <
@@ -1666,17 +1673,15 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
             goto out_set_status;
         }
     } else {
-        fc_entry = &kh_value(&iface->tx.fc_hash, it);
+        /* Expect that a FC sequence number doesn't reach UINT64_MAX value. So,
+         * uct_dc_mlx5_fc_remove_ep() can rely on "seq != UINT64_MAX" condition
+         * to check that a FC entry's sequnce number needs to be verified */
+        ucs_assert(iface->tx.fc_seq != UINT64_MAX);
+        fc_entry->seq = iface->tx.fc_seq++;
     }
 
-    /* Expect that a FC sequence number doesn't reach UINT64_MAX value. So,
-     * uct_dc_mlx5_fc_remove_ep() can rely on "seq != UINT64_MAX" condition to
-     * check that a FC entry's sequnce number needs to be verified */
-    ucs_assert(iface->tx.fc_seq != UINT64_MAX);
-    fc_entry->seq       = iface->tx.fc_seq++;
     fc_entry->send_time = now;
-
-    status = uct_dc_mlx5_ep_fc_hard_req_send(ep, fc_entry->seq);
+    status              = uct_dc_mlx5_ep_fc_hard_req_send(ep, fc_entry->seq);
     if (status != UCS_OK) {
         if (ret != UCS_KH_PUT_KEY_PRESENT) {
             kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
