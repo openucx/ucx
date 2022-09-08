@@ -409,11 +409,9 @@ ucs_status_t ucp_rndv_send_rts(ucp_request_t *sreq, uct_pack_callback_t pack_cb,
 {
     size_t max_rts_size = ucp_ep_config(sreq->send.ep)->rndv.rkey_size +
                           rts_size;
-    ucs_status_t status;
 
-    status = ucp_do_am_single(&sreq->send.uct, UCP_AM_ID_RNDV_RTS, pack_cb,
-                              max_rts_size);
-    return ucp_rndv_send_handle_status_from_pending(sreq, status);
+    return ucp_do_am_single(&sreq->send.uct, UCP_AM_ID_RNDV_RTS, pack_cb,
+                            max_rts_size);
 }
 
 static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
@@ -1882,9 +1880,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
         ucs_assert(status != UCS_INPROGRESS);
     } else {
         status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_RNDV_DATA,
-                                       UCP_AM_ID_RNDV_DATA,
-                                       ucp_rndv_pack_data,
-                                       ucp_rndv_pack_data, 1);
+                                       UCP_AM_ID_RNDV_DATA, ucp_rndv_pack_data,
+                                       ucp_rndv_pack_data, 1, 0);
 
         if (status == UCS_INPROGRESS) {
             return UCS_INPROGRESS;

@@ -137,11 +137,11 @@ static ucs_status_t ucp_tag_eager_bcopy_single(uct_pending_req_t *self)
 
 static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_multi(self,
-                                                UCP_AM_ID_EAGER_FIRST,
+    ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_EAGER_FIRST,
                                                 UCP_AM_ID_EAGER_MIDDLE,
                                                 ucp_tag_pack_eager_first_dt,
-                                                ucp_tag_pack_eager_middle_dt, 1);
+                                                ucp_tag_pack_eager_middle_dt, 1,
+                                                0);
 
     return ucp_am_bcopy_handle_status_from_pending(self, 1, 0, status);
 }
@@ -218,7 +218,8 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
                                                 UCP_AM_ID_EAGER_SYNC_FIRST,
                                                 UCP_AM_ID_EAGER_MIDDLE,
                                                 ucp_tag_pack_eager_sync_first_dt,
-                                                ucp_tag_pack_eager_middle_dt, 1);
+                                                ucp_tag_pack_eager_middle_dt, 1,
+                                                0);
 
     return ucp_am_bcopy_handle_status_from_pending(self, 1, 1, status);
 }
