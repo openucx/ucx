@@ -19,7 +19,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucm/api/ucm.h>
 #include <ucs/type/class.h>
-
+#include <uct/api/v2/uct_v2.h>
 #include <hsa_ext_amd.h>
 
 static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
@@ -34,20 +34,22 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+static ucs_status_t
+uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr_v2)
 {
-    md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->cap.cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->cap.alloc_mem_types  = 0;
-    md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->cap.detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->cap.max_alloc        = 0;
-    md_attr->cap.max_reg          = ULONG_MAX;
-    md_attr->rkey_packed_size     = sizeof(uct_rocm_copy_key_t);
-    md_attr->reg_cost             = UCS_LINEAR_FUNC_ZERO;
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->alloc_mem_types  = 0;
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->dmabuf_mem_types = 0;
+    md_attr->max_alloc        = 0;
+    md_attr->max_reg          = ULONG_MAX;
+    md_attr->rkey_packed_size = sizeof(uct_rocm_copy_key_t);
+    md_attr->reg_cost         = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }

@@ -78,7 +78,7 @@ struct uct_md_config {
 typedef void (*uct_md_close_func_t)(uct_md_h md);
 
 typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
-                                            uct_md_attr_t *md_attr);
+                                            uct_md_attr_v2_t *md_attr_v2);
 
 typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
                                                 size_t *length_p,

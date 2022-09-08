@@ -14,6 +14,7 @@
 #include "uct_iface.h"
 
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/memory/rcache.h>
@@ -23,6 +24,18 @@
 #include <ucs/time/time.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/vfs/base/vfs_obj.h>
+
+
+#define UCT_MD_ATTR_V2_FIELD_COPY(_md_attr_dst, _md_attr_src, _field_name, \
+                                  _field_flag) \
+    { \
+        if ((_md_attr_dst)->field_mask & (_field_flag)) { \
+            ucs_assert((_md_attr_src)->field_mask &(_field_flag)); \
+            memcpy(&((_md_attr_dst)->_field_name), \
+                   &((_md_attr_src)->_field_name), \
+                   sizeof((_md_attr_src)->_field_name)); \
+        } \
+    }
 
 
 ucs_config_field_t uct_md_config_table[] = {
@@ -384,9 +397,58 @@ ucs_status_t uct_rkey_release(uct_component_h component,
     return component->rkey_release(component, rkey_ob->rkey, rkey_ob->handle);
 }
 
-ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+static void uct_md_attr_from_v2(uct_md_attr_t *dst, const uct_md_attr_v2_t *src)
+{
+    dst->cap.max_alloc        = src->max_alloc;
+    dst->cap.max_reg          = src->max_reg;
+    dst->cap.flags            = src->flags;
+    dst->cap.reg_mem_types    = src->reg_mem_types;
+    dst->cap.cache_mem_types  = src->cache_mem_types;
+    dst->cap.detect_mem_types = src->detect_mem_types;
+    dst->cap.alloc_mem_types  = src->alloc_mem_types;
+    dst->cap.access_mem_types = src->access_mem_types;
+    dst->reg_cost             = src->reg_cost;
+    dst->rkey_packed_size     = src->rkey_packed_size;
+
+    memcpy(&dst->local_cpus, &src->local_cpus, sizeof(src->local_cpus));
+    memcpy(&dst->component_name, &src->component_name,
+           sizeof(src->component_name));
+}
+
+static void
+uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
+{
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, max_alloc, UCT_MD_ATTR_FIELD_MAX_ALLOC);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, max_reg, UCT_MD_ATTR_FIELD_MAX_REG);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, flags, UCT_MD_ATTR_FIELD_FLAGS);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_mem_types,
+                              UCT_MD_ATTR_FIELD_REG_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, cache_mem_types,
+                              UCT_MD_ATTR_FIELD_CACHE_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, detect_mem_types,
+                              UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, alloc_mem_types,
+                              UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, access_mem_types,
+                              UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, dmabuf_mem_types,
+                              UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_cost, UCT_MD_ATTR_FIELD_REG_COST);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, rkey_packed_size,
+                              UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, local_cpus,
+                              UCT_MD_ATTR_FIELD_LOCAL_CPUS);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, component_name,
+                              UCT_MD_ATTR_FIELD_COMPONENT_NAME);
+}
+
+static ucs_status_t uct_md_attr_v2_init(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     ucs_status_t status;
+
+    memset(md_attr, 0, sizeof(*md_attr));
+
+    md_attr->field_mask = UINT64_MAX;
 
     status = md->ops->query(md, md_attr);
     if (status != UCS_OK) {
@@ -394,7 +456,39 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     }
 
     /* Component name + data */
-    memcpy(md_attr->component_name, md->component->name, UCT_COMPONENT_NAME_MAX);
+    memcpy(md_attr->component_name, md->component->name,
+           sizeof(md_attr->component_name));
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+{
+    ucs_status_t status;
+    uct_md_attr_v2_t md_attr_v2;
+
+    status = uct_md_attr_v2_init(md, &md_attr_v2);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_md_attr_from_v2(md_attr, &md_attr_v2);
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr)
+{
+    ucs_status_t status;
+    uct_md_attr_v2_t md_attr_v2;
+
+    status = uct_md_attr_v2_init(md, &md_attr_v2);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Populate fields based on field mask set by user in md_attr  */
+    uct_md_attr_v2_copy(md_attr, &md_attr_v2);
 
     return UCS_OK;
 }
