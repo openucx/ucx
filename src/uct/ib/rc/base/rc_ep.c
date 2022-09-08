@@ -149,8 +149,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
 
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->flags      = 0;
-    self->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
-
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
