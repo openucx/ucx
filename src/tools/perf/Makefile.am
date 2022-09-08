@@ -23,6 +23,7 @@ ucx_perftest_SOURCES = \
 	perftest_run.c \
 	perftest_params.c
 
+ucx_perftest_CXXFLAGS = $(BASE_CXXFLAGS)
 ucx_perftest_CPPFLAGS = $(BASE_CPPFLAGS) $(RTE_CPPFLAGS)
 ucx_perftest_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS)
 ucx_perftest_LDFLAGS  = $(RTE_LDFLAGS) $(LDFLAGS_DYNAMIC_LIST_DATA)
@@ -41,6 +42,23 @@ dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp \
 	$(top_srcdir)/contrib/ucx_perftest_config/transports
 
+
+bin_PROGRAMS += ucx_perftest_daemon
+
+ucx_perftest_daemon_SOURCES = \
+	perftest_daemon.cc
+
+ucx_perftest_daemon_CXXFLAGS = $(BASE_CXXFLAGS)
+ucx_perftest_daemon_CPPFLAGS = $(BASE_CPPFLAGS)
+ucx_perftest_daemon_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS)
+ucx_perftest_daemon_LDFLAGS  = $(LDFLAGS_DYNAMIC_LIST_DATA)
+ucx_perftest_daemon_LDADD    = \
+	$(abs_top_builddir)/src/uct/libuct.la \
+	$(abs_top_builddir)/src/ucp/libucp.la \
+	$(abs_top_builddir)/src/ucs/libucs.la \
+	lib/libucxperf.la
+
+
 if HAVE_MPIRUN
 .PHONY: ucx test help
 
@@ -50,7 +68,7 @@ MPI_ARGS  = -n 2 -map-by node -mca pml ob1 -mca btl self,tcp,sm $(MPI_EXTRA)
 ucx:
 	$(MAKE) -C $(top_builddir)
 
-test: ucx ucx_perftest
+test: ucx ucx_perftest ucx_perftest_daemon
 	$(MPIRUN) $(MPI_ARGS) $(abs_builddir)/ucx_perftest$(EXEEXT) $(TEST_ARGS)
 
 help:

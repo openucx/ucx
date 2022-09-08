@@ -97,6 +97,24 @@ enum {
 };
 
 
+enum {
+    UCP_PERF_DAEMON_AM_ID_INIT      = 0,
+    UCP_PERF_DAEMON_AM_ID_PEER_INIT = 1,
+    UCP_PERF_DAEMON_AM_ID_REQ       = 2,
+    UCP_PERF_DAEMON_AM_ID_ACK       = 3,
+    UCP_PERF_DAEMON_AM_ID_OP        = 4
+};
+
+
+typedef enum {
+    UCP_PERF_DAEMON_SENDER,
+    UCP_PERF_DAEMON_RECEIVER,
+    UCP_PERF_DAEMON_LAST
+} ucp_perf_daemon_type_t;
+
+
+#define UCP_PERF_TEST_DAEMON_ADDRESS_MAX_NUMBER 2
+
 #define UCT_PERF_TEST_PARAMS_FMT             "%s/%s"
 #define UCT_PERF_TEST_PARAMS_ARG(_params)    (_params)->uct.tl_name, \
                                              (_params)->uct.dev_name
@@ -216,14 +234,49 @@ typedef struct ucx_perf_params {
     } uct;
 
     struct {
-        unsigned               nonblocking_mode; /* TBD */
-        ucp_perf_datatype_t    send_datatype;
-        ucp_perf_datatype_t    recv_datatype;
-        size_t                 am_hdr_size; /* UCP Active Message header size
-                                               (not included in message size) */
+        unsigned                nonblocking_mode; /* TBD */
+        ucp_perf_datatype_t     send_datatype;
+        ucp_perf_datatype_t     recv_datatype;
+        size_t                  am_hdr_size; /* UCP Active Message header size
+                                                (not included in message size) */
+        struct sockaddr_storage daemon_addrs[UCP_PERF_TEST_DAEMON_ADDRESS_MAX_NUMBER];
+        size_t                  daemon_addrs_num;
     } ucp;
 
 } ucx_perf_params_t;
+
+
+typedef struct {
+    uint64_t am_hdr_size;
+} ucp_perf_daemon_params_t;
+
+
+typedef struct {
+    ucp_perf_daemon_params_t params;
+    uint64_t                 daemon_peer_addr_length;
+    /* "struct sockaddr_storage" of peer daemon follows, if exists */
+} ucp_perf_daemon_init_t;
+
+
+typedef struct {
+    uint8_t  type; /* ucp_perf_daemon_type_t */
+    uint8_t  cmd; /* ucx_perf_cmd_t */
+    uint8_t  atomic_op; /* ucp_atomic_op_t */
+    uint64_t addr;
+    uint64_t length;
+    uint64_t remote_addr;
+    uint64_t exported_memh_buf_size;
+    /* - Exported memh buffer follows, if packet is sent from a client to
+     *   a daemon;
+     * - Exported memh buffer and reserver memory for AM header follow, if it
+     *   is a copy of a client's buffer received on a daemon. */
+} ucp_perf_daemon_req_t;
+
+
+typedef struct {
+    uint8_t  type; /* ucp_perf_daemon_type_t */
+    uint8_t  cmd; /* ucx_perf_cmd_t */
+} ucp_perf_daemon_ack_t;
 
 
 /* Allocators for each memory type */

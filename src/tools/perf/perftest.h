@@ -20,7 +20,7 @@
 #define MAX_BATCH_FILES         32
 #define MAX_CPUS                1024
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:lz"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:lzZ:"
 #define TEST_ID_UNDEFINED       -1
 
 enum {

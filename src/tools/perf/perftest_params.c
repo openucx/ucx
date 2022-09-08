@@ -138,6 +138,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -H <size>      active message header size (%zu), not included in message size\n",
                                 ctx->params.super.ucp.am_hdr_size);
     printf("     -z             pass pre-registered memory handle\n");
+    printf("     -Z             comma-separated list of <IP-address>:<port> of local and remote\n"
+           "                    daemons to offload UCP operations on\n");
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
@@ -245,6 +247,135 @@ static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
         *datatype = UCP_PERF_DATATYPE_CONTIG;
     } else {
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t set_sockaddr(const char *ip_addr_str, uint16_t port,
+                          struct sockaddr *saddr)
+{
+    struct sockaddr_in* sa_in   = (struct sockaddr_in*)saddr;
+    struct sockaddr_in6* sa_in6 = (struct sockaddr_in6*)saddr;
+
+    if (inet_pton(AF_INET, ip_addr_str, &sa_in->sin_addr) == 1) {
+        sa_in->sin_family = AF_INET;
+        sa_in->sin_port   = htons(port);
+        return UCS_OK;
+    }
+
+    if (inet_pton(AF_INET6, ip_addr_str, &sa_in6->sin6_addr) == 1) {
+        sa_in6->sin6_family = AF_INET6;
+        sa_in6->sin6_port   = htons(port);
+        return UCS_OK;
+    }
+
+    ucs_error("invalid address '%s'", ip_addr_str);
+    return UCS_ERR_INVALID_PARAM;
+    }
+
+static ucs_status_t parse_ip_addr_port(const char *str,
+                                       struct sockaddr_storage *addr)
+{
+    const char *delim = ":";
+    uint16_t port     = 0;
+    char *save_ptr, *token;
+    const char *ip_addr_str;
+
+    ip_addr_str = strtok_r((char*)str, delim, &save_ptr);
+    token       = strtok_r(NULL, delim, &save_ptr);
+    if (token != NULL) {
+        port = atoi(token);
+    }
+
+    set_sockaddr(ip_addr_str, port, (struct sockaddr*)addr);
+
+    return UCS_OK;
+}
+
+static ucs_status_t parse_ip_addr_port_params(const char *opt_arg,
+                                              struct sockaddr_storage *addrs,
+                                              size_t max_addrs,
+                                              size_t *num_addrs_p)
+{
+    const char *delim = ",";
+    char *save_ptr, *token;
+    ucs_status_t status;
+    size_t i;
+
+    token = strtok_r((char*)opt_arg, delim, &save_ptr);
+    for (i = 0; i < max_addrs; ++i) {
+        if (token == NULL) {
+            goto out;
+        }
+
+        status = parse_ip_addr_port(token, &addrs[i]);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        token = strtok_r(NULL, delim, &save_ptr);
+    }
+
+out:
+    *num_addrs_p = i;
+    return UCS_OK;
+}
+
+static ucs_status_t daemon_addrs_init(struct perftest_context *ctx)
+{
+    struct sockaddr *addr;
+    struct sockaddr_in *sa_in;
+    struct sockaddr_in6 *sa_in6;
+    size_t i;
+
+    for (i = 0; i < ctx->params.super.ucp.daemon_addrs_num; ++i) {
+        addr = (struct sockaddr*)&ctx->params.super.ucp.daemon_addrs[i];
+        switch (addr->sa_family) {
+        case AF_INET:
+            sa_in = (struct sockaddr_in*)addr;
+            if (sa_in->sin_port == 0) {
+                sa_in->sin_port = htons(ctx->port);
+            }
+            break;
+        case AF_INET6:
+            sa_in6 = (struct sockaddr_in6*)addr;
+            if (sa_in6->sin6_port == 0) {
+                sa_in6->sin6_port = htons(ctx->port);
+            }
+            break;
+        default:
+            ucs_error("unexpected address family %d", addr->sa_family);
+            break;
+        }
+    }
+
+    if (i == 1) {
+        memcpy(&ctx->params.super.ucp.daemon_addrs[1],
+               &ctx->params.super.ucp.daemon_addrs[0],
+               sizeof(ctx->params.super.ucp.daemon_addrs[0]));
+        ++ctx->params.super.ucp.daemon_addrs_num;
+    }
+
+    if (ctx->params.super.ucp.daemon_addrs_num == 0) {
+        return UCS_OK;
+    }
+
+    if ((ctx->params.super.ucp.send_datatype != UCP_PERF_DATATYPE_CONTIG) ||
+        (ctx->params.super.ucp.recv_datatype != UCP_PERF_DATATYPE_CONTIG)) {
+        ucs_error("only contiguous datatype is supported in offloaded mode");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if ((ctx->params.super.send_mem_type != UCS_MEMORY_TYPE_HOST) ||
+        (ctx->params.super.recv_mem_type != UCS_MEMORY_TYPE_HOST)) {
+        ucs_error("only HOST memory type is supported in offloaded mode");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (ctx->params.super.command != UCX_PERF_CMD_AM) {
+        ucs_error("only UCP AM API is supported in offloaded mode");
+        return UCS_ERR_UNSUPPORTED;
     }
 
     return UCS_OK;
@@ -420,6 +551,11 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'z':
         params->super.flags |= UCX_PERF_TEST_FLAG_PREREG;
         return UCS_OK;
+    case 'Z':
+        return parse_ip_addr_port_params(opt_arg,
+                                         params->super.ucp.daemon_addrs,
+                                         UCP_PERF_TEST_DAEMON_ADDRESS_MAX_NUMBER,
+                                         &params->super.ucp.daemon_addrs_num);
     default:
        return UCS_ERR_INVALID_PARAM;
     }
@@ -610,5 +746,5 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
         }
     }
 
-    return UCS_OK;
+    return daemon_addrs_init(ctx);
 }
