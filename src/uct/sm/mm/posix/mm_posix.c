@@ -18,6 +18,7 @@
 #include <ucs/sys/sys.h>
 #include <sys/mman.h>
 #include <sys/statvfs.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 /* File open flags */
@@ -114,7 +115,8 @@ static size_t uct_posix_iface_addr_length(uct_mm_md_t *md)
            0 : (strlen(posix_config->dir) + 1);
 }
 
-static ucs_status_t uct_posix_md_query(uct_md_h tl_md, uct_md_attr_t *md_attr)
+static ucs_status_t
+uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr)
 {
     uct_mm_md_t *md                           = ucs_derived_of(tl_md, uct_mm_md_t);
     const uct_posix_md_config_t *posix_config =
