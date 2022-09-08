@@ -159,7 +159,7 @@ AC_ARG_WITH([docs_only],
 AC_DEFUN([UCX_DX_ENABLE_CHECK],
          [AS_IF([DX_TEST_FEATURE($1)],
                 [],
-                [AS_IF([test "x$enable_doxygen_$1" == xyes],
+                [AS_IF([test "x$enable_doxygen_$1" = xyes],
                        [AC_MSG_ERROR([--enable-doxygen-$1 was specified, but $1 tools were not found])],
                        [])])])
 
