@@ -222,11 +222,11 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
                          size_t length_max, ucp_md_index_t md_index,
                          ucp_mem_desc_t *mdesc)
 {
-    uint64_t md_flags = context->tl_mds[md_index].attr.cap.flags;
+    uint64_t md_flags = context->tl_mds[md_index].attr.flags;
     size_t length_it  = 0;
     ucp_md_index_t memh_index;
 
-    ucs_assert((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG) ||
+    ucs_assert((context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG) ||
                !(md_flags & UCT_MD_FLAG_NEED_MEMH));
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {

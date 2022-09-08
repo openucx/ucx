@@ -243,7 +243,7 @@ typedef struct ucp_tl_md {
     /**
      * Memory domain attributes
      */
-    uct_md_attr_t          attr;
+    uct_md_attr_v2_t       attr;
 
     /**
      * Flags mask parameter for @ref uct_md_mkey_pack_v2

@@ -997,14 +997,15 @@ public:
     }
 
     bool check_scalable_tls(const ucp_worker_h worker, size_t est_num_eps) {
+        ucp_context_h context = worker->context;
         ucp_rsc_index_t rsc_index;
 
         UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, rsc_index) {
-            ucp_md_index_t md_index      = worker->context->tl_rscs[rsc_index].md_index;
-            const uct_md_attr_t *md_attr = &worker->context->tl_mds[md_index].attr;
+            ucp_md_index_t md_index         = context->tl_rscs[rsc_index].md_index;
+            const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
 
-            if ((worker->context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) ||
-                (md_attr->cap.flags & UCT_MD_FLAG_SOCKADDR) ||
+            if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) ||
+                (md_attr->flags & UCT_MD_FLAG_SOCKADDR) ||
                 (worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_ACC)) {
                 // Skip TLs for wireup and CM and acceleration TLs
                 continue;
