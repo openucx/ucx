@@ -158,8 +158,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     cuda_event->comp = comp;
 
     ucs_trace("cuda async issued :%p dst:%p[%s], src:%p[%s] len:%ld",
-              cuda_event, dst, ucs_memory_type_names[src_type], src,
-              ucs_memory_type_names[dst_type], length);
+              cuda_event, dst, ucs_memory_type_names[dst_type], src,
+              ucs_memory_type_names[src_type], length);
     return UCS_INPROGRESS;
 }
 
