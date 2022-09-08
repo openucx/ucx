@@ -263,11 +263,11 @@ static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
 
 static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_multi(self,
-                                                UCP_AM_ID_STREAM_DATA,
+    ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_STREAM_DATA,
                                                 UCP_AM_ID_STREAM_DATA,
                                                 ucp_stream_pack_am_first_dt,
-                                                ucp_stream_pack_am_middle_dt, 0);
+                                                ucp_stream_pack_am_middle_dt, 0,
+                                                0);
 
     return ucp_am_bcopy_handle_status_from_pending(self, 1, 0, status);
 }

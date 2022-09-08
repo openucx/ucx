@@ -23,6 +23,27 @@
 
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handle_user_header_send_status(
+        ucp_request_t *req, ucs_status_t send_status)
+{
+    ucs_status_t status;
+
+    if (ucs_unlikely(send_status == UCS_ERR_NO_RESOURCE) &&
+        (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
+        status = ucp_proto_am_req_copy_header(req);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
+    } else if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED)) {
+        ucs_assert(req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER);
+        ucs_mpool_set_put_inline(req->send.msg_proto.am.header.user_ptr);
+#if UCS_ENABLE_ASSERT
+        req->send.msg_proto.am.header.user_ptr = NULL;
+#endif
+    }
+
+    return send_status;
+}
 
 static UCS_F_ALWAYS_INLINE void
 ucp_add_uct_iov_elem(uct_iov_t *iov, void *buffer, size_t length,
@@ -66,7 +87,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                    uint8_t am_id_middle,
                                    uct_pack_callback_t pack_first,
                                    uct_pack_callback_t pack_middle,
-                                   int enable_am_bw)
+                                   int enable_am_bw, int handle_user_hdr)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep         = req->send.ep;
@@ -74,6 +95,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     ssize_t packed_len;
     uct_ep_h uct_ep;
     int pending_add_res;
+    ucs_status_t status;
 
     req->send.lane = (!enable_am_bw || (state.offset == 0)) ? /* first part of message must be sent */
                      ucp_ep_get_am_lane(ep) :                 /* via AM lane */
@@ -86,6 +108,12 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             packed_len = uct_ep_am_bcopy(uct_ep, am_id_first, pack_first, req, 0);
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_bcopy_first",
                                                    packed_len, packed_len);
+            if (handle_user_hdr) {
+                status = ucp_am_handle_user_header_send_status(req, packed_len);
+                if (ucs_unlikely(status == UCS_ERR_NO_MEMORY)) {
+                    return status;
+                }
+            }
         } else {
             ucs_assert(state.offset < req->send.length);
             /* Middle or last */

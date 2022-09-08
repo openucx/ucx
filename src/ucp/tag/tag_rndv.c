@@ -78,9 +78,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_tag_rndv_rts, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status;
 
-    return ucp_rndv_send_rts(sreq, ucp_tag_rndv_rts_pack,
-                             sizeof(ucp_rndv_rts_hdr_t));
+    status = ucp_rndv_send_rts(sreq, ucp_tag_rndv_rts_pack,
+                               sizeof(ucp_rndv_rts_hdr_t));
+    return ucp_rndv_send_handle_status_from_pending(sreq, status);
 }
 
 ucs_status_t
