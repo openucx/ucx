@@ -12,7 +12,7 @@ extern "C" {
 #include <ucs/vfs/sock/vfs_sock.h>
 }
 
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <time.h>
 
 
