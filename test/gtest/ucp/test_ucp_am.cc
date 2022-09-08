@@ -559,19 +559,17 @@ protected:
         return status;
     }
 
-    virtual ucs_status_t am_data_handler(const void *header,
-                                         size_t header_length,
-                                         void *data, size_t length,
-                                         const ucp_am_recv_param_t *rx_param)
+    ucs_status_t am_data_handler_common(const void *header,
+                                        size_t header_length,
+                                        void *data, size_t length,
+                                        const ucp_am_recv_param_t *rx_param)
     {
-        EXPECT_FALSE(m_am_received);
-
         check_header(header, header_length);
 
         bool has_reply_ep = get_send_flag();
 
-        EXPECT_EQ(has_reply_ep, rx_param->recv_attr &
-                                UCP_AM_RECV_ATTR_FIELD_REPLY_EP);
+        EXPECT_EQ(has_reply_ep,
+                  !!(rx_param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP));
         EXPECT_EQ(has_reply_ep, rx_param->reply_ep != NULL);
 
         if (!(rx_param->recv_attr &
@@ -584,9 +582,19 @@ protected:
         return am_data_rndv_handler(data, length);
     }
 
-    void am_recv_check_data(size_t length)
+    virtual ucs_status_t am_data_handler(const void *header,
+                                         size_t header_length,
+                                         void *data, size_t length,
+                                         const ucp_am_recv_param_t *rx_param)
     {
-        ASSERT_FALSE(m_am_received);
+
+        EXPECT_FALSE(m_am_received);
+        return am_data_handler_common(header, header_length, data, length,
+                                      rx_param);
+    }
+
+    void am_recv_check_data_common(size_t length)
+    {
         m_am_received = true;
         mem_buffer::pattern_check(m_rx_buf, length, SEED, rx_memtype());
 
@@ -594,6 +602,12 @@ protected:
             receiver().mem_unmap(m_rx_memh);
         }
         mem_buffer::release(m_rx_buf, rx_memtype());
+    }
+
+    virtual void am_recv_check_data(size_t length)
+    {
+        ASSERT_FALSE(m_am_received);
+        am_recv_check_data_common(length);
     }
 
     static ucs_status_t am_data_cb(void *arg, const void *header,
@@ -914,6 +928,213 @@ UCS_TEST_P(test_ucp_am_nbx_reply_always, short_slow_path)
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_reply_always)
+
+
+class test_ucp_am_nbx_send_copy_header : public test_ucp_am_nbx {
+public:
+    static void get_test_variants_reply(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_AM, UCP_AM_SEND_FLAG_REPLY,
+                               "reply");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_test_variants_reply, 0);
+        add_variant_values(variants, get_test_variants_reply, 1, "proto");
+    }
+
+protected:
+    void test_copy_header_on_pending(size_t header_size, size_t data_size,
+                                     bool rndv = false)
+    {
+        ucs_status_ptr_t rndv_pending_sptr = NULL;
+        const unsigned flags = UCP_AM_SEND_FLAG_COPY_HEADER | get_send_flag();
+        mem_buffer sbuf(data_size, tx_memtype());
+        ucs_status_ptr_t pending_sptr;
+
+        UCS_TEST_MESSAGE << "header length " << header_size << " data length "
+                         << data_size << (rndv ? " RNDV" : "");
+
+        sbuf.pattern_fill(SEED);
+        m_hdr_copy.resize(header_size);
+        ucs::fill_random(m_hdr_copy);
+        ucp::data_type_desc_t sdt_desc(m_dt, sbuf.ptr(), data_size);
+        m_hdr       = m_hdr_copy;
+        req_counter = 0;
+        cb_counter  = 0;
+
+        set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this);
+        /**
+         * For RNDV we use 8 byte length to fill the SQ
+         * so we will not get IN_PROGRESS status from fill_sq.
+         * 
+         * For non-RNDV, we cannot use 8 byte length,
+         * because we actually want to test two cases:
+         * - Get a pending request that did not yet send the first fragment.
+         * - Get a pending request that sent the first fragment, but
+         *   not completed sending all fragments.
+         * The exact scenario depends on transport-specific properties,
+         * such as tx queue length and fragment size.
+         */
+        size_t fillq_data_size = rndv ? 8 : data_size;
+        mem_buffer fillq_sbuf(fillq_data_size, tx_memtype());
+        fillq_sbuf.pattern_fill(SEED);
+        ucp::data_type_desc_t fillq_sdt_desc(m_dt, fillq_sbuf.ptr(),
+                                             fillq_data_size);
+        pending_sptr = fill_sq(fillq_sdt_desc, header_size,
+                               flags | UCP_AM_SEND_FLAG_EAGER);
+        if (pending_sptr == NULL) {
+            UCS_TEST_SKIP_R("Failed to get pending request");
+        }
+
+        /**
+         * When testing RNDV, need to submit another request
+         * with the actual message size.
+         */
+        if (rndv) {
+            rndv_pending_sptr = send_am(sdt_desc, flags | UCP_AM_SEND_FLAG_RNDV,
+                                        m_hdr_copy.data(), header_size);
+        }
+
+        ucs::fill_random(m_hdr_copy);
+        while (progress());
+        wait_for_value(&cb_counter, req_counter);
+        request_wait(pending_sptr);
+        if (rndv) {
+            wait_for_value(&cb_counter, req_counter);
+            request_wait(rndv_pending_sptr);
+        }
+        EXPECT_EQ(req_counter, cb_counter);
+    }
+
+    static ucs_status_t
+    am_data_cb(void *arg, const void *header, size_t header_length, void *data,
+               size_t length, const ucp_am_recv_param_t *param)
+    {
+        test_ucp_am_nbx_send_copy_header *self =
+                static_cast<test_ucp_am_nbx_send_copy_header*>(arg);
+
+        return self->am_data_handler(header, header_length, data, length,
+                                     param);
+    }
+
+    /// @override
+    ucs_status_t am_data_handler(const void *header, size_t header_length,
+                                 void *data, size_t length,
+                                 const ucp_am_recv_param_t *rx_param)
+    {
+        ucs_status_t status = am_data_handler_common(header, header_length,
+                                                     data, length, rx_param);
+
+        cb_counter++;
+        return status;
+    }
+
+    /// @override
+    void am_recv_check_data(size_t length)
+    {
+        am_recv_check_data_common(length);
+    }
+
+    static void am_data_recv_cb(void *request, ucs_status_t status,
+                                size_t length, void *user_data)
+    {
+        test_ucp_am_nbx_send_copy_header *self =
+                static_cast<test_ucp_am_nbx_send_copy_header*>(user_data);
+
+        EXPECT_UCS_OK(status);
+
+        self->am_recv_check_data(length);
+    }
+
+    virtual unsigned get_send_flag() const
+    {
+        return get_variant_value(0);
+    }
+
+private:
+    /// @override
+    ucs_status_ptr_t send_am(const ucp::data_type_desc_t &dt_desc,
+                             unsigned flags = 0, const void *hdr = NULL,
+                             unsigned hdr_length = 0,
+                             const ucp_mem_h memh = NULL)
+    {
+        req_counter++;
+        return test_ucp_am_nbx::send_am(dt_desc, flags, hdr, hdr_length, memh);
+    }
+
+    ucs_status_ptr_t fill_sq(ucp::data_type_desc_t &sdt_desc,
+                             size_t header_size = 0ul, unsigned flags = 0,
+                             const ucp_mem_h memh = NULL)
+    {
+        const auto timeout = 5;
+        ucs_status_ptr_t pending_sptr;
+
+        // Warmup for wireup connection
+        pending_sptr = send_am(sdt_desc, get_send_flag() | flags,
+                               m_hdr_copy.data(), header_size, memh);
+        wait_for_flag(&m_am_received);
+        request_wait(pending_sptr);
+        pending_sptr = NULL;
+
+        const ucs_time_t deadline = ucs::get_deadline(timeout);
+        while ((ucs_get_time() < deadline) && (pending_sptr == NULL)) {
+            pending_sptr = send_am(sdt_desc, get_send_flag() | flags,
+                                   m_hdr_copy.data(), header_size, memh);
+        }
+
+        return pending_sptr;
+    }
+
+    size_t req_counter = 0;
+    size_t cb_counter  = 0;
+    std::string m_hdr_copy;
+};
+
+/**
+ * Self transport always has resources to perform the send operation, 
+ * so its not returning pending request. For this reason with
+ * self tl the test can't verify the copy header functionality.
+ * The test is still used as a stress test for the Self transport,
+ * except when running with Valgrind, because its very time consuming.
+ */
+UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_send_copy_header, all_protos,
+                     (has_transport("self") && RUNNING_ON_VALGRIND),
+                     "TCP_SNDBUF?=1k")
+{
+    const unsigned random_iterations = 20;
+    const size_t max_random_hdr_len  = 64;
+    const size_t max_random_data_len = 32 * UCS_KBYTE;
+    size_t header_length;
+    size_t data_length;
+
+    std::vector<std::pair<unsigned, unsigned>> header_data_lengths =
+            {{8, 8},
+             {32, 32},
+             {64, 64},
+             {8, fragment_size() / 2},
+             {8, fragment_size()},
+             {8, fragment_size() * 2},
+             {max_am_hdr(), fragment_size()}};
+
+    for (unsigned i = 0; i < random_iterations; i++) {
+        header_length = 1 + (ucs::rand() % max_random_hdr_len);
+        data_length   = ucs::rand() % max_random_data_len;
+        header_data_lengths.push_back(
+                std::make_pair(header_length, data_length));
+    }
+
+    for (auto it : header_data_lengths) {
+        header_length = it.first;
+        data_length   = it.second;
+        test_copy_header_on_pending(header_length, data_length);
+        test_copy_header_on_pending(header_length, data_length, 1);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_send_copy_header)
 
 
 class test_ucp_am_nbx_send_flag : public test_ucp_am_nbx {

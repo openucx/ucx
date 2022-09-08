@@ -579,6 +579,7 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
                                        req->send.msg_proto.am.header.user_ptr,
                                        req->send.msg_proto.am.header.length,
                                        req->send.buffer, req->send.length, 0);
+    status         = ucp_am_handle_user_header_send_status(req, status);
     return ucp_am_short_handle_status_from_pending(req, status);
 }
 
@@ -594,22 +595,27 @@ static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
                                        req->send.msg_proto.am.header.user_ptr,
                                        req->send.msg_proto.am.header.length,
                                        req->send.buffer, req->send.length, 1);
+    status         = ucp_am_handle_user_header_send_status(req, status);
     return ucp_am_short_handle_status_from_pending(req, status);
 }
 
 static ucs_status_t ucp_am_bcopy_single(uct_pending_req_t *self)
 {
+    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_AM_SINGLE,
                                                  ucp_am_bcopy_pack_args_single);
 
+    status = ucp_am_handle_user_header_send_status(req, status);
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
 
 static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
 {
+    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_AM_SINGLE_REPLY,
                                                  ucp_am_bcopy_pack_args_single_reply);
 
+    status = ucp_am_handle_user_header_send_status(req, status);
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
 
@@ -618,7 +624,8 @@ static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_AM_FIRST,
                                                 UCP_AM_ID_AM_MIDDLE,
                                                 ucp_am_bcopy_pack_args_first,
-                                                ucp_am_bcopy_pack_args_mid, 1);
+                                                ucp_am_bcopy_pack_args_mid, 1,
+                                                1);
 
     return ucp_am_bcopy_handle_status_from_pending(self, 1, 0, status);
 }
@@ -760,11 +767,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_am_rndv_rts, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status;
 
     /* RTS consists of: AM RTS header, packed rkeys and user header */
-    return ucp_rndv_send_rts(sreq, ucp_am_rndv_rts_pack,
-                             sizeof(ucp_rndv_rts_hdr_t) +
-                                     sreq->send.msg_proto.am.header.length);
+    status = ucp_rndv_send_rts(sreq, ucp_am_rndv_rts_pack,
+                               sizeof(ucp_rndv_rts_hdr_t) +
+                                       sreq->send.msg_proto.am.header.length);
+    status = ucp_am_handle_user_header_send_status(sreq, status);
+    return ucp_rndv_send_handle_status_from_pending(sreq, status);
 }
 
 static ucs_status_t

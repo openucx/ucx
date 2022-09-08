@@ -113,17 +113,51 @@ static size_t ucp_am_eager_multi_bcopy_pack_args_mid(void *dest, void *arg)
     return UCP_AM_MID_FRAG_META_LEN + length;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_multi_bcopy_send_func_status(ssize_t packed_size)
+{
+    if (ucs_unlikely(packed_size < 0)) {
+        return (ucs_status_t)packed_size;
+    }
+
+    return UCS_OK;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_bcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
-    size_t user_hdr_size = req->send.msg_proto.am.header.length;
+    ucp_ep_t *ep    = req->send.ep;
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lpriv->super.lane);
+    ucp_proto_multi_pack_ctx_t pack_ctx = {
+        .req       = req,
+        .next_iter = next_iter
+    };
+    ssize_t packed_size;
+    ucs_status_t status;
 
-    return ucp_proto_eager_bcopy_multi_common_send_func(
-            req, lpriv, next_iter, UCP_AM_ID_AM_FIRST,
-            ucp_am_eager_multi_bcopy_pack_args_first,
-            UCP_AM_FIRST_FRAG_META_LEN + user_hdr_size, UCP_AM_ID_AM_MIDDLE,
-            ucp_am_eager_multi_bcopy_pack_args_mid, UCP_AM_MID_FRAG_META_LEN);
+    if (req->send.state.dt_iter.offset == 0) {
+        pack_ctx.max_payload = ucp_proto_multi_max_payload(
+                req, lpriv,
+                UCP_AM_FIRST_FRAG_META_LEN +
+                        req->send.msg_proto.am.header.length);
+
+        packed_size = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_AM_FIRST,
+                                      ucp_am_eager_multi_bcopy_pack_args_first,
+                                      &pack_ctx, 0);
+        status      = ucp_am_handle_user_header_send_status(
+                req, ucp_am_multi_bcopy_send_func_status(packed_size));
+    } else {
+        pack_ctx.max_payload = ucp_proto_multi_max_payload(
+                req, lpriv, UCP_AM_MID_FRAG_META_LEN);
+
+        packed_size = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_AM_MIDDLE,
+                                      ucp_am_eager_multi_bcopy_pack_args_mid,
+                                      &pack_ctx, 0);
+        status      = ucp_am_multi_bcopy_send_func_status(packed_size);
+    }
+
+    return status;
 }
 
 static ucs_status_t
