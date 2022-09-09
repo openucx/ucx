@@ -632,7 +632,9 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nonexistent) {
     sender().destroy_worker();
 }
 
-UCS_TEST_P(test_ucp_wireup_1sided, disconnect_reconnect) {
+UCS_TEST_P(test_ucp_wireup_1sided, disconnect_reconnect,
+           /* RNDV requires progress on both sides - sender and receiver */
+           "RNDV_THRESH=inf") {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 1);
     disconnect(sender());
@@ -644,21 +646,28 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_reconnect) {
     recv_b(receiver().worker(), receiver().ep(), 1000, 1);
 }
 
-UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided) {
+UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided,
+           /* RNDV requires progress on both sides - sender and receiver */
+           "RNDV_THRESH=inf") {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 100);
     disconnect(sender());
     recv_b(receiver().worker(), receiver().ep(), 1000, 100);
 }
 
-UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_nozcopy, "ZCOPY_THRESH=-1") {
+UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_nozcopy,
+           "ZCOPY_THRESH=-1",
+           /* RNDV requires progress on both sides - sender and receiver */
+           "RNDV_THRESH=inf") {
     sender().connect(&receiver(), get_ep_params());
     send_b(sender().ep(), 1000, 100);
     disconnect(sender());
     recv_b(receiver().worker(), receiver().ep(), 1000, 100);
 }
 
-UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_wait) {
+UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_onesided_wait,
+           /* RNDV requires progress on both sides - sender and receiver */
+           "RNDV_THRESH=inf") {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), 8, 1);
     send_b(sender().ep(), 1000, 200);
@@ -1459,22 +1468,21 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
     ucp_rkey_h rkey = get_rkey(sender());
     add_rkey(rkey);
 
-    ucs_status_t status = ucp_atomic_post(sender().ep(), UCP_ATOMIC_POST_OP_ADD,
-                                          m_send_data[0], sizeof(elem_type),
-                                          (uint64_t)&m_recv_data[0], rkey);
-    ASSERT_UCS_OK(status);
-
     ucp_request_param_t param;
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
-                         UCP_OP_ATTR_FIELD_USER_DATA;
-    param.cb.send      = flush_cb;
-    param.user_data    = this;
-    void *req = ucp_ep_flush_nbx(sender().ep(), &param);
-    if (UCS_PTR_IS_PTR(req)) {
-        request_wait(req);
-    } else {
-        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
-    }
+    std::vector<void *> reqs(2); // AMO and flush
+    param.op_attr_mask  = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype      = ucp_dt_make_contig(sizeof(elem_type));
+    reqs[0]             = ucp_atomic_op_nbx(sender().ep(), UCP_ATOMIC_OP_ADD,
+                                            &m_send_data[0], 1,
+                                            (uint64_t)&m_recv_data[0], rkey,
+                                            &param);
+    param.op_attr_mask  = UCP_OP_ATTR_FIELD_CALLBACK |
+                          UCP_OP_ATTR_FIELD_USER_DATA;
+    param.cb.send       = flush_cb;
+    param.user_data     = this;
+    reqs[1]             = ucp_ep_flush_nbx(sender().ep(), &param);
+    ucs_status_t status = requests_wait(reqs);
+    ASSERT_UCS_OK(status);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_amo)
