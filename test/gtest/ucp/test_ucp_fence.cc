@@ -20,9 +20,15 @@ public:
     template <typename T>
     void blocking_add(entity *e, uint64_t *initial_buf, uint64_t *result_buf,
                       void *memheap_addr, ucp_rkey_h rkey) {
-        ucs_status_t status = ucp_atomic_post(e->ep(), UCP_ATOMIC_POST_OP_ADD,
-                                              *initial_buf, sizeof(T),
-                                              (uintptr_t)memheap_addr, rkey);
+        ucp_request_param_t param;
+
+        param.op_attr_mask  = UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype      = ucp_dt_make_contig(sizeof(T));
+        void *request       = ucp_atomic_op_nbx(e->ep(), UCP_ATOMIC_OP_ADD,
+                                                initial_buf, 1,
+                                                (uintptr_t)memheap_addr, rkey,
+                                                &param);
+        ucs_status_t status = request_wait(request);
         ASSERT_UCS_OK(status);
     }
 
