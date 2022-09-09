@@ -415,7 +415,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     char tls_info[256];
     char *p, *endp;
     uct_iface_attr_t *iface_attr;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     int is_reachable;
     double score;
     uint8_t priority;
@@ -513,10 +513,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         reg_mem_types = ucp_wireup_select_reg_mem_types(context, md_index);
 
         /* Check that local md and interface satisfy the criteria */
-        if (!ucp_wireup_check_flags(resource, md_attr->cap.flags,
-                                    local_md_flags, criteria->title,
-                                    ucp_wireup_md_flags, p, endp - p) ||
-            !ucp_wireup_check_flags(resource, md_attr->cap.alloc_mem_types,
+        if (!ucp_wireup_check_flags(resource, md_attr->flags, local_md_flags,
+                                    criteria->title, ucp_wireup_md_flags, p,
+                                    endp - p) ||
+            !ucp_wireup_check_flags(resource, md_attr->alloc_mem_types,
                                     criteria->alloc_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
             !ucp_wireup_check_flags(resource, reg_mem_types,
@@ -971,7 +971,7 @@ static uint64_t ucp_ep_get_context_features(const ucp_ep_h ep)
 }
 
 static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
-                                        const uct_md_attr_t *md_attr,
+                                        const uct_md_attr_v2_t *md_attr,
                                         const ucp_address_entry_t *remote_addr,
                                         void *arg)
 {
@@ -998,7 +998,7 @@ static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
 }
 
 static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
-                                        const uct_md_attr_t *md_attr,
+                                        const uct_md_attr_v2_t *md_attr,
                                         const ucp_address_entry_t *remote_addr,
                                         void *arg)
 {
@@ -1142,7 +1142,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
 }
 
 double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
-                                 const uct_md_attr_t *md_attr,
+                                 const uct_md_attr_v2_t *md_attr,
                                  const ucp_address_entry_t *remote_addr,
                                  void *arg)
 {
@@ -1198,7 +1198,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
 }
 
 static double ucp_wireup_am_score_func(const ucp_worker_iface_t *wiface,
-                                       const uct_md_attr_t *md_attr,
+                                       const uct_md_attr_v2_t *md_attr,
                                        const ucp_address_entry_t *remote_addr,
                                        void *arg)
 {
@@ -1249,9 +1249,8 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
 
 static double
 ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
-                             const uct_md_attr_t *md_attr,
-                             const ucp_address_entry_t *remote_addr,
-                             void *arg)
+                             const uct_md_attr_v2_t *md_attr,
+                             const ucp_address_entry_t *remote_addr, void *arg)
 {
     ucp_wireup_dev_usage_count *dev_count = arg;
 
@@ -1384,9 +1383,8 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
 
 static double
 ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
-                            const uct_md_attr_t *md_attr,
-                            const ucp_address_entry_t *remote_addr,
-                            void *arg)
+                            const uct_md_attr_v2_t *md_attr,
+                            const ucp_address_entry_t *remote_addr, void *arg)
 {
     ucp_wireup_dev_usage_count *dev_count = arg;
 
@@ -1864,7 +1862,7 @@ ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
 
 static double
 ucp_wireup_keepalive_score_func(const ucp_worker_iface_t *wiface,
-                                const uct_md_attr_t *md_attr,
+                                const uct_md_attr_v2_t *md_attr,
                                 const ucp_address_entry_t *remote_addr,
                                 void *arg)
 {
@@ -2138,7 +2136,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
 
         /* Pack remote key only if needed for RMA.
          * FIXME a temporary workaround to prevent the ugni uct from using rndv. */
-        if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
+        if ((context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_NEED_RKEY) &&
             !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni"))) {
             key->rma_bw_md_map |= UCS_BIT(md_index);
         }

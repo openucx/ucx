@@ -385,7 +385,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     const ucp_proto_select_param_t *select_param = params->select_param;
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane, num_lanes;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     ucp_lane_map_t lane_map;
@@ -460,16 +460,17 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
 
         /* Check memory registration capabilities for zero-copy case */
         if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-            if (md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH) {
+            if (md_attr->flags & UCT_MD_FLAG_NEED_MEMH) {
                 /* Memory domain must support registration on the relevant
                  * memory type */
-                if (!(md_attr->cap.flags & UCT_MD_FLAG_REG) ||
-                    !(md_attr->cap.reg_mem_types & UCS_BIT(select_param->mem_type))) {
+                if (!(md_attr->flags & UCT_MD_FLAG_REG) ||
+                    !(md_attr->reg_mem_types &
+                      UCS_BIT(select_param->mem_type))) {
                     ucs_trace("%s: no reg of mem type %s", lane_desc,
                               ucs_memory_type_names[select_param->mem_type]);
                     continue;
                 }
-            } else if (!(md_attr->cap.access_mem_types &
+            } else if (!(md_attr->access_mem_types &
                          UCS_BIT(select_param->mem_type))) {
                 /*
                  * Memory domain which does not require a registration for zero
@@ -489,7 +490,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
                 goto out;
             }
 
-            if (((md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) ||
+            if (((md_attr->flags & UCT_MD_FLAG_NEED_RKEY) ||
                  (flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) &&
                 !(rkey_config_key->md_map &
                   UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) {
@@ -500,8 +501,8 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
                 continue;
             }
 
-            if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
-                !(md_attr->cap.access_mem_types &
+            if (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY) &&
+                !(md_attr->access_mem_types &
                   UCS_BIT(rkey_config_key->mem_type))) {
                 /* Remote memory domain without remote key must be able to
                  * access relevant memory type */
@@ -533,7 +534,7 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
 {
     ucp_context_h context                        = params->super.worker->context;
     const ucp_proto_select_param_t *select_param = params->super.select_param;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
     ucp_md_map_t reg_md_map;
     ucp_lane_index_t lane;
@@ -551,9 +552,9 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
         /* Register if the memory domain support registration for the relevant
            memory type, and needs a local memory handle for zero-copy
            communication */
-        if (ucs_test_all_flags(md_attr->cap.flags,
+        if (ucs_test_all_flags(md_attr->flags,
                                UCT_MD_FLAG_NEED_MEMH | UCT_MD_FLAG_REG) &&
-            (md_attr->cap.reg_mem_types & UCS_BIT(select_param->mem_type))) {
+            (md_attr->reg_mem_types & UCS_BIT(select_param->mem_type))) {
             reg_md_map |= UCS_BIT(md_index);
         }
     }

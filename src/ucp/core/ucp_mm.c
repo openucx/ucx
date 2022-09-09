@@ -40,7 +40,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     unsigned memh_index, prev_memh_index;
     uct_mem_h *prev_uct_memh;
     ucp_md_map_t new_md_map;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     void *end_address UCS_V_UNUSED;
     unsigned prev_num_memh;
     unsigned md_index;
@@ -114,10 +114,10 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         } else if (length == 0) {
             /* don't register zero-length regions */
             continue;
-        } else if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
+        } else if (md_attr->flags & UCT_MD_FLAG_REG) {
             ucs_assert(address != NULL);
 
-            if (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
+            if (!(md_attr->reg_mem_types & UCS_BIT(mem_type))) {
                 continue;
             }
 
@@ -161,8 +161,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                     "md[%d]=%s: %s (md reg_mem_types 0x%"PRIx64")",
                     base_address, UCS_BIT(mem_type), reg_length, md_index,
                     context->tl_mds[md_index].rsc.md_name,
-                    ucs_status_string(status),
-                    md_attr->cap.reg_mem_types);
+                    ucs_status_string(status), md_attr->reg_mem_types);
 
             if (!(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
                 goto err_dereg;
@@ -293,7 +292,7 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
                     memh->alloc_md_index);
 
         ucs_trace("de-registering memh[%d]=%p", md_index, memh->uct[md_index]);
-        ucs_assert(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG);
+        ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
         status = uct_md_mem_dereg(context->tl_mds[md_index].md,
                                   memh->uct[md_index]);
         if (status != UCS_OK) {
@@ -746,14 +745,14 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       ucp_md_map_t *md_map,
                                       uct_rkey_bundle_t *rkey_bundle)
 {
-    ucp_context_h context        = worker->context;
-    const uct_md_attr_t *md_attr = &context->tl_mds[md_index].attr;
+    ucp_context_h context           = worker->context;
+    const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
     uct_component_h cmpt;
     ucp_tl_md_t *tl_md;
     ucs_status_t status;
     char *rkey_buffer;
 
-    if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)) {
+    if (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY)) {
         rkey_bundle->handle = NULL;
         rkey_bundle->rkey   = UCT_INVALID_RKEY;
         status              = UCS_OK;
@@ -882,7 +881,7 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
     status = UCS_OK;
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
         uct_memh = memh->uct[md_index];
-        if (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_ADVISE) ||
+        if (!(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_ADVISE) ||
             (uct_memh == NULL)) {
             continue;
         }

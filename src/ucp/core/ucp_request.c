@@ -345,7 +345,7 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_request_t *req)
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
             ucs_assert(ucp_ep_get_iface_attr(ep, lane)->cap.flags &
                        UCT_IFACE_FLAG_GET_ZCOPY);
-            ucs_assert(ucp_ep_md_attr(ep, lane)->cap.flags &
+            ucs_assert(ucp_ep_md_attr(ep, lane)->flags &
                        UCT_MD_FLAG_INVALIDATE);
             inv_map |= UCS_BIT(ucp_ep_md_index(ep, lane));
         }

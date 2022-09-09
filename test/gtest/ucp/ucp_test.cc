@@ -1237,8 +1237,7 @@ void ucp_test::disable_keepalive()
 
 bool ucp_test::check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type) {
     for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(e.ep()); lane++) {
-        const uct_md_attr_t* attr = ucp_ep_md_attr(e.ep(), lane);
-        if (attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+        if (ucp_ep_md_attr(e.ep(), lane)->reg_mem_types & UCS_BIT(mem_type)) {
             return true;
         }
     }

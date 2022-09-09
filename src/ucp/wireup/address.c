@@ -1188,7 +1188,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
 
         /* MD index */
         md_index      = context->tl_rscs[dev->rsc_index].md_index;
-        md_flags      = context->tl_mds[md_index].attr.cap.flags &
+        md_flags      = context->tl_mds[md_index].attr.flags &
                             md_flags_pack_mask;
         ptr           = ucp_address_pack_md_info(
                             ptr, UCS_BITMAP_IS_ZERO_INPLACE(&dev_tl_bitmap),
