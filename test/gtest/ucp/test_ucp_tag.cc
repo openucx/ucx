@@ -561,6 +561,10 @@ UCS_TEST_P(test_ucp_tag_nbx, rndv_prereg, "RNDV_THRESH=0")
 
 UCS_TEST_P(test_ucp_tag_nbx, fallback)
 {
+    if (m_ucp_config->ctx.proto_enable) {
+        UCS_TEST_SKIP_R("FIXME: fallback is not implemented in proto_v2");
+    }
+
     /* allocate read-only pages - it force ibv_reg_mr() failure */
     void *send_buffer = mmap(NULL, MSG_SIZE, PROT_READ,
                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);

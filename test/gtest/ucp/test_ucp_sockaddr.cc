@@ -2480,6 +2480,11 @@ protected:
          * packing */
         ASSERT_FALSE(send_prereg_memh & recv_prereg_memh);
 
+        if ((send_prereg_memh || recv_prereg_memh) &&
+            m_ucp_config->ctx.proto_enable) {
+            UCS_TEST_SKIP_R("FIXME: proto_v2 does not support prereh memh");
+        }
+
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
         for (int i = 0; i < num_iters; i++) {
