@@ -37,7 +37,7 @@ ucp_rndv_memtype_direct_update_md_map(ucp_context_h context,
                                       ucp_request_t *sreq, ucp_md_map_t *md_map)
 {
     unsigned md_index;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
 
     if (UCP_MEM_IS_HOST(sreq->send.mem_type)) {
         return;
@@ -46,7 +46,7 @@ ucp_rndv_memtype_direct_update_md_map(ucp_context_h context,
     ucs_for_each_bit(md_index, *md_map) {
         md_attr = &context->tl_mds[md_index].attr;
         if (!ucp_rndv_memtype_direct_support(context, sreq->send.length,
-                                             md_attr->cap.reg_mem_types)) {
+                                             md_attr->reg_mem_types)) {
             *md_map &= ~UCS_BIT(md_index);
         }
     }
@@ -72,7 +72,7 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
     int found                        = 0;
     ucs_memory_type_t frag_mem_type  = context->config.ext.rndv_frag_mem_type;
     ucp_md_index_t md_index;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     uint64_t mem_types;
     int i;
 
@@ -80,7 +80,7 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
          (i < UCP_MAX_LANES) &&
          (ep_config->key.rma_bw_lanes[i] != UCP_NULL_LANE); i++) {
         md_index = ep_config->md_index[ep_config->key.rma_bw_lanes[i]];
-        if (context->tl_mds[md_index].attr.cap.reg_mem_types &
+        if (context->tl_mds[md_index].attr.reg_mem_types &
             UCS_BIT(frag_mem_type)) {
             found = 1;
             break;
@@ -107,7 +107,7 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
 
     ucs_for_each_bit(md_index, ep_config->key.rma_bw_md_map) {
         md_attr = &context->tl_mds[md_index].attr;
-        if (ucs_test_all_flags(md_attr->cap.reg_mem_types, mem_types)) {
+        if (ucs_test_all_flags(md_attr->reg_mem_types, mem_types)) {
             return 0;
         }
     }
@@ -660,7 +660,7 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
     ucp_lane_map_t lane_map;
     ucp_lane_index_t lane, lane_idx;
     ucp_md_index_t md_index;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     ucp_md_index_t dst_md_index;
     ucp_rsc_index_t rsc_index;
     uct_iface_attr_t *iface_attr;
@@ -690,9 +690,9 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
         lane_bw    = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
 
         if (ucs_unlikely((md_index != UCP_NULL_RESOURCE) &&
-                         !(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY))) {
+                         !(md_attr->flags & UCT_MD_FLAG_NEED_RKEY))) {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
-            if (!rkey || ((md_attr->cap.access_mem_types & UCS_BIT(mem_type)) &&
+            if (!rkey || ((md_attr->access_mem_types & UCS_BIT(mem_type)) &&
                           (mem_type == rkey->mem_type))) {
                 rndv_req->send.rndv.rkey_index[i] = UCP_NULL_RESOURCE;
                 lane_map                         |= UCS_BIT(i);
@@ -702,13 +702,13 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
         }
 
         if (ucs_unlikely((md_index != UCP_NULL_RESOURCE) &&
-                         (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))))) {
+                         (!(md_attr->reg_mem_types & UCS_BIT(mem_type))))) {
             continue;
         }
 
         if (!UCP_MEM_IS_HOST(mem_type) &&
             !ucp_rndv_memtype_direct_support(context, length,
-                                             md_attr->cap.reg_mem_types)) {
+                                             md_attr->reg_mem_types)) {
             continue;
         }
 
@@ -1072,7 +1072,7 @@ ucp_rndv_send_frag_update_get_rkey(ucp_worker_h worker, ucp_request_t *freq,
     ucs_status_t status;
     ucp_ep_h mem_type_ep;
     ucp_md_index_t md_index;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     ucp_lane_index_t mem_type_rma_lane;
 
     mem_type_ep       = worker->mem_type_ep[mem_type];
@@ -1082,7 +1082,7 @@ ucp_rndv_send_frag_update_get_rkey(ucp_worker_h worker, ucp_request_t *freq,
     md_index = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
     md_attr  = &mem_type_ep->worker->context->tl_mds[md_index].attr;
 
-    if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)) {
+    if (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY)) {
         return;
     }
 
@@ -1327,7 +1327,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
     ucp_request_t *frndv_req;
     unsigned md_index;
     unsigned memh_index;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     ucp_md_map_t alloc_md_map;
 
     ucp_trace_req(rreq, "using rndv pipeline protocol rndv_req %p", rndv_req);
@@ -1375,7 +1375,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         ucs_for_each_bit(md_index, mdesc->memh->md_map) {
             if (md_index == mdesc->memh->alloc_md_index) {
                 md_attr = &context->tl_mds[md_index].attr;
-                if (md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) {
+                if (md_attr->flags & UCT_MD_FLAG_RKEY_PTR) {
                     alloc_md_map |= UCS_BIT(md_index);
                 }
                 break;
@@ -1547,7 +1547,7 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     ucp_ep_peer_mem_data_t *ppln_data;
     ucp_md_map_t md_map;
     ucp_md_index_t md_index;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     ucp_ep_h mem_type_ep;
     ucp_lane_index_t mem_type_rma_lane;
     ucs_memory_type_t remote_mem_type;
@@ -1570,11 +1570,11 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
 
     ucs_for_each_bit(md_index, md_map) {
         md_attr = &context->tl_mds[md_index].attr;
-        if ((md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) &&
+        if ((md_attr->flags & UCT_MD_FLAG_RKEY_PTR) &&
             /* Do not use xpmem, because cuda_copy registration will fail and
              * performance will not be optimal. */
-            !(md_attr->cap.flags & UCT_MD_FLAG_REG) &&
-            (md_attr->cap.access_mem_types & UCS_BIT(remote_mem_type))) {
+            !(md_attr->flags & UCT_MD_FLAG_REG) &&
+            (md_attr->access_mem_types & UCS_BIT(remote_mem_type))) {
             rkey_ptr_md_index = md_index;
             break;
         }
@@ -2133,7 +2133,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
     ucs_memory_type_t frag_mem_type = context->config.ext.rndv_frag_mem_type;
     size_t rndv_size                = ucs_min(rndv_rtr_hdr->size,
                                               sreq->send.length);
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     ucp_request_t *freq;
     ucp_request_t *fsreq;
     size_t max_frag_size, length;
@@ -2176,7 +2176,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
         /* Check if lane supports bounce buffer memory, to stage sends
          * through it */
         md_attr = ucp_ep_md_attr(sreq->send.ep, sreq->send.lane);
-        if (!(md_attr->cap.reg_mem_types & UCS_BIT(frag_mem_type))) {
+        if (!(md_attr->reg_mem_types & UCS_BIT(frag_mem_type))) {
             goto err_unsupported;
         }
 

@@ -609,7 +609,7 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
     ucp_md_index_t dst_md_index;
     ucp_lane_index_t lane;
     ucp_md_index_t md_index;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     uint64_t mem_types;
     uint8_t rkey_index;
     int prio;
@@ -626,17 +626,16 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
         md_attr  = &context->tl_mds[md_index].attr;
 
         if ((md_index != UCP_NULL_RESOURCE) &&
-            (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)))
-        {
+            (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY))) {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
-            if (!rkey || ((md_attr->cap.access_mem_types & UCS_BIT(mem_type)) &&
+            if (!rkey || ((md_attr->access_mem_types & UCS_BIT(mem_type)) &&
                           (mem_type == rkey->mem_type))) {
                 *uct_rkey_p = UCT_INVALID_RKEY;
                 return lane;
             }
         }
 
-        mem_types = md_attr->cap.reg_mem_types | md_attr->cap.alloc_mem_types;
+        mem_types = md_attr->reg_mem_types | md_attr->alloc_mem_types;
         if ((md_index != UCP_NULL_RESOURCE) && !(mem_types & UCS_BIT(mem_type))) {
             continue;
         }

@@ -88,7 +88,7 @@ typedef struct {
      * @return Transport score, the higher the better.
      */
     double                      (*calc_score)(const ucp_worker_iface_t *wiface,
-                                              const uct_md_attr_t *md_attr,
+                                              const uct_md_attr_v2_t *md_attr,
                                               const ucp_address_entry_t *remote_addr,
                                               void *arg);
 
@@ -142,7 +142,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 ucp_wireup_select_info_t *select_info);
 
 double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
-                                 const uct_md_attr_t *md_attr,
+                                 const uct_md_attr_v2_t *md_attr,
                                  const ucp_address_entry_t *remote_addr,
                                  void *arg);
 

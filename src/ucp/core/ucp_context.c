@@ -1175,15 +1175,17 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
     }
 
     VALGRIND_MAKE_MEM_UNDEFINED(&tl_md->attr, sizeof(tl_md->attr));
+    tl_md->attr.field_mask = UINT64_MAX;
     /* Save MD attributes */
-    status = uct_md_query(tl_md->md, &tl_md->attr);
+    status                 = uct_md_query_v2(tl_md->md, &tl_md->attr);
     if (status != UCS_OK) {
         uct_md_close(tl_md->md);
         return status;
     }
 
-    tl_md->pack_flags_mask = (tl_md->attr.cap.flags & UCT_MD_FLAG_INVALIDATE) ?
-                             UCT_MD_MKEY_PACK_FLAG_INVALIDATE : 0;
+    tl_md->pack_flags_mask = (tl_md->attr.flags & UCT_MD_FLAG_INVALIDATE) ?
+                                     UCT_MD_MKEY_PACK_FLAG_INVALIDATE :
+                                     0;
     return UCS_OK;
 }
 
@@ -1343,7 +1345,7 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
     uint64_t mem_type_mask;
     uint64_t mem_type_bitmap;
     ucs_memory_type_t mem_type;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
@@ -1377,7 +1379,7 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
 
         if (num_tl_resources > 0) {
             /* List of memory type MDs */
-            mem_type_bitmap = context->tl_mds[md_index].attr.cap.detect_mem_types;
+            mem_type_bitmap = context->tl_mds[md_index].attr.detect_mem_types;
             if (~mem_type_mask & mem_type_bitmap) {
                 context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
                 ++context->num_mem_type_detect_mds;
@@ -1385,13 +1387,13 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
             }
 
             md_attr = &context->tl_mds[md_index].attr;
-            if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
+            if (md_attr->flags & UCT_MD_FLAG_REG) {
                 ucs_memory_type_for_each(mem_type) {
-                    if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+                    if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
                     }
 
-                    if (md_attr->cap.cache_mem_types & UCS_BIT(mem_type)) {
+                    if (md_attr->cache_mem_types & UCS_BIT(mem_type)) {
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
                 }
@@ -2218,7 +2220,7 @@ void ucp_context_get_mem_access_tls(ucp_context_h context,
                                     ucs_memory_type_t mem_type,
                                     ucp_tl_bitmap_t *tl_bitmap)
 {
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
     ucp_rsc_index_t tl_id;
 
@@ -2226,7 +2228,7 @@ void ucp_context_get_mem_access_tls(ucp_context_h context,
     UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
         md_index = context->tl_rscs[tl_id].md_index;
         md_attr  = &context->tl_mds[md_index].attr;
-        if (md_attr->cap.access_mem_types & UCS_BIT(mem_type)) {
+        if (md_attr->access_mem_types & UCS_BIT(mem_type)) {
             UCS_BITMAP_SET(*tl_bitmap, tl_id);
         }
     }

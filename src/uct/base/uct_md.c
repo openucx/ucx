@@ -403,7 +403,6 @@ static void uct_md_attr_from_v2(uct_md_attr_t *dst, const uct_md_attr_v2_t *src)
     dst->cap.max_reg          = src->max_reg;
     dst->cap.flags            = src->flags;
     dst->cap.reg_mem_types    = src->reg_mem_types;
-    dst->cap.cache_mem_types  = src->cache_mem_types;
     dst->cap.detect_mem_types = src->detect_mem_types;
     dst->cap.alloc_mem_types  = src->alloc_mem_types;
     dst->cap.access_mem_types = src->access_mem_types;

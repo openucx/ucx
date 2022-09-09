@@ -1818,7 +1818,7 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     uct_iface_attr_t *iface_attr;
     ucp_worker_iface_t *wiface;
     uct_perf_attr_t perf_attr;
@@ -1841,7 +1841,7 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
         if (!(md_map & UCS_BIT(md_index))) {
             md_map |= UCS_BIT(md_index);
             md_attr = &context->tl_mds[md_index].attr;
-            if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
+            if (md_attr->flags & UCT_MD_FLAG_REG) {
                 params->reg_growth   += md_attr->reg_cost.m;
                 params->reg_overhead += md_attr->reg_cost.c;
                 params->overhead     += iface_attr->overhead;
@@ -1962,7 +1962,7 @@ ucp_ep_config_calc_rma_zcopy_thresh(ucp_worker_t *worker,
     ucp_context_h context = worker->context;
     double bcopy_bw       = context->config.ext.bcopy_bw;
     ucp_ep_thresh_params_t rma;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     double numerator, denominator;
     double reg_overhead, reg_growth;
     ucs_status_t status;
@@ -1977,7 +1977,7 @@ ucp_ep_config_calc_rma_zcopy_thresh(ucp_worker_t *worker,
     }
 
     md_attr = &context->tl_mds[config->md_index[rma_lanes[0]]].attr;
-    if (md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH) {
+    if (md_attr->flags & UCT_MD_FLAG_NEED_MEMH) {
         reg_overhead = rma.reg_overhead;
         reg_growth   = rma.reg_growth;
     } else {
@@ -2022,10 +2022,13 @@ static void ucp_ep_config_init_short_thresh(ucp_memtype_thresh_t *thresh)
     thresh->memtype_off = -1;
 }
 
-static ucs_status_t ucp_ep_config_set_am_rndv_thresh(
-        ucp_worker_h worker, uct_iface_attr_t *iface_attr,
-        uct_md_attr_t *md_attr, ucp_ep_config_t *config, size_t min_rndv_thresh,
-        size_t max_rndv_thresh, ucp_rndv_thresh_t *thresh)
+static ucs_status_t
+ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
+                                 uct_iface_attr_t *iface_attr,
+                                 uct_md_attr_v2_t *md_attr,
+                                 ucp_ep_config_t *config,
+                                 size_t min_rndv_thresh, size_t max_rndv_thresh,
+                                 ucp_rndv_thresh_t *thresh)
 {
     ucp_context_h context = worker->context;
     size_t rndv_thresh, rndv_local_thresh, min_thresh;
@@ -2128,7 +2131,7 @@ static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_sho
  * a caller of this function should suppress this false-positive warning */
 static void
 ucp_ep_config_rndv_zcopy_max_bw_update(ucp_context_t *context,
-                                       const uct_md_attr_t *md_attr,
+                                       const uct_md_attr_v2_t *md_attr,
                                        const uct_iface_attr_t *iface_attr,
                                        uint64_t cap_flag,
                                        double max_bw[UCS_MEMORY_TYPE_LAST])
@@ -2141,20 +2144,17 @@ ucp_ep_config_rndv_zcopy_max_bw_update(ucp_context_t *context,
     }
 
     bw = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
-    ucs_for_each_bit(mem_type_index, md_attr->cap.reg_mem_types) {
+    ucs_for_each_bit(mem_type_index, md_attr->reg_mem_types) {
         ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
         max_bw[mem_type_index] = ucs_max(max_bw[mem_type_index], bw);
     }
 }
 
-static void
-ucp_ep_config_rndv_zcopy_set(ucp_context_t *context, uint64_t cap_flag,
-                             ucp_lane_index_t lane,
-                             const uct_md_attr_t *md_attr,
-                             const uct_iface_attr_t *iface_attr,
-                             double max_bw[UCS_MEMORY_TYPE_LAST],
-                             ucp_ep_rndv_zcopy_config_t *rndv_zcopy,
-                             ucp_lane_index_t *lanes_count_p)
+static void ucp_ep_config_rndv_zcopy_set(
+        ucp_context_t *context, uint64_t cap_flag, ucp_lane_index_t lane,
+        const uct_md_attr_v2_t *md_attr, const uct_iface_attr_t *iface_attr,
+        double max_bw[UCS_MEMORY_TYPE_LAST],
+        ucp_ep_rndv_zcopy_config_t *rndv_zcopy, ucp_lane_index_t *lanes_count_p)
 {
     const double min_scale = 1. / context->config.ext.multi_lane_max_ratio;
     uint8_t mem_type_index;
@@ -2174,7 +2174,7 @@ ucp_ep_config_rndv_zcopy_set(ucp_context_t *context, uint64_t cap_flag,
         max = iface_attr->cap.put.max_zcopy;
     }
 
-    ucs_for_each_bit(mem_type_index, md_attr->cap.reg_mem_types) {
+    ucs_for_each_bit(mem_type_index, md_attr->reg_mem_types) {
         ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
         scale = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
                 max_bw[mem_type_index];
@@ -2244,7 +2244,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                          size_t adjust_min_val, size_t max_seg_size)
 {
     ucp_context_t *context = worker->context;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     uct_iface_attr_t *iface_attr;
     size_t it;
     size_t zcopy_thresh;
@@ -2261,8 +2261,8 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
 
     md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
     if (!(iface_attr->cap.flags & zcopy_flag) ||
-        ((md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH) &&
-         !(md_attr->cap.flags & UCT_MD_FLAG_REG))) {
+        ((md_attr->flags & UCT_MD_FLAG_NEED_MEMH) &&
+         !(md_attr->flags & UCT_MD_FLAG_REG))) {
         return;
     }
 
@@ -2292,7 +2292,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
     ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_HOST(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
-        } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+        } else if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = mem_type_zcopy_thresh;
         }
     }
@@ -2335,7 +2335,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     ucp_lane_index_t put_zcopy_lane_count;
     ucp_ep_rma_config_t *rma_config;
     uct_iface_attr_t *iface_attr;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     ucs_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane, i;
@@ -2433,7 +2433,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
 
         md_attr = &context->tl_mds[config->md_index[lane]].attr;
-        if (!ucs_test_all_flags(md_attr->cap.flags,
+        if (!ucs_test_all_flags(md_attr->flags,
                                 UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_MEMH)) {
             continue;
         }
@@ -2513,7 +2513,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     if (key->rkey_ptr_lane != UCP_NULL_LANE) {
         lane      = key->rkey_ptr_lane;
         md_attr   = &context->tl_mds[config->md_index[lane]].attr;
-        ucs_assert_always(md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR);
+        ucs_assert_always(md_attr->flags & UCT_MD_FLAG_RKEY_PTR);
 
         config->rndv.rkey_ptr_dst_mds =
                 UCS_BIT(config->key.lanes[lane].dst_md_index);

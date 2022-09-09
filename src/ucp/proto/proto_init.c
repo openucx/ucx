@@ -328,7 +328,7 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
 {
     ucp_context_h context = params->super.worker->context;
     ucp_proto_perf_node_t *perf_node;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
     const char *md_name;
 

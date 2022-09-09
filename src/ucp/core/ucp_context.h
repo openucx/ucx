@@ -17,6 +17,7 @@
 #include <ucp/dt/dt.h>
 #include <ucp/proto/proto.h>
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/bitmap.h>
@@ -243,7 +244,7 @@ typedef struct ucp_tl_md {
     /**
      * Memory domain attributes
      */
-    uct_md_attr_t          attr;
+    uct_md_attr_v2_t       attr;
 
     /**
      * Flags mask parameter for @ref uct_md_mkey_pack_v2
