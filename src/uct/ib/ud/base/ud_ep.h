@@ -100,7 +100,7 @@ do { \
  *   - if wheel_time - saved_time > 3*one_tick_time
  *        schedule resend
  *        send_time = wheel_time
- *        consgestion avoidance decreases tx window
+ *        congestion avoidance decreases tx window
  *   - if window is not empty resched timer
  *   3x is needed to avoid false resends because of errors in timekeeping
  *
@@ -120,7 +120,7 @@ do { \
 
 /* Congestion avoidance and retransmits
  *
- * UD uses additive increase/multiplicative decrease algorightm
+ * UD uses additive increase/multiplicative decrease algorithm
  * See https://en.wikipedia.org/wiki/Additive_increase/multiplicative_decrease
  *
  * tx window is increased when ack is received and decreased when
@@ -131,7 +131,7 @@ do { \
  *
  * Todo:
  *
- * Consider trigerring window decrease before resend timeout:
+ * Consider triggering window decrease before resend timeout:
  * - on ECN (explicit congestion notification) from receiver. ECN can
  *   be based on some heuristic. For example on number of rx completions
  *   that receiver picked from CQ.
