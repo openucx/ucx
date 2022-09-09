@@ -225,7 +225,8 @@ private:
                                  bool wakeup = false);
 
 protected:
-    typedef void (*get_variants_func_t)(std::vector<ucp_test_variant>&);
+    using variant_vec_t       = std::vector<ucp_test_variant>;
+    using get_variants_func_t = void (*)(variant_vec_t&);
 
     virtual void init();
     bool is_self() const;

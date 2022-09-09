@@ -38,18 +38,10 @@ public:
         }
     }
 
-    static void
-    get_test_variants_prereg(std::vector<ucp_test_variant> &variants)
+    static void get_test_variants(variant_vec_t &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_AM, TEST_FLAG_PREREG,
-                               "prereg");
-    }
-
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_values(variants, get_test_variants_prereg, 0);
-        add_variant_values(variants, get_test_variants_prereg, 1, "proto");
+        add_variant_with_value(variants, UCP_FEATURE_AM, 1, "proto");
     }
 
     virtual void init() {
@@ -60,20 +52,10 @@ public:
         receiver().connect(&sender(), get_ep_params());
     }
 
-protected:
-    enum {
-        TEST_FLAG_PREREG = UCS_BIT(0)
-    };
-
-    bool prereg() const
-    {
-        return get_variant_value(0) & TEST_FLAG_PREREG;
-    }
-
 private:
     bool is_proto_enabled() const
     {
-        return get_variant_value(1);
+        return get_variant_value();
     }
 };
 
@@ -638,6 +620,11 @@ protected:
         self->am_recv_check_data(length);
     }
 
+    virtual bool prereg() const
+    {
+        return 0;
+    }
+
     static const uint16_t           TEST_AM_NBX_ID = 0;
     ucp_datatype_t                  m_dt;
     volatile bool                   m_am_received;
@@ -930,17 +917,34 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_send_flag)
 
 class test_ucp_am_nbx_reply : public test_ucp_am_nbx {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    static void get_test_variants(variant_vec_t &variants)
     {
-        add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
-        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+        add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 0);
+        add_variant_values(variants, test_ucp_am_nbx::get_test_variants,
                            UCP_AM_SEND_FLAG_REPLY, "reply");
     }
 
 protected:
     virtual unsigned get_send_flag() const
     {
-        return get_variant_value(2);
+        return get_variant_value(1);
+    }
+};
+
+
+class test_ucp_am_nbx_prereg : public test_ucp_am_nbx {
+public:
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 0);
+        add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 1,
+                           "prereg");
+    }
+
+protected:
+    virtual bool prereg() const
+    {
+        return get_variant_value(1);
     }
 };
 
@@ -1037,7 +1041,7 @@ UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_rts_am_on_closed_ep, "RNDV_THRESH=32K")
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_closed_ep)
 
 
-class test_ucp_am_nbx_eager_memtype : public test_ucp_am_nbx {
+class test_ucp_am_nbx_eager_memtype : public test_ucp_am_nbx_prereg {
 public:
     void init()
     {
@@ -1045,7 +1049,14 @@ public:
         test_ucp_am_nbx::init();
     }
 
-    static void base_test_generator(std::vector<ucp_test_variant> &variants)
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        add_variant_memtypes(variants, base_test_generator,
+                             std::numeric_limits<uint64_t>::max());
+    }
+
+private:
+    static void base_test_generator(variant_vec_t &variants)
     {
         // 1. Do not instantiate test case if no GPU memtypes supported.
         // 2. Do not exclude host memory type, because this generator is used by
@@ -1055,17 +1066,11 @@ public:
             return;
         }
 
-        add_variant_memtypes(variants, test_ucp_am_base::get_test_variants,
+        add_variant_memtypes(variants,
+                             test_ucp_am_nbx_prereg::get_test_variants,
                              std::numeric_limits<uint64_t>::max());
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_memtypes(variants, base_test_generator,
-                             std::numeric_limits<uint64_t>::max());
-    }
-
-private:
     virtual ucs_memory_type_t tx_memtype() const
     {
         return static_cast<ucs_memory_type_t>(get_variant_value(2));
@@ -1254,7 +1259,7 @@ public:
         return ep_params;
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    static void get_test_variants(variant_vec_t &variants)
     {
         add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
                            UCP_ERR_HANDLING_MODE_NONE);
@@ -1275,7 +1280,7 @@ public:
 private:
     ucp_err_handling_mode_t get_err_mode() const
     {
-        return static_cast<ucp_err_handling_mode_t>(get_variant_value(3));
+        return static_cast<ucp_err_handling_mode_t>(get_variant_value(2));
     }
 };
 
@@ -1300,7 +1305,7 @@ UCS_TEST_P(test_ucp_am_nbx_dts, zcopy_send, "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)
 
 
-class test_ucp_am_nbx_rndv : public test_ucp_am_nbx {
+class test_ucp_am_nbx_rndv : public test_ucp_am_nbx_prereg {
 public:
     struct am_cb_args {
         test_ucp_am_nbx_rndv *self;
@@ -1559,7 +1564,8 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv);
 
 class test_ucp_am_nbx_rndv_memtype : public test_ucp_am_nbx_rndv {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+    static void get_test_variants(variant_vec_t &variants)
+    {
         // Test will not be instantiated if no GPU memtypes supported, because
         // of the check for supported memory types in
         // test_ucp_am_nbx_eager_memtype::get_test_variants
