@@ -561,7 +561,7 @@ int ucp_wireup_aux_ep_is_owner(ucp_wireup_ep_t *wireup_ep, uct_ep_h owned_ep)
     ucp_lane_index_t cm_lane_idx = ucp_ep_get_cm_lane(ucp_ep);
 
     return (wireup_ep->aux_ep == owned_ep) ||
-           /* Auxilliary EP can be WIREUP EP in case of it is on CM lane */
+           /* Auxiliary EP can be WIREUP EP in case of it is on CM lane */
            ((wireup_ep->aux_ep != NULL) && (cm_lane_idx != UCP_NULL_LANE) &&
             (ucp_ep_get_lane(ucp_ep, cm_lane_idx) == &wireup_ep->super.super) &&
             ucp_wireup_ep_is_owner(wireup_ep->aux_ep, owned_ep));

@@ -997,7 +997,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
                                     ep->flags,
                                     UCT_UD_EP_FLAG_DISCONNECTED |
                                     UCT_UD_EP_FLAG_CONNECT_TO_EP))) {
-        ucs_trace("ep %p: dropping packet, point-to-point ep was disconencted",
+        ucs_trace("ep %p: dropping packet, point-to-point ep was disconnected",
                   ep);
         goto out;
     }
@@ -1184,7 +1184,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
          * because a CQE of the last sent ACK_REQ could be already received,
          * but couldn't be ACKed by a peer due to connection failure. So,
          * sending new ACK_REQ packet could help to get a CQE which will
-         * complete SKBs in TX window, becaue "acked_psn == psn - 1" */
+         * complete SKBs in TX window, because "acked_psn == psn - 1" */
         uct_ud_ep_ack_req_do(iface, ep);
     } else {
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
