@@ -101,6 +101,8 @@ enum {
     UCP_EP_FLAG_STREAM_HAS_DATA        = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
     UCP_EP_FLAG_ON_MATCH_CTX           = UCS_BIT(6), /* EP is on match queue */
     UCP_EP_FLAG_REMOTE_ID              = UCS_BIT(7), /* remote ID is valid */
+    UCP_EP_FLAG_BLOCK_FLUSH            = UCS_BIT(8), /* Flush ops have to be blocking
+                                                        while merging pending queues */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
     /* 11 bit is vacant for a flag */

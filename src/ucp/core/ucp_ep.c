@@ -65,9 +65,12 @@ typedef struct ucp_ep_set_failed_arg {
  * Argument for discarding UCP endpoint's lanes
  */
 typedef struct ucp_ep_discard_lanes_arg {
-    unsigned     counter; /* How many discarding operations on UCT lanes are
-                           * in-progress if purging of the UCP endpoint is
-                           * required */
+    uct_ep_t     failed_ep;
+    unsigned     discard_counter; /* How many discarding operations on UCT
+                                     lanes are in-progress if purging of
+                                     the UCP endpoint is required */
+    unsigned     destroy_counter; /* How many destroy operations on UCT
+                                     will be called */
     ucs_status_t status; /* Completion status of operations after discarding is
                           * done */
     ucp_ep_h     ucp_ep; /* UCP endpoint which should be discarded */
@@ -91,49 +94,54 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 };
 #endif
 
+static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
+static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
+static void ucp_ep_failed_destroy(uct_ep_h ep);
+
 static uct_iface_t ucp_failed_tl_iface = {
     .ops = {
-        .ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout,
-        .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout,
-        .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_put_short        = (uct_ep_put_short_func_t)ucp_ep_failed_op,
+        .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_ep_failed_bc_op,
+        .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucp_ep_failed_op,
+        .ep_get_short        = (uct_ep_get_short_func_t)ucp_ep_failed_op,
+        .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucp_ep_failed_op,
+        .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucp_ep_failed_op,
+        .ep_am_short         = (uct_ep_am_short_func_t)ucp_ep_failed_op,
+        .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucp_ep_failed_op,
+        .ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucp_ep_failed_bc_op,
+        .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucp_ep_failed_op,
+        .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucp_ep_failed_op,
+        .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucp_ep_failed_op,
+        .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucp_ep_failed_op,
+        .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucp_ep_failed_op,
+        .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucp_ep_failed_op,
+        .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucp_ep_failed_op,
+        .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucp_ep_failed_op,
+        .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucp_ep_failed_op,
+        .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucp_ep_failed_op,
+        .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucp_ep_failed_op,
+        .ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucp_ep_failed_op,
+        .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucp_ep_failed_op,
         .ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
         .ep_pending_purge    = (uct_ep_pending_purge_func_t)ucs_empty_function_return_success,
-        .ep_flush            = (uct_ep_flush_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_flush            = (uct_ep_flush_func_t)ucp_ep_failed_op,
+        .ep_fence            = (uct_ep_fence_func_t)ucp_ep_failed_op,
         .ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_success,
-        .ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucs_empty_function_return_ep_timeout,
-        .ep_destroy          = (uct_ep_destroy_func_t)ucs_empty_function,
-        .ep_get_address      = (uct_ep_get_address_func_t)ucs_empty_function_return_ep_timeout
+        .ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucp_ep_failed_op,
+        .ep_destroy          = ucp_ep_failed_destroy,
+        .ep_get_address      = (uct_ep_get_address_func_t)ucp_ep_failed_op
     }
 };
 
-static uct_ep_t ucp_failed_tl_ep = {
-    .iface = &ucp_failed_tl_iface
+static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
+    .failed_ep = {.iface = &ucp_failed_tl_iface},
+    .status    = UCS_ERR_CANCELED
 };
 
 
 int ucp_is_uct_ep_failed(uct_ep_h uct_ep)
 {
-    return uct_ep == &ucp_failed_tl_ep;
+    return uct_ep->iface->ops.ep_flush == (uct_ep_flush_func_t)ucp_ep_failed_op;
 }
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
@@ -413,12 +421,19 @@ static int ucp_ep_set_failed_remove_filter(const ucs_callbackq_elem_t *elem,
     return 0;
 }
 
+static int ucp_ep_wireup_eps_progress_filter(const ucs_callbackq_elem_t *elem,
+                                             void *arg)
+{
+    return (elem->cb == ucp_wireup_eps_progress) && (elem->arg == arg);
+}
+
 static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     if (ucp_wireup_msg_ack_cb_pred(elem, arg) ||
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
-        ucp_ep_set_failed_remove_filter(elem, arg)) {
+        ucp_ep_set_failed_remove_filter(elem, arg) ||
+        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
         return 1;
     }
 
@@ -612,7 +627,8 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     unsigned addr_indices[UCP_MAX_LANES];
 
     ucs_memory_type_for_each(mem_type) {
-        ucp_context_get_mem_access_tls(context, mem_type, &mem_access_tls);
+        UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, access_mem_types,
+                                mem_access_tls);
         if (UCP_MEM_IS_HOST(mem_type) ||
             UCS_BITMAP_IS_ZERO_INPLACE(&mem_access_tls)) {
             continue;
@@ -1229,7 +1245,8 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
 #endif
 }
 
-static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
+static void
+ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
 {
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
@@ -1246,7 +1263,7 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
          * due to some UCT EP discarding procedures are in-progress and UCP EP
          * may get some operation completions which could try to dereference its
          * lanes */
-        ucp_ep_set_lane(ep, lane, &ucp_failed_tl_ep);
+        ucp_ep_set_lane(ep, lane, failed_ep);
     }
 }
 
@@ -1271,20 +1288,49 @@ void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
     ucp_worker_iface_unprogress_ep(wiface);
 }
 
+static void ucp_ep_release_discard_arg(ucp_ep_discard_lanes_arg_t *arg)
+{
+    if ((arg->discard_counter == 0) && (arg->destroy_counter == 0)) {
+        ucs_free(arg);
+    }
+}
+
 static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
                                           void *user_data)
 {
     ucp_ep_discard_lanes_arg_t *arg = (ucp_ep_discard_lanes_arg_t*)user_data;
 
     ucs_assert(arg != NULL);
-    ucs_assert(arg->counter > 0);
+    ucs_assert(arg->discard_counter > 0);
 
-    if (--arg->counter > 0) {
+    if (--arg->discard_counter == 0) {
+        ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
+    }
+
+    ucp_ep_release_discard_arg(arg);
+}
+
+static ucs_status_t ucp_ep_failed_op(uct_ep_h ep)
+{
+    return ucs_container_of(ep, ucp_ep_discard_lanes_arg_t, failed_ep)->status;
+}
+
+static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep)
+{
+    return ucs_container_of(ep, ucp_ep_discard_lanes_arg_t, failed_ep)->status;
+}
+
+static void ucp_ep_failed_destroy(uct_ep_h ep)
+{
+    ucp_ep_discard_lanes_arg_t *arg =
+            ucs_container_of(ep, ucp_ep_discard_lanes_arg_t, failed_ep);
+
+    if (arg == &ucp_failed_tl_ep_discard_arg) {
         return;
     }
 
-    ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
-    ucs_free(arg);
+    --arg->destroy_counter;
+    ucp_ep_release_discard_arg(arg);
 }
 
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
@@ -1316,12 +1362,14 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
         return;
     }
 
-    discard_arg->ucp_ep  = ep;
-    discard_arg->status  = discard_status;
-    discard_arg->counter = 1;
+    discard_arg->failed_ep.iface = &ucp_failed_tl_iface;
+    discard_arg->ucp_ep          = ep;
+    discard_arg->status          = discard_status;
+    discard_arg->discard_counter = 1;
+    discard_arg->destroy_counter = ucp_ep_num_lanes(ep);
 
     ucs_debug("ep %p: discarding lanes", ep);
-    ucp_ep_set_lanes_failed(ep, uct_eps);
+    ucp_ep_set_lanes_failed(ep, uct_eps, &discard_arg->failed_ep);
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep = uct_eps[lane];
         if (uct_ep == NULL) {
@@ -1337,7 +1385,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
                                            ucp_ep_discard_lanes_callback,
                                            discard_arg);
         if (status == UCS_INPROGRESS) {
-            ++discard_arg->counter;
+            ++discard_arg->discard_counter;
         }
     }
 
@@ -1458,7 +1506,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 
     ucs_debug("ep %p: cleanup lanes", ep);
 
-    ucp_ep_set_lanes_failed(ep, uct_eps);
+    ucp_ep_set_lanes_failed(ep, uct_eps,
+                            &ucp_failed_tl_ep_discard_arg.failed_ep);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep = uct_eps[lane];

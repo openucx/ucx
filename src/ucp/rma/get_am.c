@@ -59,13 +59,13 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
         ucp_send_request_id_alloc(req);
     }
 
-    ucp_worker_flush_ops_count_inc(worker);
+    ucp_worker_flush_ops_count_add(worker, +1);
     status = ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_GET_REQ, spriv->super.lane,
             ucp_proto_get_am_bcopy_pack, req, sizeof(ucp_get_req_hdr_t),
             ucp_proto_get_am_bcopy_complete, 0);
     if (status != UCS_OK) {
-        ucp_worker_flush_ops_count_dec(worker);
+        ucp_worker_flush_ops_count_add(worker, -1);
     }
     return status;
 }

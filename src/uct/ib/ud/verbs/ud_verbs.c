@@ -379,7 +379,7 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
                              UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
 
     num_completed = wc.wr_id + 1;
-    ucs_assertv(num_completed <= UCT_UD_TX_MODERATION, "num_compeleted=%u",
+    ucs_assertv(num_completed <= UCT_UD_TX_MODERATION, "num_completed=%u",
                 num_completed);
 
     iface->super.tx.available += num_completed;

@@ -2468,7 +2468,7 @@ static void ucp_worker_discard_uct_ep_complete(ucp_request_t *req)
 {
     ucp_ep_h ucp_ep = req->send.ep;
 
-    ucp_worker_flush_ops_count_dec(ucp_ep->worker);
+    ucp_worker_flush_ops_count_add(ucp_ep->worker, -1);
     /* Coverity wrongly resolves completion callback function to
      * 'ucp_cm_server_conn_request_progress' */
     /* coverity[offset_free] */
@@ -3375,7 +3375,7 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     }
 
     ucp_ep_refcount_add(ucp_ep, discard);
-    ucp_worker_flush_ops_count_inc(worker);
+    ucp_worker_flush_ops_count_add(worker, +1);
     iter = kh_put(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                   uct_ep, &ret);
     if (ret == UCS_KH_PUT_FAILED) {

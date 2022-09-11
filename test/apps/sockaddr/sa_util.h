@@ -7,6 +7,7 @@
 #ifndef SA_UTIL_H_
 #define SA_UTIL_H_
 
+#include <cstdint>
 #include <iostream>
 #include <sstream>
 #include <string>

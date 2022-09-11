@@ -47,64 +47,6 @@ ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
     return uct_ep_connect_to_ep(wireup_ep->super.uct_ep, dev_addr, ep_addr);
 }
 
-/*
- * We switch the endpoint in this function (instead in wireup code) since
- * this is guaranteed to run from the main thread.
- */
-static unsigned ucp_wireup_ep_progress(void *arg)
-{
-    ucp_wireup_ep_t *wireup_ep = arg;
-    ucp_ep_h ucp_ep = wireup_ep->super.ucp_ep;
-    ucs_queue_head_t tmp_pending_queue;
-    uct_pending_req_t *uct_req;
-
-    UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
-
-    ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
-    ucs_assert(wireup_ep->super.uct_ep != NULL);
-
-    /* If we still have pending wireup messages, send them out first */
-    if (wireup_ep->pending_count != 0) {
-        goto out_unblock;
-    }
-
-    /* If an error happened on the endpoint (but perhaps the deferred error handler,
-     * ucp_worker_iface_err_handle_progress(), was not called yet, avoid changing
-     * ep state, and let the error handler take care of cleanup.
-     */
-    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        ucs_trace("ep %p: not switching wireup_ep %p to ready state because of error",
-                  ucp_ep, wireup_ep);
-        goto out_unblock;
-    }
-
-    ucs_trace("ep %p: switching wireup_ep %p to ready state", ucp_ep, wireup_ep);
-
-    /* Move wireup pending queue to temporary queue and remove references to
-     * the wireup progress function
-     */
-    ucs_queue_head_init(&tmp_pending_queue);
-    ucs_queue_for_each_extract(uct_req, &wireup_ep->pending_q, priv, 1) {
-        ucs_queue_push(&tmp_pending_queue, ucp_wireup_ep_req_priv(uct_req));
-        ucp_worker_flush_ops_count_dec(ucp_ep->worker);
-    }
-
-    /* Switch to real transport and destroy proxy endpoint (aux_ep as well) */
-    ucp_proxy_ep_replace(&wireup_ep->super);
-    wireup_ep = NULL;
-
-    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
-
-    /* Replay pending requests */
-    ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
-
-    return 0;
-
-out_unblock:
-    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
-    return 0;
-}
-
 static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
 {
     return UCS_ERR_NO_RESOURCE;
@@ -198,7 +140,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
         }
     } else {
         ucs_queue_push(&wireup_ep->pending_q, ucp_wireup_ep_req_priv(req));
-        ucp_worker_flush_ops_count_inc(worker);
+        ucp_worker_flush_ops_count_add(worker, +1);
         status = UCS_OK;
     }
 out:
@@ -219,7 +161,7 @@ void ucp_wireup_ep_pending_queue_purge(uct_ep_h uct_ep,
     ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
         ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
         UCS_ASYNC_BLOCK(&worker->async);
-        ucp_worker_flush_ops_count_dec(worker);
+        ucp_worker_flush_ops_count_add(worker, -1);
         UCS_ASYNC_UNBLOCK(&worker->async);
         cb(&ucp_req->send.uct, arg);
     }
@@ -444,7 +386,6 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
     self->aux_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count = 0;
     self->flags         = 0;
-    self->progress_id   = UCS_CALLBACKQ_ID_NULL;
     ucs_queue_head_init(&self->pending_q);
     UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
 
@@ -455,7 +396,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
     }
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
-    ucp_worker_flush_ops_count_inc(ucp_ep->worker);
+    ucp_worker_flush_ops_count_add(ucp_ep->worker, +1);
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 
     ucs_trace("ep %p: created wireup ep %p to %s ", ucp_ep, self,
@@ -472,8 +413,6 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     ucs_assert(self->pending_count == 0);
 
     ucs_debug("ep %p: destroy wireup ep %p", ucp_ep, self);
-
-    uct_worker_progress_unregister_safe(worker->uct, &self->progress_id);
 
     if (self->aux_ep != NULL) {
         /* No pending operations should be scheduled */
@@ -493,7 +432,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucp_worker_flush_ops_count_dec(worker);
+    ucp_worker_flush_ops_count_add(worker, -1);
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
@@ -610,29 +549,6 @@ void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep)
     ucs_assert((wireup_ep->flags & ~UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID) == 0);
 }
 
-void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep, int ready)
-{
-    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
-    ucp_ep_h ucp_ep;
-
-    ucs_assert(wireup_ep != NULL);
-    ucs_assert(wireup_ep->super.uct_ep != NULL);
-    ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
-
-    ucp_ep            = wireup_ep->super.ucp_ep;
-    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
-    ucs_trace("ep %p: wireup ep %p is %s", ucp_ep, wireup_ep,
-              ready ? "ready" : "remote-connected");
-
-    if (ready) {
-        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY;
-        uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                          ucp_wireup_ep_progress, wireup_ep, 0,
-                                          &wireup_ep->progress_id);
-        ucp_worker_signal_internal(ucp_ep->worker);
-    }
-}
-
 int ucp_wireup_ep_test(uct_ep_h uct_ep)
 {
     return uct_ep->iface->ops.ep_destroy ==
@@ -645,7 +561,7 @@ int ucp_wireup_aux_ep_is_owner(ucp_wireup_ep_t *wireup_ep, uct_ep_h owned_ep)
     ucp_lane_index_t cm_lane_idx = ucp_ep_get_cm_lane(ucp_ep);
 
     return (wireup_ep->aux_ep == owned_ep) ||
-           /* Auxilliary EP can be WIREUP EP in case of it is on CM lane */
+           /* Auxiliary EP can be WIREUP EP in case of it is on CM lane */
            ((wireup_ep->aux_ep != NULL) && (cm_lane_idx != UCP_NULL_LANE) &&
             (ucp_ep_get_lane(ucp_ep, cm_lane_idx) == &wireup_ep->super.super) &&
             ucp_wireup_ep_is_owner(wireup_ep->aux_ep, owned_ep));
@@ -688,4 +604,18 @@ ucp_wireup_ep_t *ucp_wireup_ep(uct_ep_h uct_ep)
 {
     return ucp_wireup_ep_test(uct_ep) ?
            ucs_derived_of(uct_ep, ucp_wireup_ep_t) : NULL;
+}
+
+unsigned ucp_wireup_ep_pending_extract(ucp_wireup_ep_t *wireup_ep,
+                                       ucs_queue_head_t *queue)
+{
+    unsigned count = 0;
+    uct_pending_req_t *uct_req;
+
+    ucs_queue_for_each_extract(uct_req, &wireup_ep->pending_q, priv, 1) {
+        ucs_queue_push(queue, ucp_wireup_ep_req_priv(uct_req));
+        ++count;
+    }
+
+    return count;
 }
