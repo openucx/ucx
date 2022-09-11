@@ -1291,10 +1291,34 @@ run_tests() {
 	do_distributed_task 0 4 run_release_mode_tests
 }
 
+run_test_proto_enable() {
+	export UCX_HANDLE_ERRORS=bt
+	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
+	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
+	export UCX_TCP_CM_REUSEADDR=y
+
+	# Don't cross-connect RoCE devices
+	export UCX_IB_ROCE_LOCAL_SUBNET=y
+	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
+
+	# build for devel tests and gtest
+	build devel --enable-gtest
+
+	export UCX_PROTO_ENABLE=y
+
+	# all are running gtest
+	run_gtest "default"
+}
+
 prepare
 try_load_cuda_env
+
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
-	check_machine
-	run_tests
+    check_machine
+    if [[ "$PROTO_ENABLE" == "yes" ]]; then
+        run_test_proto_enable
+    else
+        run_tests
+    fi
 fi

@@ -263,6 +263,12 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
+        name: roce_proto_enable
+        demands: ucx_roce -equals yes
+        test_perf: 0
+        proto_enable: yes
+    - template: tests.yml
+      parameters:
         name: BlueField
         demands: ucx_bf -equals yes
         test_perf: 0
