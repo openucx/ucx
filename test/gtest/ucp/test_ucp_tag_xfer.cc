@@ -383,8 +383,11 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync,
     if (!truncated) {
         EXPECT_EQ(count * sizeof(uint32_t), recvd);
     }
-    EXPECT_EQ(2, ucp::dt_gen_start_count);
-    EXPECT_EQ(2, ucp::dt_gen_finish_count);
+
+    /* restart send request might call extra start/finish */
+    EXPECT_GE(ucp::dt_gen_start_count, 2);
+    EXPECT_GE(ucp::dt_gen_finish_count, 2);
+    EXPECT_EQ(ucp::dt_gen_start_count, ucp::dt_gen_finish_count);
 
     ucp_dt_destroy(dt);
 }
@@ -452,8 +455,11 @@ void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
         EXPECT_EQ(UCS_ERR_NO_MEMORY, rreq->status);
     }
     request_free(rreq);
-    EXPECT_EQ(2, ucp::dt_gen_start_count);
-    EXPECT_EQ(2, ucp::dt_gen_finish_count);
+
+    /* restart send request might call extra start/finish */
+    EXPECT_GE(ucp::dt_gen_start_count, 2);
+    EXPECT_GE(ucp::dt_gen_finish_count, 2);
+    EXPECT_EQ(ucp::dt_gen_start_count, ucp::dt_gen_finish_count);
     ucp_dt_destroy(dt);
 }
 
