@@ -41,7 +41,7 @@
     ucs_log_level_names[_level], (ucs_log_current_indent * 2), ""
 
 #define UCS_LOG_PROC_DATA_ARG() \
-    ucs_log_hostname, ucs_log_pid, ucs_log_get_thread_name()
+    ucs_log_hostname, ucs_log_get_pid(), ucs_log_get_thread_name()
 
 #define UCS_LOG_COMPACT_ARG(_tv)\
     UCS_LOG_TIME_ARG(_tv), UCS_LOG_PROC_DATA_ARG()
@@ -90,6 +90,15 @@ static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
 static ucs_spinlock_t ucs_log_global_filter_lock;
 static khash_t(ucs_log_filter) ucs_log_global_filter;
 
+
+static inline int ucs_log_get_pid()
+{
+    if (ucs_unlikely(ucs_log_pid == 0)) {
+        return getpid();
+    }
+
+    return ucs_log_pid;
+}
 
 static const char *ucs_log_get_thread_name()
 {
@@ -387,8 +396,8 @@ void ucs_log_fatal_error(const char *format, ...)
     p = buffer;
 
     /* Print hostname:pid */
-    snprintf(p, buffer_size, "[%s:%-5d:%s:%d] ", ucs_log_hostname, ucs_log_pid,
-             ucs_log_get_thread_name(), ucs_get_tid());
+    snprintf(p, buffer_size, "[%s:%-5d:%s:%d] ", ucs_log_hostname,
+             ucs_log_get_pid(), ucs_log_get_thread_name(), ucs_get_tid());
     buffer_size -= strlen(p);
     p           += strlen(p);
 
@@ -480,7 +489,13 @@ void ucs_log_early_init()
     ucs_log_thread_count  = 0;
 }
 
-static void ucs_log_atfork_child()
+static void ucs_log_atfork_prepare()
+{
+    ucs_log_pid = 0;
+    ucs_log_flush();
+}
+
+static void ucs_log_atfork_post()
 {
     ucs_log_pid = getpid();
 }
@@ -523,7 +538,8 @@ void ucs_log_init()
                                &next_token, &ucs_log_file_base_name);
     }
 
-    pthread_atfork(NULL, NULL, ucs_log_atfork_child);
+    pthread_atfork(ucs_log_atfork_prepare, ucs_log_atfork_post,
+                   ucs_log_atfork_post);
 }
 
 void ucs_log_cleanup()
