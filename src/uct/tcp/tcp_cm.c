@@ -742,7 +742,7 @@ unsigned uct_tcp_cm_conn_progress(void *arg)
     return 1;
 
 err:
-    uct_tcp_ep_set_failed(ep);
+    uct_tcp_ep_set_failed(ep, UCS_ERR_ENDPOINT_TIMEOUT);
     return 0;
 }
 

@@ -559,7 +559,7 @@ void uct_tcp_ep_destroy_internal(uct_ep_h tl_ep);
 
 void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 
-void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep);
+void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, ucs_status_t status);
 
 void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep);
 
