@@ -754,10 +754,14 @@ void uct_test::flush(ucs_time_t deadline) const {
     EXPECT_TRUE(flushed) << "Timed out";
 }
 
-void uct_test::short_progress_loop(double delay_ms) const {
+void uct_test::short_progress_loop(double delay_ms, entity *e) const {
     ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(delay_ms * ucs::test_time_multiplier());
     while (ucs_get_time() < end_time) {
-        progress();
+        if (e == NULL) {
+            progress();
+        } else {
+            e->progress();
+        }
     }
 }
 

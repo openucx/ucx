@@ -35,9 +35,9 @@ uct_ud_iface_t *ud_base_test::iface(entity *e)
     return ucs_derived_of(e->iface(), uct_ud_iface_t);
 }
 
-void ud_base_test::short_progress_loop(double delta_ms) const
+void ud_base_test::short_progress_loop(double delta_ms, entity *e) const
 {
-    uct_test::short_progress_loop(delta_ms);
+    uct_test::short_progress_loop(delta_ms, e);
 }
 
 void ud_base_test::connect()

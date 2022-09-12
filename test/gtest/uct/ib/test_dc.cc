@@ -496,9 +496,9 @@ public:
         }
     }
 
-    virtual void test_pending_grant(int wnd, uint64_t *wait_fc_seq = NULL)
+    virtual void test_pending_grant(int16_t wnd)
     {
-        test_rc_flow_control::test_pending_grant(wnd, wait_fc_seq);
+        test_rc_flow_control::test_pending_grant(wnd);
         flush();
     }
 };
@@ -519,14 +519,6 @@ UCS_TEST_P(test_dc_flow_control, general_disabled)
 UCS_TEST_P(test_dc_flow_control, pending_grant)
 {
     test_pending_grant(5);
-}
-
-UCS_TEST_P(test_dc_flow_control, pending_grant_and_resend_hard_req,
-           "DC_FC_HARD_REQ_TIMEOUT=0.1s")
-{
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(m_e1->iface(),
-                                                uct_dc_mlx5_iface_t);
-    test_pending_grant(5, &iface->tx.fc_seq);
 }
 
 UCS_TEST_P(test_dc_flow_control, fc_disabled_flush)
@@ -657,6 +649,44 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
 }
 
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc_flow_control)
+
+
+class test_dc_flow_control_with_hard_req_resend : public test_dc_flow_control
+{
+protected:
+    virtual void init() {
+        modify_config("DC_FC_HARD_REQ_TIMEOUT", "0.1s");
+        test_dc_flow_control::init();
+    }
+
+    virtual void wait_fc_hard_resend(entity *e)
+    {
+        uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->iface(),
+                                                    uct_dc_mlx5_iface_t);
+        uct_dc_mlx5_ep_t *ep       = ucs_derived_of(e->ep(0),
+                                                    uct_dc_mlx5_ep_t);
+
+        khiter_t it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash,
+                             (uint64_t)ep);
+        ASSERT_NE(it, kh_end(&iface->tx.fc_hash));
+
+        uct_dc_mlx5_ep_fc_entry_t *fc_entry = &kh_value(&iface->tx.fc_hash,
+                                                        it);
+        ucs_time_t fc_send_time = fc_entry->send_time;
+        /* Progress only an entity which is going to resend FC_HARD_REQ to make
+         * sure that FC_PURE_GRANT won't be resend by a peer */
+        wait_for_value_change(&fc_entry->send_time, e);
+        EXPECT_NE(fc_send_time, fc_entry->send_time);
+    }
+};
+
+UCS_TEST_P(test_dc_flow_control_with_hard_req_resend, pending_grant)
+{
+    test_pending_grant(5);
+}
+
+UCT_DC_INSTANTIATE_TEST_CASE(test_dc_flow_control_with_hard_req_resend)
+
 
 class test_dc_iface_attrs : public test_rc_iface_attrs {
 public:
