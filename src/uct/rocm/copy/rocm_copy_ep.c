@@ -1,5 +1,6 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2022. ALL RIGHTS RESERVED.
+ *
  * See file LICENSE for terms.
  */
 
@@ -27,14 +28,25 @@
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_ep_t, const uct_ep_params_t *params)
 {
     uct_rocm_copy_iface_t *iface = ucs_derived_of(params->iface, uct_rocm_copy_iface_t);
+    char target_name[64];
+    ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
-    return UCS_OK;
+    snprintf(target_name, sizeof(target_name), "dest:%d",
+             *(pid_t*)params->iface_addr);
+    status = uct_rocm_copy_create_cache(&self->local_memh_cache, target_name);
+    if (status != UCS_OK) {
+        ucs_error("could not create create rocm copy cache: %s",
+                  ucs_status_string(status));
+    }
+
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rocm_copy_ep_t)
 {
+    uct_rocm_copy_destroy_cache(self->local_memh_cache);
 }
 
 UCS_CLASS_DEFINE(uct_rocm_copy_ep_t, uct_base_ep_t)
@@ -155,22 +167,88 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey)
 {
-    uct_rocm_memcpy_h2d((void *)remote_addr, buffer, length);
+    uct_rocm_copy_ep_t *ep       = ucs_derived_of(tl_ep, uct_rocm_copy_ep_t);
+    uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
+    ucs_status_t status          = UCS_OK;
+    void* base_dev_addr          = NULL;
+    uct_iov_t *iov;
+
+    if (length <= iface->config.short_h2d_thresh) {
+        uct_rocm_memcpy_h2d((void*)remote_addr, buffer, length);
+    } else {
+        iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
+        if (iov == NULL) {
+            ucs_error("failed to allocate memory for uct_iov_t");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        status = uct_rocm_copy_cache_map_memhandle(ep->local_memh_cache,
+                                                   (uint64_t)buffer,
+                                                   length, &base_dev_addr);
+        if (status != UCS_OK) {
+            ucs_free(iov);
+            return status;
+        }
+
+        iov->buffer = base_dev_addr;
+        iov->length = length;
+        iov->count  = 1;
+        status      = uct_rocm_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 1);
+        if (status != UCS_OK) {
+            ucs_error("error in uct_rocm_copy_ep_zcopy %s",
+                      ucs_status_string(status));
+        }
+
+        ucs_free(iov);
+    }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
                    length, buffer, (void *)remote_addr);
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey)
 {
-    uct_rocm_memcpy_d2h(buffer, (void *)remote_addr, length);
+    uct_rocm_copy_ep_t *ep       = ucs_derived_of(tl_ep, uct_rocm_copy_ep_t);
+    uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
+    ucs_status_t status          = UCS_OK;
+    void* base_dev_addr          = NULL;
+    uct_iov_t *iov;
+
+    if (length <= iface->config.short_d2h_thresh) {
+        uct_rocm_memcpy_d2h(buffer, (void*)remote_addr, length);
+    } else {
+        iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
+        if (iov == NULL) {
+            ucs_error("failed to allocate memory for uct_iov_t");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        status = uct_rocm_copy_cache_map_memhandle(ep->local_memh_cache,
+                                                   (uint64_t)buffer, length,
+                                                   &base_dev_addr);
+        if (status != UCS_OK) {
+            ucs_free(iov);
+            return status;
+        }
+
+        iov->buffer = base_dev_addr;
+        iov->length = length;
+        iov->count  = 1;
+        status      = uct_rocm_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 0);
+        if (status != UCS_OK) {
+            ucs_error("error in uct_rocm_copy_ep_zcopy %s",
+                      ucs_status_string(status));
+        }
+
+        ucs_free(iov);
+    }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",
                    length, (void *)remote_addr, buffer);
-    return UCS_OK;
+    return status;
 }
