@@ -2970,8 +2970,9 @@ typedef struct ucp_memh_pack_params {
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_memh_pack(ucp_mem_h memh, ucp_memh_pack_params_t *params,
-                           void **buffer_p, size_t *buffer_size_p);
+ucs_status_t
+ucp_memh_pack(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
+              void **buffer_p, size_t *buffer_size_p);
 
 
 /**
@@ -3011,7 +3012,7 @@ typedef struct ucp_memh_buffer_release_params {
  *                       @ref ucp_memh_buffer_release_params_t.
  */
 void ucp_memh_buffer_release(void *buffer,
-                             ucp_memh_buffer_release_params_t *params);
+                             const ucp_memh_buffer_release_params_t *params);
 
 
 /**
