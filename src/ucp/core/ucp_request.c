@@ -26,12 +26,10 @@ const ucp_request_param_t ucp_request_null_param = { .op_attr_mask = 0 };
 
 static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
 {
-    if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
-        if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-            return req->send.state.dt_iter.mem_info.type;
-        } else {
-            return req->send.mem_type;
-        }
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
+        return req->send.state.dt_iter.mem_info.type;
+    } else if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
+        return req->send.mem_type;
     } else if (req->flags &
                (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)) {
         return req->recv.mem_type;
@@ -41,7 +39,8 @@ static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
 }
 
 static void
-ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
+ucp_request_str(ucp_request_t *req, ucp_worker_h worker,
+                ucs_string_buffer_t *strb, int recurse)
 {
     const char *progress_func_name;
     const char *comp_func_name;
@@ -51,7 +50,7 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
     ucs_string_buffer_appendf(strb, "flags:0x%x ", req->flags);
 
     if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
-        ucp_proto_config_info_str(req->send.ep->worker, req->send.proto_config,
+        ucp_proto_config_info_str(worker, req->send.proto_config,
                                   req->send.state.dt_iter.length, strb);
         return;
     }
@@ -70,7 +69,7 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
         if (recurse) {
             ep     = req->send.ep;
             config = ucp_ep_config(ep);
-            ucp_ep_config_lane_info_str(ep->worker, &config->key, NULL,
+            ucp_ep_config_lane_info_str(worker, &config->key, NULL,
                                         req->send.lane, UCP_NULL_RESOURCE,
                                         strb);
         }
@@ -79,8 +78,7 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
 #if ENABLE_DEBUG_DATA
         if (req->recv.proto_rndv_config != NULL) {
             /* Print the send protocol of the rendezvous request */
-            ucp_proto_config_info_str(req->recv.worker,
-                                      req->recv.proto_rndv_config,
+            ucp_proto_config_info_str(worker, req->recv.proto_rndv_config,
                                       req->recv.length, strb);
             return;
         }
@@ -98,7 +96,10 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
 
 ucs_status_t ucp_request_query(void *request, ucp_request_attr_t *attr)
 {
-    ucp_request_t *req = (ucp_request_t*)request - 1;
+    ucp_request_t *req  = (ucp_request_t*)request - 1;
+    ucp_worker_h worker = ucs_container_of(ucs_mpool_obj_owner(req),
+                                           ucp_worker_t, req_mp);
+
     ucs_string_buffer_t strb;
 
     if (req->flags & UCP_REQUEST_FLAG_RELEASED) {
@@ -112,7 +113,7 @@ ucs_status_t ucp_request_query(void *request, ucp_request_attr_t *attr)
 
         ucs_string_buffer_init_fixed(&strb, attr->debug_string,
                                      attr->debug_string_size);
-        ucp_request_str(req, &strb, 1);
+        ucp_request_str(req, worker, &strb, 1);
     }
 
     if (attr->field_mask & UCP_REQUEST_ATTR_FIELD_STATUS) {
@@ -267,9 +268,10 @@ static void ucp_worker_request_fini_proxy(ucs_mpool_t *mp, void *obj)
 static void
 ucp_request_mpool_obj_str(ucs_mpool_t *mp, void *obj, ucs_string_buffer_t *strb)
 {
-    ucp_request_t *req = obj;
+    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, req_mp);
+    ucp_request_t *req  = obj;
 
-    ucp_request_str(req, strb, 0);
+    ucp_request_str(req, worker, strb, 0);
 }
 
 ucs_mpool_ops_t ucp_request_mpool_ops = {
