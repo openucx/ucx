@@ -35,12 +35,8 @@ static inline ucs_queue_elem_t* ucp_wireup_ep_req_priv(uct_pending_req_t *req)
 }
 
 static ucs_status_t
-ucp_wireup_ep_connect_to_ep_v2(uct_ep_h uct_ep,
-                               const uct_device_addr_t *dev_addr,
-                               const uct_iface_addr_t *iface_addr,
-                               const uct_ep_addr_t *ep_addr,
-                               const uct_ep_connect_to_ep_params_t *param)
-{
+ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
+                            const uct_ep_addr_t *ep_addr){
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) {
@@ -48,8 +44,7 @@ ucp_wireup_ep_connect_to_ep_v2(uct_ep_h uct_ep,
     }
 
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    return uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep, dev_addr,
-                                   iface_addr, ep_addr, param);
+    return uct_ep_connect_to_ep(wireup_ep->super.uct_ep, dev_addr, ep_addr);
 }
 
 /*
@@ -412,45 +407,38 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
 UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
                     const ucp_rsc_index_t *dst_rsc_indices)
 {
-    static uct_iface_internal_ops_t internal_ops = {
-        .ep_connect_to_ep_v2 = ucp_wireup_ep_connect_to_ep_v2
-    };
-    
-    static uct_base_iface_t iface = {
-        .internal_ops = &internal_ops,
-        .super.ops = {
-            .ep_connect_to_ep    = uct_base_ep_connect_to_ep,
-            .ep_flush            = ucp_wireup_ep_flush,
-            .ep_check            = ucp_wireup_ep_check,
-            .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
-            .ep_pending_add      = ucp_wireup_ep_pending_add,
-            .ep_pending_purge    = ucp_wireup_ep_pending_purge,
-            .ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_no_resource,
-            .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_wireup_ep_bcopy_send_func,
-            .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_no_resource,
-            .ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_no_resource,
-            .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_no_resource,
-            .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_no_resource,
-            .ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_no_resource,
-            .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucs_empty_function_return_no_resource,
-            .ep_am_bcopy         = ucp_wireup_ep_am_bcopy,
-            .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_no_resource,
-            .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_no_resource,
-            .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucp_wireup_ep_bcopy_send_func,
-            .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucs_empty_function_return_no_resource,
-            .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ptr_no_resource,
-            .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_no_resource,
-            .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_no_resource,
-            .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucs_empty_function_return_no_resource,
-            .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_no_resource,
-            .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_no_resource,
-            .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_no_resource,
-            .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_no_resource
-        }
+    static uct_iface_ops_t ops = {
+        .ep_connect_to_ep    = ucp_wireup_ep_connect_to_ep,
+        .ep_flush            = ucp_wireup_ep_flush,
+        .ep_check            = ucp_wireup_ep_check,
+        .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
+        .ep_pending_add      = ucp_wireup_ep_pending_add,
+        .ep_pending_purge    = ucp_wireup_ep_pending_purge,
+        .ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucp_wireup_ep_bcopy_send_func,
+        .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucs_empty_function_return_no_resource,
+        .ep_am_bcopy         = ucp_wireup_ep_am_bcopy,
+        .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucp_wireup_ep_bcopy_send_func,
+        .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucs_empty_function_return_no_resource,
+        .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ptr_no_resource,
+        .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_no_resource,
+        .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_no_resource
     };
     ucp_lane_index_t lane;
 
-    UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &iface, ucp_ep, NULL, 0);
+    UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
 
     self->aux_ep        = NULL;
     self->aux_rsc_index = UCP_NULL_RESOURCE;

@@ -379,12 +379,34 @@ ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
     return UCS_ERR_UNREACHABLE;
 }
 
+static ucs_status_t
+ucp_wireup_ep_connect_to_ep_v2(uct_ep_h tl_ep,
+                               const uct_device_addr_t *device_addr,
+                               const uct_iface_addr_t *iface_addr,
+                               const uct_ep_addr_t *ep_addr)
+{
+    static const uct_ep_connect_to_ep_params_t param = {.field_mask = 0};
+    ucp_wireup_ep_t *wireup_ep                       = ucp_wireup_ep(tl_ep);
+
+    if (wireup_ep != NULL) {
+        if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) {
+            return UCS_OK;
+        }
+
+        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
+        return uct_ep_connect_to_ep_v2(wireup_ep->super.uct_ep, device_addr,
+                                       iface_addr, ep_addr, &param);
+    }
+
+    return uct_ep_connect_to_ep_v2(tl_ep, device_addr, iface_addr, ep_addr,
+                                   &param);
+}
+
 ucs_status_t
 ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_unpacked_address_t *remote_address,
                          const ucp_lane_index_t *lanes2remote)
 {
-    static const uct_ep_connect_to_ep_params_t param = {.field_mask = 0};
     ucp_lane_index_t lane, remote_lane;
     const uct_device_addr_t *dev_addr;
     const uct_iface_addr_t *iface_addr;
@@ -410,8 +432,8 @@ ucp_wireup_connect_local(ucp_ep_h ep,
             goto out;
         }
 
-        status = uct_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane), dev_addr,
-                                         iface_addr, ep_addr, &param);
+        status = ucp_wireup_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane),
+                                                dev_addr, iface_addr, ep_addr);
         if (status != UCS_OK) {
             goto out;
         }

@@ -461,7 +461,7 @@ uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = ucs_empty_function_return_ep_timeout
+    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
