@@ -15,6 +15,17 @@
 class test_perf {
 protected:
     struct test_spec {
+        bool is_amo() const {
+            switch (command) {
+            case UCX_PERF_CMD_ADD:
+            case UCX_PERF_CMD_FADD:
+            case UCX_PERF_CMD_SWAP:
+            case UCX_PERF_CMD_CSWAP:
+                return true;
+            default:
+                return false;
+            }
+        }
         const char             *title;
         const char             *units;
         ucx_perf_api_t         api;
