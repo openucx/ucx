@@ -214,7 +214,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
 }
 
 static ucs_status_t
-ucp_memh_pack_internal(ucp_mem_h memh, ucp_memh_pack_params_t *params,
+ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
                        int rkey_compat, void **buffer_p, size_t *buffer_size_p)
 {
     ucp_context_h context = memh->context;
@@ -273,14 +273,15 @@ out:
     return status;
 }
 
-ucs_status_t ucp_memh_pack(ucp_mem_h memh, ucp_memh_pack_params_t *params,
-                           void **buffer_p, size_t *buffer_size_p)
+ucs_status_t
+ucp_memh_pack(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
+              void **buffer_p, size_t *buffer_size_p)
 {
     return ucp_memh_pack_internal(memh, params, 0, buffer_p, buffer_size_p);
 }
 
 void ucp_memh_buffer_release(void *buffer,
-                             ucp_memh_buffer_release_params_t *params)
+                             const ucp_memh_buffer_release_params_t *params)
 {
     if (buffer == &ucp_mem_dummy_buffer) {
         /* Dummy key, just return */
