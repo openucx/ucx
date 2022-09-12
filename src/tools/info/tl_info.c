@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 #define PRINT_CAP(_name, _cap_flags, _max) \
@@ -394,7 +395,7 @@ static void print_md_info(uct_component_h component,
     ucs_status_t status;
     const char *tl_name;
     uct_md_config_t *md_config;
-    uct_md_attr_t md_attr;
+    uct_md_attr_v2_t md_attr;
     uct_md_h md;
 
     status = uct_md_config_read(component, NULL, NULL, &md_config);
@@ -433,7 +434,8 @@ static void print_md_info(uct_component_h component,
         }
     }
 
-    status = uct_md_query(md, &md_attr);
+    md_attr.field_mask = UINT64_MAX;
+    status             = uct_md_query_v2(md, &md_attr);
     if (status != UCS_OK) {
         printf("# < failed to query memory domain >\n");
         goto out_free_list;
@@ -441,48 +443,48 @@ static void print_md_info(uct_component_h component,
         printf("#\n");
         printf("# Memory domain: %s\n", md_name);
         printf("#     Component: %s\n", component_attr->name);
-        if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
+        if (md_attr.flags & UCT_MD_FLAG_ALLOC) {
             printf("#             allocate: %s\n",
-                   size_limit_to_str(0, md_attr.cap.max_alloc));
+                   size_limit_to_str(0, md_attr.max_alloc));
         }
-        if (md_attr.cap.flags & UCT_MD_FLAG_REG) {
+        if (md_attr.flags & UCT_MD_FLAG_REG) {
             printf("#             register: %s, cost: ",
-                   size_limit_to_str(0, md_attr.cap.max_reg));
+                   size_limit_to_str(0, md_attr.max_reg));
             PRINT_LINEAR_FUNC_NS(&md_attr.reg_cost);
         }
-        if (md_attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) {
+        if (md_attr.flags & UCT_MD_FLAG_NEED_RKEY) {
             printf("#           remote key: %zu bytes\n", md_attr.rkey_packed_size);
         }
-        if (md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH) {
+        if (md_attr.flags & UCT_MD_FLAG_NEED_MEMH) {
             printf("#           local memory handle is required for zcopy\n");
         }
-        if (md_attr.cap.flags & UCT_MD_FLAG_RKEY_PTR) {
+        if (md_attr.flags & UCT_MD_FLAG_RKEY_PTR) {
             printf("#           rkey_ptr is supported\n");
         }
-        if (md_attr.cap.flags & UCT_MD_FLAG_INVALIDATE) {
+        if (md_attr.flags & UCT_MD_FLAG_INVALIDATE) {
             printf("#           memory invalidation is supported\n");
         }
 
         ucs_memory_type_for_each(mem_type) {
-            if (!(UCS_BIT(mem_type) & (md_attr.cap.reg_mem_types |
-                                       md_attr.cap.alloc_mem_types))) {
+            if (!(UCS_BIT(mem_type) &
+                  (md_attr.reg_mem_types | md_attr.alloc_mem_types))) {
                 continue;
             }
 
             ucs_string_buffer_appendf(&strb, "%s",
                                       ucs_memory_type_names[mem_type]);
-            if (UCS_BIT(mem_type) & (md_attr.cap.cache_mem_types &
-                                     ~md_attr.cap.alloc_mem_types)) {
+            if (UCS_BIT(mem_type) &
+                (md_attr.cache_mem_types & ~md_attr.alloc_mem_types)) {
                 ucs_string_buffer_appendf(&strb, ", ");
                 continue;
             }
 
             ucs_string_buffer_appendf(&strb, " (");
-            if (md_attr.cap.alloc_mem_types & UCS_BIT(mem_type)) {
+            if (md_attr.alloc_mem_types & UCS_BIT(mem_type)) {
                 ucs_string_buffer_appendf(&strb, "alloc, ");
             }
 
-            if (!(md_attr.cap.cache_mem_types & UCS_BIT(mem_type))) {
+            if (!(md_attr.cache_mem_types & UCS_BIT(mem_type))) {
                 ucs_string_buffer_appendf(&strb, "nocache, ");
             }
 

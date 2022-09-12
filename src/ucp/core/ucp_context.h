@@ -17,6 +17,7 @@
 #include <ucp/dt/dt.h>
 #include <ucp/proto/proto.h>
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/bitmap.h>
@@ -243,7 +244,7 @@ typedef struct ucp_tl_md {
     /**
      * Memory domain attributes
      */
-    uct_md_attr_t          attr;
+    uct_md_attr_v2_t       attr;
 
     /**
      * Flags mask parameter for @ref uct_md_mkey_pack_v2
@@ -456,14 +457,14 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 #define UCP_CONTEXT_MEM_CAP_TLS(_context, _mem_type, _cap_field, _tl_bitmap) \
     { \
-        const uct_md_attr_t *md_attr; \
+        const uct_md_attr_v2_t *md_attr; \
         ucp_md_index_t md_index; \
         ucp_rsc_index_t tl_id; \
         UCS_BITMAP_CLEAR(&(_tl_bitmap)); \
         UCS_BITMAP_FOR_EACH_BIT((_context)->tl_bitmap, tl_id) { \
             md_index = (_context)->tl_rscs[tl_id].md_index; \
             md_attr  = &(_context)->tl_mds[md_index].attr; \
-            if (md_attr->cap._cap_field & UCS_BIT(_mem_type)) { \
+            if (md_attr->_cap_field & UCS_BIT(_mem_type)) { \
                 UCS_BITMAP_SET(_tl_bitmap, tl_id); \
             } \
         } \

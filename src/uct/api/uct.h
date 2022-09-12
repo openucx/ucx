@@ -1436,7 +1436,6 @@ struct uct_md_attr {
         size_t               max_reg;   /**< Maximal registration size */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
-        uint64_t             cache_mem_types; /**< Bitmap of memory types that can be cached for this Memory Domain */
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
         uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on */
         uint64_t             access_mem_types; /**< Memory types that Memory Domain can access */

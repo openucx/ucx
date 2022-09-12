@@ -25,7 +25,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
     ucp_rsc_index_t mem_sys_dev, ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -52,7 +52,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         md_attr    = &worker->context->tl_mds[md_index].attr;
 
         /* Check the lane supports get_zcopy or rkey_ptr */
-        if (!(md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) &&
+        if (!(md_attr->flags & UCT_MD_FLAG_RKEY_PTR) &&
             !(iface_attr->cap.flags &
               (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY))) {
             continue;
@@ -61,8 +61,8 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         /* Check the memory domain requires remote key, and capable of
          * registering the memory type
          */
-        if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) ||
-            !(md_attr->cap.reg_mem_types & UCS_BIT(params->mem_info.type))) {
+        if (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY) ||
+            !(md_attr->reg_mem_types & UCS_BIT(params->mem_info.type))) {
             continue;
         }
 

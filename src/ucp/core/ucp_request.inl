@@ -527,13 +527,11 @@ ucp_request_send_buffer_reg_lane_check(ucp_request_t *req, ucp_lane_index_t lane
 {
     ucp_md_map_t md_map;
 
-    if (!(ucp_ep_md_attr(req->send.ep,
-                         lane)->cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
+    if (!(ucp_ep_md_attr(req->send.ep, lane)->flags & UCT_MD_FLAG_NEED_MEMH)) {
         return UCS_OK;
     }
 
-    ucs_assert(ucp_ep_md_attr(req->send.ep,
-                              lane)->cap.flags & UCT_MD_FLAG_REG);
+    ucs_assert(ucp_ep_md_attr(req->send.ep, lane)->flags & UCT_MD_FLAG_REG);
     md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane)) | prev_md_map;
     return ucp_request_send_buffer_reg(req, md_map, uct_flags);
 }

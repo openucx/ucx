@@ -886,7 +886,7 @@ protected:
                 /* RNDV lanes should be selected if transport supports GET/PUT
                  * Zcopy and: */
                 (/* - either memory invalidation can be done on its MD */
-                 (ucp_ep_md_attr(ep, lane_idx)->cap.flags &
+                 (ucp_ep_md_attr(ep, lane_idx)->flags &
                   UCT_MD_FLAG_INVALIDATE) ||
                  /* - or CONNECT_TO_EP connection establishment mode is used */
                  (ucp_ep_is_lane_p2p(ep, lane_idx)))) {

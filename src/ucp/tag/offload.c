@@ -546,12 +546,15 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     size_t packed_len;
     ucs_status_t status;
 
-    ucs_assert((UCP_DT_IS_CONTIG(req->send.datatype) &&
-               (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) ||
-               !UCP_DT_IS_CONTIG(req->send.datatype) ||
-               !(ep->worker->context->tl_mds[ucp_ep_md_index(ep, req->send.lane)].attr.cap.
-                 reg_mem_types & UCS_BIT(req->send.mem_type)) ||
-               ep->worker->context->config.ext.tm_sw_rndv);
+    ucs_assert(
+            (UCP_DT_IS_CONTIG(req->send.datatype) &&
+             (req->send.length >
+              ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) ||
+            !UCP_DT_IS_CONTIG(req->send.datatype) ||
+            !(ep->worker->context->tl_mds[ucp_ep_md_index(ep, req->send.lane)]
+                      .attr.reg_mem_types &
+              UCS_BIT(req->send.mem_type)) ||
+            ep->worker->context->config.ext.tm_sw_rndv);
 
     /* send RTS to allow fallback to SW RNDV on receiver */
     rndv_hdr_len = sizeof(ucp_rndv_rts_hdr_t) + ucp_ep_config(ep)->rndv.rkey_size;
@@ -636,19 +639,19 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq,
                                         const ucp_request_param_t *param)
 {
-    ucp_ep_t      *ep      = sreq->send.ep;
-    ucp_context_t *context = ep->worker->context;
-    ucp_md_index_t mdi     = ucp_ep_md_index(ep, sreq->send.lane);
-    uct_md_attr_t *md_attr = &context->tl_mds[mdi].attr;
+    ucp_ep_t *ep              = sreq->send.ep;
+    ucp_context_t *context    = ep->worker->context;
+    ucp_md_index_t mdi        = ucp_ep_md_index(ep, sreq->send.lane);
+    uct_md_attr_v2_t *md_attr = &context->tl_mds[mdi].attr;
     ucs_status_t status;
 
     /* should be set by ucp_tag_send_req_init() */
     ucs_assert(sreq->send.lane == ucp_ep_get_tag_lane(ep));
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        !context->config.ext.tm_sw_rndv       &&
+        !context->config.ext.tm_sw_rndv &&
         (sreq->send.length <= ucp_ep_config(ep)->tag.offload.max_rndv_zcopy) &&
-        (md_attr->cap.reg_mem_types & UCS_BIT(sreq->send.mem_type))) {
+        (md_attr->reg_mem_types & UCS_BIT(sreq->send.mem_type))) {
         ucp_request_send_state_reset(sreq, ucp_tag_offload_rndv_zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
 

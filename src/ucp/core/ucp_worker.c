@@ -1547,7 +1547,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     double score, best_score;
     ucp_md_index_t md_index;
     ucp_worker_iface_t *wiface;
-    uct_md_attr_t *md_attr;
+    uct_md_attr_v2_t *md_attr;
     uint8_t priority, best_priority;
     ucp_tl_iface_atomic_flags_t atomic;
 
@@ -1575,7 +1575,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         md_attr    = &context->tl_mds[md_index].attr;
         iface_attr = &wiface->attr;
 
-        if (!(md_attr->cap.flags & UCT_MD_FLAG_REG) ||
+        if (!(md_attr->flags & UCT_MD_FLAG_REG) ||
             !ucs_test_all_flags(iface_attr->cap.flags, iface_cap_flags)                        ||
             !ucs_test_all_flags(iface_attr->cap.atomic32.op_flags, atomic.atomic32.op_flags)   ||
             !ucs_test_all_flags(iface_attr->cap.atomic32.fop_flags, atomic.atomic32.fop_flags) ||
