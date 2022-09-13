@@ -81,6 +81,8 @@ ucp_datatype_generic_iter_init(ucp_context_h context, void *buffer,
     }
 
     dt_iter->length              = dt_gen->ops.packed_size(state);
+    dt_iter->type.generic.buffer = buffer;
+    dt_iter->type.generic.count  = count;
     dt_iter->type.generic.dt_gen = dt_gen;
     dt_iter->type.generic.state  = state;
     ucp_memory_info_set_host(&dt_iter->mem_info);
@@ -186,6 +188,43 @@ ucp_datatype_iter_cleanup(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
 {
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_GENERIC, dt_mask)) {
         dt_iter->type.generic.dt_gen->ops.finish(dt_iter->type.generic.state);
+    }
+}
+
+/*
+ * Check if the iterator has start position
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_datatype_iter_is_begin(const ucp_datatype_iter_t *dt_iter)
+{
+    return dt_iter->offset == 0;
+}
+
+/*
+ * Initialize a cleaned-up iterator, after it has already been initialized and
+ * cleaned up by calling @ref ucp_datatype_iter_init and
+ * @ref ucp_datatype_iter_cleanup.
+ *
+ * @note The current offset of the iterator must be 0, since we can't start
+ *       the iterator from the middle.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_restart(ucp_datatype_iter_t *dt_iter)
+{
+    ucp_dt_generic_t *dt_gen;
+    void *state;
+
+    ucs_assertv(ucp_datatype_iter_is_begin(dt_iter), "offset=%zu",
+                dt_iter->offset);
+
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_GENERIC,
+                                   UCP_DT_MASK_ALL)) {
+        dt_gen = dt_iter->type.generic.dt_gen;
+        state  = dt_gen->ops.start_pack(dt_gen->context,
+                                        dt_iter->type.generic.buffer,
+                                        dt_iter->type.generic.count);
+
+        dt_iter->type.generic.state = state;
     }
 }
 
@@ -477,15 +516,6 @@ ucp_datatype_iter_is_end_position(const ucp_datatype_iter_t *dt_iter,
 {
     ucs_assert(dt_iter->offset <= dt_iter->length);
     return pos_iter->offset == dt_iter->length;
-}
-
-/*
- * Check if the iterator has start position
- */
-static UCS_F_ALWAYS_INLINE int
-ucp_datatype_iter_is_begin(const ucp_datatype_iter_t *dt_iter)
-{
-    return dt_iter->offset == 0;
 }
 
 /*
