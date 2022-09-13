@@ -235,14 +235,25 @@ static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 #endif
 }
 
-/* get index of the local component which can reach a remote memory domain */
-static inline ucp_rsc_index_t
-ucp_ep_config_get_dst_md_cmpt(const ucp_ep_config_key_t *key,
+/* Get index of the local md which can reach a remote md */
+static inline ucp_md_index_t
+ucp_ep_config_dst_to_local_md(const ucp_ep_config_key_t *key,
                               ucp_md_index_t dst_md_index)
 {
     unsigned idx = ucs_popcount(key->reachable_md_map & UCS_MASK(dst_md_index));
 
-    return key->dst_md_cmpts[idx];
+    return key->dst_to_local_mds[idx];
+}
+
+/* Get index of the local component which can reach a remote memory domain */
+static inline ucp_rsc_index_t
+ucp_ep_config_get_dst_md_cmpt(ucp_context_h context,
+                              const ucp_ep_config_key_t *key,
+                              ucp_md_index_t dst_md_index)
+{
+    ucp_md_index_t md_index = ucp_ep_config_dst_to_local_md(key, dst_md_index);
+
+    return context->tl_mds[md_index].cmpt_index;
 }
 
 static inline int

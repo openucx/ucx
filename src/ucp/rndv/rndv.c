@@ -1546,7 +1546,7 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     ucp_md_index_t rkey_ptr_md_index = UCP_NULL_RESOURCE;
     ucp_ep_peer_mem_data_t *ppln_data;
     ucp_md_map_t md_map;
-    ucp_md_index_t md_index;
+    ucp_md_index_t md_index, dst_md_index;
     const uct_md_attr_v2_t *md_attr;
     ucp_ep_h mem_type_ep;
     ucp_lane_index_t mem_type_rma_lane;
@@ -1568,8 +1568,10 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     md_map          = ucp_rkey_packed_md_map(rtr_hdr + 1) &
                       ucp_ep_config(ep)->key.reachable_md_map;
 
-    ucs_for_each_bit(md_index, md_map) {
-        md_attr = &context->tl_mds[md_index].attr;
+    ucs_for_each_bit(dst_md_index, md_map) {
+        md_index = ucp_ep_config_dst_to_local_md(&ucp_ep_config(ep)->key,
+                                                 dst_md_index);
+        md_attr  = &context->tl_mds[md_index].attr;
         if ((md_attr->flags & UCT_MD_FLAG_RKEY_PTR) &&
             /* Do not use xpmem, because cuda_copy registration will fail and
              * performance will not be optimal. */

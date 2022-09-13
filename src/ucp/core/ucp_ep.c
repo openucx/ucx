@@ -167,7 +167,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->rma_bw_md_map    = 0;
     key->rma_md_map       = 0;
     key->reachable_md_map = 0;
-    key->dst_md_cmpts     = NULL;
+    key->dst_to_local_mds = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
@@ -1848,7 +1848,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     }
 
     for (i = 0; i < ucs_popcount(key1->reachable_md_map); ++i) {
-        if (key1->dst_md_cmpts[i] != key2->dst_md_cmpts[i]) {
+        if (key1->dst_to_local_mds[i] != key2->dst_to_local_mds[i]) {
             return 0;
         }
     }
@@ -2350,27 +2350,27 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
 static ucs_status_t ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
                                            const ucp_ep_config_key_t *src)
 {
-    int num_md_cmpts;
-    ucp_rsc_index_t *md_cmpts;
+    int num_mds;
+    ucp_rsc_index_t *mds;
 
-    num_md_cmpts = ucs_popcount(src->reachable_md_map);
-    if (num_md_cmpts == 0) {
-        md_cmpts = NULL;
+    num_mds = ucs_popcount(src->reachable_md_map);
+    if (num_mds == 0) {
+        mds = NULL;
         goto out;
     }
 
-    md_cmpts = ucs_calloc(num_md_cmpts, sizeof(*dst->dst_md_cmpts),
-                          "ucp_dst_md_cmpts");
-    if (md_cmpts == NULL) {
-        ucs_error("failed to allocate ucp ep dest component list");
+    mds = ucs_calloc(num_mds, sizeof(*dst->dst_to_local_mds),
+                     "ucp_dst_to_local_mds");
+    if (mds == NULL) {
+        ucs_error("failed to allocate ucp ep dest md list");
         return UCS_ERR_NO_MEMORY;
     }
 
-    memcpy(md_cmpts, src->dst_md_cmpts,
-           num_md_cmpts * sizeof(*dst->dst_md_cmpts));
+    memcpy(mds, src->dst_to_local_mds,
+           num_mds * sizeof(*dst->dst_to_local_mds));
 out:
-    *dst              = *src;
-    dst->dst_md_cmpts = md_cmpts;
+    *dst                  = *src;
+    dst->dst_to_local_mds = mds;
     return UCS_OK;
 }
 
@@ -2808,7 +2808,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     return UCS_OK;
 
 err_free_dst_mds:
-    ucs_free(config->key.dst_md_cmpts);
+    ucs_free(config->key.dst_to_local_mds);
 err:
     return status;
 }
@@ -2816,7 +2816,7 @@ err:
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)
 {
     ucp_proto_select_cleanup(&config->proto_select);
-    ucs_free(config->key.dst_md_cmpts);
+    ucs_free(config->key.dst_to_local_mds);
 }
 
 static int ucp_ep_is_short_lower_thresh(ssize_t max_short,
@@ -2965,7 +2965,7 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     }
 
     dst_md_index = key->lanes[lane].dst_md_index;
-    cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
+    cmpt_index   = ucp_ep_config_get_dst_md_cmpt(context, key, dst_md_index);
     ucs_string_buffer_appendf(strbuf, "md[%d]/%s/sysdev[%d]", dst_md_index,
                               context->tl_cmpts[cmpt_index].attr.name,
                               key->lanes[lane].dst_sys_dev);

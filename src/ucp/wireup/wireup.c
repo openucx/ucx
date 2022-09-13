@@ -1233,22 +1233,19 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
 {
     ucp_context_h context = ep->worker->context;
     const ucp_ep_config_key_t *prev_config_key;
-    ucp_rsc_index_t ae_cmpts[UCP_MAX_MDS]; /* component index for each address entry */
+    ucp_md_index_t ae_mds[UCP_MAX_MDS];
     const ucp_address_entry_t *ae;
-    ucp_rsc_index_t cmpt_index;
-    ucp_rsc_index_t rsc_index;
-    ucp_md_index_t dst_md_index;
-    ucp_md_map_t ae_dst_md_map, dst_md_map;
-    ucp_md_map_t prev_dst_md_map;
+    ucp_md_index_t dst_md_index, md_index;
+    ucp_rsc_index_t rsc_index, cmpt_index, prev_cmpt_index;
+    ucp_md_map_t ae_dst_md_map, dst_md_map, prev_dst_md_map;
     unsigned num_dst_mds;
 
     ae_dst_md_map = 0;
     UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, rsc_index) {
         ucp_unpacked_address_for_each(ae, remote_address) {
             if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae)) {
-                ae_dst_md_map         |= UCS_BIT(ae->md_index);
-                dst_md_index           = context->tl_rscs[rsc_index].md_index;
-                ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;
+                ae_dst_md_map       |= UCS_BIT(ae->md_index);
+                ae_mds[ae->md_index] = context->tl_rscs[rsc_index].md_index;
             }
         }
     }
@@ -1265,24 +1262,30 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     dst_md_map  = ae_dst_md_map | prev_dst_md_map;
     num_dst_mds = 0;
     ucs_for_each_bit(dst_md_index, dst_md_map) {
-        cmpt_index = UCP_NULL_RESOURCE;
+        md_index = UCP_NULL_RESOURCE;
         /* remote md is reachable by the provided address */
         if (UCS_BIT(dst_md_index) & ae_dst_md_map) {
-            cmpt_index = ae_cmpts[dst_md_index];
+            md_index = ae_mds[dst_md_index];
         }
         /* remote md is reachable by previous ep configuration */
         if (UCS_BIT(dst_md_index) & prev_dst_md_map) {
             ucs_assert(prev_config_key != NULL);
-            cmpt_index = ucp_ep_config_get_dst_md_cmpt(prev_config_key, dst_md_index);
+            md_index = ucp_ep_config_dst_to_local_md(prev_config_key,
+                                                     dst_md_index);
             if (UCS_BIT(dst_md_index) & ae_dst_md_map) {
                 /* we expect previous configuration will not conflict with the
                  * new one
                  */
-                ucs_assert_always(cmpt_index == ae_cmpts[dst_md_index]);
+                cmpt_index      = context->tl_mds[
+                                      ae_mds[dst_md_index]].cmpt_index;
+                prev_cmpt_index = context->tl_mds[md_index].cmpt_index;
+                ucs_assertv_always(cmpt_index == prev_cmpt_index,
+                                   "cmpt_index=%u prev_cmpt_index=%u",
+                                   cmpt_index, prev_cmpt_index);
             }
         }
-        ucs_assert_always(cmpt_index != UCP_NULL_RESOURCE);
-        key->dst_md_cmpts[num_dst_mds++] = cmpt_index;
+        ucs_assert_always(md_index != UCP_NULL_RESOURCE);
+        key->dst_to_local_mds[num_dst_mds++] = md_index;
     }
     ucs_assert(num_dst_mds == ucs_popcount(dst_md_map));
 
@@ -1478,7 +1481,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     /* Get all reachable MDs from full remote address list and join with
      * current ep configuration
      */
-    key.dst_md_cmpts = ucs_alloca(sizeof(*key.dst_md_cmpts) * UCP_MAX_MDS);
+    key.dst_to_local_mds = ucs_alloca(sizeof(*key.dst_to_local_mds) *
+                                      UCP_MAX_MDS);
     ucp_wireup_get_reachable_mds(ep, ep_init_flags, remote_address, &key);
 
     /* Load new configuration */

@@ -229,10 +229,10 @@ struct ucp_ep_config_key {
      */
     ucp_md_map_t             reachable_md_map;
 
-    /* Array with popcount(reachable_md_map) elements, each entry holds the local
-     * component index to be used for unpacking remote key from each set bit in
-     * reachable_md_map */
-    ucp_rsc_index_t          *dst_md_cmpts;
+    /* Array with popcount(reachable_md_map) elements, each entry holds the
+     * local md index from each set bit in reachable_md_map. It can also be used
+     * to find relevant local component index for unpacking remote key. */
+    ucp_md_index_t           *dst_to_local_mds;
 
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;

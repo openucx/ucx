@@ -458,7 +458,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
 
         ucs_assert(rkey_index < md_count);
         tl_rkey       = &rkey->tl_rkey[rkey_index];
-        cmpt_index    = ucp_ep_config_get_dst_md_cmpt(&ep_config->key,
+        cmpt_index    = ucp_ep_config_get_dst_md_cmpt(worker->context,
+                                                      &ep_config->key,
                                                       remote_md_index);
         tl_rkey->cmpt = worker->context->tl_cmpts[cmpt_index].cmpt;
 
