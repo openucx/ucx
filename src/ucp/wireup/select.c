@@ -1487,6 +1487,8 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         md_map |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
     }
 
+    bw_info->criteria.arg = NULL; /* To suppress compiler warning */
+
     return num_lanes;
 }
 
