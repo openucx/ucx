@@ -116,6 +116,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 
+void ucp_proto_rndv_rts_reset(ucp_request_t *req);
 
 ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *params,
                                      const char *name,
@@ -161,6 +162,8 @@ void ucp_proto_rndv_bulk_request_init_lane_idx(
 
 void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack);
 
+
+void ucp_proto_rndv_ppln_recv_frag_clean(ucp_request_t *freq);
 
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack);
 

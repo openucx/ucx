@@ -461,5 +461,5 @@ ucp_proto_t ucp_get_amo_fetch_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_fetch},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = ucp_proto_get_reset
+    .reset    = ucp_proto_request_bcopy_id_reset
 };

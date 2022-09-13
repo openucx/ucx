@@ -179,6 +179,13 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
                                       "ppln_send");
 }
 
+void ucp_proto_rndv_ppln_recv_frag_clean(ucp_request_t *freq)
+{
+    ucp_proto_rndv_ppln_frag_complete(
+            freq, 0, (ucp_proto_complete_cb_t)ucs_empty_function,
+            "ppln_recv_clean");
+}
+
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack)
 {
     ucp_proto_rndv_ppln_frag_complete(freq, send_ack,
