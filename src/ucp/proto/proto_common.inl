@@ -25,6 +25,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    if (req->send.proto_config->select_param.op_id == UCP_OP_ID_TAG_SEND) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
+    }
+
     return ucp_proto_request_complete_success(req);
 }
 
@@ -82,6 +86,10 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_CONTIG_IOV);
+    if (req->send.proto_config->select_param.op_id == UCP_OP_ID_TAG_SEND) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
+    }
+
     ucp_request_complete_send(req, status);
 }
 
