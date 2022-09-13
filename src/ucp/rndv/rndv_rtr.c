@@ -87,11 +87,17 @@ static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
 {
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     size_t max_rtr_size;
+    ucs_status_t status;
 
     max_rtr_size = sizeof(ucp_rndv_rtr_hdr_t) + rpriv->super.packed_rkey_size;
-    return ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTR,
+    status = ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTR,
                                               rpriv->super.lane, rpriv->pack_cb,
                                               req, max_rtr_size, NULL, 0);
+    if (status == UCS_OK) {
+        UCP_WORKER_STAT_RNDV(req->send.ep->worker, SEND_RTR, +1);
+    }
+
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
