@@ -22,8 +22,7 @@ static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr,
-                                          uct_md_attr_v2_t *md_attr_v2)
+static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     md_attr->rkey_packed_size = sizeof(uct_rocm_ipc_key_t);
     md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
