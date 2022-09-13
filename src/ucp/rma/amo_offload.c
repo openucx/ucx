@@ -67,11 +67,11 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         pack_arg(req, op_size);
-
         if (op_id != UCP_OP_ID_AMO_POST) {
             ucp_proto_completion_init(&req->send.state.uct_comp,
                                       ucp_proto_amo_completed);
         }
+
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 

@@ -368,7 +368,6 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
         ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
                                     req->send.ep->worker, SIZE_MAX,
                                     &next_iter, &req->send.amo.value);
-
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
