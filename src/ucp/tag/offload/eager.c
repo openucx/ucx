@@ -84,7 +84,7 @@ ucp_proto_t ucp_eager_tag_offload_short_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_short_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_bcopy_reset
 };
 
 static size_t ucp_eager_tag_offload_pack(void *dest, void *arg)
@@ -179,7 +179,7 @@ ucp_proto_t ucp_tag_offload_eager_bcopy_single_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_bcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_bcopy_reset
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -196,6 +196,7 @@ ucp_proto_eager_sync_tag_offload_bcopy_progress(uct_pending_req_t *self)
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
 
+    req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     status = ucp_proto_eager_tag_offload_bcopy_common(
             req, spriv, ucp_send_request_get_ep_remote_id(req));
     return ucp_proto_single_status_handle(
@@ -218,7 +219,7 @@ ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_sync_tag_offload_bcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_bcopy_id_reset
 };
 
 static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
@@ -297,7 +298,7 @@ ucp_proto_t ucp_tag_offload_eager_zcopy_single_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_zcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_zcopy_reset
 };
 
 static ucs_status_t ucp_proto_eager_sync_tag_offload_zcopy_init(
@@ -326,6 +327,8 @@ ucp_proto_eager_sync_tag_offload_zcopy_send_completion(uct_completion_t *self)
                                           send.state.uct_comp);
 
     ucp_proto_request_zcopy_clean(req, UCS_BIT(UCP_DATATYPE_CONTIG));
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+                              UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_proto_eager_sync_send_completed_common(req);
 }
 
@@ -357,5 +360,5 @@ ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_sync_tag_offload_zcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_zcopy_id_reset
 };

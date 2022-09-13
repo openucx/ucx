@@ -83,6 +83,7 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
 
     ucp_send_request_id_release(req);
     ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, status);
 
     return UCS_OK;
@@ -335,25 +336,29 @@ ucp_proto_rndv_op_check(const ucp_proto_init_params_t *params,
            (support_ppln || !ucp_proto_rndv_init_params_is_ppln_frag(params));
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_recv_super_complete_status(ucp_request_t *super_req,
+                                          ucs_status_t status)
+{
+    ucp_trace_req(super_req, "rndv_recv_complete super_req=%p", super_req);
+
+    if (super_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
+        ucp_request_complete_am_recv(super_req, status);
+    } else {
+        ucs_assert(super_req->flags & UCP_REQUEST_FLAG_RECV_TAG);
+        ucp_request_complete_tag_recv(super_req, status);
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_recv_complete_status(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_request_t *rreq = ucp_request_get_super(req);
-
-    ucp_trace_req(req, "rndv_recv_complete rreq=%p", rreq);
-
     /* Remote key should already be released */
     ucs_assert(req->send.rndv.rkey == NULL);
-
     ucs_assert(!ucp_proto_rndv_request_is_ppln_frag(req));
 
-    if (rreq->flags & UCP_REQUEST_FLAG_RECV_AM) {
-        ucp_request_complete_am_recv(rreq, status);
-    } else {
-        ucs_assert(rreq->flags & UCP_REQUEST_FLAG_RECV_TAG);
-        ucp_request_complete_tag_recv(rreq, status);
-    }
-
+    ucp_proto_rndv_recv_super_complete_status(ucp_request_get_super(req),
+                                              status);
     ucp_request_put(req);
     return UCS_OK;
 }

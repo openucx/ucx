@@ -138,7 +138,7 @@ ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_bcopy_multi_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_bcopy_reset
 };
 
 static ucs_status_t
@@ -208,12 +208,6 @@ ucp_proto_eager_sync_bcopy_multi_progress(uct_pending_req_t *uct_req)
             ucp_proto_eager_sync_bcopy_send_completed);
 }
 
-static void ucp_proto_eager_sync_bcopy_request_reset(ucp_request_t *request)
-{
-    ucp_send_request_id_release(request);
-    ucp_proto_request_bcopy_reset(request);
-}
-
 static void ucp_proto_eager_sync_bcopy_request_abort(ucp_request_t *request,
                                                      ucs_status_t status)
 {
@@ -229,7 +223,7 @@ ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_sync_bcopy_multi_progress},
     .abort    = ucp_proto_eager_sync_bcopy_request_abort,
-    .reset    = ucp_proto_eager_sync_bcopy_request_reset
+    .reset    = ucp_proto_request_bcopy_id_reset
 };
 
 static ucs_status_t
