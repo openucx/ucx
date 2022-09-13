@@ -117,4 +117,3 @@ ucp_proto_t ucp_put_am_bcopy_proto = {
     .abort    = ucp_proto_request_bcopy_abort,
     .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
-
