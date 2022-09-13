@@ -44,10 +44,10 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2204
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.10/builder:mofed-5.7-0.2.3.0
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2210
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.10/builder:mofed-5.8-0.2.1.0
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu22.10/builder:mofed-5.8-0.2.1.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu1804
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
