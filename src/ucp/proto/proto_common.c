@@ -743,6 +743,7 @@ void ucp_proto_request_restart(ucp_request_t *req)
 
     status = ucp_proto_request_init(req);
     if (status == UCS_OK) {
+        ucp_datatype_iter_restart(&req->send.state.dt_iter);
         ucp_request_send(req);
     } else {
         ucp_proto_request_abort(req, status);
