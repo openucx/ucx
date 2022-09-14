@@ -9,12 +9,23 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+CUDA_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw cuda \
+	&& echo --with-cuda=/usr/local/cuda || echo --without-cuda)
+
 %:
 	dh $@ 
 
 override_dh_auto_configure:
-	@top_top_srcdir@/contrib/configure-release-mt --prefix=/usr --enable-examples --with-java=no
+	./contrib/configure-release-mt --prefix=/usr \
+		--enable-examples --with-java=no \
+		$(CUDA_OPT)
 	chmod +x debian/rules
+
+# We may have a single package or two packages. We can't tell in advance.
+# Therefore set destdir for the default of multiple packages (that also
+# works for a single package):
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/tmp
 
 override_dh_shlibdeps:
 	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info
