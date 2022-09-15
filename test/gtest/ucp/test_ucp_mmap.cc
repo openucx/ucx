@@ -42,14 +42,15 @@ public:
         if (enable_proto()) {
             modify_config("PROTO_ENABLE", "y");
         }
+
+        if (get_variant_value() == VARIANT_NO_RCACHE) {
+            modify_config("RCACHE_ENABLE", "n");
+        }
+
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
         if (!is_loopback()) {
             receiver().connect(&sender(), get_ep_params());
-        }
-
-        if (get_variant_value() == VARIANT_NO_RCACHE) {
-            modify_config("RCACHE_ENABLE", "n");
         }
     }
 
