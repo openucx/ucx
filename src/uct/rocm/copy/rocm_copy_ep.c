@@ -11,6 +11,7 @@
 #include "rocm_copy_ep.h"
 #include "rocm_copy_iface.h"
 #include "rocm_copy_md.h"
+#include "rocm_copy_cache.h"
 
 
 #include <uct/rocm/base/rocm_base.h>
@@ -57,6 +58,35 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_copy_ep_t, uct_ep_t);
      ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                     (_rkey))
 
+static void*
+uct_rocm_copy_get_mapped_host_ptr (uct_ep_h tl_ep, void *ptr, size_t size,
+                                   uct_rocm_copy_key_t *rocm_copy_key)
+{
+    uct_rocm_copy_ep_t *ep = ucs_derived_of(tl_ep, uct_rocm_copy_ep_t);
+    size_t offset          = 0;
+
+    void *mapped_ptr;
+    ucs_status_t status;
+
+    if ((void*)rocm_copy_key->vaddr == rocm_copy_key->dev_ptr) {
+        /* key contains rocm address information. Need to lock host address first */
+        status = uct_rocm_copy_cache_map_memhandle(ep->local_memh_cache,
+                                                   (uint64_t)ptr,
+                                                   size, &mapped_ptr);
+        if ((status != UCS_OK) || (mapped_ptr == NULL)) {
+            ucs_trace("Failed to lock memory addr %p", ptr);
+            return NULL;
+        }
+    }
+    else {
+        /* rkey contains host address information */
+        offset     = (uint64_t) ptr - rocm_copy_key->vaddr;
+        mapped_ptr = UCS_PTR_BYTE_OFFSET(rocm_copy_key->dev_ptr, offset);
+    }
+
+    return mapped_ptr;
+}
+
 ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep,
                                     uint64_t remote_addr,
                                     const uct_iov_t *iov,
@@ -71,50 +101,88 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep,
     hsa_status_t status;
     hsa_agent_t agent;
     void *src_addr, *dst_addr;
-    void *host_ptr, *dev_ptr, *mapped_ptr;
-    size_t offset;
+    void *remote_addr_mod=NULL, *iov_buffer_mod=NULL;
+    ucs_status_t stat;
+    ucs_memory_type_t mem_type;
 
     ucs_trace("remote addr %p rkey %p size %zu",
               (void*)remote_addr, (void*)rkey, size);
 
-    if (is_put) {   /* Host-to-Device */
-        host_ptr = iov->buffer;
-        dev_ptr  = (void *)remote_addr;
-    } else {        /* Device-to-Host */
-        dev_ptr  = (void *)remote_addr;
-        host_ptr = iov->buffer;
+    stat = uct_rocm_base_detect_memory_type((uct_md_h)0, (const void *)remote_addr,
+                                            size, &mem_type);
+    if (stat != UCS_OK) {
+        return UCS_ERR_IO_ERROR;
+    }
+    if (mem_type == UCS_MEMORY_TYPE_ROCM) {
+        remote_addr_mod = (void*)remote_addr;
+
+        /* need agent */
+        uct_rocm_base_get_ptr_info(remote_addr_mod,  size, NULL, NULL, &agent);
+    } else {
+        remote_addr_mod = uct_rocm_copy_get_mapped_host_ptr(tl_ep, (void*)remote_addr,
+                                                            size, rocm_copy_key);
+        if (remote_addr_mod == NULL) {
+            ucs_error("failed to map host pointer to device address");
+            return UCS_ERR_IO_ERROR;
+        }
     }
 
-    offset     = (uint64_t) host_ptr - rocm_copy_key->vaddr;
-    mapped_ptr = UCS_PTR_BYTE_OFFSET(rocm_copy_key->dev_ptr, offset);
+    stat = uct_rocm_base_detect_memory_type((uct_md_h)0, (const void *)iov->buffer,
+                                            size, &mem_type);
+    if (stat != UCS_OK) {
+        return UCS_ERR_IO_ERROR;
+    }
+    if (mem_type == UCS_MEMORY_TYPE_ROCM) {
+        iov_buffer_mod  = (void*)iov->buffer;
 
-    ucs_trace("host_ptr %p offset %zu dev_ptr %p mapped_ptr %p",
-              host_ptr, offset, rocm_copy_key->dev_ptr, mapped_ptr);
+        /* need agent */
+        uct_rocm_base_get_ptr_info(iov_buffer_mod,  size, NULL, NULL, &agent);
+    } else {
+        iov_buffer_mod = uct_rocm_copy_get_mapped_host_ptr(tl_ep, (void*)iov->buffer,
+                                                           size, rocm_copy_key);
+        if (iov_buffer_mod == NULL) {
+            ucs_error("failed to map host ptr to device address");
+            return UCS_ERR_IO_ERROR;
+        }
+    }
 
-    status = uct_rocm_base_get_ptr_info(dev_ptr,  size, NULL, NULL, &agent);
-    if (status != HSA_STATUS_SUCCESS) {
-        const char *addr_type = is_put ? "DST" : "SRC";
-        ucs_error("%s addr %p/%lx is not ROCM memory", addr_type, dev_ptr, size);
-        return UCS_ERR_INVALID_ADDR;
+    if ( (iov_buffer_mod != iov->buffer) && (remote_addr_mod != (void*)remote_addr)) {
+        /*
+         * both pointers are host addresses. This can happen in send-to-self scenarios.
+         * for a rocm addres, the modified buffer pointer is identical to the original
+         * value.
+         * using the original host addresses, not the mapped addresses.
+         */
+        if (is_put) {
+            src_addr = iov->buffer;
+            dst_addr = (void*)remote_addr;
+        } else {
+            src_addr = (void*)remote_addr;
+            dst_addr = iov->buffer;
+        }
+        ucs_trace("Executing memcpy from %p to %p size %zu\n", src_addr, dst_addr, size);
+        memcpy(dst_addr, src_addr, size);
+
+        return UCS_OK;
     }
 
     if (is_put) {
-        src_addr = mapped_ptr;
-        dst_addr = dev_ptr;
+        src_addr = iov_buffer_mod;
+        dst_addr = remote_addr_mod;
     } else {
-        src_addr = dev_ptr;
-        dst_addr = mapped_ptr;
+        src_addr = remote_addr_mod;
+        dst_addr = iov_buffer_mod;
     }
 
     hsa_signal_store_screlease(signal, 1);
-    ucs_trace("hsa async copy from src %p to dst %p, len %ld",
-              src_addr, dst_addr, size);
     status = hsa_amd_memory_async_copy(dst_addr, agent,
                                        src_addr, agent,
                                        size, 0, NULL, signal);
 
     while (hsa_signal_wait_scacquire(signal, HSA_SIGNAL_CONDITION_LT, 1,
                                      UINT64_MAX, HSA_WAIT_STATE_ACTIVE));
+    ucs_trace("hsa async copy from src %p to dst %p, len %ld status %d",
+              src_addr, dst_addr, size, (int)status);
     return UCS_OK;
 }
 
@@ -167,10 +235,8 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey)
 {
-    uct_rocm_copy_ep_t *ep       = ucs_derived_of(tl_ep, uct_rocm_copy_ep_t);
     uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
     ucs_status_t status          = UCS_OK;
-    void* base_dev_addr          = NULL;
     uct_iov_t *iov;
 
     if (length <= iface->config.short_h2d_thresh) {
@@ -182,15 +248,7 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
             return UCS_ERR_NO_MEMORY;
         }
 
-        status = uct_rocm_copy_cache_map_memhandle(ep->local_memh_cache,
-                                                   (uint64_t)buffer,
-                                                   length, &base_dev_addr);
-        if (status != UCS_OK) {
-            ucs_free(iov);
-            return status;
-        }
-
-        iov->buffer = base_dev_addr;
+        iov->buffer = (void*)buffer;
         iov->length = length;
         iov->count  = 1;
         status      = uct_rocm_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 1);
@@ -212,10 +270,8 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey)
 {
-    uct_rocm_copy_ep_t *ep       = ucs_derived_of(tl_ep, uct_rocm_copy_ep_t);
     uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
     ucs_status_t status          = UCS_OK;
-    void* base_dev_addr          = NULL;
     uct_iov_t *iov;
 
     if (length <= iface->config.short_d2h_thresh) {
@@ -227,15 +283,7 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
             return UCS_ERR_NO_MEMORY;
         }
 
-        status = uct_rocm_copy_cache_map_memhandle(ep->local_memh_cache,
-                                                   (uint64_t)buffer, length,
-                                                   &base_dev_addr);
-        if (status != UCS_OK) {
-            ucs_free(iov);
-            return status;
-        }
-
-        iov->buffer = base_dev_addr;
+        iov->buffer = buffer;
         iov->length = length;
         iov->count  = 1;
         status      = uct_rocm_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 0);
