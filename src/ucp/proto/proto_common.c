@@ -783,6 +783,14 @@ void ucp_proto_request_zcopy_reset(ucp_request_t *request)
     ucp_proto_request_zcopy_clean(request, UCP_DT_MASK_ALL);
 }
 
+void ucp_proto_get_reset(ucp_request_t *request)
+{
+    if (request->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_send_request_id_release(request);
+        request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+}
+
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
 {
     /* Short protocol requires contig/host */
