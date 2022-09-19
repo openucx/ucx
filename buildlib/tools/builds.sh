@@ -241,6 +241,19 @@ build_cuda() {
 }
 
 #
+# Build ROCm
+#
+build_rocm() {
+	if [ -f /opt/rocm/bin/rocminfo ]; then
+		echo "==== Build with enable rocm  ===="
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-rocm
+		$MAKEP
+	else
+		echo "==== Not building with rocm ===="
+	fi
+}
+
+#
 # Build with clang compiler
 #
 build_clang() {
@@ -419,6 +432,7 @@ do_task "${prog}" build_prof
 do_task "${prog}" build_ugni
 do_task "${prog}" build_disable_numa
 do_task "${prog}" build_cuda
+do_task "${prog}" build_rocm
 do_task "${prog}" build_no_verbs
 do_task "${prog}" build_release_pkg
 do_task "${prog}" build_cmake_examples
