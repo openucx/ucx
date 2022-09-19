@@ -151,6 +151,9 @@ resources:
     - container: ubuntu20_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:1
       options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: ubuntu2004_rocm
+      image: registry.hub.docker.com/rocm/dev-ubuntu-20.04:latest
+      options: $(DOCKER_OPT_VOLUMES)
 
 stages:
   - stage: Codestyle
@@ -204,6 +207,8 @@ stages:
               long_test: yes
             centos7:
               CONTAINER: centos7_ib
+            ubuntu2004_rocm:
+              CONTAINER: ubuntu2004_rocm
         container: $[ variables['CONTAINER'] ]
         timeoutInMinutes: 340
 
