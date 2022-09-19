@@ -754,41 +754,77 @@ enum {
  * @brief  Memory allocation/registration flags.
  */
 enum uct_md_mem_flags {
-    UCT_MD_MEM_FLAG_NONBLOCK    = UCS_BIT(0), /**< Hint to perform non-blocking
-                                                   allocation/registration: page
-                                                   mapping may be deferred until
-                                                   it is accessed by the CPU or a
-                                                   transport. */
-    UCT_MD_MEM_FLAG_FIXED       = UCS_BIT(1), /**< Place the mapping at exactly
-                                                   defined address */
-    UCT_MD_MEM_FLAG_LOCK        = UCS_BIT(2), /**< Registered memory should be
-                                                   locked. May incur extra cost for
-                                                   registration, but memory access
-                                                   is usually faster. */
-    UCT_MD_MEM_FLAG_HIDE_ERRORS = UCS_BIT(3), /**< Hide errors on memory registration.
-                                                   In some cases registration failure
-                                                   is not an error (e. g. for merged
-                                                   memory regions). */
+    /**
+     * Hint to perform non-blocking allocation/registration: page mapping may
+     * be deferred until it is accessed by the CPU or a transport.
+     */
+    UCT_MD_MEM_FLAG_NONBLOCK        = UCS_BIT(0),
 
-    /* memory access flags */
-    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
-    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
-    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
-    UCT_MD_MEM_ACCESS_LOCAL_READ    = UCS_BIT(8), /**< enable local read access */
-    UCT_MD_MEM_ACCESS_LOCAL_WRITE   = UCS_BIT(9), /**< enable local write access */
+    /**
+     * Place the mapping at exactly defined address.
+     */
+    UCT_MD_MEM_FLAG_FIXED           = UCS_BIT(1),
 
-    /** enable local and remote access for all operations */
-    UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
-                              UCT_MD_MEM_ACCESS_REMOTE_GET|
-                              UCT_MD_MEM_ACCESS_REMOTE_ATOMIC|
-                              UCT_MD_MEM_ACCESS_LOCAL_READ|
-                              UCT_MD_MEM_ACCESS_LOCAL_WRITE),
+    /**
+     * Registered memory should be locked. May incur extra cost for
+     * registration, but memory access is usually faster.
+     */
+    UCT_MD_MEM_FLAG_LOCK            = UCS_BIT(2),
 
-    /** enable local and remote access for put and get operations */
-    UCT_MD_MEM_ACCESS_RMA = (UCT_MD_MEM_ACCESS_REMOTE_PUT|
-                             UCT_MD_MEM_ACCESS_REMOTE_GET|
-                             UCT_MD_MEM_ACCESS_LOCAL_READ|
-                             UCT_MD_MEM_ACCESS_LOCAL_WRITE)
+    /**
+     * Hide errors on memory registration. In some cases registration failure
+     * is not an error (e. g. for merged memory regions).
+     */
+    UCT_MD_MEM_FLAG_HIDE_ERRORS     = UCS_BIT(3),
+
+    /**
+     * The flag is used to indicate that the memory region can be accessed by
+     * another process using the same device to perform UCT operations.
+     */
+    UCT_MD_MEM_FLAG_EXPORT          = UCS_BIT(4),
+
+    /* Memory access flags */
+    /**
+     * Enable remote put access.
+     */
+    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), 
+
+    /**
+     * Enable remote get access.
+     */
+    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6),
+
+    /**
+     * Enable remote atomic access.
+     */
+    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7),
+
+    /**
+     * Enable local read access.
+     */
+    UCT_MD_MEM_ACCESS_LOCAL_READ    = UCS_BIT(8),
+
+    /**
+     * Enable local write access.
+     */
+    UCT_MD_MEM_ACCESS_LOCAL_WRITE   = UCS_BIT(9),
+
+    /**
+     * Enable local and remote access for all operations.
+     */
+    UCT_MD_MEM_ACCESS_ALL           = (UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                                       UCT_MD_MEM_ACCESS_REMOTE_GET |
+                                       UCT_MD_MEM_ACCESS_REMOTE_ATOMIC |
+                                       UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                       UCT_MD_MEM_ACCESS_LOCAL_WRITE),
+
+    /**
+     * Enable local and remote access for put and get operations.
+     */
+    UCT_MD_MEM_ACCESS_RMA           = (UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                                       UCT_MD_MEM_ACCESS_REMOTE_GET |
+                                       UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                       UCT_MD_MEM_ACCESS_LOCAL_WRITE)
 };
 
 
