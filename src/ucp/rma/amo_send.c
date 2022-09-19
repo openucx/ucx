@@ -219,6 +219,15 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
                 ep, &ucp_rkey_config(ep->worker, rkey)->proto_select,
                 rkey->cfg_index, req, op_id, buffer, 1, param->datatype,
                 op_size, param, 0, 0);
+        if (ucs_likely(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
+#if ENABLE_ASSERT
+            req->send.state.dt_iter.type.contig.buffer = NULL;
+#endif
+        } else {
+            /* We cannot return UCS_OK if value was not packed, need to block
+             * freeing or reusage of buffer */
+            goto out;
+        }
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, amo);
         if (status != UCS_OK) {
@@ -272,16 +281,11 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE,
         .datatype     = ucp_dt_make_contig(op_size)
     };
-    ucs_status_ptr_t status_p;
+    void *request;
 
-    status_p = ucp_atomic_op_nbx(ep, ucp_post_atomic_op_table[opcode], &value,
+    request = ucp_atomic_op_nbx(ep, ucp_post_atomic_op_table[opcode], &value,
                                  1, remote_addr, rkey, &param);
-    if (UCS_PTR_IS_PTR(status_p)) {
-        ucp_request_release(status_p);
-        return UCS_OK;
-    }
-
-    return UCS_PTR_STATUS(status_p);
+    return ucp_rma_wait(ep->worker, request, "post");
 }
 
 static inline ucs_status_t

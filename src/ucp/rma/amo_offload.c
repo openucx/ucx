@@ -66,7 +66,11 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
                                           spriv->super.rkey_index);
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        pack_arg(req, op_size);
+        if (!(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
+            pack_arg(req, op_size);
+            req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
+        }
+
         if (op_id != UCP_OP_ID_AMO_POST) {
             ucp_proto_completion_init(&req->send.state.uct_comp,
                                       ucp_proto_amo_completed);
@@ -198,7 +202,10 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
         .desc     = #_sub_id, \
         .init     = ucp_amo_init_##_id, \
         .query    = ucp_proto_single_query, \
-        .progress = {ucp_amo_progress_##_id} \
+        .progress = {ucp_amo_progress_##_id}, \
+        .abort    = (ucp_request_abort_func_t) \
+                    ucs_empty_function_fatal_not_implemented_void, \
+        .reset    = ucp_proto_request_bcopy_reset \
     };
 
 #define UCP_PROTO_AMO_REGISTER_MTYPE(_id, _op_id, _bits) \
