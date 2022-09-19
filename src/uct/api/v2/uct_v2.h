@@ -281,13 +281,7 @@ typedef enum {
      * in order for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
      * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag must be set.
      */
-    UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0),
-
-    /**
-     * The flag is used to indicate that the memory region can be accessed
-     * by another process using the same device to perform UCT operations.
-     */
-    UCT_MD_MKEY_PACK_FLAG_EXPORT     = UCS_BIT(1)
+    UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0)
 } uct_md_mkey_pack_flags_t;
 
 
@@ -725,7 +719,7 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
  * @param [in]  memh        Pack a remote key for this memory handle.
  * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mkey_pack_params_t.
- * @param [out] mkey_buffer Pointer to a buffer to hold the packed remote key.
+ * @param [out] mkey_buffer Pointer to a buffer to hold the packed memory key.
  *                          The size of this buffer should be at least
  *                          @ref uct_md_attr_t::rkey_packed_size or
  *                          @ref uct_md_attr_t::shared_mkey_packed_size, as
