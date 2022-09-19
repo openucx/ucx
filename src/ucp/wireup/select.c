@@ -1627,7 +1627,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
         md_reg_flag = 0;
     } else if (ucp_ep_get_context_features(ep) &
-               (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
+               (UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA)) {
         /* if needed for RNDV, need only access for remote registered memory */
         md_reg_flag = UCT_MD_FLAG_REG;
     } else {
