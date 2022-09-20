@@ -630,6 +630,34 @@ out:
     return status;
 }
 
+static ucs_status_t
+ucp_memh_reg(ucp_context_h context, void *address, size_t length,
+             ucs_memory_type_t mem_type, unsigned uct_flags, ucp_mem_h *memh_p)
+{
+    ucs_status_t status;
+    ucp_mem_h memh;
+
+    status = ucp_memh_create(context, address, length, mem_type,
+                             UCT_ALLOC_METHOD_LAST, &memh);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucp_memh_init_uct_reg(context, memh, uct_flags);
+    if (status != UCS_OK) {
+        goto err_free_memh;
+    }
+
+    *memh_p = memh;
+
+    return UCS_OK;
+
+err_free_memh:
+    ucs_free(memh);
+out:
+    return status;
+}
+
 /* Matrix of behavior
  * |--------------------------------------------------------------------------------|
  * | parameter |                             value                                  |
@@ -713,22 +741,21 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     uct_flags = ucp_mem_map_params2uct_flags(params);
 
     if (flags & UCP_MEM_MAP_ALLOCATE) {
-        status = ucp_memh_alloc(context, address, length, mem_type,
-                                uct_flags, "user memory", &memh);
-        if (status != UCS_OK) {
-            goto out;
-        }
+        status = ucp_memh_alloc(context, address, length, mem_type, uct_flags,
+                                "user memory", &memh);
     } else {
-        status = ucp_memh_create(context, address, length, mem_type,
-                                 UCT_ALLOC_METHOD_LAST, &memh);
-        if (status != UCS_OK) {
-            goto out;
-        }
+        status = ucp_memh_reg(context, address, length, mem_type, uct_flags,
+                              &memh);
+    }
 
-        status = ucp_memh_init_uct_reg(context, memh, uct_flags);
-        if (status != UCS_OK) {
-            goto err_free_memh;
-        }
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (memh->md_map == 0) {
+        ucs_error("no suitable UCT memory domains to perform registration on");
+        status = UCS_ERR_IO_ERROR;
+        goto err_memh_put;
     }
 
     ucs_assert(memh->parent != NULL);
@@ -736,8 +763,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     *memh_p = memh;
     return UCS_OK;
 
-err_free_memh:
-    ucs_free(memh);
+err_memh_put:
+    ucp_memh_put(context, memh);
 out:
     return status;
 }
