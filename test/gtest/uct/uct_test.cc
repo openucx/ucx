@@ -833,7 +833,8 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
                            resource.component, resource.md_name.c_str(),
                            md_config);
 
-    status = uct_md_query(m_md, &m_md_attr);
+    m_md_attr.field_mask = UINT64_MAX;
+    status               = uct_md_query_v2(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
 
     for (;;) {
@@ -892,7 +893,8 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
         UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
                                resource.component, resource.md_name.c_str(),
                                md_config);
-        status = uct_md_query(m_md, &m_md_attr);
+        m_md_attr.field_mask = UINT64_MAX;
+        status               = uct_md_query_v2(m_md, &m_md_attr);
         ASSERT_UCS_OK(status);
     } else {
         memset(&m_md_attr, 0, sizeof(m_md_attr));
@@ -934,7 +936,7 @@ void uct_test::entity::mem_alloc_host(size_t length,
     params.mem_type        = UCS_MEMORY_TYPE_HOST;
     params.address         = address;
 
-    if (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+    if (md_attr().flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
         status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
                                      "uct_test", mem);
         ASSERT_UCS_OK(status);
@@ -954,7 +956,7 @@ void uct_test::entity::mem_free_host(const uct_allocated_memory_t *mem) const {
 }
 
 void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem) const {
-    if (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type)) {
+    if (md_attr().reg_mem_types & UCS_BIT(mem->mem_type)) {
         ucs_status_t status = uct_md_mem_reg(m_md, mem->address, mem->length,
                                              UCT_MD_MEM_ACCESS_ALL, &mem->memh);
         ASSERT_UCS_OK(status);
@@ -964,7 +966,7 @@ void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem) const {
 
 void uct_test::entity::mem_type_dereg(uct_allocated_memory_t *mem) const {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
-        (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
+        (md_attr().reg_mem_types & UCS_BIT(mem->mem_type))) {
         ucs_status_t status = uct_md_mem_dereg(m_md, mem->memh);
         ucs_assert_always(status == UCS_OK);
         mem->memh = UCT_MEM_HANDLE_NULL;
@@ -976,7 +978,7 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
                                    uct_rkey_bundle *rkey_bundle) const
 {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
-        (md_attr().cap.flags & UCT_MD_FLAG_NEED_RKEY)) {
+        (md_attr().flags & UCT_MD_FLAG_NEED_RKEY)) {
 
         void *rkey_buffer = malloc(md_attr().rkey_packed_size);
         if (rkey_buffer == NULL) {
@@ -1065,7 +1067,7 @@ uct_md_h uct_test::entity::md() const {
     return m_md;
 }
 
-const uct_md_attr& uct_test::entity::md_attr() const {
+const uct_md_attr_v2_t& uct_test::entity::md_attr() const {
     return m_md_attr;
 }
 
