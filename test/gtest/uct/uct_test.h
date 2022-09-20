@@ -14,6 +14,7 @@
 
 #include <poll.h>
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
 #include <ucs/async/pipe.h>
@@ -158,7 +159,7 @@ protected:
 
         uct_md_h md() const;
 
-        const uct_md_attr& md_attr() const;
+        const uct_md_attr_v2_t& md_attr() const;
 
         uct_worker_h worker() const;
 
@@ -226,7 +227,7 @@ protected:
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
-        uct_md_attr_t               m_md_attr;
+        uct_md_attr_v2_t            m_md_attr;
         mutable async_wrapper       m_async;
         ucs::handle<uct_worker_h>   m_worker;
         ucs::handle<uct_cm_h>       m_cm;
