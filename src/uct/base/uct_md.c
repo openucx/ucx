@@ -439,6 +439,10 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_LOCAL_CPUS);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, component_name,
                               UCT_MD_ATTR_FIELD_COMPONENT_NAME);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, exported_mkey_packed_size,
+                              UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, global_id,
+                              UCT_MD_ATTR_FIELD_GLOBAL_ID);
 }
 
 static ucs_status_t uct_md_attr_v2_init(uct_md_h md, uct_md_attr_v2_t *md_attr)
