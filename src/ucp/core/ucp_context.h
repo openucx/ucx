@@ -122,6 +122,8 @@ typedef struct ucp_context_config {
     size_t                                 listener_backlog;
     /** Enable new protocol selection logic */
     int                                    proto_enable;
+    /** Force request reset after wireup */
+    int                                    proto_request_reset;
     /** Time period between keepalive rounds */
     ucs_time_t                             keepalive_interval;
     /** Maximal number of endpoints to check on every keepalive round

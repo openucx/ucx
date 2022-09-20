@@ -221,17 +221,26 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
 {
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {
         /* Request was detached from pending and should be scheduled again */
-        ucs_assertv(!(UCS_BIT(req->send.lane) & req->send.flush.started_lanes),
-                    "req=%p lane=%d started_lanes=0x%x", req, req->send.lane,
-                    req->send.flush.started_lanes);
-        /* Only lanes connected to iface can be started/flushed before
-         * wireup is done because connect2iface does not create wireup_ep
-         * without cm mode */
-        ucs_assertv(!(req->send.flush.started_lanes &
-                      ucp_ep_config(ep)->p2p_lanes),
-                    "req=%p flush started_lanes=0x%x p2p_lanes=0x%x", req,
-                    req->send.flush.started_lanes,
-                    ucp_ep_config(ep)->p2p_lanes);
+        if (ucp_ep_has_cm_lane(ep) ||
+            ep->worker->context->config.ext.proto_request_reset) {
+            ucs_assertv(!req->send.flush.started_lanes,
+                        "req=%p flush started_lanes=0x%x", req,
+                        req->send.flush.started_lanes);
+        } else {
+            ucs_assertv(!(UCS_BIT(req->send.lane) & req->send.flush.started_lanes),
+                        "req=%p lane=%d started_lanes=0x%x", req, req->send.lane,
+                        req->send.flush.started_lanes);
+
+            /* Only lanes connected to iface can be started/flushed before
+             * wireup is done because connect2iface does not create wireup_ep
+             * without cm mode */
+            ucs_assertv(!(req->send.flush.started_lanes &
+                          ucp_ep_config(ep)->p2p_lanes),
+                        "req=%p flush started_lanes=0x%x p2p_lanes=0x%x", req,
+                        req->send.flush.started_lanes,
+                        ucp_ep_config(ep)->p2p_lanes);
+        }
+
         ucs_assertv(!req->send.flush.sw_started, "req=%p sw_started=%d", req,
                     req->send.flush.sw_started);
         req->send.lane = UCP_NULL_LANE;
