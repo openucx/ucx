@@ -908,6 +908,7 @@ ucp_conn_request_unpack_sa_data(const ucp_conn_request_h conn_request,
  * Create an endpoint on the server side connected to the client endpoint.
  */
 ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
+                                         const ucp_ep_params_t *params,
                                          const ucp_conn_request_h conn_request,
                                          ucp_ep_h *ep_p)
 {
@@ -925,6 +926,10 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         conn_request->listener->conn_reqs--;
         UCS_ASYNC_UNBLOCK(&worker->async);
         return status;
+    }
+
+    if (params != NULL) {
+        ep_init_flags |= ucp_ep_init_flags(worker, params);
     }
 
     if (ucp_address_is_am_only(worker_addr)) {
@@ -959,7 +964,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucp_ep_h           ep;
     ucs_status_t       status;
 
-    status = ucp_ep_create_server_accept(worker, conn_request, &ep);
+    status = ucp_ep_create_server_accept(worker, params, conn_request, &ep);
     if (status != UCS_OK) {
         return status;
     }

@@ -1062,7 +1062,7 @@ static unsigned ucp_cm_server_conn_request_progress(void *arg)
 
     ucs_assert(listener->accept_cb != NULL);
     UCS_ASYNC_BLOCK(&worker->async);
-    ucp_ep_create_server_accept(worker, conn_request, &ep);
+    ucp_ep_create_server_accept(worker, NULL, conn_request, &ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
 }
