@@ -373,7 +373,7 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
     unsigned memh_index;
 
     ucs_assert(status != UCS_OK);
-    ucs_assert(ucp_ep_config(req->send.ep)->key.err_mode !=
+    ucs_assert(ucp_ep_config_err_handling_mode(ucp_ep_config(req->send.ep)) !=
                UCP_ERR_HANDLING_MODE_NONE);
     ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
 

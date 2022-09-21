@@ -3310,7 +3310,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
     if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
         ucs_trace("ep %p flags 0x%x cfg_index %d err_mode %d: keepalive lane"
                   " is not set", ep, ep->flags, ep->cfg_index,
-                  ucp_ep_config(ep)->key.err_mode);
+                  ucp_ep_config_err_handling_mode(ucp_ep_config(ep)));
         return;
     }
 

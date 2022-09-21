@@ -195,8 +195,13 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                             UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX;
     ucs_status_t status;
 
+    /* They must be equal to keep wire compatibility with previous UCP versions
+     * which pack error handling mode only */
+    UCS_STATIC_ASSERT((int)UCP_ERR_HANDLING_MODE_PEER ==
+                      (int)UCP_EP_CONFIG_KEY_FLAG_ERR_HANDLING_MODE_PEER);
+
     msg_hdr->type      = type;
-    msg_hdr->err_mode  = ucp_ep_config(ep)->key.err_mode;
+    msg_hdr->flags     = ucp_ep_config(ep)->key.flags;
     msg_hdr->conn_sn   = ep->conn_sn;
     msg_hdr->src_ep_id = ucp_ep_local_id(ep);
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
@@ -551,10 +556,15 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
+ucp_wireup_ep_init_flags(const ucp_wireup_msg_t *msg)
 {
-    return (err_mode == UCP_ERR_HANDLING_MODE_PEER) ?
-           UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+    unsigned ep_init_flags = 0;
+
+    if (msg->flags & UCP_EP_CONFIG_KEY_FLAG_ERR_HANDLING_MODE_PEER) {
+        ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    }
+
+    return ep_init_flags;
 }
 
 static UCS_F_NOINLINE void
@@ -562,9 +572,11 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
                                const ucp_wireup_msg_t *msg,
                                const ucp_unpacked_address_t *remote_address)
 {
-    unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE |
-                             UCP_EP_INIT_CM_WIREUP_CLIENT |
-                             ucp_ep_err_mode_init_flags(msg->err_mode);
+    ucp_err_handling_mode_t err_mode =
+            ucp_ep_config_key_flags_err_handling_mode(msg->flags);
+    unsigned ep_init_flags           = UCP_EP_INIT_CREATE_AM_LANE |
+                                       UCP_EP_INIT_CM_WIREUP_CLIENT |
+                                       ucp_wireup_ep_init_flags(msg);
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
 
@@ -577,7 +589,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
     ucs_assert(ucp_ep_get_cm_wireup_ep(ep) != NULL);
     ucs_assert(ep->flags & UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ);
 
-    status = ucp_ep_config_err_mode_check_mismatch(ep, msg->err_mode);
+    status = ucp_ep_config_err_mode_check_mismatch(ep, err_mode);
     if (status != UCS_OK) {
         goto err_ep_set_failed;
     }
@@ -605,10 +617,12 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                            const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
-    uint64_t remote_uuid      = remote_address->uuid;
-    int send_reply            = 0;
-    unsigned ep_init_flags    = ucp_ep_err_mode_init_flags(msg->err_mode);
-    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
+    uint64_t remote_uuid             = remote_address->uuid;
+    int send_reply                   = 0;
+    unsigned ep_init_flags           = ucp_wireup_ep_init_flags(msg);
+    ucp_err_handling_mode_t err_mode =
+            ucp_ep_config_key_flags_err_handling_mode(msg->flags);
+    ucp_tl_bitmap_t tl_bitmap        = UCS_BITMAP_ZERO;
     ucp_rsc_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
@@ -650,7 +664,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                 }
             }
         } else {
-            status = ucp_ep_config_err_mode_check_mismatch(ep, msg->err_mode);
+            status = ucp_ep_config_err_mode_check_mismatch(ep, err_mode);
             if (status != UCS_OK) {
                 goto err_set_ep_failed;
             }
@@ -1463,7 +1477,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_log_indent(1);
 
     ucp_ep_config_key_reset(&key);
-    ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
+    ucp_ep_config_key_set_flags(&key, ep_init_flags);
 
     status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
                                      remote_address, addr_indices, &key, 1);

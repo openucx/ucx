@@ -168,7 +168,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->rma_md_map       = 0;
     key->reachable_md_map = 0;
     key->dst_md_cmpts     = NULL;
-    key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
+    key->flags            = 0;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -518,21 +518,25 @@ void ucp_ep_release_id(ucp_ep_h ep)
     ep->ext->local_ep_id = UCS_PTR_MAP_KEY_INVALID;
 }
 
-void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
-                                    unsigned ep_init_flags)
+void ucp_ep_config_key_set_flags(ucp_ep_config_key_t *key,
+                                 unsigned ep_init_flags)
 {
-    key->err_mode = (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ?
-                    UCP_ERR_HANDLING_MODE_PEER : UCP_ERR_HANDLING_MODE_NONE;
+    if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
+        key->flags |= UCP_EP_CONFIG_KEY_FLAG_ERR_HANDLING_MODE_PEER;
+    }
 }
 
 ucs_status_t
 ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
                                       ucp_err_handling_mode_t err_mode)
 {
-    if (ucp_ep_config(ep)->key.err_mode != err_mode) {
+    ucp_err_handling_mode_t ep_config_err_mode =
+            ucp_ep_config_err_handling_mode(ucp_ep_config(ep));
+
+    if (ep_config_err_mode != err_mode) {
         ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
                   " error handling level mismatch (expected: %d, got: %d)",
-                  ep, ucp_ep_config(ep)->key.err_mode, err_mode);
+                  ep, ep_config_err_mode, err_mode);
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -717,7 +721,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_assert(ucp_worker_num_cm_cmpts(ep->worker) != 0);
 
     ucp_ep_config_key_reset(&key);
-    ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
+    ucp_ep_config_key_set_flags(&key, ep_init_flags);
 
     key.num_lanes = 1;
     /* all operations will use the first lane, which is a stub endpoint before
@@ -1335,11 +1339,13 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
 
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
 {
-    unsigned ep_flush_flags         = (ucp_ep_config(ep)->key.err_mode ==
-                                       UCP_ERR_HANDLING_MODE_NONE) ?
-                                      UCT_FLUSH_FLAG_LOCAL :
-                                      UCT_FLUSH_FLAG_CANCEL;
-    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
+     ucp_err_handling_mode_t err_mode =
+            ucp_ep_config_err_handling_mode(ucp_ep_config(ep));
+    unsigned ep_flush_flags          = (err_mode ==
+                                        UCP_ERR_HANDLING_MODE_NONE) ?
+                                       UCT_FLUSH_FLAG_LOCAL :
+                                       UCT_FLUSH_FLAG_CANCEL;
+    uct_ep_h uct_eps[UCP_MAX_LANES]  = { NULL };
     ucp_ep_discard_lanes_arg_t *discard_arg;
     ucs_status_t status;
     ucp_lane_index_t lane;
@@ -1438,7 +1444,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         } else if (ep_ext->err_cb == NULL) {
             /* Print error if user requested error handling support but did not
                install a valid error handling callback */
-            err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
+            err_mode  = ucp_ep_config_err_handling_mode(ucp_ep_config(ucp_ep));
             log_level = (err_mode == UCP_ERR_HANDLING_MODE_NONE) ?
                                 UCS_LOG_LEVEL_DIAG :
                                 UCS_LOG_LEVEL_ERROR;
@@ -1641,12 +1647,14 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 {
-    ucp_worker_h  worker = ep->worker;
-    void          *request = NULL;
+    ucp_worker_h worker              = ep->worker;
+    ucp_err_handling_mode_t err_mode =
+            ucp_ep_config_err_handling_mode(ucp_ep_config(ep));
+    void *request                    = NULL;
     ucp_request_t *close_req;
 
     if ((ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) &&
-        (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
+        (err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
@@ -1837,7 +1845,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->cm_lane != key2->cm_lane) ||
         (key1->keepalive_lane != key2->keepalive_lane) ||
         (key1->rkey_ptr_lane != key2->rkey_ptr_lane) ||
-        (key1->err_mode != key2->err_mode)) {
+        (key1->flags != key2->flags)) {
         return 0;
     }
 
@@ -2377,6 +2385,8 @@ out:
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                 const ucp_ep_config_key_t *key)
 {
+    ucp_err_handling_mode_t err_mode   =
+            ucp_ep_config_err_handling_mode(config);
     ucp_context_h context              = worker->context;
     ucp_lane_index_t tag_lanes[2]      = {UCP_NULL_LANE, UCP_NULL_LANE};
     ucp_lane_index_t rkey_ptr_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
@@ -2464,7 +2474,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             config->md_index[lane] = context->tl_rscs[rsc_index].md_index;
             if (ucp_ep_config_connect_p2p(worker, &config->key, rsc_index)) {
                 config->p2p_lanes |= UCS_BIT(lane);
-            } else if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+            } else if (err_mode == UCP_ERR_HANDLING_MODE_PEER) {
                 config->uct_rkey_pack_flags |= UCT_MD_MKEY_PACK_FLAG_INVALIDATE;
             }
         } else {
@@ -3357,7 +3367,7 @@ static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
     ucs_assertv(UCS_STATUS_IS_ERR(status), "req %p: status %s", req,
                 ucs_status_string(status));
 
-    if ((ucp_ep_config(req->send.ep)->key.err_mode !=
+    if ((ucp_ep_config_err_handling_mode(ucp_ep_config(req->send.ep)) !=
          UCP_ERR_HANDLING_MODE_NONE) &&
         (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE) &&
         !(req->flags & UCP_REQUEST_FLAG_USER_MEMH)) {

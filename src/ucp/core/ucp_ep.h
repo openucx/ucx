@@ -185,12 +185,19 @@ typedef struct ucp_ep_config_key_lane {
 } ucp_ep_config_key_lane_t;
 
 
+typedef enum ucp_ep_config_key_flags {
+    UCP_EP_CONFIG_KEY_FLAG_ERR_HANDLING_MODE_PEER = UCS_BIT(0)
+} ucp_ep_config_key_flags_t;
+
+
 /*
  * Endpoint configuration key.
  * This is filled by the transport selection logic, according to the local
  * resources and set of remote addresses.
  */
 struct ucp_ep_config_key {
+    /* Flags which influence an endpoint configuration */
+    uint8_t                  flags;
 
     ucp_lane_index_t         num_lanes;       /* Number of active lanes */
     ucp_ep_config_key_lane_t lanes[UCP_MAX_LANES]; /* Active lanes */
@@ -233,9 +240,6 @@ struct ucp_ep_config_key {
      * component index to be used for unpacking remote key from each set bit in
      * reachable_md_map */
     ucp_rsc_index_t          *dst_md_cmpts;
-
-    /* Error handling mode */
-    ucp_err_handling_mode_t  err_mode;
 };
 
 
@@ -667,8 +671,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name);
 
-void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
-                                    unsigned ep_init_flags);
+void ucp_ep_config_key_set_flags(ucp_ep_config_key_t *key,
+                                 unsigned ep_init_flags);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 

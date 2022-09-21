@@ -2175,6 +2175,8 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 {
     ucp_worker_h worker                = ep->worker;
     ucp_tl_bitmap_t scalable_tl_bitmap = worker->scalable_tl_bitmap;
+    ucp_err_handling_mode_t err_mode   =
+            ucp_ep_config_key_err_handling_mode(key);
     ucp_wireup_select_context_t select_ctx;
     ucp_wireup_select_params_t select_params;
     ucs_status_t status;
@@ -2184,7 +2186,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     if (!UCS_BITMAP_IS_ZERO_INPLACE(&scalable_tl_bitmap)) {
         ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                       remote_address, scalable_tl_bitmap, 0);
-        status = ucp_wireup_search_lanes(&select_params, key->err_mode,
+        status = ucp_wireup_search_lanes(&select_params, err_mode,
                                          &select_ctx);
         if (status == UCS_OK) {
             goto out;
@@ -2197,8 +2199,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                   remote_address, tl_bitmap, show_error);
-    status = ucp_wireup_search_lanes(&select_params, key->err_mode,
-                                     &select_ctx);
+    status = ucp_wireup_search_lanes(&select_params, err_mode, &select_ctx);
     if (status != UCS_OK) {
         return status;
     }

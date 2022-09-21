@@ -30,6 +30,26 @@ static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,
     return ep->uct_eps[lane_index];	
 }
 
+static UCS_F_ALWAYS_INLINE ucp_err_handling_mode_t
+ucp_ep_config_key_flags_err_handling_mode(uint8_t ep_config_key_flags)
+{
+    return (ep_config_key_flags &
+            UCP_EP_CONFIG_KEY_FLAG_ERR_HANDLING_MODE_PEER) ?
+           UCP_ERR_HANDLING_MODE_PEER : UCP_ERR_HANDLING_MODE_NONE;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_err_handling_mode_t
+ucp_ep_config_key_err_handling_mode(const ucp_ep_config_key_t *ep_config_key)
+{
+    return ucp_ep_config_key_flags_err_handling_mode(ep_config_key->flags);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_err_handling_mode_t
+ucp_ep_config_err_handling_mode(const ucp_ep_config_t *ep_config)
+{
+    return ucp_ep_config_key_err_handling_mode(&ep_config->key);
+}
+
 static UCS_F_ALWAYS_INLINE uct_ep_h
 ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
 {

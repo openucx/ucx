@@ -222,7 +222,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
 
     ucs_assert(unpacked_addr.address_count <= UCP_MAX_RESOURCES);
     ucp_ep_config_key_reset(key);
-    ucp_ep_config_key_set_err_mode(key, wireup_ep->ep_init_flags);
+    ucp_ep_config_key_set_flags(key, wireup_ep->ep_init_flags);
     status = ucp_wireup_select_lanes(ucp_ep,
                                      wireup_ep->ep_init_flags | ep_init_flags,
                                      *tl_bitmap, &unpacked_addr, addr_indices,
@@ -266,10 +266,12 @@ static void*
 ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
                        ucp_object_version_t sa_data_version)
 {
+    ucp_err_handling_mode_t err_mode =
+            ucp_ep_config_err_handling_mode(ucp_ep_config(ep));
     ucp_wireup_sockaddr_data_v1_t *sa_data_v1;
 
     if (sa_data_version == UCP_OBJECT_VERSION_V1) {
-        sa_data->header       = ucp_ep_config(ep)->key.err_mode;
+        sa_data->header       = err_mode;
         sa_data_v1            = ucs_derived_of(sa_data,
                                                ucp_wireup_sockaddr_data_v1_t);
         sa_data_v1->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
@@ -280,7 +282,7 @@ ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
                            "sa_data version: %u", sa_data_version);
         sa_data->header = UCP_OBJECT_VERSION_V2 <<
                           UCP_SA_DATA_HEADER_VERSION_SHIFT;
-        if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        if (err_mode == UCP_ERR_HANDLING_MODE_PEER) {
             sa_data->header |= UCP_SA_DATA_FLAG_ERR_MODE_PEER;
         }
 
@@ -305,7 +307,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     void *worker_addr_p;
     size_t ucp_addr_size, sa_data_length;
 
-    ucs_assert((int)ucp_ep_config(ep)->key.err_mode <= UINT8_MAX);
+    ucs_assert((uint64_t)ucp_ep_config_err_handling_mode(ucp_ep_config(ep)) <=
+               UINT8_MAX);
 
     if (ucp_ep_get_cm_wireup_ep(ep)->flags & UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID) {
         pack_flags |= UCP_ADDRESS_PACK_FLAG_CLIENT_ID;

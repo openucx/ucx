@@ -111,7 +111,9 @@ static void ucp_ep_vfs_init_address(ucp_ep_h ep)
 
 void ucp_ep_vfs_init(ucp_ep_h ep)
 {
-    ucp_err_handling_mode_t err_mode;
+    ucp_err_handling_mode_t err_mode =
+            ucp_ep_config_key_flags_err_handling_mode(
+                    ucp_ep_config(ep)->key.flags);
 
 #if ENABLE_DEBUG_DATA
     ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%s", ep->name);
@@ -124,7 +126,6 @@ void ucp_ep_vfs_init(ucp_ep_h ep)
     ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_read_peer_name, NULL, 0,
                             "peer_name");
 
-    err_mode = ucp_ep_config(ep)->key.err_mode;
     ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive,
                             (void*)ucp_err_handling_mode_names[err_mode],
                             UCS_VFS_TYPE_STRING, "error_mode");
