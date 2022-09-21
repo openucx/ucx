@@ -815,7 +815,7 @@ ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
  * @ingroup UCT_MD
  *
  * @brief Locally attach to a remote memory.
- * 
+ *
  * This routine attaches a local memory handle to a memory region
  * registered by @ref uct_md_mem_reg and packed by
  * @ref uct_md_mem_pack_v2 by a peer to allow performing local operations

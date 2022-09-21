@@ -706,7 +706,7 @@ enum {
      */
     UCT_MD_FLAG_ALLOC         = UCS_BIT(0),
 
-    /** 
+    /**
      * MD supports memory registration
      */
     UCT_MD_FLAG_REG           = UCS_BIT(1),
@@ -794,7 +794,7 @@ enum uct_md_mem_flags {
     /**
      * Enable remote put access.
      */
-    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), 
+    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5),
 
     /**
      * Enable remote get access.
@@ -979,7 +979,7 @@ enum uct_ep_connect_params_field {
  * during @ref uct_iface_open "UCT iface initialization" process.
  */
 enum uct_iface_feature {
-    /** Request Active Message support */ 
+    /** Request Active Message support */
     UCT_IFACE_FEATURE_AM           = UCS_BIT(0),
 
     /** Request PUT support */
@@ -991,16 +991,16 @@ enum uct_iface_feature {
     /** Request 32-bit atomic operations support */
     UCT_IFACE_FEATURE_AMO32        = UCS_BIT(3),
 
-    /** Request 64-bit atomic operations support */ 
+    /** Request 64-bit atomic operations support */
     UCT_IFACE_FEATURE_AMO64        = UCS_BIT(4),
 
-    /** Request tag matching offload support */ 
+    /** Request tag matching offload support */
     UCT_IFACE_FEATURE_TAG          = UCS_BIT(5),
 
-    /** Request remote flush support */ 
+    /** Request remote flush support */
     UCT_IFACE_FEATURE_FLUSH_REMOTE = UCS_BIT(6),
 
-    /** Used to determine the number of features */ 
+    /** Used to determine the number of features */
     UCT_IFACE_FEATURE_LAST         = UCS_BIT(7)
 };
 
