@@ -899,6 +899,14 @@ static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
         }
     }
 
+    /* FIN message in reverse direction to acknowledge delivery */
+    ret = client_server_communication(ucp_worker, ep, send_recv_type,
+                                      !is_server, i + 1);
+    if (ret != 0) {
+        fprintf(stderr, "%s failed on FIN message\n",
+                (is_server ? "server": "client"));
+    }
+
 out:
     return ret;
 }
@@ -1014,7 +1022,7 @@ static int run_client(ucp_worker_h ucp_worker, char *server_addr,
     ret = client_server_do_work(ucp_worker, client_ep, send_recv_type, 0);
 
     /* Close the endpoint to the server */
-    ep_close(ucp_worker, client_ep, UCP_EP_CLOSE_MODE_FORCE);
+    ep_close(ucp_worker, client_ep, UCP_EP_CLOSE_MODE_FLUSH);
 
 out:
     return ret;
