@@ -1327,7 +1327,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
     ucp_request_t *frndv_req;
     unsigned md_index;
     unsigned memh_index;
-    const uct_md_attr_v2_t *md_attr;
+    const uct_component_attr_t *cmpt_attr;
     ucp_md_map_t alloc_md_map;
 
     ucp_trace_req(rreq, "using rndv pipeline protocol rndv_req %p", rndv_req);
@@ -1374,8 +1374,8 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         /* TODO: Check if can avoid for inter-node eps */
         ucs_for_each_bit(md_index, mdesc->memh->md_map) {
             if (md_index == mdesc->memh->alloc_md_index) {
-                md_attr = &context->tl_mds[md_index].attr;
-                if (md_attr->flags & UCT_MD_FLAG_RKEY_PTR) {
+                cmpt_attr = ucp_cmpt_attr_by_md_index(context, md_index);
+                if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
                     alloc_md_map |= UCS_BIT(md_index);
                 }
                 break;
@@ -1547,6 +1547,8 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     ucp_ep_peer_mem_data_t *ppln_data;
     ucp_md_map_t md_map;
     ucp_md_index_t md_index;
+    const uct_component_attr_t *cmpt_attr;
+    ucp_rsc_index_t cmpt_index;
     const uct_md_attr_v2_t *md_attr;
     ucp_ep_h mem_type_ep;
     ucp_lane_index_t mem_type_rma_lane;
@@ -1569,8 +1571,11 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
                       ucp_ep_config(ep)->key.reachable_md_map;
 
     ucs_for_each_bit(md_index, md_map) {
-        md_attr = &context->tl_mds[md_index].attr;
-        if ((md_attr->flags & UCT_MD_FLAG_RKEY_PTR) &&
+        cmpt_index = ucp_ep_config_get_dst_md_cmpt(&ucp_ep_config(ep)->key,
+                                                   md_index);
+        cmpt_attr  = &context->tl_cmpts[cmpt_index].attr;
+        md_attr    = &context->tl_mds[md_index].attr;
+        if ((cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) &&
             /* Do not use xpmem, because cuda_copy registration will fail and
              * performance will not be optimal. */
             !(md_attr->flags & UCT_MD_FLAG_REG) &&

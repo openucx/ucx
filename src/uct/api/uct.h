@@ -290,7 +290,13 @@ enum {
      * If set, the component supports @ref uct_cm_h functionality.
      * See @ref uct_cm_open for details.
      */
-    UCT_COMPONENT_FLAG_CM = UCS_BIT(0)
+    UCT_COMPONENT_FLAG_CM       = UCS_BIT(0),
+
+    /**
+     * If set, the component supports direct access to remote memory using a
+     * local pointer returned from @ref uct_rkey_ptr function.
+     */
+    UCT_COMPONENT_FLAG_RKEY_PTR = UCS_BIT(1)
 };
 
 
@@ -728,7 +734,9 @@ enum {
 
     /**
      * MD supports direct access to remote memory via a pointer that is
-     * returned by @ref uct_rkey_ptr
+     * returned by @ref uct_rkey_ptr.
+     * @note This flag is deprecated and replaced by
+     * @a UCT_COMPONENT_FLAG_RKEY_PTR.
      */
     UCT_MD_FLAG_RKEY_PTR      = UCS_BIT(6),
 
@@ -2676,8 +2684,8 @@ ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
  * @brief Get a local pointer to remote memory.
  *
  * This routine returns a local pointer to the remote memory
- * described by the rkey bundle. The MD must support
- * @ref UCT_MD_FLAG_RKEY_PTR flag.
+ * described by the rkey bundle. The @a component must support
+ * @ref UCT_COMPONENT_FLAG_RKEY_PTR flag.
  *
  * @param [in]  component    Component on which to obtain the pointer to the
  *                           remote key.
