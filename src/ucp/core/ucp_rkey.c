@@ -462,7 +462,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
             tl_rkey->rkey.rkey   = UCT_INVALID_RKEY;
             tl_rkey->rkey.handle = NULL;
             tl_rkey->cmpt        = NULL;
-            ucs_trace("rkey[%d] for remote md %d added as not unpacked",
+            ucs_trace("rkey[%d] for remote md %d is not unpacked",
                       rkey_index, remote_md_index);
             ++rkey_index;
             continue;

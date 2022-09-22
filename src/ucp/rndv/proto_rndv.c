@@ -58,8 +58,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
-        if (!((params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) &&
-              (params->alloc_md_index == md_index)) &&
+        if (!(params->alloc_md_index == md_index) &&
             /* Check the memory domain requires remote key, and capable of
              * registering the memory type
              */
@@ -636,6 +635,8 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
     }
 
     req->send.rndv.rkey        = rkey;
+    /* Caching rkey_buffer pointer for later unpacking of shm keys in 2-stage
+     * ppln protocol */
     req->send.rndv.rkey_buffer = (void*)rkey_buffer;
 
     ucp_trace_req(req,

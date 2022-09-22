@@ -259,8 +259,12 @@ ucp_proto_rndv_get_mtype_fetch_completion(uct_completion_t *uct_comp)
 {
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
+    ucp_rsc_index_t memh_index = ucp_proto_rndv_mtype_get_memh_index(req);
+    uct_mem_h memh;
 
-    ucp_proto_rndv_mtype_copy(req, uct_ep_put_zcopy,
+    memh = ucp_proto_rndv_mtype_get_memh(req, memh_index);
+    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr, memh,
+                              uct_ep_put_zcopy,
                               ucp_proto_rndv_get_mtype_unpack_completion,
                               "out to");
 }

@@ -19,7 +19,7 @@
 static ucs_status_t
 ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
                                uint64_t rndv_modes, size_t max_length,
-                               unsigned flags, ucs_linear_func_t unpack_time,
+                               ucs_linear_func_t unpack_time,
                                ucp_proto_perf_node_t *unpack_perf_node,
                                ucp_md_index_t alloc_md_index,
                                ucs_memory_type_t mem_type,
@@ -40,7 +40,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
         .super.hdr_size      = sizeof(ucp_rndv_rtr_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .unpack_time         = unpack_time,
         .unpack_perf_node    = unpack_perf_node,
@@ -183,7 +183,7 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
     }
 
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, SIZE_MAX,
-                                            0, UCS_LINEAR_FUNC_ZERO, NULL,
+                                            UCS_LINEAR_FUNC_ZERO, NULL,
                                             UCP_NULL_RESOURCE,
                                             init_params->select_param->mem_type,
                                             init_params->select_param->sys_dev);
@@ -282,6 +282,9 @@ static void ucp_proto_rndv_rtr_mtype_copy_completion(uct_completion_t *uct_comp)
 static void
 ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 {
+    ucp_rsc_index_t memh_index;
+    uct_mem_h memh;
+
     ucp_send_request_id_release(req);
     if (in_buffer) {
         /* Data was already placed in user buffer because the sender responded
@@ -290,7 +293,10 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
     } else {
         /* Data was not placed in user buffer, which means it was placed to
            the remote address we published - the rendezvous fragment */
-        ucp_proto_rndv_mtype_copy(req, uct_ep_put_zcopy,
+        memh_index = ucp_proto_rndv_mtype_get_memh_index(req);
+        memh       = ucp_proto_rndv_mtype_get_memh(req, memh_index);
+        ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr, memh,
+                                  uct_ep_put_zcopy,
                                   ucp_proto_rndv_rtr_mtype_copy_completion,
                                   "out to");
     }
@@ -351,7 +357,6 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     }
 
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
-                                            UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR,
                                             unpack_time, unpack_perf_node,
                                             md_index, UCS_MEMORY_TYPE_HOST,
                                             UCS_SYS_DEVICE_ID_UNKNOWN);

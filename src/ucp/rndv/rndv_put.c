@@ -18,6 +18,7 @@
 
 
 #define UCP_PROTO_RNDV_PUT_DESC "write to remote"
+#define UCP_PROTO_RNDV_RKEY_PTR_DESC "write to attached"
 
 
 enum {
@@ -397,9 +398,13 @@ static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucp_rsc_index_t memh_index = ucp_proto_rndv_mtype_get_memh_index(req);
+    uct_mem_h memh;
+
     ucs_status_t status;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
+    ucs_assert(req->send.rndv.mdesc != NULL);
 
     status = ucp_proto_rndv_mtype_request_init(req);
     if (status != UCS_OK) {
@@ -408,7 +413,10 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
     }
 
     ucp_proto_rndv_put_common_request_init(req);
-    ucp_proto_rndv_mtype_copy(req, uct_ep_get_zcopy,
+
+    memh = ucp_proto_rndv_mtype_get_memh(req, memh_index);
+    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr, memh,
+                              uct_ep_get_zcopy,
                               ucp_proto_rndv_put_mtype_pack_completion,
                               "in from");
 
@@ -501,4 +509,269 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
     .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+};
+
+static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_init_params(
+        const ucp_proto_init_params_t *init_params,
+        ucp_md_map_t initial_reg_md_map, size_t max_length)
+{
+    ucp_context_t *context               = init_params->worker->context;
+    uint64_t rndv_modes                  = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
+    ucp_proto_rndv_bulk_priv_t *rpriv    = init_params->priv;
+    ucp_proto_multi_init_params_t params = {
+        .super.super         = *init_params,
+        .super.overhead      = 0,
+        .super.latency       = 0,
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_priority  = 0,
+        .super.min_length    = 0,
+        .super.max_length    = max_length,
+        .super.min_iov       = 1,
+        .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
+                                            cap.put.min_zcopy),
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
+                                            cap.put.max_zcopy),
+        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.put.max_iov),
+        .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_LAST,
+        .super.memtype_op    = UCT_EP_OP_GET_ZCOPY,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR,
+        .max_lanes           = context->config.ext.max_rndv_lanes,
+        .initial_reg_md_map  = initial_reg_md_map,
+        .first.tl_cap_flags  = 0,
+        .first.lane_type     = UCP_LANE_TYPE_RKEY_PTR,
+        .middle.tl_cap_flags = 0,
+        .middle.lane_type    = UCP_LANE_TYPE_RKEY_PTR
+    };
+    size_t bulk_priv_size;
+    ucs_status_t status;
+
+    status = ucp_proto_rndv_bulk_init(&params, rpriv,
+                                      UCP_PROTO_RNDV_RKEY_PTR_DESC,
+                                      UCP_PROTO_RNDV_ATP_NAME, &bulk_priv_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
+{
+    ucp_context_t *context = init_params->worker->context;
+    unsigned found_md      = 0;
+    ucs_status_t status;
+    ucp_md_map_t mdesc_md_map;
+    size_t frag_size;
+    ucp_md_index_t md_index;
+    const uct_md_attr_t *md_attr;
+
+    if (!context->config.ext.rndv_shm_ppln_enable) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND, 1) ||
+        (init_params->rkey_config_key == NULL)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = ucp_proto_rndv_mtype_init(init_params, &mdesc_md_map, &frag_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_for_each_bit(md_index, init_params->rkey_config_key->md_map) {
+        md_attr = &context->tl_mds[md_index].attr;
+        if ((md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) &&
+            /* Do not use xpmem, because cuda_copy registration will fail and
+             * performance will not be optimal. */
+            !(md_attr->cap.flags & UCT_MD_FLAG_REG) &&
+            (md_attr->cap.access_mem_types &
+             UCS_BIT(init_params->rkey_config_key->mem_type))) {
+            found_md = UCS_BIT(md_index);
+            break;
+        }
+    }
+
+    if (found_md == 0) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return ucp_proto_rndv_rkey_ptr_mtype_init_params(init_params, mdesc_md_map,
+                                                     frag_size);
+}
+
+static void ucp_proto_rndv_rkey_ptr_mtype_completion(uct_completion_t *uct_comp)
+{
+    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_trace_req(req, "ucp_proto_rndv_rkey_ptr_mtype_completion");
+    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+}
+
+static void
+ucp_proto_rndv_rkey_ptr_mtype_copy_completion(uct_completion_t *uct_comp)
+{
+    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_trace_req(req, "ucp_proto_rndv_rkey_ptr_mtype_copy_completion");
+
+    ucp_proto_completion_init(&req->send.state.uct_comp,
+                              ucp_proto_rndv_rkey_ptr_mtype_completion);
+    ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_PUT_STAGE_ATP);
+    ucp_request_send(req);
+}
+
+static ucs_status_t
+ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
+{
+    ucp_request_t *req    = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucp_context_h context = req->send.ep->worker->context;
+    ucp_md_index_t rkey_ptr_md_index  = UCP_NULL_RESOURCE;
+    uint64_t remote_address           = req->send.rndv.remote_address;
+    ucs_memory_type_t local_mem_type  = req->send.state.dt_iter.mem_info.type;
+    ucs_memory_type_t remote_mem_type = req->send.rndv.rkey->mem_type;
+    ucp_md_map_t md_map               = req->send.rndv.rkey->md_map;
+    void *rkey_buffer                 = req->send.rndv.rkey_buffer;
+    ucp_lane_index_t mem_type_rma_lane;
+    ucp_ep_peer_mem_data_t *ppln_data;
+    const uct_md_attr_t *md_attr;
+    ucp_md_index_t md_index;
+    ucp_ep_h mem_type_ep;
+    unsigned rkey_index;
+    void *local_ptr;
+    ucs_status_t status;
+
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
+    ucs_assert(req->send.rndv.rkey_buffer != NULL);
+
+    req->send.rndv.rkey_buffer = NULL;
+
+    mem_type_ep = req->send.ep->worker->mem_type_ep[local_mem_type];
+    if (mem_type_ep == NULL) {
+        return UCS_OK;
+    }
+    mem_type_rma_lane = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
+
+    ucs_for_each_bit(md_index, md_map) {
+        md_attr = &context->tl_mds[md_index].attr;
+        if ((md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) &&
+            /* Do not use xpmem, because cuda_copy registration will fail and
+             * performance will not be optimal. */
+            !(md_attr->cap.flags & UCT_MD_FLAG_REG) &&
+            (md_attr->cap.access_mem_types & UCS_BIT(remote_mem_type))) {
+            rkey_ptr_md_index = md_index;
+            break;
+        }
+    }
+
+    ucs_assert(rkey_ptr_md_index != UCP_NULL_RESOURCE);
+
+    ppln_data = ucp_ep_peer_mem_get(context, req->send.ep, remote_address,
+                                    req->send.state.dt_iter.length, rkey_buffer,
+                                    rkey_ptr_md_index);
+    if (ppln_data->rkey == NULL) {
+        ucp_proto_request_abort(req, UCS_ERR_UNREACHABLE);
+        return UCS_OK;
+    }
+
+    rkey_index = ucs_bitmap2idx(ppln_data->rkey->md_map, rkey_ptr_md_index);
+    status     = uct_rkey_ptr(ppln_data->rkey->tl_rkey[rkey_index].cmpt,
+                              &ppln_data->rkey->tl_rkey[rkey_index].rkey,
+                              req->send.rndv.remote_address, &local_ptr);
+    if (status != UCS_OK) {
+        ppln_data->size = 0; /* Make sure hash element is updated next time */
+        ucp_proto_request_abort(req, status);
+        return UCS_OK;
+    }
+
+    if (ppln_data->uct_memh == NULL) {
+        /* Register remote memory segment with memtype ep MD. Without
+        * registration fetching data from GPU to CPU will be performance
+        * inefficient. */
+        md_map              = 0;
+        ppln_data->md_index = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
+
+        status = ucp_mem_rereg_mds(context, UCS_BIT(ppln_data->md_index),
+                                   local_ptr, ppln_data->size,
+                                   UCT_MD_MEM_ACCESS_RMA |
+                                           UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                   NULL, remote_mem_type, NULL,
+                                   &ppln_data->uct_memh, &md_map);
+
+        if (status != UCS_OK) {
+            ppln_data->md_index = UCP_NULL_RESOURCE;
+        } else {
+            ucs_assertv(md_map == UCS_BIT(ppln_data->md_index),
+                        "mdmap=0x%lx, md_index=%u", md_map,
+                        ppln_data->md_index);
+        }
+    }
+
+    ucp_proto_rndv_mtype_copy(req, local_ptr, ppln_data->uct_memh,
+                              uct_ep_get_zcopy,
+                              ucp_proto_rndv_rkey_ptr_mtype_copy_completion,
+                              "in from");
+
+    req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_proto_rndv_rkey_ptr_mtype_atp_send(ucp_request_t *req,
+                                       ucp_lane_index_t lane)
+{
+    ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
+
+    pack_ctx.req      = req;
+    pack_ctx.ack_size = req->send.state.dt_iter.length;
+
+    if (pack_ctx.ack_size == 0) {
+        return UCS_OK; /* Skip sending 0-length ATP */
+    }
+
+    return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
+                                          ucp_proto_rndv_put_common_pack_atp,
+                                          &pack_ctx, sizeof(ucp_rndv_ack_hdr_t),
+                                          0);
+}
+
+static ucs_status_t
+ucp_proto_rndv_rkey_ptr_mtype_atp_progress(uct_pending_req_t *uct_req)
+{
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_lane_map_t atp_map                  = UCS_BIT(rpriv->super.lane);
+
+    ucs_assert(rpriv->super.lane != UCP_NULL_LANE);
+
+    return ucp_proto_multi_lane_map_progress(
+            req, &atp_map, ucp_proto_rndv_rkey_ptr_mtype_atp_send);
+}
+
+static void
+ucp_proto_rndv_rkey_ptr_mtype_query(const ucp_proto_query_params_t *params,
+                                    ucp_proto_query_attr_t *attr)
+{
+    const char *desc = UCP_PROTO_RNDV_RKEY_PTR_DESC;
+
+    ucp_proto_rndv_bulk_query(params, attr);
+    ucp_proto_rndv_mtype_query_desc(params, attr, desc);
+}
+
+ucp_proto_t ucp_rndv_rkey_ptr_mtype_proto = {
+    .name     = "rndv/rkey_ptr/mtype",
+    .desc     = NULL,
+    .flags    = 0,
+    .init     = ucp_proto_rndv_rkey_ptr_mtype_init,
+    .query    = ucp_proto_rndv_rkey_ptr_mtype_query,
+    .progress = {
+        [UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY] = ucp_proto_rndv_rkey_ptr_mtype_copy_progress,
+        [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_rkey_ptr_mtype_atp_progress,
+    },
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
