@@ -543,10 +543,18 @@ enum ucp_dt_type {
  * @ingroup UCP_DATATYPE
  * @brief UCP datatype attributes field mask.
  *
- * The enumeration allows querying a specific field in @ref ucp_datatype_attr_t.
+ * The enumeration allows specifying which fields in @ref ucp_datatype_attr_t
+ * are present and which datatype attributes are queried.
  */
 enum ucp_datatype_attr_field {
-    UCP_DATATYPE_ATTR_FIELD_PACKED_SIZE = UCS_BIT(0) /**< packed datatype size */
+    /** @ref ucp_datatype_attr_t::packed_size field is queried. */
+    UCP_DATATYPE_ATTR_FIELD_PACKED_SIZE = UCS_BIT(0),
+
+    /** @ref ucp_datatype_attr_t::buffer field is set. */
+    UCP_DATATYPE_ATTR_FIELD_BUFFER      = UCS_BIT(1),
+
+    /** @ref ucp_datatype_attr_t::count field is set. */
+    UCP_DATATYPE_ATTR_FIELD_COUNT       = UCS_BIT(2)
 };
 
 
@@ -998,7 +1006,7 @@ typedef struct ucp_generic_dt_ops {
  * @ingroup UCP_DATATYPE
  * @brief UCP datatype attributes
  *
- * This structure provides attributes that can be queried for a UCP datatype.
+ * This structure provides attributes of a UCP datatype.
  */
 typedef struct ucp_datatype_attr {
     /**
@@ -1006,12 +1014,28 @@ typedef struct ucp_datatype_attr {
      * ucp_datatype_attr_field. Fields not specified in this mask will be
      * ignored. Provides ABI compatibility with respect to adding new fields.
      */
-    uint64_t field_mask;
+    uint64_t   field_mask;
 
     /**
-     * Packed size of a single element of the given datatype.
+     * Packed size of the given datatype. (output parameter)
      */
-    size_t   packed_size;
+    size_t     packed_size;
+
+    /**
+     * Pointer to a data buffer of the associated data type.
+     * This field is optional.
+     * If @ref UCP_DATATYPE_ATTR_FIELD_BUFFER is not set in @ref field_mask,
+     * this field defaults to @e NULL.
+     */
+    const void *buffer;
+
+    /**
+     * Number of elements in @a buffer.
+     * This value is optional.
+     * If @ref UCP_DATATYPE_ATTR_FIELD_COUNT is not set in @ref field_mask, the
+     * value of this field defaults to 1.
+     */
+    size_t     count;
 } ucp_datatype_attr_t;
 
 
@@ -3888,15 +3912,8 @@ void ucp_dt_destroy(ucp_datatype_t datatype);
  * When @ref UCP_DATATYPE_ATTR_FIELD_PACKED_SIZE is set in @a field_mask of @a attr,
  * the field @a packed_size is set to the packed size (bytes) of the datatype.
  *
- * @note The size of a generic datatype is available only after it has been used
- *       in a communication operation. If it is queried before,
- *       @ref UCS_ERR_UNSUPPORTED will be returned.
- *
- * @note The size of IOV data cannot be determined from the UCP datatype. If an
- *       IOV @a datatype is passed, @ref UCS_ERR_INVALID_PARAM will be returned.
- *
- * @param [in]  datatype     Datatype object to query.
- * @param [out] attr         Filled with attributes of the datatype.
+ * @param [in]    datatype   Datatype object to query.
+ * @param [inout] attr       Filled with attributes of the datatype.
  *
  * @return Error code as defined by @ref ucs_status_t
  */

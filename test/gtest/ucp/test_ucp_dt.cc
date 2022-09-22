@@ -181,6 +181,53 @@ private:
 
 ucp_dt_generic_t* test_ucp_dt_iter::dt_gen = 0;
 
+UCS_TEST_P(test_ucp_dt_iter, datatype_query) {
+    ucs_status_t status;
+    ucp_datatype_t datatype           = GetParam();
+    ucp_datatype_attr_t datatype_attr = {};
+    datatype_attr.field_mask          = UCP_DATATYPE_ATTR_FIELD_PACKED_SIZE;
+
+    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        status = ucp_dt_query(datatype, &datatype_attr);
+        ASSERT_EQ(UCS_OK, status);
+        EXPECT_GT(datatype_attr.packed_size, 0);
+        break;
+    case UCP_DATATYPE_GENERIC:
+    {
+        const size_t count        = 2;
+        datatype_attr.count       = count;
+        datatype_attr.field_mask |= UCP_DATATYPE_ATTR_FIELD_COUNT;
+
+        int32_t buf[count]        = {1, 2};
+        datatype_attr.buffer      = buf;
+        datatype_attr.field_mask |= UCP_DATATYPE_ATTR_FIELD_BUFFER;
+
+        status = ucp_dt_query(datatype, &datatype_attr);
+        ASSERT_EQ(UCS_OK, status);
+        EXPECT_GT(datatype_attr.packed_size, 0);
+        break;
+    }
+    case UCP_DATATYPE_IOV:
+    {
+        const size_t count        = 2;
+        datatype_attr.count       = count;
+        datatype_attr.field_mask |= UCP_DATATYPE_ATTR_FIELD_COUNT;
+
+        ucp_dt_iov_t buf[count]   = {{NULL, 8}, {NULL, 4}};
+        datatype_attr.buffer      = buf;
+        datatype_attr.field_mask |= UCP_DATATYPE_ATTR_FIELD_BUFFER;
+
+        status = ucp_dt_query(datatype, &datatype_attr);
+        ASSERT_EQ(UCS_OK, status);
+        EXPECT_EQ(12, datatype_attr.packed_size);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 UCS_TEST_P(test_ucp_dt_iter, pack_100b) {
     test_pack(100);
 }
