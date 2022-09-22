@@ -98,11 +98,14 @@ typedef struct {
     ucp_tl_bitmap_t           tl_bitmap;                 /* TL bitmap of selected resources */
 } ucp_wireup_select_context_t;
 
+static const char *ucp_wireup_cmpt_flags[] = {
+    [ucs_ilog2(UCT_COMPONENT_FLAG_RKEY_PTR)]     = "obtain remote memory pointer",
+};
+
 static const char *ucp_wireup_md_flags[] = {
     [ucs_ilog2(UCT_MD_FLAG_ALLOC)]               = "memory allocation",
     [ucs_ilog2(UCT_MD_FLAG_REG)]                 = "memory registration",
     [ucs_ilog2(UCT_MD_FLAG_INVALIDATE)]          = "memory invalidation",
-    [ucs_ilog2(UCT_MD_FLAG_RKEY_PTR)]            = "obtain remote memory pointer"
 };
 
 static const char *ucp_wireup_iface_flags[] = {
@@ -416,6 +419,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     char *p, *endp;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
+    const uct_component_attr_t *cmpt_attr;
     int is_reachable;
     double score;
     uint8_t priority;
@@ -495,6 +499,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         iface_attr     = ucp_worker_iface_get_attr(worker, rsc_index);
         md_index       = context->tl_rscs[rsc_index].md_index;
         md_attr        = &context->tl_mds[md_index].attr;
+        cmpt_attr      = ucp_cmpt_attr_by_md_index(context, md_index);
 
         if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
             !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
@@ -516,6 +521,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         if (!ucp_wireup_check_flags(resource, md_attr->flags, local_md_flags,
                                     criteria->title, ucp_wireup_md_flags, p,
                                     endp - p) ||
+            !ucp_wireup_check_flags(resource, cmpt_attr->flags,
+                                    criteria->local_cmpt_flags, criteria->title,
+                                    ucp_wireup_cmpt_flags, p, endp - p) ||
             !ucp_wireup_check_flags(resource, md_attr->alloc_mem_types,
                                     criteria->alloc_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
@@ -1028,11 +1036,12 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
                 UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE |
                 UCP_ADDR_IFACE_FLAG_CB_ASYNC;
     }
-    criteria->local_event_flags       = 0;
-    criteria->remote_event_flags      = 0;
-    criteria->calc_score              = ucp_wireup_aux_score_func;
-    criteria->tl_rsc_flags            = UCP_TL_RSC_FLAG_AUX; /* Can use aux transports */
-    criteria->lane_type               = UCP_LANE_TYPE_LAST;
+    criteria->local_cmpt_flags   = 0;
+    criteria->local_event_flags  = 0;
+    criteria->remote_event_flags = 0;
+    criteria->calc_score         = ucp_wireup_aux_score_func;
+    criteria->tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX; /* Can use aux transports */
+    criteria->lane_type          = UCP_LANE_TYPE_LAST;
 
     ucp_wireup_fill_peer_err_criteria(criteria, ep_init_flags);
 }
@@ -1041,6 +1050,7 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
 {
     criteria->title              = "";
     criteria->local_md_flags     = 0;
+    criteria->local_cmpt_flags   = 0;
     criteria->local_event_flags  = 0;
     criteria->remote_event_flags = 0;
     criteria->alloc_mem_types    = 0;
@@ -1662,10 +1672,10 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
          * Allow selecting additional lanes in case the remote memory will not be
          * registered with this memory domain, i.e with GPU memory.
          */
-        bw_info.criteria.title           = "obtain remote memory pointer";
-        bw_info.criteria.local_md_flags |= UCT_MD_FLAG_RKEY_PTR;
-        bw_info.criteria.lane_type       = UCP_LANE_TYPE_RKEY_PTR;
-        bw_info.max_lanes                = 1;
+        bw_info.criteria.title             = "obtain remote memory pointer";
+        bw_info.criteria.local_cmpt_flags |= UCT_COMPONENT_FLAG_RKEY_PTR;
+        bw_info.criteria.lane_type         = UCP_LANE_TYPE_RKEY_PTR;
+        bw_info.max_lanes                  = 1;
 
         UCP_CONTEXT_MEM_CAP_TLS(context, UCS_MEMORY_TYPE_HOST, access_mem_types,
                                 tl_bitmap);
@@ -1673,10 +1683,10 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                 UCP_NULL_LANE, select_ctx);
     }
 
-    bw_info.criteria.title          = "high-bw remote memory access";
-    bw_info.criteria.lane_type      = UCP_LANE_TYPE_RMA_BW;
-    bw_info.max_lanes               = context->config.ext.max_rndv_lanes;
-    bw_info.criteria.local_md_flags = md_reg_flag;
+    bw_info.criteria.title            = "high-bw remote memory access";
+    bw_info.criteria.lane_type        = UCP_LANE_TYPE_RMA_BW;
+    bw_info.max_lanes                 = context->config.ext.max_rndv_lanes;
+    bw_info.criteria.local_cmpt_flags = 0;
 
     /* If error handling is requested we require memory invalidation
      * support to provide correct data integrity in case of error */

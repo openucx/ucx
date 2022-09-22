@@ -56,6 +56,9 @@ typedef struct {
     /* Required local MD flags */
     uint64_t                    local_md_flags;
 
+    /* Required local component flags */
+    uint64_t                    local_cmpt_flags;
+
     /* Required local interface flags */
     ucp_wireup_select_flags_t   local_iface_flags;
 
