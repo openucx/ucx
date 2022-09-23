@@ -23,40 +23,40 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: rhel76
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: rhel76_mofed47
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
       options: $(DOCKER_OPT_VOLUMES)
     - container: rhel74
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: rhel72
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: rhel82
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: rhel90
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2004
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2204
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2210
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu22.10/builder:mofed-5.8-0.2.1.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.10/builder:mofed-5.8-0.2.1.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu1804
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: sles15sp2
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: sles12sp5
-      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
     - container: centos7_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-centos7
