@@ -463,10 +463,10 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
             if (md_attr->flags & UCT_MD_FLAG_NEED_MEMH) {
                 /* Memory domain must support registration on the relevant
                  * memory type */
-                if (!(md_attr->flags & UCT_MD_FLAG_REG) ||
-                    !(md_attr->reg_mem_types &
-                      UCS_BIT(select_param->mem_type))) {
-                    ucs_trace("%s: no reg of mem type %s", lane_desc,
+                if (!(context->reg_md_map[select_param->mem_type] &
+                      UCS_BIT(md_index))) {
+                    ucs_trace("%s: md %s cannot register %s memory", lane_desc,
+                              context->tl_mds[md_index].rsc.md_name,
                               ucs_memory_type_names[select_param->mem_type]);
                     continue;
                 }
@@ -552,9 +552,8 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
         /* Register if the memory domain support registration for the relevant
            memory type, and needs a local memory handle for zero-copy
            communication */
-        if (ucs_test_all_flags(md_attr->flags,
-                               UCT_MD_FLAG_NEED_MEMH | UCT_MD_FLAG_REG) &&
-            (md_attr->reg_mem_types & UCS_BIT(select_param->mem_type))) {
+        if ((md_attr->flags & UCT_MD_FLAG_NEED_MEMH) &&
+            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index))) {
             reg_md_map |= UCS_BIT(md_index);
         }
     }

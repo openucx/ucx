@@ -21,8 +21,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                ucp_sys_dev_map_t *sys_dev_map,
                                ucs_sys_dev_distance_t *sys_distance)
 {
-    ucp_worker_h worker                      = params->super.super.worker;
-    ucp_context_h context                    = worker->context;
+    ucp_context_h context                    = params->super.super.worker->context;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
     ucp_rsc_index_t mem_sys_dev, ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
@@ -65,7 +64,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
          * registering the memory type
          */
         if (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY) ||
-            !(md_attr->reg_mem_types & UCS_BIT(params->mem_info.type))) {
+            !(context->reg_md_map[params->mem_info.type] & UCS_BIT(md_index))) {
             continue;
         }
 
