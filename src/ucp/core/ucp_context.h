@@ -272,9 +272,18 @@ typedef struct ucp_context {
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
 
+    /* Map of MDs that support dmabuf registration */
+    ucp_md_map_t                  dmabuf_reg_md_map;
+
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
+
+    /* Map of dmabuf providers per memory type. Each entry in the array is
+       either the index of the provider MD, or UCP_NULL_RESOURCE if no such MD
+       exists. */
+    ucp_md_index_t                dmabuf_mds[UCS_MEMORY_TYPE_LAST];
+
     uint64_t                      mem_type_mask;            /* Supported mem type mask */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */

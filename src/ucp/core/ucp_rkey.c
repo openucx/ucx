@@ -636,6 +636,9 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
             }
         }
 
+        /* Should not use md_attr->reg_mem_types with protov2 */
+        ucs_assert(!context->config.ext.proto_enable);
+
         mem_types = md_attr->reg_mem_types | md_attr->alloc_mem_types;
         if ((md_index != UCP_NULL_RESOURCE) && !(mem_types & UCS_BIT(mem_type))) {
             continue;
