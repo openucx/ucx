@@ -334,7 +334,7 @@ print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
                uint64_t ctx_features, const ucp_ep_params_t *base_ep_params,
                size_t estimated_num_eps, size_t estimated_num_ppn,
                unsigned dev_type_bitmap, process_placement_t proc_placement,
-               const char *mem_size, const char *ip_addr, sa_family_t af)
+               const char *mem_spec, const char *ip_addr, sa_family_t af)
 {
     ucp_worker_h peer_worker = NULL;
     ucp_config_t *config;
@@ -376,8 +376,8 @@ print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
         goto out_release_config;
     }
 
-    if ((print_opts & PRINT_MEM_MAP) && (mem_size != NULL)) {
-        ucp_mem_print_info(mem_size, context, stdout);
+    if ((print_opts & PRINT_MEM_MAP) && (mem_spec != NULL)) {
+        ucp_mem_print_info(mem_spec, context, stdout);
     }
 
     if (print_opts & PRINT_UCP_CONTEXT) {
