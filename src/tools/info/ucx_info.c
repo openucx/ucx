@@ -12,6 +12,7 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/config/global_opts.h>
+#include <ucs/sys/string.h>
 #include <ucm/api/ucm.h>
 #include <getopt.h>
 #include <stdlib.h>
@@ -19,51 +20,83 @@
 #include <limits.h>
 
 
-static void usage() {
+static uint64_t supported_mem_types()
+{
+    static const uint64_t default_memory_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    ucp_context_attr_t context_attr;
+    ucp_params_t context_params;
+    ucp_context_h context;
+    ucs_status_t status;
+
+    context_params.field_mask = UCP_PARAM_FIELD_FEATURES;
+    context_params.features   = UCP_FEATURE_AM;
+    status = ucp_init(&context_params, NULL, &context);
+    if (status != UCS_OK) {
+        return default_memory_types;
+    }
+
+    context_attr.field_mask = UCP_ATTR_FIELD_MEMORY_TYPES;
+    status = ucp_context_query(context, &context_attr);
+    if (status != UCS_OK) {
+        context_attr.memory_types = default_memory_types;
+    }
+
+    ucp_cleanup(context);
+    return context_attr.memory_types;
+}
+
+static void usage()
+{
+    char buf[128];
+
     printf("Usage: ucx_info [options]\n");
-    printf("At least one of the following options has to be set:\n");
-    printf("  -v              Show version information\n");
-    printf("  -d              Show devices and transports\n");
-    printf("  -b              Show build configuration\n");
-    printf("  -y              Show type and structures information\n");
-    printf("  -s              Show system information\n");
-    printf("  -c              Show UCX configuration\n");
-    printf("  -C              Comment-out default configuration values\n");
-    printf("  -a              Show also hidden configuration\n");
-    printf("  -f              Display fully decorated output\n");
+    printf("At least one of the following options must be set:\n");
+    printf("  -v                   Show version information\n");
+    printf("  -d                   Show devices and transports\n");
+    printf("  -b                   Show build configuration\n");
+    printf("  -y                   Show type and structures information\n");
+    printf("  -s                   Show system information\n");
+    printf("  -c                   Show UCX configuration\n");
+    printf("  -C                   Comment-out default configuration values\n");
+    printf("  -a                   Show also hidden configuration\n");
+    printf("  -f                   Display fully decorated output\n");
     printf("\nUCP information (-u is required):\n");
-    printf("  -p              Show UCP context information\n");
-    printf("  -w              Show UCP worker information\n");
-    printf("  -e              Show UCP endpoint configuration\n");
-    printf("  -m <size>       Show UCP memory allocation method for a given size\n");
-    printf("  -u <features>   UCP context features to use. String of one or more of:\n");
-    printf("                    'a' : atomic operations\n");
-    printf("                    'r' : remote memory access\n");
-    printf("                    't' : tag matching \n");
-    printf("                    's' : stream \n");
-    printf("                    'm' : active messages \n");
-    printf("                  Modifiers to use in combination with above features:\n");
-    printf("                    'w' : wakeup\n");
-    printf("                    'e' : error handling\n");
+    printf("  -p                   Show UCP context information\n");
+    printf("  -w                   Show UCP worker information\n");
+    printf("  -e                   Show UCP endpoint configuration\n");
+    printf("  -m <size>[,<type>]   Show UCP memory allocation info for a given size and type\n");
+    printf("                       Supported memory types are: %s\n",
+           ucs_flags_str(buf, sizeof(buf), supported_mem_types(),
+                         ucs_memory_type_names));
+    printf("  -u <features>        UCP context features to use. String of one or more of:\n");
+    printf("                        'a' : atomic operations\n");
+    printf("                        'r' : remote memory access\n");
+    printf("                        't' : tag matching \n");
+    printf("                        's' : stream \n");
+    printf("                        'm' : active messages \n");
+    printf("                       Modifiers to use in combination with above features:\n");
+    printf("                        'w' : wakeup\n");
+    printf("                        'e' : error handling\n");
     printf("\nOther settings:\n");
-    printf("  -t <name>       Filter devices information using specified transport (requires -d)\n");
-    printf("  -n <count>      Estimated UCP endpoint count (for ucp_init)\n");
-    printf("  -N <count>      Estimated UCP endpoint count per node (for ucp_init)\n");
-    printf("  -D <type>       Set which device types to use when creating UCP context:\n");
-    printf("                    'all'  : all possible devices (default)\n");
-    printf("                    'shm'  : shared memory devices only\n");
-    printf("                    'net'  : network devices only\n");
-    printf("                    'self' : self transport only\n");
-    printf("  -P <type>       Set peer process placement for printing UCP endpoint configuration:\n");
-    printf("                    'self'  : same process (default)\n");
-    printf("                    'intra' : same node\n");
-    printf("                    'inter' : different node\n");
-    printf("  -A <ip>         Local IP device address to use for creating\n"
-           "                  endpoint in client/server mode\n");
-    printf("  -6              IPv6 address specified with option -A\n");
-    printf("  -T              Print system topology\n");
-    printf("  -M              Print memory copy bandwidth\n");
-    printf("  -h              Show this help message\n");
+    printf("  -t <name>            Show devices of the specified transport (requires -d)\n");
+    printf("  -n <count>           Estimated UCP endpoint count (for ucp_init)\n");
+    printf("  -N <count>           Estimated UCP endpoint count per node (for ucp_init)\n");
+    printf("  -D <type>            Set which device types to use when creating UCP context:\n");
+    printf("                         'all'  : all possible devices (default)\n");
+    printf("                         'shm'  : shared memory devices only\n");
+    printf("                         'net'  : network devices only\n");
+    printf("                         'self' : self transport only\n");
+    printf("  -P <type>            Set peer process placement for printing UCP endpoint\n"
+           "                       configuration:\n");
+    printf("                         'self'  : same process (default)\n");
+    printf("                         'intra' : same node\n");
+    printf("                         'inter' : different node\n");
+    printf("  -A <ip>              Local IP device address to use for creating\n"
+           "                       endpoint in client/server mode\n");
+    printf("  -6                   IPv6 address specified with option -A\n");
+    printf("  -T                   Print system topology\n");
+    printf("  -M                   Print memory copy bandwidth\n");
+    printf("  -h                   Show this help message\n");
     printf("\n");
 }
 
@@ -87,7 +120,7 @@ int main(int argc, char **argv)
     size_t ucp_num_eps;
     size_t ucp_num_ppn;
     unsigned print_opts;
-    char *tl_name, *mem_size;
+    char *tl_name, *mem_spec;
     const char *f;
     int c;
 
@@ -97,7 +130,7 @@ int main(int argc, char **argv)
     ucp_features             = 0;
     ucp_num_eps              = 1;
     ucp_num_ppn              = 1;
-    mem_size                 = NULL;
+    mem_spec                 = NULL;
     dev_type_bitmap          = UINT_MAX;
     proc_placement           = PROCESS_PLACEMENT_SELF;
     ucp_ep_params.field_mask = 0;
@@ -143,7 +176,7 @@ int main(int argc, char **argv)
             break;
         case 'm':
             print_opts |= PRINT_MEM_MAP;
-            mem_size = optarg;
+            mem_spec    = optarg;
             break;
         case 't':
             tl_name = optarg;
@@ -280,7 +313,7 @@ int main(int argc, char **argv)
 
         return print_ucp_info(print_opts, print_flags, ucp_features,
                               &ucp_ep_params, ucp_num_eps, ucp_num_ppn,
-                              dev_type_bitmap, proc_placement, mem_size,
+                              dev_type_bitmap, proc_placement, mem_spec,
                               ip_addr, ip_addr_family);
     }
 

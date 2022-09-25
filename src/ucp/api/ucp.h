@@ -2864,11 +2864,16 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr);
  * including the mapped memory length, the allocation method, and other useful
  * information associated with the memory handle.
  *
- * @param [in] mem_size     Size of the memory to map.
+ * @param [in] mem_spec     Size and optional type of the memory to map.
+ *                          The format of the string is: "<size>[,<type>]".
+ *                          For example:
+ *                           - "32768"   : allocate 32 kilobytes of host memory.
+ *                           - "1m,cuda" : allocate 1 megabayte of cuda memory.
  * @param [in] context      The context on which the memory is mapped.
  * @param [in] stream       Output stream on which to print the information.
  */
-void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream);
+void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
+                        FILE *stream);
 
 
 /**
