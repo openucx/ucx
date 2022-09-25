@@ -621,14 +621,13 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
 
 ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
                                      const uct_device_addr_t *device_addr,
-                                     const uct_iface_addr_t *iface_addr,
                                      const uct_ep_addr_t *ep_addr,
                                      const uct_ep_connect_to_ep_params_t *params)
 {
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
 
-    return iface->internal_ops->ep_connect_to_ep_v2(ep, device_addr, iface_addr,
-                                                    ep_addr, params);
+    return iface->internal_ops->ep_connect_to_ep_v2(ep, device_addr, ep_addr,
+                                                    params);
 }
 
 ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)

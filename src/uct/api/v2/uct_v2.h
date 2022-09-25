@@ -297,6 +297,23 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief uct_ep_connect_to_ep_v2 operation fields and flags
+ * 
+ * The enumeration allows specifying which fields in @ref
+ * uct_ep_connect_to_ep_params_t are present and operation flags are used. It is
+ * used to enable backward compatibility support.
+ */
+typedef enum {
+    /** Device address length */
+    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(0),
+
+    /** Endpoint address length */
+    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH     = UCS_BIT(1)
+} uct_ep_connect_to_ep_param_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Endpoint attributes, capabilities and limitations.
  */
 struct uct_ep_attr {
@@ -480,9 +497,24 @@ typedef struct uct_iface_is_reachable_params {
  */
 typedef struct uct_ep_connect_to_ep_params {
     /**
-     * Reserved, must be 0.
+     * Mask of valid fields in this structure and operation flags, using
+     * bits from @ref uct_ep_connect_to_ep_param_field_t. Fields not specified
+     * in this mask will be ignored. Provides ABI compatibility with respect to
+     * adding new fields.
      */
     uint64_t                      field_mask;
+
+    /**
+     * Device address length. If not provided, the transport will assume a
+     * default minimal length according to the address buffer contents.
+     */
+    size_t                        device_addr_length;
+
+    /**
+     * Endpoint address length. If not provided, the transport will assume a
+     * default minimal length according to the address buffer contents.
+     */
+    size_t                        ep_addr_length;
 } uct_ep_connect_to_ep_params_t;
 
 
@@ -808,7 +840,6 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
  */
 ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
                                      const uct_device_addr_t *device_addr,
-                                     const uct_iface_addr_t *iface_addr,
                                      const uct_ep_addr_t *ep_addr,
                                      const uct_ep_connect_to_ep_params_t *params);
 
