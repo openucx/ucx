@@ -11,8 +11,6 @@
 #include "proto_rndv.inl"
 #include "rndv_mtype.inl"
 
-#include <ucp/proto/proto_debug.h>
-
 
 enum {
     UCP_PROTO_RNDV_RKEY_PTR_STAGE_FETCH = UCP_PROTO_STAGE_START,

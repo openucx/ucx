@@ -41,6 +41,14 @@ enum {
     UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND
 };
 
+
+typedef struct {
+    ucp_proto_rndv_ack_priv_t ack;
+    ucp_proto_single_priv_t   spriv;
+    ucp_md_index_t            alloc_md_index;
+} ucp_proto_rndv_rkey_ptr_mtype_priv_t;
+
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_put_common_send(ucp_request_t *req,
                                const ucp_proto_multi_lane_priv_t *lpriv,
@@ -513,12 +521,12 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
 
 static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_init_params(
         const ucp_proto_init_params_t *init_params,
-        ucp_md_map_t initial_reg_md_map, size_t max_length)
+        ucp_md_index_t alloc_md_index, size_t max_length)
 {
-    ucp_context_t *context               = init_params->worker->context;
-    uint64_t rndv_modes                  = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
-    ucp_proto_rndv_bulk_priv_t *rpriv    = init_params->priv;
-    ucp_proto_multi_init_params_t params = {
+    ucp_proto_rndv_rkey_ptr_mtype_priv_t *rpriv = init_params->priv;
+    ucp_context_t *context                = init_params->worker->context;
+    uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
+    ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.overhead      = 0,
         .super.latency       = 0,
@@ -531,40 +539,44 @@ static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_init_params(
                                             cap.put.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.max_zcopy),
-        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.put.max_iov),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_LAST,
         .super.memtype_op    = UCT_EP_OP_GET_ZCOPY,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR,
-        .max_lanes           = context->config.ext.max_rndv_lanes,
-        .initial_reg_md_map  = initial_reg_md_map,
-        .first.tl_cap_flags  = 0,
-        .first.lane_type     = UCP_LANE_TYPE_RKEY_PTR,
-        .middle.tl_cap_flags = 0,
-        .middle.lane_type    = UCP_LANE_TYPE_RKEY_PTR
+        .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
+        .tl_cap_flags        = 0,
     };
-    size_t bulk_priv_size;
+    ucp_proto_caps_t rkey_ptr_caps;
     ucs_status_t status;
 
-    status = ucp_proto_rndv_bulk_init(&params, rpriv,
-                                      UCP_PROTO_RNDV_RKEY_PTR_DESC,
-                                      UCP_PROTO_RNDV_ATP_NAME, &bulk_priv_size);
+    rpriv->alloc_md_index = alloc_md_index;
+
+    params.super.super.caps = &rkey_ptr_caps;
+    status = ucp_proto_single_init_priv(&params, &rpriv->spriv);
     if (status != UCS_OK) {
         return status;
     }
 
-    return UCS_OK;
+    *init_params->priv_size = sizeof(*rpriv);
+    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_RKEY_PTR_DESC,
+                                     &rkey_ptr_caps, UCS_LINEAR_FUNC_ZERO,
+                                     &rpriv->ack);
+
+    ucp_proto_select_caps_cleanup(&rkey_ptr_caps);
+
+    return status;
 }
 
 static ucs_status_t
 ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_t *context = init_params->worker->context;
-    unsigned found_md      = 0;
+    ucp_context_t *context        = init_params->worker->context;
+    ucp_md_index_t alloc_md_index = UCP_NULL_RESOURCE;
+    ucp_md_index_t md_index;
     ucs_status_t status;
     ucp_md_map_t mdesc_md_map;
     size_t frag_size;
-    ucp_md_index_t md_index;
     const uct_md_attr_t *md_attr;
 
     if (!context->config.ext.rndv_shm_ppln_enable) {
@@ -589,17 +601,17 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
             !(md_attr->cap.flags & UCT_MD_FLAG_REG) &&
             (md_attr->cap.access_mem_types &
              UCS_BIT(init_params->rkey_config_key->mem_type))) {
-            found_md = UCS_BIT(md_index);
+            alloc_md_index = md_index;
             break;
         }
     }
 
-    if (found_md == 0) {
+    if (alloc_md_index == UCP_NULL_RESOURCE) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_rndv_rkey_ptr_mtype_init_params(init_params, mdesc_md_map,
-                                                     frag_size);
+    return ucp_proto_rndv_rkey_ptr_mtype_init_params(init_params,
+                                                     alloc_md_index, frag_size);
 }
 
 static void ucp_proto_rndv_rkey_ptr_mtype_completion(uct_completion_t *uct_comp)
@@ -631,16 +643,15 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req    = ucs_container_of(uct_req, ucp_request_t, send.uct);
     ucp_context_h context = req->send.ep->worker->context;
-    ucp_md_index_t rkey_ptr_md_index  = UCP_NULL_RESOURCE;
     uint64_t remote_address           = req->send.rndv.remote_address;
     ucs_memory_type_t local_mem_type  = req->send.state.dt_iter.mem_info.type;
     ucs_memory_type_t remote_mem_type = req->send.rndv.rkey->mem_type;
     ucp_md_map_t md_map               = req->send.rndv.rkey->md_map;
     void *rkey_buffer                 = req->send.rndv.rkey_buffer;
+    const ucp_proto_rndv_rkey_ptr_mtype_priv_t
+                               *rpriv = req->send.proto_config->priv;
     ucp_lane_index_t mem_type_rma_lane;
     ucp_ep_peer_mem_data_t *ppln_data;
-    const uct_md_attr_t *md_attr;
-    ucp_md_index_t md_index;
     ucp_ep_h mem_type_ep;
     unsigned rkey_index;
     void *local_ptr;
@@ -648,38 +659,27 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
     ucs_assert(req->send.rndv.rkey_buffer != NULL);
+    ucs_assert(rpriv->alloc_md_index != UCP_NULL_RESOURCE);
 
     req->send.rndv.rkey_buffer = NULL;
 
     mem_type_ep = req->send.ep->worker->mem_type_ep[local_mem_type];
     if (mem_type_ep == NULL) {
+        ucp_proto_request_abort(req, UCS_ERR_UNREACHABLE);
         return UCS_OK;
     }
+
     mem_type_rma_lane = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
-
-    ucs_for_each_bit(md_index, md_map) {
-        md_attr = &context->tl_mds[md_index].attr;
-        if ((md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) &&
-            /* Do not use xpmem, because cuda_copy registration will fail and
-             * performance will not be optimal. */
-            !(md_attr->cap.flags & UCT_MD_FLAG_REG) &&
-            (md_attr->cap.access_mem_types & UCS_BIT(remote_mem_type))) {
-            rkey_ptr_md_index = md_index;
-            break;
-        }
-    }
-
-    ucs_assert(rkey_ptr_md_index != UCP_NULL_RESOURCE);
-
-    ppln_data = ucp_ep_peer_mem_get(context, req->send.ep, remote_address,
-                                    req->send.state.dt_iter.length, rkey_buffer,
-                                    rkey_ptr_md_index);
+    ppln_data         = ucp_ep_peer_mem_get(context, req->send.ep,
+                                            remote_address,
+                                            req->send.state.dt_iter.length,
+                                            rkey_buffer, rpriv->alloc_md_index);
     if (ppln_data->rkey == NULL) {
         ucp_proto_request_abort(req, UCS_ERR_UNREACHABLE);
         return UCS_OK;
     }
 
-    rkey_index = ucs_bitmap2idx(ppln_data->rkey->md_map, rkey_ptr_md_index);
+    rkey_index = ucs_bitmap2idx(ppln_data->rkey->md_map, rpriv->alloc_md_index);
     status     = uct_rkey_ptr(ppln_data->rkey->tl_rkey[rkey_index].cmpt,
                               &ppln_data->rkey->tl_rkey[rkey_index].rkey,
                               req->send.rndv.remote_address, &local_ptr);
@@ -722,35 +722,24 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
 }
 
 static ucs_status_t
-ucp_proto_rndv_rkey_ptr_mtype_atp_send(ucp_request_t *req,
-                                       ucp_lane_index_t lane)
+ucp_proto_rndv_rkey_ptr_mtype_atp_progress(uct_pending_req_t *uct_req)
 {
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    const ucp_proto_rndv_rkey_ptr_mtype_priv_t
+                *rpriv = req->send.proto_config->priv;
+
     ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
+
+    ucs_assert(rpriv->ack.lane != UCP_NULL_LANE);
 
     pack_ctx.req      = req;
     pack_ctx.ack_size = req->send.state.dt_iter.length;
 
-    if (pack_ctx.ack_size == 0) {
-        return UCS_OK; /* Skip sending 0-length ATP */
-    }
-
-    return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
-                                          ucp_proto_rndv_put_common_pack_atp,
-                                          &pack_ctx, sizeof(ucp_rndv_ack_hdr_t),
-                                          0);
-}
-
-static ucs_status_t
-ucp_proto_rndv_rkey_ptr_mtype_atp_progress(uct_pending_req_t *uct_req)
-{
-    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-    const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
-    ucp_lane_map_t atp_map                  = UCS_BIT(rpriv->super.lane);
-
-    ucs_assert(rpriv->super.lane != UCP_NULL_LANE);
-
-    return ucp_proto_multi_lane_map_progress(
-            req, &atp_map, ucp_proto_rndv_rkey_ptr_mtype_atp_send);
+    return ucp_proto_am_bcopy_single_progress(
+        req, UCP_AM_ID_RNDV_ATP, rpriv->ack.lane,
+        ucp_proto_rndv_put_common_pack_atp, &pack_ctx,
+        sizeof(ucp_rndv_ack_hdr_t), ucp_request_invoke_uct_completion_success,
+        0);
 }
 
 static void
@@ -773,5 +762,6 @@ ucp_proto_t ucp_rndv_rkey_ptr_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY] = ucp_proto_rndv_rkey_ptr_mtype_copy_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_rkey_ptr_mtype_atp_progress,
     },
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
 };
