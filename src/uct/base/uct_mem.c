@@ -70,7 +70,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
     const char *alloc_name;
     const uct_alloc_method_t *method;
     ucs_memory_type_t mem_type;
-    uct_md_attr_t md_attr;
+    uct_md_attr_v2_t md_attr;
     ucs_status_t status;
     unsigned flags;
     size_t alloc_length;
@@ -120,26 +120,33 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 alloc_length = length;
                 address      = uct_mem_alloc_params_get_address(params);
                 md           = params->mds.mds[md_index];
-                status = uct_md_query(md, &md_attr);
+                status = uct_md_query_v2(md, &md_attr);
                 if (status != UCS_OK) {
                     ucs_error("Failed to query MD");
                     goto out;
                 }
 
                 /* Check if MD supports allocation */
-                if (!(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
+                if (!(md_attr.flags & UCT_MD_FLAG_ALLOC)) {
                     continue;
                 }
 
                 /* Check if MD supports allocation with fixed address
                  * if it's requested */
                 if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
-                    !(md_attr.cap.flags & UCT_MD_FLAG_FIXED)) {
+                    !(md_attr.flags & UCT_MD_FLAG_FIXED)) {
+                    continue;
+                }
+
+                /* Check if MD supports allocation of memory as exported if
+                 * it's requested */
+                if ((flags & UCT_MD_MEM_FLAG_EXPORT) &&
+                    !(md_attr.flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
                     continue;
                 }
 
                 /* Check if MD supports allocation on requested mem_type */
-                if (!(md_attr.cap.alloc_mem_types & UCS_BIT(mem_type))) {
+                if (!(md_attr.alloc_mem_types & UCS_BIT(mem_type))) {
                     continue;
                 }
 
