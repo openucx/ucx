@@ -397,7 +397,7 @@ ucp_memh_uct_register(ucp_context_h context, ucp_mem_h memh,
 
 static ucs_status_t
 ucp_memh_register(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map,
-                  void *address, size_t length, unsigned uct_flags)
+                  unsigned uct_flags)
 {
     ucp_md_index_t md_index;
     ucs_status_t status;
@@ -517,19 +517,31 @@ out:
     return UCS_OK;
 }
 
+/**
+ * Updates a memory handle by a parent's memory handle which stored in RCACHE.
+ *
+ * @param [in]  memh          Memory handle that should be updated.
+ * @param [in]  cache_md_map  MD map of registered UCT memory keys stored in a
+ *                            parent's RCACHE memory handle.
+ * @param [out] memh_md_map_p Memory handle's MD map that should be updated by
+ *                            MDs of UCT memory keys that copied from
+ *                            @a cache_md_map.
+ * @param [out] md_map_p      MD map that should be updated and it specifies
+ *                            which MDs were not copied from a parent's RCACHE
+ *                            memory handle.
+ */
 static UCS_F_ALWAYS_INLINE void
 ucp_memh_update_from_parent_memh(ucp_mem_h memh,
                                  ucp_md_map_t cache_md_map,
                                  ucp_md_map_t *memh_md_map_p,
                                  ucp_md_map_t *md_map_p)
 {
-    ucp_md_index_t md_index, memh_index;
+    ucp_md_index_t md_index;
 
     ucs_for_each_bit(md_index, cache_md_map) {
-        memh_index            = md_index;
-        memh->uct[memh_index] = memh->parent->uct[memh_index];
-        *memh_md_map_p       |= UCS_BIT(md_index);
-        *md_map_p            &= ~UCS_BIT(md_index);
+        memh->uct[md_index] = memh->parent->uct[md_index];
+        *memh_md_map_p     |= UCS_BIT(md_index);
+        *md_map_p          &= ~UCS_BIT(md_index);
     }
 }
 
@@ -544,8 +556,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags)
     ucs_status_t status;
 
     if (context->rcache == NULL) {
-        status = ucp_memh_register(context, memh, reg_md_map, address, length,
-                                   uct_flags);
+        status = ucp_memh_register(context, memh, reg_md_map, uct_flags);
         if (status != UCS_OK) {
             goto err;
         }
@@ -559,8 +570,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags)
         ucp_memh_update_from_parent_memh(memh, cache_md_map, &memh->md_map,
                                          &reg_md_map);
 
-        status = ucp_memh_register(context, memh, reg_md_map, address, length,
-                                   uct_flags);
+        status = ucp_memh_register(context, memh, reg_md_map, uct_flags);
         if (status != UCS_OK) {
             goto err_put;
         }
@@ -615,7 +625,7 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
     ucs_assert(memh->mem_type == mem_type);
 
     status = ucp_memh_register(context, memh, ~memh->md_map & reg_md_map,
-                               reg_address, reg_length, uct_flags);
+                               uct_flags);
     if (status != UCS_OK) {
         goto err_free_memh;
     }
@@ -1261,7 +1271,6 @@ ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
 
     status = ucp_memh_register(context, &memh.memh,
                                context->reg_md_map[UCS_MEMORY_TYPE_HOST],
-                               &buff, sizeof(buff),
                                UCT_MD_MEM_ACCESS_ALL |
                                UCT_MD_MEM_FLAG_HIDE_ERRORS);
     if (status != UCS_OK) {
