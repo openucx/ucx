@@ -617,11 +617,6 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
         goto out;
     }
 
-    /* Reinitialize address and length, because they could be greater in case
-     * a region which includes the searched region was found in the rcache */
-    reg_address = ucp_memh_address(memh);
-    reg_length  = ucp_memh_length(memh);
-
     ucs_assert(memh->mem_type == mem_type);
 
     status = ucp_memh_register(context, memh, ~memh->md_map & reg_md_map,
