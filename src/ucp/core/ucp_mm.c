@@ -286,9 +286,8 @@ static void ucp_memh_uct_deregister(ucp_context_h context, ucp_mem_h memh,
     ucs_status_t status;
 
     ucs_assert(*md_map_p & UCS_BIT(md_index));
-    ucs_assertv(md_index != memh->alloc_md_index,
-                "memh %p: md_index %u alloc_md_index %u", memh, md_index,
-                memh->alloc_md_index);
+    ucs_assertv(md_index != memh->alloc_md_index, "memh %p: alloc_md_index %u",
+                memh, memh->alloc_md_index);
 
     ucs_trace("de-registering memh[%d]=%p", md_index, memh->uct[md_index]);
     ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
@@ -924,11 +923,10 @@ static ucs_status_t ucp_advice2uct(unsigned ucp_advice, uct_mem_advice_t *uct_ad
 static ucs_status_t ucp_memh_uct_mem_advise(ucp_context_h context,
                                             ucp_mem_h memh,
                                             ucp_md_index_t md_index,
-                                            ucp_md_index_t uct_memh_offset,
                                             void *address, size_t length,
                                             uct_mem_advice_t uct_advice)
 {
-    uct_mem_h uct_memh = memh->uct[uct_memh_offset + md_index];
+    uct_mem_h uct_memh = memh->uct[md_index];
 
     if (!(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_ADVISE) ||
         (uct_memh == NULL)) {
@@ -954,26 +952,31 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
                             UCP_MEM_ADVISE_PARAM_FIELD_ADVICE)) {
         return UCS_ERR_INVALID_PARAM;
     }
+
     if ((params->address < ucp_memh_address(memh)) ||
         (UCS_PTR_BYTE_OFFSET(params->address, params->length) >
          UCS_PTR_BYTE_OFFSET(ucp_memh_address(memh), ucp_memh_length(memh)))) {
         return UCS_ERR_INVALID_PARAM;
     }
+
     status = ucp_advice2uct(params->advice, &uct_advice);
     if (status != UCS_OK) {
         return status;
     }
+
     ucs_debug("advice buffer %p length %llu memh %p flags %x",
                params->address, (unsigned long long)params->length, memh,
                params->advice);
+
     if (ucp_memh_is_zero_length(memh)) {
         return UCS_OK;
     }
+
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
     status = UCS_OK;
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        tmp_status = ucp_memh_uct_mem_advise(context, memh, md_index, 0,
+        tmp_status = ucp_memh_uct_mem_advise(context, memh, md_index,
                                              params->address, params->length,
                                              uct_advice);
         if (tmp_status != UCS_OK) {
