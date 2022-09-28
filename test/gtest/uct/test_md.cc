@@ -102,7 +102,8 @@ void test_md::init()
                            GetParam().component, GetParam().md_name.c_str(),
                            m_md_config);
 
-    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    m_md_attr.field_mask = UINT64_MAX;
+    ucs_status_t status  = uct_md_query_v2(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
 
     check_skip_test();
@@ -127,13 +128,13 @@ void test_md::modify_config(const std::string& name, const std::string& value,
 
 bool test_md::check_caps(uint64_t flags)
 {
-    return ((md() == NULL) || ucs_test_all_flags(m_md_attr.cap.flags, flags));
+    return ((md() == NULL) || ucs_test_all_flags(m_md_attr.flags, flags));
 }
 
 bool test_md::check_reg_mem_type(ucs_memory_type_t mem_type)
 {
     return ((md() == NULL) || (check_caps(UCT_MD_FLAG_REG) &&
-                (m_md_attr.cap.reg_mem_types & UCS_BIT(mem_type))));
+                (m_md_attr.reg_mem_types & UCS_BIT(mem_type))));
 }
 
 void test_md::alloc_memory(void **address, size_t size, char *fill_buffer,
@@ -273,7 +274,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     params.mds.mds         = &md_ref;
     params.mds.count       = 1;
 
-    ucs_for_each_bit(mem_type, md_attr().cap.alloc_mem_types) {
+    ucs_for_each_bit(mem_type, md_attr().alloc_mem_types) {
         for (unsigned i = 0; i < 300; ++i) {
             size = orig_size = ucs::rand() % 65536;
             if (size == 0) {
@@ -311,11 +312,11 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
     int alloc_mem_type;
     void *address;
 
-    if (!md_attr().cap.detect_mem_types) {
+    if (!md_attr().detect_mem_types) {
         UCS_TEST_SKIP_R("MD can't detect any memory types");
     }
 
-    ucs_for_each_bit(alloc_mem_type, md_attr().cap.detect_mem_types) {
+    ucs_for_each_bit(alloc_mem_type, md_attr().detect_mem_types) {
         ucs_assert(alloc_mem_type < UCS_MEMORY_TYPE_LAST); /* for coverity */
 
         alloc_memory(&address, buffer_size, NULL,
@@ -375,7 +376,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
 
 UCS_TEST_P(test_md, mem_query) {
     for (auto mem_type : mem_buffer::supported_mem_types()) {
-        if (!(md_attr().cap.detect_mem_types & UCS_BIT(mem_type))) {
+        if (!(md_attr().detect_mem_types & UCS_BIT(mem_type))) {
             continue;
         }
 
@@ -437,7 +438,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
 
     for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
         ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
-        if (!(md_attr().cap.reg_mem_types & UCS_BIT(mem_type_id))) {
+        if (!(md_attr().reg_mem_types & UCS_BIT(mem_type_id))) {
             UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
                              << "registration is not supported by "
                              << GetParam().md_name;
@@ -479,7 +480,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
 
     for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
         ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
-        if (!(md_attr().cap.reg_mem_types & UCS_BIT(mem_type_id))) {
+        if (!(md_attr().reg_mem_types & UCS_BIT(mem_type_id))) {
             UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
                              << " registration is not supported by "
                              << GetParam().md_name;

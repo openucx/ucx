@@ -136,7 +136,9 @@ public:
 
     void test_general(int wnd, int s_thresh, int h_thresh, bool is_fc_enabled);
 
-    virtual void test_pending_grant(int wnd, uint64_t *wait_fc_seq = NULL);
+    virtual void wait_fc_hard_resend(entity *e);
+
+    virtual void test_pending_grant(int16_t wnd);
 
     void test_pending_purge(int wnd, int num_pend_sends);
 

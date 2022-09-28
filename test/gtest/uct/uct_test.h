@@ -14,6 +14,7 @@
 
 #include <poll.h>
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
 #include <ucs/async/pipe.h>
@@ -158,7 +159,7 @@ protected:
 
         uct_md_h md() const;
 
-        const uct_md_attr& md_attr() const;
+        const uct_md_attr_v2_t& md_attr() const;
 
         uct_worker_h worker() const;
 
@@ -226,7 +227,7 @@ protected:
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
-        uct_md_attr_t               m_md_attr;
+        uct_md_attr_v2_t            m_md_attr;
         mutable async_wrapper       m_async;
         ucs::handle<uct_worker_h>   m_worker;
         ucs::handle<uct_cm_h>       m_cm;
@@ -349,6 +350,25 @@ protected:
         }
     }
 
+    template <typename T>
+    void wait_for_value_change(volatile T *var, entity *e = NULL,
+                               bool progress = true,
+                               double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(timeout) *
+                              ucs::test_time_multiplier();
+        T initial_value     = *var;
+
+        while ((ucs_get_time() < deadline) && (*var == initial_value)) {
+            if (progress) {
+                short_progress_loop(DEFAULT_DELAY_MS, e);
+            } else {
+                twait();
+            }
+        }
+    }
+
     virtual void init();
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value,
@@ -374,7 +394,8 @@ protected:
     const entity& ent(unsigned index) const;
     unsigned progress() const;
     void flush(ucs_time_t deadline = ULONG_MAX) const;
-    virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
+    virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS,
+                                     entity *e = NULL) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
     static void set_cm_resources(std::vector<resource>& all_resources);
     static bool is_interface_usable(struct ifaddrs *ifa, const char *name);

@@ -105,6 +105,7 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
         return;
     }
 
+    UCP_WORKER_STAT_RNDV(req->send.ep->worker, GET_ZCOPY, +1);
     ucp_proto_rndv_recv_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
 }
 

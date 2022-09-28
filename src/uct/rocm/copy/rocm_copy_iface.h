@@ -21,6 +21,8 @@ typedef struct uct_rocm_copy_iface {
     struct {
         size_t                  d2h_thresh;
         size_t                  h2d_thresh;
+        size_t                  short_d2h_thresh;
+        size_t                  short_h2d_thresh;
     } config;
 } uct_rocm_copy_iface_t;
 
@@ -28,6 +30,8 @@ typedef struct uct_rocm_copy_iface_config {
     uct_iface_config_t  super;
     size_t              d2h_thresh;
     size_t              h2d_thresh;
+    size_t              short_d2h_thresh;
+    size_t              short_h2d_thresh;
 } uct_rocm_copy_iface_config_t;
 
 #endif

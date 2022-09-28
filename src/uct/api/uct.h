@@ -695,23 +695,58 @@ typedef enum {
  * @brief  Memory domain capability flags.
  */
 enum {
-    UCT_MD_FLAG_ALLOC      = UCS_BIT(0),  /**< MD supports memory allocation */
-    UCT_MD_FLAG_REG        = UCS_BIT(1),  /**< MD supports memory registration */
-    UCT_MD_FLAG_NEED_MEMH  = UCS_BIT(2),  /**< The transport needs a valid local
-                                               memory handle for zero-copy operations */
-    UCT_MD_FLAG_NEED_RKEY  = UCS_BIT(3),  /**< The transport needs a valid
-                                               remote memory key for remote memory
-                                               operations */
-    UCT_MD_FLAG_ADVISE     = UCS_BIT(4),  /**< MD supports memory advice */
-    UCT_MD_FLAG_FIXED      = UCS_BIT(5),  /**< MD supports memory allocation with
-                                               fixed address */
-    UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6),  /**< MD supports direct access to
-                                               remote memory via a pointer that
-                                               is returned by @ref uct_rkey_ptr */
-    UCT_MD_FLAG_SOCKADDR   = UCS_BIT(7),  /**< MD support for client-server
-                                               connection establishment via
-                                               sockaddr */
-    UCT_MD_FLAG_INVALIDATE = UCS_BIT(8)   /**< MD supports memory invalidation */
+    /**
+     * MD supports memory allocation
+     */
+    UCT_MD_FLAG_ALLOC         = UCS_BIT(0),
+
+    /** 
+     * MD supports memory registration
+     */
+    UCT_MD_FLAG_REG           = UCS_BIT(1),
+
+    /**
+     * The transport needs a valid local memory handle for zero-copy operations
+     */
+    UCT_MD_FLAG_NEED_MEMH     = UCS_BIT(2),
+
+    /**
+     * The transport needs a valid remote memory key for remote memory
+     * operations
+     */
+    UCT_MD_FLAG_NEED_RKEY     = UCS_BIT(3),
+
+    /**
+     * MD supports memory advice
+     */
+    UCT_MD_FLAG_ADVISE        = UCS_BIT(4),
+
+    /**
+     * MD supports memory allocation with fixed address
+     */
+    UCT_MD_FLAG_FIXED         = UCS_BIT(5),
+
+    /**
+     * MD supports direct access to remote memory via a pointer that is
+     * returned by @ref uct_rkey_ptr
+     */
+    UCT_MD_FLAG_RKEY_PTR      = UCS_BIT(6),
+
+    /**
+     * MD support for client-server connection establishment via sockaddr
+     */
+    UCT_MD_FLAG_SOCKADDR      = UCS_BIT(7),
+
+    /**
+     * MD supports memory invalidation
+     */
+    UCT_MD_FLAG_INVALIDATE    = UCS_BIT(8),
+
+    /**
+     * MD supports exporting memory keys with another process using the same
+     * device or attaching to an exported memory key.
+     */
+    UCT_MD_FLAG_EXPORTED_MKEY = UCS_BIT(9)
 };
 
 /**
@@ -719,41 +754,77 @@ enum {
  * @brief  Memory allocation/registration flags.
  */
 enum uct_md_mem_flags {
-    UCT_MD_MEM_FLAG_NONBLOCK    = UCS_BIT(0), /**< Hint to perform non-blocking
-                                                   allocation/registration: page
-                                                   mapping may be deferred until
-                                                   it is accessed by the CPU or a
-                                                   transport. */
-    UCT_MD_MEM_FLAG_FIXED       = UCS_BIT(1), /**< Place the mapping at exactly
-                                                   defined address */
-    UCT_MD_MEM_FLAG_LOCK        = UCS_BIT(2), /**< Registered memory should be
-                                                   locked. May incur extra cost for
-                                                   registration, but memory access
-                                                   is usually faster. */
-    UCT_MD_MEM_FLAG_HIDE_ERRORS = UCS_BIT(3), /**< Hide errors on memory registration.
-                                                   In some cases registration failure
-                                                   is not an error (e. g. for merged
-                                                   memory regions). */
+    /**
+     * Hint to perform non-blocking allocation/registration: page mapping may
+     * be deferred until it is accessed by the CPU or a transport.
+     */
+    UCT_MD_MEM_FLAG_NONBLOCK        = UCS_BIT(0),
 
-    /* memory access flags */
-    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
-    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
-    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
-    UCT_MD_MEM_ACCESS_LOCAL_READ    = UCS_BIT(8), /**< enable local read access */
-    UCT_MD_MEM_ACCESS_LOCAL_WRITE   = UCS_BIT(9), /**< enable local write access */
+    /**
+     * Place the mapping at exactly defined address.
+     */
+    UCT_MD_MEM_FLAG_FIXED           = UCS_BIT(1),
 
-    /** enable local and remote access for all operations */
-    UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
-                              UCT_MD_MEM_ACCESS_REMOTE_GET|
-                              UCT_MD_MEM_ACCESS_REMOTE_ATOMIC|
-                              UCT_MD_MEM_ACCESS_LOCAL_READ|
-                              UCT_MD_MEM_ACCESS_LOCAL_WRITE),
+    /**
+     * Registered memory should be locked. May incur extra cost for
+     * registration, but memory access is usually faster.
+     */
+    UCT_MD_MEM_FLAG_LOCK            = UCS_BIT(2),
 
-    /** enable local and remote access for put and get operations */
-    UCT_MD_MEM_ACCESS_RMA = (UCT_MD_MEM_ACCESS_REMOTE_PUT|
-                             UCT_MD_MEM_ACCESS_REMOTE_GET|
-                             UCT_MD_MEM_ACCESS_LOCAL_READ|
-                             UCT_MD_MEM_ACCESS_LOCAL_WRITE)
+    /**
+     * Hide errors on memory registration. In some cases registration failure
+     * is not an error (e. g. for merged memory regions).
+     */
+    UCT_MD_MEM_FLAG_HIDE_ERRORS     = UCS_BIT(3),
+
+    /**
+     * The flag is used to indicate that the memory region can be accessed by
+     * another process using the same device to perform UCT operations.
+     */
+    UCT_MD_MEM_FLAG_EXPORT          = UCS_BIT(4),
+
+    /* Memory access flags */
+    /**
+     * Enable remote put access.
+     */
+    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), 
+
+    /**
+     * Enable remote get access.
+     */
+    UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6),
+
+    /**
+     * Enable remote atomic access.
+     */
+    UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7),
+
+    /**
+     * Enable local read access.
+     */
+    UCT_MD_MEM_ACCESS_LOCAL_READ    = UCS_BIT(8),
+
+    /**
+     * Enable local write access.
+     */
+    UCT_MD_MEM_ACCESS_LOCAL_WRITE   = UCS_BIT(9),
+
+    /**
+     * Enable local and remote access for all operations.
+     */
+    UCT_MD_MEM_ACCESS_ALL           = (UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                                       UCT_MD_MEM_ACCESS_REMOTE_GET |
+                                       UCT_MD_MEM_ACCESS_REMOTE_ATOMIC |
+                                       UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                       UCT_MD_MEM_ACCESS_LOCAL_WRITE),
+
+    /**
+     * Enable local and remote access for put and get operations.
+     */
+    UCT_MD_MEM_ACCESS_RMA           = (UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                                       UCT_MD_MEM_ACCESS_REMOTE_GET |
+                                       UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                       UCT_MD_MEM_ACCESS_LOCAL_WRITE)
 };
 
 
@@ -1436,7 +1507,6 @@ struct uct_md_attr {
         size_t               max_reg;   /**< Maximal registration size */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
-        uint64_t             cache_mem_types; /**< Bitmap of memory types that can be cached for this Memory Domain */
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
         uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on */
         uint64_t             access_mem_types; /**< Memory types that Memory Domain can access */

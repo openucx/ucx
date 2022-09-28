@@ -116,12 +116,12 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md,
 }
 
 static ucs_status_t
-uct_ugni_rkey_pack(uct_md_h md, uct_mem_h memh,
+uct_ugni_mkey_pack(uct_md_h md, uct_mem_h memh,
                    const uct_md_mkey_pack_params_t *params,
-                   void *rkey_buffer)
+                   void *mkey_buffer)
 {
     gni_mem_handle_t *mem_hndl = memh;
-    uint64_t *ptr              = rkey_buffer;
+    uint64_t *ptr              = mkey_buffer;
 
     ptr[0] = UCT_UGNI_RKEY_MAGIC;
     ptr[1] = mem_hndl->qword1;
@@ -195,7 +195,7 @@ uct_ugni_md_open(uct_component_h component,const char *md_name,
     md_ops.mem_free           = (void*)ucs_empty_function;
     md_ops.mem_reg            = uct_ugni_mem_reg;
     md_ops.mem_dereg          = uct_ugni_mem_dereg;
-    md_ops.mkey_pack          = uct_ugni_rkey_pack;
+    md_ops.mkey_pack          = uct_ugni_mkey_pack;
     md_ops.detect_memory_type = ucs_empty_function_return_unsupported;
 
     md.super.ops              = &md_ops;

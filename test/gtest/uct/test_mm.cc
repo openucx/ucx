@@ -112,7 +112,7 @@ public:
 
     bool check_md_caps(uint64_t flags) {
         FOR_EACH_ENTITY(iter) {
-            if (!(ucs_test_all_flags((*iter)->md_attr().cap.flags, flags))) {
+            if (!(ucs_test_all_flags((*iter)->md_attr().flags, flags))) {
                 return false;
             }
         }
@@ -221,7 +221,7 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, open_for_posix,
 UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
                      !check_md_caps(UCT_MD_FLAG_ALLOC)) {
 
-    size_t size               = ucs_min(100000u, m_e1->md_attr().cap.max_alloc);
+    size_t size               = ucs_min(100000u, m_e1->md_attr().max_alloc);
     void *address             = NULL;
     uct_md_h md_ref           = m_e1->md();
     uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
@@ -253,7 +253,7 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
 UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
                      !check_md_caps(UCT_MD_FLAG_REG)) {
 
-    size_t size = ucs_min(100000u, m_e1->md_attr().cap.max_reg);
+    size_t size = ucs_min(100000u, m_e1->md_attr().max_reg);
     ucs_status_t status;
 
     std::vector<uint8_t> buffer(size);

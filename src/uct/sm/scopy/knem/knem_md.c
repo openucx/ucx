@@ -205,11 +205,11 @@ static ucs_status_t uct_knem_mem_dereg(uct_md_h md,
 }
 
 static ucs_status_t
-uct_knem_rkey_pack(uct_md_h md, uct_mem_h memh,
+uct_knem_mkey_pack(uct_md_h md, uct_mem_h memh,
                    const uct_md_mkey_pack_params_t *params,
-                   void *rkey_buffer)
+                   void *mkey_buffer)
 {
-    uct_knem_key_t *packed = rkey_buffer;
+    uct_knem_key_t *packed = mkey_buffer;
     uct_knem_key_t *key    = memh;
 
     packed->cookie  = (uint64_t)key->cookie;
@@ -252,7 +252,7 @@ static ucs_status_t uct_knem_rkey_release(uct_component_t *component,
 static uct_md_ops_t md_ops = {
     .close              = uct_knem_md_close,
     .query              = uct_knem_md_query,
-    .mkey_pack          = uct_knem_rkey_pack,
+    .mkey_pack          = uct_knem_mkey_pack,
     .mem_reg            = uct_knem_mem_reg,
     .mem_dereg          = uct_knem_mem_dereg,
     .detect_memory_type = ucs_empty_function_return_unsupported,
@@ -303,7 +303,7 @@ uct_knem_mem_rcache_dereg(uct_md_h uct_md,
 static uct_md_ops_t uct_knem_md_rcache_ops = {
     .close                  = uct_knem_md_close,
     .query                  = uct_knem_md_query,
-    .mkey_pack              = uct_knem_rkey_pack,
+    .mkey_pack              = uct_knem_mkey_pack,
     .mem_reg                = uct_knem_mem_rcache_reg,
     .mem_dereg              = uct_knem_mem_rcache_dereg,
     .is_sockaddr_accessible = ucs_empty_function_return_zero_int,

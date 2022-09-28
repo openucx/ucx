@@ -46,7 +46,8 @@ public:
 
     void disable_async(entity *e);
 
-    virtual void short_progress_loop(double delta_ms=10.0) const;
+    virtual void
+    short_progress_loop(double delta_ms = 10.0, entity *e = NULL) const;
 
 protected:
     entity *m_e1, *m_e2;

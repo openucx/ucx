@@ -577,7 +577,7 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
     ucp_md_map_t mdesc_md_map;
     size_t frag_size;
-    const uct_md_attr_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
 
     if (!context->config.ext.rndv_shm_ppln_enable) {
         return UCS_ERR_UNSUPPORTED;
@@ -595,11 +595,11 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
 
     ucs_for_each_bit(md_index, init_params->rkey_config_key->md_map) {
         md_attr = &context->tl_mds[md_index].attr;
-        if ((md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) &&
+        if ((md_attr->flags & UCT_MD_FLAG_RKEY_PTR) &&
             /* Do not use xpmem, because cuda_copy registration will fail and
              * performance will not be optimal. */
-            !(md_attr->cap.flags & UCT_MD_FLAG_REG) &&
-            (md_attr->cap.access_mem_types &
+            !(md_attr->flags & UCT_MD_FLAG_REG) &&
+            (md_attr->access_mem_types &
              UCS_BIT(init_params->rkey_config_key->mem_type))) {
             alloc_md_index = md_index;
             break;

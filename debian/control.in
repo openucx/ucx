@@ -2,7 +2,10 @@ Source: @PACKAGE@
 Section: libs
 Priority: extra
 Maintainer: ucx-group@elist.ornl.gov
-Build-Depends:
+Build-Depends: debhelper (>= 9.0),
+ libibverbs-dev,
+ librdmacm-dev,
+ pkg-config,
 Standards-Version: @MAJOR_VERSION@.@MINOR_VERSION@
 Homepage: http://www.openucx.org
 
@@ -18,3 +21,16 @@ Depends: libc6, libgomp1, libnuma1
 Architecture: any
 Description: Unified Communication X
  UCX is a communication library implementing high-performance messaging.
+
+Package: ucx-cuda
+Section: libs
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Architecture: any
+Build-Profiles: <cuda>
+Description: Unified Communication X
+ UCX is a communication library implementing high-performance messaging.
+ .
+ Provide CUDA (NVIDIA GPU) support for UCX. Enables passing GPU memory
+ pointers to UCX communication routines, and transports taking advantage
+ of GPU-Direct technology for direct data transfer between GPU and RDMA
+ devices.

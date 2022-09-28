@@ -87,7 +87,13 @@ build_release_pkg() {
 
 	if [[ "$rpm_based" == "no" && -x /usr/bin/dpkg-buildpackage ]]; then
 		echo "==== Build debian package ===="
-		dpkg-buildpackage -us -uc
+		(
+			tarball=$(ls -t ucx-*.tar.gz | head -n1)
+			tar xzf $tarball
+			subdir=${tarball%.tar.gz}
+			cd $subdir
+			dpkg-buildpackage -us -uc
+		)
 	else
 		echo "==== Build RPM ===="
 		echo "$PWD"

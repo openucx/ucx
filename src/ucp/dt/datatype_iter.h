@@ -44,6 +44,8 @@ typedef struct {
             ucp_mem_h             memh;       /* Memory registration handle */
         } contig;
         struct {
+            void                  *buffer;    /* Buffer pointer, needed for restart */
+            size_t                count;      /* Count, needed for restart */
             ucp_dt_generic_t      *dt_gen;    /* Generic datatype handle */
             void                  *state;     /* User-defined state */
         } generic;

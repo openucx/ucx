@@ -886,7 +886,7 @@ protected:
                 /* RNDV lanes should be selected if transport supports GET/PUT
                  * Zcopy and: */
                 (/* - either memory invalidation can be done on its MD */
-                 (ucp_ep_md_attr(ep, lane_idx)->cap.flags &
+                 (ucp_ep_md_attr(ep, lane_idx)->flags &
                   UCT_MD_FLAG_INVALIDATE) ||
                  /* - or CONNECT_TO_EP connection establishment mode is used */
                  (ucp_ep_is_lane_p2p(ep, lane_idx)))) {
@@ -2479,6 +2479,11 @@ protected:
          * since MDs shouldn't be resetted at least on one side to allow RKEY
          * packing */
         ASSERT_FALSE(send_prereg_memh & recv_prereg_memh);
+
+        if ((send_prereg_memh || recv_prereg_memh) &&
+            m_ucp_config->ctx.proto_enable) {
+            UCS_TEST_SKIP_R("FIXME: proto_v2 does not support prereh memh");
+        }
 
         /* send multiple messages to test the protocol both before and after
          * connection establishment */

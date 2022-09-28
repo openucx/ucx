@@ -251,7 +251,6 @@ typedef ucs_status_t (*uct_ep_invalidate_func_t)(uct_ep_h ep, unsigned flags);
 typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
         uct_ep_h ep,
         const uct_device_addr_t *device_addr,
-        const uct_iface_addr_t *iface_addr,
         const uct_ep_addr_t *ep_addr,
         const uct_ep_connect_to_ep_params_t *params);
 

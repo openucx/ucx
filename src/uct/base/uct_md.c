@@ -337,10 +337,10 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
 }
 
 static ucs_status_t
-uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
+uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *mkey_buffer)
 {
     if (ENABLE_PARAMS_CHECK) {
-        return ((md != NULL) && (memh != NULL) && (rkey_buffer != NULL)) ?
+        return ((md != NULL) && (memh != NULL) && (mkey_buffer != NULL)) ?
                UCS_OK : UCS_ERR_INVALID_PARAM;
     } else {
         return UCS_OK;
@@ -349,16 +349,16 @@ uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
                                  const uct_md_mkey_pack_params_t *params,
-                                 void *rkey_buffer)
+                                 void *mkey_buffer)
 {
     ucs_status_t status;
 
-    status = uct_md_mkey_pack_params_check(md, memh, rkey_buffer);
+    status = uct_md_mkey_pack_params_check(md, memh, mkey_buffer);
     if (status != UCS_OK) {
         return status;
     }
 
-    return md->ops->mkey_pack(md, memh, params, rkey_buffer);
+    return md->ops->mkey_pack(md, memh, params, mkey_buffer);
 }
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
@@ -370,7 +370,7 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
     return uct_md_mkey_pack_v2(md, memh, &params, rkey_buffer);
 }
 
-ucs_status_t uct_md_mem_attach(uct_md_h md, void *mkey_buffer,
+ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
                                uct_md_mem_attach_params_t *params,
                                uct_mem_h *memh_p)
 {
@@ -403,7 +403,6 @@ static void uct_md_attr_from_v2(uct_md_attr_t *dst, const uct_md_attr_v2_t *src)
     dst->cap.max_reg          = src->max_reg;
     dst->cap.flags            = src->flags;
     dst->cap.reg_mem_types    = src->reg_mem_types;
-    dst->cap.cache_mem_types  = src->cache_mem_types;
     dst->cap.detect_mem_types = src->detect_mem_types;
     dst->cap.alloc_mem_types  = src->alloc_mem_types;
     dst->cap.access_mem_types = src->access_mem_types;
@@ -440,6 +439,10 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_LOCAL_CPUS);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, component_name,
                               UCT_MD_ATTR_FIELD_COMPONENT_NAME);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, exported_mkey_packed_size,
+                              UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, global_id,
+                              UCT_MD_ATTR_FIELD_GLOBAL_ID);
 }
 
 static ucs_status_t uct_md_attr_v2_init(uct_md_h md, uct_md_attr_v2_t *md_attr)

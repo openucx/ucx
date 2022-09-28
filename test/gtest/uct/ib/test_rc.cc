@@ -666,7 +666,11 @@ void test_rc_flow_control::test_general(int wnd, int soft_thresh,
     flush();
 }
 
-void test_rc_flow_control::test_pending_grant(int wnd, uint64_t *wait_fc_seq)
+void test_rc_flow_control::wait_fc_hard_resend(entity *e)
+{
+}
+
+void test_rc_flow_control::test_pending_grant(int16_t wnd)
 {
     /* Block send capabilities of m_e2 for fc grant to be
      * added to the pending queue. */
@@ -680,11 +684,7 @@ void test_rc_flow_control::test_pending_grant(int wnd, uint64_t *wait_fc_seq)
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
     EXPECT_LE(get_fc_ptr(m_e1)->fc_wnd, 0);
 
-    if (wait_fc_seq != NULL) {
-        uint64_t fc_seq_value = *wait_fc_seq;
-        wait_for_value(wait_fc_seq, fc_seq_value + 1, true);
-        EXPECT_GT(*wait_fc_seq, fc_seq_value);
-    }
+    wait_fc_hard_resend(m_e1);
 
     /* Enable send capabilities of m_e2 and send short put message to force
      * pending queue dispatch. Can't send AM message for that, because it may

@@ -1055,9 +1055,9 @@ public:
     void validate_counters(unsigned tx_counter, unsigned rx_counter) {
         uint64_t cnt;
         cnt = UCS_STATS_GET_COUNTER(ep_stats(sender()), tx_counter);
-        EXPECT_EQ(1ul, cnt);
+        EXPECT_EQ(1ul, cnt) << "TX counter";
         cnt = get_rx_stat(rx_counter);
-        EXPECT_EQ(1ul, cnt);
+        EXPECT_EQ(1ul, cnt) << "RX counter";
     }
 
     bool has_xpmem() {
@@ -1084,7 +1084,7 @@ public:
         if (has_xpmem()) {
             /* rkey_ptr expected to be selected if xpmem is available */
             EXPECT_EQ(1u, rkey_ptr);
-        } else if (has_get_zcopy()) {
+        } else if (has_get_zcopy() && !m_ucp_config->ctx.proto_enable) {
             /* if any transports supports get_zcopy, expect it to be used */
             EXPECT_EQ(1u, get_zcopy);
         } else {

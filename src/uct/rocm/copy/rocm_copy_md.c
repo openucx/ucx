@@ -35,7 +35,7 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
 };
 
 static ucs_status_t
-uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr_v2)
+uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
@@ -57,9 +57,9 @@ uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr_v2)
 static ucs_status_t
 uct_rocm_copy_mkey_pack(uct_md_h uct_md, uct_mem_h memh,
                         const uct_md_mkey_pack_params_t *params,
-                        void *rkey_buffer)
+                        void *mkey_buffer)
 {
-    uct_rocm_copy_key_t *packed   = rkey_buffer;
+    uct_rocm_copy_key_t *packed   = mkey_buffer;
     uct_rocm_copy_mem_t *mem_hndl = memh;
 
     packed->vaddr   = (uint64_t) mem_hndl->vaddr;
