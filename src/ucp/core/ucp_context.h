@@ -549,6 +549,14 @@ ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwid
            (bandwidth->shared / context->config.est_num_ppn);
 }
 
+static UCS_F_ALWAYS_INLINE const uct_component_attr_t*
+ucp_cmpt_attr_by_md_index(ucp_context_h context, ucp_md_index_t md_index)
+{
+    ucp_tl_md_t *tl_md = &context->tl_mds[md_index];
+
+    return &context->tl_cmpts[tl_md->cmpt_index].attr;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {

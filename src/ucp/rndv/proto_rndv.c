@@ -22,10 +22,12 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                ucs_sys_dev_distance_t *sys_distance)
 {
     ucp_worker_h worker                      = params->super.super.worker;
+    ucp_context_h context                    = worker->context;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
     ucp_rsc_index_t mem_sys_dev, ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
     const uct_md_attr_v2_t *md_attr;
+    const uct_component_attr_t *cmpt_attr;
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -49,10 +51,11 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                                      lane);
         ep_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
         md_index   = ucp_proto_common_get_md_index(&params->super.super, lane);
-        md_attr    = &worker->context->tl_mds[md_index].attr;
+        cmpt_attr  = ucp_cmpt_attr_by_md_index(context, md_index);
+        md_attr    = &context->tl_mds[md_index].attr;
 
         /* Check the lane supports get_zcopy or rkey_ptr */
-        if (!(md_attr->flags & UCT_MD_FLAG_RKEY_PTR) &&
+        if (!(cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) &&
             !(iface_attr->cap.flags &
               (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY))) {
             continue;
@@ -67,7 +70,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         }
 
         ucs_trace_req("lane[%d]: selected md %s index %u", lane,
-                      worker->context->tl_mds[md_index].rsc.md_name, md_index);
+                      context->tl_mds[md_index].rsc.md_name, md_index);
         *md_map |= UCS_BIT(md_index);
 
         if (ep_sys_dev >= UCP_MAX_SYS_DEVICES) {
