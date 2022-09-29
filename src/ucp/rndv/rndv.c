@@ -1549,7 +1549,6 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     ucp_md_index_t md_index;
     const uct_component_attr_t *cmpt_attr;
     ucp_rsc_index_t cmpt_index;
-    const uct_md_attr_v2_t *md_attr;
     ucp_ep_h mem_type_ep;
     ucp_lane_index_t mem_type_rma_lane;
     ucs_memory_type_t remote_mem_type;
@@ -1567,19 +1566,21 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     }
 
     remote_mem_type = ucp_rkey_packed_mem_type(rtr_hdr + 1);
-    md_map          = ucp_rkey_packed_md_map(rtr_hdr + 1) &
-                      ucp_ep_config(ep)->key.reachable_md_map;
+    if (remote_mem_type != UCS_MEMORY_TYPE_HOST) {
+        return NULL;
+    }
+
+    /* Do not use xpmem, because cuda_copy registration will fail and
+     * performance will not be optimal. */
+    md_map = ucp_rkey_packed_md_map(rtr_hdr + 1) &
+             ucp_ep_config(ep)->key.reachable_md_map &
+             ~ucp_ep_config(ep)->rndv.rkey_ptr_dst_mds;
 
     ucs_for_each_bit(md_index, md_map) {
         cmpt_index = ucp_ep_config_get_dst_md_cmpt(&ucp_ep_config(ep)->key,
                                                    md_index);
         cmpt_attr  = &context->tl_cmpts[cmpt_index].attr;
-        md_attr    = &context->tl_mds[md_index].attr;
-        if ((cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) &&
-            /* Do not use xpmem, because cuda_copy registration will fail and
-             * performance will not be optimal. */
-            !(md_attr->flags & UCT_MD_FLAG_REG) &&
-            (md_attr->access_mem_types & UCS_BIT(remote_mem_type))) {
+        if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
             rkey_ptr_md_index = md_index;
             break;
         }
