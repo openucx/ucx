@@ -65,6 +65,8 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
 
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED);
+
     req->send.lane = ucp_ep_get_am_lane(req->send.ep);
     if (fetch) {
         ucp_send_request_id_alloc(req);
@@ -360,14 +362,18 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        if (!(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
+            ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
+                                        req->send.ep->worker, SIZE_MAX,
+                                        &next_iter, &req->send.amo.value);
+            req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
+        }
+
         status = ucp_ep_resolve_remote_id(req->send.ep, spriv->super.lane);
         if (status != UCS_OK) {
             return status;
         }
 
-        ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
-                                    req->send.ep->worker, SIZE_MAX,
-                                    &next_iter, &req->send.amo.value);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
@@ -426,7 +432,7 @@ ucp_proto_t ucp_get_amo_post_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_post},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_bcopy_reset
 };
 
 static ucs_status_t ucp_proto_amo_sw_progress_fetch(uct_pending_req_t *self)
@@ -455,5 +461,5 @@ ucp_proto_t ucp_get_amo_fetch_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_fetch},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_get_reset
 };

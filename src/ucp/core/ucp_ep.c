@@ -2385,6 +2385,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     ucp_ep_rma_config_t *rma_config;
     uct_iface_attr_t *iface_attr;
     uct_md_attr_v2_t *md_attr;
+    const uct_component_attr_t *cmpt_attr;
     ucs_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane, i;
@@ -2561,8 +2562,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     /* Rkey ptr */
     if (key->rkey_ptr_lane != UCP_NULL_LANE) {
         lane      = key->rkey_ptr_lane;
-        md_attr   = &context->tl_mds[config->md_index[lane]].attr;
-        ucs_assert_always(md_attr->flags & UCT_MD_FLAG_RKEY_PTR);
+        cmpt_attr = ucp_cmpt_attr_by_md_index(context, config->md_index[lane]);
+        ucs_assert_always(cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR);
 
         config->rndv.rkey_ptr_dst_mds =
                 UCS_BIT(config->key.lanes[lane].dst_md_index);
