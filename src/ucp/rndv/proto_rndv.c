@@ -69,12 +69,13 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
 
         ucs_trace_req("lane[%d]: selected md %s index %u", lane,
                       worker->context->tl_mds[md_index].rsc.md_name, md_index);
-        *md_map |= UCS_BIT(md_index);
 
-        if (ep_sys_dev >= UCP_MAX_SYS_DEVICES) {
+        if ((ep_sys_dev >= UCP_MAX_SYS_DEVICES) ||
+            (md_index >= UCP_MAX_RESOURCES)) {
             continue;
         }
 
+        *md_map      |= UCS_BIT(md_index);
         *sys_dev_map |= UCS_BIT(ep_sys_dev);
     }
 
