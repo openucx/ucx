@@ -238,7 +238,7 @@ static uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_smsg_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_smsg_ep_t),
     .ep_get_address           = uct_ugni_smsg_ep_get_address,
-    .ep_connect_to_ep         = uct_ugni_smsg_ep_connect_to_ep,
+    .ep_connect_to_ep         = uct_base_ep_connect_to_ep,
     .iface_flush              = uct_ugni_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
@@ -267,6 +267,14 @@ static ucs_mpool_ops_t uct_ugni_smsg_mbox_mpool_ops = {
     .obj_str       = NULL
 };
 
+static uct_iface_internal_ops_t uct_ugni_smsg_iface_internal_ops = {
+    .iface_estimate_perf = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2 = uct_ugni_smsg_ep_connect_to_ep_v2
+};
+
 static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -280,6 +288,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params,
                               &uct_ugni_smsg_iface_ops,
+                              &uct_ugni_smsg_iface_internal_ops,
                               &config->super UCS_STATS_ARG(NULL));
 
     /* Setting initial configuration */

@@ -357,8 +357,8 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
 static ucs_status_t
 ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
                                 const ucp_unpacked_address_t *remote_address,
-                                const uct_ep_addr_t **ep_addr_p,
-                                const uct_device_addr_t **dev_addr_p)
+                                const ucp_address_entry_t **address_entry_p,
+                                const ucp_address_entry_ep_addr_t **ep_entry_p)
 {
     const ucp_address_entry_t *address;
     unsigned ep_addr_index;
@@ -367,8 +367,8 @@ ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
         for (ep_addr_index = 0; ep_addr_index < address->num_ep_addrs;
              ++ep_addr_index) {
             if (remote_lane == address->ep_addrs[ep_addr_index].lane) {
-                *ep_addr_p  = address->ep_addrs[ep_addr_index].addr;
-                *dev_addr_p = address->dev_addr;
+                *address_entry_p = address;
+                *ep_entry_p      = &address->ep_addrs[ep_addr_index];
                 return UCS_OK;
             }
         }
@@ -383,8 +383,8 @@ ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_lane_index_t *lanes2remote)
 {
     ucp_lane_index_t lane, remote_lane;
-    const uct_device_addr_t *dev_addr;
-    const uct_ep_addr_t *ep_addr;
+    const ucp_address_entry_t *address_entry;
+    const ucp_address_entry_ep_addr_t *ep_entry;
     ucs_status_t status;
 
     ucs_trace("ep %p: connect local transports", ep);
@@ -398,15 +398,15 @@ ucp_wireup_connect_local(ucp_ep_h ep,
         remote_lane = (lanes2remote == NULL) ? lane : lanes2remote[lane];
 
         status = ucp_wireup_find_remote_p2p_addr(ep, remote_lane, remote_address,
-                                                 &ep_addr, &dev_addr);
+                                                 &address_entry, &ep_entry);
         if (status != UCS_OK) {
             ucs_error("ep %p: no remote ep address for lane[%d]->remote_lane[%d]",
                       ep, lane, remote_lane);
             goto out;
         }
 
-        status = uct_ep_connect_to_ep(ucp_ep_get_lane(ep, lane), dev_addr,
-                                      ep_addr);
+        status = ucp_wireup_ep_connect_to_ep_v2(ucp_ep_get_lane(ep, lane),
+                                                address_entry, ep_entry);
         if (status != UCS_OK) {
             goto out;
         }

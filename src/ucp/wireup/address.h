@@ -132,6 +132,7 @@ struct ucp_address_iface_attr {
 typedef struct ucp_address_entry_ep_addr {
     ucp_lane_index_t            lane;         /* Lane index (local or remote) */
     const uct_ep_addr_t         *addr;        /* Pointer to ep address */
+    size_t                      len;          /* Endpoint address length */
 } ucp_address_entry_ep_addr_t;
 
 
@@ -140,6 +141,7 @@ typedef struct ucp_address_entry_ep_addr {
  */
 struct ucp_address_entry {
     const uct_device_addr_t     *dev_addr;      /* Points to device address */
+    size_t                      dev_addr_len;   /* Device address length */
     const uct_iface_addr_t      *iface_addr;    /* Interface address, NULL if not available */
     unsigned                    num_ep_addrs;   /* How many endpoint address are in ep_addrs */
     ucp_address_entry_ep_addr_t ep_addrs[UCP_MAX_LANES]; /* Endpoint addresses */

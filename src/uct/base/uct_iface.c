@@ -460,7 +460,8 @@ uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .iface_estimate_perf = uct_base_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
+    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
@@ -899,4 +900,14 @@ void uct_tl_unregister(uct_tl_t *tl)
 {
     ucs_list_del(&tl->config.list);
     /* TODO: add list_del from ucs_config_global_list */
+}
+
+ucs_status_t
+uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
+                          const uct_device_addr_t *device_addr,
+                          const uct_ep_addr_t *ep_addr)
+{
+    const static uct_ep_connect_to_ep_params_t param = {.field_mask = 0};
+
+    return uct_ep_connect_to_ep_v2(tl_ep, device_addr, ep_addr, &param);
 }
