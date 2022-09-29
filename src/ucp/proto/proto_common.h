@@ -278,4 +278,6 @@ void ucp_proto_request_zcopy_abort(ucp_request_t *request, ucs_status_t status);
 
 void ucp_proto_request_zcopy_reset(ucp_request_t *request);
 
+void ucp_proto_get_reset(ucp_request_t *request);
+
 #endif
