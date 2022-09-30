@@ -448,8 +448,12 @@ static void print_md_info(uct_component_h component,
                    size_limit_to_str(0, md_attr.max_alloc));
         }
         if (md_attr.flags & UCT_MD_FLAG_REG) {
-            printf("#             register: %s, cost: ",
+            printf("#             register: %s",
                    size_limit_to_str(0, md_attr.max_reg));
+            if (md_attr.flags & UCT_MD_FLAG_REG_DMABUF) {
+                printf(", dmabuf");
+            }
+            printf(", cost: ");
             PRINT_LINEAR_FUNC_NS(&md_attr.reg_cost);
         }
         if (md_attr.flags & UCT_MD_FLAG_NEED_RKEY) {

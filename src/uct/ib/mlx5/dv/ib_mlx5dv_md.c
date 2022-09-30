@@ -47,15 +47,15 @@ typedef struct uct_ib_mlx5_mem {
 
 static const char uct_ib_mkey_token[] = "uct_ib_mkey_token";
 
-static ucs_status_t uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address,
-                                        size_t length, uint64_t access_flags,
-                                        uct_ib_mem_t *ib_memh,
-                                        uct_ib_mr_type_t mr_type,
-                                        int silent)
+static ucs_status_t
+uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address, size_t length,
+                    uint64_t access_flags, int dmabuf_fd, size_t dmabuf_offset,
+                    uct_ib_mem_t *ib_memh, uct_ib_mr_type_t mr_type, int silent)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
 
-    return uct_ib_reg_key_impl(md, address, length, access_flags, ib_memh,
+    return uct_ib_reg_key_impl(md, address, length, access_flags, dmabuf_fd,
+                               dmabuf_offset, ib_memh,
                                &memh->mrs[mr_type].super, mr_type, silent);
 }
 
@@ -869,7 +869,8 @@ static ucs_status_t uct_ib_mlx5_devx_init_flush_mr(uct_ib_mlx5_md_t *md)
 
     status = uct_ib_reg_mr(md->super.pd, md->zero_buf,
                            UCT_IB_MD_FLUSH_REMOTE_LENGTH,
-                           UCT_IB_MEM_ACCESS_FLAGS, &md->flush_mr, 1);
+                           UCT_IB_MEM_ACCESS_FLAGS, UCT_DMABUF_FD_INVALID, 0,
+                           &md->flush_mr, 1);
     if (status != UCS_OK) {
         return status;
     }

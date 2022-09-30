@@ -197,7 +197,8 @@ AS_IF([test "x$with_ib" = "xyes"],
                        IBV_EVENT_GID_CHANGE,
                        ibv_create_qp_ex,
                        ibv_create_cq_ex,
-                       ibv_create_srq_ex],
+                       ibv_create_srq_ex,
+                       ibv_reg_dmabuf_mr],
                       [], [], [[#include <infiniband/verbs.h>]])
 
        # Check ECE operation APIs are supported by rdma-core package
