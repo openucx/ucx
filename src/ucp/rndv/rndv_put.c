@@ -571,20 +571,25 @@ static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_init_params(
 static ucs_status_t
 ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_t *context        = init_params->worker->context;
+    ucp_worker_h worker           = init_params->worker;
+    ucp_context_t *context        = worker->context;
     ucp_md_index_t alloc_md_index = UCP_NULL_RESOURCE;
+    const uct_component_attr_t *cmpt_attr;
+    const ucp_ep_config_t *ep_config;
+    ucp_rsc_index_t cmpt_index;
     ucp_md_index_t md_index;
     ucs_status_t status;
     ucp_md_map_t mdesc_md_map;
     size_t frag_size;
-    const uct_md_attr_v2_t *md_attr;
+    ucp_md_map_t md_map;
 
     if (!context->config.ext.rndv_shm_ppln_enable) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND, 1) ||
-        (init_params->rkey_config_key == NULL)) {
+        (init_params->rkey_config_key == NULL) ||
+        (init_params->ep_cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -593,14 +598,17 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
         return status;
     }
 
-    ucs_for_each_bit(md_index, init_params->rkey_config_key->md_map) {
-        md_attr = &context->tl_mds[md_index].attr;
-        if ((md_attr->flags & UCT_MD_FLAG_RKEY_PTR) &&
-            /* Do not use xpmem, because cuda_copy registration will fail and
-             * performance will not be optimal. */
-            !(md_attr->flags & UCT_MD_FLAG_REG) &&
-            (md_attr->access_mem_types &
-             UCS_BIT(init_params->rkey_config_key->mem_type))) {
+    ep_config = &worker->ep_config[init_params->ep_cfg_index];
+    /* Do not use xpmem, because cuda_copy registration will fail and
+     * performance will not be optimal. */
+    md_map    = init_params->rkey_config_key->md_map &
+                ep_config->key.reachable_md_map &
+                ~ep_config->rndv.rkey_ptr_dst_mds;
+
+    ucs_for_each_bit(md_index, md_map) {
+        cmpt_index = ucp_ep_config_get_dst_md_cmpt(&ep_config->key, md_index);
+        cmpt_attr  = &context->tl_cmpts[cmpt_index].attr;
+        if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
             alloc_md_index = md_index;
             break;
         }
