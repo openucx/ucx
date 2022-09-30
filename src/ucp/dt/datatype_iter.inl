@@ -556,7 +556,7 @@ ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
         return ucp_memh_get(context, dt_iter->type.contig.buffer,
                             dt_iter->length,
                             (ucs_memory_type_t)dt_iter->mem_info.type, md_map,
-                            uct_flags, &dt_iter->type.contig.memh);
+                            uct_flags, 0, &dt_iter->type.contig.memh);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         return ucp_datatype_iter_iov_mem_reg(context, dt_iter, md_map,
                                              uct_flags);

@@ -29,6 +29,17 @@
 #include <ucs/type/param.h>
 
 
+/* Hash map of rcaches which contain imported memory handles got from peers */
+KHASH_TYPE(ucp_context_imported_mem_rcaches_hash, uint64_t, ucs_rcache_t*);
+typedef khash_t(ucp_context_imported_mem_rcaches_hash) ucp_context_imported_mem_rcaches_t;
+
+#define ucp_context_imported_mem_rcaches_hash_key(_uuid) \
+    kh_int64_hash_func((uint64_t)(_uuid))
+
+KHASH_IMPL(ucp_context_imported_mem_rcaches_hash, uint64_t, ucs_rcache_t*, 1,
+           ucp_context_imported_mem_rcaches_hash_key, kh_int64_hash_equal);
+
+
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
@@ -270,6 +281,11 @@ typedef struct ucp_context {
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
 
+    /* Map of MDs that provide registration of a memory buffer for a given
+       memory type to be shared among other processes which use the same MD.
+       ucp_mem_map() will register memory for all those domains. */
+    ucp_md_map_t                  export_md_map[UCS_MEMORY_TYPE_LAST];
+
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
@@ -284,6 +300,9 @@ typedef struct ucp_context {
 
     /* Mem handle registration cache */
     ucs_rcache_t                  *rcache;
+
+    /* Hash of rcaches which contain imported memory handles got from peers */
+    ucp_context_imported_mem_rcaches_t *imported_mem_rcaches;
 
     struct {
 
@@ -337,6 +356,12 @@ typedef struct ucp_context {
     ucp_mt_lock_t                 mt_lock;
 
     char                          name[UCP_ENTITY_NAME_MAX];
+
+    /* Global unique identifier */
+    uint64_t                      uuid;
+
+    /* Next memory handle registration identifier */
+    uint64_t                      next_memh_reg_id;
 
     /* Save cached uct configurations */
     ucs_list_link_t               cached_key_list;

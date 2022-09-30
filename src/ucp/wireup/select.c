@@ -1005,6 +1005,15 @@ static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
     }
 }
 
+static void
+ucp_wireup_fill_exported_memh_criteria(ucp_context_h context,
+                                       ucp_wireup_criteria_t *criteria)
+{
+    if (context->config.features & UCP_FEATURE_EXPORTED_MEMH) {
+        criteria->local_md_flags |= UCT_MD_FLAG_EXPORTED_MKEY;
+    }
+}
+
 static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
                                         const uct_md_attr_v2_t *md_attr,
                                         const ucp_address_entry_t *remote_addr,
@@ -1069,9 +1078,11 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
 /**
  * Check whether emulation over AM is allowed for RMA/AMO lanes
  */
-static int ucp_wireup_allow_am_emulation_layer(unsigned ep_init_flags)
+static int ucp_wireup_allow_am_emulation_layer(ucp_context_h context,
+                                               unsigned ep_init_flags)
 {
-    return !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE);
+    return !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
+           !(context->config.features & UCP_FEATURE_EXPORTED_MEMH);
 }
 
 static unsigned
@@ -1104,6 +1115,8 @@ static ucs_status_t
 ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
                          ucp_wireup_select_context_t *select_ctx)
 {
+    ucp_ep_h ep                    = select_params->ep;
+    ucp_context_h context          = ep->worker->context;
     unsigned ep_init_flags         = ucp_wireup_ep_init_flags(select_params,
                                                               select_ctx);
     ucp_wireup_criteria_t criteria = {};
@@ -1137,6 +1150,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
     }
     criteria.calc_score             = ucp_wireup_rma_score_func;
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
+    ucp_wireup_fill_exported_memh_criteria(context, &criteria);
 
     tl_bitmap = ucp_tl_bitmap_max;
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
@@ -1189,6 +1203,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_init_select_flags(&criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_PENDING, 0);
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
+    ucp_wireup_fill_exported_memh_criteria(context, &criteria);
     ucp_context_uct_atomic_iface_flags(context, &criteria.remote_atomic_flags);
 
     /* We can use only non-p2p resources or resources which are explicitly
@@ -1532,7 +1547,6 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                  UCP_ADDR_IFACE_FLAG_AM_SYNC, 0);
     ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_AM_BCOPY, 0);
-    ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
@@ -1652,6 +1666,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_PENDING, 0);
     ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
+    ucp_wireup_fill_exported_memh_criteria(context, &bw_info.criteria);
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
@@ -1687,6 +1702,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.lane_type        = UCP_LANE_TYPE_RMA_BW;
     bw_info.max_lanes                 = context->config.ext.max_rndv_lanes;
     bw_info.criteria.local_cmpt_flags = 0;
+    ucp_wireup_fill_exported_memh_criteria(context, &bw_info.criteria);
 
     /* If error handling is requested we require memory invalidation
      * support to provide correct data integrity in case of error */
@@ -1868,7 +1884,8 @@ ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
     select_params->tl_bitmap     = tl_bitmap;
     select_params->address       = remote_address;
     select_params->allow_am      =
-            ucp_wireup_allow_am_emulation_layer(ep_init_flags);
+            ucp_wireup_allow_am_emulation_layer(ep->worker->context,
+                                                ep_init_flags);
     select_params->show_error    = show_error;
 }
 

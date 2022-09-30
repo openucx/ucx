@@ -21,6 +21,21 @@ enum {
 };
 
 
+#define ucp_memh_serialize_next(_iter, _type, _end, _default) \
+    ({ \
+        _type *_ret; \
+        if (sizeof(_type) <= UCS_PTR_BYTE_DIFF(*_iter, _end)) { \
+            _ret = ucs_serialize_next(_iter, _type); \
+        } else { \
+            UCS_STATIC_ASSERT(sizeof(_type) <= \
+                              sizeof(memh_serialize_default_val)); \
+            _ret  = (_type*)&memh_serialize_default_val; \
+            *_ret = (_type)(_default); \
+        } \
+        _ret; \
+    })
+
+
 typedef uint8_t ucp_rkey_proto_index_t;
 
 
@@ -156,6 +171,9 @@ typedef struct ucp_rkey {
 #endif
 
 
+extern uint64_t memh_serialize_default_val;
+
+
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 
 
@@ -190,6 +208,9 @@ ucp_rkey_pack_memh(ucp_context_h context, ucp_md_map_t md_map,
                    const ucp_mem_h memh, const ucp_memory_info_t *mem_info,
                    ucp_sys_dev_map_t sys_dev_map,
                    const ucs_sys_dev_distance_t *sys_distance, void *buffer);
+
+
+size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr);
 
 
 ucs_status_t

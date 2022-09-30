@@ -20,6 +20,26 @@
 
 
 /**
+ * Memory handle flags.
+ */
+enum {
+    UCP_MEM_FLAG_IMPORTED  = UCS_BIT(0), /* Memory handle was imported and
+                                          * points to some peer's memory buffer
+                                          */
+    UCP_MEM_FLAG_IN_RCACHE = UCS_BIT(1)  /* Memory handle was stored in RCACHE
+                                          */
+};
+
+
+/**
+ * Memory handle buffer packed flags.
+ */
+enum {
+    UCP_MEMH_BUFFER_FLAG_EXPORTED = UCS_BIT(0) 
+};
+
+
+/**
  * Memory handle.
  * Contains general information, and a list of UCT handles.
  * md_map specifies which MDs from the current context are present in the array.
@@ -27,14 +47,20 @@
  */
 typedef struct ucp_mem {
     ucs_rcache_region_t super;
+    uint8_t             flags;          /* Memory handle flags */
     ucp_context_h       context;        /* UCP context that owns a memory handle */
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
+    uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
     ucp_mem_h           parent;         /* - NULL if entry should be returned to rcache
                                            - pointer to self if rcache disabled
                                            - pointer to rcache memh if entry is a user memh */
+    uint64_t            reg_id;         /* Registration ID */
+    /* Which MDs with EXPORTED_MKEY capability were exported and packed to
+       an exported_mkey_buffer and then used by a memh to import it */
+    ucp_md_map_t        remote_import_md_map;
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
 
@@ -73,7 +99,13 @@ typedef struct {
 } ucp_mem_dummy_handle_t;
 
 
+typedef struct {
+    uint16_t size;
+} UCS_S_PACKED ucp_memh_dummy_buffer_t;
+
+
 extern ucp_mem_dummy_handle_t ucp_mem_dummy_handle;
+extern ucp_memh_dummy_buffer_t ucp_memh_dummy_buffer;
 
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
