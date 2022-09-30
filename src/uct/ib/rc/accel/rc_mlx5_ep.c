@@ -535,7 +535,9 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
 
 ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
-    uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi, 1);
 }
