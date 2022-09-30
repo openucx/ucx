@@ -195,6 +195,7 @@ uct_ugni_md_open(uct_component_h component,const char *md_name,
     md_ops.mem_free           = (void*)ucs_empty_function;
     md_ops.mem_reg            = uct_ugni_mem_reg;
     md_ops.mem_dereg          = uct_ugni_mem_dereg;
+    md_ops.mem_attach         = ucs_empty_function_return_unsupported;
     md_ops.mkey_pack          = uct_ugni_mkey_pack;
     md_ops.detect_memory_type = ucs_empty_function_return_unsupported;
 
