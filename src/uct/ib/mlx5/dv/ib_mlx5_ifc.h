@@ -81,7 +81,8 @@ enum {
     UCT_IB_MLX5_CMD_OP_QUERY_LAG               = 0x842,
     UCT_IB_MLX5_CMD_OP_CREATE_GENERAL_OBJECT   = 0xa00,
     UCT_IB_MLX5_CMD_OP_MODIFY_GENERAL_OBJECT   = 0xa01,
-    UCT_IB_MLX5_CMD_OP_QUERY_GENERAL_OBJECT    = 0xa02
+    UCT_IB_MLX5_CMD_OP_QUERY_GENERAL_OBJECT    = 0xa02,
+    UCT_IB_MLX5_CMD_OP_ALLOW_OTHER_VHCA_ACCESS = 0xb16
 };
 
 enum {
@@ -94,6 +95,15 @@ enum {
     UCT_IB_MLX5_CAP_ODP       = 0x2,
     UCT_IB_MLX5_CAP_ATOMIC    = 0x3,
     UCT_IB_MLX5_CAP_2_GENERAL = 0x20,
+};
+
+enum {
+    UCT_IB_MLX5_HCA_CAPS_2_ALLOWED_OBJ_FOR_OTHER_VHCA_ACCESS_MKEY = 0x4,
+    UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY = 0x100
+};
+
+enum {
+    UCT_IB_MLX5_PAGE_SHIFT = 12
 };
 
 struct uct_ib_mlx5_cmd_hca_cap_bits {
@@ -399,7 +409,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
 
     uint8_t    reserved_at_5a0[0x10];
     uint8_t    enhanced_cqe_compression[0x1];
-    uint8_t    reserved_at_5b1[0xa];
+    uint8_t    reserved_at_5b1[0x1];
+    uint8_t    crossing_vhca_mkey[0x1];
+    uint8_t    reserved_at_5b3[0x8];
     uint8_t    must_be_0[0x1];
     uint8_t    mini_cqe_resp_stride_index[0x1];
     uint8_t    cqe_128_always[0x1];
@@ -465,13 +477,40 @@ struct uct_ib_mlx5_atomic_caps_bits {
 struct uct_ib_mlx5_cmd_hca_cap_2_bits {
     uint8_t    reserved_at_0[0x80];
 
-    uint8_t    reserved_at_80[0x13];
-    /* Log (base 2) of the minimum bulk granularity of
-       allocated RESERVED_QPN objects */
+    uint8_t    reserved_at_80[0x3];
+    uint8_t    max_num_prog_sample_field[0x5];
+    uint8_t    reserved_at_88[0x3];
+    uint8_t    log_max_num_reserved_qpn[0x5];
+    uint8_t    atomic_rate_pa[0x1];
+    uint8_t    introspection_mkey_access_allowed[0x1];
+    uint8_t    reserved_at_92[0x1];
     uint8_t    log_reserved_qpn_granularity[0x5];
-    uint8_t    reserved_at_98[0x8];
+    uint8_t    reserved_at_98[0x3];
+    uint8_t    log_reserved_qpn_max_alloc[0x5];
 
-    uint8_t    reserved_at_a0[0x760];
+    uint8_t    max_reformat_insert_size[0x8];
+    uint8_t    max_reformat_insert_offset[0x8];
+    uint8_t    max_reformat_remove_size[0x8];
+    uint8_t    max_reformat_remove_offset[0x8];
+
+    uint8_t    multi_sl_qp[0x1];
+    uint8_t    non_tunnel_reformat[0x1];
+    uint8_t    reserved_at_122[0x1];
+    uint8_t    log_min_stride_wqe_sz[0x5];
+    uint8_t    reserved_at_128[0x3];
+    uint8_t    log_conn_track_granularity[0x5];
+    uint8_t    reserved_at_130[0x3];
+    uint8_t    log_conn_track_max_alloc[0x5];
+    uint8_t    reserved_at_138[0x3];
+    uint8_t    log_max_conn_track_offload[0x5];
+
+    uint8_t    cross_vhca_object_to_object_supported[0x20];
+
+    uint8_t    allowed_object_for_other_vhca_access[0x40];
+
+    uint8_t    introspection_mkey[0x20];
+
+    uint8_t    reserved_at_220[0x6A0];
 };
 
 struct uct_ib_mlx5_odp_per_transport_service_cap_bits {
@@ -639,11 +678,12 @@ struct uct_ib_mlx5_query_hca_vport_context_in_bits {
 };
 
 enum {
-    UCT_IB_MLX5_MKC_ACCESS_MODE_PA    = 0x0,
-    UCT_IB_MLX5_MKC_ACCESS_MODE_MTT   = 0x1,
-    UCT_IB_MLX5_MKC_ACCESS_MODE_KLMS  = 0x2,
-    UCT_IB_MLX5_MKC_ACCESS_MODE_KSM   = 0x3,
-    UCT_IB_MLX5_MKC_ACCESS_MODE_MEMIC = 0x5
+    UCT_IB_MLX5_MKC_ACCESS_MODE_PA            = 0x0,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_MTT           = 0x1,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_KLMS          = 0x2,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_KSM           = 0x3,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_MEMIC         = 0x5,
+    UCT_IB_MLX5_MKC_ACCESS_MODE_CROSSING_VHCA = 0x6
 };
 
 struct uct_ib_mlx5_mkc_bits {
@@ -651,7 +691,9 @@ struct uct_ib_mlx5_mkc_bits {
     uint8_t    free[0x1];
     uint8_t    reserved_at_2[0x1];
     uint8_t    access_mode_4_2[0x3];
-    uint8_t    reserved_at_6[0x7];
+    uint8_t    alter_pd_to_vhca_id[0x1];
+    uint8_t    crossed_side_mkey[0x1];
+    uint8_t    reserved_at_8[0x5];
     uint8_t    relaxed_ordering_write[0x1];
     uint8_t    reserved_at_e[0x1];
     uint8_t    small_fence_on_rdma_read_response[0x1];
@@ -684,9 +726,15 @@ struct uct_ib_mlx5_mkc_bits {
 
     uint8_t    bsf_octword_size[0x20];
 
-    uint8_t    reserved_at_120[0x80];
+    uint8_t    reserved_at_120[0x60];
 
-    uint8_t    translations_octword_size[0x20];
+    uint8_t    crossing_target_gvmi_id[0x10];
+    uint8_t    reserved_at_190[0x10];
+
+    union {
+        uint8_t translations_octword_size[0x20];
+        uint8_t crossing_target_mkey[0x20];
+    };
 
     uint8_t    reserved_at_1c0[0x1b];
     uint8_t    log_entity_size[0x5];
@@ -1610,7 +1658,8 @@ struct uct_ib_mlx5_general_obj_in_cmd_hdr_bits {
 
     uint8_t         obj_id[0x20];
 
-    uint8_t         reserved_at_60[0x3];
+    uint8_t         alias_object[0x1];
+    uint8_t         reserved_at_61[0x2];
     uint8_t         log_obj_range[0x5];
     uint8_t         reserved_at_68[0x18];
 };
@@ -1626,6 +1675,60 @@ struct uct_ib_mlx5_create_reserved_qpn_in_bits {
 
 enum {
     UCT_IB_MLX5_OBJ_TYPE_RESERVED_QPN = 0x002C,
+    UCT_IB_MLX5_OBJ_TYPE_MKEY         = 0xFF01
+};
+
+struct uct_ib_mlx5_allow_other_vhca_access_in_bits {
+    uint8_t         opcode[0x10];
+    uint8_t         uid[0x10];
+
+    uint8_t         reserved_at_20[0x10];
+    uint8_t         op_mod[0x10];
+
+    uint8_t         reserved_at_40[0x40];
+
+    uint8_t         reserved_at_80[0x10];
+    uint8_t         object_type_to_be_accessed[0x10];
+
+    uint8_t         object_id_to_be_accessed[0x20];
+
+    uint8_t         reserved_at_a0[0x40];
+
+    uint8_t         access_key[0x100];
+};
+
+struct uct_ib_mlx5_allow_other_vhca_access_out_bits {
+    uint8_t         status[0x8];
+    uint8_t         reserved_at_8[0x18];
+
+    uint8_t         syndrome[0x20];
+
+    uint8_t         reserved_at_40[0x40];
+};
+
+struct uct_ib_mlx5_alias_context_bits {
+    uint8_t         vhca_id_to_be_accessed[0x10];
+    uint8_t         reserved_at_10[0xd];
+    uint8_t         status[0x3];
+
+    uint8_t         object_id_to_be_accessed[0x20];
+
+    uint8_t         reserved_at_40[0x40];
+
+    uint8_t         access_key[0x100];
+
+    uint8_t         metadata_1[0x20];
+    uint8_t         metadata_2[0x60];
+};
+
+struct uct_ib_mlx5_create_alias_obj_in_bits {
+    struct uct_ib_mlx5_general_obj_in_cmd_hdr_bits hdr;
+    struct uct_ib_mlx5_alias_context_bits alias_ctx;
+};
+
+struct uct_ib_mlx5_create_alias_obj_out_bits {
+    struct uct_ib_mlx5_general_obj_out_cmd_hdr_bits hdr;
+    struct uct_ib_mlx5_alias_context_bits alias_ctx;
 };
 
 struct uct_ib_mlx5_cqc_bits {

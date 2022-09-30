@@ -163,7 +163,8 @@ AS_IF([test "x$with_ib" = "xyes"],
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
                            MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE,
                            MLX5DV_UAR_ALLOC_TYPE_BF,
-                           MLX5DV_UAR_ALLOC_TYPE_NC],
+                           MLX5DV_UAR_ALLOC_TYPE_NC,
+                           mlx5dv_devx_umem_reg_ex],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_MEMBERS([struct mlx5dv_cq.cq_uar],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])

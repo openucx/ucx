@@ -814,6 +814,35 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
     free(ptr);
 }
 
+UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
+                     !check_caps(UCT_MD_FLAG_EXPORTED_MKEY))
+{
+    static const size_t size       = 1 * UCS_MBYTE;
+    static const unsigned md_flags = UCT_MD_MEM_ACCESS_REMOTE_PUT |
+                                     UCT_MD_MEM_ACCESS_REMOTE_GET;
+    uct_mem_h export_memh;
+    void *ptr;
+    ucs_status_t status;
+
+    ptr    = malloc(size);
+    status = reg_mem(md_flags, ptr, size, &export_memh);
+    ASSERT_UCS_OK(status);
+
+    std::vector<uint8_t> mkey_buffer(md_attr().exported_mkey_packed_size);
+    uct_md_mkey_pack_params_t pack_params;
+    pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+    pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_EXPORT;
+    status = uct_md_mkey_pack_v2(md(), export_memh, &pack_params,
+                                 mkey_buffer.data());
+    ASSERT_UCS_OK(status);
+
+    uct_md_mem_dereg_params_t dereg_params;
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = export_memh;
+    status                  = uct_md_mem_dereg_v2(md(), &dereg_params);
+    ASSERT_UCS_OK(status);
+}
+
 UCT_MD_INSTANTIATE_TEST_CASE(test_md)
 
 class test_md_fork : private ucs::clear_dontcopy_regions, public test_md {

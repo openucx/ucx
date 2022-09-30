@@ -207,6 +207,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack              = uct_cuda_copy_mkey_pack,
     .mem_reg                = uct_cuda_copy_mem_reg,
     .mem_dereg              = uct_cuda_copy_mem_dereg,
+    .mem_attach             = ucs_empty_function_return_unsupported,
     .mem_query              = uct_cuda_base_mem_query,
     .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
     .detect_memory_type     = uct_cuda_base_detect_memory_type
