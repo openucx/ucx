@@ -358,10 +358,18 @@ setting `UCX_MEMTYPE_CACHE=n`.
 #### Does UCX support zero-copy for GPU memory over RDMA?
 
 Yes. For large messages UCX can transfer GPU memory using zero-copy RDMA using
-rendezvous protocol. It requires the peer memory q for the relevant GPU type
-to be loaded on the system.
+rendezvous protocol. It requires a peer memory driver for the relevant GPU type
+to be loaded, or (starting with UCX v1.14.0) dmabuf support on the system.
+
 > **NOTE:** In some cases if the RDMA network device and the GPU are not on
 the same NUMA node, such zero-copy transfer is inefficient.
+
+#### What is needed for dmabuf support?
+- UCX v1.14.0 or later.
+- Linux kernel >= 5.12 (for example, Ubuntu 22.04).
+- Cuda 11.7 or later, installed with "-m=kernel-open" flag.
+> **NOTE:** Currently UCX code assumes that dmabuf support is uniform across all
+available GPU devices.
 
 ---
 <br/>
