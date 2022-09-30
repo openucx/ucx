@@ -225,22 +225,28 @@ typedef void (*uct_ib_md_cleanup_func_t)(struct uct_ib_md *);
 /**
  * Memory domain method to register memory area.
  *
- * @param [in]  md      Memory domain.
+ * @param [in]  md             Memory domain.
  *
- * @param [in]  address Memory area start address.
+ * @param [in]  address        Memory area start address.
  *
- * @param [in]  length  Memory area length.
+ * @param [in]  length         Memory area length.
  *
- * @param [in]  access  IB verbs registration access flags
+ * @param [in]  access         IB verbs registration access flags.
  *
- * @param [in]  memh    Memory region handle.
- *                      Method should initialize lkey & rkey.
+ * @param [in]  dmabuf_fd      dmabuf file descriptor.
+ *
+ * @param [in]  dmabuf_offset  Offset of the registered memory region within the
+ *                             dmabuf backing region.
+ *
+ * @param [in]  memh           Memory region handle.
+ *                             The method must initialize lkey & rkey.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
 typedef ucs_status_t (*uct_ib_md_reg_key_func_t)(struct uct_ib_md *md,
                                                  void *address, size_t length,
-                                                 uint64_t access,
+                                                 uint64_t access, int dmabuf_fd,
+                                                 size_t dmabuf_offset,
                                                  uct_ib_mem_t *memh,
                                                  uct_ib_mr_type_t mr_type,
                                                  int silent);
@@ -590,7 +596,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 void uct_ib_md_close(uct_md_h uct_md);
 
 ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
-                           uint64_t access, struct ibv_mr **mr_p, int silent);
+                           uint64_t access, int dmabuf_fd, size_t dmabuf_offset,
+                           struct ibv_mr **mr_p, int silent);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
 
@@ -610,9 +617,10 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
 void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
                                    const uct_ib_md_config_t *md_config);
 
-ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
-                                 size_t length, uint64_t access_flags,
-                                 uct_ib_mem_t *memh, uct_ib_mr_t *mrs,
-                                 uct_ib_mr_type_t mr_type, int silent);
+ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address, size_t length,
+                                 uint64_t access_flags, int dmabuf_fd,
+                                 size_t dmabuf_offset, uct_ib_mem_t *memh,
+                                 uct_ib_mr_t *mr, uct_ib_mr_type_t mr_type,
+                                 int silent);
 
 #endif
