@@ -74,7 +74,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                       worker->context->tl_mds[md_index].rsc.md_name, md_index);
 
         if ((ep_sys_dev >= UCP_MAX_SYS_DEVICES) ||
-            (md_index >= UCP_MAX_RESOURCES)) {
+            (md_index >= UCP_MAX_MDS)) {
             continue;
         }
 
