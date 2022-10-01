@@ -70,6 +70,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     void *tmp_base_ptr;
     size_t tmp_base_size;
     hsa_agent_t *gpu_agents;
+    hsa_amd_pointer_type_t mem_type;
     int num_gpu;
 
     /* no data to deliver */
@@ -83,9 +84,10 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = uct_rocm_base_get_ptr_info(local_addr, size, &base_addr,
-                                        NULL, &local_agent);
-    if (status != HSA_STATUS_SUCCESS) {
+    status = uct_rocm_base_get_ptr_info(local_addr, size, &base_addr, NULL,
+                                        &mem_type, &local_agent, NULL);
+    if ((status != HSA_STATUS_SUCCESS) ||
+        (mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
         ucs_error("local addr %p/%lx is not ROCM memory", local_addr, size);
         return UCS_ERR_INVALID_ADDR;
     }
@@ -102,8 +104,12 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
 
     memset(&remote_agent, 0, sizeof(hsa_agent_t));
     status = uct_rocm_base_get_ptr_info(remote_copy_addr, size, &tmp_base_ptr,
-                                        &tmp_base_size, &remote_agent);
-    if (status != HSA_STATUS_SUCCESS) {
+                                        &tmp_base_size, &mem_type,
+                                        &remote_agent, NULL);
+    if ((status != HSA_STATUS_SUCCESS) ||
+        (mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
+        ucs_error("remote addr %p %lu is not ROCM memory status=%d mem_type %d",
+                  remote_copy_addr, size, status, mem_type);
         return UCS_ERR_INVALID_ADDR;
     }
 
