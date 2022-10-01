@@ -67,11 +67,11 @@ class PRChecker(object):
             print("github head commit: %s base commit: %s" %
                   (self.head_commit[:7], self.base_commit[:7]))
 
-    def get_approved_commit(self):
+    def get_commit_id(self):
         """
-        Set self.approved_commit to the hash of the latest approved PR commit.
+        Set self.commit_id to the hash of the PR commit to compare with.
         """
-        if self.approved_commit:
+        if self.commit_id:
             return;
         page = 1
         while True:
@@ -79,16 +79,17 @@ class PRChecker(object):
             if not data:
                 break
             for d in data:
-                if d[u'state'] in [u'APPROVED', u'DISMISSED'] and \
+                is_approval = d[u'state'] in [u'APPROVED', u'DISMISSED']
+                if (is_approval or self.review_diff) and \
                         d[u'user'][u'login'] == self.approving_user:
-                    self.approved_commit = str(d[u'commit_id'])
+                    self.commit_id = str(d[u'commit_id'])
             page += 1
-        if not self.approved_commit:
-            raise Exception("No approved commit by user '%s' found" %
+        if not self.commit_id:
+            raise Exception("Could not find review commmit by user '%s'" %
                             self.approving_user)
         if self.verbose:
-            print("github approved commit: %s (by '%s')" %
-                  (self.approved_commit[:7], self.approving_user))
+            print("github commit_id: %s (by '%s')" %
+                  (self.commit_id[:7], self.approving_user))
 
     def init_repo(self):
         """
@@ -126,9 +127,9 @@ class PRChecker(object):
                           metavar="USER",
                           default = getpass.getuser(),
                           help="GitHub user name of approving user [default: %default]")
-        parser.add_option("--approved-commit", action="store", dest="approved_commit",
+        parser.add_option("--commit_id", action="store", dest="commit_id",
                           metavar="COMMIT", default=None,
-                          help="Approved git commit hash")
+                          help="git commit hash to compare with")
         parser.add_option("--temp-dir", action="store", dest="temp_dir",
                           metavar="PATH",
                           default="/tmp/%s" % getpass.getuser(),
@@ -143,6 +144,9 @@ class PRChecker(object):
         parser.add_option("--remote", action="store", dest="remote",
                           default="upstream",
                           help="Remote name in the local repository [default: %default]")
+        parser.add_option("--review-diff", action="store_true", dest="review_diff",
+                          default=False,
+                          help="Show diff since last review")
         parser.add_option("-v", action="store_true", dest="verbose",
                           default=False,
                           help="Verbose output")
@@ -157,8 +161,9 @@ class PRChecker(object):
         self.repo_path = options.repo
         self.depth = options.depth
         self.remote_name = options.remote
+        self.review_diff = options.review_diff
         self.verbose = options.verbose
-        self.approved_commit = options.approved_commit
+        self.commit_id = options.commit_id
 
     def print_diff(self, diff):
         if shutil.which("ydiff"):
@@ -172,23 +177,27 @@ class PRChecker(object):
     def main(self, argv):
         self.parse_args(argv)
         self.get_head_commit()
-        self.get_approved_commit()
+        self.get_commit_id()
         self.init_repo()
 
         if self.verbose:
             print("comparing %s and %s when merged to %s" %
-                  (self.approved_commit[:7], self.head_commit[:7],
-                   self.base_commit[:7]))
+                (self.commit_id[:7], self.head_commit[:7],
+                self.base_commit[:7]))
 
-        merge_approved = self.merge(self.approved_commit)
+        merge_commit = self.merge(self.commit_id)
         merge_head = self.merge(self.head_commit)
 
-        diff = self.repo.git.diff(merge_approved, merge_head)
+        diff = self.repo.git.diff(merge_commit, merge_head)
         if not diff:
             print("no differences found")
             return 0
 
         self.print_diff(diff)
+
+        if self.review_diff:
+            print("https://github.com/%s/compare/%s..%s" % (self.repo_path, self.commit_id, self.head_commit))
+
         self.remove_temp_dir()
         return 1
 
