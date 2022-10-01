@@ -1675,7 +1675,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
     } else {
         /* Expect that a FC sequence number doesn't reach UINT64_MAX value. So,
          * uct_dc_mlx5_fc_remove_ep() can rely on "seq != UINT64_MAX" condition
-         * to check that a FC entry's sequnce number needs to be verified */
+         * to check that a FC entry's sequence number needs to be verified */
         ucs_assert(iface->tx.fc_seq != UINT64_MAX);
         fc_entry->seq = iface->tx.fc_seq++;
     }
