@@ -21,13 +21,15 @@ Depends: libc6, libgomp1, libnuma1
 Architecture: any
 Description: Unified Communication X
  UCX is a communication library implementing high-performance messaging.
+ .
+ This is the main package that includes the library as well as build headers.
 
 Package: ucx-cuda
 Section: libs
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Architecture: any
 Build-Profiles: <cuda>
-Description: Unified Communication X
+Description: Unified Communication X - CUDA support
  UCX is a communication library implementing high-performance messaging.
  .
  Provide CUDA (NVIDIA GPU) support for UCX. Enables passing GPU memory
