@@ -51,9 +51,10 @@
 
 
 typedef struct uct_posix_md_config {
-    uct_mm_md_config_t        super;
-    char                      *dir;
-    int                       use_proc_link;
+    uct_mm_md_config_t super;
+    char               *dir;
+    int                use_proc_link;
+    size_t             shm_min_size;
 } uct_posix_md_config_t;
 
 typedef struct uct_posix_packed_rkey {
@@ -64,20 +65,29 @@ typedef struct uct_posix_packed_rkey {
 
 
 static ucs_config_field_t uct_posix_md_config_table[] = {
-  {"MM_", "", NULL,
-   ucs_offsetof(uct_posix_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
+    {"MM_", "", NULL, ucs_offsetof(uct_posix_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
 
-  {"DIR", UCT_POSIX_SHM_OPEN_DIR,
-   "The path to the backing file. If it's equal to " UCT_POSIX_SHM_OPEN_DIR " then \n"
-   "shm_open() is used. Otherwise, open() is used.",
-   ucs_offsetof(uct_posix_md_config_t, dir), UCS_CONFIG_TYPE_STRING},
+    {"DIR", UCT_POSIX_SHM_OPEN_DIR,
+     "The path to the backing file. If it's equal to " UCT_POSIX_SHM_OPEN_DIR
+     " then \n"
+     "shm_open() is used. Otherwise, open() is used.",
+     ucs_offsetof(uct_posix_md_config_t, dir), UCS_CONFIG_TYPE_STRING},
 
-  {"USE_PROC_LINK", "y", "Use /proc/<pid>/fd/<fd> to share posix file.\n"
-   " y   - Use /proc/<pid>/fd/<fd> to share posix file.\n"
-   " n   - Use original file path to share posix file.\n",
-   ucs_offsetof(uct_posix_md_config_t, use_proc_link), UCS_CONFIG_TYPE_BOOL},
+    {"SHM_MIN_SIZE", "16mb",
+     "Minimal size of the shared memory file system.\n"
+     "If the file system size is less than this value, the transport will be disabled\n"
+     "since it may not be able to allocate sufficient resources for communications.",
+     ucs_offsetof(uct_posix_md_config_t, shm_min_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
 
-  {NULL}
+    {"USE_PROC_LINK", "y",
+     "Use /proc/<pid>/fd/<fd> to share posix file.\n"
+     " y   - Use /proc/<pid>/fd/<fd> to share posix file.\n"
+     " n   - Use original file path to share posix file.\n",
+     ucs_offsetof(uct_posix_md_config_t, use_proc_link), UCS_CONFIG_TYPE_BOOL},
+
+    {NULL}
 };
 
 static ucs_config_field_t uct_posix_iface_config_table[] = {
@@ -122,6 +132,7 @@ uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr)
     const uct_posix_md_config_t *posix_config =
                     ucs_derived_of(md->config, uct_posix_md_config_t);
     struct statvfs shm_statvfs;
+    size_t shm_size;
 
     if (statvfs(posix_config->dir, &shm_statvfs) < 0) {
         ucs_error("could not stat shared memory device %s (%m)",
@@ -129,8 +140,9 @@ uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr)
         return UCS_ERR_NO_DEVICE;
     }
 
+    shm_size = shm_statvfs.f_bsize * shm_statvfs.f_bavail;
     uct_mm_md_query(&md->super, md_attr,
-                    shm_statvfs.f_bsize * shm_statvfs.f_bavail);
+                    (shm_size < posix_config->shm_min_size) ? 0 : shm_size);
 
     md_attr->rkey_packed_size = sizeof(uct_posix_packed_rkey_t) +
                                 uct_posix_iface_addr_length(md);

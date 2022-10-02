@@ -82,6 +82,28 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
     return uct_mm_md_mapper_ops(md)->iface_addr_pack(md, iface_addr + 1);
 }
 
+ucs_status_t
+uct_mm_iface_query_tl_devices(uct_md_h md,
+                              uct_tl_device_resource_t **tl_devices_p,
+                              unsigned *num_tl_devices_p)
+{
+    uct_md_attr_t md_attr;
+    ucs_status_t status;
+
+    status = uct_md_query(md, &md_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (!(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
+        *num_tl_devices_p = 0;
+        *tl_devices_p     = NULL;
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    return uct_sm_base_query_tl_devices(md, tl_devices_p, num_tl_devices_p);
+}
+
 static int
 uct_mm_iface_is_reachable(const uct_iface_h tl_iface,
                           const uct_device_addr_t *dev_addr,
