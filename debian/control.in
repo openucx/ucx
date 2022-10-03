@@ -36,3 +36,14 @@ Description: Unified Communication X - CUDA support
  pointers to UCX communication routines, and transports taking advantage
  of GPU-Direct technology for direct data transfer between GPU and RDMA
  devices.
+
+Package: ucx-gdrcopy
+Section: libs
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Architecture: any
+Build-Profiles: <cuda>
+Description: Unified Communication X - gdrcopy support
+ UCX is a communication library implementing high-performance messaging.
+ .
+ This package provides UCX support for using gdrcopy - A low-latency GPU
+ memory copy library based on NVIDIA GPUDirect RDMA technology.
