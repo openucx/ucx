@@ -429,8 +429,6 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
 
         /* Point to self */
         memh->parent = memh;
-    } else {
-        ucs_assert(context->imported_mem_rcaches != NULL);
     }
 
     *memh_p = memh;
