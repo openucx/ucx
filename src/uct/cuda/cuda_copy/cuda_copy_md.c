@@ -20,7 +20,6 @@
 #include <ucs/sys/math.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/api/v2/uct_v2.h>
-#include <cuda_runtime.h>
 #include <cuda.h>
 #if CUDA_VERSION >= 11070
 #include <cudaTypedefs.h>
@@ -159,6 +158,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
     CUresult result;
     ucs_status_t status;
 
+    if (!uct_cuda_base_is_context_active()) {
+        ucs_debug("attempt to register memory without active context");
+        return uct_md_dummy_mem_reg(md, address, length, params, memh_p);
+    }
+
     result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                    (CUdeviceptr)(address));
     if ((result == CUDA_SUCCESS) && ((memType == CU_MEMORYTYPE_HOST)    ||
@@ -170,8 +174,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
-    status    = UCT_CUDA_CALL(log_level, cudaHostRegister, address, length,
-                              cudaHostRegisterPortable);
+    status    = UCT_CUDADRV_FUNC(cuMemHostRegister(address, length,
+                                                   CU_MEMHOSTREGISTER_PORTABLE),
+                                 log_level);
     if (status != UCS_OK) {
         return status;
     }
@@ -194,7 +199,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
         return UCS_OK;
     }
 
-    status = UCT_CUDA_CALL_LOG_ERR(cudaHostUnregister, address);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemHostUnregister(address));
     if (status != UCS_OK) {
         return status;
     }

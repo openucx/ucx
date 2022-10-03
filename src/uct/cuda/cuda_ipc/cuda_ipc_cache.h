@@ -13,7 +13,6 @@
 #include <ucs/type/spinlock.h>
 #include "cuda_ipc_md.h"
 #include <cuda.h>
-#include <cuda_runtime.h>
 
 
 typedef struct uct_cuda_ipc_cache        uct_cuda_ipc_cache_t;
