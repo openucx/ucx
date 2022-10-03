@@ -785,12 +785,6 @@ enum uct_md_mem_flags {
      */
     UCT_MD_MEM_FLAG_HIDE_ERRORS     = UCS_BIT(3),
 
-    /**
-     * The flag is used to indicate that the memory region can be accessed by
-     * another process using the same device to perform UCT operations.
-     */
-    UCT_MD_MEM_FLAG_EXPORT          = UCS_BIT(4),
-
     /* Memory access flags */
     /**
      * Enable remote put access.

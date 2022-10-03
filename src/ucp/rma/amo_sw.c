@@ -65,8 +65,6 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
 
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED);
-
     req->send.lane = ucp_ep_get_am_lane(req->send.ep);
     if (fetch) {
         ucp_send_request_id_alloc(req);
@@ -376,6 +374,8 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
+
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED);
 
     return ucp_amo_sw_progress(self, pack_cb, fetch);
 }

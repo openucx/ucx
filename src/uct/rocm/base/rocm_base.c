@@ -143,9 +143,11 @@ int uct_rocm_base_is_gpu_agent(hsa_agent_t agent)
     return 0;
 }
 
-hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
-                                        void **base_ptr, size_t *base_size,
-                                        hsa_agent_t *agent)
+hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
+                                        size_t *base_size,
+                                        hsa_amd_pointer_type_t *hsa_mem_type,
+                                        hsa_agent_t *agent,
+                                        hsa_device_type_t *dev_type)
 {
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
@@ -157,17 +159,24 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
         return status;
     }
 
-    if (info.type == HSA_EXT_POINTER_TYPE_UNKNOWN)
-        return HSA_STATUS_ERROR;
-
-    *agent = info.agentOwner;
-
-    if (base_ptr)
+    if (hsa_mem_type != NULL) {
+        *hsa_mem_type = info.type;
+    }
+    if (agent != NULL) {
+        *agent = info.agentOwner;
+    }
+    if (base_ptr != NULL) {
         *base_ptr = info.agentBaseAddress;
-    if (base_size)
+    }
+    if (base_size != NULL) {
         *base_size = info.sizeInBytes;
+    }
+    if (dev_type != NULL) {
+        status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE,
+                                    dev_type);
+    }
 
-    return HSA_STATUS_SUCCESS;
+    return status;
 }
 
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,

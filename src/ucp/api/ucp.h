@@ -161,8 +161,8 @@ enum ucp_feature {
 
     /**
      * Request support mapping a peer's memory handle that was created by
-     * @ref ucp_mem_map with the flag @ref UCP_MEM_MAP_EXPORT and use it for
-     * local operations
+     * @ref ucp_mem_map and packed by @ref ucp_memh_pack with the flag
+     * @ref UCP_MEMH_PACK_FLAG_EXPORT and use it for local operations
      */
     UCP_FEATURE_EXPORTED_MEMH = UCS_BIT(7)
 };
@@ -584,17 +584,7 @@ enum {
      * Don't interpret address as a hint: place the mapping at exactly that
      * address. The address must be a multiple of the page size.
      */
-    UCP_MEM_MAP_FIXED    = UCS_BIT(2),
-
-    /**
-     * Create an exported memory handle that could be be packed and used by
-     * peers for their local operations on a memory buffer allocated from same
-     * or another virtual memory space, but physically registered on the
-     * same network device. A peer should call @ref ucp_mem_map with the
-     * flag @ref UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER in order to
-     * import and use the memory handle.
-     */
-    UCP_MEM_MAP_EXPORT = UCS_BIT(3)
+    UCP_MEM_MAP_FIXED    = UCS_BIT(2)
 };
 
 
@@ -1669,7 +1659,8 @@ typedef struct ucp_mem_map_params {
 
      /**
       * Exported memory handle buffer as returned by @ref ucp_mem_map
-      * function for a memory handle created with @ref UCP_MEM_MAP_EXPORT flag.
+      * function for a memory handle created and packed by @ref ucp_memh_pack
+      * with @ref UCP_MEMH_PACK_FLAG_EXPORT flag.
       * If this field is specified for @ref ucp_mem_map function, a resulting
       * memory handle will be a mapping of peer memory instead of local
       * memory.
@@ -2945,6 +2936,43 @@ ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
 
 /**
  * @ingroup UCP_MEM
+ * @brief UCP memory handle packing parameters field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref ucp_memh_pack_params_t are present. It is used to enable backward
+ * compatibility support.
+ */
+enum ucp_memh_pack_params_field {
+    /**
+     * Memory handle packing field that will be used in the @ref ucp_memh_pack
+     * routine.
+     */
+    UCP_MEMH_PACK_PARAM_FIELD_FLAGS = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief UCP memory handle flags.
+ *
+ * The enumeration list describes the memory handle packing flags supported by
+ * @ref ucp_memh_pack() function.
+ */
+enum ucp_memh_pack_flags {
+    /**
+     * Pack a memory handle to be exported and used by peers for their local
+     * operations on a memory buffer allocated from same or another virtual
+     * memory space, but physically registered on the same network device.
+     * A peer should call @ref ucp_mem_map with the
+     * flag @ref UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER in order to
+     * import and use a memory handle buffer obtained from @ref ucp_memh_pack.
+     */
+    UCP_MEMH_PACK_FLAG_EXPORT = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCP_MEM
  * @brief Memory handle pack parameters passed to @ref ucp_memh_pack.
  *
  * This structure defines the parameters that are used for packing the
@@ -2958,6 +2986,11 @@ typedef struct ucp_memh_pack_params {
      * new fields.
      */
     uint64_t                field_mask;
+
+    /**
+     * Flags to control packing of a memory handle.
+     */
+    uint64_t                flags;
 } ucp_memh_pack_params_t;
 
 
