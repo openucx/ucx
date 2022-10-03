@@ -258,6 +258,10 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
+    if (!iface->super.super.super.config.sl_ar) {
+        return uct_base_ep_fence(tl_ep, flags);
+    }
+
     UCT_DC_MLX5_CHECK_RES(iface, ep);
 
     return uct_rc_ep_fence(tl_ep, &iface->tx.dcis[ep->dci].txwq.fi,

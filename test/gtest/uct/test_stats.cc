@@ -188,6 +188,19 @@ public:
         EXPECT_EQ(1, m_comp.count);
     }
 
+    ucs_status_t ep_fence(uct_ep_h ep, unsigned int flags)
+    {
+        ucs_status_t status;
+
+        do {
+            status = uct_ep_fence(ep, flags);
+            short_progress_loop();
+            EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE));
+        } while (status == UCS_ERR_NO_RESOURCE);
+
+        return status;
+    }
+
 protected:
     mapped_buffer *lbuf, *rbuf;
     uct_completion_t m_comp;
@@ -480,7 +493,7 @@ UCS_TEST_P(test_uct_stats, fence)
     ucs_status_t status;
 
     if (sender_ep()) {
-        status = uct_ep_fence(sender_ep(), 0);
+        status = ep_fence(sender_ep(), 0);
         EXPECT_UCS_OK(status);
         EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_FENCE, 1UL);
     }
@@ -578,7 +591,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, fence_ep,
 
     fill_tx_q(0);
 
-    status = uct_ep_fence(sender_ep(), 0);
+    status = ep_fence(sender_ep(), 0);
     EXPECT_UCS_OK(status);
 
     fill_tx_q(0);

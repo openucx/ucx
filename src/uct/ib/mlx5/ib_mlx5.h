@@ -940,7 +940,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                       ucs_ternary_auto_value_t ar_enable,
                       uint16_t hw_sl_mask, int have_sl_mask_cap,
                       const char *dev_name, uint8_t port_num,
-                      uint8_t *sl_p);
+                      uint8_t *sl_p, uint8_t *sl_ar_p);
 
 ucs_status_t
 uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,

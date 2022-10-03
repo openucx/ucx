@@ -970,7 +970,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                       ucs_ternary_auto_value_t ar_enable,
                       uint16_t hw_sl_mask, int have_sl_mask_cap,
                       const char *dev_name, uint8_t port_num,
-                      uint8_t *sl_p)
+                      uint8_t *sl_p, uint8_t *sl_ar_p)
 {
     ucs_status_t status = UCS_OK;
     const char *sl_ar_support_str;
@@ -979,6 +979,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
     char sl_str[8];
     char ar_enable_str[8];
     uint8_t sl;
+    uint8_t sl_ar;
 
     ucs_assert(have_sl_mask_cap || (hw_sl_mask == 0));
 
@@ -1001,30 +1002,36 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
         /* selects SL requested by a user */
         sl                    = ucs_ffs64(sl_allow_mask);
         if (have_sl_mask_cap) {
-            sl_ar_support_str = (sl & sls_with_ar) ? "yes" : "no";
+            sl_ar             = !!(sl & sls_with_ar);
+            sl_ar_support_str = sl_ar ? "yes" : "no";
         } else {
+            sl_ar             = 0;
             sl_ar_support_str = "unknown";
         }
     } else if (((ar_enable == UCS_YES) || (ar_enable == UCS_TRY)) &&
                (sls_with_ar != 0)) {
         /* have SLs with AR, and AR is YES/TRY */
         sl                = ucs_ffs64(sls_with_ar);
+        sl_ar             = 1;
         sl_ar_support_str = "yes";
     } else if (((ar_enable == UCS_NO) || (ar_enable == UCS_TRY)) &&
                (sls_without_ar != 0)) {
         /* have SLs without AR, and AR is NO/TRY */
         sl                = ucs_ffs64(sls_without_ar);
+        sl_ar             = 0;
         sl_ar_support_str = "no";
     } else if (ar_enable == UCS_TRY) {
         ucs_assert(!have_sl_mask_cap);
         sl                = ucs_ffs64(sl_allow_mask);
+        sl_ar             = 0;
         sl_ar_support_str = "unknown"; /* we don't know which SLs support AR */
     } else {
         sl_ar_support_str = (ar_enable == UCS_YES) ? "with" : "without";
         goto err;
     }
 
-    *sl_p = sl;
+    *sl_p    = sl;
+    *sl_ar_p = sl_ar;
     ucs_debug("SL=%u (AR support - %s) was selected on %s:%u,"
               " SLs with AR support = { %s }, SLs without AR support = { %s }",
               sl, sl_ar_support_str, dev_name, port_num,
@@ -1072,7 +1079,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
          * AR support requested by user, pass empty ooo_sl_mask */
         return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1, dev_name,
                                      iface->config.port_num,
-                                     &iface->config.sl);
+                                     &iface->config.sl, &iface->config.sl_ar);
     }
 
 #if HAVE_DEVX
@@ -1088,7 +1095,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
     return uct_ib_mlx5_select_sl(ib_config, ib_mlx5_config->ar_enable,
                                  ooo_sl_mask, status == UCS_OK, dev_name,
                                  iface->config.port_num,
-                                 &iface->config.sl);
+                                 &iface->config.sl, &iface->config.sl_ar);
 }
 
 void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,

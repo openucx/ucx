@@ -537,6 +537,10 @@ ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
 
+    if (!iface->super.super.config.sl_ar) {
+        return uct_base_ep_fence(tl_ep, flags);
+    }
+
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi, 1);

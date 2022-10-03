@@ -401,6 +401,7 @@ typedef struct uct_rc_mlx5_iface_common {
     struct mlx5dv_devx_event_channel   *cq_event_channel;
     struct {
         uint8_t                        atomic_fence_flag;
+        uint8_t                        strong_fence_flag;
         uct_rc_mlx5_srq_topo_t         srq_topo;
         uint8_t                        log_ack_req_freq;
     } config;
