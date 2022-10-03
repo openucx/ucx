@@ -23,11 +23,8 @@
  * Memory handle flags.
  */
 enum {
-    UCP_MEM_FLAG_IMPORTED  = UCS_BIT(0), /* Memory handle was imported and
-                                          * points to some peer's memory buffer
-                                          */
-    UCP_MEM_FLAG_IN_RCACHE = UCS_BIT(1)  /* Memory handle was stored in RCACHE
-                                          */
+    /* Memory handle was imported and points to some peer's memory buffer */
+    UCP_MEM_FLAG_IMPORTED  = UCS_BIT(0)
 };
 
 

@@ -51,7 +51,7 @@ const ucp_rma_proto_t *ucp_rma_proto_list[] = {
 };
 
 
-/* Storage for a default value returned from  */
+/* Storage for a default value returned from ucp_memh_serialize_next() */
 uint64_t memh_serialize_default_val = 0;
 
 
@@ -248,7 +248,9 @@ static void* ucp_memh_common_pack(const ucp_mem_h memh, void *buffer,
     void *p                            = buffer;
 
     /* Check that md_map is valid */
-    ucs_assert(ucs_test_all_flags(UCS_MASK(context->num_mds), memh->md_map));
+    ucs_assertv(ucs_test_all_flags(UCS_MASK(context->num_mds), memh->md_map),
+                "mask 0x%lx memh %p md_map 0x%lx", UCS_MASK(context->num_mds),
+                memh, memh->md_map);
 
     /* Size of mkey information which comes prior TL mkey data of all MDs */
     *memh_info_size_p                 = p;

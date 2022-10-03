@@ -24,6 +24,12 @@
 #include <inttypes.h>
 
 
+typedef struct {
+    ucp_md_index_t md_index;
+    const void     *tl_mkey_buf;
+} ucp_memh_import_attach_params_t;
+
+
 ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
     .memh = {
         .alloc_method = UCT_ALLOC_METHOD_LAST,
@@ -449,7 +455,7 @@ ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
     }
 
     *memh_p          = ucs_derived_of(rregion, ucp_mem_t);
-    (*memh_p)->flags = UCP_MEM_FLAG_IN_RCACHE | memh_flags;
+    (*memh_p)->flags = memh_flags;
 
     return UCS_OK;
 }
@@ -491,34 +497,6 @@ static ucs_status_t ucp_memh_create_from_mem(ucp_context_h context,
 out:
     *memh_p = memh;
     return UCS_OK;
-}
-
-/**
- * Updates a memory handle by a parent's memory handle which stored in RCACHE.
- *
- * @param [in]  memh          Memory handle that should be updated.
- * @param [in]  cache_md_map  MD map of registered UCT memory keys stored in a
- *                            parent's RCACHE memory handle.
- * @param [out] memh_md_map_p Memory handle's MD map that should be updated by
- *                            MDs of UCT memory keys that copied from
- *                            @a cache_md_map.
- * @param [out] md_map_p      MD map that should be updated and it specifies
- *                            which MDs were not copied from a parent's RCACHE
- *                            memory handle.
- */
-static UCS_F_ALWAYS_INLINE void
-ucp_memh_update_from_parent_memh(ucp_mem_h memh,
-                                 ucp_md_map_t cache_md_map,
-                                 ucp_md_map_t *memh_md_map_p,
-                                 ucp_md_map_t *md_map_p)
-{
-    ucp_md_index_t md_index;
-
-    ucs_for_each_bit(md_index, cache_md_map) {
-        memh->uct[md_index] = memh->parent->uct[md_index];
-        *memh_md_map_p     |= UCS_BIT(md_index);
-        *md_map_p          &= ~UCS_BIT(md_index);
-    }
 }
 
 static ucs_status_t
@@ -1271,11 +1249,13 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context)
         goto err;
     }
 
-    context->imported_mem_rcaches =
-            kh_init(ucp_context_imported_mem_rcaches_hash);
-    if (context->imported_mem_rcaches == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_rcache_destroy;
+    if (context->config.features & UCP_FEATURE_EXPORTED_MEMH) {
+        context->imported_mem_rcaches =
+                kh_init(ucp_context_imported_mem_rcaches_hash);
+        if (context->imported_mem_rcaches == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_rcache_destroy;
+        }
     }
 
     return UCS_OK;
@@ -1372,13 +1352,12 @@ ucp_memh_import_parse_tl_mkey_data(ucp_context_h context,
     /* TL mkey data size */
     tl_mkey_data_size = *ucs_serialize_next(&p, uint16_t);
     end               = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
-    ucs_assertv((tl_mkey_data_size <= UINT16_MAX) && (tl_mkey_data_size != 0),
-                "tl_mkey_data_size %zu", tl_mkey_data_size);
+    ucs_assertv(tl_mkey_data_size != 0, "tl_mkey_data_size %zu",
+                tl_mkey_data_size);
 
     /* TL mkey size */
     tl_mkey_size = *ucp_memh_serialize_next(&p, uint8_t, end, 0u);
-    ucs_assertv((tl_mkey_size <= UINT8_MAX) && (tl_mkey_size != 0),
-                "tl_mkey_size %zu", tl_mkey_size);
+    ucs_assertv(tl_mkey_size != 0, "tl_mkey_size %zu", tl_mkey_size);
 
     /* TL mkey */
     tl_mkey_buf = ucs_serialize_next_raw(&p, void, tl_mkey_size);
@@ -1408,11 +1387,6 @@ ucp_memh_import_parse_tl_mkey_data(ucp_context_h context,
     *tl_mkey_buf_p = tl_mkey_buf;
     *md_map_p      = md_map;
 }
-
-typedef struct {
-    ucp_md_index_t md_index;
-    const void     *tl_mkey_buf;
-} ucp_memh_import_attach_params_t;
 
 static ucs_status_t
 ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
@@ -1658,6 +1632,8 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                                (rcache_memh->reg_id == reg_id))) {
                     memh->parent = rcache_memh;
                     status       = UCS_OK;
+
+                    UCP_THREAD_CS_EXIT(&context->mt_lock);
                     goto out_memh_update;
                 }
 
@@ -1680,8 +1656,11 @@ out_memh_update:
     if (memh->parent != memh) {
         memh->reg_id = memh->parent->reg_id;
         reg_md_map   = memh->parent->md_map;
-        ucp_memh_update_from_parent_memh(memh, memh->parent->md_map,
-                                         &memh->md_map, &reg_md_map);
+        ucs_for_each_bit(md_index, memh->parent->md_map) {
+            memh->uct[md_index] = memh->parent->uct[md_index];
+            memh->md_map       |= UCS_BIT(md_index);
+            reg_md_map         &= ~UCS_BIT(md_index);
+        }
         ucs_assert(reg_md_map == 0);
     }
 
