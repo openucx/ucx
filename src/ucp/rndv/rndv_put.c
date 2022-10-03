@@ -412,7 +412,6 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
     ucs_status_t status;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
-    ucs_assert(req->send.rndv.mdesc != NULL);
 
     status = ucp_proto_rndv_mtype_request_init(req);
     if (status != UCS_OK) {
