@@ -1406,6 +1406,10 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
         md_attr     = &context->tl_mds[md_index].attr;
         ucs_assert_always(md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY);
 
+        if (memh->uct[md_index] != NULL) {
+            continue;
+        }
+
         attach_params.field_mask = UCT_MD_MEM_ATTACH_FIELD_FLAGS;
         attach_params.flags      = UCT_MD_MEM_ATTACH_FLAG_HIDE_ERRORS;
 
@@ -1460,7 +1464,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
                               remote_uuid);
             status = ucp_mem_rcache_create(context, rcache_name, &rcache);
             if (status != UCS_OK) {
-                goto err;
+                goto out;
             }
 
             iter = kh_put(ucp_context_imported_mem_rcaches_hash,
@@ -1495,9 +1499,9 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
         goto err_memh_free;
     }
 
+out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
-
-    return UCS_OK;
+    return status;
 
 err_memh_free:
     if (rcache != NULL) {
@@ -1513,9 +1517,7 @@ err_rcache_destroy:
                context->imported_mem_rcaches, iter);
         ucs_rcache_destroy(rcache);
     }
-err:
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
-    return status;
+    goto out;
 }
 
 static ucs_status_t
@@ -1529,7 +1531,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     ucp_mem_h memh, rcache_memh;
     ucp_md_index_t remote_md_index;
     ucs_status_t status;
-    ucp_md_map_t remote_md_map, local_md_map, reg_md_map;
+    ucp_md_map_t remote_md_map, local_md_map;
     ucp_memh_import_attach_params_t *attach_params_array;
     unsigned attach_params_num;
     ucs_memory_type_t mem_type;
@@ -1584,10 +1586,6 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     ucs_for_each_bit(remote_md_index, remote_md_map) {
         ucp_memh_import_parse_tl_mkey_data(context, &p, &tl_mkey_buf,
                                            &local_md_map);
-
-        if (local_md_map == 0) {
-            continue;
-        }
 
         ucs_for_each_bit(md_index, local_md_map) {
             attach_params_array[attach_params_num].md_index    = md_index;
@@ -1653,13 +1651,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
 out_memh_update:
     if (memh->parent != memh) {
         memh->reg_id = memh->parent->reg_id;
-        reg_md_map   = memh->parent->md_map;
         ucs_for_each_bit(md_index, memh->parent->md_map) {
             memh->uct[md_index] = memh->parent->uct[md_index];
             memh->md_map       |= UCS_BIT(md_index);
-            reg_md_map         &= ~UCS_BIT(md_index);
         }
-        ucs_assert(reg_md_map == 0);
     }
 
     *memh_p = memh;
