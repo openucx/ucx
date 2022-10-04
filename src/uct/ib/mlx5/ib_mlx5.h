@@ -120,7 +120,11 @@ struct mlx5_grh_av {
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
+/* The WQE will start execution only after all previous Read/Atomic WQEs
+ * complete */
 #define UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE        (2<<5)
+/* When set, the WQE will be executed only after all previous WQEs have been
+ * executed. Can be set for RC/DC WQEs only */
 #define UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER (3<<5)
 
 #define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
