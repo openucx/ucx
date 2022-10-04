@@ -1030,32 +1030,63 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
     ucp_rndv_frag_free_mpools(mp, chunk);
 }
 
-void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)
+void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
+                        FILE *stream)
 {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
     size_t min_page_size, max_page_size;
     ucp_mem_map_params_t mem_params;
+    char mem_types_buf[128];
+    ssize_t mem_type_value;
     size_t mem_size_value;
     char memunits_str[32];
     ucs_status_t status;
+    char *mem_size_str;
+    char *mem_type_str;
     unsigned md_index;
     ucp_mem_h memh;
 
-    status = ucs_str_to_memunits(mem_size, &mem_size_value);
+    ucs_string_buffer_appendf(&strb, "%s", mem_spec);
+
+    /* Parse memory size */
+    mem_size_str = ucs_string_buffer_next_token(&strb, NULL, ",");
+    status       = ucs_str_to_memunits(mem_size_str, &mem_size_value);
     if (status != UCS_OK) {
         printf("<Failed to convert a memunits string>\n");
         return;
     }
 
-    mem_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                            UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
-                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    mem_params.address    = NULL;
-    mem_params.length     = mem_size_value;
-    mem_params.flags      = UCP_MEM_MAP_ALLOCATE;
+    /* Parse memory type */
+    mem_type_str = ucs_string_buffer_next_token(&strb, mem_size_str, ",");
+    if (mem_type_str != NULL) {
+        mem_type_value = ucs_string_find_in_list(mem_type_str,
+                                                 ucs_memory_type_names, 0);
+        if ((mem_type_value < 0) ||
+            !(UCS_BIT(mem_type_value) & context->mem_type_mask)) {
+            printf("<Invalid memory type '%s', supported types: %s>\n",
+                   mem_type_str,
+                   ucs_flags_str(mem_types_buf, sizeof(mem_types_buf),
+                                 context->mem_type_mask,
+                                 ucs_memory_type_names));
+            return;
+        }
+    } else {
+        mem_type_value = UCS_MEMORY_TYPE_HOST;
+    }
+
+    mem_params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_params.address     = NULL;
+    mem_params.length      = mem_size_value;
+    mem_params.memory_type = mem_type_value;
+    mem_params.flags       = UCP_MEM_MAP_ALLOCATE;
 
     status = ucp_mem_map(context, &mem_params, &memh);
     if (status != UCS_OK) {
-        printf("<Failed to map memory of size %s>\n", mem_size);
+        printf("<Failed to allocate memory of size %zd type %s>\n",
+               mem_size_value, mem_type_str);
         return;
     }
 
@@ -1093,7 +1124,7 @@ void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *strea
 
     status = ucp_mem_unmap(context, memh);
     if (status != UCS_OK) {
-        printf("<Failed to unmap memory of size %s>\n", mem_size);
+        printf("<Failed to unmap memory of size %zd>\n", mem_size_value);
     }
 }
 
