@@ -18,6 +18,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/sock.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/iovec.inl>
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -515,6 +516,9 @@ static ucs_status_t cleanup_sock_rte(struct perftest_context *ctx)
 }
 
 #if defined (HAVE_MPI)
+
+#define MPI_RTE_BSEND_BUFFER_SIZE 4096
+
 static unsigned mpi_rte_group_size(void *rte_group)
 {
     int size;
@@ -598,6 +602,7 @@ static void mpi_rte_barrier(void *rte_group, void (*progress)(void *arg),
 static void mpi_rte_post_vec(void *rte_group, const struct iovec *iovec,
                              int iovcnt, void **req)
 {
+    size_t total_length = ucs_iovec_total_length(iovec, iovcnt);
     int group_size;
     int my_rank;
     int dest, i;
@@ -605,15 +610,18 @@ static void mpi_rte_post_vec(void *rte_group, const struct iovec *iovec,
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &group_size);
 
+    ucs_assertv_always(total_length <= MPI_RTE_BSEND_BUFFER_SIZE,
+                       "total_length=%zu", total_length);
+
     for (dest = 0; dest < group_size; ++dest) {
         if (dest != rte_peer_index(group_size, my_rank)) {
             continue;
         }
 
         for (i = 0; i < iovcnt; ++i) {
-            MPI_Send(iovec[i].iov_base, iovec[i].iov_len, MPI_BYTE, dest,
-                     i == (iovcnt - 1), /* Send last iov with tag == 1 */
-                     MPI_COMM_WORLD);
+            MPI_Bsend(iovec[i].iov_base, iovec[i].iov_len, MPI_BYTE, dest,
+                      i == (iovcnt - 1), /* Send last iov with tag == 1 */
+                      MPI_COMM_WORLD);
         }
     }
 
@@ -793,6 +801,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     };
 
     int size, rank;
+    void *buffer;
 
     ucs_trace_func("");
 
@@ -813,6 +822,13 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     }
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    buffer = calloc(1, MPI_RTE_BSEND_BUFFER_SIZE);
+    if (buffer == NULL) {
+        ucs_error("failed to allocate memory for MPI_Buffer_attach");
+        return UCS_ERR_NO_MEMORY;
+    }
+    MPI_Buffer_attach(buffer, MPI_RTE_BSEND_BUFFER_SIZE);
 
     /* Let the last rank print the results */
     if (rank == (size - 1)) {
@@ -845,7 +861,15 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 
 static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
 {
-#ifdef HAVE_RTE
+#if defined (HAVE_MPI)
+    void *buffer;
+    int size;
+
+    MPI_Buffer_detach(&buffer, &size);
+    ucs_assert(buffer != NULL);
+    ucs_assertv(size == MPI_RTE_BSEND_BUFFER_SIZE, "size=%d", size);
+    free(buffer);
+#elif defined (HAVE_RTE)
     rte_finalize();
 #endif
     return UCS_OK;
