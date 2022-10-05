@@ -1622,10 +1622,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                                                PROT_READ | PROT_WRITE);
             if (rregion != NULL) {
                 rcache_memh = ucs_derived_of(rregion, ucp_mem_t);
-                if (ucs_likely(ucp_memh_rcache_is_suitable(
-                            rcache_memh, address, length,
-                            UCP_MEM_FLAG_IMPORTED, remote_md_map) &&
-                               (rcache_memh->reg_id == reg_id))) {
+                if (ucs_likely(ucp_memh_rcache_is_suitable(rcache_memh,
+                                                           address, length,
+                                                           remote_md_map,
+                                                           reg_id, 1))) {
                     memh->parent = rcache_memh;
                     status       = UCS_OK;
 
@@ -1633,7 +1633,9 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                     goto out_memh_update;
                 }
 
-                ucs_rcache_region_put_unsafe(rcache, rregion);
+                ucs_assertv(rregion->refcount == 1, "%u", rregion->refcount);
+                ucs_rcache_region_invalidate(rcache, rregion,
+                                             ucs_empty_function, NULL);
             }
         }
 
