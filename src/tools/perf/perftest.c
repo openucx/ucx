@@ -839,12 +839,9 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.super.rte        = &mpi_rte;
     ctx->params.super.report_arg = ctx;
 #elif defined (HAVE_RTE)
-    ucs_trace_func("");
-
-    ctx->params.rte_group         = NULL;
-    ctx->params.rte               = &mpi_rte;
-    ctx->params.report_arg        = ctx;
     rte_group_t group;
+
+    ucs_trace_func("");
 
     rte_init(NULL, NULL, &group);
     /* Let the last rank print the results */
