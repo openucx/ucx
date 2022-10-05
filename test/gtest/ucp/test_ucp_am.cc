@@ -25,9 +25,9 @@ extern "C" {
 #define NUM_MESSAGES 17
 
 #define UCP_REALLOC_ID 1000
-#define UCP_SEND_ID 0
-#define UCP_REPLY_ID 1
-#define UCP_RELEASE 1
+#define UCP_SEND_ID    0
+#define UCP_REPLY_ID   1
+#define UCP_RELEASE    1
 
 class test_ucp_am_base : public ucp_test {
 public:
@@ -44,7 +44,8 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_AM, 1, "proto");
     }
 
-    virtual void init() {
+    virtual void init()
+    {
         modify_config("MAX_EAGER_LANES", "2");
 
         ucp_test::init();
@@ -211,7 +212,7 @@ void test_ucp_am::do_send_process_data_test(int test_release, uint16_t am_id,
     }
 
     if (test_release) {
-        for(int i = 0; i < recv_ams; i++) {
+        for (int i = 0; i < recv_ams; i++) {
             if (for_release[i] != NULL) {
                 ucp_am_data_release(receiver().worker(), for_release[i]);
             }
@@ -325,11 +326,11 @@ public:
 
     test_ucp_am_nbx()
     {
-        m_dt          = ucp_dt_make_contig(1);
-        m_am_received = false;
-        m_rx_dt       = ucp_dt_make_contig(1);
-        m_rx_buf      = NULL;
-        m_rx_memh     = NULL;
+        reset_counters();
+        m_dt      = ucp_dt_make_contig(1);
+        m_rx_dt   = ucp_dt_make_contig(1);
+        m_rx_buf  = NULL;
+        m_rx_memh = NULL;
     }
 
     void test_datatypes(std::function<void()> test_f);
@@ -343,6 +344,17 @@ protected:
     virtual ucs_memory_type_t rx_memtype() const
     {
         return UCS_MEMORY_TYPE_HOST;
+    }
+
+    void reset_counters()
+    {
+        m_send_counter = 0;
+        m_recv_counter = 0;
+    }
+
+    void wait_receives()
+    {
+        wait_for_value(&m_recv_counter, m_send_counter);
     }
 
     size_t max_am_hdr()
@@ -368,9 +380,9 @@ protected:
     ucp_datatype_t make_dt(int dt)
     {
         if (dt == UCP_DATATYPE_CONTIG) {
-           return ucp_dt_make_contig(1);
+            return ucp_dt_make_contig(1);
         } else if (dt == UCP_DATATYPE_IOV) {
-           return ucp_dt_make_iov();
+            return ucp_dt_make_iov();
         } else {
             ucs_assertv(UCP_DATATYPE_GENERIC == dt, "dt=%d", dt);
             ucp_datatype_t ucp_dt;
@@ -387,8 +399,9 @@ protected:
         }
     }
 
-    void set_am_data_handler(entity &e, uint16_t am_id, ucp_am_recv_callback_t cb,
-                             void *arg, unsigned flags = 0)
+    void set_am_data_handler(entity &e, uint16_t am_id,
+                             ucp_am_recv_callback_t cb, void *arg,
+                             unsigned flags = 0)
     {
         ucp_am_handler_param_t param;
 
@@ -415,13 +428,23 @@ protected:
     }
 
     ucs_status_ptr_t
+    update_counter_and_send_am(const void *header, size_t header_length,
+                               const void *buffer, size_t count,
+                               const ucp_request_param_t *param)
+    {
+        m_send_counter++;
+        return ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, header,
+                               header_length, buffer, count, param);
+    }
+
+    ucs_status_ptr_t
     send_am(const ucp::data_type_desc_t &dt_desc, unsigned flags = 0,
             const void *hdr = NULL, unsigned hdr_length = 0,
             const ucp_mem_h memh = NULL, uint32_t op_attr_mask = 0)
     {
         ucp_request_param_t param;
-        param.op_attr_mask      = op_attr_mask | UCP_OP_ATTR_FIELD_DATATYPE;
-        param.datatype          = dt_desc.dt();
+        param.op_attr_mask = op_attr_mask | UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype     = dt_desc.dt();
 
         if (flags != 0) {
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
@@ -433,9 +456,10 @@ protected:
             param.memh          = memh;
         }
 
-        ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID,
-                                                hdr, hdr_length, dt_desc.buf(),
-                                                dt_desc.count(), &param);
+        ucs_status_ptr_t sptr = update_counter_and_send_am(hdr, hdr_length,
+                                                           dt_desc.buf(),
+                                                           dt_desc.count(),
+                                                           &param);
         return sptr;
     }
 
@@ -447,7 +471,7 @@ protected:
         sbuf.pattern_fill(SEED);
         m_hdr.resize(header_size);
         ucs::fill_random(m_hdr);
-        m_am_received  = false;
+        reset_counters();
         ucp_mem_h memh = NULL;
 
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this,
@@ -463,14 +487,14 @@ protected:
                                         m_hdr.data(), m_hdr.size(), memh,
                                         op_attr_mask);
 
-        wait_for_flag(&m_am_received);
+        wait_receives();
         request_wait(sptr);
 
         if (prereg()) {
             sender().mem_unmap(memh);
         }
 
-        EXPECT_TRUE(m_am_received);
+        EXPECT_EQ(m_recv_counter, m_send_counter);
     }
 
     void test_am(size_t size, unsigned flags = 0)
@@ -541,11 +565,12 @@ protected:
         return status;
     }
 
-    ucs_status_t am_data_handler_common(const void *header,
-                                        size_t header_length,
-                                        void *data, size_t length,
-                                        const ucp_am_recv_param_t *rx_param)
+    virtual ucs_status_t am_data_handler(const void *header,
+                                         size_t header_length,
+                                         void *data, size_t length,
+                                         const ucp_am_recv_param_t *rx_param)
     {
+        EXPECT_LT(m_recv_counter, m_send_counter);
         check_header(header, header_length);
 
         bool has_reply_ep = get_send_flag();
@@ -557,39 +582,24 @@ protected:
         if (!(rx_param->recv_attr &
               (UCP_AM_RECV_ATTR_FLAG_RNDV | UCP_AM_RECV_ATTR_FLAG_DATA))) {
             mem_buffer::pattern_check(data, length, SEED);
-            m_am_received = true;
+            m_recv_counter++;
             return UCS_OK;
         }
 
         return am_data_rndv_handler(data, length);
     }
 
-    virtual ucs_status_t am_data_handler(const void *header,
-                                         size_t header_length,
-                                         void *data, size_t length,
-                                         const ucp_am_recv_param_t *rx_param)
-    {
 
-        EXPECT_FALSE(m_am_received);
-        return am_data_handler_common(header, header_length, data, length,
-                                      rx_param);
-    }
-
-    void am_recv_check_data_common(size_t length)
+    void am_recv_check_data(size_t length)
     {
-        m_am_received = true;
+        EXPECT_LT(m_recv_counter, m_send_counter);
         mem_buffer::pattern_check(m_rx_buf, length, SEED, rx_memtype());
+        m_recv_counter++;
 
         if (m_rx_memh != NULL) {
             receiver().mem_unmap(m_rx_memh);
         }
         mem_buffer::release(m_rx_buf, rx_memtype());
-    }
-
-    virtual void am_recv_check_data(size_t length)
-    {
-        ASSERT_FALSE(m_am_received);
-        am_recv_check_data_common(length);
     }
 
     static ucs_status_t am_data_cb(void *arg, const void *header,
@@ -607,7 +617,7 @@ protected:
                                        const ucp_am_recv_param_t *param)
     {
         test_ucp_am_nbx *self = reinterpret_cast<test_ucp_am_nbx*>(arg);
-        self->m_am_received   = true;
+        self->m_recv_counter++;
         return UCS_OK;
     }
 
@@ -642,8 +652,9 @@ protected:
     }
 
     static const uint16_t           TEST_AM_NBX_ID = 0;
+    volatile size_t                 m_send_counter;
+    volatile size_t                 m_recv_counter;
     ucp_datatype_t                  m_dt;
-    volatile bool                   m_am_received;
     std::string                     m_hdr;
     ucp_datatype_t                  m_rx_dt;
     ucp::data_type_desc_t           m_rx_dt_desc;
@@ -948,9 +959,8 @@ protected:
         m_hdr_copy.resize(header_size);
         ucs::fill_random(m_hdr_copy);
         ucp::data_type_desc_t sdt_desc(m_dt, sbuf.ptr(), data_size);
-        m_hdr       = m_hdr_copy;
-        req_counter = 0;
-        cb_counter  = 0;
+        m_hdr = m_hdr_copy;
+        reset_counters();
 
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this);
         /**
@@ -987,13 +997,13 @@ protected:
 
         ucs::fill_random(m_hdr_copy);
         while (progress());
-        wait_for_value(&cb_counter, req_counter);
+        wait_receives();
         request_wait(pending_sptr);
         if (rndv) {
-            wait_for_value(&cb_counter, req_counter);
+            wait_receives();
             request_wait(rndv_pending_sptr);
         }
-        EXPECT_EQ(req_counter, cb_counter);
+        EXPECT_EQ(m_send_counter, m_recv_counter);
     }
 
     static ucs_status_t
@@ -1007,23 +1017,6 @@ protected:
                                      param);
     }
 
-    /// @override
-    ucs_status_t am_data_handler(const void *header, size_t header_length,
-                                 void *data, size_t length,
-                                 const ucp_am_recv_param_t *rx_param)
-    {
-        ucs_status_t status = am_data_handler_common(header, header_length,
-                                                     data, length, rx_param);
-
-        cb_counter++;
-        return status;
-    }
-
-    /// @override
-    void am_recv_check_data(size_t length)
-    {
-        am_recv_check_data_common(length);
-    }
 
     static void am_data_recv_cb(void *request, ucs_status_t status,
                                 size_t length, void *user_data)
@@ -1042,16 +1035,6 @@ protected:
     }
 
 private:
-    /// @override
-    ucs_status_ptr_t send_am(const ucp::data_type_desc_t &dt_desc,
-                             unsigned flags = 0, const void *hdr = NULL,
-                             unsigned hdr_length = 0,
-                             const ucp_mem_h memh = NULL)
-    {
-        req_counter++;
-        return test_ucp_am_nbx::send_am(dt_desc, flags, hdr, hdr_length, memh);
-    }
-
     ucs_status_ptr_t fill_sq(ucp::data_type_desc_t &sdt_desc,
                              size_t header_size = 0ul, unsigned flags = 0,
                              const ucp_mem_h memh = NULL)
@@ -1062,7 +1045,7 @@ private:
         // Warmup for wireup connection
         pending_sptr = send_am(sdt_desc, get_send_flag() | flags,
                                m_hdr_copy.data(), header_size, memh);
-        wait_for_flag(&m_am_received);
+        wait_receives();
         request_wait(pending_sptr);
         pending_sptr = NULL;
 
@@ -1075,8 +1058,6 @@ private:
         return pending_sptr;
     }
 
-    size_t req_counter = 0;
-    size_t cb_counter  = 0;
     std::string m_hdr_copy;
 };
 
@@ -1203,7 +1184,7 @@ protected:
         skip_loopback();
         test_am_send_recv(0, 0); // warmup wireup
 
-        m_am_received = false;
+        reset_counters();
         std::vector<char> sbuf(size, 'd');
         ucp::data_type_desc_t sdt_desc(m_dt, &sbuf[0], size);
 
@@ -1214,7 +1195,7 @@ protected:
         sender().progress();
         if (poke_rx_progress) {
             receiver().progress();
-            if (m_am_received) {
+            if (m_send_counter == m_recv_counter) {
                 request_wait(sreq);
                 UCS_TEST_SKIP_R("received all AMs before ep closed");
             }
@@ -1232,15 +1213,15 @@ protected:
 
         if (rx_expected) {
             request_wait(sreq);
-            wait_for_flag(&m_am_received);
+            wait_receives();
+            EXPECT_EQ(m_recv_counter, m_send_counter);
         } else {
             // Send request may complete with error
             // (rndv should complete with EP_TIMEOUT)
             scoped_log_handler wrap_err(wrap_errors_logger);
             request_wait(sreq);
+            EXPECT_LT(m_recv_counter, m_send_counter);
         }
-
-        EXPECT_EQ(rx_expected, m_am_received);
     }
 };
 
@@ -1333,14 +1314,14 @@ public:
     am_data_handler(const void *header, size_t header_length, void *data,
                     size_t length, const ucp_am_recv_param_t *rx_param)
     {
-        EXPECT_FALSE(m_am_received);
+        EXPECT_LT(m_recv_counter, m_send_counter);
         EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
 
-        m_am_received = true;
-        m_data_ptr    = data;
+        m_data_ptr = data;
 
         check_header(header, header_length);
         mem_buffer::pattern_check(data, length, SEED);
+        m_recv_counter++;
 
         return UCS_INPROGRESS;
     }
@@ -1433,8 +1414,7 @@ public:
 
     void init()
     {
-        m_size               = ucs_max(UCS_KBYTE,
-                                       ucs::rand() % (64 * UCS_KBYTE));
+        m_size = ucs_max(UCS_KBYTE, ucs::rand() % (64 * UCS_KBYTE));
         std::string str_size = ucs::to_string(m_size);
 
         test_ucp_am_nbx::init();
@@ -1572,8 +1552,8 @@ public:
     {
         test_ucp_am_nbx_rndv *self = reinterpret_cast<test_ucp_am_nbx_rndv*>(arg);
 
-        EXPECT_FALSE(self->m_am_received);
-        self->m_am_received = true;
+        EXPECT_LT(self->m_recv_counter, self->m_send_counter);
+        self->m_recv_counter++;
 
         return self->m_status;
     }
@@ -1607,7 +1587,7 @@ public:
         void **data_desc_p         = args->desc;
 
         *data_desc_p = data;
-        self->m_am_received = true;
+        self->m_recv_counter++;
 
         /* return UCS_OK without calling ucp_am_recv_data_nbx()
          * to drop the message */
@@ -1641,8 +1621,8 @@ public:
         /* Handle RNDV desc from AM receive callback */
         ucs_status_t status = am_data_rndv_handler(data_desc, size);
         ASSERT_TRUE((status == UCS_OK) || (status == UCS_INPROGRESS));
-        wait_for_flag(&m_am_received);
-        EXPECT_TRUE(m_am_received);
+        wait_receives();
+        EXPECT_EQ(m_recv_counter, m_send_counter);
 
         request_wait(sptr);
 
@@ -1713,11 +1693,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_rndv, invalid_recv_desc,
     set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_drop_rndv_cb, &args);
 
     param.op_attr_mask = 0ul;
+    ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul, &data,
+                                                       sizeof(data), &param);
 
-    ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
-                                            0ul, &data, sizeof(data), &param);
-
-    wait_for_flag(&m_am_received);
+    wait_receives();
 
     scoped_log_handler wrap_err(wrap_errors_logger);
     /* attempt to recv data with invalid 'data_desc' since it was reliased
@@ -1747,15 +1726,15 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)
     scoped_log_handler wrap_err(wrap_errors_logger);
 
     for (int i = 0; i < ucs_static_array_size(statuses); ++i) {
-        m_am_received = false;
-        m_status      = statuses[i];
+        reset_counters();
+        m_status = statuses[i];
 
-        ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID,
-                                                NULL, 0ul, sbuf.data(),
-                                                sbuf.size(), &param);
+        ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul,
+                                                           sbuf.data(),
+                                                           sbuf.size(), &param);
 
         EXPECT_EQ(m_status, request_wait(sptr));
-        EXPECT_TRUE(m_am_received);
+        EXPECT_EQ(m_recv_counter, m_send_counter);
     }
 }
 
