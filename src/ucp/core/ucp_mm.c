@@ -1492,12 +1492,11 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
         rcache = NULL;
     }
 
-    memh->reg_id               = reg_id;
-    memh->remote_import_md_map = remote_md_map;
-    memh->remote_uuid          = remote_uuid;
-    status                     = ucp_memh_import_attach(context, memh,
-                                                        attach_params_array,
-                                                        attach_params_num);
+    memh->reg_id      = reg_id;
+    memh->remote_uuid = remote_uuid;
+    status            = ucp_memh_import_attach(context, memh,
+                                               attach_params_array,
+                                               attach_params_num);
     if (status != UCS_OK) {
         goto err_memh_free;
     }
@@ -1627,7 +1626,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                 rcache_memh = ucs_derived_of(rregion, ucp_mem_t);
                 if (ucs_likely(rcache_memh->reg_id == reg_id)) {
                     ucp_memh_rcache_suitable_print(rcache_memh, address,
-                                                   length, remote_md_map);
+                                                   length);
                     memh->parent = rcache_memh;
                     status       = UCS_OK;
                     UCP_THREAD_CS_EXIT(&context->mt_lock);

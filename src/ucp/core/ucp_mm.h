@@ -57,7 +57,6 @@ typedef struct ucp_mem {
     uint64_t            reg_id;         /* Registration ID */
     /* Which MDs with EXPORTED_MKEY capability were exported and packed to
        an exported_mkey_buffer and then used by a memh to import it */
-    ucp_md_map_t        remote_import_md_map;
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
 

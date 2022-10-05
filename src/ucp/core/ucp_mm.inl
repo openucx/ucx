@@ -18,53 +18,16 @@ ucp_memh_is_zero_length(const ucp_mem_h memh)
     return memh == &ucp_mem_dummy_handle.memh;
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_memh_rcache_is_suitable(ucp_mem_h memh, void *address, size_t length,
-                            ucp_md_map_t reg_md_map, uint64_t reg_id,
-                            int imported)
-{
-    ucp_md_map_t memh_md_map;
-    const char UCS_V_UNUSED *type;
-
-    if (imported) {
-        memh_md_map = memh->remote_import_md_map;
-        type        = "importing";
-    } else {
-        memh_md_map = memh->md_map;
-        type        = "registration";
-    }
-
-    if (ucs_likely(ucs_test_all_flags(memh_md_map, reg_md_map) &&
-                   (memh->reg_id == reg_id))) {
-        ucs_trace("memh %p: address %p/%p length %zu/%zu md_map %" PRIx64 "/%"
-                  PRIx64 " obtained from rcache for %s", memh, address,
-                  ucp_memh_address(memh), length, ucp_memh_length(memh),
-                  reg_md_map, memh_md_map, type);
-        return 1;
-    }
-
-    return 0;
-}
-
 static UCS_F_ALWAYS_INLINE void
-ucp_memh_rcache_suitable_print(ucp_mem_h memh, void *address, size_t length,
-                               ucp_md_map_t reg_md_map)
+ucp_memh_rcache_suitable_print(ucp_mem_h memh, void *address, size_t length)
 {
-    ucp_md_map_t memh_md_map;
-    const char UCS_V_UNUSED *type;
+    const char UCS_V_UNUSED *type = (memh->flags & UCP_MEM_FLAG_IMPORTED) ?
+                                    "imported" : "normal";
 
-    if (memh->flags & UCP_MEM_FLAG_IMPORTED) {
-        memh_md_map = memh->remote_import_md_map;
-        type        = "imported";
-    } else {
-        memh_md_map = memh->md_map;
-        type        = "normal";
-    }
-
-    ucs_trace("%s memh %p: address %p/%p length %zu/%zu md_map %" PRIx64 "/%"
-              PRIx64 " obtained from rcache", type, memh, address,
+    ucs_trace("%s memh %p: address %p/%p length %zu/%zu md_map %" PRIx64
+              " obtained from rcache", type, memh, address,
               ucp_memh_address(memh), length, ucp_memh_length(memh),
-              reg_md_map, memh_md_map);
+              memh->md_map);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -95,7 +58,7 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
 
         memh = ucs_derived_of(rregion, ucp_mem_t);
         if (ucs_likely(ucs_test_all_flags(memh->md_map, reg_md_map))) {
-            ucp_memh_rcache_suitable_print(memh, address, length, reg_md_map);
+            ucp_memh_rcache_suitable_print(memh, address, length);
             *memh_p = memh;
             status = UCS_OK;
             goto out_unlock;
