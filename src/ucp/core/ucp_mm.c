@@ -707,6 +707,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
                          ucp_mem_h *memh_p)
 {
     uint8_t memh_flags = 0;
+    ucp_mem_h memh     = NULL;
     ucs_memory_type_t mem_type;
     ucp_memory_info_t mem_info;
     ucs_status_t status;
@@ -715,7 +716,6 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     void *address;
     const void *exported_memh_buffer;
     size_t length;
-    ucp_mem_h memh;
 
     if (!(params->field_mask &
           (UCP_MEM_MAP_PARAM_FIELD_LENGTH |
@@ -758,6 +758,12 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 
     if (exported_memh_buffer != NULL) {
         memh_flags |= UCP_MEM_FLAG_IMPORTED;
+
+        if (*(uint16_t*)exported_memh_buffer == sizeof(ucp_memh_dummy_buffer)) {
+            goto out_zero_mem;
+        }
+    } else if (length == 0) {
+        goto out_zero_mem;
     }
 
     if (address == NULL) {
@@ -771,16 +777,6 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
                 (flags & UCP_MEM_MAP_FIXED))) {
         ucs_error("wrong combination of flags when address is defined");
         status = UCS_ERR_INVALID_PARAM;
-        goto out;
-    }
-
-    if (ucp_mem_map_is_zero(memh_flags, length, exported_memh_buffer)) {
-        ucs_assert(ucp_memh_address(&ucp_mem_dummy_handle.memh) == NULL);
-        ucs_assert(ucp_memh_length(&ucp_mem_dummy_handle.memh) == 0);
-
-        ucs_debug("mapping zero length buffer, return dummy memh");
-        *memh_p = &ucp_mem_dummy_handle.memh;
-        status  = UCS_OK;
         goto out;
     }
 
@@ -803,11 +799,18 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     ucs_assert(memh->md_map != 0);
     ucs_assert(memh->parent != NULL);
 
-    *memh_p = memh;
-    return UCS_OK;
-
 out:
+    *memh_p = memh;
     return status;
+
+out_zero_mem:
+    ucs_assert(ucp_memh_address(&ucp_mem_dummy_handle.memh) == NULL);
+    ucs_assert(ucp_memh_length(&ucp_mem_dummy_handle.memh) == 0);
+
+    ucs_debug("mapping zero length buffer, return dummy memh");
+    memh   = &ucp_mem_dummy_handle.memh;
+    status = UCS_OK;
+    goto out;
 }
 
 ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
@@ -1622,13 +1625,11 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                                                PROT_READ | PROT_WRITE);
             if (rregion != NULL) {
                 rcache_memh = ucs_derived_of(rregion, ucp_mem_t);
-                if (ucs_likely(ucp_memh_rcache_is_suitable(rcache_memh,
-                                                           address, length,
-                                                           remote_md_map,
-                                                           reg_id, 1))) {
+                if (ucs_likely(rcache_memh->reg_id == reg_id)) {
+                    ucp_memh_rcache_suitable_print(rcache_memh, address,
+                                                   length, remote_md_map);
                     memh->parent = rcache_memh;
                     status       = UCS_OK;
-
                     UCP_THREAD_CS_EXIT(&context->mt_lock);
                     goto out_memh_update;
                 }
