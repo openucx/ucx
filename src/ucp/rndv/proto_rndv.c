@@ -361,6 +361,22 @@ out:
     return status;
 }
 
+static size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
+{
+    const ucp_proto_select_param_t *select_param = init_params->select_param;
+    uint32_t op_attr_mask           = ucp_proto_select_op_attr_from_flags(
+            select_param->op_flags);
+    const ucp_context_config_t *cfg = &init_params->worker->context->config.ext;
+
+    if ((cfg->rndv_thresh == UCS_MEMUNITS_AUTO) &&
+        (op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        ucs_likely(UCP_MEM_IS_HOST(select_param->mem_type))) {
+        return cfg->rndv_send_nbr_thresh;
+    }
+
+    return cfg->rndv_thresh;
+}
+
 ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                    = init_params->worker->context;
@@ -368,7 +384,7 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = 40e-9,
-        .super.cfg_thresh    = context->config.ext.rndv_thresh,
+        .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
         .super.cfg_priority  = 60,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
