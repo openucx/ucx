@@ -49,34 +49,4 @@ ucp_rkey_get_tl_rkey(ucp_rkey_h rkey, ucp_md_index_t rkey_index)
     return rkey->tl_rkey[rkey_index].rkey.rkey;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
-                             ucp_rkey_h *rkey_p)
-{
-    ucp_ep_config_t *config = &ep->worker->ep_config[ep->cfg_index];
-    return ucp_ep_rkey_unpack_internal(ep, buffer, length,
-                                       config->key.reachable_md_map, 0, rkey_p);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_ep_rkey_unpack_reg_reachable(ucp_ep_h ep, const void *buffer, size_t length,
-                                 ucp_rkey_h *rkey_p)
-{
-    ucp_ep_config_t  *config = &ep->worker->ep_config[ep->cfg_index];
-    ucp_md_map_t     not_unpack_md_map = config->key.reachable_md_map;
-    unsigned         md_index;
-    uct_md_attr_v2_t md_attr;
-
-    ucs_for_each_bit(md_index, config->key.reachable_md_map) {
-        md_attr = ep->worker->context->tl_mds[md_index].attr;
-        if (md_attr.flags & UCT_MD_FLAG_REG) {
-            not_unpack_md_map &= ~UCS_BIT(md_index);
-        }
-    }
-
-    return ucp_ep_rkey_unpack_internal(ep, buffer, length,
-                                       config->key.reachable_md_map,
-                                       not_unpack_md_map, rkey_p);
-}
-
 #endif

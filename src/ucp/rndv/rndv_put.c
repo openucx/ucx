@@ -18,7 +18,7 @@
 
 
 #define UCP_PROTO_RNDV_PUT_DESC "write to remote"
-#define UCP_PROTO_RNDV_RKEY_PTR_DESC "write to attached"
+#define UCP_PROTO_RNDV_RKEY_PTR_DESC "copy to attached"
 
 
 enum {
@@ -406,7 +406,6 @@ static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-    ucp_rsc_index_t memh_index = ucp_proto_rndv_mtype_get_memh_index(req);
     uct_mem_h memh;
 
     ucs_status_t status;
@@ -421,7 +420,7 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     ucp_proto_rndv_put_common_request_init(req);
 
-    memh = ucp_proto_rndv_mtype_get_memh(req, memh_index);
+    memh = ucp_proto_rndv_mtype_get_req_memh(req);
     ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr, memh,
                               uct_ep_get_zcopy,
                               ucp_proto_rndv_put_mtype_pack_completion,
@@ -534,10 +533,8 @@ static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_init_params(
         .super.min_length    = 0,
         .super.max_length    = max_length,
         .super.min_iov       = 1,
-        .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
-                                            cap.put.min_zcopy),
-        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
-                                            cap.put.max_zcopy),
+        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_LAST,
@@ -549,9 +546,9 @@ static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_init_params(
     ucp_proto_caps_t rkey_ptr_caps;
     ucs_status_t status;
 
-    rpriv->alloc_md_index = alloc_md_index;
-
+    rpriv->alloc_md_index   = alloc_md_index;
     params.super.super.caps = &rkey_ptr_caps;
+
     status = ucp_proto_single_init_priv(&params, &rpriv->spriv);
     if (status != UCS_OK) {
         return status;
@@ -672,16 +669,19 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     mem_type_ep = req->send.ep->worker->mem_type_ep[local_mem_type];
     if (mem_type_ep == NULL) {
+        ucp_trace_req(req, "unreachable mem_type_ep for %s memory type",
+                      ucs_memory_type_names[local_mem_type]);
         ucp_proto_request_abort(req, UCS_ERR_UNREACHABLE);
         return UCS_OK;
     }
 
-    mem_type_rma_lane = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
     ppln_data         = ucp_ep_peer_mem_get(context, req->send.ep,
                                             remote_address,
                                             req->send.state.dt_iter.length,
                                             rkey_buffer, rpriv->alloc_md_index);
     if (ppln_data->rkey == NULL) {
+        ucp_trace_req(req, "unreachable rkey for md_index %u",
+                      rpriv->alloc_md_index);
         ucp_proto_request_abort(req, UCS_ERR_UNREACHABLE);
         return UCS_OK;
     }
@@ -698,9 +698,10 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     if (ppln_data->uct_memh == NULL) {
         /* Register remote memory segment with memtype ep MD. Without
-        * registration fetching data from GPU to CPU will be performance
-        * inefficient. */
+         * registration fetching data from GPU to CPU will be performance
+         * inefficient. */
         md_map              = 0;
+        mem_type_rma_lane   = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
         ppln_data->md_index = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
 
         status = ucp_mem_rereg_mds(context, UCS_BIT(ppln_data->md_index),
@@ -734,7 +735,6 @@ ucp_proto_rndv_rkey_ptr_mtype_atp_progress(uct_pending_req_t *uct_req)
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_rkey_ptr_mtype_priv_t
                 *rpriv = req->send.proto_config->priv;
-
     ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
 
     ucs_assert(rpriv->ack.lane != UCP_NULL_LANE);

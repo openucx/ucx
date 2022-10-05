@@ -49,16 +49,6 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req)
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
-ucp_proto_rndv_mtype_get_memh_index(ucp_request_t *req)
-{
-    ucs_memory_type_t mem_type = req->send.state.dt_iter.mem_info.type;
-    ucp_ep_h mtype_ep          = req->send.ep->worker->mem_type_ep[mem_type];
-    ucp_lane_index_t lane      = ucp_ep_config(mtype_ep)->key.rma_bw_lanes[0];
-
-    return ucp_ep_md_index(mtype_ep, lane);
-}
-
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_proto_rndv_mtype_get_memh(ucp_request_t *req, ucp_rsc_index_t memh_index)
 {
@@ -72,6 +62,17 @@ ucp_proto_rndv_mtype_get_memh(ucp_request_t *req, ucp_rsc_index_t memh_index)
                 "memh_index=%d md_map=0x%" PRIx64, memh_index,
                 mdesc->memh->md_map);
     return mdesc->memh->uct[memh_index];
+}
+
+static UCS_F_ALWAYS_INLINE uct_mem_h
+ucp_proto_rndv_mtype_get_req_memh(ucp_request_t *req)
+{
+    ucs_memory_type_t mem_type = req->send.state.dt_iter.mem_info.type;
+    ucp_ep_h mtype_ep          = req->send.ep->worker->mem_type_ep[mem_type];
+    ucp_lane_index_t lane      = ucp_ep_config(mtype_ep)->key.rma_bw_lanes[0];
+    ucp_rsc_index_t rsc_index  = ucp_ep_md_index(mtype_ep, lane);
+
+    return ucp_proto_rndv_mtype_get_memh(req, rsc_index);
 }
 
 static UCS_F_ALWAYS_INLINE void

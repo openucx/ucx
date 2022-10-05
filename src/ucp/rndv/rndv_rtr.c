@@ -288,7 +288,6 @@ static void ucp_proto_rndv_rtr_mtype_copy_completion(uct_completion_t *uct_comp)
 static void
 ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 {
-    ucp_rsc_index_t memh_index;
     uct_mem_h memh;
 
     ucp_send_request_id_release(req);
@@ -299,8 +298,7 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
     } else {
         /* Data was not placed in user buffer, which means it was placed to
            the remote address we published - the rendezvous fragment */
-        memh_index = ucp_proto_rndv_mtype_get_memh_index(req);
-        memh       = ucp_proto_rndv_mtype_get_memh(req, memh_index);
+        memh = ucp_proto_rndv_mtype_get_req_memh(req);
         ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr, memh,
                                   uct_ep_put_zcopy,
                                   ucp_proto_rndv_rtr_mtype_copy_completion,

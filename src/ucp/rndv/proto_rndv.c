@@ -51,6 +51,9 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                                      lane);
         ep_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
         md_index   = ucp_proto_common_get_md_index(&params->super.super, lane);
+
+        ucs_assertv(md_index < UCP_MAX_MDS, "md_index=%u", md_index);
+
         cmpt_attr  = ucp_cmpt_attr_by_md_index(context, md_index);
         md_attr    = &context->tl_mds[md_index].attr;
 
@@ -72,10 +75,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
 
         ucs_trace_req("lane[%d]: selected md %s index %u", lane,
                       worker->context->tl_mds[md_index].rsc.md_name, md_index);
-
-        if(md_index < UCP_MAX_MDS) {
-            *md_map      |= UCS_BIT(md_index);
-        }
+        *md_map |= UCS_BIT(md_index);
 
         if (ep_sys_dev >= UCP_MAX_SYS_DEVICES) {
             continue;
@@ -610,8 +610,6 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
 
     ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
                (op_id < UCP_OP_ID_RNDV_LAST));
-
-    req->send.rndv.rkey_buffer = NULL;
 
     if (rkey_length > 0) {
         ucs_assert(rkey_buffer != NULL);
