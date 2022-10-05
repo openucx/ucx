@@ -60,7 +60,8 @@ class PRChecker(object):
         self.base_commit = data[u'base'][u'sha']
         if not self.base_commit:
             raise Exception("No base commit found")
-        self.head_commit = data[u'head'][u'sha']
+        if not self.head_commit:
+            self.head_commit = data[u'head'][u'sha']
         if not self.head_commit:
             raise Exception("No head commit found")
         if self.verbose:
@@ -127,9 +128,12 @@ class PRChecker(object):
                           metavar="USER",
                           default = getpass.getuser(),
                           help="GitHub user name of approving user [default: %default]")
-        parser.add_option("--commit_id", action="store", dest="commit_id",
+        parser.add_option("--commit-id", action="store", dest="commit_id",
                           metavar="COMMIT", default=None,
-                          help="git commit hash to compare with")
+                          help="git approved commit hash to compare with")
+        parser.add_option("--head-commit", action="store", dest="head_commit",
+                          metavar="COMMIT", default=None,
+                          help="git head commit hash to compare with")
         parser.add_option("--temp-dir", action="store", dest="temp_dir",
                           metavar="PATH",
                           default="/tmp/%s" % getpass.getuser(),
@@ -164,6 +168,7 @@ class PRChecker(object):
         self.review_diff = options.review_diff
         self.verbose = options.verbose
         self.commit_id = options.commit_id
+        self.head_commit = options.head_commit
 
     def print_diff(self, diff):
         if shutil.which("ydiff"):
