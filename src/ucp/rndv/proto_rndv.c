@@ -413,13 +413,18 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
-    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-        ucp_send_request_id_release(req);
-        ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                    &req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_proto_rndv_rts_reset(req);
+    ucp_request_complete_send(req, status);
+}
+
+void ucp_proto_rndv_rts_reset(ucp_request_t *req)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        return;
     }
 
-    ucp_request_complete_send(req, status);
+    ucp_send_request_id_release(req);
+    ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
 }
 
 static ucs_status_t
@@ -671,8 +676,10 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     uint8_t sg_count;
     ucp_ep_h ep;
 
-    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id, return,
-                                  "RTS on non-existing endpoint");
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id, {
+        ucp_proto_rndv_recv_super_complete_status(recv_req, UCS_ERR_CANCELED);
+        return;
+    }, "RTS on non-existing endpoint");
 
     req = ucp_request_get(worker);
     if (req == NULL) {
@@ -791,10 +798,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         /* RTR covers the whole send request - use the send request directly */
         ucs_assert(rtr->offset == 0);
 
-        ucp_datatype_iter_mem_dereg(worker->context, &req->send.state.dt_iter,
-                                    UCP_DT_MASK_ALL);
         ucp_send_request_id_release(req);
-        req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+        ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
 
         sg_count = req->send.proto_config->select_param.sg_count;
         status   = ucp_proto_rndv_send_start(worker, req, 0, op_flags, rtr,
