@@ -566,6 +566,12 @@ static size_t ucp_proto_rndv_ats_pack_ack(void *dest, void *arg)
     return ucp_proto_rndv_pack_ack(req, dest, req->send.state.dt_iter.length);
 }
 
+static ucs_status_t ucp_proto_rndv_ats_complete(ucp_request_t *req)
+{
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    return ucp_proto_rndv_recv_complete(req);
+}
+
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
@@ -573,7 +579,7 @@ ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req)
     return ucp_proto_rndv_ack_progress(req, req->send.proto_config->priv,
                                        UCP_AM_ID_RNDV_ATS,
                                        ucp_proto_rndv_ats_pack_ack,
-                                       ucp_proto_rndv_recv_complete);
+                                       ucp_proto_rndv_ats_complete);
 }
 
 void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
