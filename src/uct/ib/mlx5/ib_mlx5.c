@@ -1091,6 +1091,16 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
                                  &iface->config.sl);
 }
 
+uint8_t uct_ib_mlx5_iface_get_counter_set_id(uct_ib_iface_t *iface)
+{
+    if (iface->config.counter_set_id != UCT_IB_COUNTER_SET_ID_INVALID) {
+        return iface->config.counter_set_id;
+    }
+
+    return uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_iface_md(iface),
+                                                  iface->config.port_num);
+}
+
 void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
                                       int hw_ci_updated)
 {

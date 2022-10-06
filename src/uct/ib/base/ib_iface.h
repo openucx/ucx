@@ -28,6 +28,8 @@
 #define UCT_IB_ADDRESS_INVALID_PKEY        0
 #define UCT_IB_ADDRESS_DEFAULT_PKEY        0xffff
 #define UCT_IB_SL_NUM                      16
+#define UCT_IB_COUNTER_SET_ID_INVALID      UINT8_MAX
+
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -184,6 +186,9 @@ struct uct_ib_iface_config {
 
     /* Path MTU size */
     uct_ib_mtu_t            path_mtu;
+
+    /* QP counter set ID */
+    unsigned long           counter_set_id;
 };
 
 
@@ -298,6 +303,7 @@ struct uct_ib_iface {
         uint8_t               qp_type;
         uint8_t               force_global_addr;
         enum ibv_mtu          path_mtu;
+        uint8_t               counter_set_id;
     } config;
 
     uct_ib_iface_ops_t        *ops;

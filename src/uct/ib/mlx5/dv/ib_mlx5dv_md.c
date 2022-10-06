@@ -195,7 +195,7 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md, int atomic,
     UCT_IB_MLX5DV_SET(mkc, mkc, rr, 1);
     UCT_IB_MLX5DV_SET(mkc, mkc, lw, 1);
     UCT_IB_MLX5DV_SET(mkc, mkc, lr, 1);
-    UCT_IB_MLX5DV_SET(mkc, mkc, pd, uct_ib_mlx5_devx_get_pdn(md));
+    UCT_IB_MLX5DV_SET(mkc, mkc, pd, uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET(mkc, mkc, translations_octword_size, list_size);
     UCT_IB_MLX5DV_SET(mkc, mkc, log_entity_size, ucs_ilog2(entity_size));
     UCT_IB_MLX5DV_SET(mkc, mkc, qpn, 0xffffff);
@@ -931,6 +931,16 @@ static int uct_ib_mlx5_is_xgvmi_alias_supported(struct ibv_context *ctx)
 #endif
 }
 
+static void uct_ib_mlx5_md_port_counter_set_id_init(uct_ib_mlx5_md_t *md)
+{
+    uint8_t *counter_set_id;
+
+    ucs_carray_for_each(counter_set_id, md->port_counter_set_ids,
+                        sizeof(md->port_counter_set_ids)) {
+        *counter_set_id = UCT_IB_COUNTER_SET_ID_INVALID;
+    }
+}
+
 static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
                                              uct_ib_md_t **p_md)
@@ -1179,6 +1189,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
+    uct_ib_mlx5_md_port_counter_set_id_init(md);
     ucs_recursive_spinlock_init(&md->dbrec_lock, 0);
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_ib_mlx5_dbrec_t);
@@ -1257,6 +1268,105 @@ static void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
     ucs_recursive_spinlock_destroy(&md->dbrec_lock);
 }
 
+uint32_t uct_ib_mlx5_devx_md_get_pdn(uct_ib_mlx5_md_t *md)
+{
+    struct mlx5dv_pd dvpd = {0};
+    struct mlx5dv_obj dv  = {{0}};
+    int ret;
+
+    /* obtain pdn */
+    dv.pd.in  = md->super.pd;
+    dv.pd.out = &dvpd;
+    ret       = mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD);
+    if (ret) {
+        ucs_fatal("mlx5dv_init_obj(%s, PD) failed: %m",
+                  uct_ib_device_name(&md->super.dev));
+    }
+
+    return dvpd.pdn;
+}
+
+uint8_t
+uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
+{
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
+    struct ibv_qp_init_attr qp_init_attr              = {};
+    struct ibv_qp_attr qp_attr                        = {};
+    uint8_t *counter_set_id;
+    struct ibv_qp *dummy_qp;
+    struct ibv_cq *dummy_cq;
+    void *qpc;
+    int ret;
+
+    counter_set_id = &md->port_counter_set_ids[port_num - UCT_IB_FIRST_PORT];
+    if (*counter_set_id != UCT_IB_COUNTER_SET_ID_INVALID) {
+        return *counter_set_id;
+    }
+
+    dummy_cq = ibv_create_cq(md->super.dev.ibv_context, 1, NULL, NULL, 0);
+    if (dummy_cq == NULL) {
+        goto err;
+    }
+
+    qp_init_attr.send_cq          = dummy_cq;
+    qp_init_attr.recv_cq          = dummy_cq;
+    qp_init_attr.qp_type          = IBV_QPT_RC;
+    qp_init_attr.cap.max_send_wr  = 1;
+    qp_init_attr.cap.max_recv_wr  = 1;
+    qp_init_attr.cap.max_send_sge = 1;
+    qp_init_attr.cap.max_recv_sge = 1;
+
+    dummy_qp = ibv_create_qp(md->super.pd, &qp_init_attr);
+    if (dummy_qp == NULL) {
+        goto err_free_cq;
+    }
+
+    qp_attr.qp_state = IBV_QPS_INIT;
+    qp_attr.port_num = port_num;
+
+    ret = ibv_modify_qp(dummy_qp, &qp_attr,
+                        IBV_QP_STATE | IBV_QP_PORT | IBV_QP_PKEY_INDEX |
+                        IBV_QP_ACCESS_FLAGS);
+    if (ret) {
+        ucs_diag("failed to modify dummy QP 0x%x to INIT on %s:%d: %m",
+                 dummy_qp->qp_num, uct_ib_device_name(&md->super.dev),
+                 port_num);
+        goto err_destroy_qp;
+    }
+
+    UCT_IB_MLX5DV_SET(query_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_QP);
+    UCT_IB_MLX5DV_SET(query_qp_in, in, qpn, dummy_qp->qp_num);
+
+    ret = mlx5dv_devx_qp_query(dummy_qp, in, sizeof(in), out, sizeof(out));
+    if (ret) {
+        ucs_diag("mlx5dv_devx_qp_query(%s:%d, DUMMY_QP, QPN=0x%x) failed, "
+                 "syndrome 0x%x: %m",
+                 uct_ib_device_name(&md->super.dev), port_num, dummy_qp->qp_num,
+                 UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
+        goto err_destroy_qp;
+    }
+
+    qpc             = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
+    *counter_set_id = UCT_IB_MLX5DV_GET(qpc, qpc, counter_set_id);
+    ibv_destroy_qp(dummy_qp);
+    ibv_destroy_cq(dummy_cq);
+
+    ucs_debug("counter_set_id on %s:%d is 0x%x",
+              uct_ib_device_name(&md->super.dev), port_num, *counter_set_id);
+    return *counter_set_id;
+
+err_destroy_qp:
+    ibv_destroy_qp(dummy_qp);
+err_free_cq:
+    ibv_destroy_cq(dummy_cq);
+err:
+    *counter_set_id = 0;
+    ucs_debug("using zero counter_set_id on %s:%d",
+              uct_ib_device_name(&md->super.dev), port_num);
+    return 0;
+}
+
 static ucs_status_t
 uct_ib_mlx5_devx_reg_exported_key(uct_ib_md_t *ib_md, uct_ib_mem_t *ib_memh)
 {
@@ -1310,7 +1420,7 @@ uct_ib_mlx5_devx_reg_exported_key(uct_ib_md_t *ib_md, uct_ib_mem_t *ib_memh)
     UCT_IB_MLX5DV_SET(mkc, mkc, lr, 1);
     UCT_IB_MLX5DV_SET(mkc, mkc, crossing_target_mkey, 1);
     UCT_IB_MLX5DV_SET(mkc, mkc, qpn, 0xffffff);
-    UCT_IB_MLX5DV_SET(mkc, mkc, pd, uct_ib_mlx5_devx_get_pdn(md));
+    UCT_IB_MLX5DV_SET(mkc, mkc, pd, uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET(mkc, mkc, mkey_7_0, md->mkey_tag);
     UCT_IB_MLX5DV_SET64(mkc, mkc, start_addr, (intptr_t)address);
     UCT_IB_MLX5DV_SET64(mkc, mkc, len, length);
@@ -1401,7 +1511,7 @@ uct_ib_mlx5_devx_import_exported_key(uct_ib_md_t *ib_md, uint64_t flags,
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, object_id_to_be_accessed,
                       target_mkey >> 8);
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, metadata_1,
-                      uct_ib_mlx5_devx_get_pdn(md));
+                      uct_ib_mlx5_devx_md_get_pdn(md));
     access_key = UCT_IB_MLX5DV_ADDR_OF(alias_context, alias_ctx, access_key);
     ucs_strncpy_zero(access_key, uct_ib_mkey_token,
                      UCT_IB_MLX5DV_FLD_SZ_BYTES(alias_context, access_key));

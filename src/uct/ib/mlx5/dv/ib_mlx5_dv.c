@@ -132,24 +132,6 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
 }
 
 #if HAVE_DEVX
-uint32_t uct_ib_mlx5_devx_get_pdn(uct_ib_mlx5_md_t *md)
-{
-    struct mlx5dv_pd dvpd = {0};
-    struct mlx5dv_obj dv  = {{0}};
-    int ret;
-
-    /* obtain pdn */
-    dv.pd.in = md->super.pd;
-    dv.pd.out = &dvpd;
-    ret       = mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD);
-    if (ret) {
-        ucs_fatal("mlx5dv_init_obj(%s, PD) failed: %m",
-                  uct_ib_device_name(&md->super.dev));
-    }
-
-    return dvpd.pdn;
-}
-
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         const uct_ib_mlx5_cq_t *send_cq,
                                         const uct_ib_mlx5_cq_t *recv_cq,
@@ -225,7 +207,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     }
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, rdma_wr_disabled, !!attr->rdma_wr_disabled);
-    UCT_IB_MLX5DV_SET(qpc, qpc, pd, uct_ib_mlx5_devx_get_pdn(md));
+    UCT_IB_MLX5DV_SET(qpc, qpc, pd, uct_ib_mlx5_devx_md_get_pdn(md));
+    UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
+                      uct_ib_mlx5_iface_get_counter_set_id(iface));
     UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, uar->uar->page_id);
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, !!attr->super.srq_num);
