@@ -37,16 +37,17 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
 static ucs_status_t
 uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY |
+                                UCT_MD_FLAG_ALLOC;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->alloc_mem_types  = 0;
+    md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->dmabuf_mem_types = 0;
-    md_attr->max_alloc        = 0;
+    md_attr->max_alloc        = SIZE_MAX;
     md_attr->max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size = sizeof(uct_rocm_copy_key_t);
     md_attr->reg_cost         = UCS_LINEAR_FUNC_ZERO;
@@ -222,6 +223,48 @@ static void uct_rocm_copy_md_close(uct_md_h uct_md) {
     ucs_free(md);
 }
 
+static ucs_status_t
+uct_rocm_copy_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
+                        ucs_memory_type_t mem_type, unsigned flags,
+                        const char *alloc_name, uct_mem_h *memh_p)
+{
+    ucs_status_t status;
+    hsa_status_t hsa_status;
+    hsa_amd_memory_pool_t pool;
+
+    if (mem_type != UCS_MEMORY_TYPE_ROCM) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_rocm_base_get_last_device_pool(&pool);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    hsa_status = hsa_amd_memory_pool_allocate(pool, *length_p, 0, address_p);
+    if (hsa_status != HSA_STATUS_SUCCESS) {
+        ucs_debug("could not allocate HSA memory: 0x%x", hsa_status);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    *memh_p = *address_p;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_rocm_copy_mem_free(uct_md_h md, uct_mem_h memh)
+{
+    hsa_status_t hsa_status;
+
+    hsa_status = hsa_amd_memory_pool_free((void*)memh);
+    if ((hsa_status != HSA_STATUS_SUCCESS) &&
+        (hsa_status != HSA_STATUS_INFO_BREAK)) {
+        ucs_debug("could not free HSA memory 0x%x", hsa_status);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
 static uct_md_ops_t md_ops = {
     .close                  = uct_rocm_copy_md_close,
     .query                  = uct_rocm_copy_md_query,
@@ -280,6 +323,8 @@ uct_rocm_copy_mem_rcache_dereg(uct_md_h uct_md,
 static uct_md_ops_t md_rcache_ops = {
     .close                  = uct_rocm_copy_md_close,
     .query                  = uct_rocm_copy_md_query,
+    .mem_alloc              = uct_rocm_copy_mem_alloc,
+    .mem_free               = uct_rocm_copy_mem_free,
     .mkey_pack              = uct_rocm_copy_mkey_pack,
     .mem_reg                = uct_rocm_copy_mem_rcache_reg,
     .mem_dereg              = uct_rocm_copy_mem_rcache_dereg,
