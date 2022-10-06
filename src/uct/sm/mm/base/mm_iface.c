@@ -95,7 +95,7 @@ uct_mm_iface_query_tl_devices(uct_md_h md,
         return status;
     }
 
-    if (!(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
+    if (!(md_attr.cap.flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG))) {
         *num_tl_devices_p = 0;
         *tl_devices_p     = NULL;
         return UCS_ERR_NO_DEVICE;
