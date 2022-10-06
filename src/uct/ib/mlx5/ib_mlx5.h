@@ -771,6 +771,8 @@ void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
 
 #if HAVE_DEVX
 
+uint32_t uct_ib_mlx5_devx_get_pdn(uct_ib_mlx5_md_t *md);
+
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         const uct_ib_mlx5_cq_t *send_cq,
                                         const uct_ib_mlx5_cq_t *recv_cq,
@@ -795,7 +797,7 @@ ucs_status_t uct_ib_mlx5_devx_obj_modify(struct mlx5dv_devx_obj *obj,
 struct mlx5dv_devx_obj *
 uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
                             size_t inlen, void *out, size_t outlen,
-                            char *msg_arg);
+                            char *msg_arg, ucs_log_level_t log_level);
 
 ucs_status_t
 uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg);

@@ -17,23 +17,17 @@
 
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 {
-    uct_ib_device_t *dev        = uct_ib_iface_device(&iface->super.super.super);
-    const uct_ib_mlx5_cq_t *cq  = &iface->super.cq[UCT_IB_DIR_RX];
-    struct mlx5dv_pd dvpd       = {};
-    struct mlx5dv_obj dv        = {};
+    uct_ib_md_t *ib_md         = uct_ib_iface_md(&iface->super.super.super);
+    uct_ib_mlx5_md_t *md       = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev       = uct_ib_iface_device(&iface->super.super.super);
+    const uct_ib_mlx5_cq_t *cq = &iface->super.cq[UCT_IB_DIR_RX];
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_out)] = {};
-    int dvflags;
     void *dctc;
-
-    dvflags   = MLX5DV_OBJ_PD;
-    dv.pd.in  = uct_ib_iface_md(&iface->super.super.super)->pd;
-    dv.pd.out = &dvpd;
-    mlx5dv_init_obj(&dv, dvflags);
 
     UCT_IB_MLX5DV_SET(create_dct_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_DCT);
     dctc = UCT_IB_MLX5DV_ADDR_OF(create_dct_in, in, dct_context_entry);
-    UCT_IB_MLX5DV_SET(dctc, dctc, pd, dvpd.pdn);
+    UCT_IB_MLX5DV_SET(dctc, dctc, pd, uct_ib_mlx5_devx_get_pdn(md));
     ucs_assert(iface->super.rx.srq.srq_num != 0);
     UCT_IB_MLX5DV_SET(dctc, dctc, srqn_xrqn, iface->super.rx.srq.srq_num);
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
@@ -81,7 +75,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 
     iface->rx.dct.devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
                                                          sizeof(in), out,
-                                                         sizeof(out), "DCT");
+                                                         sizeof(out), "DCT",
+                                                         UCS_LOG_LEVEL_ERROR);
     if (iface->rx.dct.devx.obj == NULL) {
         return UCS_ERR_INVALID_PARAM;
     }
