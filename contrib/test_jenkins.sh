@@ -1305,6 +1305,7 @@ run_test_proto_enable() {
 	build devel --enable-gtest
 
 	export UCX_PROTO_ENABLE=y
+	export UCX_PROTO_REQUEST_RESET=y
 
 	# all are running gtest
 	run_gtest "default"

@@ -26,12 +26,8 @@
 
 
 enum {
-    /* Tag Matching address. It additionally contains QP number which
-     * is used for hardware offloads. */
-    UCT_RC_MLX5_IFACE_ADDR_FLAG_TM         = UCS_BIT(0),
-
-    /* Address contains flush remote rkey */
-    UCT_RC_MLX5_IFACE_ADDR_FLAG_FLUSH_RKEY = UCS_BIT(1)
+    /* EP address includes flush_rkey value */
+    UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY = UCS_BIT(0)
 };
 
 
@@ -67,6 +63,12 @@ typedef struct uct_rc_mlx5_ep_address {
     uct_ib_uint24_t  tm_qp_num;
     uint8_t          atomic_mr_id;
 } UCS_S_PACKED uct_rc_mlx5_ep_address_t;
+
+
+typedef struct uct_rc_mlx5_ep_ext_address {
+    uct_rc_mlx5_ep_address_t super;
+    uint8_t                  flags;
+} UCS_S_PACKED uct_rc_mlx5_ep_ext_address_t;
 
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
@@ -161,9 +163,12 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
                           uint8_t path_index);
 
-ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
-                                          const uct_device_addr_t *dev_addr,
-                                          const uct_ep_addr_t *ep_addr);
+ucs_status_t
+uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
+                                const uct_device_addr_t *device_addr,
+                                const uct_ep_addr_t *ep_addr,
+                                const uct_ep_connect_to_ep_params_t *params);
+
 
 ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                             const void *data, size_t length);

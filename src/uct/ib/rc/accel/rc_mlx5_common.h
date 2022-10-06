@@ -242,17 +242,6 @@ typedef struct uct_rc_mlx5_mp_hash_key {
 } uct_rc_mlx5_mp_hash_key_t;
 
 
-typedef struct uct_rc_mlx5_iface_addr {
-    uint8_t                       flags;
-} UCS_S_PACKED uct_rc_mlx5_iface_addr_t;
-
-
-typedef struct uct_rc_mlx5_iface_flush_addr {
-    uct_rc_mlx5_iface_addr_t      super;
-    uint16_t                      flush_rkey_hi;
-} UCS_S_PACKED uct_rc_mlx5_iface_flush_addr_t;
-
-
 static UCS_F_ALWAYS_INLINE int
 uct_rc_mlx5_mp_hash_equal(uct_rc_mlx5_mp_hash_key_t key1,
                           uct_rc_mlx5_mp_hash_key_t key2)

@@ -336,6 +336,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_context_config_t, proto_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"PROTO_REQUEST_RESET", "n",
+   "Experimental: forces reset of pending request when an endpoint has been\n"
+   "connected, useful for testing purposes only",
+   ucs_offsetof(ucp_context_config_t, proto_request_reset), UCS_CONFIG_TYPE_BOOL},
+
   {"KEEPALIVE_INTERVAL", "20s",
    "Time interval between keepalive rounds. Must be non-zero value.",
    ucs_offsetof(ucp_context_config_t, keepalive_interval),

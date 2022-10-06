@@ -208,6 +208,28 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
     }
 }
 
+static void ucp_rndv_get_zcopy_proto_reset(ucp_request_t *req)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        return;
+    }
+
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+
+    switch (req->send.proto_stage) {
+    case UCP_PROTO_RNDV_GET_STAGE_FETCH:
+        ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
+                                    &req->send.state.dt_iter, UCP_DT_MASK_ALL);
+        /* Fall through */
+    case UCP_PROTO_RNDV_GET_STAGE_ATS:
+        break;
+    default:
+        ucs_fatal("req %p: %s has invalid stage %d", req,
+                  req->send.proto_config->proto->name, req->send.proto_stage);
+        break;
+    }
+}
+
 ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .name     = "rndv/get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_RNDV_GET_DESC,
@@ -219,7 +241,7 @@ ucp_proto_t ucp_rndv_get_zcopy_proto = {
          [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
     .abort    = ucp_rndv_get_zcopy_proto_abort,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_rndv_get_zcopy_proto_reset
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(

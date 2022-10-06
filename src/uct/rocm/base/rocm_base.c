@@ -22,6 +22,8 @@ static struct agents {
     hsa_agent_t gpu_agents[MAX_AGENTS];
 } uct_rocm_base_agents;
 
+static int uct_rocm_base_last_device_agent_used;
+
 int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents)
 {
     *agents = uct_rocm_base_agents.gpu_agents;
@@ -40,6 +42,7 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
     }
     else if (device_type == HSA_DEVICE_TYPE_GPU) {
         uint32_t bdfid = 0;
+        uct_rocm_base_last_device_agent_used = uct_rocm_base_agents.num;
         uct_rocm_base_agents.gpu_agents[uct_rocm_base_agents.num_gpu++] = agent;
         hsa_agent_get_info(agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_BDFID, &bdfid);
         ucs_trace("%d found gpu agent %lu bdfid %x", getpid(), agent.handle, bdfid);
@@ -143,9 +146,11 @@ int uct_rocm_base_is_gpu_agent(hsa_agent_t agent)
     return 0;
 }
 
-hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
-                                        void **base_ptr, size_t *base_size,
-                                        hsa_agent_t *agent)
+hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
+                                        size_t *base_size,
+                                        hsa_amd_pointer_type_t *hsa_mem_type,
+                                        hsa_agent_t *agent,
+                                        hsa_device_type_t *dev_type)
 {
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
@@ -157,17 +162,24 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
         return status;
     }
 
-    if (info.type == HSA_EXT_POINTER_TYPE_UNKNOWN)
-        return HSA_STATUS_ERROR;
-
-    *agent = info.agentOwner;
-
-    if (base_ptr)
+    if (hsa_mem_type != NULL) {
+        *hsa_mem_type = info.type;
+    }
+    if (agent != NULL) {
+        *agent = info.agentOwner;
+    }
+    if (base_ptr != NULL) {
         *base_ptr = info.agentBaseAddress;
-    if (base_size)
+    }
+    if (base_size != NULL) {
         *base_size = info.sizeInBytes;
+    }
+    if (dev_type != NULL) {
+        status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE,
+                                    dev_type);
+    }
 
-    return HSA_STATUS_SUCCESS;
+    return status;
 }
 
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
@@ -191,6 +203,8 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
                                     &dev_type);
         if ((status == HSA_STATUS_SUCCESS) &&
             (dev_type == HSA_DEVICE_TYPE_GPU)) {
+            uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(
+                    info.agentOwner);
             *mem_type_p = UCS_MEMORY_TYPE_ROCM;
             return UCS_OK;
         }
@@ -250,6 +264,24 @@ static hsa_status_t uct_rocm_hsa_pool_callback(hsa_amd_memory_pool_t pool, void*
         }
     }
     return HSA_STATUS_SUCCESS;
+}
+
+ucs_status_t uct_rocm_base_get_last_device_pool(hsa_amd_memory_pool_t *pool)
+{
+    hsa_status_t hsa_status;
+    hsa_agent_t agent;
+
+    agent = uct_rocm_base_get_dev_agent(uct_rocm_base_last_device_agent_used);
+    hsa_status = hsa_amd_agent_iterate_memory_pools(agent,
+                                                    uct_rocm_hsa_pool_callback,
+                                                    (void*)pool);
+    if ((hsa_status != HSA_STATUS_SUCCESS) &&
+        (hsa_status != HSA_STATUS_INFO_BREAK)) {
+        ucs_debug("could not iterate HSA memory pools: 0x%x", hsa_status);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *link_type)
