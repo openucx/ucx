@@ -451,3 +451,134 @@ void ucs_topo_cleanup()
                        &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_spinlock_destroy(&ucs_topo_global_ctx.lock);
 }
+
+typedef struct {
+    double     bw_gbps;       /* Link speed */
+    uint16_t   payload;       /* Payload used to data transfer */
+    uint16_t   tlp_overhead;  /* PHY + data link layer + header + CRC */
+    uint16_t   ctrl_ratio;    /* Number of TLC before ACK */
+    uint16_t   ctrl_overhead; /* Length of control TLP */
+    uint16_t   encoding;      /* Number of encoded symbol bits */
+    uint16_t   decoding;      /* Number of decoded symbol bits */
+    const char *name;         /* Name of PCI generation */
+} ucs_topo_pci_info_t;
+
+/*
+ * - TLP (Transaction Layer Packet) overhead calculations (no ECRC):
+ *   Gen1/2:
+ *     Start   SeqNum   Hdr_64bit   LCRC   End
+ *       1   +   2    +   16      +   4  +  1  = 24
+ *
+ *   Gen3/4:
+ *     Start   SeqNum   Hdr_64bit   LCRC
+ *       4   +   2    +   16      +   4  = 26
+ *
+ * - DLLP (Data Link Layer Packet) overhead calculations:
+ *    - Control packet 8b ACK + 8b flow control
+ *    - ACK/FC ratio: 1 per 4 TLPs
+ *
+ * References:
+ * [1] https://www.xilinx.com/support/documentation/white_papers/wp350.pdf
+ * [2] https://xdevs.com/doc/Standards/PCI/PCI_Express_Base_4.0_Rev0.3_February19-2014.pdf
+ * [3] https://www.nxp.com/docs/en/application-note/AN3935.pdf
+ */
+static const ucs_topo_pci_info_t ucs_topo_pci_info[] = {
+    {.name          = "gen1",
+     .bw_gbps       = 2.5,
+     .payload       = 256,
+     .tlp_overhead  = 24,
+     .ctrl_ratio    = 4,
+     .ctrl_overhead = 16,
+     .encoding      = 8,
+     .decoding      = 10},
+    {.name          = "gen2",
+     .bw_gbps       = 5,
+     .payload       = 256,
+     .tlp_overhead  = 24,
+     .ctrl_ratio    = 4,
+     .ctrl_overhead = 16,
+     .encoding      = 8,
+     .decoding      = 10},
+    {.name          = "gen3",
+     .bw_gbps       = 8,
+     .payload       = 256,
+     .tlp_overhead  = 26,
+     .ctrl_ratio    = 4,
+     .ctrl_overhead = 16,
+     .encoding      = 128,
+     .decoding      = 130},
+    {.name          = "gen4",
+     .bw_gbps       = 16,
+     .payload       = 256,
+     .tlp_overhead  = 26,
+     .ctrl_ratio    = 4,
+     .ctrl_overhead = 16,
+     .encoding      = 128,
+     .decoding      = 130},
+};
+
+double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
+{
+    const char *pci_width_file_name = "current_link_width";
+    const char *pci_speed_file_name = "current_link_speed";
+
+    double bw_gbps, effective_bw, link_utilization;
+    const ucs_topo_pci_info_t *p;
+    char pci_width_str[16];
+    char pci_speed_str[16];
+    ucs_status_t status;
+    unsigned width;
+    char gts[16];
+    size_t i;
+
+    status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, pci_width_file_name,
+                                     pci_width_str, sizeof(pci_width_str),
+                                     UCS_LOG_LEVEL_DEBUG);
+    if (status != UCS_OK) {
+        goto out_max_bw;
+    }
+
+    status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, pci_speed_file_name,
+                                     pci_speed_str, sizeof(pci_speed_str),
+                                     UCS_LOG_LEVEL_DEBUG);
+    if (status != UCS_OK) {
+        goto out_max_bw;
+    }
+
+    if (sscanf(pci_width_str, "%u", &width) < 1) {
+        ucs_debug("%s: incorrect format of %s file: expected: <unsigned "
+                  "integer>, actual: %s\n",
+                  dev_name, pci_width_file_name, pci_width_str);
+        goto out_max_bw;
+    }
+
+    if ((sscanf(pci_speed_str, "%lf%s", &bw_gbps, gts) < 2) ||
+        strcasecmp("GT/s", ucs_strtrim(gts))) {
+        ucs_debug("%s: incorrect format of %s file: expected: <double> GT/s, "
+                  "actual: %s\n",
+                  dev_name, pci_speed_file_name, pci_speed_str);
+        goto out_max_bw;
+    }
+
+    for (i = 0; i < ucs_static_array_size(ucs_topo_pci_info); i++) {
+        p = &ucs_topo_pci_info[i];
+        if ((bw_gbps / p->bw_gbps) > 1.01) { /* floating-point compare */
+            continue;
+        }
+
+        link_utilization = (double)(p->payload * p->ctrl_ratio) /
+                           (((p->payload + p->tlp_overhead) * p->ctrl_ratio) +
+                            p->ctrl_overhead);
+        /* coverity[overflow] */
+        effective_bw     = (p->bw_gbps * 1e9 / 8.0) * width *
+                           ((double)p->encoding / p->decoding) * link_utilization;
+        ucs_trace("%s: PCIe %s %ux, effective throughput %.3f MB/s %.3f Gb/s",
+                  dev_name, p->name, width, effective_bw / UCS_MBYTE,
+                  effective_bw * 8e-9);
+        return effective_bw;
+    }
+
+out_max_bw:
+    ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
+    return DBL_MAX;
+}

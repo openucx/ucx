@@ -1615,3 +1615,24 @@ int ucs_sys_is_dynamic_lib(void)
 #endif
 }
 
+ucs_status_t ucs_sys_read_sysfs_file(const char *dev_name,
+                                     const char *sysfs_path,
+                                     const char *file_name, char *output_buffer,
+                                     size_t max, ucs_log_level_t err_level)
+{
+    ssize_t nread;
+
+    if (sysfs_path == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    nread = ucs_read_file_str(output_buffer, max, 1, "%s/%s", sysfs_path,
+                              file_name);
+    if (nread < 0) {
+        ucs_log(err_level, "%s: could not read from '%s/%s'", dev_name,
+                sysfs_path, file_name);
+        return UCS_ERR_NO_ELEM;
+    }
+
+    return UCS_OK;
+}
