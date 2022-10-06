@@ -680,17 +680,6 @@ static ucs_status_t
 ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                 ucp_mem_h *memh_p);
 
-static UCS_F_ALWAYS_INLINE int
-ucp_mem_map_is_zero(uint8_t memh_flags, size_t length,
-                    const void *exported_memh_buffer)
-{
-    if (!(memh_flags & UCP_MEM_FLAG_IMPORTED)) {
-        return length == 0;
-    }
-
-    return *(uint16_t*)exported_memh_buffer == sizeof(ucp_memh_dummy_buffer);
-}
-
 /* Matrix of behavior
  * |--------------------------------------------------------------------------------|
  * | parameter |                             value                                  |
