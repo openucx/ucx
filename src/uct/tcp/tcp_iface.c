@@ -18,6 +18,7 @@
 #include <netinet/tcp.h>
 #include <dirent.h>
 
+#define UCT_TCP_IFACE_NETDEV_DIR "/sys/class/net"
 
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_tcp_iface_t);
 
@@ -219,14 +220,20 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
                              sizeof(uct_tcp_am_hdr_t);
     ucs_status_t status;
     int is_default;
+    char sysfs_path[PATH_MAX];
+    double pci_bw, network_bw;
 
     uct_base_iface_query(&iface->super, attr);
 
-    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c,
-                                &attr->bandwidth.shared);
+    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c, &network_bw);
     if (status != UCS_OK) {
         return status;
     }
+
+    ucs_snprintf_safe(sysfs_path, PATH_MAX, "%s/%s/device",
+                      UCT_TCP_IFACE_NETDEV_DIR, iface->if_name);
+    pci_bw                 = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
+    attr->bandwidth.shared = ucs_min(pci_bw, network_bw);
 
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_tcp_iface_addr_t);
@@ -808,16 +815,15 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
 {
     uct_tcp_md_t *tcp_md = ucs_derived_of(md, uct_tcp_md_t);
     uct_tl_device_resource_t *devices, *tmp;
-    static const char *netdev_dir = "/sys/class/net";
     struct dirent *entry;
     unsigned num_devices;
     int is_active, i;
     ucs_status_t status;
     DIR *dir;
 
-    dir = opendir(netdev_dir);
+    dir = opendir(UCT_TCP_IFACE_NETDEV_DIR);
     if (dir == NULL) {
-        ucs_error("opendir(%s) failed: %m", netdev_dir);
+        ucs_error("opendir(%s) failed: %m", UCT_TCP_IFACE_NETDEV_DIR);
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
@@ -829,7 +835,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         entry = readdir(dir);
         if (entry == NULL) {
             if (errno != 0) {
-                ucs_error("readdir(%s) failed: %m", netdev_dir);
+                ucs_error("readdir(%s) failed: %m", UCT_TCP_IFACE_NETDEV_DIR);
                 ucs_free(devices);
                 status = UCS_ERR_IO_ERROR;
                 goto out_closedir;

@@ -123,6 +123,22 @@ typedef ucs_status_t (*ucs_sys_enum_threads_cb_t)(pid_t pid, void *ctx);
 typedef void (*ucs_sys_enum_pfn_cb_t)(unsigned page_number, unsigned long pfn,
                                       void *ctx);
 
+/**
+ * Initialize a buffer with sysfs file contents.
+ *
+ * @param dev_name      Device name of the underlying sysfs_path (eg. 'ib0').
+ * @param sysfs_path    Path to the device system folder.
+ * @param file_name     Specific file to read.
+ * @param output_buffer Filled with contents of the read file.
+ * @param max           Room in "output_buffer".
+ * @param err_level     Error message log level.
+ *
+ * @return UCS_OK if successful, or error code otherwise.
+ */
+ucs_status_t ucs_sys_read_sysfs_file(const char *dev_name,
+                                     const char *sysfs_path,
+                                     const char *file_name, char *output_buffer,
+                                     size_t max, ucs_log_level_t err_level);
 
 /**
  * @return TMPDIR environment variable if set. Otherwise, return "/tmp".
