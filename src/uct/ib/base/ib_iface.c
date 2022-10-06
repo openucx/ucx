@@ -193,6 +193,11 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, path_mtu),
                 UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
+  {"COUNTER_SET_ID", "auto",
+   "Counter set ID to use for performance counters. A value of 'auto' will try to\n"
+   "detect the default value by creating a dummy QP." ,
+   ucs_offsetof(uct_ib_iface_config_t, counter_set_id), UCS_CONFIG_TYPE_ULUNITS},
+
   {NULL}
 };
 
@@ -1335,6 +1340,16 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     }
 
     uct_ib_iface_set_num_paths(self, config);
+
+    if (config->counter_set_id == UCS_ULUNITS_AUTO) {
+        self->config.counter_set_id = UCT_IB_COUNTER_SET_ID_INVALID;
+    } else if (config->counter_set_id < UINT8_MAX) {
+        self->config.counter_set_id = config->counter_set_id;
+    } else {
+        ucs_error("counter_set_id must be less than %d", UINT8_MAX);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
 
     self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
     if (self->comp_channel == NULL) {
