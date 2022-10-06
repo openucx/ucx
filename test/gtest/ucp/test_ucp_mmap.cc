@@ -81,8 +81,11 @@ public:
             }
         }
 
-        ucp_mem_unmap(sender().ucph(), memh1);
-        ucp_mem_unmap(sender().ucph(), memh2);
+        status = ucp_mem_unmap(sender().ucph(), memh1);
+        ASSERT_UCS_OK(status);
+
+        status = ucp_mem_unmap(sender().ucph(), memh2);
+        ASSERT_UCS_OK(status);
     }
 
     virtual void init() {
