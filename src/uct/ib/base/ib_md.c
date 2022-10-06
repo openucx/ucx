@@ -1230,6 +1230,42 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
+static const char *uct_ib_device_transport_type_name(struct ibv_device *device)
+{
+    switch (device->transport_type) {
+    case IBV_TRANSPORT_IB:
+        return "InfiniBand";
+    case IBV_TRANSPORT_IWARP:
+        return "iWARP";
+#if HAVE_DECL_IBV_TRANSPORT_USNIC
+    case IBV_TRANSPORT_USNIC:
+        return "usNIC";
+#endif
+#if HAVE_DECL_IBV_TRANSPORT_USNIC_UDP
+    case IBV_TRANSPORT_USNIC_UDP:
+        return "usNIC UDP";
+#endif
+#if HAVE_DECL_IBV_TRANSPORT_UNSPECIFIED
+    case IBV_TRANSPORT_UNSPECIFIED:
+        return "Unspecified";
+#endif
+    default:
+        return "Unknown";
+    }
+}
+
+static int uct_ib_device_is_supported(struct ibv_device *device)
+{
+    /* TODO: enable additional transport types when ready */
+    int ret = device->transport_type == IBV_TRANSPORT_IB;
+    if (!ret) {
+        ucs_debug("device %s of type %s is not supported",
+                  device->dev_name, uct_ib_device_transport_type_name(device));
+    }
+
+    return ret;
+}
+
 int uct_ib_device_is_accessible(struct ibv_device *device)
 {
     /* Enough place to hold the full path */
@@ -1248,7 +1284,7 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
         return 0;
     }
 
-    return 1;
+    return uct_ib_device_is_supported(device);
 }
 
 static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
