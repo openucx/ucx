@@ -754,7 +754,12 @@ enum {
      * MD supports exporting memory keys with another process using the same
      * device or attaching to an exported memory key.
      */
-    UCT_MD_FLAG_EXPORTED_MKEY = UCS_BIT(9)
+    UCT_MD_FLAG_EXPORTED_MKEY = UCS_BIT(9),
+
+    /**
+     * MD supports registering a dmabuf file descriptor.
+     */
+    UCT_MD_FLAG_REG_DMABUF    = UCS_BIT(10)
 };
 
 /**
