@@ -590,7 +590,7 @@ static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_init_params(
         .super.send_op       = UCT_EP_OP_LAST,
         .super.memtype_op    = UCT_EP_OP_GET_ZCOPY,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR,
-        .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
+        .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = 0,
     };
     ucp_proto_caps_t rkey_ptr_caps;
