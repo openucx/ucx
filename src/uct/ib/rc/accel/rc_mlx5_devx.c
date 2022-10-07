@@ -268,7 +268,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET  (wq, wq, wq_type,       wq_type);
     UCT_IB_MLX5DV_SET  (wq, wq, log_wq_sz,     ucs_ilog2(max));
     UCT_IB_MLX5DV_SET  (wq, wq, log_wq_stride, ucs_ilog2(stride));
-    UCT_IB_MLX5DV_SET  (wq, wq, pd,            uct_ib_mlx5_devx_get_pdn(md));
+    UCT_IB_MLX5DV_SET  (wq, wq, pd,            uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET  (wq, wq, dbr_umem_id,   iface->rx.srq.devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,      iface->rx.srq.devx.dbrec->offset);
     UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
