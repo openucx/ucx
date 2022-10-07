@@ -832,11 +832,15 @@ uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
     dv_attr.flags |= MLX5DV_CONTEXT_FLAGS_DEVX;
     ctx = mlx5dv_open_device(ibv_device, &dv_attr);
     if (ctx == NULL) {
+        ucs_debug("mlx5dv_open_device(%s) failed: %m",
+                  ibv_get_device_name(ibv_device));
         return NULL;
     }
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
+        ucs_debug("ibv_create_cq(%s) failed: %m",
+                  ibv_get_device_name(ibv_device));
         goto close_ctx;
     }
 
@@ -976,13 +980,11 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     ctx = uct_ib_mlx5_devx_open_device(ibv_device);
     if (ctx == NULL) {
         if (md_config->devx == UCS_YES) {
-            status = UCS_ERR_IO_ERROR;
-            ucs_error("DEVX requested but not supported by %s",
+            ucs_error("DevX requested but not supported by %s",
                       ibv_get_device_name(ibv_device));
+            status = UCS_ERR_IO_ERROR;
         } else {
             status = UCS_ERR_UNSUPPORTED;
-            ucs_debug("mlx5dv_open_device(%s) failed: %m",
-                      ibv_get_device_name(ibv_device));
         }
         goto err;
     }
