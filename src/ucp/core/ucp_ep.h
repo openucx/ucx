@@ -318,7 +318,7 @@ typedef struct ucp_rndv_zcopy {
 
 /*
  * Element in ep peer memory hash. The element represents remote peer shared
- * memory segement. Having it hashed helps to avoid expensive rkey unpacking
+ * memory segment. Having it hashed helps to avoid expensive rkey unpacking
  * and md registration procedures. Unpacking is expensive, because for shared
  * memory segments it assumes attach/mmap calls. Registration is needed for
  * better performance of CPU<->GPU memory transfers and is typically quite
