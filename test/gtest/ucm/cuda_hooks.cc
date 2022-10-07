@@ -164,6 +164,31 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {
     check_mem_free_events((void *)dptr, 0);
 }
 
+#if CUDA_VERSION >= 11020
+UCS_TEST_F(cuda_hooks, test_cuMemAllocAsync) {
+    CUresult ret;
+    CUdeviceptr dptr;
+
+    /* release with cuMemFree */
+    ret = cuMemAllocAsync(&dptr, 64, 0);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+    check_mem_alloc_events((void*)dptr, 64, UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    ret = cuMemFree(dptr);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+    check_mem_free_events((void*)dptr, 0);
+
+    /* release with cuMemFreeAsync */
+    ret = cuMemAllocAsync(&dptr, 64, 0);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+    check_mem_alloc_events((void*)dptr, 64);
+
+    ret = cuMemFreeAsync(dptr, 0);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+    check_mem_free_events((void*)dptr, 0, UCS_MEMORY_TYPE_CUDA_MANAGED);
+}
+#endif
+
 UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
     cudaError_t ret;
     void *ptr, *ptr1;
@@ -234,3 +259,28 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocPitch) {
     ASSERT_EQ(ret, cudaSuccess);
     check_mem_free_events(devPtr, 0);
 }
+
+#if CUDA_VERSION >= 11020
+UCS_TEST_F(cuda_hooks, test_cudaMallocAsync) {
+    cudaError_t ret;
+    void *ptr;
+
+    /* release with cudaFree */
+    ret = cudaMallocAsync(&ptr, 64, 0);
+    ASSERT_EQ(ret, cudaSuccess);
+    check_mem_alloc_events(ptr, 64, UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    ret = cudaFree(ptr);
+    ASSERT_EQ(ret, cudaSuccess);
+    check_mem_free_events(ptr, 0);
+
+    /* release with cudaFreeAsync */
+    ret = cudaMallocAsync(&ptr, 64, 0);
+    ASSERT_EQ(ret, cudaSuccess);
+    check_mem_alloc_events(ptr, 64);
+
+    ret = cudaFreeAsync(ptr, 0);
+    ASSERT_EQ(ret, cudaSuccess);
+    check_mem_free_events(ptr, 0, UCS_MEMORY_TYPE_CUDA_MANAGED);
+}
+#endif
