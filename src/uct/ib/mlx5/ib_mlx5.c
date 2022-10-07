@@ -1079,7 +1079,8 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
          * AR support requested by user, pass empty ooo_sl_mask */
         return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1, dev_name,
                                      iface->config.port_num,
-                                     &iface->config.sl, &iface->config.sl_ar);
+                                     &iface->config.sl,
+                                     &iface->config.ar_enable);
     }
 
 #if HAVE_DEVX
@@ -1095,7 +1096,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
     return uct_ib_mlx5_select_sl(ib_config, ib_mlx5_config->ar_enable,
                                  ooo_sl_mask, status == UCS_OK, dev_name,
                                  iface->config.port_num,
-                                 &iface->config.sl, &iface->config.sl_ar);
+                                 &iface->config.sl, &iface->config.ar_enable);
 }
 
 void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,

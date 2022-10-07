@@ -1302,7 +1302,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.port_num           = port_num;
     /* initialize to invalid value */
     self->config.sl                 = UCT_IB_SL_NUM;
-    self->config.sl_ar              = 0;
+    self->config.ar_enable          = 0;
     self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;

@@ -514,11 +514,9 @@ ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    if (!iface->super.super.config.sl_ar) {
-        return uct_base_ep_fence(tl_ep, flags);
+    if (iface->super.super.config.ar_enable) {
+        UCT_RC_CHECK_RES(&iface->super, &ep->super);
     }
-
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     return uct_rc_ep_fence(tl_ep, &ep->fi, 1);
 }

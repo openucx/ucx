@@ -840,7 +840,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         goto cleanup_tm;
     }
 
-    self->config.strong_fence_flag = self->super.super.config.sl_ar ?
+    self->config.strong_fence_flag = self->super.super.config.ar_enable ?
                                      UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER : 0;
 
     /* By default set to something that is always in cache */

@@ -296,7 +296,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     self->super.config.fence_mode        = (uct_rc_fence_mode_t)config->super.super.fence_mode;
     self->super.progress                 = uct_rc_verbs_iface_progress;
     self->super.super.config.sl          = uct_ib_iface_config_select_sl(ib_config);
-    self->super.super.config.sl_ar       = 0;
+    self->super.super.config.ar_enable   = 0;
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {

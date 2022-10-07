@@ -293,7 +293,7 @@ struct uct_ib_iface {
         uint8_t               max_inl_cqe[UCT_IB_DIR_NUM];
         uint8_t               port_num;
         uint8_t               sl;
-        uint8_t               sl_ar;
+        uint8_t               ar_enable;
         uint8_t               traffic_class;
         uint8_t               hop_limit;
         uint8_t               qp_type;
