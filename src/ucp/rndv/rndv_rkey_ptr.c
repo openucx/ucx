@@ -9,7 +9,6 @@
 #endif
 
 #include "proto_rndv.inl"
-#include "rndv_mtype.inl"
 
 
 enum {

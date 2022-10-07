@@ -42,6 +42,24 @@ enum {
 };
 
 
+typedef struct ucp_proto_rndv_put_priv {
+    uct_completion_callback_t  put_comp_cb;
+    uct_completion_callback_t  atp_comp_cb;
+    uint8_t                    stage_after_put;
+    ucp_lane_map_t             flush_map;
+    ucp_lane_map_t             atp_map;
+    ucp_lane_index_t           atp_num_lanes;
+    ucp_proto_rndv_bulk_priv_t bulk;
+} ucp_proto_rndv_put_priv_t;
+
+
+/* Context for packing ATP message */
+typedef struct {
+    ucp_request_t *req;     /* rndv/put request */
+    size_t        ack_size; /* Size to send in ATP message */
+} ucp_proto_rndv_put_atp_pack_ctx_t;
+
+
 typedef struct {
     ucp_proto_rndv_ack_priv_t ack;
     ucp_proto_single_priv_t   spriv;
@@ -95,6 +113,41 @@ ucp_proto_rndv_put_common_flush_progress(uct_pending_req_t *uct_req)
     return ucp_proto_multi_lane_map_progress(
             req, &req->send.rndv.put.flush_map,
             ucp_proto_rndv_put_common_flush_send);
+}
+
+static size_t ucp_proto_rndv_put_common_pack_atp(void *dest, void *arg)
+{
+    ucp_proto_rndv_put_atp_pack_ctx_t *pack_ctx = arg;
+
+    return ucp_proto_rndv_pack_ack(pack_ctx->req, dest, pack_ctx->ack_size);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
+
+    pack_ctx.req = req;
+
+    /* When we need to send multiple ATP messages: each will acknowledge 1 byte,
+       except the last ATP which will acknowledge the remaining payload size.
+       This is simpler than keeping track of how much was sent on each lane */
+    ucs_assert(req->send.rndv.put.atp_map != 0);
+    if (ucs_is_pow2(req->send.rndv.put.atp_map)) {
+        pack_ctx.ack_size = req->send.state.dt_iter.length -
+                            rpriv->atp_num_lanes + 1;
+        if (pack_ctx.ack_size == 0) {
+            return UCS_OK; /* Skip sending 0-length ATP */
+        }
+    } else {
+        pack_ctx.ack_size = 1;
+    }
+
+    return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
+                                          ucp_proto_rndv_put_common_pack_atp,
+                                          &pack_ctx, sizeof(ucp_rndv_ack_hdr_t),
+                                          0);
 }
 
 static ucs_status_t
@@ -406,8 +459,6 @@ static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-    uct_mem_h memh;
-
     ucs_status_t status;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
@@ -419,9 +470,8 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
     }
 
     ucp_proto_rndv_put_common_request_init(req);
-
-    memh = ucp_proto_rndv_mtype_get_req_memh(req);
-    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr, memh,
+    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
+                              ucp_proto_rndv_mtype_get_req_memh(req),
                               uct_ep_get_zcopy,
                               ucp_proto_rndv_put_mtype_pack_completion,
                               "in from");
@@ -668,20 +718,11 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
     req->send.rndv.rkey_buffer = NULL;
 
     mem_type_ep = req->send.ep->worker->mem_type_ep[local_mem_type];
-    if (mem_type_ep == NULL) {
-        ucp_trace_req(req, "unreachable mem_type_ep for %s memory type",
-                      ucs_memory_type_names[local_mem_type]);
-        ucp_proto_request_abort(req, UCS_ERR_UNREACHABLE);
-        return UCS_OK;
-    }
-
-    ppln_data         = ucp_ep_peer_mem_get(context, req->send.ep,
-                                            remote_address,
-                                            req->send.state.dt_iter.length,
-                                            rkey_buffer, rpriv->alloc_md_index);
+    ppln_data   = ucp_ep_peer_mem_get(context, req->send.ep, remote_address,
+                                      req->send.state.dt_iter.length,
+                                      rkey_buffer, rpriv->alloc_md_index);
     if (ppln_data->rkey == NULL) {
-        ucp_trace_req(req, "unreachable rkey for md_index %u",
-                      rpriv->alloc_md_index);
+        ucs_error("unreachable rkey for md_index %u", rpriv->alloc_md_index);
         ucp_proto_request_abort(req, UCS_ERR_UNREACHABLE);
         return UCS_OK;
     }

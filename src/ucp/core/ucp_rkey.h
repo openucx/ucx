@@ -195,7 +195,7 @@ ucp_rkey_pack_memh(ucp_context_h context, ucp_md_map_t md_map,
 ucs_status_t
 ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
                             ucp_md_map_t unpack_md_map,
-                            ucp_md_map_t not_unpack_md_map, ucp_rkey_h *rkey_p);
+                            ucp_md_map_t skip_md_map, ucp_rkey_h *rkey_p);
 
 void ucp_rkey_dump_packed(const void *buffer, size_t length,
                           ucs_string_buffer_t *strb);

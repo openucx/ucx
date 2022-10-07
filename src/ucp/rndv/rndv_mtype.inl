@@ -50,7 +50,7 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
-ucp_proto_rndv_mtype_get_memh(ucp_request_t *req, ucp_rsc_index_t memh_index)
+ucp_proto_rndv_mtype_get_memh(ucp_request_t *req, ucp_md_index_t memh_index)
 {
     ucp_mem_desc_t *mdesc = req->send.rndv.mdesc;
 
@@ -70,9 +70,9 @@ ucp_proto_rndv_mtype_get_req_memh(ucp_request_t *req)
     ucs_memory_type_t mem_type = req->send.state.dt_iter.mem_info.type;
     ucp_ep_h mtype_ep          = req->send.ep->worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane      = ucp_ep_config(mtype_ep)->key.rma_bw_lanes[0];
-    ucp_rsc_index_t rsc_index  = ucp_ep_md_index(mtype_ep, lane);
+    ucp_md_index_t md_index    = ucp_ep_md_index(mtype_ep, lane);
 
-    return ucp_proto_rndv_mtype_get_memh(req, rsc_index);
+    return ucp_proto_rndv_mtype_get_memh(req, md_index);
 }
 
 static UCS_F_ALWAYS_INLINE void

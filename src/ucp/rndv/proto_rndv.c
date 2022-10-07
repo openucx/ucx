@@ -74,7 +74,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         }
 
         ucs_trace_req("lane[%d]: selected md %s index %u", lane,
-                      worker->context->tl_mds[md_index].rsc.md_name, md_index);
+                      context->tl_mds[md_index].rsc.md_name, md_index);
         *md_map |= UCS_BIT(md_index);
 
         if (ep_sys_dev >= UCP_MAX_SYS_DEVICES) {
@@ -883,11 +883,4 @@ void ucp_proto_rndv_bulk_request_init_lane_idx(
     }
 
     req->send.multi_lane_idx = lane_idx - 1;
-}
-
-size_t ucp_proto_rndv_put_common_pack_atp(void *dest, void *arg)
-{
-    ucp_proto_rndv_put_atp_pack_ctx_t *pack_ctx = arg;
-
-    return ucp_proto_rndv_pack_ack(pack_ctx->req, dest, pack_ctx->ack_size);
 }

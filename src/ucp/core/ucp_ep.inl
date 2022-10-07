@@ -293,7 +293,7 @@ ucp_ep_rkey_unpack_reg_reachable(ucp_ep_h ep, const void *buffer, size_t length,
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_context_t *context     = ep->worker->context;
     const uct_component_attr_t *cmpt_attr;
-    ucp_md_map_t not_unpack_md_map;
+    ucp_md_map_t skip_md_map;
     ucp_md_map_t md_map;
     ucp_md_index_t md_index;
     ucp_rsc_index_t cmpt_index;
@@ -301,18 +301,18 @@ ucp_ep_rkey_unpack_reg_reachable(ucp_ep_h ep, const void *buffer, size_t length,
     md_map = ep_config->key.reachable_md_map &
              ~(ep_config->key.rma_bw_md_map | ep_config->rndv.rkey_ptr_dst_mds);
 
-    not_unpack_md_map = 0;
+    skip_md_map = 0;
     ucs_for_each_bit(md_index, md_map) {
         cmpt_index = ucp_ep_config_get_dst_md_cmpt(&ep_config->key, md_index);
         cmpt_attr  = &context->tl_cmpts[cmpt_index].attr;
         if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
-            not_unpack_md_map &= UCS_BIT(md_index);
+            skip_md_map &= UCS_BIT(md_index);
         }
     }
 
     return ucp_ep_rkey_unpack_internal(ep, buffer, length,
                                        ep_config->key.reachable_md_map,
-                                       not_unpack_md_map, rkey_p);
+                                       skip_md_map, rkey_p);
 }
 
 #endif

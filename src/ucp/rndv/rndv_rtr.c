@@ -16,6 +16,23 @@
 #include <ucp/proto/proto_single.inl>
 
 
+/**
+ * RTR protocol callback, which is called when all incoming data is filled to
+ * the request send buffer.
+ *
+ * @param in_buffer Whether data is already in user buffer (dt_iter), or in the
+ * buffer that we published as the remote address.
+ */
+typedef void (*ucp_proto_rndv_rtr_data_received_cb_t)(ucp_request_t *req,
+                                                      int in_buffer);
+
+typedef struct {
+    ucp_proto_rndv_ctrl_priv_t            super;
+    uct_pack_callback_t                   pack_cb;
+    ucp_proto_rndv_rtr_data_received_cb_t data_received;
+} ucp_proto_rndv_rtr_priv_t;
+
+
 static ucs_status_t
 ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
                                uint64_t rndv_modes, size_t max_length,
@@ -299,8 +316,6 @@ static void ucp_proto_rndv_rtr_mtype_copy_completion(uct_completion_t *uct_comp)
 static void
 ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
 {
-    uct_mem_h memh;
-
     ucp_send_request_id_release(req);
     if (in_buffer) {
         /* Data was already placed in user buffer because the sender responded
@@ -309,8 +324,8 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
     } else {
         /* Data was not placed in user buffer, which means it was placed to
            the remote address we published - the rendezvous fragment */
-        memh = ucp_proto_rndv_mtype_get_req_memh(req);
-        ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr, memh,
+        ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
+                                  ucp_proto_rndv_mtype_get_req_memh(req),
                                   uct_ep_put_zcopy,
                                   ucp_proto_rndv_rtr_mtype_copy_completion,
                                   "out to");

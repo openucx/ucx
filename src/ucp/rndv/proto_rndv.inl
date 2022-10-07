@@ -371,32 +371,4 @@ ucp_proto_rndv_recv_complete(ucp_request_t *req)
     return ucp_proto_rndv_recv_complete_status(req, rreq->status);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
-{
-    const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
-    ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
-
-    pack_ctx.req = req;
-
-    /* When we need to send multiple ATP messages: each will acknowledge 1 byte,
-       except the last ATP which will acknowledge the remaining payload size.
-       This is simpler than keeping track of how much was sent on each lane */
-    ucs_assert(req->send.rndv.put.atp_map != 0);
-    if (ucs_is_pow2(req->send.rndv.put.atp_map)) {
-        pack_ctx.ack_size = req->send.state.dt_iter.length -
-                            rpriv->atp_num_lanes + 1;
-        if (pack_ctx.ack_size == 0) {
-            return UCS_OK; /* Skip sending 0-length ATP */
-        }
-    } else {
-        pack_ctx.ack_size = 1;
-    }
-
-    return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
-                                          ucp_proto_rndv_put_common_pack_atp,
-                                          &pack_ctx, sizeof(ucp_rndv_ack_hdr_t),
-                                          0);
-}
-
 #endif

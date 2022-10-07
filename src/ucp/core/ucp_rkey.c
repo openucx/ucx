@@ -380,9 +380,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
-                 (ep, buffer, length, unpack_md_map, not_unpack_md_map, rkey_p), ucp_ep_h ep,
+                 (ep, buffer, length, unpack_md_map, skip_md_map, rkey_p), ucp_ep_h ep,
                  const void *buffer, size_t length, ucp_md_map_t unpack_md_map,
-                 ucp_md_map_t not_unpack_md_map, ucp_rkey_h *rkey_p)
+                 ucp_md_map_t skip_md_map, ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -459,7 +459,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
         ucs_assert(rkey_index < md_count);
         tl_rkey = &rkey->tl_rkey[rkey_index];
 
-        if (UCS_BIT(remote_md_index) & not_unpack_md_map) {
+        if (UCS_BIT(remote_md_index) & skip_md_map) {
             tl_rkey->rkey.rkey   = UCT_INVALID_RKEY;
             tl_rkey->rkey.handle = NULL;
             tl_rkey->cmpt        = NULL;
