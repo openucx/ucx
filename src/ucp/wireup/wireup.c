@@ -609,7 +609,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     int send_reply            = 0;
     unsigned ep_init_flags    = ucp_ep_err_mode_init_flags(msg->err_mode);
     ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
-    ucp_rsc_index_t lanes2remote[UCP_MAX_LANES];
+    ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
     int has_cm_lane;
@@ -736,15 +736,13 @@ err_set_ep_failed:
 static unsigned ucp_wireup_send_msg_ack(void *arg)
 {
     ucp_ep_h ep = (ucp_ep_h)arg;
-    ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
     ucs_status_t status;
 
     /* Send ACK without any address, we've already sent it as part of the request */
     ucs_trace("ep %p: sending wireup ack", ep);
 
-    memset(rsc_tli, UCP_NULL_RESOURCE, sizeof(rsc_tli));
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, &ucp_tl_bitmap_min,
-                                 rsc_tli);
+                                 NULL);
     return (status == UCS_OK);
 }
 
@@ -1332,11 +1330,30 @@ ucp_wireup_get_dst_rsc_indices(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     }
 }
 
-static void
+static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
+                                       ucs_queue_head_t *replay_pending_queue)
+{
+    ucp_lane_index_t index;
+
+    for (index = 0; index < UCP_MAX_LANES; ++index) {
+        if (uct_eps[index] == NULL) {
+            continue;
+        }
+
+        ucp_worker_discard_uct_ep(ep, uct_eps[index], UCP_NULL_RESOURCE,
+                                  UCT_FLUSH_FLAG_LOCAL,
+                                  ucp_request_purge_enqueue_cb,
+                                  replay_pending_queue,
+                                  (ucp_send_nbx_callback_t)ucs_empty_function,
+                                  NULL);
+    }
+}
+
+static ucs_status_t
 ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                                   const ucp_unpacked_address_t *remote_address,
                                   const unsigned *addr_indices,
-                                  ucp_lane_index_t *connect_lane_bitmap,
+                                  ucp_lane_map_t *connect_lane_bitmap,
                                   ucs_queue_head_t *replay_pending_queue)
 {
     uct_ep_h new_uct_eps[UCP_MAX_LANES]                = { NULL };
@@ -1346,6 +1363,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucp_ep_config_key_t *old_key;
     ucp_lane_index_t lane, reuse_lane;
     uct_ep_h uct_ep;
+    ucs_status_t status;
 
     *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
     ucs_queue_head_init(replay_pending_queue);
@@ -1353,7 +1371,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     if (!ucp_ep_has_cm_lane(ep) ||
         (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
         /* nothing to intersect with */
-        return;
+        return ucp_ep_realloc_lanes(ep, new_key->num_lanes);
     }
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
@@ -1417,7 +1435,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         reuse_lane = reuse_lane_map[lane];
         uct_ep     = ucp_ep_get_lane(ep, lane);
-        if (reuse_lane == UCP_NULL_RESOURCE) {
+        if (reuse_lane == UCP_NULL_LANE) {
             if (uct_ep != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
                 ucp_worker_discard_uct_ep(
@@ -1439,9 +1457,17 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
     }
 
-    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+    status = ucp_ep_realloc_lanes(ep, new_key->num_lanes);
+    if (status != UCS_OK) {
+        ucp_wireup_discard_uct_eps(ep, new_uct_eps, replay_pending_queue);
+        return status;
+    }
+
+    for (lane = 0; lane < new_key->num_lanes; ++lane) {
         ucp_ep_set_lane(ep, lane, new_uct_eps[lane]);
     }
+
+    return UCS_OK;
 }
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
@@ -1454,7 +1480,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                                           worker->context->tl_bitmap,
                                                           UCP_MAX_RESOURCES);
     ucp_rsc_index_t cm_idx               = UCP_NULL_RESOURCE;
-    ucp_lane_index_t connect_lane_bitmap;
+    ucp_lane_map_t connect_lane_bitmap;
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;

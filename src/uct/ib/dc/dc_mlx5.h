@@ -34,7 +34,7 @@ struct ibv_ravh {
 #endif
 
 #define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
-#define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 8
+#define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 16
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
     (!!((_addr)->flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))

@@ -1423,8 +1423,27 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup, compare_cm_and_wireup_configs,
     }
 }
 
-UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_wireup)
+class test_max_lanes : public test_ucp_sockaddr {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        get_test_variants_cm_mode(variants, UCP_FEATURE_TAG, CONN_REQ_TAG,
+                                  "tag");
+    }
+};
 
+UCS_TEST_SKIP_COND_P(test_max_lanes, 16_lanes_reconf, !cm_use_all_devices(),
+                     "MAX_RNDV_LANES=16", "MAX_EAGER_LANES=16",
+                     "IB_NUM_PATHS?=16", "TM_SW_RNDV=y")
+{
+    /* get configuration index for EP created through CM */
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+
+    ASSERT_EQ(16, ucp_ep_num_lanes(sender().ep()));
+    ASSERT_EQ(16, ucp_ep_num_lanes(receiver().ep()));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, ib, "ib")
 
 class test_ucp_sockaddr_wireup_fail : public test_ucp_sockaddr_wireup {
 protected:
