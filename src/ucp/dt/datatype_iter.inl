@@ -200,34 +200,6 @@ ucp_datatype_iter_is_begin(const ucp_datatype_iter_t *dt_iter)
     return dt_iter->offset == 0;
 }
 
-/*
- * Initialize a cleaned-up iterator, after it has already been initialized and
- * cleaned up by calling @ref ucp_datatype_iter_init and
- * @ref ucp_datatype_iter_cleanup.
- *
- * @note The current offset of the iterator must be 0, since we can't start
- *       the iterator from the middle.
- */
-static UCS_F_ALWAYS_INLINE void
-ucp_datatype_iter_restart(ucp_datatype_iter_t *dt_iter)
-{
-    ucp_dt_generic_t *dt_gen;
-    void *state;
-
-    ucs_assertv(ucp_datatype_iter_is_begin(dt_iter), "offset=%zu",
-                dt_iter->offset);
-
-    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_GENERIC,
-                                   UCP_DT_MASK_ALL)) {
-        dt_gen = dt_iter->type.generic.dt_gen;
-        state  = dt_gen->ops.start_pack(dt_gen->context,
-                                        dt_iter->type.generic.buffer,
-                                        dt_iter->type.generic.count);
-
-        dt_iter->type.generic.state = state;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_iov_check(const ucp_datatype_iter_t *dt_iter)
 {
