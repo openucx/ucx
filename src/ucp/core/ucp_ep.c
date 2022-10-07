@@ -178,6 +178,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 static void ucp_ep_deallocate(ucp_ep_h ep)
 {
     UCS_STATS_NODE_FREE(ep->stats);
+    ucs_free(ep->ext->uct_eps);
     ucs_free(ep->ext);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
@@ -222,6 +223,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->ka_last_round                = 0;
 #endif
     ep->ext->peer_mem                     = NULL;
+    ep->ext->uct_eps                      = NULL;
 
     UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
                       sizeof(ep->ext->flush_state));
@@ -229,7 +231,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
 
-    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+    for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
         ucp_ep_set_lane(ep, lane, NULL);
     }
 #if ENABLE_DEBUG_DATA
@@ -3610,6 +3612,40 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes)
+{
+    int num_slow_lanes   = new_num_lanes - UCP_MAX_FAST_PATH_LANES;
+    ucp_ep_ext_t *ep_ext = ep->ext;
+    ucp_lane_index_t lane;
+    unsigned old_num_lanes;
+    uct_ep_h *tmp;
+
+    if (num_slow_lanes <= 0) {
+        ucs_free(ep_ext->uct_eps);
+        ep_ext->uct_eps = NULL;
+        return UCS_OK;
+    }
+
+    tmp = ucs_realloc(ep_ext->uct_eps,
+                      num_slow_lanes * sizeof(*ep_ext->uct_eps),
+                      "ucp_slow_lanes");
+    if (tmp == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ep_ext->uct_eps = tmp;
+
+    old_num_lanes = (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) ?
+                            ucp_ep_num_lanes(ep) :
+                            0;
+
+    for (lane = old_num_lanes; lane < new_num_lanes; ++lane) {
+        ucp_ep_set_lane(ep, lane, NULL);
     }
 
     return UCS_OK;

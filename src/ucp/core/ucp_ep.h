@@ -499,7 +499,7 @@ typedef struct ucp_ep_ext {
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
      * structure. TODO allocate this array dynamically.
      */
-    uct_ep_h                      uct_eps[UCP_MAX_SLOW_PATH_LANES];
+    uct_ep_h                     *uct_eps;
 } ucp_ep_ext_t;
 
 
@@ -828,5 +828,18 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
+
+/**
+ * @brief Realloc slow lanes according to current number of lanes.
+ *        Slow lanes number will be (new_num_lanes - MAX_FAST_PATH_LANES).
+ *        If new slow lanes are added, fill them with NULL.
+ *
+ * @param [in] ucp_ep           Endpoint object.
+ * @param [in] new_num_lanes    Number of total lanes required
+ *                              (including fast lanes).
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
 
 #endif

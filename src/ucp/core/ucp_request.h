@@ -245,9 +245,6 @@ struct ucp_request {
 
                             /* Actual lanes count */
                             uint8_t        lanes_count;
-
-                            /* Remote key index map */
-                            uint8_t        rkey_index[UCP_MAX_LANES];
                         };
 
                         /* Used by "new" rendezvous protocols, in proto_rndv.c */
