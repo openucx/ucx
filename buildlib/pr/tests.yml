@@ -33,6 +33,8 @@ jobs:
           rc=$?
           if [[ $rc != 0 && x'${{ parameters.proto_enable }}' == x'yes' ]]; then
             azure_complete_with_issues "Test with PROTO_ENABLE=yes exit with expected error"
+          else
+            exit $rc
           fi
         displayName: Run ./contrib/test_jenkins.sh
         env:
