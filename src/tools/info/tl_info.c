@@ -56,6 +56,11 @@
         printf(" nsec\n"); \
     }
 
+#define PRINT_MD_MEM_TYPE(_strb, _md_attr, _mem_type, _cap) \
+    if ((_md_attr)._cap##_mem_types & UCS_BIT(_mem_type)) { \
+        ucs_string_buffer_appendf(_strb, UCS_PP_MAKE_STRING(_cap) ","); \
+    }
+
 
 static char *strduplower(const char *str)
 {
@@ -477,22 +482,24 @@ static void print_md_info(uct_component_h component,
 
             ucs_string_buffer_appendf(&strb, "%s",
                                       ucs_memory_type_names[mem_type]);
-            if (UCS_BIT(mem_type) &
-                (md_attr.cache_mem_types & ~md_attr.alloc_mem_types)) {
+            if (!(UCS_BIT(mem_type) &
+                  (md_attr.access_mem_types | md_attr.alloc_mem_types |
+                   md_attr.reg_mem_types | md_attr.cache_mem_types |
+                   md_attr.detect_mem_types | md_attr.dmabuf_mem_types))) {
                 ucs_string_buffer_appendf(&strb, ", ");
                 continue;
             }
 
             ucs_string_buffer_appendf(&strb, " (");
-            if (md_attr.alloc_mem_types & UCS_BIT(mem_type)) {
-                ucs_string_buffer_appendf(&strb, "alloc, ");
-            }
 
-            if (!(md_attr.cache_mem_types & UCS_BIT(mem_type))) {
-                ucs_string_buffer_appendf(&strb, "nocache, ");
-            }
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, access);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, alloc);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, reg);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, cache);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, detect);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, dmabuf);
+            ucs_string_buffer_rtrim(&strb, ",");
 
-            ucs_string_buffer_rtrim(&strb, ", ");
             ucs_string_buffer_appendf(&strb, "), ");
         }
 
