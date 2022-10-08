@@ -282,8 +282,7 @@ typedef struct ucp_context {
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration of a memory buffer for a given
-       memory type to be shared among other processes which use the same MD.
-       ucp_mem_map() will register memory for all those domains. */
+       memory type to be exported to other processes. */
     ucp_md_map_t                  export_md_map[UCS_MEMORY_TYPE_LAST];
 
     /* List of MDs that detect non host memory type */

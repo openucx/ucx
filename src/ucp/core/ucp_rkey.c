@@ -361,16 +361,9 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
                                               &memh_info_size_p);
     common_memh_info_p = p;
 
-    /* Address */
     *ucs_serialize_next(&p, uint64_t) = address;
-
-    /* Length */
     *ucs_serialize_next(&p, uint64_t) = length;
-
-    /* UCP uuid */
     *ucs_serialize_next(&p, uint64_t) = context->uuid;
-
-    /* Registration ID */
     *ucs_serialize_next(&p, uint64_t) = memh->reg_id;
 
     /* Store the size of an exported memh information */
@@ -385,13 +378,11 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
         md_data_p                         = p;
         *ucs_serialize_next(&p, uint16_t) = 0;
 
-        /* TL mkey size */
         tl_mkey_size = md_attr->exported_mkey_packed_size;
         ucs_assertv((tl_mkey_size <= UINT8_MAX) && (tl_mkey_size != 0),
                     "tl_mkey_size %zu", tl_mkey_size);
         *ucs_serialize_next(&p, uint8_t) = tl_mkey_size;
 
-        /* TL mkey */
         tl_mkey_buf = ucs_serialize_next_raw(&p, void, tl_mkey_size);
         status      = uct_md_mkey_pack_v2(tl_mds[md_index].md,
                                           uct_memhs[md_index], &params,
@@ -401,26 +392,21 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
             goto out;
         }
 
-        /* Size of component name */
         component_name_size              = strlen(md_attr->component_name);
         *ucs_serialize_next(&p, uint8_t) = component_name_size;
 
-        /* Component name */
         component_name_buf = ucs_serialize_next_raw(&p, void,
                                                     component_name_size);
         memcpy(component_name_buf, md_attr->component_name,
                component_name_size);
 
-        /* Size of global MD identifier */
         global_id_size                   =
                 ucp_memh_global_id_packed_size(md_attr);
         *ucs_serialize_next(&p, uint8_t) = global_id_size;
 
-        /* Global MD identifier */
         global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
         memcpy(global_id_buf, md_attr->global_id, global_id_size);
 
-        /* Size of TL mkey data */
         tl_mkey_data_size = UCS_PTR_BYTE_DIFF(md_data_p, p);
         ucs_assertv((tl_mkey_data_size <= UINT16_MAX) &&
                     (tl_mkey_data_size != 0),
@@ -513,6 +499,8 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
 
     if ((flags & UCP_MEMH_PACK_FLAG_EXPORT) &&
         (context->export_md_map[memh->mem_type] == 0)) {
+        ucs_diag("packing memory handle as exported was requested, but"
+                 " no UCT MDs which support exported memory keys");
         status = UCS_ERR_UNSUPPORTED;
         goto out;
     }

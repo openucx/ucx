@@ -721,6 +721,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     flags                = UCP_PARAM_VALUE(MEM_MAP, params, flags, FLAGS, 0);
     exported_memh_buffer = UCP_PARAM_VALUE(MEM_MAP, params, exported_memh_buffer,
                                            EXPORTED_MEMH_BUFFER, NULL);
+    mem_type             = UCP_PARAM_VALUE(MEM_MAP, params, memory_type,
+                                           MEMORY_TYPE, UCS_MEMORY_TYPE_LAST);
 
     if ((flags & UCP_MEM_MAP_FIXED) &&
         ((uintptr_t)address % ucs_get_page_size())) {
@@ -729,23 +731,23 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         goto out;
     }
 
-    if (flags & UCP_MEM_MAP_ALLOCATE) {
-        mem_type = UCP_PARAM_VALUE(MEM_MAP, params, memory_type, MEMORY_TYPE,
-                                   UCS_MEMORY_TYPE_HOST);
-    } else if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE) ||
-               (params->memory_type == UCS_MEMORY_TYPE_UNKNOWN)) {
-        ucp_memory_detect(context, address, length, &mem_info);
-        mem_type = mem_info.type;
-    } else {
-        if (params->memory_type > UCS_MEMORY_TYPE_LAST) {
-            ucs_error("invalid memory type %d", params->memory_type);
-            status = UCS_ERR_INVALID_PARAM;
-            goto out;
+    if (mem_type == UCS_MEMORY_TYPE_LAST) {
+        if (flags & UCP_MEM_MAP_ALLOCATE) {
+            mem_type = UCS_MEMORY_TYPE_HOST;
+        } else {
+            ucp_memory_detect(context, address, length, &mem_info);
+            mem_type = mem_info.type;
         }
-        mem_type = params->memory_type;
     }
 
     if (exported_memh_buffer != NULL) {
+        if (flags & UCP_MEM_MAP_ALLOCATE) {
+            ucs_error("wrong combinations of parameters: exported memory handle"
+                      " and memory allocation were requested altogether");
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
+        }
+
         memh_flags |= UCP_MEM_FLAG_IMPORTED;
 
         if (*(uint16_t*)exported_memh_buffer == sizeof(ucp_memh_dummy_buffer)) {
@@ -1339,33 +1341,27 @@ ucp_memh_import_parse_tl_mkey_data(ucp_context_h context,
     const void *tl_mkey_buf, *component_name_buf, *global_id_buf;
     ucp_md_map_t md_map;
 
-    /* TL mkey data size */
     tl_mkey_data_size = *ucs_serialize_next(&p, uint16_t);
     end               = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
-    ucs_assertv(tl_mkey_data_size != 0, "tl_mkey_data_size %zu",
-                tl_mkey_data_size);
+    ucs_assert(tl_mkey_data_size != 0);
 
-    /* TL mkey size */
     tl_mkey_size = *ucp_memh_serialize_next(&p, uint8_t, end, 0u);
-    ucs_assertv(tl_mkey_size != 0, "tl_mkey_size %zu", tl_mkey_size);
+    ucs_assert(tl_mkey_size != 0);
 
-    /* TL mkey */
     tl_mkey_buf = ucs_serialize_next_raw(&p, void, tl_mkey_size);
 
-    /* Size of component name */
     component_name_size = *ucp_memh_serialize_next(&p, uint8_t, end, 0u);
+    ucs_assert(component_name_size != 0);
 
-    /* Component name */
     component_name_buf = ucs_serialize_next_raw(&p, void,
                                                 component_name_size);
 
-    /* Size of global MD identifier */
     global_id_size = *ucp_memh_serialize_next(&p, uint8_t, end, 0u);
+    ucs_assert(global_id_size != 0);
 
-    /* Global MD identifier */
     global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
 
-    /* Get local MD index which corresponds to the remote one */
+    /* Get local MD indices which corresponds to the remote ones */
     md_map = ucp_find_md_map(context, component_name_buf,
                              component_name_size, global_id_buf,
                              global_id_size);
@@ -1548,18 +1544,17 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     mem_type       = *ucp_memh_serialize_next(&p, uint8_t, end,
                                               UCS_MEMORY_TYPE_HOST);
 
+    if (ucs_unlikely(!(flags & UCP_MEMH_BUFFER_FLAG_EXPORTED))) {
+        ucs_error("passed memory handle buffer which does not contain exported"
+                  " memory handle: flags 0x%lx", flags);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     /* Exported memory handle stuff */
     address     = (void*)*ucp_memh_serialize_next(&p, uint64_t, end, 0lu);
     length      = *ucp_memh_serialize_next(&p, uint64_t, end, 0lu);
     remote_uuid = *ucp_memh_serialize_next(&p, uint64_t, end, 0lu);
     reg_id      = *ucp_memh_serialize_next(&p, uint64_t, end, UINT64_MAX);
-
-    if (ucs_unlikely(!(flags & UCP_MEMH_BUFFER_FLAG_EXPORTED))) {
-        ucs_error("passed memory handle buffer which does not contain exported"
-                  " memory handle: flags 0x%lx, address %p, length %" PRIu64,
-                  flags, (void*)address, length);
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     ucs_assert(length != 0);
 
@@ -1614,14 +1609,20 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
             if (rregion != NULL) {
                 rcache_memh = ucs_derived_of(rregion, ucp_mem_t);
                 if (ucs_likely(rcache_memh->reg_id == reg_id)) {
-                    ucp_memh_rcache_suitable_print(rcache_memh, address,
-                                                   length);
+                    ucp_memh_rcache_print(rcache_memh, address, length);
                     memh->parent = rcache_memh;
                     status       = UCS_OK;
                     UCP_THREAD_CS_EXIT(&context->mt_lock);
                     goto out_memh_update;
                 }
 
+                /* If registration IDs are not matched, but a region still
+                 * exists in the RCACHE of imported regions, it means that
+                 * an exported memory handle has already been destroyed for a
+                 * given address, but an imported memory handle hasn't been
+                 * retrieved from the RCACHE. So, it should have reference
+                 * counter == 1, since ucp_mem_unmap() should be invoked for
+                 * imported memory handles and then - for exported ones */
                 ucs_assertv(rregion->refcount == 1, "%u", rregion->refcount);
                 ucs_rcache_region_invalidate(rcache, rregion,
                                              ucs_empty_function, NULL);
@@ -1641,10 +1642,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
 
 out_memh_update:
     if (memh->parent != memh) {
-        memh->reg_id = memh->parent->reg_id;
+        memh->reg_id  = memh->parent->reg_id;
+        memh->md_map |= memh->parent->md_map;
         ucs_for_each_bit(md_index, memh->parent->md_map) {
             memh->uct[md_index] = memh->parent->uct[md_index];
-            memh->md_map       |= UCS_BIT(md_index);
         }
     }
 

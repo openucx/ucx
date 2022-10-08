@@ -19,7 +19,7 @@ ucp_memh_is_zero_length(const ucp_mem_h memh)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_memh_rcache_suitable_print(ucp_mem_h memh, void *address, size_t length)
+ucp_memh_rcache_print(ucp_mem_h memh, void *address, size_t length)
 {
     const char UCS_V_UNUSED *type = (memh->flags & UCP_MEM_FLAG_IMPORTED) ?
                                     "imported" : "normal";
@@ -58,7 +58,7 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
 
         memh = ucs_derived_of(rregion, ucp_mem_t);
         if (ucs_likely(ucs_test_all_flags(memh->md_map, reg_md_map))) {
-            ucp_memh_rcache_suitable_print(memh, address, length);
+            ucp_memh_rcache_print(memh, address, length);
             *memh_p = memh;
             status = UCS_OK;
             goto out_unlock;
