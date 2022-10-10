@@ -37,7 +37,7 @@ static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
      ucs_offsetof(uct_rocm_copy_iface_config_t, short_d2h_thresh),
      UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"SHORT_H2D_THRESH", "inf",
+    {"SHORT_H2D_THRESH", "1m",
      "Threshold for switching to hsa memcpy for host-to-device copies for "
      "short operations",
      ucs_offsetof(uct_rocm_copy_iface_config_t, short_h2d_thresh),
