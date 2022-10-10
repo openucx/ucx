@@ -497,6 +497,19 @@ out:
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
+{
+    ucp_md_index_t md_index;
+
+    memh->reg_id  = memh->parent->reg_id;
+    memh->md_map |= memh->parent->md_map;
+
+    ucs_for_each_bit(md_index, parent_md_map) {
+        memh->uct[md_index] = memh->parent->uct[md_index];
+    }
+}
+
 static ucs_status_t
 ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags)
 {
@@ -505,7 +518,6 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags)
     ucp_md_map_t cache_md_map  = context->cache_md_map[mem_type] & reg_md_map;
     void *address              = ucp_memh_address(memh);
     size_t length              = ucp_memh_length(memh);
-    ucp_md_index_t md_index;
     ucs_status_t status;
 
     if (context->rcache == NULL) {
@@ -518,16 +530,14 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags)
         memh->reg_id = context->next_memh_reg_id++;
     } else {
         status = ucp_memh_get(context, address, length, mem_type, cache_md_map,
-                              uct_flags, memh->flags, &memh->parent);
+                              uct_flags, &memh->parent);
         if (status != UCS_OK) {
             goto err;
         }
 
-        ucs_for_each_bit(md_index, cache_md_map) {
-            memh->uct[md_index] = memh->parent->uct[md_index];
-            memh->md_map       |= UCS_BIT(md_index);
-            reg_md_map         &= ~UCS_BIT(md_index);
-        }
+        ucp_memh_init_from_parent(memh, cache_md_map);
+        memh->md_map |= cache_md_map;
+        reg_md_map   &= ~cache_md_map;
 
         status = ucp_memh_register(context, memh, reg_md_map, address, length,
                                    uct_flags);
@@ -783,12 +793,10 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
                                      uct_flags, &memh);
     }
 
-    if (status != UCS_OK) {
-        goto out;
+    if (status == UCS_OK) {
+        ucs_assert(memh->md_map != 0);
+        ucs_assert(memh->parent != NULL);
     }
-
-    ucs_assert(memh->md_map != 0);
-    ucs_assert(memh->parent != NULL);
 
 out:
     *memh_p = memh;
@@ -1404,6 +1412,8 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
         status = uct_md_mem_attach(context->tl_mds[md_index].md, tl_mkey_buf,
                                    &attach_params, &uct_memh);
         if (ucs_unlikely(status != UCS_OK)) {
+            /* Don't print an error, because two MDs can have similar global
+             * identifiers, but a memory key was exported on another MD */
             ucs_trace("failed to attach memory on '%s': %s",
                       md_attr->component_name, ucs_status_string(status));
             continue;
@@ -1581,7 +1591,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     }
 
     if (attach_params_num == 0) {
-        ucs_error("couldn't find local MDs which correspond to remote MDs");
+        ucs_diag("couldn't find local MDs which correspond to remote MDs");
         return UCS_ERR_UNREACHABLE;
     }
 
@@ -1642,11 +1652,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
 
 out_memh_update:
     if (memh->parent != memh) {
-        memh->reg_id  = memh->parent->reg_id;
-        memh->md_map |= memh->parent->md_map;
-        ucs_for_each_bit(md_index, memh->parent->md_map) {
-            memh->uct[md_index] = memh->parent->uct[md_index];
-        }
+        ucp_memh_init_from_parent(memh, memh->parent->md_map);
     }
 
     *memh_p = memh;

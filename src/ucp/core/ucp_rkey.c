@@ -356,9 +356,9 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
 
     ucs_log_indent(1);
 
-    p                  = ucp_memh_common_pack(memh, p,
-                                              UCP_MEMH_BUFFER_FLAG_EXPORTED,
-                                              &memh_info_size_p);
+    p = ucp_memh_common_pack(memh, p, UCP_MEMH_BUFFER_FLAG_EXPORTED,
+                             &memh_info_size_p);
+
     common_memh_info_p = p;
 
     *ucs_serialize_next(&p, uint64_t) = address;
@@ -373,7 +373,7 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
     ucs_for_each_bit(md_index, context->export_md_map[memh->mem_type]) {
         md_attr = &tl_mds[md_index].attr;
 
-        /* Save pointer to the begging of the TL mkey data to fill later by the
+        /* Save pointer to the beginning of the TL mkey data to fill later by the
          * resulted size of TL mkey data */
         md_data_p                         = p;
         *ucs_serialize_next(&p, uint16_t) = 0;
@@ -400,8 +400,8 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
         memcpy(component_name_buf, md_attr->component_name,
                component_name_size);
 
-        global_id_size                   =
-                ucp_memh_global_id_packed_size(md_attr);
+        global_id_size = ucp_memh_global_id_packed_size(md_attr);
+
         *ucs_serialize_next(&p, uint8_t) = global_id_size;
 
         global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
