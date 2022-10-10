@@ -1331,10 +1331,12 @@ public:
     }
 };
 
-UCS_TEST_SKIP_COND_P(select_transport_rma_bw, select_rc,
-                     !has_resource(&sender(), "rc_mlx5"), "NUM_EPS=56",
-                     "NUM_PPN=28")
+UCS_TEST_P(select_transport_rma_bw, select_rc, "NUM_EPS=56", "NUM_PPN=28")
 {
+    if (!has_resource(&sender(), "rc_mlx5")) {
+        UCS_TEST_SKIP_R("no rc resources");
+    }
+
     sender().connect(&receiver(), get_ep_params());
 
     const ucp_ep_config_t *config = ucp_ep_config(sender().ep());
