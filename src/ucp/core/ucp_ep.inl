@@ -306,7 +306,7 @@ ucp_ep_rkey_unpack_reg_reachable(ucp_ep_h ep, const void *buffer, size_t length,
         cmpt_index = ucp_ep_config_get_dst_md_cmpt(&ep_config->key, md_index);
         cmpt_attr  = &context->tl_cmpts[cmpt_index].attr;
         if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
-            skip_md_map &= UCS_BIT(md_index);
+            skip_md_map |= UCS_BIT(md_index);
         }
     }
 
