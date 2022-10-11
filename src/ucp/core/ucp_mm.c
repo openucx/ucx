@@ -1353,18 +1353,18 @@ ucp_memh_import_parse_tl_mkey_data(ucp_context_h context,
     end               = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
     ucs_assert(tl_mkey_data_size != 0);
 
-    tl_mkey_size = *ucp_memh_serialize_next(&p, uint8_t, end, 0u);
+    tl_mkey_size = *ucs_serialize_next(&p, uint8_t);
     ucs_assert(tl_mkey_size != 0);
 
     tl_mkey_buf = ucs_serialize_next_raw(&p, void, tl_mkey_size);
 
-    component_name_size = *ucp_memh_serialize_next(&p, uint8_t, end, 0u);
+    component_name_size = *ucs_serialize_next(&p, uint8_t);
     ucs_assert(component_name_size != 0);
 
     component_name_buf = ucs_serialize_next_raw(&p, void,
                                                 component_name_size);
 
-    global_id_size = *ucp_memh_serialize_next(&p, uint8_t, end, 0u);
+    global_id_size = *ucs_serialize_next(&p, uint8_t);
     ucs_assert(global_id_size != 0);
 
     global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
@@ -1549,10 +1549,9 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     memh_info_size = *ucs_serialize_next(&p, uint16_t);
     end            = UCS_PTR_BYTE_OFFSET(export_mkey_buffer, memh_info_size);
 
-    flags          = *ucp_memh_serialize_next(&p, uint64_t, end, 0lu);
-    remote_md_map  = *ucp_memh_serialize_next(&p, ucp_md_map_t, end, 0u);
-    mem_type       = *ucp_memh_serialize_next(&p, uint8_t, end,
-                                              UCS_MEMORY_TYPE_HOST);
+    flags         = *ucs_serialize_next(&p, uint64_t);
+    remote_md_map = *ucs_serialize_next(&p, ucp_md_map_t);
+    mem_type      = *ucs_serialize_next(&p, uint8_t);
 
     if (ucs_unlikely(!(flags & UCP_MEMH_BUFFER_FLAG_EXPORTED))) {
         ucs_error("passed memory handle buffer which does not contain exported"
@@ -1561,10 +1560,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     }
 
     /* Exported memory handle stuff */
-    address     = (void*)*ucp_memh_serialize_next(&p, uint64_t, end, 0lu);
-    length      = *ucp_memh_serialize_next(&p, uint64_t, end, 0lu);
-    remote_uuid = *ucp_memh_serialize_next(&p, uint64_t, end, 0lu);
-    reg_id      = *ucp_memh_serialize_next(&p, uint64_t, end, UINT64_MAX);
+    address     = (void*)*ucs_serialize_next(&p, uint64_t);
+    length      = *ucs_serialize_next(&p, uint64_t);
+    remote_uuid = *ucs_serialize_next(&p, uint64_t);
+    reg_id      = *ucs_serialize_next(&p, uint64_t);
 
     ucs_assert(length != 0);
 

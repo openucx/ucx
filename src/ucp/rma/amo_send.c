@@ -175,6 +175,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
+    if (ucs_unlikely(!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH))) {
+        ucs_error("user's memory handle is not supported");
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
+
     if (param->datatype == ucp_dt_make_contig(8)) {
         op_size = sizeof(uint64_t);
     } else if (param->datatype == ucp_dt_make_contig(4)) {

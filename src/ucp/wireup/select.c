@@ -1203,7 +1203,6 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_init_select_flags(&criteria.local_iface_flags,
                                  UCT_IFACE_FLAG_PENDING, 0);
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
-    ucp_wireup_fill_exported_memh_criteria(context, &criteria);
     ucp_context_uct_atomic_iface_flags(context, &criteria.remote_atomic_flags);
 
     /* We can use only non-p2p resources or resources which are explicitly

@@ -51,10 +51,6 @@ const ucp_rma_proto_t *ucp_rma_proto_list[] = {
 };
 
 
-/* Storage for a default value returned from ucp_memh_serialize_next() */
-uint64_t memh_serialize_default_val = 0;
-
-
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
                             ucs_sys_device_t sys_dev,
                             ucp_sys_dev_map_t sys_dev_map)
@@ -329,6 +325,26 @@ ucp_memh_exported_packed_size(ucp_context_h context, ucp_md_map_t md_map)
     return size;
 }
 
+/**
+ * memh_info_size   : 16
+ * flags            : 64
+ * md_map           : 64
+ * mem_type         :  8
+ * address          : 64
+ * length           : 64
+ * ucp_context_uuid : 64
+ * registration_id  : 64
+ *
+ * ucs_for_each_bit(md_map) {
+ *      tl_mkey_data_size         : 16
+ *      tl_mkey_size              :  8
+ *      exported_mkey_packed_size : 64
+ *      component_name_size       :  8
+ *      component_name            : <size>
+ *      global_md_id_size         :  8
+ *      global_md_id              : <size>
+ * }
+ */
 static ssize_t
 ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
 {
