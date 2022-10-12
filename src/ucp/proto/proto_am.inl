@@ -28,7 +28,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handle_user_header_send_status(
 {
     ucs_status_t status;
 
-    if (ucs_unlikely(send_status == UCS_ERR_NO_RESOURCE) &&
+    if (ucs_likely(send_status == UCS_OK)) {
+        return UCS_OK;
+    } else if (ucs_unlikely(send_status == UCS_ERR_NO_RESOURCE) &&
         (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
         status = ucp_proto_am_req_copy_header(req);
         if (ucs_unlikely(status != UCS_OK)) {
