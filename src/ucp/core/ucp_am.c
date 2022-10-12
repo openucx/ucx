@@ -601,20 +601,22 @@ static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
 
 static ucs_status_t ucp_am_bcopy_single(uct_pending_req_t *self)
 {
-    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_AM_SINGLE,
-                                                 ucp_am_bcopy_pack_args_single);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status;
 
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_AM_SINGLE,
+                                    ucp_am_bcopy_pack_args_single);
     status = ucp_am_handle_user_header_send_status(req, status);
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
 
 static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
 {
-    ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_AM_SINGLE_REPLY,
-                                                 ucp_am_bcopy_pack_args_single_reply);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_status_t status;
 
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_AM_SINGLE_REPLY,
+                                    ucp_am_bcopy_pack_args_single_reply);
     status = ucp_am_handle_user_header_send_status(req, status);
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
@@ -626,7 +628,6 @@ static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
                                                 ucp_am_bcopy_pack_args_first,
                                                 ucp_am_bcopy_pack_args_mid, 1,
                                                 1);
-
     return ucp_am_bcopy_handle_status_from_pending(self, 1, 0, status);
 }
 
@@ -649,6 +650,7 @@ static void ucp_am_zcopy_completion(uct_completion_t *self)
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t,
                                            send.state.uct_comp);
 
+    ucp_am_release_user_header(req);
     if (req->send.state.dt.offset == req->send.length) {
         ucp_am_zcopy_req_complete(req, self->status);
     } else if (self->status != UCS_OK) {
@@ -1755,4 +1757,10 @@ void ucp_am_proto_request_zcopy_reset(ucp_request_t *request)
     request->send.msg_proto.am.header.reg_desc = NULL;
 
     ucp_proto_request_zcopy_reset(request);
+}
+
+void ucp_proto_am_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_am_release_user_header(req);
+    ucp_proto_request_bcopy_abort(req, status);
 }
