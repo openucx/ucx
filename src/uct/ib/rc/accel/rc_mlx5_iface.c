@@ -473,6 +473,7 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
     struct ibv_tmh tmh;
     int mtu;
     int tm_params;
+    unsigned md_mp_support_flags;
 #endif
     ucs_status_t status;
 
@@ -534,10 +535,18 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
         return UCS_OK;
     }
 
+    if (init_attr->qp_type == UCT_IB_QPT_DCI) {
+        md_mp_support_flags = UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ |
+                              UCT_IB_MLX5_MD_FLAG_DEVX_DCI    |
+                              UCT_IB_MLX5_MD_FLAG_DEVX_DCT;
+    } else {
+        md_mp_support_flags = UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ |
+                              UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP;
+    }
+
     /* Multi-Packet XRQ initialization */
-    if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_MP_RQ       |
-                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ |
-                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP)) {
+    if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_MP_RQ |
+                            md_mp_support_flags)) {
         goto out_mp_disabled;
     }
 
