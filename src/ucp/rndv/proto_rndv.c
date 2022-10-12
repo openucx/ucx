@@ -103,6 +103,10 @@ ucp_proto_rndv_md_map_to_remote(const ucp_proto_rndv_ctrl_init_params_t *params,
 
     ucs_carray_for_each(lane_cfg, ep_config->key.lanes,
                         ep_config->key.num_lanes) {
+        if (lane_cfg->rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
         if (md_map & UCS_BIT(context->tl_rscs[lane_cfg->rsc_index].md_index)) {
             remote_md_map |= UCS_BIT(lane_cfg->dst_md_index);
         }
