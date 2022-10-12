@@ -1404,6 +1404,16 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                 }
             }
 
+            if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
+                context->dmabuf_reg_md_map |= UCS_BIT(md_index);
+            }
+
+            ucs_for_each_bit(mem_type, md_attr->dmabuf_mem_types) {
+                /* In case of multiple providers, take the first one */
+                if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
+                    context->dmabuf_mds[mem_type] = md_index;
+                }
+            }
             ++context->num_mds;
         } else {
             /* If the MD does not have transport resources (device or sockaddr),
@@ -1431,6 +1441,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     uct_component_h *uct_components;
     unsigned i, num_uct_components;
     uct_device_type_t dev_type;
+    ucs_memory_type_t mem_type;
     ucs_status_t status;
     unsigned max_mds;
 
@@ -1443,9 +1454,10 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
 
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
-        context->reg_md_map[i]   = 0;
-        context->cache_md_map[i] = 0;
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+        context->reg_md_map[mem_type]   = 0;
+        context->cache_md_map[mem_type] = 0;
+        context->dmabuf_mds[mem_type]   = UCP_NULL_RESOURCE;
     }
 
     ucs_string_set_init(&avail_tls);
