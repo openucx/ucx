@@ -61,18 +61,20 @@ public:
 
         ~worker() {
             assert(!running);
+            assert(m_thread == pthread_self());
         }
 
         static void *run(void *arg) {
             worker *self = reinterpret_cast<worker*>(arg);
             self->run();
+            self->running = false;
             return NULL;
         }
 
         void join() {
             void *retval;
             pthread_join(m_thread, &retval);
-            running = false;
+            m_thread = pthread_self();
         }
 
         test_ucp_fence* const test;
@@ -113,9 +115,15 @@ public:
                      ucp_rkey_h rkey, void *memheap_ptr,
                      uint64_t initial_value, uint32_t* error) {
         ucs::ptr_vector<worker> m_workers;
+        std::vector<entity*> entities;
         m_workers.clear();
         m_workers.push_back(new worker(this, send1, send2, sender, rkey,
                                        memheap_ptr, initial_value, error));
+        entities.push_back(&receiver());
+        while (m_workers.at(0).running) {
+            /* allow receiver to progress incoming ops */
+            progress(entities, 0);
+        }
         m_workers.at(0).join();
         m_workers.clear();
     }
@@ -165,6 +173,11 @@ public:
 };
 
 UCS_TEST_P(test_ucp_fence64, atomic_add_fadd) {
+    test<uint64_t>(&test_ucp_fence64::blocking_add<uint64_t>,
+                   &test_ucp_fence64::blocking_fadd<uint64_t>);
+}
+
+UCS_TEST_P(test_ucp_fence64, atomic_add_fadd_strong, "FENCE_MODE=strong") {
     test<uint64_t>(&test_ucp_fence64::blocking_add<uint64_t>,
                    &test_ucp_fence64::blocking_fadd<uint64_t>);
 }
