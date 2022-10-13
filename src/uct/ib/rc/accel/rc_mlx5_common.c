@@ -293,14 +293,14 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
         return status;
     }
 
-    ah_attr.is_global     = 1;
-    ah_attr.grh.dgid      = iface->super.super.gid_info.gid;
-    ah_attr.dlid          = uct_ib_device_port_attr(dev, attr.super.port)->lid;
-    ah_attr.port_num      = dev->first_port;
-    status = uct_rc_mlx5_iface_common_devx_connect_qp(
+    ah_attr.is_global = 1;
+    ah_attr.grh.dgid  = iface->super.super.gid_info.gid;
+    ah_attr.dlid      = uct_ib_device_port_attr(dev, attr.super.port)->lid;
+    ah_attr.port_num  = dev->first_port;
+    status            = uct_rc_mlx5_iface_common_devx_connect_qp(
             iface, &iface->tm.cmd_wq.super.super,
             iface->tm.cmd_wq.super.super.qp_num, &ah_attr,
-            iface->super.super.config.path_mtu, 0);
+            iface->super.super.config.path_mtu, 0, 1);
     if (status != UCS_OK) {
         goto err_destroy_qp;
     }

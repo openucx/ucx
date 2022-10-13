@@ -393,13 +393,10 @@ void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
     uct_ib_mlx5_md_buf_free(md, srq->buf, &srq->devx.mem);
 }
 
-ucs_status_t
-uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
-                                         uct_ib_mlx5_qp_t *qp,
-                                         uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu path_mtu,
-                                         uint8_t path_index)
+ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
+        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
+        uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic)
 {
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
@@ -472,8 +469,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max,
-                      ucs_ilog2_or0(iface->super.config.max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max, ucs_ilog2_or0(max_rd_atomic));
     UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
     UCT_IB_MLX5DV_SET(qpc, qpc, rre, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
@@ -497,8 +493,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, qp->qp_num);
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max,
-                      ucs_ilog2_or0(iface->super.config.max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(max_rd_atomic));
     UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.config.retry_cnt);
     UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.config.rnr_retry);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout,
