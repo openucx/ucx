@@ -821,11 +821,10 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
     static const unsigned md_flags = UCT_MD_MEM_ACCESS_REMOTE_PUT |
                                      UCT_MD_MEM_ACCESS_REMOTE_GET;
     uct_mem_h export_memh;
-    void *ptr;
     ucs_status_t status;
 
-    ptr    = malloc(size);
-    status = reg_mem(md_flags, ptr, size, &export_memh);
+    std::vector<uint8_t> mem_buffer(size);
+    status = reg_mem(md_flags, mem_buffer.data(), size, &export_memh);
     ASSERT_UCS_OK(status);
 
     std::vector<uint8_t> mkey_buffer(md_attr().exported_mkey_packed_size);
