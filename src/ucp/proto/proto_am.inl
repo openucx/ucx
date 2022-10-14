@@ -28,23 +28,26 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handle_user_header_send_status(
 {
     ucs_status_t status;
 
-    if (ucs_likely(send_status == UCS_OK)) {
-        return UCS_OK;
-    } else if (ucs_unlikely(send_status == UCS_ERR_NO_RESOURCE) &&
+    if (ucs_unlikely(send_status == UCS_ERR_NO_RESOURCE) &&
         (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
         status = ucp_proto_am_req_copy_header(req);
         if (ucs_unlikely(status != UCS_OK)) {
             return status;
         }
-    } else if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED)) {
+    }
+
+    return send_status;
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_am_release_user_header(ucp_request_t *req)
+{
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED)) {
         ucs_assert(req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER);
         ucs_mpool_set_put_inline(req->send.msg_proto.am.header.user_ptr);
 #if UCS_ENABLE_ASSERT
         req->send.msg_proto.am.header.user_ptr = NULL;
 #endif
     }
-
-    return send_status;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -114,6 +117,10 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                 status = ucp_am_handle_user_header_send_status(req, packed_len);
                 if (ucs_unlikely(status == UCS_ERR_NO_MEMORY)) {
                     return status;
+                }
+
+                if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+                    ucp_am_release_user_header(req);
                 }
             }
         } else {
