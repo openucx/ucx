@@ -1349,7 +1349,7 @@ ucp_memh_import_parse_tl_mkey_data(ucp_context_h context,
     const void *tl_mkey_buf, *component_name_buf, *global_id_buf;
     ucp_md_map_t md_map;
 
-    tl_mkey_data_size = *ucs_serialize_next(&p, uint16_t);
+    tl_mkey_data_size = ucp_memh_info_size_unpack(&p);
     end               = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
     ucs_assert(tl_mkey_data_size != 0);
 
@@ -1532,30 +1532,30 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     ucp_memh_import_attach_params_t *attach_params_array;
     unsigned attach_params_num;
     ucs_memory_type_t mem_type;
-    uint64_t UCS_V_UNUSED flags;
-    uint64_t UCS_V_UNUSED mem_info_parsed_size;
+    uint16_t flags;
+    uint16_t UCS_V_UNUSED mem_info_parsed_size;
     uint64_t remote_uuid;
     const void *tl_mkey_buf;
     ucs_rcache_region_t *rregion;
     khiter_t iter;
     void *address;
     size_t length;
-    uint64_t memh_info_size;
+    uint16_t memh_info_size;
     uint64_t reg_id;
 
     ucs_assert(export_mkey_buffer != NULL);
 
     /* Common memory handle information */
-    memh_info_size = *ucs_serialize_next(&p, uint16_t);
+    memh_info_size = ucp_memh_info_size_unpack(&p);
     end            = UCS_PTR_BYTE_OFFSET(export_mkey_buffer, memh_info_size);
 
-    flags         = *ucs_serialize_next(&p, uint64_t);
+    flags         = *ucs_serialize_next(&p, uint16_t);
     remote_md_map = *ucs_serialize_next(&p, ucp_md_map_t);
     mem_type      = *ucs_serialize_next(&p, uint8_t);
 
     if (ucs_unlikely(!(flags & UCP_MEMH_BUFFER_FLAG_EXPORTED))) {
         ucs_error("passed memory handle buffer which does not contain exported"
-                  " memory handle: flags 0x%lx", flags);
+                  " memory handle: flags 0x%" PRIx16, flags);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1568,9 +1568,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     ucs_assert(length != 0);
 
     mem_info_parsed_size = UCS_PTR_BYTE_DIFF(export_mkey_buffer, p);
-    ucs_assertv(mem_info_parsed_size <= memh_info_size,
-                "mem_info: parsed_size=%" PRIu64 " packed_size=%" PRIu64,
+    ucs_assertv(mem_info_parsed_size == memh_info_size,
+                "mem_info: parsed_size %" PRIu16 " packed_size %" PRIu16,
                 mem_info_parsed_size, memh_info_size);
+    ucs_assertv(p <= end, "mem_info: p %p end %p", p, end);
     p = end;
 
     attach_params_num   = 0;

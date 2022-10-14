@@ -195,6 +195,9 @@ ucp_rkey_pack_memh(ucp_context_h context, ucp_md_map_t md_map,
                    const ucs_sys_dev_distance_t *sys_distance, void *buffer);
 
 
+uint16_t ucp_memh_info_size_unpack(const void **p);
+
+
 size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr);
 
 
