@@ -2059,7 +2059,7 @@ uct_component_t uct_ib_component = {
 
 void UCS_F_CTOR uct_ib_init()
 {
-    int i;
+    ssize_t i;
 
     uct_component_register(&uct_ib_component);
 
@@ -2070,7 +2070,7 @@ void UCS_F_CTOR uct_ib_init()
 
 void UCS_F_DTOR uct_ib_cleanup()
 {
-    int i;
+    ssize_t i;
 
     for (i = ucs_static_array_size(uct_ib_tls) - 1; i >= 0; i--) {
         uct_tl_unregister(uct_ib_tls[i]);
