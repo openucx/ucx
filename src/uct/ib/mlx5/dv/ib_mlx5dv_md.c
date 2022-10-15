@@ -1252,8 +1252,7 @@ static void uct_ib_mlx5_devx_cleanup_flush_mr(uct_ib_mlx5_md_t *md)
 {
     ucs_status_t status;
 
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_KSM) ||
-        !uct_ib_md_is_flush_rkey_valid(md->super.flush_rkey)) {
+    if (!uct_ib_md_is_flush_rkey_valid(md->super.flush_rkey)) {
         return;
     }
 
