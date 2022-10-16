@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/proto/proto_common.inl>
 #include <ucp/tag/eager.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
@@ -48,6 +49,13 @@ static UCS_F_ALWAYS_INLINE void ucp_am_release_user_header(ucp_request_t *req)
         req->send.msg_proto.am.header.user_ptr = NULL;
 #endif
     }
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_request_am_bcopy_complete_success(ucp_request_t *req)
+{
+    ucp_am_release_user_header(req);
+    return ucp_proto_request_bcopy_complete_success(req);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -117,10 +125,6 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                 status = ucp_am_handle_user_header_send_status(req, packed_len);
                 if (ucs_unlikely(status == UCS_ERR_NO_MEMORY)) {
                     return status;
-                }
-
-                if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-                    ucp_am_release_user_header(req);
                 }
             }
         } else {

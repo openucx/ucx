@@ -665,6 +665,7 @@ static void ucp_am_zcopy_completion(uct_completion_t *self)
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t,
                                            send.state.uct_comp);
 
+    ucp_am_release_user_header(req);
     if (req->send.state.dt.offset == req->send.length) {
         ucp_am_zcopy_req_complete(req, self->status);
     } else if (self->status != UCS_OK) {

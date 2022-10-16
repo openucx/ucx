@@ -203,13 +203,6 @@ static size_t ucp_am_eager_single_bcopy_pack(void *dest, void *arg)
     return ucp_am_eager_single_bcopy_pack_common(dest, arg, 0);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_request_am_bcopy_complete_success(ucp_request_t *req)
-{
-    ucp_am_release_user_header(req);
-    return ucp_proto_request_bcopy_complete_success(req);
-}
-
 static ucs_status_t
 ucp_am_eager_single_bcopy_proto_progress(uct_pending_req_t *self)
 {
@@ -220,7 +213,7 @@ ucp_am_eager_single_bcopy_proto_progress(uct_pending_req_t *self)
     status = ucp_proto_am_bcopy_single_progress(
             req, UCP_AM_ID_AM_SINGLE, spriv->super.lane,
             ucp_am_eager_single_bcopy_pack, req, SIZE_MAX,
-            ucp_proto_request_bcopy_complete_success, 1);
+            ucp_proto_request_am_bcopy_complete_success, 1);
     return ucp_am_handle_user_header_send_status(req, status);
 }
 
