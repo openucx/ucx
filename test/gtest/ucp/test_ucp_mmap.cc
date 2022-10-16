@@ -199,7 +199,7 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     EXPECT_TRUE(ucs_test_all_flags(memh->md_map, rkey->md_map));
 
     /* Test remote key protocols selection */
-    if (enable_proto()) {
+    if (m_ucp_config->ctx.proto_enable) {
         test_rkey_proto(memh);
     } else {
         bool have_rma              = resolve_rma(&receiver(), rkey);
