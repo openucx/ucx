@@ -189,7 +189,7 @@ ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
     .init     = ucp_am_eager_multi_bcopy_proto_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_bcopy_proto_progress},
-    .abort    = ucp_request_complete_send,
+    .abort    = ucp_proto_am_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
