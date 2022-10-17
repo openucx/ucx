@@ -1415,28 +1415,22 @@ ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
 }
 
 static ucp_md_map_t ucp_find_md_map(ucp_context_h context,
-                                    const void *component_name,
-                                    size_t component_name_size,
                                     const void *global_id_buf,
                                     size_t global_id_size)
 {
     ucp_md_map_t md_map = 0;
     ucp_md_index_t md_index;
     uct_md_attr_v2_t *md_attr;
-    size_t component_name_cmp_size, global_id_cmp_size;
+    size_t global_id_cmp_size;
 
     for (md_index = 0; md_index < context->num_mds; md_index++) {
         md_attr                 = &context->tl_mds[md_index].attr;
-        component_name_cmp_size = ucs_min(strlen(md_attr->component_name),
-                                          component_name_size);
         global_id_cmp_size      =
                 ucs_min(ucp_memh_global_id_packed_size(md_attr),
                         global_id_size);
 
-        if ((memcmp(md_attr->component_name, component_name,
-                    component_name_cmp_size) == 0) &&
-            (memcmp(md_attr->global_id, global_id_buf,
-                    global_id_cmp_size) == 0)) {
+        if (memcmp(md_attr->global_id, global_id_buf,
+                   global_id_cmp_size) == 0) {
             md_map |= UCS_BIT(md_index);
             continue;
         }
@@ -1454,8 +1448,8 @@ ucp_memh_import_parse_tl_mkey_data(ucp_context_h context,
     const void *p = *start_p;
     const void *next_tl_md_p, *end;
     size_t tl_mkey_data_size;
-    size_t tl_mkey_size, component_name_size, global_id_size;
-    const void *tl_mkey_buf, *component_name_buf, *global_id_buf;
+    size_t tl_mkey_size, global_id_size;
+    const void *tl_mkey_buf, *global_id_buf;
     ucp_md_map_t md_map;
 
     tl_mkey_data_size = ucp_memh_info_size_unpack(&p);
@@ -1467,21 +1461,13 @@ ucp_memh_import_parse_tl_mkey_data(ucp_context_h context,
 
     tl_mkey_buf = ucs_serialize_next_raw(&p, void, tl_mkey_size);
 
-    component_name_size = *ucs_serialize_next(&p, uint8_t);
-    ucs_assert(component_name_size != 0);
-
-    component_name_buf = ucs_serialize_next_raw(&p, void,
-                                                component_name_size);
-
     global_id_size = *ucs_serialize_next(&p, uint8_t);
     ucs_assert(global_id_size != 0);
 
     global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
 
     /* Get local MD indices which corresponds to the remote ones */
-    md_map = ucp_find_md_map(context, component_name_buf,
-                             component_name_size, global_id_buf,
-                             global_id_size);
+    md_map = ucp_find_md_map(context, global_id_buf, global_id_size);
 
     next_tl_md_p = end;
     ucs_assertv(p <= next_tl_md_p, "p=%p, next_tl_md_p=%p", p, next_tl_md_p);

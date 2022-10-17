@@ -359,12 +359,6 @@ ucp_memh_exported_tl_mkey_packed_size(ucp_context_h context,
     /* Size of exported TL mkey packed size */
     size = md_attr->exported_mkey_packed_size;
 
-    /* Size of component name */
-    size = sizeof(uint8_t);
-
-    /* Component name */
-    size += strlen(md_attr->component_name);
-
     /* Size of global MD identifier */
     size += sizeof(uint8_t);
 
@@ -410,8 +404,6 @@ ucp_memh_exported_packed_size(ucp_context_h context, ucp_md_map_t md_map)
  *
  *     exported_memh :
  *     [
- *      component_name_size :  8
- *      component_name      : <size>
  *      global_md_id_size   :  8
  *      global_md_id        : <size>
  *     ]
@@ -439,8 +431,8 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
     ssize_t result;
     ucp_md_index_t md_index;
     unsigned uct_memh_index;
-    size_t tl_mkey_size, component_name_size, global_id_size;
-    void *tl_mkey_buf, *component_name_buf, *global_id_buf;
+    size_t tl_mkey_size, global_id_size;
+    void *tl_mkey_buf, *global_id_buf;
     size_t tl_mkey_data_size;
 
     ucs_log_indent(1);
@@ -480,14 +472,6 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
             result = status;
             goto out;
         }
-
-        component_name_size              = strlen(md_attr->component_name);
-        *ucs_serialize_next(&p, uint8_t) = component_name_size;
-
-        component_name_buf = ucs_serialize_next_raw(&p, void,
-                                                    component_name_size);
-        memcpy(component_name_buf, md_attr->component_name,
-               component_name_size);
 
         global_id_size = ucp_memh_global_id_packed_size(md_attr);
 
