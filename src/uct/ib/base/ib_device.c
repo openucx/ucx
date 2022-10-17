@@ -679,11 +679,12 @@ err:
     return status;
 }
 
-void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
+static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 {
     struct ibv_ah *ah;
 
     kh_foreach_value(&dev->ah_hash, ah, ibv_destroy_ah(ah));
+    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 }
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
@@ -696,7 +697,7 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 
     kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
     ucs_spinlock_destroy(&dev->async_event_lock);
-    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
+    uct_ib_device_cleanup_ah_cached(dev);
     ucs_recursive_spinlock_destroy(&dev->ah_lock);
 
     if (dev->async_events) {

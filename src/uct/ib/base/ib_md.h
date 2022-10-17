@@ -591,9 +591,21 @@ int uct_ib_device_is_accessible(struct ibv_device *device);
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
-                                   const uct_ib_md_config_t *md_config);
+                                   const uct_ib_md_config_t *md_config,
+                                   size_t mem_size, size_t mr_size);
+
+void uct_ib_md_close_common(uct_ib_md_t *md);
+
+void uct_ib_md_device_context_close(struct ibv_context *ctx);
+
+uct_ib_md_t* uct_ib_md_alloc(size_t size, const char *name,
+                             struct ibv_context *ctx);
+
+void uct_ib_md_free(uct_ib_md_t *md);
 
 void uct_ib_md_close(uct_md_h uct_md);
+
+void uct_ib_md_cleanup(uct_ib_md_t *md);
 
 ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access, int dmabuf_fd, size_t dmabuf_offset,
@@ -613,9 +625,6 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
                                        size_t length, uint64_t access,
                                        size_t chunk, struct ibv_mr **mrs,
                                        int silent);
-
-void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
-                                   const uct_ib_md_config_t *md_config);
 
 ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address, size_t length,
                                  uint64_t access_flags, int dmabuf_fd,

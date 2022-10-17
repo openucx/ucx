@@ -387,8 +387,6 @@ uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
                                const char *usage, struct ibv_ah **ah_p);
 
-void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
-
 ucs_status_t uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev,
                                               uint8_t port_num,
                                               uint8_t gid_index,
