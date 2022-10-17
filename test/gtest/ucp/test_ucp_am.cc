@@ -1098,7 +1098,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_send_copy_header, all_protos,
         header_length = it.first;
         data_length   = it.second;
         test_copy_header_on_pending(header_length, data_length);
-        test_copy_header_on_pending(header_length, data_length, 1);
+        test_copy_header_on_pending(header_length, data_length, true);
     }
 }
 

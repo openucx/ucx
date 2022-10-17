@@ -609,6 +609,7 @@ ucp_am_short_handle_status_from_pending(ucp_request_t *req, ucs_status_t status)
         return UCS_ERR_NO_RESOURCE;
     }
 
+    ucp_am_release_user_header(req);
     ucp_request_complete_send(req, status);
     return UCS_OK;
 }
@@ -639,6 +640,7 @@ ucp_am_bcopy_handle_status_from_pending(uct_pending_req_t *self, int multi,
                                       UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED,
                                       status);
     } else {
+        ucp_am_release_user_header(req);
         ucp_request_complete_send(req, status);
     }
 

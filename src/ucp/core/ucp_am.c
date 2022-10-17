@@ -580,10 +580,6 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
                                        req->send.msg_proto.am.header.length,
                                        req->send.buffer, req->send.length, 0);
     status         = ucp_am_handle_user_header_send_status(req, status);
-    if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
-        ucp_am_release_user_header(req);
-    }
-
     return ucp_am_short_handle_status_from_pending(req, status);
 }
 
@@ -600,10 +596,6 @@ static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
                                        req->send.msg_proto.am.header.length,
                                        req->send.buffer, req->send.length, 1);
     status         = ucp_am_handle_user_header_send_status(req, status);
-    if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
-        ucp_am_release_user_header(req);
-    }
-
     return ucp_am_short_handle_status_from_pending(req, status);
 }
 
@@ -614,10 +606,6 @@ static ucs_status_t ucp_am_bcopy_single(uct_pending_req_t *self)
                                                  ucp_am_bcopy_pack_args_single);
 
     status = ucp_am_handle_user_header_send_status(req, status);
-    if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
-        ucp_am_release_user_header(req);
-    }
-
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
 
@@ -628,10 +616,6 @@ static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
                                                  ucp_am_bcopy_pack_args_single_reply);
 
     status = ucp_am_handle_user_header_send_status(req, status);
-    if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
-        ucp_am_release_user_header(req);
-    }
-
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
 
