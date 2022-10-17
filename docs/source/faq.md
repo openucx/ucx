@@ -351,6 +351,15 @@ In some cases, the internal memory type cache can misdetect GPU memory as host
 memory, also leading to invalid memory access. This cache can be disabled by
 setting `UCX_MEMTYPE_CACHE=n`.
 
+#### Why am I getting the error "provided PTX was compiled with an unsupported toolchain"?
+
+The application is loading a cuda binary that was compiled for newer version of
+cuda than installed, and the failure is detected asynchronously by a Cuda API
+call from UCX. In order to fix the issue, you would need to install a newer cuda
+version or compile the cuda binaries with the appropriate -arch option to nvcc.
+Refer to https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#virtual-architecture-feature-list
+for the appropriate `-arch` option to pass to nvcc.
+
 <br/>
 
 ### Performance considerations
