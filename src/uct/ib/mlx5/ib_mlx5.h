@@ -767,6 +767,9 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
 void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
                                       int hw_ci_updated);
 
+void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
+                                   const uct_ib_mlx5_iface_config_t *mlx5_config,
+                                   uct_ib_iface_init_attr_t *init_attr);
 
 /**
  * DEVX QP API
@@ -832,10 +835,6 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                            uct_ib_mlx5_cq_t *cq, int preferred_cpu, size_t inl);
 
 void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t *cq);
-
-void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
-                                   const uct_ib_mlx5_iface_config_t *mlx5_config,
-                                   uct_ib_iface_init_attr_t *init_attr);
 
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
@@ -938,6 +937,12 @@ uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
 }
 
 static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp) { }
+
+static inline uint8_t
+uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
+{
+    return 0;
+}
 
 #endif
 
