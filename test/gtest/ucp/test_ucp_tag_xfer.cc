@@ -137,6 +137,7 @@ protected:
 
 private:
     request* do_send(const void *sendbuf, size_t count, ucp_datatype_t dt, bool sync);
+    size_t get_msg_size();
 
     static const uint64_t SENDER_TAG = 0x111337;
     static const uint64_t RECV_MASK  = 0xffff;
@@ -229,10 +230,18 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
     }
 }
 
+size_t test_ucp_tag_xfer::get_msg_size()
+{
+    size_t count      = 1148544 / ucs::test_time_multiplier();
+    size_t chunk_size = num_lanes() * UCS_SYS_PCI_MAX_PAYLOAD;
+    return ucs_div_round_up(count, chunk_size) * chunk_size;
+}
+
 void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
                                       bool expected, bool sync, bool truncated)
 {
-    static const size_t count = 1148544 / ucs::test_time_multiplier();
+    static const size_t count = get_msg_size();
+
     uint8_t *sendbuf = NULL, *recvbuf = NULL;
     ucp_datatype_t send_dt, recv_dt;
     size_t recvd;
@@ -246,11 +255,13 @@ void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
 
     if (send_contig) {
         /* the sender has a contig datatype for the data buffer */
-        sendbuf = (uint8_t*) malloc(count * sizeof(*sendbuf));
+        sendbuf = (uint8_t*)aligned_alloc(ucs_get_page_size(),
+                                          count * sizeof(*sendbuf));
     }
     if (recv_contig) {
         /* the recv has a contig datatype for the data buffer */
-        recvbuf = (uint8_t*) malloc(count * sizeof(*recvbuf));
+        recvbuf = (uint8_t*)aligned_alloc(ucs_get_page_size(),
+                                          count * sizeof(*recvbuf));
     }
 
     test_xfer_prepare_bufs(sendbuf, recvbuf, count, send_contig, recv_contig,
@@ -1191,15 +1202,14 @@ public:
 
     unsigned num_lanes() override
     {
-        /* Init max lanes for the test */
         return max_lanes;
     }
 
-    const uint32_t max_lanes = 8;
+    const uint32_t max_lanes = 16;
 };
 
-UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=8", "TM_SW_RNDV=y",
-           "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1")
+UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
+           "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
     receiver().connect(&sender(), get_ep_params());
     test_run_xfer(true, true, true, true, false);

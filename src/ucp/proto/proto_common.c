@@ -463,10 +463,10 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
             if (md_attr->flags & UCT_MD_FLAG_NEED_MEMH) {
                 /* Memory domain must support registration on the relevant
                  * memory type */
-                if (!(md_attr->flags & UCT_MD_FLAG_REG) ||
-                    !(md_attr->reg_mem_types &
-                      UCS_BIT(select_param->mem_type))) {
-                    ucs_trace("%s: no reg of mem type %s", lane_desc,
+                if (!(context->reg_md_map[select_param->mem_type] &
+                      UCS_BIT(md_index))) {
+                    ucs_trace("%s: md %s cannot register %s memory", lane_desc,
+                              context->tl_mds[md_index].rsc.md_name,
                               ucs_memory_type_names[select_param->mem_type]);
                     continue;
                 }
@@ -552,9 +552,8 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
         /* Register if the memory domain support registration for the relevant
            memory type, and needs a local memory handle for zero-copy
            communication */
-        if (ucs_test_all_flags(md_attr->flags,
-                               UCT_MD_FLAG_NEED_MEMH | UCT_MD_FLAG_REG) &&
-            (md_attr->reg_mem_types & UCS_BIT(select_param->mem_type))) {
+        if ((md_attr->flags & UCT_MD_FLAG_NEED_MEMH) &&
+            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index))) {
             reg_md_map |= UCS_BIT(md_index);
         }
     }
@@ -726,7 +725,7 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
  *
  * @param req   request to check
  */
-static void ucp_proto_request_check_reset_state(const ucp_request_t *req)
+void ucp_proto_request_check_reset_state(const ucp_request_t *req)
 {
     ucs_assertv_always(
             ucp_datatype_iter_is_begin(&req->send.state.dt_iter),
@@ -743,7 +742,6 @@ void ucp_proto_request_restart(ucp_request_t *req)
 
     status = ucp_proto_request_init(req);
     if (status == UCS_OK) {
-        ucp_datatype_iter_restart(&req->send.state.dt_iter);
         ucp_request_send(req);
     } else {
         ucp_proto_request_abort(req, status);
@@ -759,35 +757,42 @@ void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
     req->send.proto_config->proto->abort(req, status);
 }
 
-void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status)
+void ucp_proto_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_datatype_iter_cleanup(&request->send.state.dt_iter, UCP_DT_MASK_ALL);
-    ucp_request_complete_send(request, status);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_request_complete_send(req, status);
 }
 
-void ucp_proto_request_bcopy_reset(ucp_request_t *request)
+void ucp_proto_request_bcopy_reset(ucp_request_t *req)
 {
-    ucp_proto_request_check_reset_state(request);
-    ucp_datatype_iter_cleanup(&request->send.state.dt_iter, UCP_DT_MASK_ALL);
-    request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 }
 
-void ucp_proto_request_zcopy_abort(ucp_request_t *request, ucs_status_t status)
+void ucp_proto_request_bcopy_id_reset(ucp_request_t *req)
 {
-    ucp_invoke_uct_completion(&request->send.state.uct_comp, status);
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_send_request_id_release(req);
+        ucp_proto_request_bcopy_reset(req);
+    }
 }
 
-void ucp_proto_request_zcopy_reset(ucp_request_t *request)
+void ucp_proto_request_zcopy_abort(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_proto_request_check_reset_state(request);
-    ucp_proto_request_zcopy_clean(request, UCP_DT_MASK_ALL);
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }
 
-void ucp_proto_get_reset(ucp_request_t *request)
+void ucp_proto_request_zcopy_reset(ucp_request_t *req)
 {
-    if (request->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-        ucp_send_request_id_release(request);
-        request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
+    }
+}
+
+void ucp_proto_request_zcopy_id_reset(ucp_request_t *req)
+{
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_send_request_id_release(req);
+        ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
     }
 }
 

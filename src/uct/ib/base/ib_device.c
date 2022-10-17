@@ -23,81 +23,7 @@
 #include <sys/poll.h>
 #include <libgen.h>
 #include <sched.h>
-#include <float.h>
 
-
-typedef struct {
-    double     bw_gbps;       /* Link speed */
-    uint16_t   payload;       /* Payload used to data transfer */
-    uint16_t   tlp_overhead;  /* PHY + data link layer + header + CRC */
-    uint16_t   ctrl_ratio;    /* Number of TLC before ACK */
-    uint16_t   ctrl_overhead; /* Length of control TLP */
-    uint16_t   encoding;      /* Number of encoded symbol bits */
-    uint16_t   decoding;      /* Number of decoded symbol bits */
-    const char *name;         /* Name of PCI generation */
-} uct_ib_device_pci_info_t;
-
-/*
- * - TLP (Transaction Layer Packet) overhead calculations (no ECRC):
- *   Gen1/2:
- *     Start   SeqNum   Hdr_64bit   LCRC   End
- *       1   +   2    +   16      +   4  +  1  = 24
- *
- *   Gen3/4:
- *     Start   SeqNum   Hdr_64bit   LCRC
- *       4   +   2    +   16      +   4  = 26
- *
- * - DLLP (Data Link Layer Packet) overhead calculations:
- *    - Control packet 8b ACK + 8b flow control
- *    - ACK/FC ratio: 1 per 4 TLPs
- *
- * References:
- * [1] https://www.xilinx.com/support/documentation/white_papers/wp350.pdf
- * [2] https://xdevs.com/doc/Standards/PCI/PCI_Express_Base_4.0_Rev0.3_February19-2014.pdf
- * [3] https://www.nxp.com/docs/en/application-note/AN3935.pdf
- */
-static const uct_ib_device_pci_info_t uct_ib_device_pci_info[] = {
-    {
-        .name          = "gen1",
-        .bw_gbps       = 2.5,
-        .payload       = 256,
-        .tlp_overhead  = 24,
-        .ctrl_ratio    = 4,
-        .ctrl_overhead = 16,
-        .encoding      = 8,
-        .decoding      = 10
-    },
-    {
-        .name          = "gen2",
-        .bw_gbps       = 5,
-        .payload       = 256,
-        .tlp_overhead  = 24,
-        .ctrl_ratio    = 4,
-        .ctrl_overhead = 16,
-        .encoding      = 8,
-        .decoding      = 10
-    },
-    {
-        .name          = "gen3",
-        .bw_gbps       = 8,
-        .payload       = 256,
-        .tlp_overhead  = 26,
-        .ctrl_ratio    = 4,
-        .ctrl_overhead = 16,
-        .encoding      = 128,
-        .decoding      = 130
-    },
-    {
-        .name          = "gen4",
-        .bw_gbps       = 16,
-        .payload       = 256,
-        .tlp_overhead  = 26,
-        .ctrl_ratio    = 4,
-        .ctrl_overhead = 16,
-        .encoding      = 128,
-        .decoding      = 130
-    },
-};
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
@@ -548,27 +474,6 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
     ucs_log(level, "IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
 }
 
-static ucs_status_t
-uct_ib_device_read_sysfs_file(uct_ib_device_t *dev, const char *sysfs_path,
-                              const char *file_name, char *str, size_t max,
-                              ucs_log_level_t err_level)
-{
-    ssize_t nread;
-
-    if (sysfs_path == NULL) {
-        return UCS_ERR_NO_ELEM;
-    }
-
-    nread = ucs_read_file_str(str, max, 1, "%s/%s", sysfs_path, file_name);
-    if (nread < 0) {
-        ucs_log(err_level, "%s: could not read from '%s/%s'",
-                uct_ib_device_name(dev), sysfs_path, file_name);
-        return UCS_ERR_NO_ELEM;
-    }
-
-    return UCS_OK;
-}
-
 static const char *
 uct_ib_device_get_sysfs_path(struct ibv_device *ib_device, char *path_buffer)
 {
@@ -654,94 +559,26 @@ out_unknown:
 static void
 uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
 {
+    const char *dev_name = uct_ib_device_name(dev);
     char pci_id_str[16];
     ucs_status_t status;
 
-    status = uct_ib_device_read_sysfs_file(dev, sysfs_path, "vendor",
-                                           pci_id_str, sizeof(pci_id_str),
-                                           UCS_LOG_LEVEL_WARN);
+    status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, "vendor", pci_id_str,
+                                     sizeof(pci_id_str), UCS_LOG_LEVEL_WARN);
     dev->pci_id.vendor = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
 
-    status = uct_ib_device_read_sysfs_file(dev, sysfs_path, "device",
-                                           pci_id_str, sizeof(pci_id_str),
-                                           UCS_LOG_LEVEL_WARN);
+    status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, "device", pci_id_str,
+                                     sizeof(pci_id_str), UCS_LOG_LEVEL_WARN);
     dev->pci_id.device = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
 
     ucs_debug("%s: vendor_id 0x%x device_id %d", uct_ib_device_name(dev),
               dev->pci_id.vendor, dev->pci_id.device);
 }
 
-static void
-uct_ib_device_set_pci_bw(uct_ib_device_t *dev, const char *sysfs_path)
-{
-    const char *pci_width_file_name = "current_link_width";
-    const char *pci_speed_file_name = "current_link_speed";
-    const char *dev_name            = uct_ib_device_name(dev);
-    double bw_gbps, effective_bw, link_utilization;
-    const uct_ib_device_pci_info_t *p;
-    char pci_width_str[16];
-    char pci_speed_str[16];
-    ucs_status_t status;
-    unsigned width;
-    char gts[16];
-    size_t i;
-
-    status = uct_ib_device_read_sysfs_file(dev, sysfs_path, pci_width_file_name,
-                                           pci_width_str, sizeof(pci_width_str),
-                                           UCS_LOG_LEVEL_DEBUG);
-    if (status != UCS_OK) {
-        goto out_max_bw;
-    }
-
-    status = uct_ib_device_read_sysfs_file(dev, sysfs_path, pci_speed_file_name,
-                                           pci_speed_str, sizeof(pci_speed_str),
-                                           UCS_LOG_LEVEL_DEBUG);
-    if (status != UCS_OK) {
-        goto out_max_bw;
-    }
-
-    if (sscanf(pci_width_str, "%u", &width) < 1) {
-        ucs_debug("%s: incorrect format of %s file: expected: <unsigned "
-                  "integer>, actual: %s\n",
-                  dev_name, pci_width_file_name, pci_width_str);
-        goto out_max_bw;
-    }
-
-    if ((sscanf(pci_speed_str, "%lf%s", &bw_gbps, gts) < 2) ||
-        strcasecmp("GT/s", ucs_strtrim(gts))) {
-        ucs_debug("%s: incorrect format of %s file: expected: <double> GT/s, "
-                  "actual: %s\n",
-                  dev_name, pci_speed_file_name, pci_speed_str);
-        goto out_max_bw;
-    }
-
-    for (i = 0; i < ucs_static_array_size(uct_ib_device_pci_info); i++) {
-        p = &uct_ib_device_pci_info[i];
-        if ((bw_gbps / p->bw_gbps) > 1.01) { /* floating-point compare */
-            continue;
-        }
-
-        link_utilization = (double)(p->payload * p->ctrl_ratio) /
-                           (((p->payload + p->tlp_overhead) * p->ctrl_ratio) +
-                            p->ctrl_overhead);
-        /* coverity[overflow] */
-        effective_bw     = (p->bw_gbps * 1e9 / 8.0) * width *
-                           ((double)p->encoding / p->decoding) * link_utilization;
-        ucs_trace("%s: PCIe %s %ux, effective throughput %.3f MB/s %.3f Gb/s",
-                  dev_name, p->name, width, effective_bw / UCS_MBYTE,
-                  effective_bw * 8e-9);
-        dev->pci_bw = effective_bw;
-        return;
-    }
-
-out_max_bw:
-    dev->pci_bw = DBL_MAX;
-    ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
-}
-
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                  struct ibv_device *ibv_device)
 {
+    const char *dev_name = uct_ib_device_name(dev);
     char path_buffer[PATH_MAX];
     const char *sysfs_path;
     ucs_status_t status;
@@ -787,7 +624,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                               path_buffer);
     uct_ib_device_set_sys_dev(dev, sysfs_path);
     uct_ib_device_set_pci_id(dev, sysfs_path);
-    uct_ib_device_set_pci_bw(dev, sysfs_path);
+    dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
     return UCS_OK;
 }
@@ -842,11 +679,12 @@ err:
     return status;
 }
 
-void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
+static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 {
     struct ibv_ah *ah;
 
     kh_foreach_value(&dev->ah_hash, ah, ibv_destroy_ah(ah));
+    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 }
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
@@ -859,7 +697,7 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 
     kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
     ucs_spinlock_destroy(&dev->async_event_lock);
-    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
+    uct_ib_device_cleanup_ah_cached(dev);
     ucs_recursive_spinlock_destroy(&dev->ah_lock);
 
     if (dev->async_events) {

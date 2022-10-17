@@ -25,12 +25,20 @@
     ucs_log(uct_md_reg_log_lvl(_flags), _fmt, ## __VA_ARGS__)
 
 
+#define uct_md_log_mem_attach_error(_flags, _fmt, ...) \
+    ucs_log(uct_md_attach_log_lvl(_flags), _fmt, ##__VA_ARGS__)
+
+
 #define UCT_MD_MEM_REG_FIELD_VALUE(_params, _name, _flag, _default) \
     UCS_PARAM_VALUE(UCT_MD_MEM_REG, _params, _name, _flag, _default)
 
 
 #define UCT_MD_MEM_DEREG_FIELD_VALUE(_params, _name, _flag, _default) \
     UCS_PARAM_VALUE(UCT_MD_MEM_DEREG, _params, _name, _flag, _default)
+
+
+#define UCT_MD_MEM_ATTACH_FIELD_VALUE(_params, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCT_MD_MEM_ATTACH, _params, _name, _flag, _default)
 
 
 #define UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, _invalidate_supported) \
@@ -244,10 +252,16 @@ double uct_md_rcache_overhead(const uct_md_rcache_config_t *rcache_config);
 
 extern ucs_config_field_t uct_md_config_table[];
 
-static inline ucs_log_level_t uct_md_reg_log_lvl(unsigned flags)
+static inline ucs_log_level_t uct_md_reg_log_lvl(uint64_t flags)
 {
     return (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
            UCS_LOG_LEVEL_ERROR;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_log_level_t uct_md_attach_log_lvl(uint64_t flags)
+{
+    return (flags & UCT_MD_MEM_ATTACH_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                                                          UCS_LOG_LEVEL_ERROR;
 }
 
 

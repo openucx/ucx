@@ -305,6 +305,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         .mkey_pack              = uct_cuda_ipc_mkey_pack,
         .mem_reg                = uct_cuda_ipc_mem_reg,
         .mem_dereg              = uct_cuda_ipc_mem_dereg,
+        .mem_attach             = ucs_empty_function_return_unsupported,
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported
     };

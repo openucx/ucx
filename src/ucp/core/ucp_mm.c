@@ -17,8 +17,10 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/serialize.h>
+#include <ucs/type/param.h>
 #include <ucm/api/ucm.h>
 #include <string.h>
 #include <inttypes.h>
@@ -346,13 +348,18 @@ void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     }
 }
 
-static void ucp_memh_register_log_fail(ucs_log_level_t log_level, void *address,
-                                       size_t length, ucp_md_index_t md_index,
-                                       ucp_context_h context,
-                                       ucs_status_t status)
+static void
+ucp_memh_register_log_fail(ucs_log_level_t log_level, void *address,
+                           size_t length, const uct_md_mem_reg_params_t *params,
+                           ucp_md_index_t md_index, ucp_context_h context,
+                           ucs_status_t status)
 {
-    ucs_log(log_level, "failed to register %p length %zu on md[%d]=%s: %s",
-            address, length, md_index, context->tl_mds[md_index].rsc.md_name,
+    ucs_log(log_level,
+            "failed to register %p length %zu dmabuf_fd %d on md[%d]=%s: %s",
+            address, length,
+            UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd, DMABUF_FD,
+                            -1),
+            md_index, context->tl_mds[md_index].rsc.md_name,
             ucs_status_string(status));
 }
 
@@ -360,36 +367,85 @@ static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                       ucp_md_map_t md_map, void *address,
                                       size_t length, unsigned uct_flags)
 {
-    ucp_md_map_t md_map_registered = 0;
+    ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[memh->mem_type];
+    ucp_md_map_t md_map_registered      = 0;
+    ucp_md_map_t dmabuf_md_map          = 0;
+    uct_md_mem_reg_params_t reg_params;
+    uct_md_mem_attr_t mem_attr;
+    ucs_log_level_t err_level;
     ucp_md_index_t md_index;
     ucs_status_t status;
 
+    if (md_map == 0) {
+        return UCS_OK;
+    }
+
+    err_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
+                                                            UCS_LOG_LEVEL_ERROR;
+
+    reg_params.flags         = uct_flags;
+    reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
+    reg_params.dmabuf_offset = 0;
+
+    if ((dmabuf_prov_md_index != UCP_NULL_RESOURCE) &&
+        (md_map & context->dmabuf_reg_md_map)) {
+        /* Query dmabuf file descriptor and offset */
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                              UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+        status = uct_md_mem_query(context->tl_mds[dmabuf_prov_md_index].md,
+                                  address, length, &mem_attr);
+        if (status != UCS_OK) {
+            ucs_log(err_level,
+                    "uct_md_mem_query(dmabuf address %p length %zu) failed: %s",
+                    address, length, ucs_status_string(status));
+        } else {
+            ucs_trace("uct_md_mem_query(dmabuf address %p length %zu) returned "
+                      "fd %d offset %zu",
+                      address, length, mem_attr.dmabuf_fd,
+                      mem_attr.dmabuf_offset);
+            dmabuf_md_map            = context->dmabuf_reg_md_map;
+            reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
+            reg_params.dmabuf_offset = mem_attr.dmabuf_offset;
+        }
+    }
+
     ucs_for_each_bit(md_index, md_map) {
-        status = uct_md_mem_reg(context->tl_mds[md_index].md,
-                                address, length, uct_flags,
-                                &memh->uct[md_index]);
+        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        if (dmabuf_md_map & UCS_BIT(md_index)) {
+            /* If this MD can consume a dmabuf and we have it - provide it */
+            reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                                     UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
+        }
+
+        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, address,
+                                   length, &reg_params, &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
+            ucp_memh_register_log_fail(err_level, address, length, &reg_params,
+                                       md_index, context, status);
             if (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) {
-                ucp_memh_register_log_fail(UCS_LOG_LEVEL_DIAG, address, length,
-                                           md_index, context, status);
                 continue;
             }
 
-            ucp_memh_register_log_fail(UCS_LOG_LEVEL_ERROR, address, length,
-                                       md_index, context, status);
             ucp_memh_dereg(context, memh, md_map_registered);
-            return status;
+            goto out_close_dmabuf_fd;
         }
 
-        ucs_trace("registered address %p length %zu on md[%d]=%s %p",
-                  address, length, md_index,
-                  context->tl_mds[md_index].rsc.md_name,
+        ucs_trace("register address %p length %zu dmabuf-fd %d on md[%d]=%s %p",
+                  address, length,
+                  (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
+                                                        UCT_DMABUF_FD_INVALID,
+                  md_index, context->tl_mds[md_index].rsc.md_name,
                   memh->uct[md_index]);
         md_map_registered |= UCS_BIT(md_index);
     }
 
     memh->md_map |= md_map_registered;
-    return UCS_OK;
+    status        = UCS_OK;
+
+out_close_dmabuf_fd:
+    UCS_STATIC_ASSERT(UCT_DMABUF_FD_INVALID == -1);
+    ucs_close_fd(&reg_params.dmabuf_fd);
+    return status;
 }
 
 static size_t ucp_memh_size(ucp_context_h context)
@@ -1100,32 +1156,63 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
     ucp_rndv_frag_free_mpools(mp, chunk);
 }
 
-void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)
+void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
+                        FILE *stream)
 {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
     size_t min_page_size, max_page_size;
     ucp_mem_map_params_t mem_params;
+    char mem_types_buf[128];
+    ssize_t mem_type_value;
     size_t mem_size_value;
     char memunits_str[32];
     ucs_status_t status;
+    char *mem_size_str;
+    char *mem_type_str;
     unsigned md_index;
     ucp_mem_h memh;
 
-    status = ucs_str_to_memunits(mem_size, &mem_size_value);
+    ucs_string_buffer_appendf(&strb, "%s", mem_spec);
+
+    /* Parse memory size */
+    mem_size_str = ucs_string_buffer_next_token(&strb, NULL, ",");
+    status       = ucs_str_to_memunits(mem_size_str, &mem_size_value);
     if (status != UCS_OK) {
         printf("<Failed to convert a memunits string>\n");
         return;
     }
 
-    mem_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                            UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
-                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    mem_params.address    = NULL;
-    mem_params.length     = mem_size_value;
-    mem_params.flags      = UCP_MEM_MAP_ALLOCATE;
+    /* Parse memory type */
+    mem_type_str = ucs_string_buffer_next_token(&strb, mem_size_str, ",");
+    if (mem_type_str != NULL) {
+        mem_type_value = ucs_string_find_in_list(mem_type_str,
+                                                 ucs_memory_type_names, 0);
+        if ((mem_type_value < 0) ||
+            !(UCS_BIT(mem_type_value) & context->mem_type_mask)) {
+            printf("<Invalid memory type '%s', supported types: %s>\n",
+                   mem_type_str,
+                   ucs_flags_str(mem_types_buf, sizeof(mem_types_buf),
+                                 context->mem_type_mask,
+                                 ucs_memory_type_names));
+            return;
+        }
+    } else {
+        mem_type_value = UCS_MEMORY_TYPE_HOST;
+    }
+
+    mem_params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_params.address     = NULL;
+    mem_params.length      = mem_size_value;
+    mem_params.memory_type = mem_type_value;
+    mem_params.flags       = UCP_MEM_MAP_ALLOCATE;
 
     status = ucp_mem_map(context, &mem_params, &memh);
     if (status != UCS_OK) {
-        printf("<Failed to map memory of size %s>\n", mem_size);
+        printf("<Failed to allocate memory of size %zd type %s>\n",
+               mem_size_value, mem_type_str);
         return;
     }
 
@@ -1163,7 +1250,7 @@ void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *strea
 
     status = ucp_mem_unmap(context, memh);
     if (status != UCS_OK) {
-        printf("<Failed to unmap memory of size %s>\n", mem_size);
+        printf("<Failed to unmap memory of size %zd>\n", mem_size_value);
     }
 }
 
@@ -1285,9 +1372,12 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
 
 ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
 {
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_mem_dummy_handle_t memh = {
         .memh.alloc_md_index = UCP_NULL_RESOURCE,
     };
+    ucs_memory_type_t mem_type;
+    ucp_md_index_t md_index;
     ucs_status_t status;
     uint8_t buff;
 
@@ -1302,6 +1392,25 @@ ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
 
     context->reg_md_map[UCS_MEMORY_TYPE_HOST] = memh.memh.md_map;
     ucp_memh_dereg(context, &memh.memh, memh.memh.md_map);
+
+    /* If we have a dmabuf provider for a memory type, it means we can register
+     * memory of this type with any md that supports dmabuf registration. */
+    ucs_memory_type_for_each(mem_type) {
+        if (context->dmabuf_mds[mem_type] != UCP_NULL_RESOURCE) {
+            context->reg_md_map[mem_type] |= context->dmabuf_reg_md_map;
+        }
+
+        ucs_string_buffer_reset(&strb);
+        ucs_for_each_bit(md_index, context->reg_md_map[mem_type]) {
+            ucs_string_buffer_appendf(&strb, "%s, ",
+                                      context->tl_mds[md_index].rsc.md_name);
+        }
+        ucs_string_buffer_rtrim(&strb, ", ");
+
+        ucs_debug("register %s memory on: %s", ucs_memory_type_names[mem_type],
+                  ucs_string_buffer_cstr(&strb));
+    }
+
     return UCS_OK;
 }
 

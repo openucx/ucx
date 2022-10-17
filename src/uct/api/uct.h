@@ -706,7 +706,7 @@ enum {
      */
     UCT_MD_FLAG_ALLOC         = UCS_BIT(0),
 
-    /** 
+    /**
      * MD supports memory registration
      */
     UCT_MD_FLAG_REG           = UCS_BIT(1),
@@ -754,7 +754,12 @@ enum {
      * MD supports exporting memory keys with another process using the same
      * device or attaching to an exported memory key.
      */
-    UCT_MD_FLAG_EXPORTED_MKEY = UCS_BIT(9)
+    UCT_MD_FLAG_EXPORTED_MKEY = UCS_BIT(9),
+
+    /**
+     * MD supports registering a dmabuf file descriptor.
+     */
+    UCT_MD_FLAG_REG_DMABUF    = UCS_BIT(10)
 };
 
 /**
@@ -789,7 +794,7 @@ enum uct_md_mem_flags {
     /**
      * Enable remote put access.
      */
-    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), 
+    UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5),
 
     /**
      * Enable remote get access.
@@ -974,7 +979,7 @@ enum uct_ep_connect_params_field {
  * during @ref uct_iface_open "UCT iface initialization" process.
  */
 enum uct_iface_feature {
-    /** Request Active Message support */ 
+    /** Request Active Message support */
     UCT_IFACE_FEATURE_AM           = UCS_BIT(0),
 
     /** Request PUT support */
@@ -986,16 +991,16 @@ enum uct_iface_feature {
     /** Request 32-bit atomic operations support */
     UCT_IFACE_FEATURE_AMO32        = UCS_BIT(3),
 
-    /** Request 64-bit atomic operations support */ 
+    /** Request 64-bit atomic operations support */
     UCT_IFACE_FEATURE_AMO64        = UCS_BIT(4),
 
-    /** Request tag matching offload support */ 
+    /** Request tag matching offload support */
     UCT_IFACE_FEATURE_TAG          = UCS_BIT(5),
 
-    /** Request remote flush support */ 
+    /** Request remote flush support */
     UCT_IFACE_FEATURE_FLUSH_REMOTE = UCS_BIT(6),
 
-    /** Used to determine the number of features */ 
+    /** Used to determine the number of features */
     UCT_IFACE_FEATURE_LAST         = UCS_BIT(7)
 };
 
@@ -1532,18 +1537,33 @@ struct uct_md_attr {
  * are present.
  */
 typedef enum uct_md_mem_attr_field {
-    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE     = UCS_BIT(0), /**< Indicate if memory type
-                                                          is populated. E.g. CPU/GPU */
-    UCT_MD_MEM_ATTR_FIELD_SYS_DEV      = UCS_BIT(1), /**< Indicate if details of
-                                                          system device backing
-                                                          the pointer are populated.
-                                                          E.g. NUMA/GPU */
-    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS = UCS_BIT(2), /**< Request base address of the
-                                                          allocation to which the buffer
-                                                          belongs. */
-    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH = UCS_BIT(3)  /**< Request the whole length of the
-                                                          allocation to which the buffer
-                                                          belongs. */
+    /** Indicate if memory type is populated. E.g. CPU/GPU */
+    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE      = UCS_BIT(0),
+
+    /**
+     * Indicate if details of system device backing the pointer are populated.
+     * For example: GPU device, NUMA domain, etc.
+     */
+    UCT_MD_MEM_ATTR_FIELD_SYS_DEV       = UCS_BIT(1),
+
+    /** Request base address of the allocation to which the buffer belongs. */
+    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS  = UCS_BIT(2),
+
+    /** Request the whole length of the allocation to which the buffer belongs. */
+    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH  = UCS_BIT(3),
+
+    /**
+     * Request a cross-device dmabuf file descriptor that represents a memory
+     * region, and can be used to register the region with another memory
+     * domain.
+     */
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD     = UCS_BIT(4),
+
+    /**
+     * Request the offset of the provided virtual address relative to the
+     * beginning of its backing dmabuf region.
+     */
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5)
 } uct_md_mem_attr_field_t;
 
 
@@ -1589,6 +1609,22 @@ typedef struct uct_md_mem_attr {
      * to uct_md_mem_query is returned as is.
      */
     size_t            alloc_length;
+
+    /**
+     * Dmabuf file descriptor to expose memory regions across devices. Refer
+     * (https://01.org/linuxgraphics/gfx-docs/drm/driver-api/dma-buf.html).
+     * If the md does not support querying the fd object associated with the
+     * region, then dmabuf_fd is set to UCT_DMABUF_FD_INVALID by
+     * uct_md_mem_query(). It is the responsibility of the user to close the
+     * returned fd using close (2) when it's no longer needed.
+     */
+    int               dmabuf_fd;
+
+    /**
+     * Offset of the given address from the start of the memory region
+     * (identified by dmabuf_fd) backing the memory region being queried.
+     */
+    size_t            dmabuf_offset;
 } uct_md_mem_attr_t;
 
 

@@ -20,6 +20,9 @@
 #include <uct/api/v2/uct_v2.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
+#if CUDA_VERSION >= 11070
+#include <cudaTypedefs.h>
+#endif
 
 
 static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
@@ -44,6 +47,35 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
     {NULL}
 };
 
+static int uct_cuda_copy_md_is_dmabuf_supported()
+{
+    int dmabuf_supported = 0;
+    CUdevice cuda_device;
+    CUresult cu_err;
+
+    cu_err = cuDeviceGet(&cuda_device, 0);
+    if (cu_err != CUDA_SUCCESS) {
+        ucs_debug("cuDevuceGet(0) returned %d", cu_err);
+        return 0;
+    }
+
+    /* Assume dmabuf support is uniform across all devices */
+#if CUDA_VERSION >= 11070
+    cu_err = cuDeviceGetAttribute(&dmabuf_supported,
+                                  CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED,
+                                  cuda_device);
+    if (cu_err != CUDA_SUCCESS) {
+        ucs_debug("cuDeviceGetAttribute(DMA_BUF_SUPPORTED) returned %d",
+                  cu_err);
+        return 0;
+    }
+#endif
+
+    ucs_debug("dmabuf is%s supported on cuda device %d",
+              dmabuf_supported ? "" : " not", cuda_device);
+    return dmabuf_supported;
+}
+
 static ucs_status_t
 uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
@@ -60,6 +92,9 @@ uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->dmabuf_mem_types = 0;
+    if (uct_cuda_copy_md_is_dmabuf_supported()) {
+        md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    }
     md_attr->max_alloc        = SIZE_MAX;
     md_attr->max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size = 0;
@@ -207,6 +242,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack              = uct_cuda_copy_mkey_pack,
     .mem_reg                = uct_cuda_copy_mem_reg,
     .mem_dereg              = uct_cuda_copy_mem_dereg,
+    .mem_attach             = ucs_empty_function_return_unsupported,
     .mem_query              = uct_cuda_base_mem_query,
     .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
     .detect_memory_type     = uct_cuda_base_detect_memory_type

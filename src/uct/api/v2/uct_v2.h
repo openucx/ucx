@@ -195,7 +195,9 @@ typedef struct {
  * @brief MD memory registration operation flags.
  */
 typedef enum {
-    UCT_MD_MEM_REG_FIELD_FLAGS = UCS_BIT(0)
+    UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
+    UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
 } uct_md_mem_reg_field_mask_t;
 
 
@@ -378,6 +380,45 @@ typedef struct uct_md_mem_reg_params {
      * Operation specific flags, using bits from @ref uct_md_mem_flags_t.
      */
     uint64_t                     flags;
+
+    /**
+     * dmabuf file descriptor of the memory region to register.
+     *
+     * If is set (along with its corresponding bit in the field_mask -
+     * @ref UCT_MD_MEM_REG_FIELD_DMABUF_FD), the memory region will be
+     * registered using dmabuf mechanism.
+     * Can be used only if the memory domain supports dmabuf registration by
+     * returning @ref UCT_MD_FLAG_REG_DMABUF flag from @ref uct_md_query_v2.
+     *
+     * When registering memory using dmabuf mechanism, any memory type is supported
+     * (assuming a valid dmabuf file descriptor could be created).
+     * Therefore, @ref uct_md_attr_v2_t.reg_mem_types field is not relevant for
+     * such registrations.
+     *
+     * If not set, it's assumed to be @ref UCT_DMABUF_FD_INVALID, and the memory
+     * region will be registered without using dmabuf mechanism.
+     *
+     * More information about dmabuf registration can be found in
+     * https://01.org/linuxgraphics/gfx-docs/drm/driver-api/dma-buf.html
+     */
+    int                          dmabuf_fd;
+
+    /**
+     * When @ref uct_md_mem_reg_params_t.dmabuf_fd is provided, this field
+     * specifies the offset of the region to register relative to the start of
+     * the underlying dmabuf region.
+     *
+     * If not set (along with its corresponding bit in the field_mask -
+     * @ref UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET) it's assumed to be 0.
+     *
+     * @note The value of this field must be equal to the offset of the virtual
+     * address provided by the address parameter to @ref uct_md_mem_reg_v2 from
+     * the beginning of the memory region associated with
+     * @ref uct_md_mem_reg_params_t.dmabuf_fd.
+     * For example, if the virtual address is equal to the beginning of the
+     * dmabuf region, then this field must be omitted or set to 0.
+     */
+    size_t                       dmabuf_offset;
 } uct_md_mem_reg_params_t;
 
 
@@ -774,7 +815,7 @@ ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
  * @ingroup UCT_MD
  *
  * @brief Locally attach to a remote memory.
- * 
+ *
  * This routine attaches a local memory handle to a memory region
  * registered by @ref uct_md_mem_reg and packed by
  * @ref uct_md_mem_pack_v2 by a peer to allow performing local operations

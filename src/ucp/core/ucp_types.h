@@ -40,13 +40,13 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 
 /* Lanes */
-#define UCP_MAX_LANES                8
+#define UCP_MAX_LANES                16
 #define UCP_MAX_FAST_PATH_LANES      5
 #define UCP_MAX_SLOW_PATH_LANES      (UCP_MAX_LANES - UCP_MAX_FAST_PATH_LANES)
 
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
 typedef uint8_t                      ucp_lane_index_t;
-typedef uint8_t                      ucp_lane_map_t;
+UCP_UINT_TYPE(UCP_MAX_LANES)         ucp_lane_map_t;
 
 
 /* System devices */
@@ -208,6 +208,17 @@ typedef enum {
                               * the CPU is selected, otherwise DEVICE is selected */
     UCP_ATOMIC_MODE_LAST
 } ucp_atomic_mode_t;
+
+
+/**
+ * Fence mode.
+ */
+typedef enum {
+    UCP_FENCE_MODE_WEAK,   /* Use weak fence mode */
+    UCP_FENCE_MODE_STRONG, /* Use strong fence mode */
+    UCP_FENCE_MODE_AUTO,   /* Automatically detect fence mode */
+    UCP_FENCE_MODE_LAST
+} ucp_fence_mode_t;
 
 
 /**

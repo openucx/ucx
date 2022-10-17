@@ -124,6 +124,8 @@ typedef struct ucp_context_config {
     size_t                                 estimated_num_ppn;
     /** Enable flushing endpoints while flushing a worker */
     int                                    flush_worker_eps;
+    /** Fence mode */
+    ucp_fence_mode_t                       fence_mode;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
     /** Enable cm wireup message exchange to select the best transports
@@ -133,6 +135,8 @@ typedef struct ucp_context_config {
     size_t                                 listener_backlog;
     /** Enable new protocol selection logic */
     int                                    proto_enable;
+    /** Force request reset after wireup */
+    int                                    proto_request_reset;
     /** Time period between keepalive rounds */
     ucs_time_t                             keepalive_interval;
     /** Maximal number of endpoints to check on every keepalive round
@@ -285,9 +289,18 @@ typedef struct ucp_context {
        memory type to be exported to other processes. */
     ucp_md_map_t                  export_md_map[UCS_MEMORY_TYPE_LAST];
 
+    /* Map of MDs that support dmabuf registration */
+    ucp_md_map_t                  dmabuf_reg_md_map;
+
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
+
+    /* Map of dmabuf providers per memory type. Each entry in the array is
+       either the index of the provider MD, or UCP_NULL_RESOURCE if no such MD
+       exists. */
+    ucp_md_index_t                dmabuf_mds[UCS_MEMORY_TYPE_LAST];
+
     uint64_t                      mem_type_mask;            /* Supported mem type mask */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
@@ -344,6 +357,9 @@ typedef struct ucp_context {
 
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
+
+        /* worker_fence implementation method */
+        unsigned                  worker_strong_fence;
 
         struct {
            unsigned               count;

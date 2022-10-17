@@ -537,6 +537,7 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
         .mem_advise             = ucs_empty_function_return_unsupported,
         .mem_reg                = uct_xmpem_mem_reg,
         .mem_dereg              = uct_xmpem_mem_dereg,
+        .mem_attach             = ucs_empty_function_return_unsupported,
         .mkey_pack              = uct_xpmem_mkey_pack,
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported

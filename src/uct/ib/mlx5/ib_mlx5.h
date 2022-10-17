@@ -285,6 +285,9 @@ typedef struct uct_ib_mlx5_md {
     struct ibv_mr            *flush_mr;
     struct mlx5dv_devx_obj   *flush_dvmr;
     uint8_t                  mkey_tag;
+
+    /* Cached values of counter set id per port */
+    uint8_t                  port_counter_set_ids[UCT_IB_DEV_MAX_PORTS];
 #endif
     struct {
         size_t dc;
@@ -771,6 +774,11 @@ void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
 
 #if HAVE_DEVX
 
+uint8_t
+uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num);
+
+uint32_t uct_ib_mlx5_devx_md_get_pdn(uct_ib_mlx5_md_t *md);
+
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         const uct_ib_mlx5_cq_t *send_cq,
                                         const uct_ib_mlx5_cq_t *recv_cq,
@@ -795,7 +803,7 @@ ucs_status_t uct_ib_mlx5_devx_obj_modify(struct mlx5dv_devx_obj *obj,
 struct mlx5dv_devx_obj *
 uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
                             size_t inlen, void *out, size_t outlen,
-                            char *msg_arg);
+                            char *msg_arg, ucs_log_level_t log_level);
 
 ucs_status_t
 uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg);
@@ -946,6 +954,8 @@ ucs_status_t
 uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
                             const uct_ib_mlx5_iface_config_t *ib_mlx5_config,
                             const uct_ib_iface_config_t *ib_config);
+
+uint8_t uct_ib_mlx5_iface_get_counter_set_id(uct_ib_iface_t *iface);
 
 static inline uct_ib_mlx5_dbrec_t *uct_ib_mlx5_get_dbrec(uct_ib_mlx5_md_t *md)
 {

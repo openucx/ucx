@@ -202,6 +202,7 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
         .mem_advise             = ucs_empty_function_return_unsupported,
         .mem_reg                = ucs_empty_function_return_unsupported,
         .mem_dereg              = ucs_empty_function_return_unsupported,
+        .mem_attach             = ucs_empty_function_return_unsupported,
         .mkey_pack              = uct_sysv_md_mkey_pack,
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported

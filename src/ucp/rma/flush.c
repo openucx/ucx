@@ -221,17 +221,26 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
 {
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {
         /* Request was detached from pending and should be scheduled again */
-        ucs_assertv(!(UCS_BIT(req->send.lane) & req->send.flush.started_lanes),
-                    "req=%p lane=%d started_lanes=0x%x", req, req->send.lane,
-                    req->send.flush.started_lanes);
-        /* Only lanes connected to iface can be started/flushed before
-         * wireup is done because connect2iface does not create wireup_ep
-         * without cm mode */
-        ucs_assertv(!(req->send.flush.started_lanes &
-                      ucp_ep_config(ep)->p2p_lanes),
-                    "req=%p flush started_lanes=0x%x p2p_lanes=0x%x", req,
-                    req->send.flush.started_lanes,
-                    ucp_ep_config(ep)->p2p_lanes);
+        if (ucp_ep_has_cm_lane(ep) ||
+            ep->worker->context->config.ext.proto_request_reset) {
+            ucs_assertv(!req->send.flush.started_lanes,
+                        "req=%p flush started_lanes=0x%x", req,
+                        req->send.flush.started_lanes);
+        } else {
+            ucs_assertv(!(UCS_BIT(req->send.lane) & req->send.flush.started_lanes),
+                        "req=%p lane=%d started_lanes=0x%x", req, req->send.lane,
+                        req->send.flush.started_lanes);
+
+            /* Only lanes connected to iface can be started/flushed before
+             * wireup is done because connect2iface does not create wireup_ep
+             * without cm mode */
+            ucs_assertv(!(req->send.flush.started_lanes &
+                          ucp_ep_config(ep)->p2p_lanes),
+                        "req=%p flush started_lanes=0x%x p2p_lanes=0x%x", req,
+                        req->send.flush.started_lanes,
+                        ucp_ep_config(ep)->p2p_lanes);
+        }
+
         ucs_assertv(!req->send.flush.sw_started, "req=%p sw_started=%d", req,
                     req->send.flush.sw_started);
         req->send.lane = UCP_NULL_LANE;
@@ -383,7 +392,9 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->send.ep                    = ep;
     req->send.flushed_cb            = flushed_cb;
     req->send.flush.prog_id         = UCS_CALLBACKQ_ID_NULL;
-    req->send.flush.uct_flags       = UCT_FLUSH_FLAG_LOCAL;
+    req->send.flush.uct_flags       = (worker_req != NULL) ?
+                                      worker_req->flush_worker.uct_flags :
+                                      UCT_FLUSH_FLAG_LOCAL;
     req->send.flush.sw_started      = 0;
     req->send.flush.sw_done         = 0;
     req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
@@ -558,7 +569,8 @@ static unsigned ucp_worker_flush_progress(void *arg)
         }
     }
 
-    if (worker->context->config.ext.flush_worker_eps &&
+    if ((worker->context->config.ext.flush_worker_eps ||
+         (req->flush_worker.uct_flags & UCT_FLUSH_FLAG_REMOTE)) &&
         (&next_ep_ext->ep_list != &worker->all_eps)) {
         /* Some endpoints are not flushed yet. Take the endpoint from the list
          * and start flush operation on it. */
@@ -588,7 +600,8 @@ out:
 
 static ucs_status_ptr_t
 ucp_worker_flush_nbx_internal(ucp_worker_h worker,
-                              const ucp_request_param_t *param)
+                              const ucp_request_param_t *param,
+                              unsigned uct_flags)
 {
     ucs_status_t status;
     ucp_request_t *req;
@@ -609,6 +622,7 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
     req->flush_worker.worker     = worker;
     req->flush_worker.comp_count = 1; /* counting starts from 1, and decremented
                                          when finished going over all endpoints */
+    req->flush_worker.uct_flags  = uct_flags;
     req->flush_worker.prog_id    = UCS_CALLBACKQ_ID_NULL;
 
     ucp_worker_flush_req_set_next_ep(req, 0, worker->all_eps.next);
@@ -636,7 +650,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nbx, (worker, param),
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    request = ucp_worker_flush_nbx_internal(worker, param);
+    request = ucp_worker_flush_nbx_internal(worker, param,
+                                            UCT_FLUSH_FLAG_LOCAL);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
@@ -655,7 +670,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    request = ucp_worker_flush_nbx_internal(worker, &ucp_request_null_param);
+    request = ucp_worker_flush_nbx_internal(worker, &ucp_request_null_param,
+                                            UCT_FLUSH_FLAG_LOCAL);
     status  = ucp_flush_wait(worker, request);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
@@ -678,13 +694,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
     return status;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
+static ucs_status_t ucp_worker_fence_weak(ucp_worker_h worker)
 {
-    ucp_rsc_index_t rsc_index;
     ucp_worker_iface_t *wiface;
+    ucp_rsc_index_t rsc_index;
     ucs_status_t status;
-
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, rsc_index) {
         wiface = ucp_worker_iface(worker, rsc_index);
@@ -694,12 +708,55 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 
         status = uct_iface_fence(wiface->iface, 0);
         if (status != UCS_OK) {
-            goto out;
+            return status;
         }
     }
-    status = UCS_OK;
 
+    return UCS_OK;
+}
+
+static ucs_status_t ucp_worker_fence_strong(ucp_worker_h worker)
+{
+    ucp_request_t *request;
+    ucs_status_ptr_t status_ptr;
+    ucs_status_t status;
+
+    ucp_worker_flush_ops_count_add(worker, 1);
+    status_ptr = ucp_worker_flush_nbx_internal(worker,
+                                                &ucp_request_null_param,
+                                                UCT_FLUSH_FLAG_REMOTE);
+    if (ucs_unlikely(!UCS_PTR_IS_PTR(status_ptr))) {
+        status = UCS_PTR_STATUS(status_ptr);
+        goto out;
+    }
+
+    request = (ucp_request_t*)status_ptr - 1;
+
+    do {
+        ucp_worker_progress(worker);
+    } while (request->flush_worker.comp_count > 1);
+
+    ucp_worker_flush_complete_one(request, request->status, 1);
+    status = request->status;
+    ucp_request_put(request);
 out:
+    ucp_worker_flush_ops_count_add(worker, -1);
+    return status;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
+{
+    ucs_status_t status;
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
+    if (worker->context->config.worker_strong_fence) {
+        /* force using flush on EPs */
+        status = ucp_worker_fence_strong(worker);
+    } else {
+        status = ucp_worker_fence_weak(worker);
+    }
+
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return status;
 }

@@ -35,6 +35,11 @@
 #define UCT_IB_MD_FLUSH_REMOTE_LENGTH 8
 
 
+#define uct_ib_md_log_mem_reg_error(_md, _flags, _fmt, ...) \
+    uct_md_log_mem_reg_error(_flags, "md %p (%s): " _fmt, _md, \
+                             uct_ib_device_name(&(_md)->dev), ## __VA_ARGS__)
+
+
 /**
  * IB MD statistics counters
  */
@@ -56,9 +61,11 @@ enum {
     UCT_IB_MEM_MULTITHREADED         = UCS_BIT(3), /**< The memory region registration
                                                         handled by chunks in parallel
                                                         threads */
-    UCT_IB_MEM_FLAG_RELAXED_ORDERING = UCS_BIT(4)  /**< The memory region will issue
+    UCT_IB_MEM_FLAG_RELAXED_ORDERING = UCS_BIT(4), /**< The memory region will issue
                                                         PCIe writes with relaxed order
                                                         attribute */
+    UCT_IB_MEM_FLAG_NO_RCACHE        = UCS_BIT(5)  /**< Memory handle wasn't stored
+                                                        in RCACHE */
 };
 
 enum {
@@ -98,6 +105,7 @@ typedef struct uct_ib_md_ext_config {
 
 typedef struct uct_ib_mem {
     uint32_t                lkey;
+    uint32_t                exported_lkey;
     uint32_t                rkey;
     uint32_t                atomic_rkey;
     uint32_t                indirect_rkey;
@@ -153,7 +161,14 @@ typedef struct uct_ib_md {
      * means that flush_rkey is invalid and flush_remote operation could not
      * be initiated.  */
     uint32_t                 flush_rkey;
+    uct_ib_uint128_t         vhca_id;
 } uct_ib_md_t;
+
+
+typedef struct uct_ib_md_packed_mkey {
+    uint32_t         lkey;
+    uct_ib_uint128_t vhca_id;
+} UCS_S_PACKED uct_ib_md_packed_mkey_t;
 
 
 /**
@@ -210,22 +225,28 @@ typedef void (*uct_ib_md_cleanup_func_t)(struct uct_ib_md *);
 /**
  * Memory domain method to register memory area.
  *
- * @param [in]  md      Memory domain.
+ * @param [in]  md             Memory domain.
  *
- * @param [in]  address Memory area start address.
+ * @param [in]  address        Memory area start address.
  *
- * @param [in]  length  Memory area length.
+ * @param [in]  length         Memory area length.
  *
- * @param [in]  access  IB verbs registration access flags
+ * @param [in]  access         IB verbs registration access flags.
  *
- * @param [in]  memh    Memory region handle.
- *                      Method should initialize lkey & rkey.
+ * @param [in]  dmabuf_fd      dmabuf file descriptor.
+ *
+ * @param [in]  dmabuf_offset  Offset of the registered memory region within the
+ *                             dmabuf backing region.
+ *
+ * @param [in]  memh           Memory region handle.
+ *                             The method must initialize lkey & rkey.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
 typedef ucs_status_t (*uct_ib_md_reg_key_func_t)(struct uct_ib_md *md,
                                                  void *address, size_t length,
-                                                 uint64_t access,
+                                                 uint64_t access, int dmabuf_fd,
+                                                 size_t dmabuf_offset,
                                                  uct_ib_mem_t *memh,
                                                  uct_ib_mr_type_t mr_type,
                                                  int silent);
@@ -353,6 +374,38 @@ typedef ucs_status_t (*uct_ib_md_mem_prefetch_func_t)(uct_ib_md_t *md,
 typedef ucs_status_t (*uct_ib_md_get_atomic_mr_id_func_t)(uct_ib_md_t *md,
                                                           uint8_t *mr_id);
 
+
+/**
+ * Memory domain method to register crossed mkey for memory area.
+ *
+ * @param [in]  ib_md           Memory domain.
+ * @param [out] ib_memh         Memory region handle.
+ *                              Method should initialize lkey & rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_ib_md_reg_exported_key_func_t)(
+        uct_ib_md_t *ib_md, uct_ib_mem_t *ib_memh);
+
+
+/**
+ * Memory domain method to register crossing mkey for memory area.
+ *
+ * @param [in]  ib_md          Memory domain.
+ * @param [in]  flags          UCT memory attach flags.
+ * @param [in]  target_vhca_id Target vHCA ID.
+ * @param [in]  target_mkey    Target mkey this mkey refers to.
+ * @param [out] ib_memh        Memory region handle.
+ *                             Method should initialize lkey and rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_ib_md_import_key_func_t)(
+        uct_ib_md_t *ib_md, uint64_t flags,
+        const uct_ib_uint128_t *target_vhca_id, uint32_t target_mkey,
+        uct_ib_mem_t *ib_memh);
+
+
 typedef struct uct_ib_md_ops {
     uct_ib_md_open_func_t                open;
     uct_ib_md_cleanup_func_t             cleanup;
@@ -365,6 +418,8 @@ typedef struct uct_ib_md_ops {
     uct_ib_md_dereg_multithreaded_func_t dereg_multithreaded;
     uct_ib_md_mem_prefetch_func_t        mem_prefetch;
     uct_ib_md_get_atomic_mr_id_func_t    get_atomic_mr_id;
+    uct_ib_md_reg_exported_key_func_t    reg_exported_key;
+    uct_ib_md_import_key_func_t          import_exported_key;
 } uct_ib_md_ops_t;
 
 
@@ -401,13 +456,32 @@ typedef struct uct_ib_md_ops_entry {
 extern uct_component_t uct_ib_component;
 
 
-static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)
+static UCS_F_ALWAYS_INLINE uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)
 {
     return (uint32_t)uct_rkey;
 }
 
 
-static uint32_t uct_ib_md_indirect_rkey(uct_rkey_t uct_rkey)
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_ib_md_lkey(const void *exported_mkey_buffer)
+{
+    const uct_ib_md_packed_mkey_t *mkey =
+            (const uct_ib_md_packed_mkey_t*)exported_mkey_buffer;
+    return mkey->lkey;
+}
+
+
+static UCS_F_ALWAYS_INLINE const uct_ib_uint128_t*
+uct_ib_md_vhca_id(const void *exported_mkey_buffer)
+{
+    const uct_ib_md_packed_mkey_t *mkey =
+            (const uct_ib_md_packed_mkey_t*)exported_mkey_buffer;
+    return &mkey->vhca_id;
+}
+
+
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_ib_md_indirect_rkey(uct_rkey_t uct_rkey)
 {
     return uct_rkey >> 32;
 }
@@ -420,6 +494,19 @@ uct_ib_md_pack_rkey(uint32_t rkey, uint32_t atomic_rkey, void *rkey_buffer)
 
     *rkey_p = (((uint64_t)atomic_rkey) << 32) | rkey;
     ucs_trace("packed rkey: direct 0x%x indirect 0x%x", rkey, atomic_rkey);
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_ib_md_pack_exported_mkey(uct_ib_md_t *md, uint32_t lkey, void *buffer)
+{
+    uct_ib_md_packed_mkey_t *mkey = (uct_ib_md_packed_mkey_t*)buffer;
+
+    mkey->lkey = lkey;
+    memcpy(mkey->vhca_id, md->vhca_id, sizeof(md->vhca_id));
+
+    ucs_trace("packed exported mkey on %s: lkey 0x%x",
+              uct_ib_device_name(&md->dev), lkey);
 }
 
 
@@ -504,12 +591,25 @@ int uct_ib_device_is_accessible(struct ibv_device *device);
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
-                                   const uct_ib_md_config_t *md_config);
+                                   const uct_ib_md_config_t *md_config,
+                                   size_t mem_size, size_t mr_size);
+
+void uct_ib_md_close_common(uct_ib_md_t *md);
+
+void uct_ib_md_device_context_close(struct ibv_context *ctx);
+
+uct_ib_md_t* uct_ib_md_alloc(size_t size, const char *name,
+                             struct ibv_context *ctx);
+
+void uct_ib_md_free(uct_ib_md_t *md);
 
 void uct_ib_md_close(uct_md_h uct_md);
 
+void uct_ib_md_cleanup(uct_ib_md_t *md);
+
 ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
-                           uint64_t access, struct ibv_mr **mr_p, int silent);
+                           uint64_t access, int dmabuf_fd, size_t dmabuf_offset,
+                           struct ibv_mr **mr_p, int silent);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
 
@@ -526,12 +626,10 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
                                        size_t chunk, struct ibv_mr **mrs,
                                        int silent);
 
-void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
-                                   const uct_ib_md_config_t *md_config);
-
-ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
-                                 size_t length, uint64_t access_flags,
-                                 uct_ib_mem_t *memh, uct_ib_mr_t *mrs,
-                                 uct_ib_mr_type_t mr_type, int silent);
+ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address, size_t length,
+                                 uint64_t access_flags, int dmabuf_fd,
+                                 size_t dmabuf_offset, uct_ib_mem_t *memh,
+                                 uct_ib_mr_t *mr, uct_ib_mr_type_t mr_type,
+                                 int silent);
 
 #endif

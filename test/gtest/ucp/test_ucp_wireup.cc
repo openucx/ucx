@@ -83,6 +83,18 @@ protected:
     bool ep_iface_has_caps(const entity& e, const std::string& tl,
                            uint64_t caps);
 
+    bool
+    has_resource(const ucp_test_base::entity *e, const std::string &tl_name)
+    {
+        for (int i = 0; i < e->ucph()->num_tls; ++i) {
+            if (tl_name == e->ucph()->tl_rscs[i].tl_rsc.tl_name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 protected:
     vec_type                               m_send_data;
     vec_type                               m_recv_data;
@@ -1288,19 +1300,6 @@ public:
     {
         add_variant_with_value(variants, UCP_FEATURE_TAG, TEST_TAG, "tag");
     }
-
-    bool has_resource(const ucp_test_base::entity *e, const char *tl_name)
-    {
-        std::string tl_name_str(tl_name);
-
-        for (int i = 0; i < e->ucph()->num_tls; ++i) {
-            if (tl_name_str == e->ucph()->tl_rscs[i].tl_rsc.tl_name) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 };
 
 /* This test checks that DC transport is selected for scaled communication,
@@ -1323,6 +1322,35 @@ UCS_TEST_P(select_transport_rndv, select_dc, "NUM_EPS=300")
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(select_transport_rndv, ib, "ib")
+
+class select_transport_rma_bw : public test_ucp_wireup {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_RMA, "rma");
+    }
+};
+
+UCS_TEST_P(select_transport_rma_bw, select_rc, "NUM_EPS=56", "NUM_PPN=28")
+{
+    if (!has_resource(&sender(), "rc_mlx5")) {
+        UCS_TEST_SKIP_R("no rc resources");
+    }
+
+    sender().connect(&receiver(), get_ep_params());
+
+    const ucp_ep_config_t *config = ucp_ep_config(sender().ep());
+    for (int i = 0; (i < config->key.num_lanes) &&
+                    (config->key.rma_bw_lanes[i] != UCP_NULL_LANE);
+         ++i) {
+        /* Verify RC is selected for rma_bw lanes */
+        ucp_lane_index_t lane = config->key.rma_bw_lanes[i];
+        ASSERT_STREQ("rc_mlx5",
+                     ucp_ep_get_tl_rsc(sender().ep(), lane)->tl_name);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(select_transport_rma_bw, tcp_ib, "tcp,ib")
 
 class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
 protected:

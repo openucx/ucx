@@ -224,7 +224,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
                 ep, &ucp_rkey_config(ep->worker, rkey)->proto_select,
                 rkey->cfg_index, req, op_id, buffer, 1, param->datatype,
                 op_size, param, 0, 0);
-        if (ucs_likely(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
+        if (UCS_PTR_IS_PTR(status_p) &&
+            ucs_likely(req->flags & UCP_REQUEST_FLAG_PROTO_AMO_PACKED)) {
 #if ENABLE_ASSERT
             req->send.state.dt_iter.type.contig.buffer = NULL;
 #endif

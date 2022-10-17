@@ -231,7 +231,7 @@ static ucs_status_t
 uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 uct_ib_mlx5_md_t *md,
                                 const uct_rc_iface_common_config_t *config,
-                                const struct mlx5dv_pd *dvpd, void *wq)
+                                void *wq)
 {
     ucs_status_t status  = UCS_ERR_NO_MEMORY;
     int len, max, stride, log_num_of_strides, wq_type;
@@ -268,7 +268,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET  (wq, wq, wq_type,       wq_type);
     UCT_IB_MLX5DV_SET  (wq, wq, log_wq_sz,     ucs_ilog2(max));
     UCT_IB_MLX5DV_SET  (wq, wq, log_wq_stride, ucs_ilog2(stride));
-    UCT_IB_MLX5DV_SET  (wq, wq, pd,            dvpd->pdn);
+    UCT_IB_MLX5DV_SET  (wq, wq, pd,            uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET  (wq, wq, dbr_umem_id,   iface->rx.srq.devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,      iface->rx.srq.devx.dbrec->offset);
     UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
@@ -303,20 +303,14 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
                             int dc, unsigned rndv_hdr_len)
 {
-    uct_ib_mlx5_md_t *md  = uct_ib_mlx5_iface_md(&iface->super.super);
-    uct_ib_device_t *dev  = &md->super.dev;
-    struct mlx5dv_pd dvpd = {};
-    struct mlx5dv_obj dv  = {};
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    uct_ib_device_t *dev = &md->super.dev;
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_xrq_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_xrq_out)] = {};
     ucs_status_t status;
     void *xrqc;
 
     uct_rc_mlx5_init_rx_tm_common(iface, config, rndv_hdr_len);
-
-    dv.pd.in  = uct_ib_iface_md(&iface->super.super)->pd;
-    dv.pd.out = &dvpd;
-    mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD);
 
     UCT_IB_MLX5DV_SET(create_xrq_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_XRQ);
     xrqc = UCT_IB_MLX5DV_ADDR_OF(create_xrq_in, in, xrq_context);
@@ -328,7 +322,7 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(xrqc, xrqc, dc,       dc);
     UCT_IB_MLX5DV_SET(xrqc, xrqc, cqn,      iface->cq[UCT_IB_DIR_RX].cq_num);
 
-    status = uct_rc_mlx5_devx_init_rx_common(iface, md, config, &dvpd,
+    status = uct_rc_mlx5_devx_init_rx_common(iface, md, config,
                                              UCT_IB_MLX5DV_ADDR_OF(xrqc, xrqc, wq));
     if (status != UCS_OK) {
         return UCS_OK;
@@ -336,7 +330,8 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 
     iface->rx.srq.devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
                                                          sizeof(in), out,
-                                                         sizeof(out), "XRQ");
+                                                         sizeof(out), "XRQ",
+                                                         UCS_LOG_LEVEL_ERROR);
     if (iface->rx.srq.devx.obj == NULL) {
         status = UCS_ERR_IO_ERROR;
         goto err_cleanup_srq;
@@ -356,25 +351,19 @@ err_cleanup_srq:
 ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                       const uct_rc_iface_common_config_t *config)
 {
-    uct_ib_mlx5_md_t *md  = uct_ib_mlx5_iface_md(&iface->super.super);
-    uct_ib_device_t *dev  = &md->super.dev;
-    struct mlx5dv_pd dvpd = {};
-    struct mlx5dv_obj dv  = {};
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
+    uct_ib_device_t *dev = &md->super.dev;
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_rmp_out)] = {};
     ucs_status_t status;
     void *rmpc;
-
-    dv.pd.in  = uct_ib_iface_md(&iface->super.super)->pd;
-    dv.pd.out = &dvpd;
-    mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD);
 
     UCT_IB_MLX5DV_SET(create_rmp_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_RMP);
     rmpc = UCT_IB_MLX5DV_ADDR_OF(create_rmp_in, in, rmp_context);
 
     UCT_IB_MLX5DV_SET(rmpc, rmpc, state, UCT_IB_MLX5_RMPC_STATE_RDY);
 
-    status = uct_rc_mlx5_devx_init_rx_common(iface, md, config, &dvpd,
+    status = uct_rc_mlx5_devx_init_rx_common(iface, md, config,
                                              UCT_IB_MLX5DV_ADDR_OF(rmpc, rmpc, wq));
     if (status != UCS_OK) {
         return status;
@@ -382,7 +371,8 @@ ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
 
     iface->rx.srq.devx.obj = uct_ib_mlx5_devx_obj_create(dev->ibv_context, in,
                                                          sizeof(in), out,
-                                                         sizeof(out), "RMP");
+                                                         sizeof(out), "RMP",
+                                                         UCS_LOG_LEVEL_ERROR);
     if (iface->rx.srq.devx.obj == NULL) {
         status = UCS_ERR_IO_ERROR;
         goto err_cleanup_srq;
@@ -403,13 +393,10 @@ void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
     uct_ib_mlx5_md_buf_free(md, srq->buf, &srq->devx.mem);
 }
 
-ucs_status_t
-uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
-                                         uct_ib_mlx5_qp_t *qp,
-                                         uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu path_mtu,
-                                         uint8_t path_index)
+ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
+        uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
+        uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic)
 {
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
@@ -482,8 +469,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max,
-                      ucs_ilog2_or0(iface->super.config.max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max, ucs_ilog2_or0(max_rd_atomic));
     UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
     UCT_IB_MLX5DV_SET(qpc, qpc, rre, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
@@ -507,8 +493,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, qp->qp_num);
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
-    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max,
-                      ucs_ilog2_or0(iface->super.config.max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(max_rd_atomic));
     UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.config.retry_cnt);
     UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.config.rnr_retry);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout,

@@ -86,15 +86,17 @@ ucp_proto_rtr_common_request_init(ucp_request_t *req)
 static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
 {
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_worker_h UCS_V_UNUSED worker       = req->send.ep->worker;
     size_t max_rtr_size;
     ucs_status_t status;
 
     max_rtr_size = sizeof(ucp_rndv_rtr_hdr_t) + rpriv->super.packed_rkey_size;
-    status = ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTR,
-                                              rpriv->super.lane, rpriv->pack_cb,
-                                              req, max_rtr_size, NULL, 0);
+    status       = ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTR,
+                                                      rpriv->super.lane,
+                                                      rpriv->pack_cb, req,
+                                                      max_rtr_size, NULL, 0);
     if (status == UCS_OK) {
-        UCP_WORKER_STAT_RNDV(req->send.ep->worker, SEND_RTR, +1);
+        UCP_WORKER_STAT_RNDV(worker, SEND_RTR, +1);
     }
 
     return status;
@@ -249,7 +251,7 @@ ucp_proto_t ucp_rndv_rtr_proto = {
     .query    = ucp_proto_rndv_rtr_query,
     .progress = {ucp_proto_rndv_rtr_progress},
     .abort    = ucp_proto_rndv_rtr_abort,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_request_zcopy_id_reset
 };
 
 static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
@@ -289,6 +291,17 @@ static void ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req)
         ucp_proto_rndv_ppln_recv_frag_complete(req, 0);
     } else {
         ucp_proto_rndv_rtr_common_complete(req, UCS_BIT(UCP_DATATYPE_CONTIG));
+    }
+}
+
+static void ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
+{
+    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    if (ucp_proto_rndv_request_is_ppln_frag(req)) {
+        ucp_proto_rndv_ppln_recv_frag_clean(req);
+        ucp_proto_request_bcopy_id_reset(req);
+    } else {
+        ucp_proto_request_zcopy_id_reset(req);
     }
 }
 
@@ -399,7 +412,7 @@ ucp_proto_t ucp_rndv_rtr_mtype_proto = {
     .query    = ucp_proto_rndv_rtr_mtype_query,
     .progress = {ucp_proto_rndv_rtr_mtype_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_rndv_rtr_mtype_reset
 };
 
 ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,

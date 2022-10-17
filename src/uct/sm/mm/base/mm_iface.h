@@ -224,6 +224,12 @@ typedef struct uct_mm_iface {
 } uct_mm_iface_t;
 
 
+ucs_status_t
+uct_mm_iface_query_tl_devices(uct_md_h md,
+                              uct_tl_device_resource_t **tl_devices_p,
+                              unsigned *num_tl_devices_p);
+
+
 /*
  * Define a memory-mapper transport for MM.
  *
@@ -239,7 +245,7 @@ typedef struct uct_mm_iface {
     UCT_MM_COMPONENT_DEFINE(_name, _md_ops, _rkey_unpack, _rkey_release, \
                             _cfg_prefix) \
     UCT_TL_DEFINE_ENTRY(&UCT_COMPONENT_NAME(_name).super, _name, \
-                        uct_sm_base_query_tl_devices, uct_mm_iface_t, \
+                        uct_mm_iface_query_tl_devices, uct_mm_iface_t, \
                         _cfg_prefix, _cfg_table, uct_mm_iface_config_t)
 
 

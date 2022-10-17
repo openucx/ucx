@@ -75,6 +75,13 @@ static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
+static const char *ucp_fence_modes[] = {
+    [UCP_FENCE_MODE_WEAK]   = "weak",
+    [UCP_FENCE_MODE_STRONG] = "strong",
+    [UCP_FENCE_MODE_AUTO]   = "auto",
+    [UCP_FENCE_MODE_LAST]   = NULL
+};
+
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -314,6 +321,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "another thread, or incoming active messages, but consumes more resources.",
    ucs_offsetof(ucp_context_config_t, flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
 
+  {"FENCE_MODE", "auto",
+   "Fence mode used in ucp_worker_fence routine.\n"
+   " weak   - use weak fence mode.\n"
+   " strong - use strong fence mode.\n"
+   " auto   - automatically detect required fence mode.",
+   ucs_offsetof(ucp_context_config_t, fence_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_fence_modes)},
+
   {"UNIFIED_MODE", "n",
    "Enable various optimizations intended for homogeneous environment.\n"
    "Enabling this mode implies that the local transport resources/devices\n"
@@ -335,6 +350,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"PROTO_ENABLE", "n",
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_context_config_t, proto_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"PROTO_REQUEST_RESET", "n",
+   "Experimental: forces reset of pending request when an endpoint has been\n"
+   "connected, useful for testing purposes only",
+   ucs_offsetof(ucp_context_config_t, proto_request_reset), UCS_CONFIG_TYPE_BOOL},
 
   {"KEEPALIVE_INTERVAL", "20s",
    "Time interval between keepalive rounds. Must be non-zero value.",
@@ -1407,6 +1427,17 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                 }
             }
 
+            if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
+                context->dmabuf_reg_md_map |= UCS_BIT(md_index);
+            }
+
+            ucs_for_each_bit(mem_type, md_attr->dmabuf_mem_types) {
+                /* In case of multiple providers, take the first one */
+                if (context->dmabuf_mds[mem_type] == UCP_NULL_RESOURCE) {
+                    context->dmabuf_mds[mem_type] = md_index;
+                }
+            }
+
             ++context->num_mds;
         } else {
             /* If the MD does not have transport resources (device or sockaddr),
@@ -1434,6 +1465,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     uct_component_h *uct_components;
     unsigned i, num_uct_components;
     uct_device_type_t dev_type;
+    ucs_memory_type_t mem_type;
     ucs_status_t status;
     unsigned max_mds;
 
@@ -1446,10 +1478,11 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
 
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
-        context->reg_md_map[i]    = 0;
-        context->cache_md_map[i]  = 0;
-        context->export_md_map[i] = 0;
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+        context->reg_md_map[mem_type]    = 0;
+        context->cache_md_map[mem_type]  = 0;
+        context->export_md_map[mem_type] = UCP_NULL_RESOURCE;
+        context->dmabuf_mds[mem_type]    = UCP_NULL_RESOURCE;
     }
 
     ucs_string_set_init(&avail_tls);
@@ -1846,6 +1879,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     memcpy(context->config.am_mpools.sizes, config->mpool_sizes.memunits,
            config->mpool_sizes.count * sizeof(size_t));
+
+    context->config.worker_strong_fence =
+            (context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) ||
+            ((context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) &&
+             (context->config.ext.max_rma_lanes > 1));
 
     return UCS_OK;
 

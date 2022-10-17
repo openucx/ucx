@@ -19,6 +19,10 @@
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
+#if CUDA_VERSION >= 11070
+#include <cudaTypedefs.h>
+#endif
+
 
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
 #define UCT_CUDA_MAX_DEVICES      32
@@ -203,6 +207,43 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
     return UCS_OK;
 }
 
+static int uct_cuda_copy_get_dmabuf_fd(const ucs_memory_info_t *addr_mem_info)
+{
+#if CUDA_VERSION >= 11070
+    PFN_cuMemGetHandleForAddressRange get_handle_func;
+    const char *cu_err_str;
+    CUresult cu_err;
+    int fd;
+
+    /* Get fxn ptr for cuMemGetHandleForAddressRange in case installed libcuda
+     * does not have the definition for it even though 11.7 header includes the
+     * declaration and avoid link error */
+    cu_err = cuGetProcAddress("cuMemGetHandleForAddressRange",
+                              (void**)&get_handle_func, 11070,
+                              CU_GET_PROC_ADDRESS_DEFAULT);
+    if (cu_err != CUDA_SUCCESS) {
+        ucs_debug("cuMemGetHandleForAddressRange not found");
+        return UCT_DMABUF_FD_INVALID;
+    }
+
+    cu_err = get_handle_func((void*)&fd, (uintptr_t)addr_mem_info->base_address,
+                             addr_mem_info->alloc_length,
+                             CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
+    if (cu_err == CUDA_SUCCESS) {
+        ucs_trace("dmabuf for address %p length %zu is fd %d",
+                  addr_mem_info->base_address, addr_mem_info->alloc_length, fd);
+        return fd;
+    }
+
+    cuGetErrorString(cu_err, &cu_err_str);
+    ucs_debug("cuMemGetHandleForAddressRange(address=%p length=%zu DMA_BUF_FD) "
+              "failed: %s",
+              addr_mem_info->base_address, addr_mem_info->alloc_length,
+              cu_err_str);
+#endif
+    return UCT_DMABUF_FD_INVALID;
+}
+
 ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
                                      size_t length, uct_md_mem_attr_t *mem_attr)
 {
@@ -219,10 +260,12 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
     ucs_status_t status;
     CUresult cu_err;
 
-    if (!(mem_attr->field_mask & (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE     |
-                                  UCT_MD_MEM_ATTR_FIELD_SYS_DEV      |
-                                  UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
-                                  UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH))) {
+    if (!(mem_attr->field_mask &
+          (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE | UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
+           UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+           UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
+           UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+           UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET))) {
         return UCS_OK;
     }
 
@@ -263,6 +306,15 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
         mem_attr->alloc_length = addr_mem_info.alloc_length;
+    }
+
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+        mem_attr->dmabuf_fd = uct_cuda_copy_get_dmabuf_fd(&addr_mem_info);
+    }
+
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+        mem_attr->dmabuf_offset = UCS_PTR_BYTE_DIFF(addr_mem_info.base_address,
+                                                    address);
     }
 
     return UCS_OK;
