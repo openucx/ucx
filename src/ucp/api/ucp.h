@@ -145,19 +145,19 @@ enum ucp_feature {
     UCP_FEATURE_RMA           = UCS_BIT(1),
 
     /** Request 32-bit atomic operations support */
-    UCP_FEATURE_AMO32         = UCS_BIT(2),  
+    UCP_FEATURE_AMO32         = UCS_BIT(2),
 
     /** Request 64-bit atomic operations support */
-    UCP_FEATURE_AMO64         = UCS_BIT(3),  
+    UCP_FEATURE_AMO64         = UCS_BIT(3),
 
     /** Request interrupt notification support */
-    UCP_FEATURE_WAKEUP        = UCS_BIT(4),  
+    UCP_FEATURE_WAKEUP        = UCS_BIT(4),
 
     /** Request stream support */
     UCP_FEATURE_STREAM        = UCS_BIT(5),
 
     /** Request Active Message support */
-    UCP_FEATURE_AM            = UCS_BIT(6),  
+    UCP_FEATURE_AM            = UCS_BIT(6),
 
     /**
      * Request support mapping a peer's memory handle that was created by
@@ -648,14 +648,14 @@ enum ucp_send_am_flags {
      */
     UCP_AM_SEND_FLAG_RNDV        = UCS_BIT(2),
 
-    /** 
+    /**
      * The flag indicates that the header should be copied to an internal buffer
      * in case it's needed after the send function returns. If this flag is
      * specified, the header can be released immediately after the send
      * function returns, even if the non-blocking send request is not completed.
-     */                                                                
+     */
     UCP_AM_SEND_FLAG_COPY_HEADER = UCS_BIT(3),
-    
+
     /**
      * Backward compatibility.
      */
@@ -3201,7 +3201,7 @@ ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
  *                            By default the header must be valid until
  *                            the active message send operation completes.
  *                            If the flag @ref UCP_AM_SEND_FLAG_COPY_HEADER
- *                            is specified, the header is only required to be 
+ *                            is specified, the header is only required to be
  *                            valid until this function call returns.
  * @param [in]  header_length Active message header length in bytes.
  * @param [in]  buffer        Pointer to the data to be sent to the target node
@@ -3411,7 +3411,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nbx(ucp_ep_h ep, const void *buffer,
  * size @a count object on the endpoint @a ep. The routine is non-blocking
  * and therefore returns immediately. The receive operation is considered
  * complete when the message is delivered to the buffer. If the receive
- * operation cannot be started, the routine returns an error.
+ * operation cannot be started, then the routine returns an error.
  *
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
  * @param [in]     buffer   Pointer to the buffer that will receive the data.
@@ -3490,7 +3490,7 @@ ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
  * buffer.  In order to notify the application about completion of the receive
  * operation the UCP library will invoke the call-back @a cb when the received
  * message is in the receive buffer and ready for application access.  If the
- * receive operation cannot be stated the routine returns an error.
+ * receive operation cannot be started, then the routine returns an error.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
  * @param [in]  buffer      Pointer to the buffer to receive the data.
@@ -3577,7 +3577,7 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  * is delivered to the @a buffer. In order to notify the application about
  * completion of the receive operation the UCP library will invoke the
  * call-back @a cb when the received message is in the receive buffer and ready
- * for application access. If the receive operation cannot be started the
+ * for application access. If the receive operation cannot be started, then the
  * routine returns an error.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
