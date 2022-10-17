@@ -271,8 +271,9 @@ typedef struct {
 
 static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    uint64_t guid   = IBV_DEV_ATTR(&md->dev, sys_image_guid);
+    uct_ib_md_t *md              = ucs_derived_of(uct_md, uct_ib_md_t);
+    size_t component_name_length = strlen(md->super.component->name);
+    uint64_t guid                = IBV_DEV_ATTR(&md->dev, sys_image_guid);
 
     md_attr->max_alloc                 = ULONG_MAX; /* TODO query device */
     md_attr->max_reg                   = ULONG_MAX; /* TODO query device */
@@ -288,8 +289,11 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->exported_mkey_packed_size = sizeof(uct_ib_md_packed_mkey_t);
     ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);
 
-    UCS_STATIC_ASSERT(sizeof(guid) <= UCT_MD_GLOBAL_ID_MAX);
-    memcpy(md_attr->global_id, &guid, sizeof(guid));
+    UCS_STATIC_ASSERT(sizeof(guid) <=
+                      (UCT_MD_GLOBAL_ID_MAX - UCT_COMPONENT_NAME_MAX));
+    memcpy(md_attr->global_id, md->super.component->name, component_name_length);
+    memcpy(UCS_PTR_BYTE_OFFSET(md_attr->global_id, component_name_length),
+           &guid, sizeof(guid));
 
     return UCS_OK;
 }
