@@ -75,7 +75,10 @@ AC_ARG_WITH([dm],
 #
 # DEVX Support
 #
-AC_ARG_WITH([devx], [], [], [with_devx=check])
+AC_ARG_WITH([devx],
+            [AC_HELP_STRING([--with-devx], [Compile with DEVX support])],
+            [],
+            [with_devx=check])
 
 #
 # Check basic IB support: User wanted at least one IB transport, and we found
@@ -173,16 +176,12 @@ AS_IF([test "x$with_ib" = "xyes"],
                        AC_CHECK_DECLS([MLX5DV_DCTYPE_DCT],
                                   [have_dc_dv=yes], [], [[#include <infiniband/mlx5dv.h>]])
                        AC_CHECK_DECLS([ibv_alloc_td],
-                                  [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
-
-               AS_IF([test "x$with_devx" != xno], [
-                    AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
-                         AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
-                         have_devx=yes
-                    ], [
-                         AS_IF([test "x$with_devx" != xcheck],
-                               [AC_MSG_ERROR([devx requested but not found])])
-                    ], [[#include <infiniband/mlx5dv.h>]])])])
+                                  [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])
+                       AS_IF([test x$with_devx != xno], [
+                               AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
+                                          AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
+                                          have_devx=yes
+                               ], [], [[#include <infiniband/mlx5dv.h>]])])])])
 
        AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
                with_mlx5_dv=no])
@@ -191,6 +190,9 @@ AS_IF([test "x$with_ib" = "xyes"],
              [AC_DEFINE([HAVE_MLX5_DV], 1, [mlx5 DV support])
               AS_IF([test "x$has_get_av" = "xyes"],
                  [AC_DEFINE([HAVE_MLX5_HW_UD], 1, [mlx5 UD bare-metal support])])])
+
+       AS_IF([test x$with_devx = xyes -a x$have_devx != xyes], [
+               AC_MSG_ERROR([devx requested but not found])])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,

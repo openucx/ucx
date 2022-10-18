@@ -1106,10 +1106,10 @@ uct_rc_mlx5_iface_common_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
 {
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(ib_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md              = uct_ib_mlx5_iface_md(ib_iface);
     uct_ib_mlx5_cq_t *uct_cq          = &iface->cq[dir];
-
 #if HAVE_DEVX
+    uct_ib_mlx5_md_t *md              = uct_ib_mlx5_iface_md(ib_iface);
+
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
         return uct_ib_mlx5_devx_create_cq(ib_iface, dir, init_attr, uct_cq,
                                           preferred_cpu, inl);

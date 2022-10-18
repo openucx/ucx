@@ -320,10 +320,10 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_iface_t *ib_iface           = &iface->super.super;
     uct_ib_mlx5_md_t *md               = uct_ib_mlx5_iface_md(ib_iface);
     ucs_status_t status;
-#if HAVE_DECL_MLX5DV_CREATE_QP
+#if HAVE_DEVX
     uct_ib_device_t *dev               = &md->super.dev;
     struct mlx5dv_qp_init_attr dv_attr = {};
-    uint64_t UCS_V_UNUSED cookie;
+    uint64_t cookie;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
         attr->uidx      = 0xffffff;
@@ -729,9 +729,10 @@ ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 static ucs_status_t
 uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
 {
+    ucs_status_t status   = UCS_OK;
+#if HAVE_DEVX
     uct_ib_mlx5_cq_t *scq = &iface->cq[UCT_IB_DIR_TX];
     uct_ib_mlx5_cq_t *rcq = &iface->cq[UCT_IB_DIR_RX];
-    ucs_status_t status   = UCS_OK;
 
     if (scq->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
         status = uct_rc_mlx5_devx_iface_subscribe_event(iface,
@@ -749,6 +750,7 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
                                                         rcq->devx.obj, 0,
                                                         UCT_IB_DIR_RX, "RCQ");
     }
+#endif
 
     return status;
 }
