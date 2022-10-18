@@ -33,11 +33,8 @@
 KHASH_TYPE(ucp_context_imported_mem_rcaches_hash, uint64_t, ucs_rcache_t*);
 typedef khash_t(ucp_context_imported_mem_rcaches_hash) ucp_context_imported_mem_rcaches_t;
 
-#define ucp_context_imported_mem_rcaches_hash_key(_uuid) \
-    kh_int64_hash_func((uint64_t)(_uuid))
-
 KHASH_IMPL(ucp_context_imported_mem_rcaches_hash, uint64_t, ucs_rcache_t*, 1,
-           ucp_context_imported_mem_rcaches_hash_key, kh_int64_hash_equal);
+           kh_int64_hash_func, kh_int64_hash_equal);
 
 
 enum {

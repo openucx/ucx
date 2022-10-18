@@ -592,8 +592,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags)
         }
 
         ucp_memh_init_from_parent(memh, cache_md_map);
-        memh->md_map |= cache_md_map;
-        reg_md_map   &= ~cache_md_map;
+        reg_md_map &= ~cache_md_map;
 
         status = ucp_memh_register(context, memh, reg_md_map, address, length,
                                    uct_flags);
@@ -1553,7 +1552,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
     if (ucs_likely(context->imported_mem_rcaches != NULL)) {
         if (existing_rcache == NULL) {
             ucs_snprintf_safe(rcache_name, sizeof(rcache_name),
-                              "ucp rcache[%zu] of imported memory buffer",
+                              "ucp imported rcache[%zu]",
                               remote_uuid);
             status = ucp_mem_rcache_create(context, rcache_name, &rcache);
             if (status != UCS_OK) {
@@ -1643,6 +1642,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     /* Common memory handle information */
     memh_info_size = ucp_memh_info_size_unpack(&p);
     end            = UCS_PTR_BYTE_OFFSET(export_mkey_buffer, memh_info_size);
+    ucs_assert(memh_info_size != 0);
 
     flags         = *ucs_serialize_next(&p, uint16_t);
     remote_md_map = *ucs_serialize_next(&p, ucp_md_map_t);
@@ -1663,7 +1663,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     ucs_assert(length != 0);
 
     mem_info_parsed_size = UCS_PTR_BYTE_DIFF(export_mkey_buffer, p);
-    ucs_assertv(mem_info_parsed_size == memh_info_size,
+    ucs_assertv(mem_info_parsed_size <= memh_info_size,
                 "mem_info: parsed_size %" PRIu16 " packed_size %" PRIu16,
                 mem_info_parsed_size, memh_info_size);
     ucs_assertv(p <= end, "mem_info: p %p end %p", p, end);

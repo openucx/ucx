@@ -224,10 +224,10 @@ static size_t ucp_memh_extended_info_size(size_t common_size,
     if ((specific_info_size + common_size) > UINT8_MAX) {
         /* This field is packed after the 8-bit size field in case of a total
          * info size is greater than UINT8_MAX. */
-        return common_size + sizeof(uint16_t);
+        return sizeof(uint16_t);
     }
 
-    return common_size;
+    return 0;
 }
 
 static size_t ucp_memh_common_packed_size(size_t specific_info_size)
@@ -246,11 +246,10 @@ static size_t ucp_memh_common_packed_size(size_t specific_info_size)
     /* Memory type */
     size += sizeof(uint8_t);
 
-    return ucp_memh_extended_info_size(size, specific_info_size);
+    return size + ucp_memh_extended_info_size(size, specific_info_size);
 }
 
-static size_t
-ucp_memh_exported_info_packed_size()
+static size_t ucp_memh_exported_info_packed_size()
 {
     size_t size;
 
@@ -277,10 +276,10 @@ static void ucp_memh_info_size_pack(void **p, size_t info_size)
     ucs_assert(info_size <= UINT16_MAX);
 
     if ((info_size - sizeof(uint8_t)) > UINT8_MAX) {
-        *ucs_serialize_next(&p, uint8_t) = 0;
-        *ucs_serialize_next(&p, uint8_t) = info_size - sizeof(uint16_t);
+        *ucs_serialize_next(p, uint8_t)  = 0;
+        *ucs_serialize_next(p, uint16_t) = info_size - sizeof(uint16_t);
     } else {
-        *ucs_serialize_next(&p, uint8_t) = info_size - sizeof(uint8_t);
+        *ucs_serialize_next(p, uint8_t) = info_size - sizeof(uint8_t);
     }
 }
 
@@ -289,17 +288,16 @@ uint16_t ucp_memh_info_size_unpack(const void **p)
     uint16_t info_size = *ucs_serialize_next(&p, uint8_t);
 
     if (info_size == 0) {
-        info_size = *ucs_serialize_next(&p, uint16_t);
+        info_size = *ucs_serialize_next(&p, uint16_t) + sizeof(uint16_t);
     }
 
-    return info_size;
+    return info_size + sizeof(uint8_t);
 }
 
-static void* ucp_memh_common_pack(const ucp_mem_h memh, void *buffer,
-                                  uint64_t flags, size_t memh_info_size)
+static void ucp_memh_common_pack(const ucp_mem_h memh, void **p,
+                                 uint64_t flags, size_t memh_info_size)
 {
     ucp_context_h UCS_V_UNUSED context = memh->context;
-    void *p                            = buffer;
 
     /* Check that md_map is valid */
     ucs_assertv(ucs_test_all_flags(UCS_MASK(context->num_mds), memh->md_map),
@@ -307,20 +305,18 @@ static void* ucp_memh_common_pack(const ucp_mem_h memh, void *buffer,
                 memh, memh->md_map);
 
     /* Size of mkey information which comes prior TL mkey data of all MDs */
-    ucp_memh_info_size_pack(&p, memh_info_size);
+    ucp_memh_info_size_pack(p, memh_info_size);
 
     /* Flags */
-    *ucs_serialize_next(&p, uint16_t) = flags;
+    *ucs_serialize_next(p, uint16_t) = flags;
 
     /* Memory domains map */
-    *ucs_serialize_next(&p, ucp_md_map_t) =
+    *ucs_serialize_next(p, ucp_md_map_t) =
             context->export_md_map[memh->mem_type];
 
     /* Memory type */
     UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_LAST <= 255);
-    *ucs_serialize_next(&p, uint8_t) = memh->mem_type;
-
-    return p;
+    *ucs_serialize_next(p, uint8_t) = memh->mem_type;
 }
 
 size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr)
@@ -346,7 +342,7 @@ ucp_memh_tl_mkey_common_packed_size(size_t specific_info_size)
     /* TL mkey size */
     size += sizeof(uint8_t);
 
-    return ucp_memh_extended_info_size(size, specific_info_size);
+    return size + ucp_memh_extended_info_size(size, specific_info_size);
 }
 
 static size_t
@@ -383,7 +379,8 @@ ucp_memh_exported_packed_size(ucp_context_h context, ucp_md_map_t md_map)
 
 /**
  *  memh_info_size_part1    :  8
- * [memh_info_size_part2    : 16  - packed only if memh_info_size_part1 > 255]
+ * [memh_info_size_part2    : 16  - packed only if memh_info_size > 255,
+ *                                  memh_info_size_part1 is set to 0]
  *  flags                   : 16
  *  md_map                  : 64
  *  mem_type                :  8
@@ -398,7 +395,8 @@ ucp_memh_exported_packed_size(ucp_context_h context, ucp_md_map_t md_map)
  *
  * ucs_for_each_bit(md_map) {
  *     tl_mkey_data_size_part1 :  8
- *    [tl_mkey_data_size_part2 : 16 - packed only if tl_mkey_data_size_part1 > 255]
+ *    [tl_mkey_data_size_part2 : 16 - packed only if tl_mkey_data_size > 255,
+ *                                    tl_mkey_data_size_part1 is set to 0]
  *     tl_mkey_size            :  8
  *     tl_mkey_packed          : <size>
  *
@@ -425,7 +423,6 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
     size_t memh_info_size            = ucp_memh_exported_info_packed_size();
     size_t UCS_V_UNUSED memh_info_packed_size;
     uct_md_attr_v2_t *md_attr;
-    void *md_data_p;
     char UCS_V_UNUSED buf[128];
     ucs_status_t status;
     ssize_t result;
@@ -437,8 +434,8 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
 
     ucs_log_indent(1);
 
-    p = ucp_memh_common_pack(memh, p, UCP_MEMH_BUFFER_FLAG_EXPORTED,
-                             memh_info_size);
+    ucp_memh_common_pack(memh, &p, UCP_MEMH_BUFFER_FLAG_EXPORTED,
+                         memh_info_size);
 
     *ucs_serialize_next(&p, uint64_t) = address;
     *ucs_serialize_next(&p, uint64_t) = length;
@@ -452,12 +449,10 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
 
     uct_memh_index = 0;
     ucs_for_each_bit(md_index, context->export_md_map[memh->mem_type]) {
-        md_attr = &tl_mds[md_index].attr;
-
-        /* Save pointer to the beginning of the TL mkey data to fill later by the
-         * resulted size of TL mkey data */
-        md_data_p                         = p;
-        *ucs_serialize_next(&p, uint16_t) = 0;
+        md_attr           = &tl_mds[md_index].attr;
+        tl_mkey_data_size = ucp_memh_exported_tl_mkey_packed_size(context,
+                                                                  md_index);
+        ucp_memh_info_size_pack(&p, tl_mkey_data_size);
 
         tl_mkey_size = md_attr->exported_mkey_packed_size;
         ucs_assertv((tl_mkey_size <= UINT8_MAX) && (tl_mkey_size != 0),
@@ -479,12 +474,6 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
 
         global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
         memcpy(global_id_buf, md_attr->global_id, global_id_size);
-
-        tl_mkey_data_size = UCS_PTR_BYTE_DIFF(md_data_p, p);
-        ucs_assertv((tl_mkey_data_size <= UINT16_MAX) &&
-                    (tl_mkey_data_size != 0),
-                    "tl_mkey_data_size %zu", tl_mkey_data_size);
-        *(uint16_t*)md_data_p = tl_mkey_data_size;
 
         ucs_trace("exported mkey[%d]=%s for md[%d]=%s", uct_memh_index,
                   ucs_str_dump_hex(p, tl_mkey_size, buf, sizeof(buf),
