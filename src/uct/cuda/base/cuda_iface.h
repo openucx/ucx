@@ -36,12 +36,31 @@
     UCT_CUDAR_CALL(UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
 
 
+#if CUDART_VERSION >= 11010
+#define UCT_CUDA_FUNC_PTX_ERR(_result, _func, _err_str)         \
+    do {                                                        \
+        if (_result == cudaErrorUnsupportedPtxVersion) {        \
+            ucs_error("%s() failed: %s",                        \
+                      UCS_PP_MAKE_STRING(_func), _err_str);     \
+        }                                                       \
+    } while (0);
+#else
+#define UCT_CUDA_FUNC_PTX_ERR(_result, _func, _err_str)         \
+    do {                                                        \
+    } while (0);
+#endif
+
+
 #define UCT_CUDA_FUNC(_func, _log_level)                        \
     ({                                                          \
         ucs_status_t _status = UCS_OK;                          \
         do {                                                    \
             cudaError_t _result = (_func);                      \
             if (cudaSuccess != _result) {                       \
+                if (_log_level != UCS_LOG_LEVEL_ERROR) {        \
+                    UCT_CUDA_FUNC_PTX_ERR(_result,  _func,      \
+                        cudaGetErrorString(_result));           \
+                }                                               \
                 ucs_log((_log_level), "%s() failed: %s",        \
                         UCS_PP_MAKE_STRING(_func),              \
                         cudaGetErrorString(_result));           \

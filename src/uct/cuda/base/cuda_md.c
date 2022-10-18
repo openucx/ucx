@@ -112,10 +112,11 @@ static ucs_status_t
 uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
                                size_t length, ucs_memory_info_t *mem_info)
 {
-#define UCT_CUDA_MEM_QUERY_NUM_ATTRS 3
+#define UCT_CUDA_MEM_QUERY_NUM_ATTRS 4
     CUmemorytype cuda_mem_mype = (CUmemorytype)0;
     uint32_t is_managed        = 0;
     CUdevice cuda_device       = -1;
+    CUcontext cuda_mem_ctx     = NULL;
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     const char *cu_err_str;
@@ -131,6 +132,8 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     attr_data[1] = &is_managed;
     attr_type[2] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
     attr_data[2] = &cuda_device;
+    attr_type[3] = CU_POINTER_ATTRIBUTE_CONTEXT;
+    attr_data[3] = &cuda_mem_ctx;
 
     cu_err = cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
                                     attr_data, (CUdeviceptr)address);
@@ -144,9 +147,19 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return status;
     }
 
-    if (is_managed) {
-        /* cuMemGetAddress range does not support managed memory so use provided
-         * address and length as base address and alloc length respectively */
+    if (is_managed || (cuda_mem_ctx == NULL)) {
+        /* is_managed: cuMemGetAddress range does not support managed memory so
+         * use provided address and length as base address and alloc length
+         * respectively.
+         *
+         * cuda_mem_ctx == NULL: currently virtual/stream-ordered CUDA
+         * allocations are typed as `UCS_MEMORY_TYPE_CUDA_MANAGED`. This may
+         * change in the future. Ideally checking for
+         * `CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE` would be better
+         * here, but due to a bug in the driver `cudaMalloc` also returns false
+         * in that case. Therefore, checking whether the allocation was not
+         * allocated in a context should also allows us to identify
+         * virtual/stream-ordered CUDA allocations. */
         mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
         goto out_default_range;
     }

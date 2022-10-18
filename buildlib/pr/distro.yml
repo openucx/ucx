@@ -27,6 +27,11 @@ jobs:
           gcc -v
           make -s -j `nproc`
           make install
+
+          mkdir -p $(Build.Repository.LocalPath)/install/examples
+          cd ${WORKSPACE}/examples
+          gcc -lm -lucs -lucp -I$(Build.Repository.LocalPath)/install/include -L$(Build.Repository.LocalPath)/install/lib -o $(Build.Repository.LocalPath)/install/examples/hworld ucp_hello_world.c
+
         displayName: Build ucx artifact
       - task: CopyFiles@2
         inputs:
@@ -113,3 +118,59 @@ jobs:
           UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
         displayName: Test wire compatibility server on master client v1.11
+
+  - job: Test_compatibility
+    dependsOn: Distros
+    displayName: Test UCP_HELLO_WORLD
+    workspace:
+      clean: all
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+      - ucx_amd -equals no
+    strategy:
+      matrix:
+        centos7_ib:
+          CONTAINER: centos7_ib
+    steps:
+      - checkout: none
+        clean: true
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: ucx_bin_$(Build.BuildId)
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId) -R
+      - bash: |
+          set -Eex
+          git clone --depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
+          cd $(System.DefaultWorkingDirectory)/ucx-1.11
+          ./autogen.sh
+          ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.11/install --enable-examples
+          make -s -j `nproc`
+          make install -s -j `nproc`
+        displayName: Build ucx-1.11 version
+
+      - bash: |
+          set -Eex
+          ldd $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/hworld
+
+          cmd_prefix="stdbuf -e0 -o0 timeout -s 9 120s"
+          export UCX_LOG_LEVEL=info  # print version and used transports
+          export UCX_TLS=^sm         # shared memory is not backward compatible
+
+          env LD_LIBRARY_PATH=$UCX_PR_LIB_PATH \
+            ${cmd_prefix} \
+            $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/hworld &
+          server_pid=$!
+
+          sleep 5
+          env LD_LIBRARY_PATH=$UCX_V11_LIB_PATH \
+            ${cmd_prefix} \
+            $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/hworld -n localhost
+        env:
+          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
+        displayName: Test UCP_HELLO_WORLD wire compatibility server on master client v1.11
+        timeoutInMinutes: 5
