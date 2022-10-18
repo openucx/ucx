@@ -26,6 +26,8 @@ AS_IF([test "x$with_mpi" = xyes],
         [
         AC_ARG_VAR(MPICC,[MPI C compiler command])
         AC_PATH_PROGS(MPICC,mpicc mpiicc,"",$mpi_path)
+        AC_ARG_VAR(SHMEMCC,[SHMEM C compiler command])
+        AC_PATH_PROGS(SHMEMCC,shmemcc,"",$mpi_path)
         AC_ARG_VAR(MPIRUN,[MPI launch command])
         AC_PATH_PROGS(MPIRUN,mpirun mpiexec aprun orterun,"",$mpi_path)
         AS_IF([test -z "$MPIRUN"],
@@ -38,4 +40,5 @@ AS_IF([test -n "$MPICC"],
       [mpi_enable=disabled])
 AM_CONDITIONAL([HAVE_MPI],    [test -n "$MPIRUN"])
 AM_CONDITIONAL([HAVE_MPICC],  [test -n "$MPICC"])
+AM_CONDITIONAL([HAVE_SHMEMCC],[test -n "$SHMEMCC"])
 AM_CONDITIONAL([HAVE_MPIRUN], [test -n "$MPIRUN"])
