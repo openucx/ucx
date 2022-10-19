@@ -157,8 +157,9 @@ jobs:
           ldd $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/hworld
 
           cmd_prefix="stdbuf -e0 -o0 timeout -s 9 120s"
-          export UCX_LOG_LEVEL=info  # print version and used transports
-          export UCX_TLS=^sm         # shared memory is not backward compatible
+          export UCX_LOG_LEVEL=info         # print version and used transports
+          export UCX_TLS=^sm                # shared memory is not backward compatible
+          export UCX_IB_ROCE_LOCAL_SUBNET=y # connect reachable devices
 
           env LD_LIBRARY_PATH=$UCX_PR_LIB_PATH \
             ${cmd_prefix} \
