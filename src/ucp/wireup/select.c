@@ -889,9 +889,14 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
         ucp_tl_bitmap_t tl_bitmap, ucp_lane_type_t lane_type,
         ucp_wireup_select_context_t *select_ctx)
 {
+    ucp_context_h context                = select_params->ep->worker->context;
     ucp_wireup_criteria_t mem_criteria   = *criteria;
     ucp_wireup_select_info_t select_info = {0};
-    int show_error                       = !select_params->allow_am;
+    int allow_am                         =
+            ((lane_type == UCP_LANE_TYPE_RMA) &&
+             (context->config.features & UCP_FEATURE_EXPORTED_MEMH)) ?
+            0 : select_params->allow_am;
+    int show_error                       = !allow_am;
     double reg_score                     = 0;
     uint64_t remote_md_map;
     ucs_status_t status;
@@ -914,7 +919,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
     if (status == UCS_OK) {
         /* Add to the list of lanes */
         status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
-                                     !select_params->allow_am, select_ctx);
+                                     !allow_am, select_ctx);
         if (status == UCS_OK) {
             /* Remove all occurrences of the remote md from the address list,
              * to avoid selecting the same remote md again. */
@@ -1078,11 +1083,9 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
 /**
  * Check whether emulation over AM is allowed for RMA/AMO lanes
  */
-static int ucp_wireup_allow_am_emulation_layer(ucp_context_h context,
-                                               unsigned ep_init_flags)
+static int ucp_wireup_allow_am_emulation_layer(unsigned ep_init_flags)
 {
-    return !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
-           !(context->config.features & UCP_FEATURE_EXPORTED_MEMH);
+    return !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE);
 }
 
 static unsigned
@@ -1884,8 +1887,7 @@ ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
     select_params->tl_bitmap     = tl_bitmap;
     select_params->address       = remote_address;
     select_params->allow_am      =
-            ucp_wireup_allow_am_emulation_layer(ep->worker->context,
-                                                ep_init_flags);
+            ucp_wireup_allow_am_emulation_layer(ep_init_flags);
     select_params->show_error    = show_error;
 }
 
