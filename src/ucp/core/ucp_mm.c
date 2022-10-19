@@ -559,7 +559,7 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
     ucp_md_index_t md_index;
 
     memh->reg_id  = memh->parent->reg_id;
-    memh->md_map |= memh->parent->md_map;
+    memh->md_map |= parent_md_map;
 
     ucs_for_each_bit(md_index, parent_md_map) {
         memh->uct[md_index] = memh->parent->uct[md_index];
@@ -1423,10 +1423,9 @@ static ucp_md_map_t ucp_find_md_map(ucp_context_h context,
     size_t global_id_cmp_size;
 
     for (md_index = 0; md_index < context->num_mds; md_index++) {
-        md_attr                 = &context->tl_mds[md_index].attr;
-        global_id_cmp_size      =
-                ucs_min(ucp_memh_global_id_packed_size(md_attr),
-                        global_id_size);
+        md_attr            = &context->tl_mds[md_index].attr;
+        global_id_cmp_size = ucs_min(ucp_memh_global_id_packed_size(md_attr),
+                                     global_id_size);
 
         if (memcmp(md_attr->global_id, global_id_buf,
                    global_id_cmp_size) == 0) {
@@ -1514,12 +1513,12 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
         }
 
         memh->uct[md_index] = uct_memh;
+        memh->md_map       |= UCS_BIT(md_index);
 
         ucs_trace("imported address %p length %zu on md[%d]=%s: uct_memh %p",
                   ucp_memh_address(memh), ucp_memh_length(memh), md_index,
                   context->tl_mds[md_index].rsc.md_name,
                   memh->uct[md_index]);
-        memh->md_map |= UCS_BIT(md_index);
     }
 
     if (memh->md_map == 0) {
@@ -1645,7 +1644,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     ucs_assert(memh_info_size != 0);
 
     flags         = *ucs_serialize_next(&p, uint16_t);
-    remote_md_map = *ucs_serialize_next(&p, ucp_md_map_t);
+    remote_md_map = *ucs_serialize_next(&p, uint64_t);
     mem_type      = *ucs_serialize_next(&p, uint8_t);
 
     if (ucs_unlikely(!(flags & UCP_MEMH_BUFFER_FLAG_EXPORTED))) {
@@ -1663,9 +1662,6 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     ucs_assert(length != 0);
 
     mem_info_parsed_size = UCS_PTR_BYTE_DIFF(export_mkey_buffer, p);
-    ucs_assertv(mem_info_parsed_size <= memh_info_size,
-                "mem_info: parsed_size %" PRIu16 " packed_size %" PRIu16,
-                mem_info_parsed_size, memh_info_size);
     ucs_assertv(p <= end, "mem_info: p %p end %p", p, end);
     p = end;
 

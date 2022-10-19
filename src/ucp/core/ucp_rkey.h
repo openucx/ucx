@@ -156,9 +156,6 @@ typedef struct ucp_rkey {
 #endif
 
 
-extern uint64_t memh_serialize_default_val;
-
-
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 
 

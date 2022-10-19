@@ -221,7 +221,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
 static size_t ucp_memh_extended_info_size(size_t common_size,
                                           size_t specific_info_size)
 {
-    if ((specific_info_size + common_size) > UINT8_MAX) {
+    if ((specific_info_size + common_size - sizeof(uint8_t)) > UINT8_MAX) {
         /* This field is packed after the 8-bit size field in case of a total
          * info size is greater than UINT8_MAX. */
         return sizeof(uint16_t);
@@ -241,7 +241,7 @@ static size_t ucp_memh_common_packed_size(size_t specific_info_size)
     size += sizeof(uint16_t);
 
     /* Memory domains map */
-    size += sizeof(ucp_md_map_t);
+    size += sizeof(uint64_t);
 
     /* Memory type */
     size += sizeof(uint8_t);
@@ -311,8 +311,7 @@ static void ucp_memh_common_pack(const ucp_mem_h memh, void **p,
     *ucs_serialize_next(p, uint16_t) = flags;
 
     /* Memory domains map */
-    *ucs_serialize_next(p, ucp_md_map_t) =
-            context->export_md_map[memh->mem_type];
+    *ucs_serialize_next(p, uint64_t) = context->export_md_map[memh->mem_type];
 
     /* Memory type */
     UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_LAST <= 255);
@@ -327,7 +326,8 @@ size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr)
         --size;
     }
 
-    ucs_assert(size < UCT_MD_GLOBAL_ID_MAX);
+    ucs_assertv(size < UCT_MD_GLOBAL_ID_MAX, "size %zu", size);
+    ucs_assertv(size < UINT8_MAX, "size %zu", size);
     return size;
 }
 
@@ -427,7 +427,6 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
     ucs_status_t status;
     ssize_t result;
     ucp_md_index_t md_index;
-    unsigned uct_memh_index;
     size_t tl_mkey_size, global_id_size;
     void *tl_mkey_buf, *global_id_buf;
     size_t tl_mkey_data_size;
@@ -447,7 +446,6 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
                 "memh_info_size %zu memh_info_packed_size %zu",
                 memh_info_size, memh_info_packed_size);
 
-    uct_memh_index = 0;
     ucs_for_each_bit(md_index, context->export_md_map[memh->mem_type]) {
         md_attr           = &tl_mds[md_index].attr;
         tl_mkey_data_size = ucp_memh_exported_tl_mkey_packed_size(context,
@@ -475,11 +473,12 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
         global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
         memcpy(global_id_buf, md_attr->global_id, global_id_size);
 
-        ucs_trace("exported mkey[%d]=%s for md[%d]=%s", uct_memh_index,
+        ucs_trace("exported mkey[%d]=%s for md[%d]=%s",
+                  ucs_bitmap2idx(context->export_md_map[memh->mem_type],
+                                 md_index),
                   ucs_str_dump_hex(p, tl_mkey_size, buf, sizeof(buf),
                                    SIZE_MAX),
                   md_index, tl_mds[md_index].rsc.md_name);
-        ++uct_memh_index;
     }
 
     result = UCS_PTR_BYTE_DIFF(buffer, p);
@@ -538,9 +537,13 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
     size_t size;
     uint64_t flags;
 
-    ucs_trace("packing memh %p for buffer %p md_map 0x%" PRIx64
-              " export_md_map 0x%" PRIx64, memh, ucp_memh_address(memh),
-              memh->md_map, context->export_md_map[memh->mem_type]);
+    flags = UCP_PARAM_VALUE(MEMH_PACK, params, flags, FLAGS, 0);
+
+    ucs_trace("packing %smemh %p for buffer %p md_map 0x%" PRIx64
+              " export_md_map 0x%" PRIx64,
+              (flags & UCP_MEMH_PACK_FLAG_EXPORT) ? "exported " : "", memh,
+              ucp_memh_address(memh), memh->md_map,
+              context->export_md_map[memh->mem_type]);
 
     if (ucp_memh_is_zero_length(memh)) {
         /* Dummy memh, return dummy key */
@@ -556,8 +559,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-    flags = UCP_PARAM_VALUE(MEMH_PACK, params, flags, FLAGS, 0);
-    size  = ucp_memh_packed_size(memh, flags, rkey_compat);
+    size = ucp_memh_packed_size(memh, flags, rkey_compat);
 
     if ((flags & UCP_MEMH_PACK_FLAG_EXPORT) &&
         (context->export_md_map[memh->mem_type] == 0)) {
