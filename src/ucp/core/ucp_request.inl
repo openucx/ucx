@@ -882,15 +882,13 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
 }
 
 /*
- * process data, complete receive if done
+ * process data
  * @return UCS_OK/ERR - completed, UCS_INPROGRESS - not completed
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_request_process_recv_data(ucp_request_t *req, const void *data,
-                              size_t length, size_t offset, int is_zcopy,
-                              int is_am)
+ucp_request_recv_data(ucp_request_t *req, const void *data, size_t length,
+                      size_t offset)
 {
-    ucs_status_t status;
     int last;
 
     last = (req->recv.remaining == length);
@@ -910,7 +908,26 @@ ucp_request_process_recv_data(ucp_request_t *req, const void *data,
         return UCS_INPROGRESS;
     }
 
-    status = req->status;
+    ucs_assert(req->status != UCS_INPROGRESS);
+    return req->status;
+}
+
+/*
+ * process data, complete receive if done
+ * @return UCS_OK/ERR - completed, UCS_INPROGRESS - not completed
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_process_recv_data(ucp_request_t *req, const void *data,
+                              size_t length, size_t offset, int is_zcopy,
+                              int is_am)
+{
+    ucs_status_t status;
+
+    status = ucp_request_recv_data(req, data, length, offset);
+    if (status == UCS_INPROGRESS) {
+        return status;
+    }
+
     if (is_zcopy) {
         ucp_request_recv_buffer_dereg(req);
     }
@@ -920,8 +937,6 @@ ucp_request_process_recv_data(ucp_request_t *req, const void *data,
     } else {
         ucp_request_complete_tag_recv(req, status);
     }
-
-    ucs_assert(status != UCS_INPROGRESS);
 
     return status;
 }

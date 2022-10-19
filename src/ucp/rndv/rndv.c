@@ -1368,6 +1368,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
             ucs_fatal("failed to allocate fragment memory buffer");
         }
 
+        freq->recv.worker                 = worker;
         freq->recv.buffer                 = mdesc->ptr;
         freq->recv.datatype               = ucp_dt_make_contig(1);
         freq->recv.mem_type               = mdesc->memh->mem_type;
@@ -1376,6 +1377,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         freq->recv.frag.offset            = offset;
         freq->flags                       = UCP_REQUEST_FLAG_RNDV_FRAG;
 
+        ucp_rndv_recv_data_init(freq, frag_size);
         ucp_request_set_super(freq, rreq);
 
         alloc_md_map = 0;
@@ -2440,7 +2442,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
 {
     ucp_worker_h worker                   = arg;
     ucp_request_data_hdr_t *rndv_data_hdr = data;
-    ucp_request_t *rreq, *rndv_req;
+    ucp_request_t *req, *rtr_sreq;
+    ucp_mem_desc_t *mdesc;
     size_t recv_len;
     ucs_status_t status;
 
@@ -2448,25 +2451,41 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
         return ucp_proto_rndv_handle_data(arg, data, length, flags);
     }
 
-    UCP_SEND_REQUEST_GET_BY_ID(&rndv_req, worker, rndv_data_hdr->req_id, 0,
+    UCP_SEND_REQUEST_GET_BY_ID(&rtr_sreq, worker, rndv_data_hdr->req_id, 0,
                                return UCS_OK, "RNDV data %p", rndv_data_hdr);
 
-    rreq = ucp_request_get_super(rndv_req);
-    ucs_assert(rreq != NULL);
-    ucs_assert(!(rreq->flags & UCP_REQUEST_FLAG_RNDV_FRAG));
-    ucs_assert(rreq->flags &
-               (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG));
+    req = ucp_request_get_super(rtr_sreq);
+    ucs_assert(req != NULL);
 
     recv_len = length - sizeof(*rndv_data_hdr);
-    UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_recv", recv_len);
+    UCS_PROFILE_REQUEST_EVENT(req, "rndv_data_recv", recv_len);
 
-    status = ucp_request_process_recv_data(rreq, rndv_data_hdr + 1, recv_len,
-                                           rndv_data_hdr->offset, 1,
-                                           rreq->flags &
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
+        /* received DATA for frag RTR request */
+        status = ucp_request_recv_data(req, rndv_data_hdr + 1, recv_len,
+                                       rndv_data_hdr->offset);
+    } else {
+        status = ucp_request_process_recv_data(req, rndv_data_hdr + 1,
+                                               recv_len, rndv_data_hdr->offset,
+                                               1,
+                                               req->flags &
                                                    UCP_REQUEST_FLAG_RECV_AM);
+    }
+
     if (status != UCS_INPROGRESS) {
-        ucp_send_request_id_release(rndv_req);
-        ucp_request_put(rndv_req);
+        if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
+            /* received DATA for frag RTR request */
+            mdesc = rtr_sreq->send.rndv.mdesc;
+            ucp_rndv_recv_frag_put_mem_type(ucp_request_get_super(req), req,
+                                            mdesc, req->recv.length,
+                                            req->recv.frag.offset);
+        } else {
+            ucs_assert(req->flags & (UCP_REQUEST_FLAG_RECV_AM |
+                                     UCP_REQUEST_FLAG_RECV_TAG));
+        }
+
+        ucp_send_request_id_release(rtr_sreq);
+        ucp_request_put(rtr_sreq);
     }
 
     return UCS_OK;
