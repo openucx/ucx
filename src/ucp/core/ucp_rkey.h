@@ -117,6 +117,26 @@ typedef struct ucp_rkey {
 } ucp_rkey_t;
 
 
+typedef struct ucp_memh_exported_tl_mkey_unpacked {
+    ucp_md_index_t md_index;
+    const void     *tl_mkey_buf;
+} ucp_memh_exported_tl_mkey_unpacked_t;
+
+
+typedef struct ucp_memh_exported_unpacked {
+    uint16_t flags;
+    ucp_md_map_t remote_md_map;
+    ucs_memory_type_t mem_type;
+    void *address;
+    size_t length;
+    uint64_t remote_uuid;
+    uint64_t reg_id;
+    unsigned tl_mkeys_num;
+
+    ucp_memh_exported_tl_mkey_unpacked_t tl_mkeys[UCP_MD_INDEX_BITS];
+} ucp_memh_exported_unpacked_t;
+
+
 #define UCP_RKEY_AMO_PROTO(_amo_proto_index) ucp_amo_proto_list[_amo_proto_index]
 
 
@@ -197,6 +217,9 @@ uint16_t ucp_memh_info_size_unpack(const void **p);
 
 size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr);
 
+ucs_status_t
+ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
+                         ucp_memh_exported_unpacked_t *unpacked);
 
 ucs_status_t
 ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,

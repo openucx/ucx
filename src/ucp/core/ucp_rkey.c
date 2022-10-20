@@ -488,6 +488,132 @@ out:
     return result;
 }
 
+static ucp_md_map_t ucp_find_md_map(ucp_context_h context,
+                                    const void *global_id_buf,
+                                    size_t global_id_size)
+{
+    ucp_md_map_t md_map = 0;
+    ucp_md_index_t md_index;
+    uct_md_attr_v2_t *md_attr;
+    size_t global_id_cmp_size;
+
+    for (md_index = 0; md_index < context->num_mds; md_index++) {
+        md_attr            = &context->tl_mds[md_index].attr;
+        global_id_cmp_size = ucs_min(ucp_memh_global_id_packed_size(md_attr),
+                                     global_id_size);
+
+        if (memcmp(md_attr->global_id, global_id_buf,
+                   global_id_cmp_size) == 0) {
+            md_map |= UCS_BIT(md_index);
+            continue;
+        }
+    }
+
+    return md_map;
+}
+
+static void
+ucp_memh_import_parse_tl_mkey_data(ucp_context_h context, 
+                                   const void **start_p,
+                                   const void **tl_mkey_buf_p,
+                                   ucp_md_map_t *md_map_p)
+{
+    const void *p = *start_p;
+    const void *next_tl_md_p, *end;
+    size_t tl_mkey_data_size;
+    size_t tl_mkey_size, global_id_size;
+    const void *tl_mkey_buf, *global_id_buf;
+    ucp_md_map_t md_map;
+
+    tl_mkey_data_size = ucp_memh_info_size_unpack(&p);
+    end               = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
+    ucs_assert(tl_mkey_data_size != 0);
+
+    tl_mkey_size = *ucs_serialize_next(&p, uint8_t);
+    ucs_assert(tl_mkey_size != 0);
+
+    tl_mkey_buf = ucs_serialize_next_raw(&p, void, tl_mkey_size);
+
+    global_id_size = *ucs_serialize_next(&p, uint8_t);
+    ucs_assert(global_id_size != 0);
+
+    global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
+
+    /* Get local MD indices which corresponds to the remote ones */
+    md_map = ucp_find_md_map(context, global_id_buf, global_id_size);
+
+    next_tl_md_p = end;
+    ucs_assertv(p <= next_tl_md_p, "p=%p, next_tl_md_p=%p", p, next_tl_md_p);
+
+    *start_p       = next_tl_md_p;
+    *tl_mkey_buf_p = tl_mkey_buf;
+    *md_map_p      = md_map;
+}
+
+ucs_status_t
+ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
+                         ucp_memh_exported_unpacked_t *unpacked)
+{
+    const void *p = export_mkey_buffer;
+    const void *end;
+    uint16_t memh_info_size;
+    uint16_t UCS_V_UNUSED mem_info_parsed_size;
+    ucp_md_map_t local_md_map;
+    ucp_md_index_t remote_md_index;
+    ucp_md_index_t md_index;
+    const void *tl_mkey_buf;
+    ucp_memh_exported_tl_mkey_unpacked_t *tl_mkey;
+
+    ucs_assert(export_mkey_buffer != NULL);
+
+    /* Common memory handle information */
+    memh_info_size = ucp_memh_info_size_unpack(&p);
+    end            = UCS_PTR_BYTE_OFFSET(export_mkey_buffer, memh_info_size);
+    ucs_assert(memh_info_size != 0);
+
+    unpacked->flags         = *ucs_serialize_next(&p, uint16_t);
+    unpacked->remote_md_map = *ucs_serialize_next(&p, uint64_t);
+    unpacked->mem_type      = *ucs_serialize_next(&p, uint8_t);
+
+    if (ucs_unlikely(!(unpacked->flags & UCP_MEMH_BUFFER_FLAG_EXPORTED))) {
+        ucs_error("passed memory handle buffer which does not contain exported"
+                  " memory handle: flags 0x%" PRIx16, unpacked->flags);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* Exported memory handle stuff */
+    unpacked->address     = (void*)*ucs_serialize_next(&p, uint64_t);
+    unpacked->length      = *ucs_serialize_next(&p, uint64_t);
+    unpacked->remote_uuid = *ucs_serialize_next(&p, uint64_t);
+    unpacked->reg_id      = *ucs_serialize_next(&p, uint64_t);
+
+    ucs_assert(unpacked->length != 0);
+
+    mem_info_parsed_size = UCS_PTR_BYTE_DIFF(export_mkey_buffer, p);
+    ucs_assertv(p <= end, "mem_info: p %p end %p", p, end);
+    p = end;
+
+    unpacked->tl_mkeys_num = 0;
+    ucs_for_each_bit(remote_md_index, unpacked->remote_md_map) {
+        ucp_memh_import_parse_tl_mkey_data(context, &p, &tl_mkey_buf,
+                                           &local_md_map);
+
+        ucs_for_each_bit(md_index, local_md_map) {
+            tl_mkey              = &unpacked->tl_mkeys[unpacked->tl_mkeys_num];
+            tl_mkey->md_index    = md_index;
+            tl_mkey->tl_mkey_buf = tl_mkey_buf;
+            ++unpacked->tl_mkeys_num;
+        }
+    }
+
+    if (unpacked->tl_mkeys_num == 0) {
+        ucs_diag("couldn't find local MDs which correspond to remote MDs");
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    return UCS_OK;
+}
+
 static size_t
 ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
 {
