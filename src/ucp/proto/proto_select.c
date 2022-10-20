@@ -370,9 +370,9 @@ static const char *ucp_proto_select_node_name(ucp_proto_perf_type_t perf_type)
 {
     switch (perf_type) {
     case UCP_PROTO_PERF_TYPE_SINGLE:
-        return "best single-frag";
+        return "best single operation";
     case UCP_PROTO_PERF_TYPE_MULTI:
-        return "best multi-frag";
+        return "best multiple operations";
     default:
         ucs_fatal("invalid performance type %d", perf_type);
     }
