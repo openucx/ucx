@@ -513,10 +513,10 @@ static ucp_md_map_t ucp_find_md_map(ucp_context_h context,
 }
 
 static void
-ucp_memh_import_parse_tl_mkey_data(ucp_context_h context, 
-                                   const void **start_p,
-                                   const void **tl_mkey_buf_p,
-                                   ucp_md_map_t *md_map_p)
+ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context, 
+                                      const void **start_p,
+                                      const void **tl_mkey_buf_p,
+                                      ucp_md_map_t *md_map_p)
 {
     const void *p = *start_p;
     const void *next_tl_md_p, *end;
@@ -524,6 +524,8 @@ ucp_memh_import_parse_tl_mkey_data(ucp_context_h context,
     size_t tl_mkey_size, global_id_size;
     const void *tl_mkey_buf, *global_id_buf;
     ucp_md_map_t md_map;
+
+    ucs_assert(p != NULL);
 
     tl_mkey_data_size = ucp_memh_info_size_unpack(&p);
     end               = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
@@ -595,8 +597,8 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
 
     unpacked->tl_mkeys_num = 0;
     ucs_for_each_bit(remote_md_index, unpacked->remote_md_map) {
-        ucp_memh_import_parse_tl_mkey_data(context, &p, &tl_mkey_buf,
-                                           &local_md_map);
+        ucp_memh_exported_tl_mkey_data_unpack(context, &p, &tl_mkey_buf,
+                                              &local_md_map);
 
         ucs_for_each_bit(md_index, local_md_map) {
             tl_mkey              = &unpacked->tl_mkeys[unpacked->tl_mkeys_num];
