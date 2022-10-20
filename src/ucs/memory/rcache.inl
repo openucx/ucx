@@ -87,7 +87,7 @@ ucs_rcache_region_put_unsafe(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 
     ucs_assert(region->refcount > 0);
     if (ucs_unlikely(--region->refcount == 0)) {
-        ucs_mem_region_destroy_internal(rcache, region);
+        ucs_mem_region_destroy_internal(rcache, region, 0);
     }
 
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_PUTS, 1);
