@@ -350,7 +350,8 @@ ucs_rcache_distribution_get_bin(ucs_rcache_t *rcache, size_t region_size)
 
 /* Lock must be held in write mode */
 void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
-                                     ucs_rcache_region_t *region)
+                                     ucs_rcache_region_t *region,
+                                     int drop_lock)
 {
     ucs_rcache_comp_entry_t *comp;
     size_t region_size;
@@ -364,10 +365,19 @@ void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
 
     if (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) {
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_DEREGS, 1);
+
+        if (drop_lock) {
+            pthread_rwlock_unlock(&rcache->pgt_lock);
+        }
+
         UCS_PROFILE_NAMED_CALL_VOID_ALWAYS("mem_dereg",
                                            rcache->params.ops->mem_dereg,
                                            rcache->params.context, rcache,
                                            region);
+
+        if (drop_lock) {
+            pthread_rwlock_wrlock(&rcache->pgt_lock);
+        }
     }
 
     if (!(rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK) &&
@@ -397,6 +407,7 @@ void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
     }
 
     ucs_free(region);
+    /* coverity[missing_unlock] */
 }
 
 static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
@@ -428,7 +439,8 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
         pthread_rwlock_wrlock(&rcache->pgt_lock);
     }
 
-    ucs_mem_region_destroy_internal(rcache, region);
+    ucs_mem_region_destroy_internal(rcache, region,
+                                    flags & UCS_RCACHE_REGION_PUT_FLAG_TAKE_PGLOCK);
 
     if (flags & UCS_RCACHE_REGION_PUT_FLAG_TAKE_PGLOCK) {
         pthread_rwlock_unlock(&rcache->pgt_lock);
@@ -472,6 +484,8 @@ static void ucs_rcache_invalidate_range(ucs_rcache_t *rcache, ucs_pgt_addr_t sta
     ucs_rcache_find_regions(rcache, start, end - 1, &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, tmp_list) {
         /* all regions on the list are in the page table */
+        /* coverity[double_unlock] */
+        /* coverity[double_lock] */
         ucs_rcache_region_invalidate_internal(
                 rcache, region, flags | UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAP_INVALIDATES, 1);
@@ -515,8 +529,7 @@ static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache, unsigned flags)
     ucs_spin_unlock(&rcache->lock);
 }
 
-/* Lock must be held in write mode */
-static void ucs_rcache_check_gc_list(ucs_rcache_t *rcache)
+static void ucs_rcache_check_gc_list(ucs_rcache_t *rcache, int drop_lock)
 {
     ucs_rcache_region_t *region;
 
@@ -535,7 +548,7 @@ static void ucs_rcache_check_gc_list(ucs_rcache_t *rcache)
          */
         ucs_spin_unlock(&rcache->lock);
 
-        ucs_mem_region_destroy_internal(rcache, region);
+        ucs_mem_region_destroy_internal(rcache, region, drop_lock);
 
         ucs_spin_lock(&rcache->lock);
     }
@@ -580,6 +593,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
         ucs_rcache_invalidate_range(rcache, start, end,
                                     UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC);
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAPS, 1);
+        /* coverity[double_lock] */
         ucs_rcache_check_inv_queue(rcache, UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC);
         /* coverity[double_unlock] */
         pthread_rwlock_unlock(&rcache->pgt_lock);
@@ -602,9 +616,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     ucs_spin_unlock(&rcache->lock);
 }
 
-/* Clear all regions
-   Lock must be held in write mode (or use it during cleanup)
- */
+/* Clear all regions, called only during cleanup without holding the lock */
 static void ucs_rcache_purge(ucs_rcache_t *rcache)
 {
     ucs_rcache_region_t *region, *tmp;
@@ -623,7 +635,7 @@ static void ucs_rcache_purge(ucs_rcache_t *rcache)
         if (region->refcount > 0) {
             ucs_rcache_region_warn(rcache, region, "destroying inuse");
         }
-        ucs_mem_region_destroy_internal(rcache, region);
+        ucs_mem_region_destroy_internal(rcache, region, 0);
     }
 }
 
@@ -633,7 +645,7 @@ static void ucs_rcache_clean(ucs_rcache_t *rcache)
     pthread_rwlock_wrlock(&rcache->pgt_lock);
     /* coverity[double_lock]*/
     ucs_rcache_check_inv_queue(rcache, 0);
-    ucs_rcache_check_gc_list(rcache);
+    ucs_rcache_check_gc_list(rcache, 1);
     pthread_rwlock_unlock(&rcache->pgt_lock);
 }
 
@@ -700,7 +712,8 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
                    *end);
 
     ucs_rcache_check_inv_queue(rcache, 0);
-    ucs_rcache_check_gc_list(rcache);
+    /* coverity[double_unlock] */
+    ucs_rcache_check_gc_list(rcache, 1);
 
     ucs_rcache_find_regions(rcache, *start, *end - 1, &region_list);
 
@@ -769,6 +782,8 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
         *start  = ucs_min(*start, region->super.start);
         *end    = ucs_max(*end,   region->super.end);
         *merged = 1;
+        /* coverity[double_unlock] */
+        /* coverity[double_lock] */
         ucs_rcache_region_invalidate_internal(
                 rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
     }
@@ -1281,7 +1296,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
     ucs_vfs_obj_remove(self);
     ucs_rcache_global_list_remove(self);
     ucs_rcache_check_inv_queue(self, 0);
-    ucs_rcache_check_gc_list(self);
+    ucs_rcache_check_gc_list(self, 0);
     ucs_rcache_purge(self);
 
     if (!ucs_list_is_empty(&self->lru.list)) {

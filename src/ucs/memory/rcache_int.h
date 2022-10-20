@@ -133,7 +133,8 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
 
 
 void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
-                                     ucs_rcache_region_t *region);
+                                     ucs_rcache_region_t *region,
+                                     int drop_lock);
 
 
 void ucs_rcache_region_log(const char *file, int line, const char *function,
