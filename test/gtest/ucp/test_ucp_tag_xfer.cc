@@ -233,8 +233,16 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
 size_t test_ucp_tag_xfer::get_msg_size()
 {
     size_t count      = 1148544 / ucs::test_time_multiplier();
-    size_t chunk_size = num_lanes() * UCS_SYS_PCI_MAX_PAYLOAD;
-    return ucs_div_round_up(count, chunk_size) * chunk_size;
+    unsigned lanes = num_lanes();
+    size_t chunk_size = lanes * UCS_SYS_PCI_MAX_PAYLOAD;
+
+    size_t div = ucs_div_round_up(count, chunk_size);
+    size_t msg_size = div * chunk_size;
+
+    printf("test msg size: %lu, num_lanes: %u, chunk_size: %lu, div %lu, time_mult: %u\n",
+            msg_size, lanes, chunk_size, div, ucs::test_time_multiplier());
+
+    return msg_size;
 }
 
 void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
