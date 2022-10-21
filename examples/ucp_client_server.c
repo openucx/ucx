@@ -52,6 +52,7 @@ static long iov_cnt            = 1;
 static uint16_t server_port    = DEFAULT_PORT;
 static sa_family_t ai_family   = AF_INET;
 static int num_iterations      = DEFAULT_NUM_ITERATIONS;
+static int connection_closed   = 1;
 
 
 typedef enum {
@@ -193,6 +194,7 @@ static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
     printf("error handling callback was invoked with status %d (%s)\n",
            status, ucs_status_string(status));
+    connection_closed = 1;
 }
 
 /**
@@ -889,6 +891,8 @@ static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
 {
     int i, ret = 0;
 
+    connection_closed = 0;
+
     for (i = 0; i < num_iterations; i++) {
         ret = client_server_communication(ucp_worker, ep, send_recv_type,
                                           is_server, i);
@@ -905,6 +909,14 @@ static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
     if (ret != 0) {
         fprintf(stderr, "%s failed on FIN message\n",
                 (is_server ? "server": "client"));
+        goto out;
+    }
+
+    printf("%s FIN message\n", is_server ? "sent" : "received");
+
+    /* Server waits until the client closed the connection after receiving FIN */
+    while (is_server && !connection_closed) {
+        ucp_worker_progress(ucp_worker);
     }
 
 out:

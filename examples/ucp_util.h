@@ -39,7 +39,8 @@ static void ep_close(ucp_worker_h ucp_worker, ucp_ep_h ep, uint64_t flags)
     }
 
     if (status != UCS_OK) {
-        fprintf(stderr, "failed to close ep %p\n", (void*)ep);
+        fprintf(stderr, "failed to close ep %p: %s\n", (void*)ep,
+                ucs_status_string(status));
     }
 }
 
