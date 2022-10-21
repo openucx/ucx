@@ -530,6 +530,21 @@ BASE_CXXFLAGS="$BASE_CFLAGS"
 
 
 #
+# Check for C99 standard support
+#
+CHECK_COMPILER_FLAG([-std=gnu99], [-std=gnu99],
+                    [AC_LANG_SOURCE([[
+                          int main(int argc, char** argv){
+                            // check for for loop init, one-line comment and
+                            // implicit return in main function
+                            for (int i = 0; i < 10; ++i) {}
+                          }
+                    ]])],
+                    [BASE_CFLAGS="$BASE_CFLAGS -std=gnu99"],
+                    [AC_MSG_ERROR([Cannot continue. Please install C compiler that supports C99.])])
+
+
+#
 # Add strict flags supported by C compiler only
 # NOTE: This must be done after setting BASE_CXXFLAGS
 #
