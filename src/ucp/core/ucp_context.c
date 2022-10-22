@@ -1435,7 +1435,6 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                     context->dmabuf_mds[mem_type] = md_index;
                 }
             }
-
             ++context->num_mds;
         } else {
             /* If the MD does not have transport resources (device or sockaddr),
