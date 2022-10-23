@@ -232,16 +232,15 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
 
 size_t test_ucp_tag_xfer::get_msg_size()
 {
-    size_t count      = 1148544 / ucs::test_time_multiplier();
+    size_t raw_size   = 1148544 / ucs::test_time_multiplier();
     size_t chunk_size = num_lanes() * UCS_SYS_PCI_MAX_PAYLOAD;
-    return ucs_div_round_up(count, chunk_size) * chunk_size;
+    return ucs_div_round_up(raw_size, chunk_size) * chunk_size;
 }
 
 void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
                                       bool expected, bool sync, bool truncated)
 {
-    static const size_t count = get_msg_size();
-
+    const size_t msg_size = get_msg_size();
     uint8_t *sendbuf = NULL, *recvbuf = NULL;
     ucp_datatype_t send_dt, recv_dt;
     size_t recvd;
@@ -256,23 +255,23 @@ void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
     if (send_contig) {
         /* the sender has a contig datatype for the data buffer */
         sendbuf = (uint8_t*)aligned_alloc(ucs_get_page_size(),
-                                          count * sizeof(*sendbuf));
+                                          msg_size * sizeof(*sendbuf));
     }
     if (recv_contig) {
         /* the recv has a contig datatype for the data buffer */
         recvbuf = (uint8_t*)aligned_alloc(ucs_get_page_size(),
-                                          count * sizeof(*recvbuf));
+                                          msg_size * sizeof(*recvbuf));
     }
 
-    test_xfer_prepare_bufs(sendbuf, recvbuf, count, send_contig, recv_contig,
+    test_xfer_prepare_bufs(sendbuf, recvbuf, msg_size, send_contig, recv_contig,
                            &send_dt, &recv_dt);
 
     /* coverity[var_deref_model] */
     /* coverity[var_deref_op] */
-    recvd = do_xfer(&sendbuf[0], &recvbuf[0], count, send_dt, recv_dt, expected,
-                    sync, truncated);
+    recvd = do_xfer(&sendbuf[0], &recvbuf[0], msg_size, send_dt, recv_dt,
+                    expected, sync, truncated);
     if (!truncated) {
-        EXPECT_EQ(count * sizeof(uint8_t), recvd);
+        EXPECT_EQ(msg_size * sizeof(uint8_t), recvd);
     }
 
     if (send_contig) {
@@ -1217,11 +1216,6 @@ UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
     ucp_lane_index_t num_lanes = ucp_ep_num_lanes(sender().ep());
     ASSERT_EQ(ucp_ep_num_lanes(receiver().ep()), num_lanes);
     ASSERT_EQ(num_lanes, max_lanes);
-
-    if (RUNNING_ON_VALGRIND) {
-        UCS_TEST_SKIP_R("FIXME: Disabling sent bytes check on Valgrind due to "
-                        "unresolved failure");
-    }
 
     for (int i = 0; i < num_lanes; ++i) {
         uint64_t bytes_sent = get_bytes_sent(sender().ep(), i) +
