@@ -18,7 +18,7 @@
 
 #define UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH (6911.0 * UCS_MBYTE)
 #define UCT_GDR_COPY_IFACE_OVERHEAD          0
-#define UCT_GDR_COPY_IFACE_LATENCY           ucs_linear_func_make(1e-6, 0)
+#define UCT_GDR_COPY_IFACE_LATENCY           ucs_linear_func_make(1.4e-6, 0)
 
 
 static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
@@ -109,7 +109,7 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
             switch (perf_attr->operation) {
             case UCT_EP_OP_GET_SHORT:
             case UCT_EP_OP_GET_ZCOPY:
-                perf_attr->bandwidth.shared = 440.0 * UCS_MBYTE;
+                perf_attr->bandwidth.shared = 250.0 * UCS_MBYTE;
                 break;
             case UCT_EP_OP_PUT_SHORT:
                 perf_attr->bandwidth.shared = 10200.0 * UCS_MBYTE;
