@@ -373,7 +373,7 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
         ucp_worker_discard_uct_ep(ucp_ep, ucp_ep_get_lane(ucp_ep, lane_idx),
                                   ucp_ep_get_rsc_index(ucp_ep, lane_idx),
                                   UCT_FLUSH_FLAG_CANCEL,
-                                  ucp_request_purge_enqueue_cb, &queue,
+                                  ucp_request_purge_enqueue_cb, queue,
                                   (ucp_send_nbx_callback_t)ucs_empty_function,
                                   NULL);
         ucp_ep_set_lane(ucp_ep, lane_idx, NULL);
