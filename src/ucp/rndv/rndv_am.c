@@ -133,5 +133,5 @@ ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_rndv_am_bcopy_progress},
     .abort    = ucp_proto_rndv_am_bcopy_abort,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_fatal_not_implemented_void
+    .reset    = ucp_proto_reset_fatal_not_implemented
 };

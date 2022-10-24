@@ -431,7 +431,7 @@ ucp_proto_t ucp_get_amo_post_proto = {
     .init     = ucp_proto_amo_sw_init_post,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_post},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
@@ -460,6 +460,6 @@ ucp_proto_t ucp_get_amo_fetch_proto = {
     .init     = ucp_proto_amo_sw_init_fetch,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_fetch},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_bcopy_id_reset
 };

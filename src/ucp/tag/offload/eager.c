@@ -83,7 +83,7 @@ ucp_proto_t ucp_eager_tag_offload_short_proto = {
     .init     = ucp_proto_eager_tag_offload_short_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_short_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
@@ -178,7 +178,7 @@ ucp_proto_t ucp_tag_offload_eager_bcopy_single_proto = {
     .init     = ucp_proto_eager_tag_offload_bcopy_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_bcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
@@ -218,7 +218,7 @@ ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
     .init     = ucp_proto_eager_sync_tag_offload_bcopy_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_sync_tag_offload_bcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_bcopy_id_reset
 };
 
@@ -297,7 +297,7 @@ ucp_proto_t ucp_tag_offload_eager_zcopy_single_proto = {
     .init     = ucp_proto_eager_tag_offload_zcopy_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_tag_offload_zcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_zcopy_reset
 };
 
@@ -359,6 +359,6 @@ ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
     .init     = ucp_proto_eager_sync_tag_offload_zcopy_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_eager_sync_tag_offload_zcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_zcopy_id_reset
 };
