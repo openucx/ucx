@@ -641,6 +641,13 @@ void ucp_proto_request_zcopy_completion(uct_completion_t *self)
     ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
 
+int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
+{
+    /* Short protocol requires contig/host */
+    return (select_param->dt_class == UCP_DATATYPE_CONTIG) &&
+           UCP_MEM_IS_HOST(select_param->mem_type);
+}
+
 void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, UCP_PROTO_CONFIG_STR_MAX);
@@ -796,9 +803,20 @@ void ucp_proto_request_zcopy_id_reset(ucp_request_t *req)
     }
 }
 
-int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
+static void ucp_proto_stub_fatal_not_implemented(const char *func_name,
+                                                 ucp_request_t *req)
 {
-    /* Short protocol requires contig/host */
-    return (select_param->dt_class == UCP_DATATYPE_CONTIG) &&
-           UCP_MEM_IS_HOST(select_param->mem_type);
+    ucs_fatal("%s request %p proto %s, not implemented", func_name, req,
+              req->send.proto_config->proto->name);
+}
+
+void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,
+                                           ucs_status_t status)
+{
+    ucp_proto_stub_fatal_not_implemented("abort", req);
+}
+
+void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req)
+{
+    ucp_proto_stub_fatal_not_implemented("reset", req);
 }
