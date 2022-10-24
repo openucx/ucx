@@ -101,8 +101,3 @@ void ucs_empty_function_do_assert_void()
 {
     ucs_assert_always(0);
 }
-
-void ucs_empty_function_fatal_not_implemented_void()
-{
-    ucs_fatal("%s", ucs_status_string(UCS_ERR_NOT_IMPLEMENTED));
-}
