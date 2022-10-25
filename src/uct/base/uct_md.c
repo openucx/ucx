@@ -243,8 +243,7 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
         return status;
     }
 
-    status = uct_config_read(&bundle, tl->config.table, tl->config.size,
-                             env_prefix, tl->config.prefix);
+    status = uct_config_read(&bundle, &tl->config, env_prefix);
     if (status != UCS_OK) {
         ucs_error("Failed to read iface config");
         return status;
@@ -300,9 +299,7 @@ ucs_status_t uct_md_config_read(uct_component_h component,
     uct_config_bundle_t *bundle = NULL;
     ucs_status_t status;
 
-    status = uct_config_read(&bundle, component->md_config.table,
-                             component->md_config.size, env_prefix,
-                             component->md_config.prefix);
+    status = uct_config_read(&bundle, &component->md_config, env_prefix);
     if (status != UCS_OK) {
         ucs_error("Failed to read MD config");
         return status;

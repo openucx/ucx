@@ -124,19 +124,19 @@ ucs_status_t uct_component_query(uct_component_h component,
 }
 
 ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
-                             ucs_config_field_t *config_table,
-                             size_t config_size, const char *env_prefix,
-                             const char *cfg_prefix)
+                             ucs_config_global_list_entry_t *entry,
+                             const char *env_prefix)
 {
     char full_prefix[128] = UCS_DEFAULT_ENV_PREFIX;
     uct_config_bundle_t *config_bundle;
     ucs_status_t status;
 
-    if (config_table == NULL) {
+    if (entry->table == NULL) {
         return UCS_ERR_INVALID_PARAM;
     }
 
-    config_bundle = ucs_calloc(1, sizeof(*config_bundle) + config_size, "uct_config");
+    config_bundle = ucs_calloc(1, sizeof(*config_bundle) + entry->size,
+                               "uct_config");
     if (config_bundle == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
@@ -148,14 +148,14 @@ ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
                           env_prefix, UCS_DEFAULT_ENV_PREFIX);
     }
 
-    status = ucs_config_parser_fill_opts(config_bundle->data, config_table,
-                                         full_prefix, cfg_prefix, 0);
+    status = ucs_config_parser_fill_opts(config_bundle->data, entry,
+                                         full_prefix, 0);
     if (status != UCS_OK) {
         goto err_free_bundle;
     }
 
-    config_bundle->table = config_table;
-    config_bundle->table_prefix = ucs_strdup(cfg_prefix, "uct_config");
+    config_bundle->table        = entry->table;
+    config_bundle->table_prefix = ucs_strdup(entry->prefix, "uct_config");
     if (config_bundle->table_prefix == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_bundle;
