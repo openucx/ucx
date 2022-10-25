@@ -1593,9 +1593,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                  * exists in the RCACHE of imported regions, it means that
                  * an exported memory handle has already been destroyed for a
                  * given address, but an imported memory handle hasn't been
-                 * retrieved from the RCACHE. So, it should have reference
+                 * retrieved from the RCACHE yet. So, it should have reference
                  * counter == 1, since ucp_mem_unmap() should be invoked for
-                 * imported memory handles and then - for exported ones */
+                 * unused imported memory handles and then - for corresponding
+                 * exported ones */
                 ucs_assertv(rregion->refcount == 1, "%u", rregion->refcount);
                 ucs_rcache_region_invalidate(rcache, rregion,
                                              ucs_empty_function, NULL);

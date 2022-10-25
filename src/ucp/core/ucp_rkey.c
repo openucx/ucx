@@ -297,25 +297,19 @@ uint16_t ucp_memh_info_size_unpack(const void **p)
 static void ucp_memh_common_pack(const ucp_mem_h memh, void **p,
                                  uint64_t flags, size_t memh_info_size)
 {
-    ucp_context_h UCS_V_UNUSED context = memh->context;
+    ucp_context_h context = memh->context;
 
     /* Check that md_map is valid */
     ucs_assertv(ucs_test_all_flags(UCS_MASK(context->num_mds), memh->md_map),
                 "mask 0x%lx memh %p md_map 0x%lx", UCS_MASK(context->num_mds),
                 memh, memh->md_map);
+    UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_LAST <= 255);
 
-    /* Size of mkey information which comes prior TL mkey data of all MDs */
     ucp_memh_info_size_pack(p, memh_info_size);
 
-    /* Flags */
     *ucs_serialize_next(p, uint16_t) = flags;
-
-    /* Memory domains map */
     *ucs_serialize_next(p, uint64_t) = context->export_md_map[memh->mem_type];
-
-    /* Memory type */
-    UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_LAST <= 255);
-    *ucs_serialize_next(p, uint8_t) = memh->mem_type;
+    *ucs_serialize_next(p, uint8_t)  = memh->mem_type;
 }
 
 size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr)
@@ -495,17 +489,13 @@ static ucp_md_map_t ucp_find_md_map(ucp_context_h context,
     ucp_md_map_t md_map = 0;
     ucp_md_index_t md_index;
     uct_md_attr_v2_t *md_attr;
-    size_t global_id_cmp_size;
 
     for (md_index = 0; md_index < context->num_mds; md_index++) {
-        md_attr            = &context->tl_mds[md_index].attr;
-        global_id_cmp_size = ucs_min(ucp_memh_global_id_packed_size(md_attr),
-                                     global_id_size);
+        md_attr = &context->tl_mds[md_index].attr;
 
-        if (memcmp(md_attr->global_id, global_id_buf,
-                   global_id_cmp_size) == 0) {
+        if ((ucp_memh_global_id_packed_size(md_attr) == global_id_size) &&
+            (memcmp(md_attr->global_id, global_id_buf, global_id_size) == 0)) {
             md_map |= UCS_BIT(md_index);
-            continue;
         }
     }
 
