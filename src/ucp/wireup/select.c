@@ -2043,7 +2043,72 @@ static unsigned ucp_wireup_default_path_index(unsigned path_index)
     return (path_index == UCP_WIREUP_PATH_INDEX_UNDEFINED) ? 0 : path_index;
 }
 
-static UCS_F_NOINLINE void
+static ucs_status_t ucp_wireup_select_set_locality_flags(
+        const ucp_wireup_select_params_t *select_params,
+        ucp_ep_config_key_t *key)
+{
+    ucp_worker_h worker = select_params->ep->worker;
+    ucp_worker_iface_t *wiface;
+    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t iface_id;
+    ucp_address_entry_t *ae;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+    void *dev_addr;
+
+    if (select_params->address->uuid == worker->uuid) {
+        key->flags |= UCP_EP_CONFIG_KEY_FLAG_SELF;
+        return UCS_OK;
+    }
+
+    /* If selected at least one shared-memory transport, it's intra-node */
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        rsc_index = key->lanes[lane].rsc_index;
+        if ((rsc_index != UCP_NULL_RESOURCE) &&
+            (worker->context->tl_rscs[rsc_index].tl_rsc.dev_type ==
+             UCT_DEVICE_TYPE_SHM)) {
+            key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
+            return UCS_OK;
+        }
+    }
+
+    /* If the local context matching at least one remote device address, it's
+       intra-node */
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        wiface = worker->ifaces[iface_id];
+        if (wiface->attr.device_addr_len == 0) {
+            continue;
+        }
+
+        dev_addr = ucs_malloc(wiface->attr.device_addr_len, "ucp_tmp_dev_addr");
+        if (dev_addr == NULL) {
+            ucs_error("failed to allocated device address of size %zu",
+                      wiface->attr.device_addr_len);
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        status = uct_iface_get_device_address(wiface->iface, dev_addr);
+        if (status != UCS_OK) {
+            ucs_free(dev_addr);
+            return status;
+        }
+
+        ucp_unpacked_address_for_each(ae, select_params->address) {
+            if ((wiface->attr.device_addr_len == ae->dev_addr_len) &&
+                !memcmp(ae->dev_addr, dev_addr, ae->dev_addr_len)) {
+                key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
+                ucs_free(dev_addr);
+                return UCS_OK;
+            }
+        }
+
+        ucs_free(dev_addr);
+    }
+
+    return UCS_OK;
+}
+
+static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                            ucp_wireup_select_context_t *select_ctx,
                            unsigned *addr_indices, ucp_ep_config_key_t *key)
@@ -2174,6 +2239,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     /* use AM lane first for eager AM transport to simplify processing single/middle
      * msg packets */
     key->am_bw_lanes[0] = key->am_lane;
+
+    return ucp_wireup_select_set_locality_flags(select_params, key);
 }
 
 ucs_status_t
@@ -2214,7 +2281,11 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
 out:
-    ucp_wireup_construct_lanes(&select_params, &select_ctx, addr_indices, key);
+    status = ucp_wireup_construct_lanes(&select_params, &select_ctx,
+                                        addr_indices, key);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     /* Only two lanes must be created during CM phase (CM lane and TL lane) of
      * connection setup between two peers, if an AM lane only requested */

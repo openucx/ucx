@@ -169,6 +169,15 @@ enum {
 };
 
 
+/**
+ * Endpoint configuration key flags
+ */
+enum {
+    UCP_EP_CONFIG_KEY_FLAG_SELF       = UCS_BIT(0), /** Endpoint is connected to own worker */
+    UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE = UCS_BIT(1)  /** Endpoint is within same node */
+};
+
+
 #define UCP_EP_STAT_TAG_OP(_ep, _op) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
@@ -236,6 +245,9 @@ struct ucp_ep_config_key {
 
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
+
+    /* Additional flags */
+    unsigned                 flags;
 };
 
 
@@ -707,6 +719,9 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
+
+void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
+                        ucs_string_buffer_t *strb);
 
 int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
                                       ucp_lane_index_t lane);

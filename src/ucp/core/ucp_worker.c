@@ -1690,10 +1690,11 @@ static void ucp_worker_add_feature_rsc(ucp_context_h context,
     ucs_string_buffer_appendf(strb, ") ");
 }
 
-static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
-                                      ucp_context_h context,
-                                      ucp_worker_cfg_index_t config_idx)
+static void
+ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
 {
+    const ucp_ep_config_key_t *key = &worker->ep_config[cfg_index].key;
+    ucp_context_h context          = worker->context;
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_lane_map_t tag_lanes_map    = 0;
     ucp_lane_map_t rma_lanes_map    = 0;
@@ -1706,7 +1707,7 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     int num_valid_lanes             = 0;
     ucp_lane_index_t lane;
 
-    ucs_string_buffer_appendf(&strb, "ep_cfg[%d]: ", config_idx);
+    ucp_ep_config_name(worker, cfg_index, &strb);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
         if (key->lanes[lane].rsc_index == UCP_NULL_RESOURCE) {
@@ -2026,7 +2027,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                         UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
                                         &ep_config->am_u.max_eager_short);
     } else {
-        ucp_worker_print_used_tls(key, context, ep_cfg_index);
+        ucp_worker_print_used_tls(worker, ep_cfg_index);
     }
 
 out:

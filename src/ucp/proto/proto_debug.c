@@ -147,10 +147,7 @@ ucp_proto_select_param_dump(ucp_worker_h worker,
                             ucs_string_buffer_t *ep_cfg_strb,
                             ucs_string_buffer_t *select_param_strb)
 {
-    if (!ucs_string_is_empty(worker->context->name)) {
-        ucs_string_buffer_appendf(ep_cfg_strb, "%s ", worker->context->name);
-    }
-    ucs_string_buffer_appendf(ep_cfg_strb, "ep_cfg[%d]", ep_cfg_index);
+    ucp_ep_config_name(worker, ep_cfg_index, ep_cfg_strb);
 
     /* Operation name and attributes */
     ucp_proto_select_info_str(worker, rkey_cfg_index, select_param,
