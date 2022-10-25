@@ -9,7 +9,6 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5.h>
-#include "ib_mlx5_ifc.h"
 
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
@@ -785,6 +784,33 @@ no_odp:
     return UCS_OK;
 }
 
+static uct_ib_port_select_mode_t
+uct_ib_mlx5_devx_query_port_select(uct_ib_mlx5_md_t *md)
+{
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_in)]   = {};
+    void *lag;
+    uint8_t port_select_mode;
+    ucs_status_t status;
+
+    lag = UCT_IB_MLX5DV_ADDR_OF(query_lag_out, out, lag_context);
+    UCT_IB_MLX5DV_SET(query_lag_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_LAG);
+    status = uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, in,
+                                          sizeof(in), out, sizeof(out),
+                                          "QUERY_LAG", 0);
+    if (status != UCS_OK) {
+        return UCT_IB_MLX5_LAG_INVALID_MODE;
+    }
+
+    port_select_mode = UCT_IB_MLX5DV_GET(lag_context, lag, port_select_mode);
+
+    if (port_select_mode > UCT_IB_MLX5_LAG_MULTI_PORT_ESW) {
+        return UCT_IB_MLX5_LAG_INVALID_MODE;
+    }
+
+    return port_select_mode;
+}
+
 static ucs_status_t
 uct_ib_mlx5_devx_query_lag(uct_ib_mlx5_md_t *md, uint8_t *state)
 {
@@ -1054,6 +1080,8 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     } else {
         dev->lag_level = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, num_lag_ports);
     }
+
+    md->port_select_mode = uct_ib_mlx5_devx_query_port_select(md);
 
     max_rd_atomic_dc = 1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
                                               log_max_ra_req_dc);
