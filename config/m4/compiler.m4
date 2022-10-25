@@ -282,11 +282,9 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
 # Force ICC treat command line warnings as errors.
 # This evaluation should be called prior to all other compiler flags evals
 #
-CHECK_COMPILER_FLAG([-diag-error 10006], [-diag-error 10006],
-                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                    [BASE_CFLAGS="$BASE_CFLAGS -diag-error 10006"
-                     BASE_CXXFLAGS="$BASE_CXXFLAGS -diag-error 10006"],
-                    [])
+ADD_COMPILER_FLAGS_IF_SUPPORTED([[-diag-error 10006],
+                                 [-diag-error 10148]],
+                                [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
 
 CHECK_DEPRECATED_DECL_FLAG([-diag-disable 1478], CFLAGS_NO_DEPRECATED) # icc
