@@ -30,10 +30,10 @@
 
 
 /* Hash map of rcaches which contain imported memory handles got from peers */
-KHASH_TYPE(ucp_context_imported_mem_rcaches_hash, uint64_t, ucs_rcache_t*);
-typedef khash_t(ucp_context_imported_mem_rcaches_hash) ucp_context_imported_mem_rcaches_t;
+KHASH_TYPE(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*);
+typedef khash_t(ucp_context_imported_mem_hash) ucp_context_imported_mem_hash_t;
 
-KHASH_IMPL(ucp_context_imported_mem_rcaches_hash, uint64_t, ucs_rcache_t*, 1,
+KHASH_IMPL(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
 
 
@@ -311,7 +311,7 @@ typedef struct ucp_context {
     ucs_rcache_t                  *rcache;
 
     /* Hash of rcaches which contain imported memory handles got from peers */
-    ucp_context_imported_mem_rcaches_t *imported_mem_rcaches;
+    ucp_context_imported_mem_hash_t *imported_mem_hash;
 
     struct {
 

@@ -21,7 +21,7 @@ ucp_memh_is_zero_length(const ucp_mem_h memh)
 static UCS_F_ALWAYS_INLINE void
 ucp_memh_rcache_print(ucp_mem_h memh, void *address, size_t length)
 {
-    const char UCS_V_UNUSED *type = (memh->flags & UCP_MEM_FLAG_IMPORTED) ?
+    const char UCS_V_UNUSED *type = (memh->flags & UCP_MEMH_FLAG_IMPORTED) ?
                                     "imported " : "";
 
     ucs_trace("%smemh %p: address %p/%p length %zu/%zu md_map %" PRIx64
@@ -100,20 +100,20 @@ ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
     ucs_assert(context->rcache != NULL);
 
     if (context->config.features & UCP_FEATURE_EXPORTED_MEMH) {
-        ucs_assert(context->imported_mem_rcaches != NULL);
+        ucs_assert(context->imported_mem_hash != NULL);
     }
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
-    if (!(memh->flags & UCP_MEM_FLAG_IMPORTED)) {
-        ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
-    } else {
-        iter = kh_get(ucp_context_imported_mem_rcaches_hash,
-                      context->imported_mem_rcaches, memh->remote_uuid);
-        ucs_assert(iter != kh_end(context->imported_mem_rcaches));
+    if (memh->flags & UCP_MEMH_FLAG_IMPORTED) {
+        iter = kh_get(ucp_context_imported_mem_hash,
+                      context->imported_mem_hash, memh->remote_uuid);
+        ucs_assert(iter != kh_end(context->imported_mem_hash));
 
-        rcache = kh_value(context->imported_mem_rcaches, iter);
+        rcache = kh_value(context->imported_mem_hash, iter);
         ucs_assert(rcache != NULL);
         ucs_rcache_region_put_unsafe(rcache, &memh->super);
+    } else {
+        ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
     }
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 }

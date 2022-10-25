@@ -36,9 +36,11 @@ static struct {
 } UCS_S_PACKED ucp_memh_rkey_dummy_buffer = {0, UCS_MEMORY_TYPE_HOST};
 
 
-ucp_memh_dummy_buffer_t ucp_memh_dummy_buffer = { 
-    sizeof(ucp_memh_dummy_buffer)
-};
+static struct {
+    uint8_t  size_part1;
+    uint16_t size_part2;
+} UCS_S_PACKED ucp_memh_dummy_buffer = { 0, 0 };
+
 
 const ucp_amo_proto_t *ucp_amo_proto_list[] = {
     [UCP_RKEY_BASIC_PROTO] = &ucp_amo_basic_proto,
@@ -273,17 +275,22 @@ static size_t ucp_memh_exported_info_packed_size()
 
 static void ucp_memh_info_size_pack(void **p, size_t info_size)
 {
+    size_t packed_info_size;
+
     ucs_assert(info_size <= UINT16_MAX);
 
-    if ((info_size - sizeof(uint8_t)) > UINT8_MAX) {
+    packed_info_size = info_size - sizeof(uint8_t);
+    if (packed_info_size > UINT8_MAX) {
+        packed_info_size -= sizeof(uint16_t);
+
         *ucs_serialize_next(p, uint8_t)  = 0;
-        *ucs_serialize_next(p, uint16_t) = info_size - sizeof(uint16_t);
+        *ucs_serialize_next(p, uint16_t) = packed_info_size;
     } else {
-        *ucs_serialize_next(p, uint8_t) = info_size - sizeof(uint8_t);
+        *ucs_serialize_next(p, uint8_t) = packed_info_size;
     }
 }
 
-uint16_t ucp_memh_info_size_unpack(const void **p)
+static uint16_t ucp_memh_info_size_unpack(const void **p)
 {
     uint16_t info_size = *ucs_serialize_next(&p, uint8_t);
 
@@ -312,7 +319,7 @@ static void ucp_memh_common_pack(const ucp_mem_h memh, void **p,
     *ucs_serialize_next(p, uint8_t)  = memh->mem_type;
 }
 
-size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr)
+static size_t ucp_memh_global_id_packed_size(const uct_md_attr_v2_t *md_attr)
 {
     size_t size = UCT_MD_GLOBAL_ID_MAX;
 
@@ -320,7 +327,6 @@ size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr)
         --size;
     }
 
-    ucs_assertv(size < UCT_MD_GLOBAL_ID_MAX, "size %zu", size);
     ucs_assertv(size < UINT8_MAX, "size %zu", size);
     return size;
 }
@@ -407,7 +413,6 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
     ucp_context_h context            = memh->context;
     uint64_t address                 = (uint64_t)ucp_memh_address(memh);
     uint64_t length                  = ucp_memh_length(memh);
-    uct_mem_h *uct_memhs             = memh->uct;
     void *p                          = buffer;
     ucp_tl_md_t *tl_mds              = context->tl_mds;
     uct_md_mkey_pack_params_t params = {
@@ -416,13 +421,12 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
     };
     size_t memh_info_size            = ucp_memh_exported_info_packed_size();
     size_t UCS_V_UNUSED memh_info_packed_size;
-    uct_md_attr_v2_t *md_attr;
+    const uct_md_attr_v2_t *md_attr;
     char UCS_V_UNUSED buf[128];
     ucs_status_t status;
     ssize_t result;
     ucp_md_index_t md_index;
     size_t tl_mkey_size, global_id_size;
-    void *tl_mkey_buf, *global_id_buf;
     size_t tl_mkey_data_size;
 
     ucs_log_indent(1);
@@ -442,6 +446,7 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
 
     ucs_for_each_bit(md_index, context->export_md_map[memh->mem_type]) {
         md_attr           = &tl_mds[md_index].attr;
+        global_id_size    = ucp_memh_global_id_packed_size(md_attr);
         tl_mkey_data_size = ucp_memh_exported_tl_mkey_packed_size(context,
                                                                   md_index);
         ucp_memh_info_size_pack(&p, tl_mkey_data_size);
@@ -451,21 +456,18 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
                     "tl_mkey_size %zu", tl_mkey_size);
         *ucs_serialize_next(&p, uint8_t) = tl_mkey_size;
 
-        tl_mkey_buf = ucs_serialize_next_raw(&p, void, tl_mkey_size);
-        status      = uct_md_mkey_pack_v2(tl_mds[md_index].md,
-                                          uct_memhs[md_index], &params,
-                                          tl_mkey_buf);
+        status = uct_md_mkey_pack_v2(tl_mds[md_index].md,
+                                     memh->uct[md_index], &params,
+                                     ucs_serialize_next_raw(&p, void,
+                                                            tl_mkey_size));
         if (status != UCS_OK) {
             result = status;
             goto out;
         }
 
-        global_id_size = ucp_memh_global_id_packed_size(md_attr);
-
         *ucs_serialize_next(&p, uint8_t) = global_id_size;
-
-        global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
-        memcpy(global_id_buf, md_attr->global_id, global_id_size);
+        memcpy(ucs_serialize_next_raw(&p, void, global_id_size),
+               md_attr->global_id, global_id_size);
 
         ucs_trace("exported mkey[%d]=%s for md[%d]=%s",
                   ucs_bitmap2idx(context->export_md_map[memh->mem_type],
@@ -482,9 +484,9 @@ out:
     return result;
 }
 
-static ucp_md_map_t ucp_find_md_map(ucp_context_h context,
-                                    const void *global_id_buf,
-                                    size_t global_id_size)
+static ucp_md_map_t ucp_rkey_find_global_id_md_map(ucp_context_h context,
+                                                   const void *md_global_id,
+                                                   size_t global_id_size)
 {
     ucp_md_map_t md_map = 0;
     ucp_md_index_t md_index;
@@ -494,7 +496,7 @@ static ucp_md_map_t ucp_find_md_map(ucp_context_h context,
         md_attr = &context->tl_mds[md_index].attr;
 
         if ((ucp_memh_global_id_packed_size(md_attr) == global_id_size) &&
-            (memcmp(md_attr->global_id, global_id_buf, global_id_size) == 0)) {
+            (memcmp(md_attr->global_id, md_global_id, global_id_size) == 0)) {
             md_map |= UCS_BIT(md_index);
         }
     }
@@ -509,16 +511,13 @@ ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context,
                                       ucp_md_map_t *md_map_p)
 {
     const void *p = *start_p;
-    const void *next_tl_md_p, *end;
+    const void *next_tl_md_p;
     size_t tl_mkey_data_size;
     size_t tl_mkey_size, global_id_size;
-    const void *tl_mkey_buf, *global_id_buf;
+    const void *tl_mkey_buf;
     ucp_md_map_t md_map;
 
-    ucs_assert(p != NULL);
-
     tl_mkey_data_size = ucp_memh_info_size_unpack(&p);
-    end               = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
     ucs_assert(tl_mkey_data_size != 0);
 
     tl_mkey_size = *ucs_serialize_next(&p, uint8_t);
@@ -529,12 +528,12 @@ ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context,
     global_id_size = *ucs_serialize_next(&p, uint8_t);
     ucs_assert(global_id_size != 0);
 
-    global_id_buf = ucs_serialize_next_raw(&p, void, global_id_size);
-
     /* Get local MD indices which corresponds to the remote ones */
-    md_map = ucp_find_md_map(context, global_id_buf, global_id_size);
+    md_map = ucp_rkey_find_global_id_md_map(
+            context, ucs_serialize_next_raw(&p, void, global_id_size),
+            global_id_size);
 
-    next_tl_md_p = end;
+    next_tl_md_p = UCS_PTR_BYTE_OFFSET(*start_p, tl_mkey_data_size);
     ucs_assertv(p <= next_tl_md_p, "p=%p, next_tl_md_p=%p", p, next_tl_md_p);
 
     *start_p       = next_tl_md_p;
@@ -544,23 +543,19 @@ ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context,
 
 ucs_status_t
 ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
-                         ucp_memh_exported_unpacked_t *unpacked)
+                         ucp_unpacked_exported_memh_t *unpacked)
 {
     const void *p = export_mkey_buffer;
-    const void *end;
     uint16_t memh_info_size;
     uint16_t UCS_V_UNUSED mem_info_parsed_size;
     ucp_md_map_t local_md_map;
     ucp_md_index_t remote_md_index;
     ucp_md_index_t md_index;
     const void *tl_mkey_buf;
-    ucp_memh_exported_tl_mkey_unpacked_t *tl_mkey;
-
-    ucs_assert(export_mkey_buffer != NULL);
+    ucp_unpacked_exported_tl_mkey_t *tl_mkey;
 
     /* Common memory handle information */
     memh_info_size = ucp_memh_info_size_unpack(&p);
-    end            = UCS_PTR_BYTE_OFFSET(export_mkey_buffer, memh_info_size);
     ucs_assert(memh_info_size != 0);
 
     unpacked->flags         = *ucs_serialize_next(&p, uint16_t);
@@ -582,23 +577,25 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
     ucs_assert(unpacked->length != 0);
 
     mem_info_parsed_size = UCS_PTR_BYTE_DIFF(export_mkey_buffer, p);
-    ucs_assertv(p <= end, "mem_info: p %p end %p", p, end);
-    p = end;
+    ucs_assertv(mem_info_parsed_size <= memh_info_size,
+                "mem_info: parsed_size %" PRIu16 " memh_info_size %" PRIu16,
+                mem_info_parsed_size, memh_info_size);
+    p = UCS_PTR_BYTE_OFFSET(export_mkey_buffer, memh_info_size);
 
-    unpacked->tl_mkeys_num = 0;
+    unpacked->num_tl_mkeys = 0;
     ucs_for_each_bit(remote_md_index, unpacked->remote_md_map) {
         ucp_memh_exported_tl_mkey_data_unpack(context, &p, &tl_mkey_buf,
                                               &local_md_map);
 
         ucs_for_each_bit(md_index, local_md_map) {
-            tl_mkey              = &unpacked->tl_mkeys[unpacked->tl_mkeys_num];
+            tl_mkey              = &unpacked->tl_mkeys[unpacked->num_tl_mkeys];
             tl_mkey->md_index    = md_index;
             tl_mkey->tl_mkey_buf = tl_mkey_buf;
-            ++unpacked->tl_mkeys_num;
+            ++unpacked->num_tl_mkeys;
         }
     }
 
-    if (unpacked->tl_mkeys_num == 0) {
+    if (unpacked->num_tl_mkeys == 0) {
         ucs_diag("couldn't find local MDs which correspond to remote MDs");
         return UCS_ERR_UNREACHABLE;
     }
@@ -642,6 +639,12 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags,
     }
 
     ucs_fatal("packing rkey using ucp_memh_pack() is unsupported");
+}
+
+int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer)
+{
+    return memcmp(exported_memh_buffer, &ucp_memh_dummy_buffer,
+                  sizeof(ucp_memh_dummy_buffer)) == 0;
 }
 
 static ucs_status_t

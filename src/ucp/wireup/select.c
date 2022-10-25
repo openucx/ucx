@@ -892,16 +892,17 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
     ucp_context_h context                = select_params->ep->worker->context;
     ucp_wireup_criteria_t mem_criteria   = *criteria;
     ucp_wireup_select_info_t select_info = {0};
-    int allow_am                         =
-            ((lane_type == UCP_LANE_TYPE_RMA) &&
-             (context->config.features & UCP_FEATURE_EXPORTED_MEMH)) ?
-            0 : select_params->allow_am;
-    int show_error                       = !allow_am;
     double reg_score                     = 0;
+    int allow_am;
+    int show_error;
     uint64_t remote_md_map;
     ucs_status_t status;
     char title[64];
 
+    allow_am      = ((lane_type == UCP_LANE_TYPE_RMA) &&
+                     (context->config.features & UCP_FEATURE_EXPORTED_MEMH)) ?
+                    0 : select_params->allow_am;
+    show_error    = !allow_am;
     remote_md_map = UINT64_MAX;
 
     /* Select best transport which can reach registered memory */

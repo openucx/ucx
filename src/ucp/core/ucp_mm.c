@@ -475,8 +475,6 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
     ucp_memh_set(memh, context, address, length, mem_type, memh_flags, method);
 
     if (context->rcache == NULL) {
-        ucs_assert(context->imported_mem_rcaches == NULL);
-
         /* Point to self */
         memh->parent = memh;
     }
@@ -487,8 +485,7 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
 
 static ucs_status_t
 ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
-                    ucs_memory_type_t mem_type, uint8_t memh_flags,
-                    ucp_mem_h *memh_p)
+                    ucs_memory_type_t mem_type, ucp_mem_h *memh_p)
 {
     ucp_mem_attr_t attr = {
         .mem_type = mem_type
@@ -502,8 +499,7 @@ ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
         return status;
     }
 
-    *memh_p          = ucs_derived_of(rregion, ucp_mem_t);
-    (*memh_p)->flags = memh_flags;
+    *memh_p = ucs_derived_of(rregion, ucp_mem_t);
 
     return UCS_OK;
 }
@@ -552,10 +548,15 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
 {
     ucp_md_index_t md_index;
 
+    ucs_assertv(!(memh->md_map & parent_md_map),
+                "memh %p: md_map 0x%lx parent_md_map 0x%lx", memh,
+                memh->md_map, parent_md_map);
+
     memh->reg_id  = memh->parent->reg_id;
     memh->md_map |= parent_md_map;
 
     ucs_for_each_bit(md_index, parent_md_map) {
+        ucs_assert(memh->uct[md_index] == NULL);
         memh->uct[md_index] = memh->parent->uct[md_index];
     }
 }
@@ -629,7 +630,7 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
                                  UCT_ALLOC_METHOD_LAST, 0, &memh);
     } else {
         status = ucp_memh_rcache_get(context->rcache, reg_address, reg_length,
-                                     mem_type, 0, &memh);
+                                     mem_type, &memh);
     }
 
     if (status != UCS_OK) {
@@ -807,9 +808,10 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
             goto out;
         }
 
-        memh_flags |= UCP_MEM_FLAG_IMPORTED;
+        memh_flags |= UCP_MEMH_FLAG_IMPORTED;
 
-        if (*(uint16_t*)exported_memh_buffer == sizeof(ucp_memh_dummy_buffer)) {
+        if (ucp_memh_buffer_is_dummy(exported_memh_buffer)) {
+            /* Exported memory handle buffer packed for dummy memory handle */
             goto out_zero_mem;
         }
     } else if (length == 0) {
@@ -832,7 +834,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 
     uct_flags = ucp_mem_map_params2uct_flags(params);
 
-    if (memh_flags & UCP_MEM_FLAG_IMPORTED) {
+    if (memh_flags & UCP_MEMH_FLAG_IMPORTED) {
         status = ucp_memh_import(context, exported_memh_buffer, &memh);
     } else if (flags & UCP_MEM_MAP_ALLOCATE) {
         status = ucp_memh_alloc(context, address, length, mem_type,
@@ -1330,9 +1332,8 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context)
     }
 
     if (context->config.features & UCP_FEATURE_EXPORTED_MEMH) {
-        context->imported_mem_rcaches =
-                kh_init(ucp_context_imported_mem_rcaches_hash);
-        if (context->imported_mem_rcaches == NULL) {
+        context->imported_mem_hash = kh_init(ucp_context_imported_mem_hash);
+        if (context->imported_mem_hash == NULL) {
             status = UCS_ERR_NO_MEMORY;
             goto err_rcache_destroy;
         }
@@ -1354,12 +1355,11 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
         ucs_rcache_destroy(context->rcache);
     }
 
-    if (context->imported_mem_rcaches != NULL) {
-        kh_foreach_value(context->imported_mem_rcaches, rcache, {
+    if (context->imported_mem_hash != NULL) {
+        kh_foreach_value(context->imported_mem_hash, rcache, {
             ucs_rcache_destroy(rcache);
         })
-        kh_destroy(ucp_context_imported_mem_rcaches_hash,
-                   context->imported_mem_rcaches);
+        kh_destroy(ucp_context_imported_mem_hash, context->imported_mem_hash);
     }
 }
 
@@ -1409,20 +1409,20 @@ ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
 
 static ucs_status_t
 ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
-                       ucp_memh_exported_tl_mkey_unpacked_t *tl_mkeys,
-                       unsigned tl_mkeys_num)
+                       ucp_unpacked_exported_tl_mkey_t *tl_mkeys,
+                       unsigned num_tl_mkeys)
 {
-    ucp_md_index_t md_index = UCP_NULL_RESOURCE;
-    unsigned iter;
+    ucp_md_index_t md_index;
+    unsigned tl_mkey_index;
     const void *tl_mkey_buf;
     uct_md_mem_attach_params_t attach_params;
     uct_md_attr_v2_t *md_attr;
     ucs_status_t status;
     uct_mem_h uct_memh;
 
-    for (iter = 0; iter < tl_mkeys_num; ++iter) {
-        md_index    = tl_mkeys[iter].md_index;
-        tl_mkey_buf = tl_mkeys[iter].tl_mkey_buf;
+    for (tl_mkey_index = 0; tl_mkey_index < num_tl_mkeys; ++tl_mkey_index) {
+        md_index    = tl_mkeys[tl_mkey_index].md_index;
+        tl_mkey_buf = tl_mkeys[tl_mkey_index].tl_mkey_buf;
         md_attr     = &context->tl_mds[md_index].attr;
         ucs_assert_always(md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY);
 
@@ -1463,7 +1463,7 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
 static ucs_status_t
 ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
                      ucp_mem_h user_memh,
-                     ucp_memh_exported_unpacked_t *unpacked)
+                     ucp_unpacked_exported_memh_t *unpacked)
 {
     ucs_rcache_t *rcache;
     ucs_status_t status;
@@ -1476,35 +1476,36 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-    if (ucs_likely(context->imported_mem_rcaches != NULL)) {
+    if (context->imported_mem_hash != NULL) {
         if (existing_rcache == NULL) {
             ucs_snprintf_safe(rcache_name, sizeof(rcache_name),
-                              "ucp imported rcache[%zu]",
+                              "ucp_import_rcache[0x%" PRIx64,
                               unpacked->remote_uuid);
             status = ucp_mem_rcache_create(context, rcache_name, &rcache);
             if (status != UCS_OK) {
                 goto out;
             }
 
-            iter = kh_put(ucp_context_imported_mem_rcaches_hash,
-                          context->imported_mem_rcaches, unpacked->remote_uuid,
+            iter = kh_put(ucp_context_imported_mem_hash,
+                          context->imported_mem_hash, unpacked->remote_uuid,
                           &ret);
             ucs_assertv((ret != UCS_KH_PUT_FAILED) &&
                         (ret != UCS_KH_PUT_KEY_PRESENT), "ret %d", ret);
 
-            kh_value(context->imported_mem_rcaches, iter) = rcache;
+            kh_value(context->imported_mem_hash, iter) = rcache;
         } else {
             rcache = existing_rcache;
         }
 
         status = ucp_memh_rcache_get(rcache, unpacked->address,
                                      unpacked->length, unpacked->mem_type,
-                                     UCP_MEM_FLAG_IMPORTED, &memh);
+                                     &memh);
         if (status != UCS_OK) {
             goto err_rcache_destroy;
         }
 
-        user_memh->parent = memh;
+        memh->flags       |= UCP_MEMH_FLAG_IMPORTED;
+        user_memh->parent  = memh;
     } else {
         memh   = user_memh;
         rcache = NULL;
@@ -1514,7 +1515,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
     memh->remote_uuid = unpacked->remote_uuid;
     status            = ucp_memh_import_attach(context, memh,
                                                unpacked->tl_mkeys,
-                                               unpacked->tl_mkeys_num);
+                                               unpacked->num_tl_mkeys);
     if (status != UCS_OK) {
         goto err_memh_free;
     }
@@ -1530,11 +1531,11 @@ err_memh_free:
 err_rcache_destroy:
     if ((rcache != NULL) && (rcache != existing_rcache)) { 
         /* Rcache was allocated here - remove it from hash and destroy */
-        iter = kh_get(ucp_context_imported_mem_rcaches_hash,
-                      context->imported_mem_rcaches, unpacked->remote_uuid);
-        ucs_assert(iter != kh_end(context->imported_mem_rcaches));
-        kh_del(ucp_context_imported_mem_rcaches_hash,
-               context->imported_mem_rcaches, iter);
+        iter = kh_get(ucp_context_imported_mem_hash,
+                      context->imported_mem_hash, unpacked->remote_uuid);
+        ucs_assert(iter != kh_end(context->imported_mem_hash));
+        kh_del(ucp_context_imported_mem_hash, context->imported_mem_hash,
+               iter);
         ucs_rcache_destroy(rcache);
     }
     goto out;
@@ -1547,47 +1548,54 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
     ucs_rcache_t *rcache = NULL;
     ucp_mem_h memh, rcache_memh;
     ucs_status_t status;
-    ucp_memh_exported_unpacked_t unpacked;
+    ucp_unpacked_exported_memh_t unpacked_memh;
     ucs_rcache_region_t *rregion;
     khiter_t iter;
 
-    status = ucp_memh_exported_unpack(context, export_mkey_buffer, &unpacked);
+    status = ucp_memh_exported_unpack(context, export_mkey_buffer,
+                                      &unpacked_memh);
     if (status != UCS_OK) {
         goto out;
     }
 
-    status = ucp_memh_create(context, unpacked.address, unpacked.length,
-                             unpacked.mem_type, UCT_ALLOC_METHOD_LAST,
-                             UCP_MEM_FLAG_IMPORTED, &memh);
+    status = ucp_memh_create(context, unpacked_memh.address,
+                             unpacked_memh.length, unpacked_memh.mem_type,
+                             UCT_ALLOC_METHOD_LAST, UCP_MEMH_FLAG_IMPORTED,
+                             &memh);
     if (status != UCS_OK) {
         goto out;
     }
 
-    if (ucs_likely(context->imported_mem_rcaches != NULL)) {
-        /* Try to find rcache of imported memory buffers for the specific peer with
-         * UUID packed in the exported_mkey_buffer */
+    if (ucs_likely(context->imported_mem_hash != NULL)) {
+        /* Try to find rcache of imported memory buffers for the specific peer
+         * with UUID packed in the exported_mkey_buffer */
         UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-        iter = kh_get(ucp_context_imported_mem_rcaches_hash,
-                      context->imported_mem_rcaches, unpacked.remote_uuid);
-        if (iter != kh_end(context->imported_mem_rcaches)) {
+        iter = kh_get(ucp_context_imported_mem_hash,
+                      context->imported_mem_hash, unpacked_memh.remote_uuid);
+        if (iter != kh_end(context->imported_mem_hash)) {
             /* Found rcache for the specific peer */
-            rcache = kh_value(context->imported_mem_rcaches, iter);
+            rcache = kh_value(context->imported_mem_hash, iter);
             ucs_assert(rcache != NULL);
 
-            rregion = ucs_rcache_lookup_unsafe(rcache, unpacked.address,
-                                               unpacked.length,
+            rregion = ucs_rcache_lookup_unsafe(rcache, unpacked_memh.address,
+                                               unpacked_memh.length,
                                                PROT_READ | PROT_WRITE);
             if (rregion != NULL) {
                 rcache_memh = ucs_derived_of(rregion, ucp_mem_t);
-                if (ucs_likely(rcache_memh->reg_id == unpacked.reg_id)) {
-                    ucp_memh_rcache_print(rcache_memh, unpacked.address,
-                                          unpacked.length);
+                if (ucs_likely(rcache_memh->reg_id == unpacked_memh.reg_id)) {
+                    ucp_memh_rcache_print(rcache_memh, unpacked_memh.address,
+                                          unpacked_memh.length);
                     memh->parent = rcache_memh;
                     status       = UCS_OK;
                     UCP_THREAD_CS_EXIT(&context->mt_lock);
                     goto out_memh_update;
                 }
+
+                ucs_debug("found memh %p (reg_id %" PRIu64 ") in rcache %p,"
+                          " but reg_id is not matched with %" PRIu64,
+                          rcache_memh, rcache_memh->reg_id, rcache,
+                          unpacked_memh.reg_id);
 
                 /* If registration IDs are not matched, but a region still
                  * exists in the RCACHE of imported regions, it means that
@@ -1606,9 +1614,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
         UCP_THREAD_CS_EXIT(&context->mt_lock);
     }
 
-    status = ucp_memh_import_slow(context, rcache, memh, &unpacked);
+    status = ucp_memh_import_slow(context, rcache, memh, &unpacked_memh);
     if (status != UCS_OK) {
-        goto err_memh_free;
+        ucs_free(memh);
+        goto out;
     }
 
 out_memh_update:
@@ -1619,8 +1628,4 @@ out_memh_update:
     *memh_p = memh;
 out:
     return status;
-
-err_memh_free:
-    ucs_free(memh);
-    goto out;
 }

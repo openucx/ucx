@@ -26,7 +26,7 @@ enum {
     /*
      * Memory handle was imported and points to some peer's memory buffer.
      */
-    UCP_MEM_FLAG_IMPORTED  = UCS_BIT(0)
+    UCP_MEMH_FLAG_IMPORTED  = UCS_BIT(0)
 };
 
 
@@ -95,13 +95,7 @@ typedef struct {
 } ucp_mem_dummy_handle_t;
 
 
-typedef struct {
-    uint16_t size;
-} UCS_S_PACKED ucp_memh_dummy_buffer_t;
-
-
 extern ucp_mem_dummy_handle_t ucp_mem_dummy_handle;
-extern ucp_memh_dummy_buffer_t ucp_memh_dummy_buffer;
 
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);

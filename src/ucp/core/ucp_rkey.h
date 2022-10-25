@@ -117,24 +117,23 @@ typedef struct ucp_rkey {
 } ucp_rkey_t;
 
 
-typedef struct ucp_memh_exported_tl_mkey_unpacked {
-    ucp_md_index_t md_index;
-    const void     *tl_mkey_buf;
-} ucp_memh_exported_tl_mkey_unpacked_t;
+typedef struct ucp_unpacked_exported_tl_mkey {
+    ucp_md_index_t md_index;     /* Index of MD which owns TL mkey */
+    const void     *tl_mkey_buf; /* Packed TL mkey buffer */
+} ucp_unpacked_exported_tl_mkey_t;
 
 
-typedef struct ucp_memh_exported_unpacked {
-    uint16_t flags;
-    ucp_md_map_t remote_md_map;
-    ucs_memory_type_t mem_type;
-    void *address;
-    size_t length;
-    uint64_t remote_uuid;
-    uint64_t reg_id;
-    unsigned tl_mkeys_num;
-
-    ucp_memh_exported_tl_mkey_unpacked_t tl_mkeys[UCP_MD_INDEX_BITS];
-} ucp_memh_exported_unpacked_t;
+typedef struct ucp_unpacked_exported_memh {
+    uint16_t                        flags; /* Flags */
+    ucp_md_map_t                    remote_md_map; /* Remote MD map of packed TL mkeys */
+    ucs_memory_type_t               mem_type; /* Memory type of exported buffer */
+    void                            *address; /* Address of exported buffer */
+    size_t                          length; /* Length of exported buffer */
+    uint64_t                        remote_uuid; /* UUID of remote UCP context */
+    uint64_t                        reg_id; /* Registration ID */
+    unsigned                        num_tl_mkeys; /* Number of unpacked TL mkeys */
+    ucp_unpacked_exported_tl_mkey_t tl_mkeys[UCP_MD_INDEX_BITS]; /* Unpacked TL mkeys */
+} ucp_unpacked_exported_memh_t;
 
 
 #define UCP_RKEY_AMO_PROTO(_amo_proto_index) ucp_amo_proto_list[_amo_proto_index]
@@ -212,14 +211,13 @@ ucp_rkey_pack_memh(ucp_context_h context, ucp_md_map_t md_map,
                    const ucs_sys_dev_distance_t *sys_distance, void *buffer);
 
 
-uint16_t ucp_memh_info_size_unpack(const void **p);
-
-
-size_t ucp_memh_global_id_packed_size(uct_md_attr_v2_t *md_attr);
-
 ucs_status_t
 ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
-                         ucp_memh_exported_unpacked_t *unpacked);
+                         ucp_unpacked_exported_memh_t *unpacked);
+
+
+int ucp_memh_buffer_is_dummy(const void *exported_memh_buffer);
+
 
 ucs_status_t
 ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
