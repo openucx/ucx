@@ -592,8 +592,9 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                           UCS_DEFAULT_ENV_PREFIX);
     }
 
-    status = ucs_config_parser_fill_opts(config, ucp_config_table,
-                                         config->env_prefix, NULL, 0);
+    status = ucs_config_parser_fill_opts(config,
+                                         UCS_CONFIG_GET_TABLE(ucp_config_table),
+                                         config->env_prefix, 0);
     if (status != UCS_OK) {
         goto err_free_prefix;
     }

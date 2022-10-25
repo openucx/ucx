@@ -339,11 +339,14 @@ protected:
 
             ucs_config_parse_config_files();
 
-            status = ucs_config_parser_fill_opts(&tmp,
-                                                 car_opts_table,
-                                                 env_prefix,
-                                                 table_prefix,
-                                                 0);
+            static ucs_config_global_list_entry_t entry;
+            entry.table  = car_opts_table;
+            entry.name   = "cars";
+            entry.prefix = table_prefix;
+            entry.size   = sizeof(car_opts_t);
+            entry.flags  = 0;
+
+            status = ucs_config_parser_fill_opts(&tmp, &entry, env_prefix, 0);
             ASSERT_UCS_OK(status);
             return tmp;
         }
@@ -702,14 +705,22 @@ UCS_TEST_F(test_config, test_config_file_parse_files) {
     ucs_status_t status;
 
     ucs_config_parse_config_file(TEST_CONFIG_DIR, TEST_CONFIG_FILE, 1);
-    status = ucs_config_parser_fill_opts(&opts, car_opts_table,
-                                         UCS_DEFAULT_ENV_PREFIX, NULL, 0);
+
+    ucs_config_global_list_entry_t entry;
+    entry.table  = car_opts_table;
+    entry.name   = "cars";
+    entry.prefix = NULL;
+    entry.size   = sizeof(car_opts_t);
+    entry.flags  = 0;
+
+    status = ucs_config_parser_fill_opts(&opts, &entry, UCS_DEFAULT_ENV_PREFIX,
+                                         0);
     EXPECT_EQ(200, opts.price);
     ucs_config_parser_release_opts(&opts, car_opts_table);
     
     ucs_config_parse_config_files();
-    status = ucs_config_parser_fill_opts(&opts, car_opts_table,
-                                         UCS_DEFAULT_ENV_PREFIX, NULL, 0);
+    status = ucs_config_parser_fill_opts(&opts, &entry, UCS_DEFAULT_ENV_PREFIX,
+                                         0);
     ASSERT_UCS_OK(status);
 
     /* Verify ucs_config_parse_config_files() overrides config */

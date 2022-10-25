@@ -192,9 +192,8 @@ struct uct_component {
 
 
 ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
-                             ucs_config_field_t *config_table,
-                             size_t config_size, const char *env_prefix,
-                             const char *cfg_prefix);
+                             ucs_config_global_list_entry_t *entry,
+                             const char *env_prefix);
 
 void uct_component_register(uct_component_t *component);
 
