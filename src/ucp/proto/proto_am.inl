@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/proto/proto_common.inl>
 #include <ucp/tag/eager.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
@@ -23,8 +24,9 @@
 
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
-static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handle_user_header_send_status(
-        ucp_request_t *req, ucs_status_t send_status)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_am_handle_user_header_send_status(ucp_request_t *req,
+                                            ucs_status_t send_status)
 {
     ucs_status_t status;
 
@@ -34,15 +36,27 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handle_user_header_send_status(
         if (ucs_unlikely(status != UCS_OK)) {
             return status;
         }
-    } else if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED)) {
+    }
+
+    return send_status;
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_am_release_user_header(ucp_request_t *req)
+{
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED)) {
         ucs_assert(req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER);
         ucs_mpool_set_put_inline(req->send.msg_proto.am.header.user_ptr);
 #if UCS_ENABLE_ASSERT
         req->send.msg_proto.am.header.user_ptr = NULL;
 #endif
     }
+}
 
-    return send_status;
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_request_am_bcopy_complete_success(ucp_request_t *req)
+{
+    ucp_am_release_user_header(req);
+    return ucp_proto_request_bcopy_complete_success(req);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -80,6 +94,25 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
                 packed_len, ucp_ep_get_max_bcopy(ep, req->send.lane));
 
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_handle_user_header_send_status(ucp_request_t *req,
+                                      ucs_status_t send_status)
+{
+    ucs_status_t status;
+
+    if (ucs_unlikely(send_status == UCS_ERR_NO_RESOURCE) &&
+        (req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER)) {
+        status = ucp_proto_am_req_copy_header(req);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
+    } else {
+        ucp_am_release_user_header(req);
+    }
+
+    return send_status;
 }
 
 static UCS_F_ALWAYS_INLINE

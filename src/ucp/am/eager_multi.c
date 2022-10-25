@@ -145,8 +145,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_bcopy_send_func(
         packed_size = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_AM_FIRST,
                                       ucp_am_eager_multi_bcopy_pack_args_first,
                                       &pack_ctx, 0);
-        status      = ucp_am_handle_user_header_send_status(
-                req, ucp_am_multi_bcopy_send_func_status(packed_size));
+        status      = ucp_am_multi_bcopy_send_func_status(packed_size);
+        status      = ucp_proto_am_handle_user_header_send_status(req, status);
     } else {
         pack_ctx.max_payload = ucp_proto_multi_max_payload(
                 req, lpriv, UCP_AM_MID_FRAG_META_LEN);
@@ -169,7 +169,14 @@ ucp_am_eager_multi_bcopy_proto_progress(uct_pending_req_t *uct_req)
     return ucp_proto_multi_bcopy_progress(
             req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
             ucp_am_eager_multi_bcopy_send_func,
-            ucp_proto_request_bcopy_complete_success);
+            ucp_proto_request_am_bcopy_complete_success);
+}
+
+void ucp_am_eager_multi_bcopy_proto_abort(ucp_request_t *req,
+                                          ucs_status_t status)
+{
+    ucp_am_release_user_header(req);
+    ucp_request_complete_send(req, status);
 }
 
 ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
@@ -179,7 +186,7 @@ ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
     .init     = ucp_am_eager_multi_bcopy_proto_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_bcopy_proto_progress},
-    .abort    = ucp_request_complete_send,
+    .abort    = ucp_proto_am_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
