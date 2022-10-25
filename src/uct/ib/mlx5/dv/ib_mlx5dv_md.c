@@ -941,6 +941,20 @@ static void uct_ib_mlx5_md_port_counter_set_id_init(uct_ib_mlx5_md_t *md)
     }
 }
 
+static int uct_ib_mlx5_check_uar(uct_ib_mlx5_md_t *md)
+{
+    uct_ib_mlx5_devx_uar_t uar;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_uar_init(&uar, md, 0);
+    if (status != UCS_OK) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    uct_ib_mlx5_devx_uar_cleanup(&uar);
+    return UCS_OK;
+}
+
 static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                              const uct_ib_md_config_t *md_config,
                                              uct_ib_md_t **p_md)
@@ -972,13 +986,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     ctx = uct_ib_mlx5_devx_open_device(ibv_device);
     if (ctx == NULL) {
-        if (md_config->devx == UCS_YES) {
-            ucs_error("DevX requested but not supported by %s",
-                      ibv_get_device_name(ibv_device));
-            status = UCS_ERR_IO_ERROR;
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
-        }
+        status = UCS_ERR_UNSUPPORTED;
         goto err;
     }
 
@@ -987,6 +995,11 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_context;
+    }
+
+    status = uct_ib_mlx5_check_uar(md);
+    if (status != UCS_OK) {
+        goto err_free_md;
     }
 
     dev          = &md->super.dev;
@@ -1229,11 +1242,19 @@ err_lock_destroy:
     uct_ib_md_close_common(&md->super);
 err_lru_cleanup:
     uct_ib_mlx5_devx_mr_lru_cleanup(md);
+err_free_md:
     uct_ib_md_free(&md->super);
 err_free_context:
     uct_ib_md_device_context_close(ctx);
 err:
-    ucs_debug("%s: DEVX is not supported", ibv_get_device_name(ibv_device));
+    if ((status == UCS_ERR_UNSUPPORTED) && (md_config->devx == UCS_YES)) {
+        ucs_error("DEVX requested but not supported by %s",
+                  ibv_get_device_name(ibv_device));
+        status = UCS_ERR_IO_ERROR;
+    } else {
+        ucs_debug("%s: DEVX is not supported", ibv_get_device_name(ibv_device));
+    }
+
     return status;
 }
 
