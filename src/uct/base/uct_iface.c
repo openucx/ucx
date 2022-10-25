@@ -851,7 +851,9 @@ void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
     addr_ns->super.id = ucs_get_system_id() &
                         ~UCT_IFACE_LOCAL_ADDR_FLAG_NS;
 
-    if (!ucs_sys_ns_is_default(sys_ns_type)) {
+    if (ucs_sys_ns_is_default(sys_ns_type)) {
+        addr_ns->sys_ns = 0;
+    } else {
         addr_ns->super.id |= UCT_IFACE_LOCAL_ADDR_FLAG_NS;
         addr_ns->sys_ns    = ucs_sys_get_ns(sys_ns_type);
     }
