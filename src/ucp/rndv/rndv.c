@@ -451,7 +451,8 @@ static uint8_t ucp_rndv_get_rkey_index(ucp_request_t *rndv_req, ucp_rkey_h rkey,
     uint8_t mem_type            = rndv_req->send.mem_type;
     uct_md_attr_v2_t *md_attr;
 
-    if ((md_index == UCP_NULL_RESOURCE) || (rkey == NULL)) {
+    if ((md_index == UCP_NULL_RESOURCE) || (rkey == NULL) ||
+        !(UCS_BIT(dst_md_index) & rkey->md_map)) {
         return UCP_NULL_RESOURCE;
     }
 
