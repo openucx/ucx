@@ -137,7 +137,7 @@ ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .init     = ucp_proto_eager_bcopy_multi_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_bcopy_multi_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_bcopy_reset
 };
 

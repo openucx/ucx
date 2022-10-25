@@ -115,7 +115,7 @@ ucp_proto_t ucp_get_offload_bcopy_proto = {
     .init     = ucp_proto_get_offload_bcopy_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_bcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
@@ -205,6 +205,6 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .init     = ucp_proto_get_offload_zcopy_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_zcopy_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_request_zcopy_reset
 };

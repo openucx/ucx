@@ -59,6 +59,6 @@ ucp_proto_t ucp_rndv_ats_proto = {
     .init     = ucp_proto_rndv_ats_init,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_rndv_ats_progress},
-    .abort    = (ucp_request_abort_func_t)ucs_empty_function_fatal_not_implemented_void,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = (ucp_request_reset_func_t)ucs_empty_function
 };

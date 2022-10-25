@@ -284,4 +284,9 @@ void ucp_proto_request_zcopy_reset(ucp_request_t *req);
 
 void ucp_proto_request_zcopy_id_reset(ucp_request_t *req);
 
+void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,
+                                           ucs_status_t status);
+
+void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req);
+
 #endif

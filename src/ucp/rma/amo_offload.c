@@ -203,8 +203,7 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
         .init     = ucp_amo_init_##_id, \
         .query    = ucp_proto_single_query, \
         .progress = {ucp_amo_progress_##_id}, \
-        .abort    = (ucp_request_abort_func_t) \
-                    ucs_empty_function_fatal_not_implemented_void, \
+        .abort    = ucp_proto_abort_fatal_not_implemented, \
         .reset    = ucp_proto_request_bcopy_reset \
     };
 
