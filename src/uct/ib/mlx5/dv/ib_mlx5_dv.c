@@ -8,9 +8,6 @@
 #  include "config.h"
 #endif
 
-#include "ib_mlx5_ifc.h"
-
-#include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5.inl>
 #include <ucs/arch/bitops.h>
 

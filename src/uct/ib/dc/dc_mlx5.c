@@ -71,6 +71,15 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
+    {"LAG_PORT_AFFINITY", "auto",
+     "Specifies how DCI select port under RoCE LAG. The values are:\n"
+     " auto     Set DCI QP port affinity only if the hardware is configured\n"
+     "          to QUEUE_AFFINITY mode.\n"
+     " on       Always set DCI QP port affinity.\n"
+     " off      Never set DCI QP port affinity.\n",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_port_affinity),
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
     {"DCI_FULL_HANDSHAKE", "no",
      "Force full-handshake protocol for DC initiator. Enabling this mode\n"
      "increases network latency, but is more resilient to packet drops.\n"
@@ -1352,6 +1361,30 @@ static ucs_status_t uct_dc_mlx5_calc_sq_length(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
+static void
+uct_dc_mlx5_iface_init_tx_port_affinity(uct_dc_mlx5_iface_t *iface,
+                                        const uct_dc_mlx5_iface_config_t *config)
+{
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                          uct_ib_mlx5_md_t);
+
+    iface->tx.port_affinity = 0;
+    if (config->tx_port_affinity == UCS_CONFIG_ON) {
+        if ((md->port_select_mode == UCT_IB_MLX5_LAG_QUEUE_AFFINITY) ||
+            (md->port_select_mode == UCT_IB_MLX5_LAG_PORT_SELECT_FT)) {
+            iface->tx.port_affinity = 1;
+        } else {
+            ucs_warn("Device %s does not support set"
+                     "UCX_DC_MLX5_LAG_PORT_AFFINITY=on, port select mode is %d",
+                     uct_ib_device_name(&md->super.dev),
+                     md->port_select_mode);
+        }
+    } else if ((config->tx_port_affinity == UCS_CONFIG_AUTO) &&
+               (md->port_select_mode == UCT_IB_MLX5_LAG_QUEUE_AFFINITY)) {
+        iface->tx.port_affinity = 1;
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -1458,6 +1491,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         !(params->features & UCT_IFACE_FEATURE_PUT)) {
         self->flags |= UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT;
     }
+
+    uct_dc_mlx5_iface_init_tx_port_affinity(self, config);
 
     UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(self, config, dci, DCI, status, err);
     UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(self, config, dci_ka, KEEPALIVE,

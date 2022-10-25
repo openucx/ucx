@@ -14,7 +14,6 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
 #include <uct/ib/rc/base/rc_iface.h>
-#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 
 
 ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(
