@@ -270,7 +270,7 @@ ucp_proto_rndv_get_mtype_unpack_completion(uct_completion_t *uct_comp)
 
     ucs_mpool_put_inline(req->send.rndv.mdesc);
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
-        ucp_proto_rndv_ppln_recv_frag_complete(req, 1);
+        ucp_proto_rndv_ppln_recv_frag_complete(req, 1, 0);
     } else {
         ucp_proto_rndv_recv_complete_with_ats(req,
                                               UCP_PROTO_RNDV_GET_STAGE_ATS);
