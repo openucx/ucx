@@ -267,9 +267,7 @@ static size_t ucp_memh_exported_info_packed_size()
     size += sizeof(uint64_t);
 
     /* Common data (size, md_map, mem_type and etc) */
-    size += ucp_memh_common_packed_size(size);
-
-    return size;
+    return ucp_memh_common_packed_size(size);
 }
 
 static void ucp_memh_info_size_pack(void **p, size_t info_size)
