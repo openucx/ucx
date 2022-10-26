@@ -289,10 +289,10 @@ static void ucp_memh_info_size_pack(void **p, size_t info_size)
 
 static uint16_t ucp_memh_info_size_unpack(const void **p)
 {
-    uint16_t info_size = *ucs_serialize_next(&p, uint8_t);
+    uint16_t info_size = *ucs_serialize_next(p, uint8_t);
 
     if (info_size == 0) {
-        info_size = *ucs_serialize_next(&p, uint16_t) + sizeof(uint16_t);
+        info_size = *ucs_serialize_next(p, uint16_t) + sizeof(uint16_t);
     }
 
     return info_size + sizeof(uint8_t);
