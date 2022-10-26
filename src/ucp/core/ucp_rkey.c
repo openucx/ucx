@@ -236,7 +236,7 @@ static size_t ucp_memh_common_packed_size(size_t specific_info_size)
     size_t size = specific_info_size;
 
     /* Size of mkey information which comes prior TL mkey data of all MDs */
-    size = sizeof(uint8_t);
+    size += sizeof(uint8_t);
 
     /* Flags */
     size += sizeof(uint16_t);
@@ -336,7 +336,7 @@ ucp_memh_tl_mkey_common_packed_size(size_t specific_info_size)
     size_t size = specific_info_size;
 
     /* Size of packed TL mkey data */
-    size = sizeof(uint8_t);
+    size += sizeof(uint8_t);
 
     /* TL mkey size */
     size += sizeof(uint8_t);
