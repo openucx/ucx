@@ -9,8 +9,6 @@
 #endif
 
 #include "dc_mlx5.inl"
-#include "dc_mlx5.h"
-#include "dc_mlx5_ep.h"
 
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_device.h>
