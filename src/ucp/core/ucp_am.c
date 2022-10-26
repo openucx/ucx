@@ -957,7 +957,6 @@ ucp_am_params_check_memh(const ucp_request_param_t *param, uint32_t *flags_p)
          */
         ucs_assert(param->memh != NULL);
 
-
         if (ucs_unlikely(param->memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
             if (ucs_unlikely(ENABLE_PARAMS_CHECK &&
                              (*flags_p & UCP_AM_SEND_FLAG_EAGER))) {

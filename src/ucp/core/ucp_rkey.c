@@ -220,10 +220,9 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                                 sys_dev_map, sys_distance, buffer, 1, 0);
 }
 
-static size_t ucp_memh_extended_info_size(size_t common_size,
-                                          size_t specific_info_size)
+static size_t ucp_memh_extended_info_size(size_t size)
 {
-    if ((specific_info_size + common_size - sizeof(uint8_t)) > UINT8_MAX) {
+    if ((size - sizeof(uint8_t)) > UINT8_MAX) {
         /* This field is packed after the 8-bit size field in case of a total
          * info size is greater than UINT8_MAX. */
         return sizeof(uint16_t);
@@ -234,7 +233,7 @@ static size_t ucp_memh_extended_info_size(size_t common_size,
 
 static size_t ucp_memh_common_packed_size(size_t specific_info_size)
 {
-    size_t size;
+    size_t size = specific_info_size;
 
     /* Size of mkey information which comes prior TL mkey data of all MDs */
     size = sizeof(uint8_t);
@@ -248,7 +247,7 @@ static size_t ucp_memh_common_packed_size(size_t specific_info_size)
     /* Memory type */
     size += sizeof(uint8_t);
 
-    return size + ucp_memh_extended_info_size(size, specific_info_size);
+    return size + ucp_memh_extended_info_size(size);
 }
 
 static size_t ucp_memh_exported_info_packed_size()
@@ -334,7 +333,7 @@ static size_t ucp_memh_global_id_packed_size(const uct_md_attr_v2_t *md_attr)
 static size_t
 ucp_memh_tl_mkey_common_packed_size(size_t specific_info_size)
 {
-    size_t size;
+    size_t size = specific_info_size;
 
     /* Size of packed TL mkey data */
     size = sizeof(uint8_t);
@@ -342,7 +341,7 @@ ucp_memh_tl_mkey_common_packed_size(size_t specific_info_size)
     /* TL mkey size */
     size += sizeof(uint8_t);
 
-    return size + ucp_memh_extended_info_size(size, specific_info_size);
+    return size + ucp_memh_extended_info_size(size);
 }
 
 static size_t
