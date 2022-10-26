@@ -517,6 +517,8 @@ ucp_memh_exported_tl_mkey_data_unpack(ucp_context_h context,
     const void *tl_mkey_buf;
     ucp_md_map_t md_map;
 
+    ucs_assert(p != NULL);
+
     tl_mkey_data_size = ucp_memh_info_size_unpack(&p);
     ucs_assert(tl_mkey_data_size != 0);
 
@@ -553,6 +555,8 @@ ucp_memh_exported_unpack(ucp_context_h context, const void *export_mkey_buffer,
     ucp_md_index_t md_index;
     const void *tl_mkey_buf;
     ucp_unpacked_exported_tl_mkey_t *tl_mkey;
+
+    ucs_assert(p != NULL);
 
     /* Common memory handle information */
     memh_info_size = ucp_memh_info_size_unpack(&p);
