@@ -146,7 +146,7 @@ static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
 }
 
 static void
-ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack,
+ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
                                   ucp_proto_complete_cb_t complete_func,
                                   const char *title)
 {
@@ -156,7 +156,7 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack,
         req->send.rndv.ppln.ack_data_size += freq->send.state.dt_iter.length;
     }
 
-    if (!ucp_proto_rndv_frag_complete(req, freq, title)) {
+    if (!ucp_proto_rndv_frag_complete(req, freq, title) && !abort) {
         return;
     }
 
@@ -164,7 +164,7 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack,
         ucp_proto_rndv_rkey_destroy(req);
     }
 
-    if (req->send.rndv.ppln.ack_data_size > 0) {
+    if ((req->send.rndv.ppln.ack_data_size > 0) && !abort) {
         ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_PPLN_STAGE_ACK);
         ucp_request_send(req);
     } else {
@@ -174,7 +174,7 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack,
 
 void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
 {
-    ucp_proto_rndv_ppln_frag_complete(freq, send_ack,
+    ucp_proto_rndv_ppln_frag_complete(freq, send_ack, 0,
                                       ucp_proto_request_complete_success,
                                       "ppln_send");
 }
@@ -182,13 +182,14 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
 void ucp_proto_rndv_ppln_recv_frag_clean(ucp_request_t *freq)
 {
     ucp_proto_rndv_ppln_frag_complete(
-            freq, 0, (ucp_proto_complete_cb_t)ucs_empty_function,
+            freq, 0, 0, (ucp_proto_complete_cb_t)ucs_empty_function,
             "ppln_recv_clean");
 }
 
-void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack)
+void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
+                                            int abort)
 {
-    ucp_proto_rndv_ppln_frag_complete(freq, send_ack,
+    ucp_proto_rndv_ppln_frag_complete(freq, send_ack, abort,
                                       ucp_proto_rndv_recv_complete,
                                       "ppln_recv");
 }
