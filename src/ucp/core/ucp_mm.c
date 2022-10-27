@@ -1454,7 +1454,7 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
 
     if (memh->md_map == 0) {
         ucs_error("no suitable UCT memory domains to perform importing on");
-        return UCS_ERR_IO_ERROR;
+        return UCS_ERR_UNREACHABLE;
     }
 
     return UCS_OK;

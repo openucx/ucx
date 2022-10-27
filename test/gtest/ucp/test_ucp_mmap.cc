@@ -190,6 +190,11 @@ private:
     void test_rkey_proto(ucp_mem_h memh);
     void test_rereg_local_mem(ucp_mem_h memh, void *ptr, size_t size,
                               unsigned map_flags);
+    static ucs_log_func_rc_t
+    import_no_md_error_handler(const char *file, unsigned line,
+                               const char *function, ucs_log_level_t level,
+                               const ucs_log_component_config_t *comp_conf,
+                               const char *message, va_list ap);
     void test_rereg_imported_mem(ucp_mem_h memh, uint64_t memh_pack_flags,
                                  size_t size);
 
@@ -560,6 +565,27 @@ void test_ucp_mmap::test_rereg_local_mem(ucp_mem_h memh, void *ptr,
     }
 }
 
+ucs_log_func_rc_t
+test_ucp_mmap::import_no_md_error_handler(const char *file, unsigned line,
+                                          const char *function,
+                                          ucs_log_level_t level,
+                                          const ucs_log_component_config_t *comp_conf,
+                                          const char *message, va_list ap)
+{
+    // Ignore errors that no suitable MDs for import as it is expected
+    if (level == UCS_LOG_LEVEL_ERROR) {
+        std::string err_str = format_message(message, ap);
+
+        if (err_str.find("no suitable UCT memory domains to perform importing"
+                         " on") != std::string::npos) {
+            UCS_TEST_MESSAGE << err_str;
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+    }
+
+    return UCS_LOG_FUNC_RC_CONTINUE;
+}
+
 void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
                                             uint64_t memh_pack_flags,
                                             size_t size)
@@ -586,9 +612,15 @@ void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
     params.field_mask           =
             UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER;
     params.exported_memh_buffer = exported_memh_buf;
-    status                      = ucp_mem_map(receiver().ucph(), &params,
-                                              &imp_memh);
-    ASSERT_UCS_OK(status);
+
+    {
+        scoped_log_handler warn_slh(import_no_md_error_handler);
+        status = ucp_mem_map(receiver().ucph(), &params, &imp_memh);
+        if (status == UCS_ERR_UNREACHABLE) {
+            UCS_TEST_SKIP_R("memory importing is unsupported");
+        }
+        ASSERT_UCS_OK(status);
+    }
 
     ucp_mem_h test_imp_memh;
 
@@ -679,19 +711,9 @@ UCS_TEST_P(test_ucp_mmap, rereg)
     test_rereg();
 }
 
-UCS_TEST_P(test_ucp_mmap, reg_export_and_reimport)
-{
-    test_rereg(0, UCP_MEMH_PACK_FLAG_EXPORT, true);
-}
-
 UCS_TEST_P(test_ucp_mmap, alloc_rereg)
 {
     test_rereg(UCP_MEM_MAP_ALLOCATE);
-}
-
-UCS_TEST_P(test_ucp_mmap, alloc_reg_export_and_reimport)
-{
-    test_rereg(UCP_MEM_MAP_ALLOCATE, UCP_MEMH_PACK_FLAG_EXPORT, true);
 }
 
 void test_ucp_mmap::test_length0(unsigned flags)

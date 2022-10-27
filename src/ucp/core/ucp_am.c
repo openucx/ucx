@@ -952,19 +952,20 @@ static UCS_F_ALWAYS_INLINE uint16_t ucp_am_send_nbx_get_op_flag(uint32_t flags)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_params_check_memh(const ucp_request_param_t *param, uint32_t *flags_p)
 {
-    if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
-        /* Suppress Coverity warning that memh could be NULL and dereferenced
-         */
-        ucs_assert(param->memh != NULL);
+    if (!ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
+        return UCS_OK;
+    }
 
-        if (ucs_unlikely(param->memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
-            if (ucs_unlikely(ENABLE_PARAMS_CHECK &&
-                             (*flags_p & UCP_AM_SEND_FLAG_EAGER))) {
-                return UCS_ERR_INVALID_PARAM;
-            }
+    /* Suppress Coverity warning that memh could be NULL and dereferenced */
+    ucs_assert(param->memh != NULL);
 
-            *flags_p |= UCP_AM_SEND_FLAG_RNDV;
+    if (ucs_unlikely(param->memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+        if (ENABLE_PARAMS_CHECK &&
+            ucs_unlikely(*flags_p & UCP_AM_SEND_FLAG_EAGER)) {
+            return UCS_ERR_INVALID_PARAM;
         }
+
+        *flags_p |= UCP_AM_SEND_FLAG_RNDV;
     }
 
     return UCS_OK;
