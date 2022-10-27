@@ -1418,11 +1418,10 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
                 }
+            }
 
-                if ((md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY) &&
-                    (md_attr->reg_mem_types & UCS_BIT(mem_type))) {
-                    context->export_md_map[mem_type] |= UCS_BIT(md_index);
-                }
+            if (md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY) {
+                context->export_md_map |= UCS_BIT(md_index);
             }
 
             if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
@@ -1474,11 +1473,11 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_tls                  = 0;
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
+    context->export_md_map            = 0;
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
         context->reg_md_map[mem_type]    = 0;
         context->cache_md_map[mem_type]  = 0;
-        context->export_md_map[mem_type] = 0;
         context->dmabuf_mds[mem_type]    = UCP_NULL_RESOURCE;
     }
 

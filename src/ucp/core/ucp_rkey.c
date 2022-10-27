@@ -222,7 +222,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t ucp_memh_export_md_map(ucp_mem_h memh)
 {
-    return memh->context->export_md_map[memh->mem_type] & memh->md_map;
+    return memh->context->export_md_map & memh->md_map;
 }
 
 static size_t ucp_memh_extended_info_size(size_t size)
@@ -306,7 +306,7 @@ static uint16_t ucp_memh_info_size_unpack(const void **p)
 static void ucp_memh_common_pack(const ucp_mem_h memh, void **p,
                                  uint64_t flags, size_t memh_info_size)
 {
-    ucp_context_h context = memh->context;
+    ucp_context_h UCS_V_UNUSED context = memh->context;
 
     /* Check that md_map is valid */
     ucs_assertv(ucs_test_all_flags(UCS_MASK(context->num_mds), memh->md_map),
@@ -668,8 +668,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
     ucs_trace("packing %smemh %p for buffer %p md_map 0x%" PRIx64
               " export_md_map 0x%" PRIx64,
               (flags & UCP_MEMH_PACK_FLAG_EXPORT) ? "exported " : "", memh,
-              ucp_memh_address(memh), memh->md_map,
-              context->export_md_map[memh->mem_type]);
+              ucp_memh_address(memh), memh->md_map, context->export_md_map);
 
     if (ucp_memh_is_zero_length(memh)) {
         /* Dummy memh, return dummy key */

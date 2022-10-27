@@ -284,7 +284,7 @@ typedef struct ucp_context {
 
     /* Map of MDs that provide registration of a memory buffer for a given
        memory type to be exported to other processes. */
-    ucp_md_map_t                  export_md_map[UCS_MEMORY_TYPE_LAST];
+    ucp_md_map_t                  export_md_map;
 
     /* Map of MDs that support dmabuf registration */
     ucp_md_map_t                  dmabuf_reg_md_map;
