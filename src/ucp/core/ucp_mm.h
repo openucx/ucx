@@ -91,7 +91,7 @@ typedef struct ucp_rndv_mpool_priv {
 
 typedef struct {
     ucp_mem_t memh;
-    uct_mem_h uct[UCP_MD_INDEX_BITS];
+    uct_mem_h uct[UCP_MAX_MDS];
 } ucp_mem_dummy_handle_t;
 
 

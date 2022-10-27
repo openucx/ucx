@@ -132,7 +132,7 @@ typedef struct ucp_unpacked_exported_memh {
     uint64_t                        remote_uuid; /* UUID of remote UCP context */
     uint64_t                        reg_id; /* Registration ID */
     unsigned                        num_tl_mkeys; /* Number of unpacked TL mkeys */
-    ucp_unpacked_exported_tl_mkey_t tl_mkeys[UCP_MD_INDEX_BITS]; /* Unpacked TL mkeys */
+    ucp_unpacked_exported_tl_mkey_t tl_mkeys[UCP_MAX_MDS]; /* Unpacked TL mkeys */
 } ucp_unpacked_exported_memh_t;
 
 

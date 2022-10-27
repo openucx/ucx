@@ -220,6 +220,11 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
                                 sys_dev_map, sys_distance, buffer, 1, 0);
 }
 
+static UCS_F_ALWAYS_INLINE ucp_md_map_t ucp_memh_export_md_map(ucp_mem_h memh)
+{
+    return memh->context->export_md_map[memh->mem_type] & memh->md_map;
+}
+
 static size_t ucp_memh_extended_info_size(size_t size)
 {
     if ((size - sizeof(uint8_t)) > UINT8_MAX) {
@@ -312,7 +317,7 @@ static void ucp_memh_common_pack(const ucp_mem_h memh, void **p,
     ucp_memh_info_size_pack(p, memh_info_size);
 
     *ucs_serialize_next(p, uint16_t) = flags;
-    *ucs_serialize_next(p, uint64_t) = context->export_md_map[memh->mem_type];
+    *ucs_serialize_next(p, uint64_t) = ucp_memh_export_md_map(memh);
     *ucs_serialize_next(p, uint8_t)  = memh->mem_type;
 }
 
@@ -417,6 +422,7 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
         .flags      = UCT_MD_MKEY_PACK_FLAG_EXPORT
     };
     size_t memh_info_size            = ucp_memh_exported_info_packed_size();
+    ucp_md_map_t export_md_map       = ucp_memh_export_md_map(memh);
     size_t UCS_V_UNUSED memh_info_packed_size;
     const uct_md_attr_v2_t *md_attr;
     char UCS_V_UNUSED buf[128];
@@ -441,7 +447,7 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
                 "memh_info_size %zu memh_info_packed_size %zu",
                 memh_info_size, memh_info_packed_size);
 
-    ucs_for_each_bit(md_index, context->export_md_map[memh->mem_type]) {
+    ucs_for_each_bit(md_index, export_md_map) {
         md_attr           = &tl_mds[md_index].attr;
         global_id_size    = ucp_memh_global_id_packed_size(md_attr);
         tl_mkey_data_size = ucp_memh_exported_tl_mkey_packed_size(context,
@@ -467,8 +473,7 @@ ucp_memh_exported_pack(const ucp_mem_h memh, void *buffer)
                md_attr->global_id, global_id_size);
 
         ucs_trace("exported mkey[%d]=%s for md[%d]=%s",
-                  ucs_bitmap2idx(context->export_md_map[memh->mem_type],
-                                 md_index),
+                  ucs_bitmap2idx(export_md_map, md_index),
                   ucs_str_dump_hex(p, tl_mkey_size, buf, sizeof(buf),
                                    SIZE_MAX),
                   md_index, tl_mds[md_index].rsc.md_name);
@@ -491,7 +496,6 @@ static ucp_md_map_t ucp_rkey_find_global_id_md_map(ucp_context_h context,
 
     for (md_index = 0; md_index < context->num_mds; md_index++) {
         md_attr = &context->tl_mds[md_index].attr;
-
         if ((ucp_memh_global_id_packed_size(md_attr) == global_id_size) &&
             (memcmp(md_attr->global_id, md_global_id, global_id_size) == 0)) {
             md_map |= UCS_BIT(md_index);
@@ -611,8 +615,8 @@ ucp_memh_packed_size(ucp_mem_h memh, uint64_t flags, int rkey_compat)
 
     if (flags & UCP_MEMH_PACK_FLAG_EXPORT) {
         ucs_assert(!rkey_compat);
-        return ucp_memh_exported_packed_size(
-                context, context->export_md_map[memh->mem_type]);
+        return ucp_memh_exported_packed_size(context,
+                                             ucp_memh_export_md_map(memh));
     }
 
     if (rkey_compat) {
@@ -684,7 +688,7 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
     size = ucp_memh_packed_size(memh, flags, rkey_compat);
 
     if ((flags & UCP_MEMH_PACK_FLAG_EXPORT) &&
-        (context->export_md_map[memh->mem_type] == 0)) {
+        (ucp_memh_export_md_map(memh) == 0)) {
         ucs_diag("packing memory handle as exported was requested, but"
                  " no UCT MDs which support exported memory keys");
         status = UCS_ERR_UNSUPPORTED;
@@ -894,7 +898,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
          * If some rkeys cannot be unpacked, we remove them from the local map.
          */
         ucs_assert(UCS_BIT(remote_md_index) & remote_md_map);
-        ucs_assert_always(remote_md_index <= UCP_MD_INDEX_BITS);
+        ucs_assert_always(remote_md_index <= UCP_MAX_MDS);
 
         /* Unpack only reachable rkeys */
         if (!(UCS_BIT(remote_md_index) & rkey->md_map)) {

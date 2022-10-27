@@ -575,7 +575,6 @@ test_ucp_mmap::import_no_md_error_handler(const char *file, unsigned line,
     // Ignore errors that no suitable MDs for import as it is expected
     if (level == UCS_LOG_LEVEL_ERROR) {
         std::string err_str = format_message(message, ap);
-
         if (err_str.find("no suitable UCT memory domains to perform importing"
                          " on") != std::string::npos) {
             UCS_TEST_MESSAGE << err_str;

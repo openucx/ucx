@@ -97,12 +97,6 @@ ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
         return;
     }
 
-    ucs_assert(context->rcache != NULL);
-
-    if (context->config.features & UCP_FEATURE_EXPORTED_MEMH) {
-        ucs_assert(context->imported_mem_hash != NULL);
-    }
-
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     if (memh->flags & UCP_MEMH_FLAG_IMPORTED) {
         iter = kh_get(ucp_context_imported_mem_hash,
