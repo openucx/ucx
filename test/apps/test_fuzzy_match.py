@@ -40,12 +40,23 @@ class TestRunner:
         self.ucx_info = ucx_info
         if verbose:
             logging.basicConfig(level=logging.DEBUG)
+       
+    def ib_available(self):
+        status, output = commands.getstatusoutput('ibv_devinfo')
+        if status != 0:
+            return False
         
+        return 'No IB devices found' not in output
+         
     def run(self, expected):
-        with Environment(expected.keys()):
+        if expected['ib_required'] and not self.ib_available():
+            # Skip test if IB transport is required but not available.
+            return
+        
+        with Environment(expected['results'].keys()):
             matches = self.get_fuzzy_matches()
 
-            if matches != expected:
+            if matches != expected['results']:
                 raise Exception('Wrong fuzzy list: got: %s, expected: %s' % (matches, expected))
         
             logging.info('found all expected matches: %s' % expected)
@@ -86,12 +97,12 @@ if __name__ == '__main__':
 
     try:    
         runner = TestRunner(args.ucx_info, args.verbose)
-        expected_list = [{'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL']}, 
-                         {'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL'], 'UCX_MOFULE_D' : ['UCX_MODULE_DIR', 'UCX_MODULES']},
-                         {'UCX_SOME_VAR' : [], 'UCX_SOME_VAR2' : [],  'UCX_SOME_VAR3' : [],  'UCX_SOME_VAR4' : []},
-                         {'UCX_SOME_VAR' : [], 'UCX_MOFULE_D' : ['UCX_MODULE_DIR', 'UCX_MODULES'], 'UCX_SOME_VAR2' : [], 'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL']},
-                         {'UCX_RC_VERBS_RX_MAX_BUF' : ['UCX_RC_VERBS_TX_MAX_BUFS', 'UCX_RC_VERBS_RX_MAX_BUFS', 'UCX_UD_VERBS_RX_MAX_BUFS']},
-                         {'UCX_RLS' : ['UCX_TLS']}]
+        expected_list =  [{'results' : {'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL']}, 'ib_required': False}, 
+                          {'results' : {'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL'], 'UCX_MOFULE_D' : ['UCX_MODULE_DIR', 'UCX_MODULES']}, 'ib_required': False},
+                          {'results' : {'UCX_SOME_VAR' : [], 'UCX_SOME_VAR2' : [],  'UCX_SOME_VAR3' : [],  'UCX_SOME_VAR4' : []}, 'ib_required': False},
+                          {'results' : {'UCX_SOME_VAR' : [], 'UCX_MOFULE_D' : ['UCX_MODULE_DIR', 'UCX_MODULES'], 'UCX_SOME_VAR2' : [], 'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL']}, 'ib_required': False},
+                          {'results' : {'UCX_RC_VERBS_RX_MAX_BUF' : ['UCX_RC_VERBS_TX_MAX_BUFS', 'UCX_RC_VERBS_RX_MAX_BUFS', 'UCX_UD_VERBS_RX_MAX_BUFS']}, 'ib_required': True},
+                          {'results' : {'UCX_RLS' : ['UCX_TLS']}, 'ib_required': False}]
         
         for expected in expected_list:
             runner.run(expected)
