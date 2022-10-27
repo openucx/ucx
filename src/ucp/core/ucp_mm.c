@@ -1479,7 +1479,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
     if (context->imported_mem_hash != NULL) {
         if (existing_rcache == NULL) {
             ucs_snprintf_safe(rcache_name, sizeof(rcache_name),
-                              "ucp_import_rcache[0x%" PRIx64,
+                              "ucp_import_rcache[0x%" PRIx64 "]",
                               unpacked->remote_uuid);
             status = ucp_mem_rcache_create(context, rcache_name, &rcache);
             if (status != UCS_OK) {
