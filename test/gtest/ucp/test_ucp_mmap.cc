@@ -18,7 +18,8 @@ extern "C" {
 
 class test_ucp_mmap : public ucp_test {
 public:
-    test_ucp_mmap() {
+    test_ucp_mmap()
+    {
         m_always_equal_md_map = 0;
     }
 
@@ -30,20 +31,27 @@ public:
     };
 
     static void
-    get_test_variants(std::vector<ucp_test_variant>& variants)
+    get_test_variants(std::vector<ucp_test_variant>& variants,
+                      uint64_t extra_features)
     {
-        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_RMA, VARIANT_MAP_NONBLOCK,
-                               "map_nb");
-        add_variant_with_value(variants, UCP_FEATURE_RMA, VARIANT_PROTO_ENABLE,
-                               "proto");
-        add_variant_with_value(variants, UCP_FEATURE_RMA,
+        add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_RMA |extra_features,
+                               VARIANT_MAP_NONBLOCK, "map_nb");
+        add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
+                               VARIANT_PROTO_ENABLE, "proto");
+        add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
                                VARIANT_NO_SEND_RCACHE, "no_send_rcache");
-        add_variant_with_value(variants, UCP_FEATURE_RMA,
+        add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
                                VARIANT_NO_RECV_RCACHE, "no_recv_rcache");
-        add_variant_with_value(variants, UCP_FEATURE_RMA,
+        add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
                                VARIANT_NO_SEND_RCACHE | VARIANT_NO_RECV_RCACHE,
                                "no_rcache");
+    }
+
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        get_test_variants(variants, 0);
     }
 
     void create_entity_no_rcache() {
@@ -854,3 +862,25 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap)
+
+
+class test_ucp_mmap_export : public test_ucp_mmap {
+public:
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        test_ucp_mmap::get_test_variants(variants, UCP_FEATURE_EXPORTED_MEMH);
+    }
+};
+
+UCS_TEST_P(test_ucp_mmap_export, reg_export_and_reimport)
+{
+    test_rereg(0, UCP_MEMH_PACK_FLAG_EXPORT, true);
+}
+
+UCS_TEST_P(test_ucp_mmap_export, alloc_reg_export_and_reimport)
+{
+    test_rereg(UCP_MEM_MAP_ALLOCATE, UCP_MEMH_PACK_FLAG_EXPORT, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_export)
