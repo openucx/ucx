@@ -1425,7 +1425,7 @@ ucp_rndv_is_rkey_ptr(const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
            (rndv_rts_hdr->address != 0) &&
            /* remote key must be on a memory domain for which we support rkey_ptr */
            (ucp_rkey_packed_md_map(rkey_buffer) &
-            ep_config->rndv.rkey_ptr_dst_mds) &&
+            ep_config->rndv.rkey_ptr_lane_dst_mds) &&
            /* rendezvous mode must not be forced to put/get */
            ((rndv_mode == UCP_RNDV_MODE_AUTO) ||
            /*  or be forced to rkey_ptr */
@@ -1506,7 +1506,8 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
 
     if (ucs_unlikely(lane == UCP_NULL_LANE)) {
         /* We should be able to find a lane, because ucp_rndv_is_rkey_ptr()
-         * already checked that (rkey->md_map & ep_config->rkey_ptr_dst_mds) != 0
+         * already checked that
+         * (rkey->md_map & ep_config->rkey_ptr_lane_dst_mds) != 0
          */
         ucs_fatal("failed to find a lane to access remote memory domains "
                   "0x%"PRIx64, rkey->md_map);
@@ -1555,9 +1556,6 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     ucp_md_index_t rkey_ptr_md_index = UCP_NULL_RESOURCE;
     ucp_ep_peer_mem_data_t *ppln_data;
     ucp_md_map_t md_map;
-    ucp_md_index_t md_index;
-    const uct_component_attr_t *cmpt_attr;
-    ucp_rsc_index_t cmpt_index;
     ucs_memory_type_t remote_mem_type;
 
     if (local_mem_type == UCS_MEMORY_TYPE_UNKNOWN) {
@@ -1576,26 +1574,16 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     /* Find MD with rkey_ptr property, but do not use xpmem, because cuda_copy
      * registration will fail and performance will not be optimal. */
     md_map = ucp_rkey_packed_md_map(rtr_hdr + 1) &
-             ucp_ep_config(ep)->key.reachable_md_map &
-             ~ucp_ep_config(ep)->rndv.rkey_ptr_dst_mds;
+             ucp_ep_config(ep)->rndv.proto_rndv_rkey_skip_mds;
 
-    ucs_for_each_bit(md_index, md_map) {
-        cmpt_index = ucp_ep_config_get_dst_md_cmpt(&ucp_ep_config(ep)->key,
-                                                   md_index);
-        cmpt_attr  = &context->tl_cmpts[cmpt_index].attr;
-        if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
-            rkey_ptr_md_index = md_index;
-            break;
-        }
-    }
-
-    if (rkey_ptr_md_index == UCP_NULL_RESOURCE) {
+    if (md_map == 0) {
         return NULL;
     }
 
-    ppln_data = ucp_ep_peer_mem_get(context, ep, rtr_hdr->address,
-                                    rtr_hdr->size, rtr_hdr + 1, local_mem_type,
-                                    rkey_ptr_md_index);
+    rkey_ptr_md_index = ucs_ffs64(md_map);
+    ppln_data         = ucp_ep_peer_mem_get(context, ep, rtr_hdr->address,
+                                            rtr_hdr->size, rtr_hdr + 1,
+                                            local_mem_type, rkey_ptr_md_index);
     if (ppln_data == NULL) {
         return NULL;
     }

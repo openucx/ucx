@@ -628,7 +628,8 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                           const void *rkey_buffer, size_t rkey_length,
                           uint8_t sg_count)
 {
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep                = req->send.ep;
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
@@ -640,8 +641,14 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
 
     if (rkey_length > 0) {
         ucs_assert(rkey_buffer != NULL);
-        status = ucp_ep_rkey_unpack_reachable(ep, rkey_buffer, rkey_length,
-                                              &rkey);
+        /* Do not unpack rkeys from MDs with rkey_ptr capability, except
+         * rkey_ptr_lane. Examples are: sysv and posix. Such keys, if packed,
+         * are unpacked only once and cached in the peer_mem hash on ep. It is
+         * done by the specific protocols (if selected) which use them.
+         */
+        status = ucp_ep_rkey_unpack_internal(
+                  ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
+                  ep_config->rndv.proto_rndv_rkey_skip_mds, &rkey);
         if (status != UCS_OK) {
             goto err;
         }
@@ -650,7 +657,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
         rkey_cfg_index = rkey->cfg_index;
     } else {
         /* No remote key, use endpoint protocols */
-        proto_select   = &ucp_ep_config(ep)->proto_select;
+        proto_select   = &ep_config->proto_select;
         rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
         rkey           = NULL;
     }
