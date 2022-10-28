@@ -98,6 +98,8 @@ function add_timestamp() {
 function az_init_modules() {
     . /etc/profile.d/modules.sh
     export MODULEPATH="/hpc/local/etc/modulefiles:$MODULEPATH"
+    # Read module files (W/A if there're some network instabilities lead to autofs issues)
+    find /hpc/local/etc/modulefiles >/dev/null 2>&1
 }
 
 #
