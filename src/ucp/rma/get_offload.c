@@ -93,6 +93,7 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+        .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_rma_lanes,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_BCOPY,
@@ -183,6 +184,7 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
+        .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_rma_lanes,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,

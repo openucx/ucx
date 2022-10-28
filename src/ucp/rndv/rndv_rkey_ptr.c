@@ -58,6 +58,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+        .super.exclude_map   = 0,
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };

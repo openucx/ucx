@@ -30,7 +30,8 @@ ucp_proto_single_init_priv(const ucp_proto_single_init_params_t *params,
     ucs_status_t status;
 
     num_lanes = ucp_proto_common_find_lanes(&params->super, params->lane_type,
-                                            params->tl_cap_flags, 1, 0, &lane);
+                                            params->tl_cap_flags, 1,
+                                            params->super.exclude_map, &lane);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s", params->super.super.proto_name);
         return UCS_ERR_NO_ELEM;

@@ -72,6 +72,7 @@ static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.exclude_map   = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
@@ -245,6 +246,7 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.exclude_map   = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY

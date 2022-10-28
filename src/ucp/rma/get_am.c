@@ -91,6 +91,7 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_PUT_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.exclude_map   = 0,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
