@@ -380,8 +380,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
-                 (ep, buffer, length, unpack_md_map, rkey_p), ucp_ep_h ep,
-                 const void *buffer, size_t length, ucp_md_map_t unpack_md_map,
+                 (ep, buffer, length, unpack_md_map, skip_md_map, rkey_p),
+                 ucp_ep_h ep, const void *buffer, size_t length,
+                 ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
                  ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
@@ -457,7 +458,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
         }
 
         ucs_assert(rkey_index < md_count);
-        tl_rkey       = &rkey->tl_rkey[rkey_index];
+        tl_rkey = &rkey->tl_rkey[rkey_index];
+
+        if (UCS_BIT(remote_md_index) & skip_md_map) {
+            tl_rkey->rkey.rkey   = UCT_INVALID_RKEY;
+            tl_rkey->rkey.handle = NULL;
+            tl_rkey->cmpt        = NULL;
+            ucs_trace("rkey[%d] for remote md %d is not unpacked",
+                      rkey_index, remote_md_index);
+            ++rkey_index;
+            continue;
+        }
+
         cmpt_index    = ucp_ep_config_get_dst_md_cmpt(&ep_config->key,
                                                       remote_md_index);
         tl_rkey->cmpt = worker->context->tl_cmpts[cmpt_index].cmpt;
@@ -583,8 +595,10 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
 
     rkey_index = 0;
     ucs_for_each_bit(remote_md_index, rkey->md_map) {
-        uct_rkey_release(rkey->tl_rkey[rkey_index].cmpt,
-                         &rkey->tl_rkey[rkey_index].rkey);
+        if (rkey->tl_rkey[rkey_index].rkey.rkey != UCT_INVALID_RKEY) {
+            uct_rkey_release(rkey->tl_rkey[rkey_index].cmpt,
+                             &rkey->tl_rkey[rkey_index].rkey);
+        }
         ++rkey_index;
     }
 

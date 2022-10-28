@@ -315,7 +315,7 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
     }
 
     data->size = size;
-    ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(rkey_ptr_md_index),
+    ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(rkey_ptr_md_index), 0,
                                 &data->rkey);
     rkey_index = ucs_bitmap2idx(data->rkey->md_map, rkey_ptr_md_index);
     status     = uct_rkey_ptr(data->rkey->tl_rkey[rkey_index].cmpt,
@@ -2461,6 +2461,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     double get_zcopy_max_bw[UCS_MEMORY_TYPE_LAST];
     double put_zcopy_max_bw[UCS_MEMORY_TYPE_LAST];
     ucs_status_t status;
+    ucp_md_index_t dst_md_index;
     size_t it;
 
     memset(config, 0, sizeof(*config));
@@ -2514,10 +2515,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 config->rndv.put_zcopy.lanes[lane] = UCP_NULL_LANE;
     }
 
-    config->rndv.rkey_ptr_dst_mds       = 0;
-    config->stream.proto                = &ucp_stream_am_proto;
-    config->am_u.proto                  = &ucp_am_proto;
-    config->am_u.reply_proto            = &ucp_am_reply_proto;
+    config->rndv.proto_rndv_rkey_skip_mds = 0;
+    config->rndv.rkey_ptr_lane_dst_mds    = 0;
+    config->stream.proto                  = &ucp_stream_am_proto;
+    config->am_u.proto                    = &ucp_am_proto;
+    config->am_u.reply_proto              = &ucp_am_reply_proto;
 
     ucp_ep_config_init_short_thresh(&config->tag.offload.max_eager_short);
     ucp_ep_config_init_short_thresh(&config->tag.max_eager_short);
@@ -2526,15 +2528,26 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
         rsc_index = config->key.lanes[lane].rsc_index;
-        if (rsc_index != UCP_NULL_RESOURCE) {
-            config->md_index[lane] = context->tl_rscs[rsc_index].md_index;
-            if (ucp_ep_config_connect_p2p(worker, &config->key, rsc_index)) {
-                config->p2p_lanes |= UCS_BIT(lane);
-            } else if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
-                config->uct_rkey_pack_flags |= UCT_MD_MKEY_PACK_FLAG_INVALIDATE;
-            }
-        } else {
+        if (rsc_index == UCP_NULL_RESOURCE) {
             config->md_index[lane] = UCP_NULL_RESOURCE;
+            continue;
+        }
+
+        config->md_index[lane] = context->tl_rscs[rsc_index].md_index;
+        if (ucp_ep_config_connect_p2p(worker, &config->key, rsc_index)) {
+            config->p2p_lanes |= UCS_BIT(lane);
+        } else if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+            config->uct_rkey_pack_flags |= UCT_MD_MKEY_PACK_FLAG_INVALIDATE;
+        }
+
+        cmpt_attr = ucp_cmpt_attr_by_md_index(context, config->md_index[lane]);
+        if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
+            dst_md_index = config->key.lanes[lane].dst_md_index;
+            if (lane == key->rkey_ptr_lane) {
+                config->rndv.rkey_ptr_lane_dst_mds     = UCS_BIT(dst_md_index);
+            } else {
+                config->rndv.proto_rndv_rkey_skip_mds |= UCS_BIT(dst_md_index);
+            }
         }
     }
 
@@ -2623,16 +2636,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     /* PUT Zcopy */
     ucp_ep_config_rndv_zcopy_commit(put_zcopy_lane_count,
                                     &config->rndv.put_zcopy);
-
-    /* Rkey ptr */
-    if (key->rkey_ptr_lane != UCP_NULL_LANE) {
-        lane      = key->rkey_ptr_lane;
-        cmpt_attr = ucp_cmpt_attr_by_md_index(context, config->md_index[lane]);
-        ucs_assert_always(cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR);
-
-        config->rndv.rkey_ptr_dst_mds =
-                UCS_BIT(config->key.lanes[lane].dst_md_index);
-    }
 
     /* Configuration for tag offload */
     if (config->key.tag_lane != UCP_NULL_LANE) {
