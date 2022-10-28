@@ -48,12 +48,25 @@ uct_sm_iface_get_device_address(uct_iface_t *tl_iface, uct_device_addr_t *addr)
     return UCS_OK;
 }
 
+int uct_sm_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                 const uct_iface_is_reachable_params_t *params)
+{
+    const uct_device_addr_t *dev_addr = params->device_addr;
+    return uct_iface_local_is_reachable((uct_iface_local_addr_ns_t*)dev_addr,
+                                        UCS_SYS_NS_TYPE_IPC);
+}
+
 int uct_sm_iface_is_reachable(const uct_iface_h tl_iface,
                               const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr)
 {
-    return uct_iface_local_is_reachable((uct_iface_local_addr_ns_t*)dev_addr,
-                                        UCS_SYS_NS_TYPE_IPC);
+    uct_iface_is_reachable_params_t params = {
+        .device_addr = dev_addr,
+        .iface_addr = iface_addr,
+        .info_string = NULL,
+        .info_string_length = 0
+    };
+    return uct_sm_iface_is_reachable_v2(tl_iface, (const uct_iface_is_reachable_params_t *)&params);
 }
 
 ucs_status_t uct_sm_iface_fence(uct_iface_t *tl_iface, unsigned flags)

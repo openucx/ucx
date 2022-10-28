@@ -222,5 +222,77 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
     }
 }
 
+UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs_v2) {
+    /* test all pkeys (even with limited membership) that are configured
+     * for the device */
+    ib_pkey_pairs_t pairs = supported_pkey_pairs(false);
+
+    for (size_t i = 0; i < pairs.first.size(); i++) {
+        m_pkey[0]       = pairs.first[i][0];
+        m_pkey[1]       = pairs.first[i][1];
+        m_pkey_index[0] = pairs.second[i][0];
+        m_pkey_index[1] = pairs.second[i][1];
+
+        modify_config("IB_PKEY", "0x" +
+                      ucs::to_hex_string(m_pkey[0] &
+                                         UCT_IB_PKEY_PARTITION_MASK));
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+
+        modify_config("IB_PKEY", "0x" +
+                      ucs::to_hex_string(m_pkey[1] &
+                                         UCT_IB_PKEY_PARTITION_MASK));
+        m_e2 = uct_test::create_entity(0);
+        m_entities.push_back(m_e2);
+
+        m_e1->connect(0, *m_e2, 0);
+        m_e2->connect(0, *m_e1, 0);
+
+        check_pkeys();
+
+        /* pack-unpack the first IB iface address */
+        uct_ib_iface_t *iface1      = ucs_derived_of(m_e1->iface(),
+                                                     uct_ib_iface_t);
+         uct_ib_address_t *ib_addr1 =
+             (uct_ib_address_t*)ucs_alloca(uct_ib_iface_address_size(iface1));
+        uint16_t pkey1              = test_pack_unpack_ib_address(iface1,
+                                                                  ib_addr1);
+
+        /* pack-unpack the second IB iface address */
+        uct_ib_iface_t *iface2     = ucs_derived_of(m_e2->iface(),
+                                                    uct_ib_iface_t);
+        uct_ib_address_t *ib_addr2 =
+            (uct_ib_address_t*)ucs_alloca(uct_ib_iface_address_size(iface2));
+        uint16_t pkey2             = test_pack_unpack_ib_address(iface2,
+                                                                 ib_addr2);
+
+        int res = !(/* both PKEYs are with limited membership */
+                    !((pkey1 | pkey2) & UCT_IB_PKEY_MEMBERSHIP_MASK) ||
+                    /* the PKEYs are not equal */
+                    ((pkey1 ^ pkey2) & UCT_IB_PKEY_PARTITION_MASK));
+        
+        char info_buf1[1024] = { 0 };
+        uct_iface_is_reachable_params_t params1;
+        params1.device_addr = (uct_device_addr_t*)ib_addr1;
+        params1.iface_addr = NULL;
+        params1.info_string = (char*)info_buf1;
+        params1.info_string_length = 1024;
+        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(), (const uct_iface_is_reachable_params_t *)&params1));
+
+        char info_buf2[1024] = { 0 };
+        uct_iface_is_reachable_params_t params2;
+        params2.device_addr = (uct_device_addr_t*)ib_addr2;
+        params2.iface_addr = NULL;
+        params2.info_string = (char*)info_buf2;
+        params2.info_string_length = 1024;
+        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(), (const uct_iface_is_reachable_params_t *)&params2));
+
+        if (res) {
+            test_uct_ib::send_recv_short();
+        }
+
+        cleanup_entities();
+    }
+}
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_pkey);

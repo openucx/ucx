@@ -328,6 +328,9 @@ int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
                                    const uct_iface_addr_t *iface_addr);
 
+int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                      const uct_iface_is_reachable_params_t *params);
+
 ucs_status_t uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 
 ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);

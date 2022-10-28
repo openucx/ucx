@@ -222,8 +222,8 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
 int uct_iface_is_reachable_v2(const uct_iface_h iface,
                               const uct_iface_is_reachable_params_t *params)
 {
-    ucs_fatal("uct_iface_is_reachable_v2 not supported yet");
-    return 0;
+    const uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
+    return base_iface->internal_ops->iface_is_reachable_v2(iface, params);
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
@@ -457,11 +457,12 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 }
 
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
+    .iface_estimate_perf   = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
