@@ -195,6 +195,7 @@ private:
                                const char *function, ucs_log_level_t level,
                                const ucs_log_component_config_t *comp_conf,
                                const char *message, va_list ap);
+    void import_memh(void *exported_memh_buf, ucp_mem_h *memh_p);
     void test_rereg_imported_mem(ucp_mem_h memh, uint64_t memh_pack_flags,
                                  size_t size);
 
@@ -585,6 +586,26 @@ test_ucp_mmap::import_no_md_error_handler(const char *file, unsigned line,
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 
+void test_ucp_mmap::import_memh(void *exported_memh_buf, ucp_mem_h *memh_p)
+{
+    ucp_mem_map_params_t params;
+
+    params.field_mask           =
+            UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER;
+    params.exported_memh_buffer = exported_memh_buf;
+
+    {
+        scoped_log_handler warn_slh(import_no_md_error_handler);
+        ucs_status_t status = ucp_mem_map(receiver().ucph(), &params, memh_p);
+        if (status == UCS_ERR_UNREACHABLE) {
+            const ucp_memh_buffer_release_params_t release_params = { 0 };
+            ucp_memh_buffer_release(exported_memh_buf, &release_params);
+            UCS_TEST_SKIP_R("memory importing is unsupported");
+        }
+        ASSERT_UCS_OK(status);
+    }
+}
+
 void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
                                             uint64_t memh_pack_flags,
                                             size_t size)
@@ -607,24 +628,10 @@ void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
     ASSERT_UCS_OK(status);
 
     ucp_mem_h imp_memh;
-    ucp_mem_map_params_t params;
-    params.field_mask           =
-            UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER;
-    params.exported_memh_buffer = exported_memh_buf;
-
-    {
-        scoped_log_handler warn_slh(import_no_md_error_handler);
-        status = ucp_mem_map(receiver().ucph(), &params, &imp_memh);
-        if (status == UCS_ERR_UNREACHABLE) {
-            UCS_TEST_SKIP_R("memory importing is unsupported");
-        }
-        ASSERT_UCS_OK(status);
-    }
+    import_memh(exported_memh_buf, &imp_memh);
 
     ucp_mem_h test_imp_memh;
-
-    status = ucp_mem_map(receiver().ucph(), &params, &test_imp_memh);
-    ASSERT_UCS_OK(status);
+    import_memh(exported_memh_buf, &test_imp_memh);
 
     ucp_memh_buffer_release(exported_memh_buf, &release_params);
 
