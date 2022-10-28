@@ -334,6 +334,8 @@ typedef struct {
     /* Memory handle holding registration of the remote buffer on memtype
      * ep MD */
     uct_mem_h        uct_memh;
+    /* Local pointer to the remote memory described by rkey */
+    void             *local_ptr;
 } ucp_ep_peer_mem_data_t;
 
 
@@ -767,7 +769,9 @@ void ucp_ep_peer_mem_destroy(ucp_context_h context,
 
 ucp_ep_peer_mem_data_t*
 ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
-                    size_t size, void *rkey_buf, ucp_md_index_t md_index);
+                    size_t size, void *rkey_buf,
+                    ucs_memory_type_t local_mem_type,
+                    ucp_md_index_t rkey_ptr_md_index);
 
 /**
  * @brief Indicates AM-based keepalive necessity.

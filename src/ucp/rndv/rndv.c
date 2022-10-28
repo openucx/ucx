@@ -1557,19 +1557,13 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
     ucp_md_index_t md_index;
     const uct_component_attr_t *cmpt_attr;
     ucp_rsc_index_t cmpt_index;
-    ucp_ep_h mem_type_ep;
-    ucp_lane_index_t mem_type_rma_lane;
     ucs_memory_type_t remote_mem_type;
-    unsigned rkey_index;
-    void *local_ptr;
-    ucs_status_t status;
 
     if (local_mem_type == UCS_MEMORY_TYPE_UNKNOWN) {
         return NULL;
     }
 
-    mem_type_ep = worker->mem_type_ep[local_mem_type];
-    if (mem_type_ep == NULL) {
+    if (worker->mem_type_ep[local_mem_type] == NULL) {
         return NULL;
     }
 
@@ -1578,8 +1572,8 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
         return NULL;
     }
 
-    /* Do not use xpmem, because cuda_copy registration will fail and
-     * performance will not be optimal. */
+    /* Find MD with rkey_ptr property, but do not use xpmem, because cuda_copy
+     * registration will fail and performance will not be optimal. */
     md_map = ucp_rkey_packed_md_map(rtr_hdr + 1) &
              ucp_ep_config(ep)->key.reachable_md_map &
              ~ucp_ep_config(ep)->rndv.rkey_ptr_dst_mds;
@@ -1598,47 +1592,16 @@ ucp_rndv_get_frag_rkey_ptr(ucp_worker_h worker, ucp_ep_h ep,
         return NULL;
     }
 
-    ppln_data  = ucp_ep_peer_mem_get(context, ep, rtr_hdr->address,
-                                     rtr_hdr->size, rtr_hdr + 1,
-                                     rkey_ptr_md_index);
-    rkey_index = ucs_bitmap2idx(ppln_data->rkey->md_map, rkey_ptr_md_index);
-    status     = uct_rkey_ptr(ppln_data->rkey->tl_rkey[rkey_index].cmpt,
-                              &ppln_data->rkey->tl_rkey[rkey_index].rkey,
-                              rtr_hdr->address, &local_ptr);
-    if (status != UCS_OK) {
-        ucp_rkey_destroy(ppln_data->rkey);
-        ppln_data->size = 0; /* Make sure hash element is updated next time */
+    ppln_data = ucp_ep_peer_mem_get(context, ep, rtr_hdr->address,
+                                    rtr_hdr->size, rtr_hdr + 1, local_mem_type,
+                                    rkey_ptr_md_index);
+    if (ppln_data == NULL) {
         return NULL;
     }
 
-    if (ppln_data->uct_memh != NULL) {
-        goto out;
-    }
-
-    /* Register remote memory segment with memtype ep MD. Without
-     * registration fetching data from GPU to CPU will be performance
-     * inefficient. */
-    md_map              = 0;
-    mem_type_rma_lane   = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
-    ppln_data->md_index = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
-    status              = ucp_mem_rereg_mds(
-                           context, UCS_BIT(ppln_data->md_index), local_ptr,
-                           ppln_data->size,
-                           UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_HIDE_ERRORS,
-                           NULL, remote_mem_type, NULL, &ppln_data->uct_memh,
-                           &md_map);
-    if (status != UCS_OK) {
-        ppln_data->md_index = UCP_NULL_RESOURCE;
-    } else {
-        ucs_assertv(md_map == UCS_BIT(ppln_data->md_index),
-                    "mdmap=0x%lx, md_index=%u", md_map,
-                    ppln_data->md_index);
-    }
-
-out:
     *rkey_p = ppln_data->rkey;
 
-    return local_ptr;
+    return ppln_data->local_ptr;
 }
 
 static UCS_F_ALWAYS_INLINE int
