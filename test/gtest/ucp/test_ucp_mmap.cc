@@ -196,6 +196,7 @@ private:
                                const ucs_log_component_config_t *comp_conf,
                                const char *message, va_list ap);
     void import_memh(void *exported_memh_buf, ucp_mem_h *memh_p);
+    void release_exported_memh_buf(void *exported_memh_buf);
     void test_rereg_imported_mem(ucp_mem_h memh, uint64_t memh_pack_flags,
                                  size_t size);
 
@@ -586,6 +587,12 @@ test_ucp_mmap::import_no_md_error_handler(const char *file, unsigned line,
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 
+void test_ucp_mmap::release_exported_memh_buf(void *exported_memh_buf)
+{
+    const ucp_memh_buffer_release_params_t release_params = { 0 };
+    ucp_memh_buffer_release(exported_memh_buf, &release_params);
+}
+
 void test_ucp_mmap::import_memh(void *exported_memh_buf, ucp_mem_h *memh_p)
 {
     ucp_mem_map_params_t params;
@@ -598,8 +605,7 @@ void test_ucp_mmap::import_memh(void *exported_memh_buf, ucp_mem_h *memh_p)
         scoped_log_handler warn_slh(import_no_md_error_handler);
         ucs_status_t status = ucp_mem_map(receiver().ucph(), &params, memh_p);
         if (status == UCS_ERR_UNREACHABLE) {
-            const ucp_memh_buffer_release_params_t release_params = { 0 };
-            ucp_memh_buffer_release(exported_memh_buf, &release_params);
+            release_exported_memh_buf(exported_memh_buf);
             UCS_TEST_SKIP_R("memory importing is unsupported");
         }
         ASSERT_UCS_OK(status);
@@ -610,7 +616,6 @@ void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
                                             uint64_t memh_pack_flags,
                                             size_t size)
 {
-    const ucp_memh_buffer_release_params_t release_params = { 0 };
     ucp_memh_pack_params_t pack_params;
     ucs_status_t status;
     void *exported_memh_buf;
@@ -633,7 +638,7 @@ void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
     ucp_mem_h test_imp_memh;
     import_memh(exported_memh_buf, &test_imp_memh);
 
-    ucp_memh_buffer_release(exported_memh_buf, &release_params);
+    release_exported_memh_buf(exported_memh_buf);
 
     if (size == 0) {
         EXPECT_EQ(memh, test_imp_memh);
