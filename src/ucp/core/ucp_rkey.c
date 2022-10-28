@@ -238,38 +238,22 @@ static size_t ucp_memh_extended_info_size(size_t size)
 
 static size_t ucp_memh_common_packed_size(size_t specific_info_size)
 {
-    size_t size = specific_info_size;
-
-    /* Size of mkey information which comes prior TL mkey data of all MDs */
-    size += sizeof(uint8_t);
-
-    /* Flags */
-    size += sizeof(uint16_t);
-
-    /* Memory domains map */
-    size += sizeof(uint64_t);
-
-    /* Memory type */
-    size += sizeof(uint8_t);
+    size_t size = specific_info_size +
+            sizeof(uint8_t) /* Size of mkey information */ +
+            sizeof(uint16_t) /* Flags */ +
+            sizeof(uint64_t) /* Memory domains map */ +
+            sizeof(uint8_t) /* Memory type */;
 
     return size + ucp_memh_extended_info_size(size);
 }
 
 static size_t ucp_memh_exported_info_packed_size()
 {
-    size_t size;
-
-    /* Address */
-    size = sizeof(uint64_t);
-
-    /* Length */
-    size += sizeof(uint64_t);
-
-    /* UCP uuid */
-    size += sizeof(uint64_t);
-
-    /* Registration ID */
-    size += sizeof(uint64_t);
+    size_t size =
+            sizeof(uint64_t) /* Address */ +
+            sizeof(uint64_t) /* Length */ +
+            sizeof(uint64_t) /* UCP uuid */ +
+            sizeof(uint64_t) /* Registration ID */;
 
     /* Common data (size, md_map, mem_type and etc) */
     return ucp_memh_common_packed_size(size);
