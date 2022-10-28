@@ -231,6 +231,7 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
         .super.memtype_op    = memtype_op,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
+        .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_ZCOPY,

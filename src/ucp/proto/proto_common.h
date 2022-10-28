@@ -110,6 +110,9 @@ typedef struct {
 
     /* Protocol instance flags, see @ref ucp_proto_common_init_flags_t */
     unsigned                flags;
+
+    /* Map of unsuitable lanes */
+    ucp_lane_map_t          exclude_map;
 } ucp_proto_common_init_params_t;
 
 
