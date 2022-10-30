@@ -424,16 +424,18 @@ void ucs_global_opts_init()
     UCS_CONFIG_ADD_TABLE(ucs_global_opts_read_only_table,
                          &ucs_config_global_list);
 
-    status = ucs_config_parser_fill_opts(&ucs_global_opts,
-                                         ucs_global_opts_read_only_table,
-                                         UCS_DEFAULT_ENV_PREFIX, NULL, 1);
+    status = ucs_config_parser_fill_opts(
+            &ucs_global_opts,
+            UCS_CONFIG_GET_TABLE(ucs_global_opts_read_only_table),
+            UCS_DEFAULT_ENV_PREFIX, 1);
     if (status != UCS_OK) {
         ucs_fatal("failed to parse global runtime read-only configuration");
     }
 
     status = ucs_config_parser_fill_opts(&ucs_global_opts,
-                                         ucs_global_opts_table,
-                                         UCS_DEFAULT_ENV_PREFIX, NULL, 1);
+                                         UCS_CONFIG_GET_TABLE(
+                                                 ucs_global_opts_table),
+                                         UCS_DEFAULT_ENV_PREFIX, 1);
     if (status != UCS_OK) {
         ucs_fatal("failed to parse global configuration");
     }

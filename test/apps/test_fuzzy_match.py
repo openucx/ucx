@@ -40,15 +40,15 @@ class TestRunner:
         self.ucx_info = ucx_info
         if verbose:
             logging.basicConfig(level=logging.DEBUG)
-        
-    def run(self, expected):
-        with Environment(expected.keys()):
+       
+    def run(self, test_case):
+        with Environment(test_case.keys()):
             matches = self.get_fuzzy_matches()
 
-            if matches != expected:
-                raise Exception('Wrong fuzzy list: got: %s, expected: %s' % (matches, expected))
+            if matches != test_case:
+                raise Exception('Wrong fuzzy list: got: %s, expected: %s' % (matches, test_case))
         
-            logging.info('found all expected matches: %s' % expected)
+            logging.info('found all expected matches: %s' % test_case)
         
     def exec_ucx_info(self):
         cmd = self.ucx_info + ' -u m -w'
@@ -77,6 +77,12 @@ class TestRunner:
         
         return {m.group(1) : [x.strip() for x in m.group(2).split(',')] if m.group(2) else [] for m in matches}
     
+def has_ib():
+    status, output = commands.getstatusoutput('ibv_devinfo')
+    if status != 0:
+        return False
+        
+    return 'No IB devices found' not in output
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Tester for config vars fuzzy matching')
@@ -86,15 +92,17 @@ if __name__ == '__main__':
 
     try:    
         runner = TestRunner(args.ucx_info, args.verbose)
-        expected_list = [{'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL']}, 
-                         {'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL'], 'UCX_MOFULE_D' : ['UCX_MODULE_DIR', 'UCX_MODULES']},
-                         {'UCX_SOME_VAR' : [], 'UCX_SOME_VAR2' : [],  'UCX_SOME_VAR3' : [],  'UCX_SOME_VAR4' : []},
-                         {'UCX_SOME_VAR' : [], 'UCX_MOFULE_D' : ['UCX_MODULE_DIR', 'UCX_MODULES'], 'UCX_SOME_VAR2' : [], 'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL']},
-                         {'UCX_RC_VERBS_RX_MAX_BUF' : ['UCX_RC_VERBS_TX_MAX_BUFS', 'UCX_RC_VERBS_RX_MAX_BUFS', 'UCX_UD_VERBS_RX_MAX_BUFS']},
-                         {'UCX_RLS' : ['UCX_TLS']}]
+        test_cases =  [{'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL']}, 
+                       {'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL'], 'UCX_MOFULE_D' : ['UCX_MODULE_DIR', 'UCX_MODULES']},
+                       {'UCX_SOME_VAR' : [], 'UCX_SOME_VAR2' : [],  'UCX_SOME_VAR3' : [],  'UCX_SOME_VAR4' : []},
+                       {'UCX_SOME_VAR' : [], 'UCX_MOFULE_D' : ['UCX_MODULE_DIR', 'UCX_MODULES'], 'UCX_SOME_VAR2' : [], 'UCX_LOF_LEVEL' : ['UCX_LOG_LEVEL']},
+                       {'UCX_RLS' : ['UCX_TLS']}]
         
-        for expected in expected_list:
-            runner.run(expected)
+        if has_ib():
+            test_cases += [{'UCX_RC_VERBS_RX_MAX_BUF' : ['UCX_RC_VERBS_TX_MAX_BUFS', 'UCX_RC_VERBS_RX_MAX_BUFS', 'UCX_UD_VERBS_RX_MAX_BUFS']}]
+            
+        for test_case in test_cases:
+            runner.run(test_case)
             
     except Exception as e:
         logging.error(str(e))

@@ -50,9 +50,7 @@ ucs_status_t uct_cm_config_read(uct_component_h component,
     uct_config_bundle_t *bundle = NULL;
     ucs_status_t status;
 
-    status = uct_config_read(&bundle, component->cm_config.table,
-                             component->cm_config.size, env_prefix,
-                             component->cm_config.prefix);
+    status = uct_config_read(&bundle, &component->cm_config, env_prefix);
     if (status != UCS_OK) {
         ucs_error("failed to read CM configuration");
         return status;

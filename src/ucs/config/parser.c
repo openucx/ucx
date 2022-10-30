@@ -1468,17 +1468,16 @@ void ucs_config_parse_config_files()
     ucs_config_parse_config_file(".", UCX_CONFIG_FILE_NAME, 1);
 }
 
-ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
-                                         const char *env_prefix,
-                                         const char *table_prefix,
-                                         int ignore_errors)
+ucs_status_t
+ucs_config_parser_fill_opts(void *opts, ucs_config_global_list_entry_t *entry,
+                            const char *env_prefix, int ignore_errors)
 {
     const char   *sub_prefix = NULL;
     static ucs_init_once_t config_file_parse = UCS_INIT_ONCE_INITIALIZER;
     ucs_status_t status;
 
     /* Set default values */
-    status = ucs_config_parser_set_default_values(opts, fields);
+    status = ucs_config_parser_set_default_values(opts, entry->table);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1495,24 +1494,26 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
 
     /* Apply environment variables */
     if (sub_prefix != NULL) {
-        status = ucs_config_apply_config_vars(opts, fields, sub_prefix,
-                                              table_prefix, 1, ignore_errors);
+        status = ucs_config_apply_config_vars(opts, entry->table, sub_prefix,
+                                              entry->prefix, 1, ignore_errors);
         if (status != UCS_OK) {
             goto err_free;
         }
     }
 
     /* Apply environment variables with custom prefix */
-    status = ucs_config_apply_config_vars(opts, fields, env_prefix,
-                                          table_prefix, 1, ignore_errors);
+    status = ucs_config_apply_config_vars(opts, entry->table, env_prefix,
+                                          entry->prefix, 1, ignore_errors);
     if (status != UCS_OK) {
         goto err_free;
     }
 
+    entry->flags |= UCS_CONFIG_TABLE_FLAG_LOADED;
     return UCS_OK;
 
 err_free:
-    ucs_config_parser_release_opts(opts, fields); /* Release default values */
+    ucs_config_parser_release_opts(opts,
+                                   entry->table); /* Release default values */
 err:
     return status;
 }
@@ -1841,7 +1842,7 @@ void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
                                       ucs_config_print_flags_t flags,
                                       ucs_list_link_t *config_list)
 {
-    const ucs_config_global_list_entry_t *entry;
+    ucs_config_global_list_entry_t *entry;
     ucs_status_t status;
     char title[64];
     void *opts;
@@ -1859,8 +1860,7 @@ void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
             continue;
         }
 
-        status = ucs_config_parser_fill_opts(opts, entry->table, prefix,
-                                             entry->prefix, 0);
+        status = ucs_config_parser_fill_opts(opts, entry, prefix, 0);
         if (status != UCS_OK) {
             ucs_free(opts);
             continue;
@@ -1910,7 +1910,10 @@ static void ucs_config_parser_append_similar_vars_message(
 
     ucs_list_for_each(entry, &ucs_config_global_list, list) {
         if ((entry->table == NULL) ||
-            ucs_config_field_is_last(&entry->table[0])) {
+            ucs_config_field_is_last(&entry->table[0]) ||
+            /* Show warning only for loaded tables (we only want to display
+               the relevant env vars) */
+            !(entry->flags & UCS_CONFIG_TABLE_FLAG_LOADED)) {
             continue;
         }
 

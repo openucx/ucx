@@ -85,12 +85,22 @@ typedef struct ucs_range_spec {
 } ucs_range_spec_t;
 
 
+/**
+ * Configuration table flags
+ */
+typedef enum {
+    /* Table has been already loaded by config parser */
+    UCS_CONFIG_TABLE_FLAG_LOADED = UCS_BIT(0)
+} ucs_config_table_flags_t;
+
+
 typedef struct ucs_config_global_list_entry {
     const char               *name;    /* configuration table name */
     const char               *prefix;  /* configuration prefix */
     ucs_config_field_t       *table;   /* array of configuration fields */
     size_t                   size;     /* size of config structure */
     ucs_list_link_t          list;     /* entry in global list */
+    uint8_t                  flags;    /* config table flags */
 } ucs_config_global_list_entry_t;
 
 
@@ -127,8 +137,13 @@ typedef struct ucs_config_bw_spec {
         .table  = _table, \
         .name   = _name, \
         .prefix = _prefix, \
-        .size   = sizeof(_type) \
+        .size   = sizeof(_type), \
+        .flags  = 0 \
     };
+
+
+#define UCS_CONFIG_GET_TABLE(_table) &_table##_config_entry
+
 
 #define UCS_CONFIG_ADD_TABLE(_table, _list) \
     ucs_list_add_tail(_list, &(_table##_config_entry).list)
@@ -423,17 +438,16 @@ void ucs_config_parse_config_files();
  * Fill existing opts structure.
  *
  * @param opts           User-defined options structure to fill.
- * @param fields         Array of fields which define how to parse.
+ * @param entry          Global configuration list entry which contains
+ *                       relevant fields (eg. parser info, prefix etc).
  * @param env_prefix     Prefix to add to all environment variables,
  *                       env_prefix may consist of multiple sub prefixes
- * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param ignore_errors  Whether to ignore parsing errors and continue parsing
  *                       other fields.
  */
-ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
-                                         const char *env_prefix,
-                                         const char *table_prefix,
-                                         int ignore_errors);
+ucs_status_t
+ucs_config_parser_fill_opts(void *opts, ucs_config_global_list_entry_t *entry,
+                            const char *env_prefix, int ignore_errors);
 
 /**
  * Perform deep copy of the options structure.
