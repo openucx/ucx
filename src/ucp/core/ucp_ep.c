@@ -283,12 +283,21 @@ void ucp_ep_peer_mem_destroy(ucp_context_h context,
 
 ucp_ep_peer_mem_data_t*
 ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
-                    size_t size, void *rkey_buf, ucp_md_index_t md_index)
+                    size_t size, void *rkey_buf,
+                    ucs_memory_type_t local_mem_type,
+                    ucp_md_index_t rkey_ptr_md_index)
 {
     khash_t(ucp_ep_peer_mem_hash) *peer_mem = ep->ext->peer_mem;
+    ucp_lane_index_t mem_type_rma_lane;
     ucp_ep_peer_mem_data_t *data;
+    ucp_ep_h mem_type_ep;
+    ucp_md_map_t md_map;
+    unsigned rkey_index;
     khiter_t iter;
+    ucs_status_t status;
     int ret;
+
+    ucs_assert(local_mem_type != UCS_MEMORY_TYPE_UNKNOWN);
 
     if (ucs_unlikely(peer_mem == NULL)) {
         ep->ext->peer_mem = peer_mem = kh_init(ucp_ep_peer_mem_hash);
@@ -300,16 +309,47 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
 
     if (ucs_likely(ret == UCS_KH_PUT_KEY_PRESENT)) {
         if (ucs_likely(size <= data->size)) {
-            return data;
+            return data; /* found element with proper size */
         }
-
         ucp_ep_peer_mem_destroy(context, data);
     }
 
-    data->size     = size;
-    data->uct_memh = NULL;
-    ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(md_index),
+    data->size = size;
+    ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(rkey_ptr_md_index),
                                 &data->rkey);
+    rkey_index = ucs_bitmap2idx(data->rkey->md_map, rkey_ptr_md_index);
+    status     = uct_rkey_ptr(data->rkey->tl_rkey[rkey_index].cmpt,
+                              &data->rkey->tl_rkey[rkey_index].rkey, address,
+                              &data->local_ptr);
+    if (status != UCS_OK) {
+        ucp_rkey_destroy(data->rkey);
+        data->size = 0; /* Make sure hash element is updated next time */
+        return NULL;
+    }
+
+    /* Register remote memory segment with memtype ep MD. Without
+     * registration fetching data from GPU to CPU will be performance
+     * inefficient. */
+    mem_type_ep = ep->worker->mem_type_ep[local_mem_type];
+    ucs_assert(mem_type_ep != NULL);
+
+    md_map            = 0;
+    mem_type_rma_lane = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
+    data->md_index    = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
+    status            = ucp_mem_rereg_mds(
+                          ep->worker->context, UCS_BIT(data->md_index),
+                          data->local_ptr, data->size,
+                          UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                          NULL, UCS_MEMORY_TYPE_HOST, NULL, &data->uct_memh,
+                          &md_map);
+    if (status != UCS_OK) {
+        data->md_index = UCP_NULL_RESOURCE;
+        data->uct_memh = NULL;
+    } else {
+        ucs_assertv(md_map == UCS_BIT(data->md_index),
+                    "mdmap=0x%lx, md_index=%u", md_map, data->md_index);
+    }
+
     return data;
 }
 
