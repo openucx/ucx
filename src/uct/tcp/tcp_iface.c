@@ -128,6 +128,7 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
 
     if (ucs_sockaddr_is_inaddr_loopback(saddr)) {
         dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK;
+        memset(pack_ptr, 0, sizeof(uct_iface_local_addr_ns_t));
         uct_iface_get_local_address(pack_ptr, UCS_SYS_NS_TYPE_NET);
     } else {
         in_addr = ucs_sockaddr_get_inet_addr(saddr);

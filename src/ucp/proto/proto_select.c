@@ -553,14 +553,16 @@ ucp_proto_select_elem_init(ucp_worker_h worker,
                            ucp_proto_select_elem_t *select_elem)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
+    UCS_STRING_BUFFER_ONSTACK(config_name_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
     ucp_proto_select_init_protocols_t *proto_init;
     ucs_status_t status;
 
     ucp_proto_select_info_str(worker, rkey_cfg_index, select_param,
                               ucp_operation_names, &sel_param_strb);
+    ucp_ep_config_name(worker, ep_cfg_index, &config_name_strb);
 
-    ucs_trace("worker %p: select protocols for ep_cfg[%d] rkey[%d] for %s",
-              worker, ep_cfg_index, rkey_cfg_index,
+    ucs_trace("worker %p: select protocols %s rkey[%d] for %s", worker,
+              ucs_string_buffer_cstr(&config_name_strb), rkey_cfg_index,
               ucs_string_buffer_cstr(&sel_param_strb));
 
     ucs_log_indent(1);

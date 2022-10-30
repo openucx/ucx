@@ -169,6 +169,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->reachable_md_map = 0;
     key->dst_md_cmpts     = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
+    key->flags            = 0;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -1839,7 +1840,8 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->cm_lane != key2->cm_lane) ||
         (key1->keepalive_lane != key2->keepalive_lane) ||
         (key1->rkey_ptr_lane != key2->rkey_ptr_lane) ||
-        (key1->err_mode != key2->err_mode)) {
+        (key1->err_mode != key2->err_mode) ||
+        (key1->flags != key2->flags)) {
         return 0;
     }
 
@@ -1856,6 +1858,27 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     }
 
     return 1;
+}
+
+void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
+                        ucs_string_buffer_t *strb)
+{
+    ucp_context_h context          = worker->context;
+    const ucp_ep_config_key_t *key = &worker->ep_config[cfg_index].key;
+
+    if (!ucs_string_is_empty(context->name)) {
+        ucs_string_buffer_appendf(strb, "%s ", context->name);
+    }
+
+    if (key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) {
+        ucs_string_buffer_appendf(strb, "self ");
+    } else if (key->flags & UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE) {
+        ucs_string_buffer_appendf(strb, "intra-node ");
+    } else {
+        ucs_string_buffer_appendf(strb, "inter-node ");
+    }
+
+    ucs_string_buffer_appendf(strb, "cfg#%d", cfg_index);
 }
 
 static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
