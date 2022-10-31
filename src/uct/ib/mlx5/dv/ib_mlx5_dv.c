@@ -208,8 +208,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, rdma_wr_disabled, !!attr->rdma_wr_disabled);
     UCT_IB_MLX5DV_SET(qpc, qpc, pd, uct_ib_mlx5_devx_md_get_pdn(md));
-    UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
-                      uct_ib_mlx5_iface_get_counter_set_id(iface));
     UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, uar->uar->page_id);
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, !!attr->super.srq_num);
@@ -261,6 +259,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index,
                               iface->pkey_index);
         }
+        UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
+                          uct_ib_mlx5_iface_get_counter_set_id(iface));
         UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
 
         status = uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in_2init,
