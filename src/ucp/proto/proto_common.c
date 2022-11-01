@@ -386,6 +386,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane, num_lanes;
     const uct_md_attr_v2_t *md_attr;
+    const uct_component_attr_t *cmpt_attr;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     ucp_lane_map_t lane_map;
@@ -425,7 +426,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         goto out;
     }
 
-    lane_map      = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
+    lane_map = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
     ucs_for_each_bit(lane, lane_map) {
         if (num_lanes >= max_lanes) {
             break;
@@ -442,7 +443,8 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
 
         /* Check if lane type matches */
-        if (!(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
+        if ((lane_type != UCP_LANE_TYPE_LAST) &&
+            !(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
             ucs_trace("%s: no %s in name types", lane_desc,
                       ucp_lane_type_info[lane_type].short_name);
             continue;
@@ -455,8 +457,16 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
             continue;
         }
 
-        md_index = context->tl_rscs[rsc_index].md_index;
-        md_attr  = &context->tl_mds[md_index].attr;
+        md_index  = context->tl_rscs[rsc_index].md_index;
+        md_attr   = &context->tl_mds[md_index].attr;
+        cmpt_attr = ucp_cmpt_attr_by_md_index(context, md_index);
+
+        if ((flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) &&
+            !(cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR)) {
+            ucs_trace("protocol requires rkey ptr but it is not "
+                      "supported by the component");
+            continue;
+        }
 
         /* Check memory registration capabilities for zero-copy case */
         if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
