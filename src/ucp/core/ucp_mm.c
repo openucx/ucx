@@ -1273,15 +1273,26 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
 ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
-    ucp_mem_dummy_handle_t memh = {
-        .memh.alloc_md_index = UCP_NULL_RESOURCE,
+    ucp_mem_dummy_handle_t reg_memh = {
+        .memh.alloc_md_index = UCP_NULL_RESOURCE
     };
+    ucp_mem_h alloc_memh;
     ucs_memory_type_t mem_type;
     ucp_md_index_t md_index;
     ucs_status_t status;
     uint8_t buff;
 
-    status = ucp_memh_register(context, &memh.memh,
+    status = ucp_memh_alloc(context, NULL, 1, UCS_MEMORY_TYPE_HOST,
+                            UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                            "get_alloc_md_id", &alloc_memh);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    context->alloc_md_index[UCS_MEMORY_TYPE_HOST] = alloc_memh->alloc_md_index;
+    ucp_memh_put(context, alloc_memh);
+
+    status = ucp_memh_register(context, &reg_memh.memh,
                                context->reg_md_map[UCS_MEMORY_TYPE_HOST],
                                &buff, sizeof(buff),
                                UCT_MD_MEM_ACCESS_ALL |
@@ -1290,8 +1301,8 @@ ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
         return status;
     }
 
-    context->reg_md_map[UCS_MEMORY_TYPE_HOST] = memh.memh.md_map;
-    ucp_memh_dereg(context, &memh.memh, memh.memh.md_map);
+    context->reg_md_map[UCS_MEMORY_TYPE_HOST] = reg_memh.memh.md_map;
+    ucp_memh_dereg(context, &reg_memh.memh, reg_memh.memh.md_map);
 
     /* If we have a dmabuf provider for a memory type, it means we can register
      * memory of this type with any md that supports dmabuf registration. */
