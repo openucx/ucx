@@ -53,6 +53,14 @@ BEGIN_C_DECLS
 #define ucs_trace_func(_fmt, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_FUNC, "%s(" _fmt ")", __FUNCTION__, ## __VA_ARGS__)
 #define ucs_trace_poll(_fmt, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, _fmt, ## __VA_ARGS__)
 
+#define ucs_log_indent_level(_level, _delta) \
+    do { \
+        if (ucs_log_component_is_enabled(_level, \
+                                         &ucs_global_opts.log_component)) { \
+            ucs_log_indent(_delta); \
+        } \
+    } while (0)
+
 
 /**
  * Print a message regardless of current log level. Output can be
