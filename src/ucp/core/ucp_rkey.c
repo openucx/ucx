@@ -138,7 +138,7 @@ ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
 
     ucs_trace("packing rkey type %s md_map 0x%" PRIx64 "dev_map 0x%" PRIx64,
               ucs_memory_type_names[mem_info->type], md_map, sys_dev_map);
-    ucs_log_indent(1);
+    ucs_log_indent_level(UCS_LOG_LEVEL_TRACE, 1);
 
     UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_LAST <= 255);
     *ucs_serialize_next(&p, ucp_md_map_t) = md_map;
@@ -185,7 +185,7 @@ ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
 out_packed_size:
     result = UCS_PTR_BYTE_DIFF(buffer, p);
 out:
-    ucs_log_indent(-1);
+    ucs_log_indent_level(UCS_LOG_LEVEL_TRACE, -1);
     return result;
 }
 
