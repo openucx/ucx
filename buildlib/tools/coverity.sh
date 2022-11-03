@@ -4,7 +4,7 @@ realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 
-COV_MODULE="tools/cov-2019.12"
+COV_MODULE="tools/cov-2021.12"
 
 #
 # Run Coverity and report errors
