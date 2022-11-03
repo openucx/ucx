@@ -1219,13 +1219,21 @@ static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
     ucp_context_h context = rcontext;
     unsigned md_index;
 
+    if (memh->md_map == 0) {
+        ucs_string_buffer_appendf(&strb, "no mds");
+        return;
+    }
+
     ucs_for_each_bit(md_index, memh->md_map) {
-        ucs_string_buffer_appendf(&strb, " md[%d]=%s", md_index,
+        ucs_string_buffer_appendf(&strb, "md[%d]=%s", md_index,
                                   context->tl_mds[md_index].rsc.md_name);
         if (memh->alloc_md_index == md_index) {
             ucs_string_buffer_appendf(&strb, "(alloc)");
         }
+        ucs_string_buffer_appendf(&strb, " ");
     }
+
+    ucs_string_buffer_rtrim(&strb, NULL);
 }
 
 static ucs_rcache_ops_t ucp_mem_rcache_ops = {
