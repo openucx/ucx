@@ -64,6 +64,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.exclude_map   = 0,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_SHORT
     };
@@ -137,6 +138,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.exclude_map   = 0,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_BCOPY
     };
@@ -247,6 +249,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.exclude_map   = 0,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_ZCOPY
     };

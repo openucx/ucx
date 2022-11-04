@@ -400,6 +400,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.exclude_map   = 0,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = 0
     };
