@@ -1471,9 +1471,10 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_mem_type_detect_mds  = 0;
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
-        context->reg_md_map[mem_type]   = 0;
-        context->cache_md_map[mem_type] = 0;
-        context->dmabuf_mds[mem_type]   = UCP_NULL_RESOURCE;
+        context->reg_md_map[mem_type]     = 0;
+        context->cache_md_map[mem_type]   = 0;
+        context->dmabuf_mds[mem_type]     = UCP_NULL_RESOURCE;
+        context->alloc_md_index[mem_type] = UCP_NULL_RESOURCE;
     }
 
     ucs_string_set_init(&avail_tls);
