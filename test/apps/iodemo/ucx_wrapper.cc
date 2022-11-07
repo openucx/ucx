@@ -926,6 +926,7 @@ bool UcxConnection::recv_data(void *buffer, size_t length, ucp_mem_h memh,
         param.memh          = memh;
     }
 
+    /* coverity[uninit_use_in_call] */
     ucs_status_ptr_t status_ptr = ucp_tag_recv_nbx(_context.worker(), buffer,
                                                    length, tag, tag_mask,
                                                    &param);
@@ -946,12 +947,12 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
                          UCP_OP_ATTR_FIELD_FLAGS;
     param.cb.send      = common_request_callback_nbx;
     param.flags        = UCP_AM_SEND_FLAG_REPLY;
-    param.datatype     = 0; // make coverity happy
     if (memh) {
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
         param.memh          = memh;
     }
 
+    /* coverity[uninit_use_in_call] */
     ucs_status_ptr_t sptr = ucp_am_send_nbx(_ep, AM_MSG_ID, meta, meta_length,
                                             buffer, length, &param);
     return process_request("ucp_am_send_nbx", sptr, callback);
@@ -1225,7 +1226,6 @@ bool UcxConnection::send_common(const void *buffer, size_t length,
 
     ucp_request_param_t param;
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK;
-    param.datatype     = 0; // make coverity happy
     param.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;
 
     if (memh) {
@@ -1233,6 +1233,7 @@ bool UcxConnection::send_common(const void *buffer, size_t length,
         param.memh          = memh;
     }
 
+    /* coverity[uninit_use_in_call] */
     ucs_status_ptr_t status_ptr = ucp_tag_send_nbx(_ep, buffer, length, tag,
                                                    &param);
     return process_request("ucp_tag_send_nbx", status_ptr, callback);

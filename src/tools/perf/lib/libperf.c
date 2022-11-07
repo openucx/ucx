@@ -624,6 +624,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
     const size_t buffer_size = ADDR_BUF_SIZE;
+    void *req                = NULL; /* make coverity happy */
     ucx_perf_ep_info_t info, *remote_info;
     unsigned group_size, i, group_index;
     uct_device_addr_t *dev_addr;
@@ -637,7 +638,6 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     ucs_status_t status;
     struct iovec vec[5];
     void *buffer;
-    void *req;
 
     buffer = malloc(buffer_size);
     if (buffer == NULL) {
