@@ -126,7 +126,6 @@ static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)
     }
 
     ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
 
     ucp_proto_rndv_recv_complete_with_ats(req,
                                           UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS);
