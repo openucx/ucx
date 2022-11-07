@@ -96,18 +96,6 @@ protected:
     }
 };
 
-#ifdef IMPLICIT_ODP_FIXED
-UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_odp,
-                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
-                                 UCT_IFACE_FLAG_GET_ZCOPY),
-                     "REG_METHODS=odp,direct",
-                     "MLX5_DEVX_OBJECTS=dct,dcsrq")
-{
-    test_put_zcopy();
-    test_get_zcopy();
-}
-#endif
-
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_rcache,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
                                  UCT_IFACE_FLAG_GET_ZCOPY),
@@ -139,14 +127,6 @@ UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_alloc_methods)
 
 
 class uct_p2p_mix_test_alloc_methods : public uct_p2p_mix_test {};
-
-#ifdef IMPLICIT_ODP_FIXED
-UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000_odp,
-           "REG_METHODS=odp,direct", "MLX5_DEVX_OBJECTS=dct,dcsrq")
-{
-    run(1000);
-}
-#endif
 
 UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000_rcache,
            "REG_METHODS=rcache,direct")

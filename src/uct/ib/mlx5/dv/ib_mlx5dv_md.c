@@ -769,12 +769,6 @@ uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         }
     }
 
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size) &&
-        UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, null_mkey) &&
-        UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_extended_translation_offset)) {
-        md->super.dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
-    }
-
     return UCS_OK;
 
 no_odp:
@@ -1748,11 +1742,6 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
         goto err_md_free;
-    }
-
-    if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr) &&
-        !uct_ib_mlx5_has_roce_port(dev)) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 
     if (IBV_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
