@@ -218,7 +218,7 @@ static void ucp_proto_eager_sync_bcopy_request_abort(ucp_request_t *request,
 
 ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .name     = "egrsnc/multi/bcopy",
-    .desc     = UCP_PROTO_EAGER_BCOPY_DESC,
+    .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_sync_bcopy_multi_init,
     .query    = ucp_proto_multi_query,
@@ -306,7 +306,7 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
 
 ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .name     = "egr/multi/zcopy",
-    .desc     = UCP_PROTO_EAGER_ZCOPY_DESC,
+    .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_ZCOPY_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_zcopy_multi_init,
     .query    = ucp_proto_multi_query,
