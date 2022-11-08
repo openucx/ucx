@@ -133,7 +133,7 @@ ucp_proto_eager_bcopy_multi_progress(uct_pending_req_t *uct_req)
 
 ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .name     = "egr/multi/bcopy",
-    .desc     = UCP_PROTO_EAGER_BCOPY_DESC,
+    .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_bcopy_multi_init,
     .query    = ucp_proto_multi_query,
