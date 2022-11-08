@@ -392,8 +392,11 @@ struct ucp_ep_config {
         ucp_rndv_thresh_t          am_thresh;
         /* Total size of packed rkey, according to high-bw md_map */
         size_t                     rkey_size;
-        /* Remote memory domains which support rkey_ptr */
-        ucp_md_map_t               rkey_ptr_dst_mds;
+        /* Remote memory domains which support rkey_ptr, excluding
+         * rkey_ptr_lane. Used by 2-stage pipeline rendezvous protocol. */
+        ucp_md_map_t               proto_rndv_rkey_skip_mds;
+        /* Remote memory domain corresponding to rkey_ptr_lane */
+        ucp_md_map_t               rkey_ptr_lane_dst_mds;
     } rndv;
 
     struct {
