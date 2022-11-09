@@ -1,0 +1,15 @@
+#
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+libdir = @libdir@/ucx
+
+Name: @PACKAGE@-topo-sysfs
+Description: Unified Communication X Library SYSFS Topo Provider module
+Version: @VERSION@
+Libs:
+Libs.private: -L${libdir} -lucs_topo_sysfs -Wl,--undefined=ucs_topo_sysfs_init

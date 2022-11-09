@@ -5,7 +5,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = vfs/sock . vfs/fuse signal
+SUBDIRS = vfs/sock . vfs/fuse signal sys/topo/providers/sysfs sys/topo/providers/default
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
 lib_LTLIBRARIES     = libucs.la

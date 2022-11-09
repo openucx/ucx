@@ -203,6 +203,15 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
  *
  * @return Number of system devices.
  */
+unsigned ucs_topo_num_devices_non_sync();
+
+
+/**
+ * Get the number of registered system devices.
+ * This function is synchronic.
+ *
+ * @return Number of system devices.
+ */
 unsigned ucs_topo_num_devices();
 
 
@@ -223,6 +232,42 @@ void ucs_topo_init();
  * Cleanup UCS topology subsystem.
  */
 void ucs_topo_cleanup();
+
+
+/**
+ * Register topo provider.
+ *
+ */
+void ucs_topo_register_provider(ucs_sys_topo_method_t *provider);
+
+
+/**
+ * Unregister topo provider.
+ *
+ */
+void ucs_topo_unregister_provider(ucs_sys_topo_method_t *provider);
+
+
+/**
+ * lock proto context.
+ *
+ */
+void ucs_sys_topo_lock_ctx();
+
+
+/**
+ * unlock proto context.
+ *
+ */
+void ucs_sys_topo_unlock_ctx();
+
+
+/**
+ * Prints device's bus id.
+ *
+ */
+void ucs_topo_device_bus_id_str(ucs_sys_device_t sys_dev, int abbreviate,
+                                char *str, size_t max);
 
 END_C_DECLS
 
