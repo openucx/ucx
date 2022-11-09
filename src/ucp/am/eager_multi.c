@@ -182,7 +182,7 @@ void ucp_am_eager_multi_bcopy_proto_abort(ucp_request_t *req,
 
 ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
     .name     = "am/egr/multi/bcopy",
-    .desc     = UCP_PROTO_COPY_IN_DESC,
+    .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
     .init     = ucp_am_eager_multi_bcopy_proto_init,
     .query    = ucp_proto_multi_query,
@@ -316,7 +316,7 @@ ucp_am_eager_multi_zcopy_proto_progress(uct_pending_req_t *self)
 
 ucp_proto_t ucp_am_eager_multi_zcopy_proto = {
     .name     = "am/egr/multi/zcopy",
-    .desc     = UCP_PROTO_ZCOPY_DESC,
+    .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
     .init     = ucp_am_eager_multi_zcopy_proto_init,
     .query    = ucp_proto_multi_query,
