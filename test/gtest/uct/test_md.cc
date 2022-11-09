@@ -817,14 +817,17 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
 UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
                      !check_caps(UCT_MD_FLAG_EXPORTED_MKEY))
 {
-    static const size_t size       = 1 * UCS_MBYTE;
-    static const unsigned md_flags = UCT_MD_MEM_ACCESS_REMOTE_PUT |
-                                     UCT_MD_MEM_ACCESS_REMOTE_GET;
+    size_t size   = ucs::rand() % UCS_MBYTE;
+    void *address = NULL;
     uct_mem_h export_memh;
     ucs_status_t status;
 
-    std::vector<uint8_t> mem_buffer(size);
-    status = reg_mem(md_flags, mem_buffer.data(), size, &export_memh);
+    status = ucs_mmap_alloc(&size, &address, 0, "test_md_exp_mkey");
+    ASSERT_UCS_OK(status);
+
+    UCS_TEST_MESSAGE << "allocated " << address << " of size " << size;
+
+    status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &export_memh);
     ASSERT_UCS_OK(status);
 
     std::vector<uint8_t> mkey_buffer(md_attr().exported_mkey_packed_size);
@@ -839,6 +842,9 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
     dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
     dereg_params.memh       = export_memh;
     status                  = uct_md_mem_dereg_v2(md(), &dereg_params);
+    ASSERT_UCS_OK(status);
+
+    status = ucs_mmap_free(address, size);
     ASSERT_UCS_OK(status);
 }
 
