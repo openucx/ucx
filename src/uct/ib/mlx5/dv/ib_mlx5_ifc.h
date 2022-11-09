@@ -102,10 +102,6 @@ enum {
     UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY = 0x100
 };
 
-enum {
-    UCT_IB_MLX5_PAGE_SHIFT = 12
-};
-
 struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    reserved_at_0[0x30];
     uint8_t    vhca_id[0x10];

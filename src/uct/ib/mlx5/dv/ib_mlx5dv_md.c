@@ -1402,7 +1402,7 @@ uct_ib_mlx5_devx_reg_exported_key(uct_ib_md_t *ib_md, uct_ib_mem_t *ib_memh)
     struct mlx5dv_devx_umem_in umem_in;
     ucs_status_t status;
     void *access_key;
-    void *address;
+    void *address, *aligned_address;
     size_t length;
     void *mkc;
     int ret;
@@ -1414,7 +1414,8 @@ uct_ib_mlx5_devx_reg_exported_key(uct_ib_md_t *ib_md, uct_ib_mem_t *ib_memh)
     umem_in.addr        = address;
     umem_in.size        = length;
     umem_in.access      = UCT_IB_MLX5_MD_UMEM_ACCESS;
-    umem_in.pgsz_bitmap = UINT64_MAX & ~UCS_MASK(UCT_IB_MLX5_PAGE_SHIFT);
+    aligned_address     = ucs_align_down_pow2_ptr(address, ucs_get_page_size());
+    umem_in.pgsz_bitmap = UCS_MASK(ucs_ffs64((uint64_t)aligned_address) + 1);
     umem_in.comp_mask   = 0;
 
     ucs_assertv(memh->umem == NULL, "memh %p umem %p", memh, memh->umem);
