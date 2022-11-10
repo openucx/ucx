@@ -45,16 +45,20 @@
 
 #define SHMAT_FAILED ((void*)-1)
 
-void *event_init(const char *path, ucm_mmap_hook_mode_t mmap_mode);
-void *ext_event_init(const char *path, ucm_mmap_hook_mode_t mmap_mode);
-void* flag_no_install_init(const char *path, ucm_mmap_hook_mode_t mmap_mode);
+void *event_init(const char *ucs_path, const char *ucm_path,
+                 ucm_mmap_hook_mode_t mmap_mode);
+void *ext_event_init(const char *ucs_path, const char *ucm_path,
+                     ucm_mmap_hook_mode_t mmap_mode);
+void *flag_no_install_init(const char *ucs_path, const char *ucm_path,
+                           ucm_mmap_hook_mode_t mmap_mode);
 int malloc_hooks_run_all(void *dl);
 int malloc_hooks_run_unmapped(void *dl);
 int ext_event_run(void *dl);
 
 typedef struct memtest_type {
     const char *name;
-    void*      (*init)(const char *path, ucm_mmap_hook_mode_t mmap_mode);
+    void*      (*init)(const char *ucs_path, const char *ucm_path,
+                       ucm_mmap_hook_mode_t mmap_mode);
     int        (*run) (void *arg);
 } memtest_type_t;
 
@@ -129,9 +133,9 @@ static ucs_status_t init_ucm_config(void *dl_ucm, int enable_hooks,
     return UCS_OK;
 }
 
-void* open_dyn_lib(const char *lib_path)
+void* open_dyn_lib(const char *lib_path, int flags)
 {
-    void *dl = dlopen(lib_path, RTLD_LAZY);
+    void *dl = dlopen(lib_path, RTLD_LAZY | flags);
     char *error;
 
     if (dl == NULL) {
@@ -142,18 +146,21 @@ void* open_dyn_lib(const char *lib_path)
     return dl;
 }
 
-void *event_init(const char *path, ucm_mmap_hook_mode_t mmap_mode)
+void *event_init(const char *ucs_path, const char *ucm_path,
+                 ucm_mmap_hook_mode_t mmap_mode)
 {
     ucs_status_t status;
     void *dl_ucm;
 
-    dl_ucm = open_dyn_lib(path);
+    dl_ucm = open_dyn_lib(ucm_path, 0);
     if (dl_ucm == NULL) {
         return NULL;
     }
 
     status = init_ucm_config(dl_ucm, 1, mmap_mode);
     CHKERR_JUMP(status != UCS_OK, "Failed to initialize UCM", fail);
+
+    open_dyn_lib(ucs_path, RTLD_GLOBAL);
 
     return dl_ucm;
 
@@ -162,19 +169,22 @@ fail:
     return NULL;
 }
 
-void *ext_event_init(const char *path, ucm_mmap_hook_mode_t mmap_mode)
+void *ext_event_init(const char *ucs_path, const char *ucm_path,
+                     ucm_mmap_hook_mode_t mmap_mode)
 {
     void (*set_ext_event)(int events);
     ucs_status_t status;
     void *dl_ucm;
 
-    dl_ucm = open_dyn_lib(path);
+    dl_ucm = open_dyn_lib(ucm_path, 0);
     if (dl_ucm == NULL) {
         return NULL;
     }
 
     status = init_ucm_config(dl_ucm, 0, mmap_mode);
     CHKERR_JUMP(status != UCS_OK, "Failed to initialize UCM", fail);
+
+    open_dyn_lib(ucs_path, RTLD_GLOBAL);
 
     DL_FIND_FUNC(dl_ucm, "ucm_set_external_event", set_ext_event, goto fail);
     set_ext_event(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED);
@@ -190,18 +200,21 @@ fail:
     return NULL;
 }
 
-void* flag_no_install_init(const char *path, ucm_mmap_hook_mode_t mmap_mode)
+void *flag_no_install_init(const char *ucs_path, const char *ucm_path,
+                           ucm_mmap_hook_mode_t mmap_mode)
 {
     void *dl_ucm;
     ucs_status_t status;
 
-    dl_ucm = open_dyn_lib(path);
+    dl_ucm = open_dyn_lib(ucm_path, 0);
     if (dl_ucm == NULL) {
         return NULL;
     }
 
     status = init_ucm_config(dl_ucm, 0, mmap_mode);
     CHKERR_JUMP(status != UCS_OK, "Failed to initialize UCM", fail);
+
+    open_dyn_lib(ucs_path, RTLD_GLOBAL);
 
     status = set_event_handler(dl_ucm, UCM_EVENT_VM_MAPPED   |
                                        UCM_EVENT_VM_UNMAPPED |
@@ -351,7 +364,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
     printf("After mmap free + trim: reported unmapped=%zu\n", total_unmapped);
 
     /* Call mmap from a library we load after hooks are installed */
-    dl_test = open_dyn_lib(lib_path);
+    dl_test = open_dyn_lib(lib_path, 0);
     CHKERR_JUMP(dl_test == NULL, "Failed to load test lib", fail_close_ucm);
 
     DL_FIND_FUNC(dl_test, cust_mmap_name, cust_mmap, goto fail_close_all);
@@ -455,7 +468,8 @@ fail:
 
 int main(int argc, char **argv)
 {
-    const char *ucm_path           = UCS_PP_MAKE_STRING(UCM_LIB_DIR)"/libucm.so";
+    static const char *ucs_path    = UCS_PP_MAKE_STRING(UCS_LIB_DIR)"/libucs.so";
+    static const char *ucm_path    = UCS_PP_MAKE_STRING(UCM_LIB_DIR)"/libucm.so";
     memtest_type_t *test           = tests;
     ucm_mmap_hook_mode_t mmap_mode = UCM_MMAP_HOOK_BISTRO;
     void *dl;
@@ -494,7 +508,7 @@ int main(int argc, char **argv)
 
     /* Some tests need to modify UCM config before to call ucp_init,
      * which may be called by MPI_Init */
-    dl = test->init(ucm_path, mmap_mode);
+    dl = test->init(ucs_path, ucm_path, mmap_mode);
     if (dl == NULL) {
         return -1;
     }
