@@ -1538,32 +1538,35 @@ struct uct_md_attr {
  */
 typedef enum uct_md_mem_attr_field {
     /** Indicate if memory type is populated. E.g. CPU/GPU */
-    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE      = UCS_BIT(0),
+    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE           = UCS_BIT(0),
 
     /**
      * Indicate if details of system device backing the pointer are populated.
      * For example: GPU device, NUMA domain, etc.
      */
-    UCT_MD_MEM_ATTR_FIELD_SYS_DEV       = UCS_BIT(1),
+    UCT_MD_MEM_ATTR_FIELD_SYS_DEV            = UCS_BIT(1),
 
     /** Request base address of the allocation to which the buffer belongs. */
-    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS  = UCS_BIT(2),
+    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS       = UCS_BIT(2),
 
     /** Request the whole length of the allocation to which the buffer belongs. */
-    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH  = UCS_BIT(3),
+    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH       = UCS_BIT(3),
 
     /**
      * Request a cross-device dmabuf file descriptor that represents a memory
      * region, and can be used to register the region with another memory
      * domain.
      */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD     = UCS_BIT(4),
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD          = UCS_BIT(4),
 
     /**
      * Request the offset of the provided virtual address relative to the
      * beginning of its backing dmabuf region.
      */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5)
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET      = UCS_BIT(5),
+
+    /** Indicate if preferred memory type is populated. E.g. CPU/GPU */
+    UCT_MD_MEM_ATTR_FIELD_PREFERRED_MEM_TYPE = UCS_BIT(6)
 } uct_md_mem_attr_field_t;
 
 
@@ -1584,7 +1587,7 @@ typedef struct uct_md_mem_attr {
 
     /**
      * The type of memory. E.g. CPU/GPU memory or some other valid type.
-     * If the md does not support sys_dev query, then UCS_MEMORY_TYPE_UNKNOWN
+     * If the md does not support mem_dev query, then UCS_MEMORY_TYPE_UNKNOWN
      * is returned.
      */
     ucs_memory_type_t mem_type;
@@ -1625,6 +1628,22 @@ typedef struct uct_md_mem_attr {
      * (identified by dmabuf_fd) backing the memory region being queried.
      */
     size_t            dmabuf_offset;
+
+    /**
+     * For some memory types, a given memory range can have pages that reside
+     * in multiple locations. For example, UCS_MEMORY_TYPE_CUDA_MANAGED can have
+     * some pages reside on CPU memory and others on GPU memory. However,
+     * irrespective of the actual location, the user can request the runtime to
+     * set preferred location of the range to a specific location. Knowing the
+     * preferred location can help the communication runtime decide where to
+     * stage such memory for some protocols and improve performance. This
+     * attribute returns the preferred memory type as UCS_MEMORY_TYPE_HOST or
+     * UCS_MEMORY_TYPE_CUDA depending on the location preference set by the user
+     * (if set) for a memory range of type UCS_MEMORY_TYPE_CUDA_MANAGED. If the
+     * md does not support mem_dev query, then UCS_MEMORY_TYPE_UNKNOWN is
+     * returned.
+     */
+    ucs_memory_type_t preferred_mem_type;
 } uct_md_mem_attr_t;
 
 
