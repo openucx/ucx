@@ -554,7 +554,7 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
              * to confirm data transfer from the sender to the "recv_message"
              * buffer. */
             params.op_attr_mask |= UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
-            params.cb.recv_am    = am_recv_cb,
+            params.cb.recv_am    = am_recv_cb;
             request              = ucp_am_recv_data_nbx(ucp_worker,
                                                         am_data_desc.desc,
                                                         msg, msg_length,
@@ -566,7 +566,7 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
         }
     } else {
         /* Client sends a message to the server using the AM API */
-        params.cb.send = (ucp_send_nbx_callback_t)send_cb,
+        params.cb.send = (ucp_send_nbx_callback_t)send_cb;
         request        = ucp_am_send_nbx(ep, TEST_AM_ID, NULL, 0ul, msg,
                                          msg_length, &params);
     }
@@ -886,10 +886,25 @@ out:
     return status;
 }
 
+ucs_status_t register_am_recv_callback(ucp_worker_h worker)
+{
+    ucp_am_handler_param_t param;
+
+    param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                       UCP_AM_HANDLER_PARAM_FIELD_CB |
+                       UCP_AM_HANDLER_PARAM_FIELD_ARG;
+    param.id         = TEST_AM_ID;
+    param.cb         = ucp_am_data_cb;
+    param.arg        = worker; /* not used in our callback */
+
+    return ucp_worker_set_am_recv_handler(worker, &param);
+}
+
 static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
                                  send_recv_type_t send_recv_type, int is_server)
 {
     int i, ret = 0;
+    ucs_status_t status;
 
     connection_closed = 0;
 
@@ -899,6 +914,15 @@ static int client_server_do_work(ucp_worker_h ucp_worker, ucp_ep_h ep,
         if (ret != 0) {
             fprintf(stderr, "%s failed on iteration #%d\n",
                     (is_server ? "server": "client"), i + 1);
+            goto out;
+        }
+    }
+
+    /* Register recv callback on the client side to receive FIN message */
+    if (!is_server && (send_recv_type == CLIENT_SERVER_SEND_RECV_AM)) {
+        status = register_am_recv_callback(ucp_worker);
+        if (status != UCS_OK) {
+            ret = -1;
             goto out;
         }
     }
@@ -928,7 +952,6 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
 {
     ucx_server_ctx_t context;
     ucp_worker_h     ucp_data_worker;
-    ucp_am_handler_param_t param;
     ucp_ep_h         server_ep;
     ucs_status_t     status;
     int              ret;
@@ -941,15 +964,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
     }
 
     if (send_recv_type == CLIENT_SERVER_SEND_RECV_AM) {
-        /* Initialize Active Message data handler */
-        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
-                           UCP_AM_HANDLER_PARAM_FIELD_CB |
-                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
-        param.id         = TEST_AM_ID;
-        param.cb         = ucp_am_data_cb;
-        param.arg        = ucp_data_worker; /* not used in our callback */
-        status           = ucp_worker_set_am_recv_handler(ucp_data_worker,
-                                                          &param);
+        status = register_am_recv_callback(ucp_data_worker);
         if (status != UCS_OK) {
             ret = -1;
             goto err_worker;
