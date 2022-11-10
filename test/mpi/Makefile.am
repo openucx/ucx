@@ -23,6 +23,7 @@ endif
 
 AM_CPPFLAGS           = \
     $(BASE_CPPFLAGS) \
+    -DUCS_LIB_DIR="$(abs_top_builddir)/src/ucs/.libs" \
     -DUCM_LIB_DIR="$(abs_top_builddir)/src/ucm/.libs" \
     -DTEST_LIB_DIR="$(abs_builddir)/.libs"
 AM_CFLAGS             = $(BASE_CFLAGS)
