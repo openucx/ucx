@@ -462,7 +462,9 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
     }
 
     ucp_proto_rndv_put_common_request_init(req);
-    ucp_proto_rndv_mtype_copy(req, uct_ep_get_zcopy,
+    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
+                              ucp_proto_rndv_mtype_get_req_memh(req),
+                              uct_ep_get_zcopy,
                               ucp_proto_rndv_put_mtype_pack_completion,
                               "in from");
 
