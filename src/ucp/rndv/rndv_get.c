@@ -284,7 +284,9 @@ ucp_proto_rndv_get_mtype_fetch_completion(uct_completion_t *uct_comp)
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_proto_rndv_mtype_copy(req, uct_ep_put_zcopy,
+    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
+                              ucp_proto_rndv_mtype_get_req_memh(req),
+                              uct_ep_put_zcopy,
                               ucp_proto_rndv_get_mtype_unpack_completion,
                               "out to");
 }

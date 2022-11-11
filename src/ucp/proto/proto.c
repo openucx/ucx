@@ -51,6 +51,7 @@
     _macro(ucp_rndv_put_zcopy_proto) \
     _macro(ucp_rndv_put_mtype_proto) \
     _macro(ucp_rndv_rkey_ptr_proto) \
+    _macro(ucp_rndv_rkey_ptr_mtype_proto) \
     _macro(ucp_tag_offload_eager_bcopy_single_proto) \
     _macro(ucp_am_eager_short_proto) \
     _macro(ucp_am_eager_single_bcopy_proto) \
