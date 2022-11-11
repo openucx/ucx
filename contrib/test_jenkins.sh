@@ -855,6 +855,7 @@ run_mpi_tests() {
 					-x UCX_ERROR_SIGNALS \
 					-x UCX_HANDLE_ERRORS \
 					-mca pml ob1 \
+					-mca osc ^ucx \
 					-mca btl tcp,self \
 					-mca btl_tcp_if_include lo \
 					-mca orte_allowed_exit_without_sync 1 \
@@ -981,7 +982,7 @@ test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
 	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
-	
+
 	# Check that suggestions for similar ucx env vars are printed
 	echo "==== Running fuzzy match test ===="
 	../test/apps/test_fuzzy_match.py --ucx_info ./src/tools/info/ucx_info
