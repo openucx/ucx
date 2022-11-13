@@ -590,6 +590,8 @@ run_client_server() {
 	test_name=ucp_client_server
 
 	mem_types_list="host"
+	msg_size_list="1 16 256 4096 65534"
+	api_list="am tag stream"
 
 	if [ "X$have_cuda" == "Xyes" ]
 	then
@@ -609,8 +611,14 @@ run_client_server() {
 
 	for mem_type in ${mem_types_list}
 	do
-		echo "==== Running UCP client-server with \"${mem_type}\" memory type ===="
-		run_client_server_app "./examples/${test_name}" "-m ${mem_type}" "-a ${server_ip}" 1 0
+		for api in ${api_list}
+		do
+			for msg_size in ${msg_size_list}
+			do
+				echo "==== Running UCP client-server with \"${mem_type}\" memory type using \"{$api}\" API with msg_size={$msg_size} ===="
+				run_client_server_app "./examples/${test_name}" "-m ${mem_type} -c ${api} -s ${msg_size}" "-a ${server_ip}" 1 0
+			done
+		done
 	done
 }
 
