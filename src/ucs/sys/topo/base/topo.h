@@ -179,7 +179,7 @@ ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev);
 
 /**
  * Sets a name for a given system device. If the name exists, it will be replaced
- * only if @ref priority is higher then current device name priority.
+ * only if @ref priority is higher than current device name priority.
  *
  * @param [in]  sys_dev  System device to set the name for.
  * @param [in]  name     Name to set for this system device. Note: the name can
