@@ -517,7 +517,9 @@ static const ucs_topo_pci_info_t ucs_topo_pci_info[] = {
      .decoding      = 130},
 };
 
-double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
+int test_enable_prints = 0;
+
+double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path, int verbose)
 {
     const char *pci_width_file_name = "current_link_width";
     const char *pci_speed_file_name = "current_link_speed";
@@ -533,15 +535,21 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 
     status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, pci_width_file_name,
                                      pci_width_str, sizeof(pci_width_str),
-                                     UCS_LOG_LEVEL_DEBUG);
+                                     UCS_LOG_LEVEL_DEBUG, test_enable_prints);
     if (status != UCS_OK) {
+        if (test_enable_prints) {
+            printf("ucs_sys_read_sysfs_file1 failed: sysfs_path %s dev_name %s pci_width_file_name %s\n", sysfs_path, dev_name, pci_width_file_name);
+        }
         goto out_max_bw;
     }
 
     status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, pci_speed_file_name,
                                      pci_speed_str, sizeof(pci_speed_str),
-                                     UCS_LOG_LEVEL_DEBUG);
+                                     UCS_LOG_LEVEL_DEBUG, 1);
     if (status != UCS_OK) {
+        if (test_enable_prints) {
+            printf("ucs_sys_read_sysfs_file2 failed: sysfs_path %s dev_name %s pci_width_file_name %s\n", sysfs_path, dev_name, pci_width_file_name);
+        }
         goto out_max_bw;
     }
 
@@ -549,6 +557,9 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
         ucs_debug("%s: incorrect format of %s file: expected: <unsigned "
                   "integer>, actual: %s\n",
                   dev_name, pci_width_file_name, pci_width_str);
+        if (test_enable_prints) {
+            printf("failed parsing width: %s %s %s\n", dev_name, pci_width_file_name, pci_width_str);
+        }
         goto out_max_bw;
     }
 
@@ -557,6 +568,9 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
         ucs_debug("%s: incorrect format of %s file: expected: <double> GT/s, "
                   "actual: %s\n",
                   dev_name, pci_speed_file_name, pci_speed_str);
+        if (test_enable_prints) {
+            printf("failed parsing speed: %s %s %s\n", dev_name, pci_width_file_name, pci_width_str);
+        }
         goto out_max_bw;
     }
 
@@ -577,6 +591,8 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
                   effective_bw * 8e-9);
         return effective_bw;
     }
+
+    printf("reached end of pci_info loop\n");
 
 out_max_bw:
     ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);

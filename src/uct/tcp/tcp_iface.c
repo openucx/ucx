@@ -233,7 +233,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
 
     ucs_snprintf_safe(sysfs_path, PATH_MAX, "%s/%s/device",
                       UCT_TCP_IFACE_NETDEV_DIR, iface->if_name);
-    pci_bw                 = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
+    pci_bw                 = ucs_topo_get_pci_bw(iface->if_name, sysfs_path, 0);
     attr->bandwidth.shared = ucs_min(pci_bw, network_bw);
 
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);

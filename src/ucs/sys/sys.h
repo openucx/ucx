@@ -138,7 +138,8 @@ typedef void (*ucs_sys_enum_pfn_cb_t)(unsigned page_number, unsigned long pfn,
 ucs_status_t ucs_sys_read_sysfs_file(const char *dev_name,
                                      const char *sysfs_path,
                                      const char *file_name, char *output_buffer,
-                                     size_t max, ucs_log_level_t err_level);
+                                     size_t max, ucs_log_level_t err_level,
+                                     int verbose);
 
 /**
  * @return TMPDIR environment variable if set. Otherwise, return "/tmp".

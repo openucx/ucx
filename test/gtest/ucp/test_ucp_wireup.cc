@@ -1331,16 +1331,19 @@ public:
     }
 };
 
+extern int test_enable_prints;
+
 UCS_TEST_P(select_transport_rma_bw, select_rc, "NUM_EPS=56", "NUM_PPN=28")
 {
-    UCS_TEST_SKIP_R("FIXME: Disabled due to unresolved failure");
-
-    /* coverity[unreachable] */
     if (!has_resource(&sender(), "rc_mlx5")) {
         UCS_TEST_SKIP_R("no rc resources");
     }
 
+    test_enable_prints = 1;
+
     sender().connect(&receiver(), get_ep_params());
+
+    test_enable_prints = 0;
 
     const ucp_ep_config_t *config = ucp_ep_config(sender().ep());
     for (int i = 0; (i < config->key.num_lanes) &&

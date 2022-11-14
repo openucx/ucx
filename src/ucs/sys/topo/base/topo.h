@@ -184,7 +184,7 @@ ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev, const char *name);
  *
  * @return BW of the PCIe device on success, or MAX_DBL on failure.
  */
-double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path);
+double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path, int verbose);
 
 /**
  * Get the name of a given system device. If the name was never set, it defaults

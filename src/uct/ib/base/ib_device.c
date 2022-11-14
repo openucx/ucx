@@ -564,11 +564,11 @@ uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
     ucs_status_t status;
 
     status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, "vendor", pci_id_str,
-                                     sizeof(pci_id_str), UCS_LOG_LEVEL_WARN);
+                                     sizeof(pci_id_str), UCS_LOG_LEVEL_WARN, 0);
     dev->pci_id.vendor = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
 
     status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, "device", pci_id_str,
-                                     sizeof(pci_id_str), UCS_LOG_LEVEL_WARN);
+                                     sizeof(pci_id_str), UCS_LOG_LEVEL_WARN, 0);
     dev->pci_id.device = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
 
     ucs_debug("%s: vendor_id 0x%x device_id %d", uct_ib_device_name(dev),
@@ -624,7 +624,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                               path_buffer);
     uct_ib_device_set_sys_dev(dev, sysfs_path);
     uct_ib_device_set_pci_id(dev, sysfs_path);
-    dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
+    dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path, 0);
 
     return UCS_OK;
 }
