@@ -101,7 +101,8 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     rts->size        = req->send.state.dt_iter.length;
     rpriv            = req->send.proto_config->priv;
 
-    if ((rts->size == 0) || (rpriv->md_map == 0)) {
+    if ((rts->size == 0) ||
+        (req->send.state.dt_iter.dt_class != UCP_DATATYPE_CONTIG)) {
         rts->address = 0;
         rkey_size    = 0;
     } else {

@@ -216,10 +216,10 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
 
     rpriv->data_received = ucp_proto_rndv_rtr_data_received;
 
-    if (rpriv->super.md_map == 0) {
-        rpriv->pack_cb = ucp_proto_rndv_rtr_pack_without_rkey;
-    } else {
+    if (init_params->select_param->dt_class == UCP_DATATYPE_CONTIG) {
         rpriv->pack_cb = ucp_proto_rndv_rtr_pack_with_rkey;
+    } else {
+        rpriv->pack_cb = ucp_proto_rndv_rtr_pack_without_rkey;
     }
 
     return UCS_OK;
