@@ -29,17 +29,18 @@
     _macro(ucp_put_offload_short_proto) \
     _macro(ucp_put_offload_bcopy_proto) \
     _macro(ucp_put_offload_zcopy_proto) \
-    _macro(ucp_eager_bcopy_multi_proto) \
-    _macro(ucp_eager_sync_bcopy_multi_proto) \
-    _macro(ucp_eager_zcopy_multi_proto) \
     _macro(ucp_eager_short_proto) \
     _macro(ucp_eager_bcopy_single_proto) \
     _macro(ucp_eager_zcopy_single_proto) \
+    _macro(ucp_eager_bcopy_multi_proto) \
+    _macro(ucp_eager_zcopy_multi_proto) \
+    _macro(ucp_eager_sync_bcopy_single_proto) \
+    _macro(ucp_eager_sync_zcopy_single_proto) \
+    _macro(ucp_eager_sync_bcopy_multi_proto) \
     _macro(ucp_tag_rndv_proto) \
     _macro(ucp_eager_tag_offload_short_proto) \
-    _macro(ucp_eager_sync_bcopy_single_proto) \
+    _macro(ucp_tag_offload_eager_bcopy_single_proto) \
     _macro(ucp_tag_offload_eager_zcopy_single_proto) \
-    _macro(ucp_eager_sync_zcopy_single_proto) \
     _macro(ucp_rndv_am_bcopy_proto) \
     _macro(ucp_rndv_get_zcopy_proto) \
     _macro(ucp_rndv_get_mtype_proto) \
@@ -51,7 +52,6 @@
     _macro(ucp_rndv_put_zcopy_proto) \
     _macro(ucp_rndv_put_mtype_proto) \
     _macro(ucp_rndv_rkey_ptr_proto) \
-    _macro(ucp_tag_offload_eager_bcopy_single_proto) \
     _macro(ucp_am_eager_short_proto) \
     _macro(ucp_am_eager_single_bcopy_proto) \
     _macro(ucp_am_eager_single_zcopy_proto) \
