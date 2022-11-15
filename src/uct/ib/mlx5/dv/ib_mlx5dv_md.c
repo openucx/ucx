@@ -901,7 +901,7 @@ static int uct_ib_mlx5_is_xgvmi_alias_supported(struct ibv_context *ctx)
     uint64_t object_for_other_vhca;
     uint32_t object_to_object;
     void *cap;
-    int ret;
+    ucs_status_t status;
 
     cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
 
@@ -911,9 +911,9 @@ static int uct_ib_mlx5_is_xgvmi_alias_supported(struct ibv_context *ctx)
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod,
                       UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                               (UCT_IB_MLX5_CAP_2_GENERAL << 1));
-    ret = mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out));
-    if (ret != 0) {
-        ucs_debug("mlx5dv_devx_general_cmd(QUERY_HCA_CAP) failed: %m");
+    status = uct_ib_mlx5_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out),
+                                          "QUERY_HCA_CAP", 1);
+    if (status != UCS_OK) {
         return 0;
     }
 
@@ -1405,7 +1405,6 @@ uct_ib_mlx5_devx_reg_exported_key(uct_ib_md_t *ib_md, uct_ib_mem_t *ib_memh)
     void *address;
     size_t length;
     void *mkc;
-    int ret;
 
     address = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->addr;
     length  = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length;
@@ -1477,12 +1476,10 @@ uct_ib_mlx5_devx_reg_exported_key(uct_ib_md_t *ib_md, uct_ib_mem_t *ib_memh)
     ucs_strncpy_zero(access_key, uct_ib_mkey_token,
                      UCT_IB_MLX5DV_FLD_SZ_BYTES(alias_context, access_key));
 
-    ret = mlx5dv_devx_general_cmd(md->super.dev.ibv_context, ein, sizeof(ein),
-                                  eout, sizeof(eout));
-    if (ret) {
-        uct_ib_md_log_mem_reg_error(ib_md, 0,
-                                    "mlx5dv_devx_general_cmd() failed: %m");
-        status = UCS_ERR_IO_ERROR;
+    status = uct_ib_mlx5_devx_general_cmd(md->super.dev.ibv_context, ein,
+                                          sizeof(ein), eout, sizeof(eout),
+                                          "ALLOW_OTHER_VHCA_ACCESS", 0);
+    if (status != UCS_OK) {
         goto err_cross_mr_destroy;
     }
 
