@@ -18,6 +18,11 @@
     _macro(ucp_amo_proto_##_id##32_mtype) \
     _macro(ucp_amo_proto_##_id##64_mtype)
 
+/**
+ * Please be aware that the order of declaration matters. The first declared
+ * protocol will be selected, if several protocols have the same estimated
+ * performance.
+ */
 #define UCP_PROTO_FOR_EACH(_macro) \
     _macro(ucp_reconfig_proto) \
     _macro(ucp_get_amo_post_proto) \
