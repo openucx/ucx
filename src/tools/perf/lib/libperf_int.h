@@ -27,7 +27,7 @@ BEGIN_C_DECLS
 
 #define TIMING_QUEUE_SIZE    2048
 #define UCT_PERF_TEST_AM_ID  5
-#define ADDR_BUF_SIZE        2048
+#define ADDR_BUF_SIZE        4096
 #define EXTRA_INFO_SIZE      256
 
 #define UCX_PERF_TEST_FOREACH(perf) \
