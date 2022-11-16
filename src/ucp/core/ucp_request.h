@@ -294,14 +294,6 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    /* The length of the data that should be fetched from sender
-                     * side */
-                    size_t            length;
-                    /* Offset in the receiver's buffer */
-                    size_t            offset;
-                } rndv_rtr;
-
-                struct {
                     unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
                     uct_worker_cb_id_t prog_id; /* Progress callback ID */
                     uint32_t           cmpl_sn; /* Sequence number of the remote completion
