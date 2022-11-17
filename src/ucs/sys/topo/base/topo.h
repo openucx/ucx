@@ -26,6 +26,9 @@ BEGIN_C_DECLS
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
+#define UCS_SYS_DEVICE_PRIORITY_TCP  10
+#define UCS_SYS_DEVICE_PRIORITY_IB   20
+#define UCS_SYS_DEVICE_PRIORITY_CUDA 10
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -139,7 +142,7 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
                                   char *buffer, size_t max);
 
 /**
- * Sets a system device.
+ * Gets a system device. If the device doesn't exist, it will be added.
  *
  * @param [in]  dev_name       Device Name.
  * @param [in]  sysfs_path     sysfs path for the required device.
