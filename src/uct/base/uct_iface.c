@@ -867,8 +867,10 @@ const char *uct_iface_get_sysfs_path(const char *dev_path, const char *dev_name,
     char *sysfs_path;
     int ret;
 
-    /* PF: realpath name is of form /sys/devices/.../0000:03:00.0/<interface_type>/<dev_name> */
-    /* SF: realpath name is of form /sys/devices/.../0000:03:00.0/<UUID>/<interface_type>/<dev_name> */
+    /* realpath name is expected to be like below:
+     * PF: /sys/devices/.../0000:03:00.0/<interface_type>/<dev_name>
+     * SF: /sys/devices/.../0000:03:00.0/<UUID>/<interface_type>/<dev_name>
+     */
 
     sysfs_realpath = realpath(dev_path, path_buffer);
     if (sysfs_realpath == NULL) {
