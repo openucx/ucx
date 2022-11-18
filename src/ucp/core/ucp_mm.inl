@@ -24,7 +24,6 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
              unsigned uct_flags, ucp_mem_h *memh_p)
 {
     ucs_rcache_region_t *rregion;
-    ucs_status_t status;
     ucp_mem_h memh;
 
     if (length == 0) {
@@ -52,8 +51,8 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
                       ucp_memh_address(memh), length, ucp_memh_length(memh),
                       reg_md_map, memh->md_map);
             *memh_p = memh;
-            status = UCS_OK;
-            goto out_unlock;
+            UCP_THREAD_CS_EXIT(&context->mt_lock);
+            return UCS_OK;
         }
 
         ucs_rcache_region_put_unsafe(context->rcache, rregion);
@@ -63,9 +62,6 @@ not_found:
 
     return ucp_memh_get_slow(context, address, length, mem_type, reg_md_map,
                              uct_flags, memh_p);
-out_unlock:
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
-    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
