@@ -1231,18 +1231,17 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
 }
 
 int ucp_wireup_is_reachable_v2(ucp_ep_h ep, unsigned ep_init_flags,
-                            ucp_rsc_index_t rsc_index,
-                            const ucp_address_entry_t *ae,
-                            char* info_string,
-                            size_t info_string_length)
+                               ucp_rsc_index_t rsc_index,
+                               const ucp_address_entry_t *ae,
+                               char* info_string,
+                               size_t info_string_length)
 {
-    ucp_context_h context      = ep->worker->context;
-    ucp_worker_iface_t *wiface = ucp_worker_iface(ep->worker, rsc_index);
-
-    uct_iface_is_reachable_params_t params = {
-        .device_addr = ae->dev_addr,
-        .iface_addr = ae->iface_addr,
-        .info_string = info_string,
+    ucp_context_h context                        = ep->worker->context;
+    ucp_worker_iface_t *wiface                   = ucp_worker_iface(ep->worker, rsc_index);
+    const uct_iface_is_reachable_params_t params = {
+        .device_addr        = ae->dev_addr,
+        .iface_addr         = ae->iface_addr,
+        .info_string        = info_string,
         .info_string_length = info_string_length
     };
 
@@ -1250,7 +1249,7 @@ int ucp_wireup_is_reachable_v2(ucp_ep_h ep, unsigned ep_init_flags,
            (/* assume reachability is checked by CM, if EP selects lanes
              * during CM phase */
             (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
-            uct_iface_is_reachable_v2(wiface->iface, (const uct_iface_is_reachable_params_t *)&params));
+            uct_iface_is_reachable_v2(wiface->iface, &params));
 }
 
 static void
@@ -1268,14 +1267,24 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_md_map_t ae_dst_md_map, dst_md_map;
     ucp_md_map_t prev_dst_md_map;
     unsigned num_dst_mds;
-
+    char* ucs_diag_info_string = ucs_malloc(UCP_REACHABLE_INFO_MAX_LEN, "ucs_diag_info_string");
+    if (ucs_diag_info_string != NULL) {
+        ucs_diag_info_string[0] = '\0';
+    }
     ae_dst_md_map = 0;
     UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, rsc_index) {
         ucp_unpacked_address_for_each(ae, remote_address) {
-            if (ucp_wireup_is_reachable_v2(ep, ep_init_flags, rsc_index, ae, NULL, 0)) {
+            if (ucp_wireup_is_reachable_v2(ep, ep_init_flags, rsc_index, ae,
+                                           ucs_diag_info_string, 
+                                           ucs_diag_info_string != NULL ?
+                                           UCP_REACHABLE_INFO_MAX_LEN : 0)) {
                 ae_dst_md_map         |= UCS_BIT(ae->md_index);
                 dst_md_index           = context->tl_rscs[rsc_index].md_index;
                 ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;
+            } else {
+                if (ucs_diag_info_string && ucs_diag_info_string[0] != '\0') {
+                    ucs_diag("%s", ucs_diag_info_string);
+                }
             }
         }
     }
@@ -1314,6 +1323,9 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_assert(num_dst_mds == ucs_popcount(dst_md_map));
 
     key->reachable_md_map = dst_md_map;
+    if (ucs_diag_info_string != NULL) {
+        ucs_free(ucs_diag_info_string);
+    }
 }
 
 void

@@ -72,7 +72,7 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
 static int uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                               const uct_iface_is_reachable_params_t *params)
 {
-    const uct_device_addr_t *dev_addr = params->device_addr;
+    const uct_device_addr_t *dev_addr  = params->device_addr;
     const uct_iface_addr_t *iface_addr = params->iface_addr;
 
     return (ucs_get_system_id() == *((const uint64_t*)dev_addr)) &&
@@ -83,14 +83,13 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
                                            const uct_device_addr_t *dev_addr,
                                            const uct_iface_addr_t *iface_addr)
 {
-    uct_iface_is_reachable_params_t params = {
-        .device_addr = dev_addr,
-        .iface_addr = iface_addr,
-        .info_string = NULL,
+    const uct_iface_is_reachable_params_t params = {
+        .device_addr        = dev_addr,
+        .iface_addr         = iface_addr,
+        .info_string        = NULL,
         .info_string_length = 0,
     };
-
-    return uct_cuda_ipc_iface_is_reachable_v2(tl_iface, (uct_iface_is_reachable_params_t*)&params);
+    return uct_cuda_ipc_iface_is_reachable_v2(tl_iface, &params);
 }
 
 static double uct_cuda_ipc_iface_get_bw()

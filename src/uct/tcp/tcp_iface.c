@@ -185,7 +185,7 @@ uct_tcp_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
 static int uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                          const uct_iface_is_reachable_params_t *params)
 {
-    uct_tcp_iface_t *iface              = ucs_derived_of(tl_iface,
+    uct_tcp_iface_t              *iface = ucs_derived_of(tl_iface,
                                                          uct_tcp_iface_t);
     uct_tcp_device_addr_t *tcp_dev_addr = (uct_tcp_device_addr_t*)params->device_addr;
     uct_iface_local_addr_ns_t *local_addr_ns;
@@ -216,15 +216,13 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
                                       const uct_device_addr_t *dev_addr,
                                       const uct_iface_addr_t *iface_addr)
 {
-    uct_iface_is_reachable_params_t params = 
-    {
-        .device_addr = dev_addr,
-        .iface_addr = iface_addr,
-        .info_string = NULL,
+    const uct_iface_is_reachable_params_t params = {
+        .device_addr        = dev_addr,
+        .iface_addr         = iface_addr,
+        .info_string        = NULL,
         .info_string_length = 0
     };
-    
-    return uct_tcp_iface_is_reachable_v2(tl_iface, (const uct_iface_is_reachable_params_t *)&params);
+    return uct_tcp_iface_is_reachable_v2(tl_iface, &params);
 }
 
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,

@@ -425,8 +425,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uint8_t priority;
     uint64_t reg_mem_types;
     ucp_md_index_t md_index;
-    char ucs_diag_info_string[1024];
-
+    char* ucs_diag_info_string = ucs_malloc(UCP_REACHABLE_INFO_MAX_LEN, "ucs_diag_info_string");
+    if (ucs_diag_info_string != NULL) {
+        ucs_diag_info_string[0] = '\0';
+    }
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
     tls_info[0]  = '\0';
@@ -604,10 +606,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
 
         UCS_BITMAP_FOR_EACH_BIT(rsc_addr_index_map, addr_index) {
             ae = &address->address_list[addr_index];
-            ucs_diag_info_string[0] = '\0';
             if (!ucp_wireup_is_reachable_v2(ep, select_params->ep_init_flags,
-                                         rsc_index, ae, ucs_diag_info_string, 1024)) {
-                if( ucs_diag_info_string[0] != '\0'){
+                                            rsc_index, ae,
+                                            ucs_diag_info_string, 
+                                            ucs_diag_info_string != NULL ?
+                                            UCP_REACHABLE_INFO_MAX_LEN : 0)) {
+                if (ucs_diag_info_string && ucs_diag_info_string[0] != '\0') {
                     ucs_diag("%s", ucs_diag_info_string);
                 }
                 /* Must be reachable device address, on same transport */
@@ -645,6 +649,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     }
 
 out:
+    if (ucs_diag_info_string != NULL) {
+        ucs_free(ucs_diag_info_string);
+    }
+
     if (p >= tls_info + 2) {
         *(p - 2) = '\0'; /* trim last "," */
     }
