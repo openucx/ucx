@@ -31,8 +31,6 @@ typedef struct {
  * packed in the worker address */
 #define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
 
-/* The maximum length for the diagnostic string buffer */
-#define UCP_REACHABLE_INFO_MAX_LEN  4096
 
 /**
  * Wireup message types
@@ -169,7 +167,6 @@ int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             ucp_rsc_index_t rsc_index,
                             const ucp_address_entry_t *ae);
-
 void
 ucp_wireup_get_dst_rsc_indices(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                                const ucp_unpacked_address_t *remote_address,
