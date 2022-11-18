@@ -898,9 +898,9 @@ int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                       const uct_iface_is_reachable_params_t *params)
 {
     const uct_iface_addr_t *iface_addr = params->iface_addr;
-    char* info_string = params->info_string;
-    size_t info_string_length = params->info_string_length;
-    uct_dc_mlx5_iface_addr_t *addr = (uct_dc_mlx5_iface_addr_t *)iface_addr;
+    char* info_string                  = params->info_string;
+    size_t info_string_length          = params->info_string_length;
+    uct_dc_mlx5_iface_addr_t *addr     = (uct_dc_mlx5_iface_addr_t *)iface_addr;
     uct_dc_mlx5_iface_t UCS_V_UNUSED *iface;
 
     iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
