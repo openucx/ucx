@@ -26,6 +26,9 @@ BEGIN_C_DECLS
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
+#define UCS_SYS_DEVICE_PRIORITY_TCP  10
+#define UCS_SYS_DEVICE_PRIORITY_IB   20
+#define UCS_SYS_DEVICE_PRIORITY_CUDA 10
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -138,6 +141,20 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
 const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
                                   char *buffer, size_t max);
 
+/**
+ * Gets a system device. If the device doesn't exist, it will be added.
+ *
+ * @param [in]  dev_name       Device Name.
+ * @param [in]  sysfs_path     sysfs path for the required device.
+ * @param [in]  name_priority  Indicates whether to override device name
+ *                             if it already exists.
+ *
+ * @return A topo module identifier for the device.
+ */
+
+ucs_sys_device_t ucs_topo_get_sysfs_dev(const char *dev_name,
+                                        const char *sysfs_path,
+                                        unsigned name_priority);
 
 /**
  * Return system device name in BDF format: "<domain>:<bus>:<device>.<function>".
@@ -164,17 +181,19 @@ ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev);
 
 
 /**
- * Set a name for a given system device. If the name was set previously, the new
- * name will replace the old one.
+ * Sets a name for a given system device. If the name exists, it will be replaced
+ * only if @ref priority is higher than current device name priority.
  *
  * @param [in]  sys_dev  System device to set the name for.
  * @param [in]  name     Name to set for this system device. Note: the name can
  *                       be released after this call.
+ * @param [in]  priority Determine whether device name will be overriden,
+ *                       in case it already exists.
  *
  * @return UCS_OK if the name was set, error otherwise.
  */
-ucs_status_t
-ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev, const char *name);
+ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
+                                          const char *name, unsigned priority);
 
 /**
  * Calculates and returns a specific PCIe device BW.
