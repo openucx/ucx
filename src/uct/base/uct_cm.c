@@ -284,27 +284,29 @@ UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
                     uct_worker_h worker, uct_component_h component,
                     const uct_cm_config_t* config)
 {
-    self->ops                     = ops;
-    self->component               = component;
-    self->iface.super.ops         = *iface_ops;
-    self->iface.internal_ops      = internal_ops;
-    self->iface.worker            = ucs_derived_of(worker, uct_priv_worker_t);
+    self->ops                            = ops;
+    self->component                      = component;
+    self->iface.super.ops                = *iface_ops;
+    self->iface.internal_ops             = internal_ops;
+    self->iface.worker                   = ucs_derived_of(worker, uct_priv_worker_t);
 
-    self->iface.md                = NULL;
-    self->iface.am->arg           = NULL;
-    self->iface.am->flags         = 0;
-    self->iface.am->cb            = (uct_am_callback_t)ucs_empty_function_return_unsupported;
-    self->iface.am_tracer         = NULL;
-    self->iface.am_tracer_arg     = NULL;
-    self->iface.err_handler       = NULL;
-    self->iface.err_handler_arg   = NULL;
-    self->iface.err_handler_flags = 0;
-    self->iface.prog.id           = UCS_CALLBACKQ_ID_NULL;
-    self->iface.prog.refcount     = 0;
-    self->iface.progress_flags    = 0;
+    self->iface.md                       = NULL;
+    self->iface.am->arg                  = NULL;
+    self->iface.am->flags                = 0;
+    self->iface.am->cb                   = (uct_am_callback_t)ucs_empty_function_return_unsupported;
+    self->iface.am_tracer                = NULL;
+    self->iface.am_tracer_arg            = NULL;
+    self->iface.err_handler              = NULL;
+    self->iface.err_handler_arg          = NULL;
+    self->iface.err_handler_flags        = 0;
+    self->iface.prog.id                  = UCS_CALLBACKQ_ID_NULL;
+    self->iface.prog.refcount            = 0;
+    self->iface.progress_flags           = 0;
+    self->iface.diag_info_buffer         = NULL;
+    self->iface.diag_info_buffer_length  = 0;
 
-    self->config.failure_level    = config->failure;
-    self->config.reuse_addr       = config->reuse_addr;
+    self->config.failure_level           = config->failure;
+    self->config.reuse_addr              = config->reuse_addr;
 
     return UCS_STATS_NODE_ALLOC(&self->iface.stats, &uct_cm_stats_class,
                                 ucs_stats_get_root(), "%s-%p", "iface",
@@ -313,6 +315,12 @@ UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
 
 UCS_CLASS_CLEANUP_FUNC(uct_cm_t)
 {
+    if (self->iface.diag_info_buffer != NULL) {
+        ucs_free(self->iface.diag_info_buffer);
+        self->iface.diag_info_buffer = NULL;
+        self->iface.diag_info_buffer_length = 0;
+    }
+
     UCS_STATS_NODE_FREE(self->iface.stats);
 }
 
