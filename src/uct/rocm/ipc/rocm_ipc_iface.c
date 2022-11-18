@@ -64,7 +64,7 @@ static ucs_status_t uct_rocm_ipc_iface_get_address(uct_iface_h tl_iface,
 static int uct_rocm_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                               const uct_iface_is_reachable_params_t *params)
 {
-    const uct_device_addr_t  *dev_addr = params->device_addr;
+    const uct_device_addr_t *dev_addr  = params->device_addr;
     const uct_iface_addr_t *iface_addr = params->iface_addr;
 
     return (ucs_get_system_id() == *((const uint64_t*)dev_addr)) &&

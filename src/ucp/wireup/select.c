@@ -607,7 +607,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         UCS_BITMAP_FOR_EACH_BIT(rsc_addr_index_map, addr_index) {
             ae = &address->address_list[addr_index];
             if (!ucp_wireup_is_reachable(ep, select_params->ep_init_flags,
-                                            rsc_index, ae)) {
+                                         rsc_index, ae)) {
                 /* Must be reachable device address, on same transport */
                 continue;
             }

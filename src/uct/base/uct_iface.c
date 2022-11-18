@@ -241,9 +241,9 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     }
 
     res = base_iface->internal_ops->iface_is_reachable_v2(iface,
-                                                           (const uct_iface_is_reachable_params_t*)&params);
+                                                          (const uct_iface_is_reachable_params_t*)&params);
     if (!res) {
-        if(base_iface->diag_info_buffer && base_iface->diag_info_buffer[0] != '\0'){
+        if (base_iface->diag_info_buffer && base_iface->diag_info_buffer[0] != '\0') {
             ucs_diag("%s", base_iface->diag_info_buffer);
         }
     }
