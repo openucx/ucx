@@ -1245,6 +1245,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_md_map_t ae_dst_md_map, dst_md_map;
     ucp_md_map_t prev_dst_md_map;
     unsigned num_dst_mds;
+    
     ae_dst_md_map = 0;
     UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, rsc_index) {
         ucp_unpacked_address_for_each(ae, remote_address) {

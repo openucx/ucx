@@ -425,6 +425,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uint8_t priority;
     uint64_t reg_mem_types;
     ucp_md_index_t md_index;
+    
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
     tls_info[0]  = '\0';
