@@ -425,7 +425,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uint8_t priority;
     uint64_t reg_mem_types;
     ucp_md_index_t md_index;
-    char* ucs_diag_info_string = ucs_malloc(UCP_REACHABLE_INFO_MAX_LEN, "ucs_diag_info_string");
+    char* ucs_diag_info_string = ucs_malloc(UCP_REACHABLE_INFO_MAX_LEN, "ucs_diag_info_string_select");
     if (ucs_diag_info_string != NULL) {
         ucs_diag_info_string[0] = '\0';
     }
