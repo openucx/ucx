@@ -89,6 +89,7 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
         .info_string        = NULL,
         .info_string_length = 0,
     };
+    
     return uct_cuda_ipc_iface_is_reachable_v2(tl_iface, &params);
 }
 

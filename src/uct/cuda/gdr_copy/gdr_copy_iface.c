@@ -46,7 +46,7 @@ static int uct_gdr_copy_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                               const uct_iface_is_reachable_params_t *params)
 {
     const uct_iface_addr_t *iface_addr = params->iface_addr;
-    uct_gdr_copy_iface_t  *iface       = ucs_derived_of(tl_iface, uct_gdr_copy_iface_t);
+    uct_gdr_copy_iface_t *iface        = ucs_derived_of(tl_iface, uct_gdr_copy_iface_t);
     uct_gdr_copy_iface_addr_t *addr    = (uct_gdr_copy_iface_addr_t*)iface_addr;
 
     return (addr != NULL) && (iface->id == *addr);
@@ -62,6 +62,7 @@ static int uct_gdr_copy_iface_is_reachable(const uct_iface_h tl_iface,
         .info_string        = NULL,
         .info_string_length = 0
     };
+    
     return uct_gdr_copy_iface_is_reachable_v2(tl_iface, &params);
 }
 
