@@ -1245,10 +1245,6 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_md_map_t ae_dst_md_map, dst_md_map;
     ucp_md_map_t prev_dst_md_map;
     unsigned num_dst_mds;
-    char* ucs_diag_info_string = ucs_malloc(UCP_REACHABLE_INFO_MAX_LEN, "ucs_diag_info_string_wireup");
-    if (ucs_diag_info_string != NULL) {
-        ucs_diag_info_string[0] = '\0';
-    }
     ae_dst_md_map = 0;
     UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, rsc_index) {
         ucp_unpacked_address_for_each(ae, remote_address) {
@@ -1294,9 +1290,6 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_assert(num_dst_mds == ucs_popcount(dst_md_map));
 
     key->reachable_md_map = dst_md_map;
-    if (ucs_diag_info_string != NULL) {
-        ucs_free(ucs_diag_info_string);
-    }
 }
 
 void

@@ -425,10 +425,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uint8_t priority;
     uint64_t reg_mem_types;
     ucp_md_index_t md_index;
-    char* ucs_diag_info_string = ucs_malloc(UCP_REACHABLE_INFO_MAX_LEN, "ucs_diag_info_string_select");
-    if (ucs_diag_info_string != NULL) {
-        ucs_diag_info_string[0] = '\0';
-    }
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
     tls_info[0]  = '\0';
@@ -643,10 +639,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     }
 
 out:
-    if (ucs_diag_info_string != NULL) {
-        ucs_free(ucs_diag_info_string);
-    }
-
     if (p >= tls_info + 2) {
         *(p - 2) = '\0'; /* trim last "," */
     }
