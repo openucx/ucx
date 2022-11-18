@@ -218,7 +218,7 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr)
 int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
 {
-    int res;
+    ucs_status_t res;
     uct_base_iface_t *base_iface           = ucs_derived_of(iface, uct_base_iface_t);
     uct_iface_is_reachable_params_t params = {
         .device_addr        = dev_addr,
