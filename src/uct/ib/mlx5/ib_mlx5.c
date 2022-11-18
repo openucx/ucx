@@ -211,15 +211,6 @@ void uct_ib_mlx5_fill_cq_common(uct_ib_mlx5_cq_t *cq,  unsigned cq_size,
 
     cq->cq_length_mask = UCS_MASK(cq->cq_length_log);
 
-    if (cq->zip) {
-        /* signature is in union with validity_iteration_count */
-        cq->own_field_offset = ucs_offsetof(struct mlx5_cqe64, signature);
-        cq->own_mask         = 0xff;
-    } else {
-        cq->own_field_offset = ucs_offsetof(struct mlx5_cqe64, op_own);
-        cq->own_mask         = MLX5_CQE_OWNER_MASK;
-    }
-
     /* Set owner bit for all CQEs, so that CQE would look like it is in HW
      * ownership. In this case CQ polling functions will return immediately if
      * no any CQE ready, there is no need to check opcode for

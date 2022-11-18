@@ -28,14 +28,10 @@ static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
                             unsigned cqe_index, int poll_flags)
 {
-    uint8_t sw_it_count = cqe_index >> cq->cq_length_log;
-    uint8_t hw_it_count;
-
     if (poll_flags & UCT_IB_MLX5_POLL_FLAG_CQE_ZIP) {
-        hw_it_count = ((uint8_t *)cqe)[cq->own_field_offset];
-        return (sw_it_count ^ hw_it_count) & cq->own_mask;
+        return ((cqe_index >> cq->cq_length_log) ^ cqe->signature);
     } else {
-        return (sw_it_count ^ cqe->op_own) & MLX5_CQE_OWNER_MASK;
+        return ((cqe_index >> cq->cq_length_log) ^ cqe->op_own) & MLX5_CQE_OWNER_MASK;
     }
 }
 

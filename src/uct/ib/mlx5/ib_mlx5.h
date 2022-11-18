@@ -437,8 +437,6 @@ typedef struct uct_ib_mlx5_cq {
     void                   *uar;
     volatile uint32_t      *dbrec;
     int                    zip;
-    unsigned               own_field_offset;
-    unsigned               own_mask;
     uct_ib_mlx5_cq_unzip_t cq_unzip;
     union {
         struct {
