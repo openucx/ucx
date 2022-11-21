@@ -1225,13 +1225,13 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             const ucp_address_entry_t *ae)
 {
     int result;
-    ucp_context_h context                  = ep->worker->context;
-    ucp_worker_iface_t *wiface             = ucp_worker_iface(ep->worker, rsc_index);
+    ucp_context_h context                        = ep->worker->context;
+    ucp_worker_iface_t *wiface                   = ucp_worker_iface(ep->worker, rsc_index);
     const uct_iface_is_reachable_params_t params = {
         .device_addr        = ae->dev_addr,
         .iface_addr         = ae->iface_addr,
         .info_string        = (char*)ucs_malloc(UCP_WIREUP_UNREACHABLE_DIAG_INFO_BUFF_LEN,
-                              "wireup diag"),
+                                                "wireup diag"),
         .info_string_length = UCP_WIREUP_UNREACHABLE_DIAG_INFO_BUFF_LEN
     };
 
