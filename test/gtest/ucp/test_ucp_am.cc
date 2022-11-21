@@ -1526,7 +1526,7 @@ public:
     {
         m_status             = UCS_OK;
         m_am_recv_cb_invoked = false;
-        modify_config("RNDV_THRESH", "128");
+        modify_config("RNDV_THRESH", std::to_string(RNDV_THRESH));
     }
 
     ucs_status_t am_data_handler(const void *header, size_t header_length,
@@ -1632,8 +1632,9 @@ public:
     }
 
 protected:
+    static constexpr unsigned RNDV_THRESH = 128;
     ucs_status_t m_status;
-    bool         m_am_recv_cb_invoked;
+    bool m_am_recv_cb_invoked;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
@@ -1768,8 +1769,18 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, dts, "RNDV_THRESH=256")
     test_datatypes([&]() { test_am_send_recv(64 * UCS_KBYTE); });
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv);
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_am_zcopy, "ZCOPY_THRESH=256",
+           "RNDV_SCHEME=am")
+{
+    test_am_send_recv(256);
+}
 
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_am_bcopy, "RNDV_SCHEME=am")
+{
+    test_am_send_recv(RNDV_THRESH);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv);
 
 class test_ucp_am_nbx_rndv_memtype : public test_ucp_am_nbx_rndv {
 public:
