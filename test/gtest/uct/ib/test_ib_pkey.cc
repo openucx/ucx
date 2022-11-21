@@ -278,7 +278,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs_v2) {
         params1.info_string = (char*)info_buf1;
         params1.info_string_length = 4096;
         EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(),
-            (const uct_iface_is_reachable_params_t *)&params1));
+                  (const uct_iface_is_reachable_params_t *)&params1));
 
         char info_buf2[4096] = { 0 };
         uct_iface_is_reachable_params_t params2;
@@ -287,7 +287,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs_v2) {
         params2.info_string = (char*)info_buf2;
         params2.info_string_length = 4096;
         EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(),
-            (const uct_iface_is_reachable_params_t *)&params2));
+                  (const uct_iface_is_reachable_params_t *)&params2));
 
         if (res) {
             test_uct_ib::send_recv_short();

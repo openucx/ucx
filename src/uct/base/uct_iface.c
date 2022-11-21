@@ -22,9 +22,6 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
-/* The default maximum length of the diagnostic info buffer */
-#define UCT_DIAG_INFO_BUFFER_MAX_LEN 4096 
-
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
     [UCT_EP_OP_AM_BCOPY]     = "am_bcopy",
@@ -218,37 +215,14 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr)
 int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
 {
-    ucs_status_t res;
-    uct_base_iface_t *base_iface           = ucs_derived_of(iface, uct_base_iface_t);
-    uct_iface_is_reachable_params_t params = {
-        .device_addr        = dev_addr,
-        .iface_addr         = iface_addr,
-        .info_string        = NULL,
-        .info_string_length = 0
-    };
+    return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
+}
 
-    if (base_iface->diag_info_buffer == NULL) {
-        base_iface->diag_info_buffer_length = base_iface->diag_info_buffer_length == 0 ?
-                                              UCT_DIAG_INFO_BUFFER_MAX_LEN : 
-                                              base_iface->diag_info_buffer_length;
-        base_iface->diag_info_buffer = (char*)ucs_malloc(base_iface->diag_info_buffer_length, "diag info");
-    }
-
-    if (base_iface->diag_info_buffer != NULL) {
-        base_iface->diag_info_buffer[0] = '\0';
-        params.info_string = base_iface->diag_info_buffer;
-        params.info_string_length = base_iface->diag_info_buffer_length;
-    }
-
-    res = base_iface->internal_ops->iface_is_reachable_v2(iface,
-                                                          (const uct_iface_is_reachable_params_t*)&params);
-    if (!res) {
-        if (base_iface->diag_info_buffer && base_iface->diag_info_buffer[0] != '\0') {
-            ucs_diag("%s", base_iface->diag_info_buffer);
-        }
-    }
-
-    return res;
+int uct_iface_is_reachable_v2(uct_iface_h iface,
+                              const uct_iface_is_reachable_params_t *params)
+{
+    const uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
+    return base_iface->internal_ops->iface_is_reachable_v2(iface, params);
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,

@@ -296,9 +296,7 @@ typedef struct uct_base_iface {
         ucs_log_level_t      failure_level;
         size_t               max_num_eps;
     } config;
-
-    char                     *diag_info_buffer;        /* The buffer for store the last diagnostic information */
-    size_t                   diag_info_buffer_length; /* The buffer length of the last diagnostic information buffer */
+    
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
 } uct_base_iface_t;
 

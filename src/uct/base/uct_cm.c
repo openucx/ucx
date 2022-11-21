@@ -302,8 +302,6 @@ UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
     self->iface.prog.id                  = UCS_CALLBACKQ_ID_NULL;
     self->iface.prog.refcount            = 0;
     self->iface.progress_flags           = 0;
-    self->iface.diag_info_buffer         = NULL;
-    self->iface.diag_info_buffer_length  = 0;
 
     self->config.failure_level           = config->failure;
     self->config.reuse_addr              = config->reuse_addr;
@@ -315,12 +313,6 @@ UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
 
 UCS_CLASS_CLEANUP_FUNC(uct_cm_t)
 {
-    if (self->iface.diag_info_buffer != NULL) {
-        ucs_free(self->iface.diag_info_buffer);
-        self->iface.diag_info_buffer = NULL;
-        self->iface.diag_info_buffer_length = 0;
-    }
-
     UCS_STATS_NODE_FREE(self->iface.stats);
 }
 
