@@ -32,10 +32,6 @@
  */
 
 
-/* The maximum buffer length of the diagnostic information when the peer is
- * unreachable */
-#define UCP_WIREUP_UNREACHABLE_DIAG_INFO_BUFF_LEN 4096
-
 /* Validate wireup message, implemented as a macro to prevent static checker
  * warnings */
 #define UCP_WIREUP_MSG_CHECK(_msg, _ep, _msg_type) \
@@ -1230,9 +1226,9 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
     const uct_iface_is_reachable_params_t params = {
         .device_addr        = ae->dev_addr,
         .iface_addr         = ae->iface_addr,
-        .info_string        = (char*)ucs_malloc(UCP_WIREUP_UNREACHABLE_DIAG_INFO_BUFF_LEN,
+        .info_string        = (char*)ucs_malloc(UCP_WIREUP_UNREACHABLE_INFO_STRING_DEFAULT_LENGTH,
                                                 "wireup diag"),
-        .info_string_length = UCP_WIREUP_UNREACHABLE_DIAG_INFO_BUFF_LEN
+        .info_string_length = UCP_WIREUP_UNREACHABLE_INFO_STRING_DEFAULT_LENGTH
     };
 
     if (params.info_string != NULL) {
@@ -1244,10 +1240,12 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
               * during CM phase */
              (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
              uct_iface_is_reachable_v2(wiface->iface, &params));
-    if (!result &&
-        params.info_string != NULL &&
-        params.info_string[0] != '\0') {
+    if (!result && params.info_string != NULL && params.info_string[0] != '\0') {
         ucs_diag("%s", params.info_string);
+    }
+
+    if (params.info_string != NULL) {
+        ucs_free(params.info_string);
     }
 
     return result;
