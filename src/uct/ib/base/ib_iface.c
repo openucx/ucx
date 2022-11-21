@@ -1473,7 +1473,7 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
-    
+
     self->ops->destroy_cq(self, UCT_IB_DIR_RX);
     self->ops->destroy_cq(self, UCT_IB_DIR_TX);
 

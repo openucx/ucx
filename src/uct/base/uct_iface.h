@@ -296,7 +296,7 @@ typedef struct uct_base_iface {
         ucs_log_level_t      failure_level;
         size_t               max_num_eps;
     } config;
-    
+
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
 } uct_base_iface_t;
 

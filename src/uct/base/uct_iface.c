@@ -22,6 +22,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
+
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
     [UCT_EP_OP_AM_BCOPY]     = "am_bcopy",
@@ -218,7 +219,7 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
-int uct_iface_is_reachable_v2(uct_iface_h iface,
+int uct_iface_is_reachable_v2(const uct_iface_h iface,
                               const uct_iface_is_reachable_params_t *params)
 {
     const uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);

@@ -1240,10 +1240,10 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     result = (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           (/* assume reachability is checked by CM, if EP selects lanes
-             * during CM phase */
-            (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
-            uct_iface_is_reachable_v2(wiface->iface, &params));
+            (/* assume reachability is checked by CM, if EP selects lanes
+              * during CM phase */
+             (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
+             uct_iface_is_reachable_v2(wiface->iface, &params));
     if (!result &&
         params.info_string != NULL &&
         params.info_string[0] != '\0') {
