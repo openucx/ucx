@@ -622,6 +622,7 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                      ucs_sockaddr_address_family_str(local_ib_addr_af),
                      ucs_sockaddr_address_family_str(remote_ib_addr_af));
         }
+
         return 0;
     }
 
@@ -641,6 +642,7 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                      uct_ib_gid_str((union ibv_gid*)(remote_ib_addr + 1),
                                     remote_str, sizeof(remote_str)));
         }
+
         return 0;
     }
 
@@ -716,6 +718,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                          !((pack_params.pkey | iface->pkey) & UCT_IB_PKEY_MEMBERSHIP_MASK) ?
                          "membership" : "mismatch", iface->pkey, pack_params.pkey);
             }
+
             return 0;
     }
 
@@ -732,6 +735,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                          be64toh(pack_params.gid.global.subnet_prefix));
             }
         }
+
         return result;
     } else if (is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* there shouldn't be a lid and the UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH
@@ -748,6 +752,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                          uct_ib_gid_str((union ibv_gid*)(ib_addr + 1), remote_str, sizeof(remote_str)));
             }
         }
+
         return result;
     } else {
         /* local and remote have different link layers and therefore are unreachable */
@@ -756,6 +761,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                      "IB iface %p: local and remote have different link layers and "
                      "therefore are unreachable", iface);
         }
+        
         return 0;
     }
 }

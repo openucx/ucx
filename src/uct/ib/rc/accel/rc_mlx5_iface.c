@@ -715,6 +715,7 @@ int uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                      "local=%d, remote=%d", iface,
                      my_type, *(uint8_t*)iface_addr);
         }
+        
         return 0;
     }
 
