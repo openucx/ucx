@@ -722,7 +722,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
     if (!is_local_eth && !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* same subnet prefix */
         result = (pack_params.gid.global.subnet_prefix ==
-                 iface->gid_info.gid.global.subnet_prefix);
+                  iface->gid_info.gid.global.subnet_prefix);
         if (!result) {
             if (info_string && info_string_length > 0) {
                 snprintf(info_string, info_string_length,
