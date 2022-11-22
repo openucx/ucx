@@ -703,9 +703,18 @@ int uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                       const uct_iface_is_reachable_params_t *params)
 {
     const uct_iface_addr_t *iface_addr = params->iface_addr;
+    char* info_string                  = params->info_string;
+    size_t info_string_length          = params->info_string_length;
+    uct_ib_iface_t *iface              = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uint8_t my_type                    = uct_rc_mlx5_iface_get_address_type(tl_iface);
 
     if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
+        if (info_string && info_string_length > 0) {
+            snprintf(info_string, info_string_length,
+                     "IB iface %p: is unreachable due to address type mismatch, "
+                     "local=%d, peer=%d", iface,
+                     my_type, *(uint8_t*)iface_addr);
+        }
         return 0;
     }
 
