@@ -104,6 +104,11 @@ protected:
         std::vector<uct_ep_h> wireup_eps(wireup_ep_count);
         ucs_status_t status;
 
+        if (!has_resource(&sender(), "rc_mlx5") &&
+            (get_variant_value() & TEST_DISCARD_DISABLED)) {
+            UCS_TEST_SKIP_R("no IB transports found");
+        }
+
         ASSERT_LE(wireup_ep_count, ep_count);
         ASSERT_LE(wireup_aux_ep_count, wireup_ep_count);
 

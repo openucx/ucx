@@ -113,6 +113,18 @@ bool ucp_test::has_transport(const std::string& tl_name) const {
     return check_transport(tl_name, GetParam().transports);
 }
 
+bool
+ucp_test::has_resource(const ucp_test_base::entity *e, const std::string &tl_name) const
+{
+    for (int i = 0; i < e->ucph()->num_tls; ++i) {
+        if (tl_name == e->ucph()->tl_rscs[i].tl_rsc.tl_name) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool ucp_test::has_any_transport(const std::vector<std::string>& tl_names) const {
     const std::vector<std::string>& all_tl_names = GetParam().transports;
 
