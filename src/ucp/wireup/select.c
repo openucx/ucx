@@ -1415,7 +1415,7 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
     return size / t * 1e-5;
 }
 
-static double ucp_wireup_get_lane_bw(ucp_wireup_select_info_t *sinfo,
+static double ucp_wireup_get_lane_bw(const ucp_wireup_select_info_t *sinfo,
                                      ucp_worker_h worker,
                                      const ucp_address_entry_t *address)
 {
@@ -1431,7 +1431,7 @@ static double ucp_wireup_get_lane_bw(ucp_wireup_select_info_t *sinfo,
 
 static unsigned
 ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
-                          ucp_wireup_select_info_t *sinfo_array,
+                          const ucp_wireup_select_info_t *sinfo_array,
                           unsigned num_sinfo, ucp_worker_h worker,
                           ucp_lane_type_t lane_type,
                           ucp_wireup_select_context_t *select_ctx)
