@@ -1468,7 +1468,7 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
         }
 
         show_error = (num_lanes == 0);
-        status     = ucp_wireup_add_lane(select_params, &sinfo[sinfo_index],
+        status     = ucp_wireup_add_lane(select_params, &sinfo_array[sinfo_index],
                                          lane_type, show_error, select_ctx);
         if (status != UCS_OK) {
             break;
