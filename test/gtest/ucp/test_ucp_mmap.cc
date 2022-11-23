@@ -24,10 +24,10 @@ public:
     }
 
     enum {
-        VARIANT_MAP_NONBLOCK   = UCS_BIT(0),
-        VARIANT_PROTO_ENABLE   = UCS_BIT(1),
-        VARIANT_NO_SEND_RCACHE = UCS_BIT(2),
-        VARIANT_NO_RECV_RCACHE = UCS_BIT(3)
+        VARIANT_DEFAULT,
+        VARIANT_MAP_NONBLOCK,
+        VARIANT_PROTO_ENABLE,
+        VARIANT_NO_RCACHE
     };
 
     static void
@@ -40,25 +40,13 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
                                VARIANT_PROTO_ENABLE, "proto");
         add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
-                               VARIANT_NO_SEND_RCACHE, "no_send_rcache");
-        add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
-                               VARIANT_NO_RECV_RCACHE, "no_recv_rcache");
-        add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
-                               VARIANT_NO_SEND_RCACHE | VARIANT_NO_RECV_RCACHE,
-                               "no_rcache");
+                               VARIANT_NO_RCACHE, "no_rcache");
     }
 
     static void
     get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         get_test_variants(variants, 0);
-    }
-
-    void create_entity_no_rcache() {
-        modify_config("RCACHE_ENABLE", "n");
-        ucs::scoped_setenv ib_reg_methods_env("UCX_IB_REG_METHODS", "direct");
-        ucs::scoped_setenv knem_rcache_env("UCX_KNEM_RCACHE", "no");
-        create_entity();
     }
 
     void always_equal_md_map_init() {
@@ -70,7 +58,7 @@ public:
         params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH;
         params.length     = sizeof(char);
-        
+
         params.address = &dummy[0];
         status         = ucp_mem_map(sender().ucph(), &params, &memh1);
         ASSERT_UCS_OK(status);
@@ -102,22 +90,14 @@ public:
             modify_config("PROTO_ENABLE", "y");
         }
 
-        test_base::init();
-
-        // sender
-        if (get_variant_value() & VARIANT_NO_SEND_RCACHE) {
-            create_entity_no_rcache();
+        if (get_variant_value() == VARIANT_NO_RCACHE) {
+            modify_config("RCACHE_ENABLE", "n");
+            ucs::scoped_setenv ib_reg_methods_env("UCX_IB_REG_METHODS",
+                                                  "direct");
+            ucs::scoped_setenv knem_rcache_env("UCX_KNEM_RCACHE", "no");
+            ucp_test::init(); // Init UCP with rcache disabled
         } else {
-            create_entity();
-        }
-
-        if (!is_self()) {
-            // receiver
-            if (get_variant_value() & VARIANT_NO_RECV_RCACHE) {
-                create_entity_no_rcache();
-            } else {
-                create_entity();
-            }
+            ucp_test::init();
         }
 
         sender().connect(&receiver(), get_ep_params());
@@ -129,7 +109,7 @@ public:
     }
 
     unsigned mem_map_flags() const {
-        return (get_variant_value() & VARIANT_MAP_NONBLOCK) ?
+        return (get_variant_value() == VARIANT_MAP_NONBLOCK) ?
                        UCP_MEM_MAP_NONBLOCK :
                        0;
     }
@@ -373,7 +353,7 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
 
 bool test_ucp_mmap::enable_proto() const
 {
-    return get_variant_value() & VARIANT_PROTO_ENABLE;
+    return get_variant_value() == VARIANT_PROTO_ENABLE;
 }
 
 void test_ucp_mmap::expect_same_distance(const ucs_sys_dev_distance_t &dist1,
@@ -558,7 +538,7 @@ void test_ucp_mmap::test_rereg_local_mem(ucp_mem_h memh, void *ptr,
         if (size == 0) {
             EXPECT_EQ(memh, test_memh);
             EXPECT_EQ(&ucp_mem_dummy_handle.memh, test_memh);
-        } else if (get_variant_value() & VARIANT_NO_SEND_RCACHE) {
+        } else if (get_variant_value() == VARIANT_NO_RCACHE) {
             EXPECT_NE(test_memh->reg_id, memh->reg_id);
             compare_uct_memhs(test_memh, memh, false);
         } else {
@@ -646,12 +626,10 @@ void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
     if (size == 0) {
         EXPECT_EQ(memh, test_imp_memh);
         EXPECT_EQ(&ucp_mem_dummy_handle.memh, test_imp_memh);
-    } else if (get_variant_value() & (VARIANT_NO_SEND_RCACHE |
-                                      VARIANT_NO_RECV_RCACHE)) {
+    } else if (get_variant_value() == VARIANT_NO_RCACHE) {
         EXPECT_EQ(test_imp_memh->reg_id, memh->reg_id);
         compare_uct_memhs(test_imp_memh, imp_memh, false);
     } else {
-        EXPECT_EQ(test_imp_memh->reg_id, memh->reg_id);
         compare_memhs(test_imp_memh, imp_memh);
     }
 
