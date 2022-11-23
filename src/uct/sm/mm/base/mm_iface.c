@@ -108,14 +108,13 @@ static int
 uct_mm_iface_is_reachable_v2(const uct_iface_h tl_iface,
                              const uct_iface_is_reachable_params_t *params)
 {
-    const uct_device_addr_t *dev_addr     = params->device_addr;
     const uct_iface_addr_t *tl_iface_addr = params->iface_addr;
     uct_mm_iface_t *iface                 = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_mm_md_t *md                       = ucs_derived_of(iface->super.super.md,
                                                            uct_mm_md_t);
     uct_mm_iface_addr_t *iface_addr       = (void*)tl_iface_addr;
 
-    if (!uct_sm_iface_is_reachable(tl_iface, dev_addr, tl_iface_addr)) {
+    if (!uct_sm_iface_is_reachable_v2(tl_iface, params)) {
         return 0;
     }
 

@@ -72,11 +72,10 @@ static int
 uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
                               const uct_iface_is_reachable_params_t *params)
 {
-    const uct_device_addr_t *dev_addr           = params->device_addr;
     const uct_iface_addr_t *tl_iface_addr       = params->iface_addr;
     ucs_cma_iface_ext_device_addr_t *iface_addr = (void*)tl_iface_addr;
 
-    if (!uct_sm_iface_is_reachable(tl_iface, dev_addr, tl_iface_addr)) {
+    if (!uct_sm_iface_is_reachable_v2(tl_iface, params)) {
         return 0;
     }
 
