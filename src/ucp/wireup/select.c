@@ -1415,17 +1415,18 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
     return size / t * 1e-5;
 }
 
-static void ucp_wireup_get_lane_bw(ucp_wireup_select_info_t *sinfo,
-                                   ucp_worker_h worker,
-                                   const ucp_address_entry_t *address,
-                                   double *bw_local, double *bw_remote)
+static double ucp_wireup_get_lane_bw(ucp_wireup_select_info_t *sinfo,
+                                     ucp_worker_h worker,
+                                     const ucp_address_entry_t *address)
 {
-    const uct_iface_attr_t *iface_attr;
     ucp_context_h context = worker->context;
+    const uct_iface_attr_t *iface_attr;
+    double bw_local, bw_remote;
 
     iface_attr = ucp_worker_iface_get_attr(worker, sinfo->rsc_index);
-    *bw_local  = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
-    *bw_remote = address[sinfo->addr_index].iface_attr.bandwidth;
+    bw_local   = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+    bw_remote  = address[sinfo->addr_index].iface_attr.bandwidth;
+    return ucs_min(bw_local, bw_remote);
 }
 
 static unsigned
@@ -1436,34 +1437,27 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
                           ucp_wireup_select_context_t *select_ctx)
 {
     unsigned num_lanes     = 0;
-    double max_bw_local    = 0;
-    double max_bw_remote   = 0;
+    double max_bw          = 0;
     ucp_context_h context  = worker->context;
     const double max_ratio = 1. / context->config.ext.multi_lane_max_ratio;
     ucs_status_t status;
     int show_error;
     unsigned sinfo_index;
-    double bw_local, bw_remote;
-
+    double lane_bw;
 
     /* Iterate over all elements and calculate max BW */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
-        ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
-                               select_params->address->address_list, &bw_local,
-                               &bw_remote);
-
-        max_bw_local  = ucs_max(bw_local, max_bw_local);
-        max_bw_remote = ucs_max(bw_remote, max_bw_remote);
+        lane_bw = ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
+                                         select_params->address->address_list);
+        max_bw  = ucs_max(lane_bw, max_bw);
     }
 
     /* Compare each element to max BW and filter only fast lanes */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
-        ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
-                               select_params->address->address_list, &bw_local,
-                               &bw_remote);
+        lane_bw = ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
+                                         select_params->address->address_list);
 
-        if (((bw_local / max_bw_local) < max_ratio) ||
-            ((bw_remote / max_bw_remote) < max_ratio)) {
+        if ((lane_bw / max_bw) < max_ratio) {
             continue;
         }
 
