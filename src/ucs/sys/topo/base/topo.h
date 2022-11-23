@@ -22,6 +22,7 @@ BEGIN_C_DECLS
 /* Indicate that the ucs_sys_device_t for the device has no real bus_id
  * e.g. virtual devices like CMA/knem */
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
+#define UCS_SYS_DEVICE_ID_CPU     (UINT8_MAX - 1)
 
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16

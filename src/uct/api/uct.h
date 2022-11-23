@@ -1563,7 +1563,10 @@ typedef enum uct_md_mem_attr_field {
      * Request the offset of the provided virtual address relative to the
      * beginning of its backing dmabuf region.
      */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5)
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5),
+
+    /** Indicate if preferred memory type is populated. E.g. CPU/GPU */
+    UCT_MD_MEM_ATTR_FIELD_PREFERRED_DEV = UCS_BIT(6)
 } uct_md_mem_attr_field_t;
 
 
@@ -1584,7 +1587,7 @@ typedef struct uct_md_mem_attr {
 
     /**
      * The type of memory. E.g. CPU/GPU memory or some other valid type.
-     * If the md does not support sys_dev query, then UCS_MEMORY_TYPE_UNKNOWN
+     * If the md does not support mem_dev query, then UCS_MEMORY_TYPE_UNKNOWN
      * is returned.
      */
     ucs_memory_type_t mem_type;
@@ -1625,6 +1628,22 @@ typedef struct uct_md_mem_attr {
      * (identified by dmabuf_fd) backing the memory region being queried.
      */
     size_t            dmabuf_offset;
+
+    /**
+     * For some memory types, a given memory range can have pages that reside
+     * in multiple locations. For example, UCS_MEMORY_TYPE_CUDA_MANAGED can have
+     * some pages reside on CPU memory and others on GPU memory. However,
+     * irrespective of the actual location, the user can request the runtime to
+     * set preferred location of the range to a specific location. Knowing the
+     * preferred location can help the communication runtime decide where to
+     * stage such memory for some protocols and improve performance. This
+     * attribute returns the preferred system device as UCS_SYS_DEVICE_ID_CPU or
+     * appropriate index depending on the location preference set by the user
+     * (if set) for a memory range of type UCS_MEMORY_TYPE_CUDA_MANAGED. If the
+     * md does not support mem_dev query, then UCS_SYS_DEVICE_ID_UNKNOWN is
+     * returned.
+     */
+    ucs_sys_device_t  preferred_dev;
 } uct_md_mem_attr_t;
 
 

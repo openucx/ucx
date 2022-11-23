@@ -55,8 +55,9 @@ typedef struct ucp_dt_state {
  * UCP layer memory information
  */
 typedef struct {
-    uint8_t          type;    /**< Memory type, use uint8 for compact size */
-    ucs_sys_device_t sys_dev; /**< System device index */
+    uint8_t          type;          /**< Memory type, use uint8 for compact size */
+    ucs_sys_device_t sys_dev;       /**< System device index */
+    ucs_sys_device_t preferred_dev; /**< Preferred device index */
 } ucp_memory_info_t;
 
 
