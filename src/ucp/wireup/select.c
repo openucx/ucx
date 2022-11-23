@@ -1415,26 +1415,55 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
     return size / t * 1e-5;
 }
 
+static void ucp_wireup_get_lane_bw(ucp_wireup_select_info_t *sinfo,
+                                   ucp_worker_h worker,
+                                   const ucp_address_entry_t *address,
+                                   double *bw_local, double *bw_remote)
+{
+    const uct_iface_attr_t *iface_attr;
+    ucp_context_h context = worker->context;
+
+    iface_attr = ucp_worker_iface_get_attr(worker, sinfo->rsc_index);
+    *bw_local  = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+    *bw_remote = address[sinfo->addr_index].iface_attr.bandwidth;
+}
+
 static unsigned
 ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
-                          ucp_wireup_select_info_t *sinfo, unsigned num_sinfo,
-                          ucp_context_h context, ucp_worker_h worker,
-                          double max_bw, ucp_lane_type_t lane_type,
+                          ucp_wireup_select_info_t *sinfo_array,
+                          unsigned num_sinfo, ucp_worker_h worker,
+                          ucp_lane_type_t lane_type,
                           ucp_wireup_select_context_t *select_ctx)
 {
-    unsigned num_lanes = 0;
-    double max_ratio   = 1. / context->config.ext.multi_lane_max_ratio;
-    const uct_iface_attr_t *iface_attr;
+    unsigned num_lanes     = 0;
+    double max_bw_local    = 0;
+    double max_bw_remote   = 0;
+    ucp_context_h context  = worker->context;
+    const double max_ratio = 1. / context->config.ext.multi_lane_max_ratio;
     ucs_status_t status;
     int show_error;
     unsigned sinfo_index;
-    double lane_bw;
+    double bw_local, bw_remote;
 
+
+    /* Iterate over all elements and calculate max BW */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
-        iface_attr = ucp_worker_iface_get_attr(worker,
-                                               sinfo[sinfo_index].rsc_index);
-        lane_bw    = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
-        if ((lane_bw / max_bw) < max_ratio) {
+        ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
+                               select_params->address->address_list, &bw_local,
+                               &bw_remote);
+
+        max_bw_local  = ucs_max(bw_local, max_bw_local);
+        max_bw_remote = ucs_max(bw_remote, max_bw_remote);
+    }
+
+    /* Compare each element to max BW and filter only fast lanes */
+    for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
+        ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
+                               select_params->address->address_list, &bw_local,
+                               &bw_remote);
+
+        if (((bw_local / max_bw_local) < max_ratio) ||
+            ((bw_remote / max_bw_remote) < max_ratio)) {
             continue;
         }
 
@@ -1471,10 +1500,8 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_md_map_t md_map;
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
-    double max_bw, lane_bw;
 
     num_sinfo             = 0;
-    max_bw                = 0;
     md_map                = bw_info->md_map;
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
@@ -1500,10 +1527,6 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
             dev_index                   = context->tl_rscs[rsc_index].dev_index;
             sinfo[num_sinfo].path_index = dev_count.local[dev_index];
             num_sinfo++;
-
-            iface_attr = ucp_worker_iface_get_attr(ep->worker, rsc_index);
-            lane_bw    = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
-            max_bw     = ucs_max(lane_bw, max_bw);
         } else {
             /* disqualify/count lane_desc_idx */
             addr_index      = select_ctx->lane_descs[excl_lane].addr_index;
@@ -1532,9 +1555,10 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     bw_info->criteria.arg = NULL; /* To suppress compiler warning */
-    return ucp_wireup_add_fast_lanes(select_params, sinfo, num_sinfo, context,
-                                     ep->worker, max_bw,
-                                     bw_info->criteria.lane_type, select_ctx);
+
+    return ucp_wireup_add_fast_lanes(select_params, sinfo, num_sinfo,
+                                     ep->worker, bw_info->criteria.lane_type,
+                                     select_ctx);
 }
 
 static ucs_status_t
