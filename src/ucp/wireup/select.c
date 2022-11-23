@@ -1457,7 +1457,7 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
         lane_bw = ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
                                          select_params->address->address_list);
 
-        if ((lane_bw / max_bw) < max_ratio) {
+        if ((max_bw > 0) && ((lane_bw / max_bw) < max_ratio)) {
             continue;
         }
 
