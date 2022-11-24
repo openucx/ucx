@@ -3451,7 +3451,8 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
 
     /* Only send operations could have request ID allocated */
     if (!(req->flags &
-          (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG))) {
+          (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG |
+           UCP_REQUEST_FLAG_RNDV_FRAG))) {
         ucp_send_request_id_release(req);
     }
 
@@ -3473,7 +3474,6 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         ucp_request_complete_tag_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         ucs_assert(req->flags & UCP_REQUEST_FLAG_SUPER_VALID);
-        ucs_assert(req->send.ep == ucp_ep);
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
 
@@ -3496,13 +3496,20 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         ucp_request_complete_send(req, status);
         ucp_ep_rma_remote_request_completed(ucp_ep);
     } else {
-        /* SW RMA/PUT and AMO/Post operations don't allocate local request ID
-         * and don't need to be tracked, since they complete UCP request upon
-         * sending all data to a peer. Receiving RMA/CMPL and AMO/REP packets
-         * complete flush requests */
-        ucs_assert((req->send.uct.func != ucp_rma_sw_proto.progress_put) &&
-                   (req->send.uct.func != ucp_amo_sw_proto.progress_post));
         ucs_assert(req->send.ep == ucp_ep);
+
+        if (req->send.uct.func == ucp_proto_progress_rndv_rtr) {
+            if (req->send.rndv.mdesc != NULL) {
+                ucs_mpool_put_inline(req->send.rndv.mdesc);
+            }
+        } else {
+            /* SW RMA/PUT and AMO/Post operations don't allocate local request ID
+             * and don't need to be tracked, since they complete UCP request upon
+             * sending all data to a peer. Receiving RMA/CMPL and AMO/REP packets
+             * complete flush requests */
+            ucs_assert((req->send.uct.func != ucp_rma_sw_proto.progress_put) &&
+                       (req->send.uct.func != ucp_amo_sw_proto.progress_post));
+        }
 
         ucp_ep_req_purge(ucp_ep, ucp_request_get_super(req), status, 1);
         ucp_request_put(req);
