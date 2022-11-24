@@ -211,8 +211,7 @@ protected:
         flush_req = sender().flush_worker_nb(0);
         if ((flush_req == NULL) &&
             (get_variant_value() & TEST_DISCARD_DISABLED)) {
-            ucs::detail::message_stream ms("INFO");
-            ms << "all EPs returned UCS_OK in 'flush_worker_nb'" << std::endl;
+            UCS_TEST_MESSAGE << "all EPs returned UCS_OK in 'flush_worker_nb'";
             goto out;
         }
 
