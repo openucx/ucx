@@ -239,7 +239,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
             .device_addr        = (uct_device_addr_t*)ib_addr2,
             .iface_addr         = NULL,
             .info_string        = NULL,
-            .info_string_length = 4096
+            .info_string_length = 0
         };
 
         EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(), &params1));
