@@ -1426,6 +1426,7 @@ static double ucp_wireup_get_lane_bw(const ucp_wireup_select_info_t *sinfo,
     iface_attr = ucp_worker_iface_get_attr(worker, sinfo->rsc_index);
     bw_local   = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
     bw_remote  = address[sinfo->addr_index].iface_attr.bandwidth;
+
     return ucs_min(bw_local, bw_remote);
 }
 
