@@ -951,6 +951,28 @@ static UCS_F_ALWAYS_INLINE uint16_t ucp_am_send_nbx_get_op_flag(uint32_t flags)
     return 0;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_params_check_memh(const ucp_request_param_t *param, uint32_t *flags_p)
+{
+    if (!ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
+        return UCS_OK;
+    }
+
+    /* Suppress Coverity warning that memh could be NULL and dereferenced */
+    ucs_assert(param->memh != NULL);
+
+    if (ucs_unlikely(param->memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+        if (ENABLE_PARAMS_CHECK &&
+            ucs_unlikely(*flags_p & UCP_AM_SEND_FLAG_EAGER)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        *flags_p |= UCP_AM_SEND_FLAG_RNDV;
+    }
+
+    return UCS_OK;
+}
+
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
                  (ep, id, header, header_length, buffer, count, param),
                  ucp_ep_h ep, unsigned id, const void *header,
@@ -987,6 +1009,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         max_short = &ucp_ep_config(ep)->am_u.max_eager_short;
         proto     = ucp_ep_config(ep)->am_u.proto;
         op_id     = UCP_OP_ID_AM_SEND;
+    }
+
+    status = ucp_am_params_check_memh(param, &flags);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ret = UCS_STATUS_PTR(status);
+        goto out;
     }
 
     if (ucs_likely(attr_mask == 0)) {

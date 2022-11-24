@@ -74,6 +74,7 @@ static void usage()
     printf("                        't' : tag matching \n");
     printf("                        's' : stream \n");
     printf("                        'm' : active messages \n");
+    printf("                        'x' : exported memory handle \n");
     printf("                       Modifiers to use in combination with above features:\n");
     printf("                        'w' : wakeup\n");
     printf("                        'e' : error handling\n");
@@ -204,6 +205,9 @@ int main(int argc, char **argv)
                     break;
                 case 'm':
                     ucp_features |= UCP_FEATURE_AM;
+                    break;
+                case 'x':
+                    ucp_features |= UCP_FEATURE_EXPORTED_MEMH;
                     break;
                 case 'w':
                     ucp_features |= UCP_FEATURE_WAKEUP;

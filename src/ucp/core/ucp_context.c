@@ -1382,6 +1382,8 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
     mem_type_mask = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     for (i = 0; i < tl_cmpt->attr.md_resource_count; ++i) {
         md_index = context->num_mds;
+        md_attr  = &context->tl_mds[md_index].attr;
+
         status = ucp_fill_tl_md(context, cmpt_index,
                                 &uct_component_attr.md_resources[i],
                                 &context->tl_mds[md_index]);
@@ -1400,16 +1402,15 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
 
         if (num_tl_resources > 0) {
             /* List of memory type MDs */
-            mem_type_bitmap = context->tl_mds[md_index].attr.detect_mem_types;
+            mem_type_bitmap = md_attr->detect_mem_types;
             if (~mem_type_mask & mem_type_bitmap) {
                 context->mem_type_detect_mds[context->num_mem_type_detect_mds] = md_index;
                 ++context->num_mem_type_detect_mds;
                 mem_type_mask |= mem_type_bitmap;
             }
 
-            md_attr = &context->tl_mds[md_index].attr;
-            if (md_attr->flags & UCT_MD_FLAG_REG) {
-                ucs_memory_type_for_each(mem_type) {
+            ucs_memory_type_for_each(mem_type) {
+                if (md_attr->flags & UCT_MD_FLAG_REG) {
                     if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
                     }
@@ -1418,6 +1419,10 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
                 }
+            }
+
+            if (md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY) {
+                context->export_md_map |= UCS_BIT(md_index);
             }
 
             if (md_attr->flags & UCT_MD_FLAG_REG_DMABUF) {
@@ -1469,6 +1474,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_tls                  = 0;
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
+    context->export_md_map            = 0;
 
     for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
         context->reg_md_map[mem_type]     = 0;
@@ -1986,6 +1992,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     if (status != UCS_OK) {
         goto err_thread_lock_finalize;
     }
+
+    context->uuid             = ucs_generate_uuid((uintptr_t)context);
+    context->next_memh_reg_id = 0;
 
     if (config->enable_rcache != UCS_NO) {
         status = ucp_mem_rcache_init(context);

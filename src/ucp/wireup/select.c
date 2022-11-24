@@ -889,14 +889,18 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
         ucp_tl_bitmap_t tl_bitmap, ucp_lane_type_t lane_type,
         ucp_wireup_select_context_t *select_ctx)
 {
+    ucp_context_h context                = select_params->ep->worker->context;
     ucp_wireup_criteria_t mem_criteria   = *criteria;
     ucp_wireup_select_info_t select_info = {0};
-    int show_error                       = !select_params->allow_am;
     double reg_score                     = 0;
+    int allow_am;
     uint64_t remote_md_map;
     ucs_status_t status;
     char title[64];
 
+    allow_am      = select_params->allow_am &&
+                    !((lane_type == UCP_LANE_TYPE_RMA) &&
+                      (context->config.features & UCP_FEATURE_EXPORTED_MEMH));
     remote_md_map = UINT64_MAX;
 
     /* Select best transport which can reach registered memory */
@@ -910,11 +914,11 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
     status = ucp_wireup_select_transport(select_ctx, select_params,
                                          &mem_criteria, tl_bitmap,
                                          remote_md_map, UINT64_MAX, UINT64_MAX,
-                                         show_error, &select_info);
+                                         !allow_am, &select_info);
     if (status == UCS_OK) {
         /* Add to the list of lanes */
         status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
-                                     !select_params->allow_am, select_ctx);
+                                     !allow_am, select_ctx);
         if (status == UCS_OK) {
             /* Remove all occurrences of the remote md from the address list,
              * to avoid selecting the same remote md again. */

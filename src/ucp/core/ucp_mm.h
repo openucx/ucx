@@ -20,6 +20,25 @@
 
 
 /**
+ * Memory handle flags.
+ */
+enum {
+    /*
+     * Memory handle was imported and points to some peer's memory buffer.
+     */
+    UCP_MEMH_FLAG_IMPORTED  = UCS_BIT(0)
+};
+
+
+/**
+ * Memory handle buffer packed flags.
+ */
+enum {
+    UCP_MEMH_BUFFER_FLAG_EXPORTED = UCS_BIT(0) 
+};
+
+
+/**
  * Memory handle.
  * Contains general information, and a list of UCT handles.
  * md_map specifies which MDs from the current context are present in the array.
@@ -27,14 +46,17 @@
  */
 typedef struct ucp_mem {
     ucs_rcache_region_t super;
+    uint8_t             flags;          /* Memory handle flags */
     ucp_context_h       context;        /* UCP context that owns a memory handle */
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
+    uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
     ucp_mem_h           parent;         /* - NULL if entry should be returned to rcache
                                            - pointer to self if rcache disabled
                                            - pointer to rcache memh if entry is a user memh */
+    uint64_t            reg_id;         /* Registration ID */
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
 
@@ -69,7 +91,7 @@ typedef struct ucp_rndv_mpool_priv {
 
 typedef struct {
     ucp_mem_t memh;
-    uct_mem_h uct[UCP_MD_INDEX_BITS];
+    uct_mem_h uct[UCP_MAX_MDS];
 } ucp_mem_dummy_handle_t;
 
 
