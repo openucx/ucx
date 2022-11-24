@@ -1587,7 +1587,7 @@ typedef struct uct_md_mem_attr {
 
     /**
      * The type of memory. E.g. CPU/GPU memory or some other valid type.
-     * If the md does not support mem_dev query, then UCS_MEMORY_TYPE_UNKNOWN
+     * If the md does not support mem_type query, then UCS_MEMORY_TYPE_UNKNOWN
      * is returned.
      */
     ucs_memory_type_t mem_type;

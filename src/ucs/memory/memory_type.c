@@ -32,3 +32,14 @@ const char *ucs_memory_type_descs[] = {
     [UCS_MEMORY_TYPE_LAST]         = "unknown"
 };
 
+
+ucs_memory_type_t ucs_memory_type_get_pinned_type(ucs_memory_type_t mem_type)
+{
+    if (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        return UCS_MEMORY_TYPE_CUDA;
+    } else if (mem_type == UCS_MEMORY_TYPE_ROCM_MANAGED) {
+        return UCS_MEMORY_TYPE_ROCM;
+    } else {
+        return mem_type;
+    }
+}

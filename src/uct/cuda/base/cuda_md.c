@@ -161,11 +161,9 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
          * in that case. Therefore, checking whether the allocation was not
          * allocated in a context should also allows us to identify
          * virtual/stream-ordered CUDA allocations. */
-        mem_info->type           = UCS_MEMORY_TYPE_CUDA_MANAGED;
+        mem_info->type          = UCS_MEMORY_TYPE_CUDA_MANAGED;
+        mem_info->preferred_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 
-        /* set preferred location to default device; if user has set a
-         * preference explicitly, then change preferred_type accordingly */
-        mem_info->preferred_dev  = mem_info->sys_dev;
         cu_err = cuMemRangeGetAttribute(&preferred_location, 4,
                                         CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION,
                                         (CUdeviceptr)address, length);
@@ -178,7 +176,7 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
                 status = uct_cuda_base_get_sys_dev(preferred_location,
                                                    &mem_info->preferred_dev);
                 if (status != UCS_OK) {
-                    mem_info->preferred_dev = mem_info->sys_dev;
+                    mem_info->preferred_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
                 }
             }
         }

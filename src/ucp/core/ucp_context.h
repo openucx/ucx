@@ -74,6 +74,8 @@ typedef struct ucp_context_config {
     size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
     /** Memory type of fragments used for RNDV pipeline protocol */
     ucs_memory_type_t                      rndv_frag_mem_type;
+    /** Preferred location should be used when selecting fragment location */
+    int                                    rndv_frag_preferred_loc;
     /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Enabling 2-stage pipeline rndv protocol */

@@ -307,6 +307,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_type),
    UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
+  {"RNDV_FRAG_PREFERRED_LOC", "n",
+   "Use preferred location for mem_types like cuda-managed to decide rendezvous\n"
+   "staging buffer location.",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_preferred_loc), UCS_CONFIG_TYPE_BOOL},
+
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
    ucs_offsetof(ucp_context_config_t, rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
