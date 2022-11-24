@@ -616,7 +616,7 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
 
     if (local_ib_addr_af != remote_ib_addr_af) {
         ucs_assert(local_ib_addr_af != 0);
-        if (info_string && info_string_length > 0) {
+        if (info_string != NULL && info_string_length > 0) {
             snprintf(info_string, info_string_length,
                      "different addr_family detected. local %s remote %s",
                      ucs_sockaddr_address_family_str(local_ib_addr_af),
@@ -632,7 +632,7 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     remote_roce_ver = uct_ib_address_flags_get_roce_version(remote_ib_addr_flags);
 
     if (local_roce_ver != remote_roce_ver) {
-        if (info_string && info_string_length > 0) {
+        if (info_string != NULL && info_string_length > 0) {
             snprintf(info_string, info_string_length,
                      "different RoCE versions detected. local %s (gid=%s) remote %s (gid=%s)",
                      uct_ib_roce_version_str(local_roce_ver),
@@ -703,7 +703,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_ib_address_pack_params_t pack_params;
 
     char local_str[128], remote_str[128];
-    int result;
+    int ret;
 
     uct_ib_address_unpack(ib_addr, &pack_params);
 
@@ -711,7 +711,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
         !((pack_params.pkey | iface->pkey) & UCT_IB_PKEY_MEMBERSHIP_MASK) ||
         /* PKEY values have to be equal */
         ((pack_params.pkey ^ iface->pkey) & UCT_IB_PKEY_PARTITION_MASK)) {
-            if (info_string && info_string_length > 0) {
+            if (info_string != NULL && info_string_length > 0) {
                 snprintf(info_string, info_string_length,
                          "IB iface %p: is unreachable due to pkeys %s, "
                          "lpkey=%d, rpkey=%d", iface,
@@ -724,10 +724,10 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
 
     if (!is_local_eth && !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* same subnet prefix */
-        result = (pack_params.gid.global.subnet_prefix ==
+        ret = (pack_params.gid.global.subnet_prefix ==
                   iface->gid_info.gid.global.subnet_prefix);
-        if (!result) {
-            if (info_string && info_string_length > 0) {
+        if (!ret) {
+            if (info_string != NULL && info_string_length > 0) {
                 snprintf(info_string, info_string_length,
                          "IB iface %p: is unreachable due to subnet mismatch "
                          "0x%"PRIx64"!=0x%"PRIx64, iface,
@@ -736,16 +736,16 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
             }
         }
 
-        return result;
+        return ret;
     } else if (is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* there shouldn't be a lid and the UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH
          * flag should be on. If reachable, the remote and local RoCE versions
          * and address families have to be the same */
-        result = uct_ib_iface_roce_is_reachable(&iface->gid_info, ib_addr,
+        ret = uct_ib_iface_roce_is_reachable(&iface->gid_info, ib_addr,
                                                 iface->addr_prefix_bits,
                                                 info_string, info_string_length);
-        if (!result) {
-            if (info_string && info_string_length > 0) {
+        if (!ret) {
+            if (info_string != NULL && info_string_length > 0) {
                 snprintf(info_string, info_string_length,
                          "IB iface %p: roce is unreachable lgid=%s rgid=%s", iface,
                          uct_ib_gid_str(&iface->gid_info.gid, local_str, sizeof(local_str)),
@@ -753,10 +753,10 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
             }
         }
 
-        return result;
+        return ret;
     } else {
         /* local and remote have different link layers and therefore are unreachable */
-        if (info_string && info_string_length > 0) {
+        if (info_string != NULL && info_string_length > 0) {
             snprintf(info_string, info_string_length,
                      "IB iface %p: local and remote have different link layers and "
                      "therefore are unreachable", iface);

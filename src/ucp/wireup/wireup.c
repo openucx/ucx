@@ -1220,7 +1220,7 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             ucp_rsc_index_t rsc_index,
                             const ucp_address_entry_t *ae)
 {
-    int result;
+    int ret;
     ucp_context_h context                        = ep->worker->context;
     ucp_worker_iface_t *wiface                   = ucp_worker_iface(ep->worker, rsc_index);
     const uct_iface_is_reachable_params_t params = {
@@ -1237,17 +1237,17 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
     }
     
     params.info_string[0] = '\0';
-    result = ((context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
+    ret = ((context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
               (/* assume reachability is checked by CM, if EP selects lanes
                 * during CM phase */
                (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
                uct_iface_is_reachable_v2(wiface->iface, &params)));
-    if (!result && params.info_string != NULL && params.info_string[0] != '\0') {
+    if (!ret && params.info_string != NULL && params.info_string[0] != '\0') {
         ucs_diag("%s", params.info_string);
     }
 
     ucs_free(params.info_string);
-    return result;
+    return ret;
 }
 
 static void
