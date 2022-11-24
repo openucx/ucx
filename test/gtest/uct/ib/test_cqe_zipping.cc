@@ -68,7 +68,8 @@ public:
     virtual void init()
     {
         stats_activate();
-        modify_config("IB_CQE_ZIPPING_ENABLE", "y");
+        modify_config("IB_TX_CQE_ZIP_ENABLE", "yes");
+        modify_config("IB_RX_CQE_ZIP_ENABLE", "yes");
 
         test_uct_ib_with_specific_port::init();
         test_uct_ib::init();

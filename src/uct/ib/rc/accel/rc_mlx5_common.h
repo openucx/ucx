@@ -348,7 +348,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_ib_mlx5_srq_t              srq;
         void                           *pref_ptr;
     } rx;
-    uct_ib_mlx5_cq_t                   cq[UCT_IB_DIR_NUM];
+    uct_ib_mlx5_cq_t                   cq[UCT_IB_DIR_LAST];
     struct {
         uct_rc_mlx5_cmd_wq_t           cmd_wq;
         uct_rc_mlx5_tag_entry_t        *head;
