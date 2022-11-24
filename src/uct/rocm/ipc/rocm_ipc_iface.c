@@ -234,7 +234,6 @@ static uct_iface_internal_ops_t uct_rocm_ipc_iface_internal_ops = {
     .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)uct_rocm_ipc_iface_is_reachable_v2
 };
 
-
 static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)

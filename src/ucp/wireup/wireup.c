@@ -1231,10 +1231,12 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
         .info_string_length = UCP_WIREUP_UNREACHABLE_INFO_STRING_DEFAULT_LENGTH
     };
 
-    if (params.info_string != NULL) {
-        params.info_string[0] = '\0';
+    if (params.info_string == NULL) {
+        ucs_error("failed to allocate memory for uct_iface_is_reachable_params_t param");
+        return UCS_ERR_NO_MEMORY;
     }
-
+    
+    params.info_string[0] = '\0';
     result = ((context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
               (/* assume reachability is checked by CM, if EP selects lanes
                 * during CM phase */
@@ -1244,10 +1246,7 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
         ucs_diag("%s", params.info_string);
     }
 
-    if (params.info_string != NULL) {
-        ucs_free(params.info_string);
-    }
-
+    ucs_free(params.info_string);
     return result;
 }
 
