@@ -74,7 +74,6 @@ ucp_proto_select_get_multi_op_perf(const ucp_proto_perf_range_t *range,
                                     range->perf[UCP_PROTO_PERF_TYPE_SINGLE]),
             ucs_linear_func_compose(bias_func_multi,
                                     range->perf[UCP_PROTO_PERF_TYPE_MULTI]));
-
 }
 
 /*
