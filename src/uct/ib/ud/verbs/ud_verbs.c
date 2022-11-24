@@ -484,7 +484,7 @@ uct_ud_verbs_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     }
 
     ucs_for_each_bit(dir, dirs) {
-        ucs_assert(dir < UCT_IB_DIR_NUM);
+        ucs_assert(dir < UCT_IB_DIR_LAST);
         status = uct_ib_iface_arm_cq(&iface->super, dir, 0);
         if (status != UCS_OK) {
             goto out;

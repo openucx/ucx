@@ -72,7 +72,7 @@ typedef enum uct_ib_mtu {
 typedef enum {
     UCT_IB_DIR_RX,
     UCT_IB_DIR_TX,
-    UCT_IB_DIR_NUM
+    UCT_IB_DIR_LAST
 } uct_ib_dir_t;
 
 enum {
@@ -149,7 +149,7 @@ struct uct_ib_iface_config {
     } rx;
 
     /* Inline space to reserve in CQ */
-    size_t                  inl[UCT_IB_DIR_NUM];
+    size_t                  inl[UCT_IB_DIR_LAST];
 
     /* Change the address type */
     int                     addr_type;
@@ -204,16 +204,16 @@ enum {
 
 
 typedef struct uct_ib_iface_init_attr {
-    unsigned    rx_priv_len;            /* Length of transport private data to reserve */
-    unsigned    rx_hdr_len;             /* Length of transport network header */
-    unsigned    cq_len[UCT_IB_DIR_NUM]; /* CQ length */
-    size_t      seg_size;               /* Transport segment size */
-    unsigned    fc_req_size;            /* Flow control request size */
-    int         qp_type;                /* IB QP type */
-    int         flags;                  /* Various flags (see enum) */
+    unsigned    rx_priv_len;             /* Length of transport private data to reserve */
+    unsigned    rx_hdr_len;              /* Length of transport network header */
+    unsigned    cq_len[UCT_IB_DIR_LAST]; /* CQ length */
+    size_t      seg_size;                /* Transport segment size */
+    unsigned    fc_req_size;             /* Flow control request size */
+    int         qp_type;                 /* IB QP type */
+    int         flags;                   /* Various flags (see enum) */
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
     unsigned    max_rd_atomic;
-    uint8_t     cqe_zip_sizes;
+    uint8_t     cqe_zip_sizes[UCT_IB_DIR_LAST];
 } uct_ib_iface_init_attr_t;
 
 
@@ -231,7 +231,7 @@ typedef struct uct_ib_qp_attr {
     struct ibv_srq              *srq;
     uint32_t                    srq_num;
     unsigned                    sq_sig_all;
-    unsigned                    max_inl_cqe[UCT_IB_DIR_NUM];
+    unsigned                    max_inl_cqe[UCT_IB_DIR_LAST];
     uct_ib_qp_init_attr_t       ibv;
 } uct_ib_qp_attr_t;
 
@@ -273,7 +273,7 @@ struct uct_ib_iface_ops {
 struct uct_ib_iface {
     uct_base_iface_t          super;
 
-    struct ibv_cq             *cq[UCT_IB_DIR_NUM];
+    struct ibv_cq             *cq[UCT_IB_DIR_LAST];
     struct ibv_comp_channel   *comp_channel;
     uct_recv_desc_t           release_desc;
 
@@ -295,7 +295,7 @@ struct uct_ib_iface {
         unsigned              tx_max_poll;
         unsigned              seg_size;
         unsigned              roce_path_factor;
-        uint8_t               max_inl_cqe[UCT_IB_DIR_NUM];
+        uint8_t               max_inl_cqe[UCT_IB_DIR_LAST];
         uint8_t               port_num;
         uint8_t               sl;
         uint8_t               traffic_class;
