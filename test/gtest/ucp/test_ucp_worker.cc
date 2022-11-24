@@ -104,11 +104,6 @@ protected:
         std::vector<uct_ep_h> wireup_eps(wireup_ep_count);
         ucs_status_t status;
 
-        if (!has_resource(&sender(), "rc_mlx5") &&
-            (get_variant_value() & TEST_DISCARD_DISABLED)) {
-            UCS_TEST_SKIP_R("no IB transports found");
-        }
-
         ASSERT_LE(wireup_ep_count, ep_count);
         ASSERT_LE(wireup_aux_ep_count, wireup_ep_count);
 
@@ -214,6 +209,11 @@ protected:
         }
 
         flush_req = sender().flush_worker_nb(0);
+        if ((flush_req == NULL) &&
+            (get_variant_value() & TEST_DISCARD_DISABLED)) {
+            UCS_TEST_SKIP_R("all EPs returned UCS_OK in 'flush_worker_nb'");
+        }
+
         ASSERT_FALSE(flush_req == NULL);
         ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
 
