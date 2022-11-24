@@ -59,20 +59,22 @@ ucp_proto_caps_range_find(const ucp_proto_caps_t *caps, size_t msg_length)
     return NULL;
 }
 
-static void ucp_proto_select_get_multi_op_perf(
-        const ucp_proto_perf_range_t *range, ucs_linear_func_t *proto_perf,
-        unsigned window_size)
+static void
+ucp_proto_select_get_multi_op_perf(const ucp_proto_perf_range_t *range,
+                                   ucs_linear_func_t *proto_perf,
+                                   unsigned window_size)
 {
-    ucs_linear_func_t bias_func_single = ucs_linear_func_make(
-            0.0, 1.0 / window_size);
-    ucs_linear_func_t bias_func_multi  = ucs_linear_func_make(
-            0.0, (window_size - 1.0) / window_size);
+    ucs_linear_func_t bias_func_single =
+            ucs_linear_func_make(0.0, 1.0 / window_size);
+    ucs_linear_func_t bias_func_multi =
+            ucs_linear_func_make(0.0, (window_size - 1.0) / window_size);
 
     *proto_perf = ucs_linear_func_add(
-            ucs_linear_func_compose(
-                    bias_func_single, range->perf[UCP_PROTO_PERF_TYPE_SINGLE]),
-            ucs_linear_func_compose(
-                    bias_func_multi, range->perf[UCP_PROTO_PERF_TYPE_MULTI]));
+            ucs_linear_func_compose(bias_func_single,
+                                    range->perf[UCP_PROTO_PERF_TYPE_SINGLE]),
+            ucs_linear_func_compose(bias_func_multi,
+                                    range->perf[UCP_PROTO_PERF_TYPE_MULTI]));
+
 }
 
 /*

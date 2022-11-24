@@ -420,7 +420,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
    {"PROTO_WINDOW_SIZE", "64",
     "Window size (WS) defines the contribution of single operation\n"
-    "performance into estimation of multiple operations perfromance:\n"
+    "performance into estimation of multiple operations performance:\n"
     "(1 / WS) * single_op_estimation + ((WS - 1) / WS) * multi_op_estimation",
     ucs_offsetof(ucp_context_config_t, proto_window_size),
     UCS_CONFIG_TYPE_UINT},
