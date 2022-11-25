@@ -1224,6 +1224,10 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_context_h context                        = ep->worker->context;
     ucp_worker_iface_t *wiface                   = ucp_worker_iface(ep->worker, rsc_index);
     const uct_iface_is_reachable_params_t params = {
+        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
         .device_addr        = ae->dev_addr,
         .iface_addr         = ae->iface_addr,
         .info_string        = (char*)ucs_malloc(UCP_WIREUP_UNREACHABLE_INFO_STRING_DEFAULT_LENGTH,
@@ -1242,7 +1246,7 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
              * during CM phase */
              (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
              uct_iface_is_reachable_v2(wiface->iface, &params)));
-    if (!ret && params.info_string != NULL && params.info_string[0] != '\0') {
+    if (!ret && (params.info_string != NULL) && (params.info_string[0] != '\0')) {
         ucs_diag("%s", params.info_string);
     }
 

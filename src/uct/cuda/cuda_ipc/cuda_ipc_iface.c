@@ -84,6 +84,10 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
                                            const uct_iface_addr_t *iface_addr)
 {
     const uct_iface_is_reachable_params_t params = {
+        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
         .device_addr        = dev_addr,
         .iface_addr         = iface_addr,
         .info_string        = NULL,
