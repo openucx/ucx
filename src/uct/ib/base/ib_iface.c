@@ -738,8 +738,8 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
          * flag should be on. If reachable, the remote and local RoCE versions
          * and address families have to be the same */
         ret = uct_ib_iface_roce_is_reachable(&iface->gid_info, ib_addr,
-                                                iface->addr_prefix_bits,
-                                                info_string, info_string_length);
+                                             iface->addr_prefix_bits,
+                                             info_string, info_string_length);
         if (!ret) {
             if (info_string != NULL && info_string_length > 0) {
                 snprintf(info_string, info_string_length,
