@@ -218,7 +218,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
             .field_mask         = 0,
             .device_addr        = (uct_device_addr_t*)ib_addr1,
             .iface_addr         = NULL,
-            .info_string        = (char*)ucs_alloca(4096),
+            .info_string        = (char*)ucs_malloc(4096, "test ib pkey"),
             .info_string_length = 4096
         };
         
@@ -226,7 +226,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
             .field_mask         = 0,
             .device_addr        = (uct_device_addr_t*)ib_addr2,
             .iface_addr         = NULL,
-            .info_string        = (char*)ucs_alloca(4096),
+            .info_string        = (char*)ucs_malloc(4096, "test ib pkey"),
             .info_string_length = 4096
         };
 
