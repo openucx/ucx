@@ -214,40 +214,39 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
                                                  (uct_device_addr_t*)ib_addr1,
                                                  NULL));
         
-        const uct_iface_is_reachable_params_t params1      = {
-            .device_addr        = (uct_device_addr_t*)ib_addr1,
-            .iface_addr         = NULL,
-            .info_string        = (char*)ucs_alloca(4096),
-            .info_string_length = 4096
-        };
+        uct_iface_is_reachable_params_t params1;
+        params1.device_addr             = (uct_device_addr_t*)ib_addr1;
+        params1.iface_addr              = NULL;
+        params1.info_string             = (char*)ucs_alloca(4096);
+        params1.info_string_length      = 4096;
         
-        const uct_iface_is_reachable_params_t params2      = {
-            .device_addr        = (uct_device_addr_t*)ib_addr2,
-            .iface_addr         = NULL,
-            .info_string        = (char*)ucs_alloca(4096),
-            .info_string_length = 4096
-        };
+        uct_iface_is_reachable_params_t params2;
+        params2.device_addr             = (uct_device_addr_t*)ib_addr2;
+        params2.iface_addr              = NULL;
+        params2.info_string             = (char*)ucs_alloca(4096);
+        params2.info_string_length      = 4096;
 
-        const uct_iface_is_reachable_params_t params_null1 = {
-            .device_addr        = (uct_device_addr_t*)ib_addr1,
-            .iface_addr         = NULL,
-            .info_string        = NULL,
-            .info_string_length = 0
-        };
+        uct_iface_is_reachable_params_t params_null1;
+        params_null1.device_addr        = (uct_device_addr_t*)ib_addr1;
+        params_null1.iface_addr         = NULL;
+        params_null1.info_string        = NULL;
+        params_null1.info_string_length = 0;
         
-        const uct_iface_is_reachable_params_t params_null2 = {
-            .device_addr        = (uct_device_addr_t*)ib_addr2,
-            .iface_addr         = NULL,
-            .info_string        = NULL,
-            .info_string_length = 0
-        };
+        uct_iface_is_reachable_params_t params_null2;
+        params_null2.device_addr        = (uct_device_addr_t*)ib_addr2;
+        params_null2.iface_addr         = NULL;
+        params_null2.info_string        = NULL;
+        params_null2.info_string_length = 0;
 
-        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(), &params1));
-        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(), &params2));
-        
+        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(),
+                                                    (const uct_iface_is_reachable_params_t*)&params1));
+        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(),
+                                                    (const uct_iface_is_reachable_params_t*)&params2));
         /* Test null buffer pointer */
-        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(), &params_null1));
-        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(), &params_null2));
+        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(),
+                                                    (const uct_iface_is_reachable_params_t*)&params_null1));
+        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(),
+                                                    (const uct_iface_is_reachable_params_t*)&params_null2));
 
         ucs_free(params1.info_string);
         ucs_free(params2.info_string);
