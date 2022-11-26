@@ -84,11 +84,6 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
  */
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
-/**
- * Backports for legacy bare-metal support
- */
-struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq);
-
 void *uct_dv_get_info_uar0(void *uar);
 
 #endif
