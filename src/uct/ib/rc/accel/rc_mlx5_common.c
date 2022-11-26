@@ -400,18 +400,11 @@ static ucs_status_t
 uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
     struct ibv_qp *qp;
-#ifdef HAVE_STRUCT_MLX5_SRQ_CMD_QP
-    iface->tm.cmd_wq.super.super.verbs.qp = NULL;
-    iface->tm.cmd_wq.super.super.verbs.rd = NULL;
-    iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_OBJ_TYPE_LAST;
-    qp = uct_dv_get_cmd_qp(iface->rx.srq.verbs.srq);
-#else
     if (iface->rx.srq.type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
         return uct_rc_mlx5_devx_create_cmd_qp(iface);
     } else {
         qp = uct_rc_mlx5_verbs_create_cmd_qp(iface);
     }
-#endif
     iface->tm.cmd_wq.super.super.qp_num = qp->qp_num;
     return uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
                                  iface->tx.mmio_mode,
