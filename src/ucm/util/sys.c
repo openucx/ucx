@@ -16,7 +16,6 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
-#include <ucm/util/reloc.h>
 #include <ucm/mmap/mmap.h>
 #include <ucm/malloc/malloc_hook.h>
 #include <ucs/type/init_once.h>
