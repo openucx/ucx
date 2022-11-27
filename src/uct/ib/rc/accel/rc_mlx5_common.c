@@ -265,8 +265,8 @@ static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
 #  endif
 
 
-static ucs_status_t UCS_F_MAYBE_UNUSED
-uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
+static UCS_F_MAYBE_UNUSED
+ucs_status_t uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(&iface->super.super);
     uct_ib_device_t *dev = &md->super.dev;
@@ -312,7 +312,7 @@ err_destroy_qp:
     return status;
 }
 
-static struct ibv_qp * UCS_F_MAYBE_UNUSED
+static UCS_F_MAYBE_UNUSED struct ibv_qp*
 uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
