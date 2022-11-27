@@ -34,6 +34,34 @@ ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
     .uct = { UCT_MEM_HANDLE_NULL }
 };
 
+static void
+ucp_memh_register_log_fail(ucs_log_level_t log_level, void *address,
+                           size_t length, ucs_memory_type_t mem_type,
+                           int dmabuf_fd, ucp_md_index_t md_index,
+                           ucp_context_h context, ucs_status_t status)
+{
+    UCS_STRING_BUFFER_ONSTACK(err_str, 256);
+
+    ucs_string_buffer_appendf(&err_str,
+                              "failed to register address %p (%s) length %zu",
+                              address, ucs_memory_type_names[mem_type], length);
+
+    if (dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+        ucs_string_buffer_appendf(&err_str, " dmabuf_fd %d", dmabuf_fd);
+    }
+
+    ucs_string_buffer_appendf(&err_str,
+                              " on md[%d]=%s: %s (md supports: ", md_index,
+                              context->tl_mds[md_index].rsc.md_name,
+                              ucs_status_string(status));
+    ucs_string_buffer_append_flags(&err_str,
+                                   context->tl_mds[md_index].attr.reg_mem_types,
+                                   ucs_memory_type_names);
+    ucs_string_buffer_appendf(&err_str, ")");
+
+    ucs_log(log_level, "%s", ucs_string_buffer_cstr(&err_str));
+}
+
 ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                void *address, size_t length, unsigned uct_flags,
                                uct_md_h alloc_md, ucs_memory_type_t mem_type,
@@ -158,13 +186,9 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
 
             level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
                     UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
-
-            ucs_log(level,
-                    "failed to register address %p mem_type bit 0x%lx length %zu on "
-                    "md[%d]=%s: %s (md reg_mem_types 0x%"PRIx64")",
-                    base_address, UCS_BIT(mem_type), reg_length, md_index,
-                    context->tl_mds[md_index].rsc.md_name,
-                    ucs_status_string(status), md_attr->reg_mem_types);
+            ucp_memh_register_log_fail(level, base_address, reg_length,
+                                       mem_type, UCT_DMABUF_FD_INVALID,
+                                       md_index, context, status);
 
             if (!(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
                 goto err_dereg;
@@ -342,24 +366,10 @@ void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     }
 }
 
-static void
-ucp_memh_register_log_fail(ucs_log_level_t log_level, void *address,
-                           size_t length, const uct_md_mem_reg_params_t *params,
-                           ucp_md_index_t md_index, ucp_context_h context,
-                           ucs_status_t status)
-{
-    ucs_log(log_level,
-            "failed to register %p length %zu dmabuf_fd %d on md[%d]=%s: %s",
-            address, length,
-            UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd, DMABUF_FD,
-                            -1),
-            md_index, context->tl_mds[md_index].rsc.md_name,
-            ucs_status_string(status));
-}
-
 static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                       ucp_md_map_t md_map, void *address,
-                                      size_t length, unsigned uct_flags)
+                                      size_t length, ucs_memory_type_t mem_type,
+                                      unsigned uct_flags)
 {
     ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[memh->mem_type];
     ucp_md_map_t md_map_registered      = 0;
@@ -414,8 +424,9 @@ static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, address,
                                    length, &reg_params, &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
-            ucp_memh_register_log_fail(err_level, address, length, &reg_params,
-                                       md_index, context, status);
+            ucp_memh_register_log_fail(err_level, address, length, mem_type,
+                                       reg_params.dmabuf_fd, md_index, context,
+                                       status);
             if (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) {
                 continue;
             }
@@ -573,7 +584,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags)
 
     if (context->rcache == NULL) {
         status = ucp_memh_register(context, memh, reg_md_map, address, length,
-                                   uct_flags);
+                                   mem_type, uct_flags);
         if (status != UCS_OK) {
             goto err;
         }
@@ -590,7 +601,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags)
         reg_md_map &= ~cache_md_map;
 
         status = ucp_memh_register(context, memh, reg_md_map, address, length,
-                                   uct_flags);
+                                   mem_type, uct_flags);
         if (status != UCS_OK) {
             goto err_put;
         }
@@ -645,7 +656,7 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
     ucs_assert(memh->mem_type == mem_type);
 
     status = ucp_memh_register(context, memh, ~memh->md_map & reg_md_map,
-                               reg_address, reg_length, uct_flags);
+                               reg_address, reg_length, mem_type, uct_flags);
     if (status != UCS_OK) {
         goto err_free_memh;
     }
@@ -1353,6 +1364,7 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
 
 ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
 {
+    const ucs_memory_type_t alloc_mem_type = UCS_MEMORY_TYPE_HOST;
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_mem_dummy_handle_t reg_memh = {
         .memh.alloc_md_index = UCP_NULL_RESOURCE
@@ -1363,26 +1375,26 @@ ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
     ucs_status_t status;
     uint8_t buff;
 
-    status = ucp_memh_alloc(context, NULL, 1, UCS_MEMORY_TYPE_HOST,
+    status = ucp_memh_alloc(context, NULL, 1, alloc_mem_type,
                             UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_HIDE_ERRORS,
                             "get_alloc_md_id", &alloc_memh);
     if (status != UCS_OK) {
         return status;
     }
 
-    context->alloc_md_index[UCS_MEMORY_TYPE_HOST] = alloc_memh->alloc_md_index;
+    context->alloc_md_index[alloc_mem_type] = alloc_memh->alloc_md_index;
     ucp_memh_put(context, alloc_memh);
 
     status = ucp_memh_register(context, &reg_memh.memh,
-                               context->reg_md_map[UCS_MEMORY_TYPE_HOST],
-                               &buff, sizeof(buff),
+                               context->reg_md_map[alloc_mem_type], &buff,
+                               sizeof(buff), alloc_mem_type,
                                UCT_MD_MEM_ACCESS_ALL |
                                UCT_MD_MEM_FLAG_HIDE_ERRORS);
     if (status != UCS_OK) {
         return status;
     }
 
-    context->reg_md_map[UCS_MEMORY_TYPE_HOST] = reg_memh.memh.md_map;
+    context->reg_md_map[alloc_mem_type] = reg_memh.memh.md_map;
     ucp_memh_dereg(context, &reg_memh.memh, reg_memh.memh.md_map);
 
     /* If we have a dmabuf provider for a memory type, it means we can register
