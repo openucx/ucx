@@ -194,17 +194,20 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
     if (iface->config.ifaddr.ss_family != tcp_dev_addr->sa_family) {
         return 0;
     }
+
     /* Loopback can connect only to loopback */
     if (!!(tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) !=
         ucs_sockaddr_is_inaddr_loopback(
                 (const struct sockaddr*)&iface->config.ifaddr)) {
         return 0;
     }
+
     if (tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) {
         local_addr_ns = (uct_iface_local_addr_ns_t*)(tcp_dev_addr + 1);
         return uct_iface_local_is_reachable(local_addr_ns,
                                             UCS_SYS_NS_TYPE_NET);
     }
+
     /* We always report that a peer is reachable. connect() call will
      * fail if the peer is unreachable when creating UCT/TCP EP */
     return 1;
