@@ -255,7 +255,7 @@ typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
         const uct_ep_connect_to_ep_params_t *params);
 
 
-/* Check the interface is reachable or not */
+/* Check if remote iface address is reachable */
 typedef ucs_status_t (*uct_iface_is_reachable_v2_func_t)(
         const uct_iface_h iface,
         const uct_iface_is_reachable_params_t *params);
