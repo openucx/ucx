@@ -182,52 +182,32 @@ uct_tcp_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
     return UCS_OK;
 }
 
-static int uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                                         const uct_iface_is_reachable_params_t *params)
+static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
+                                      const uct_device_addr_t *dev_addr,
+                                      const uct_iface_addr_t *iface_addr)
 {
     uct_tcp_iface_t *iface              = ucs_derived_of(tl_iface,
                                                          uct_tcp_iface_t);
-    uct_tcp_device_addr_t *tcp_dev_addr = (uct_tcp_device_addr_t*)params->device_addr;
+    uct_tcp_device_addr_t *tcp_dev_addr = (uct_tcp_device_addr_t*)dev_addr;
     uct_iface_local_addr_ns_t *local_addr_ns;
 
     if (iface->config.ifaddr.ss_family != tcp_dev_addr->sa_family) {
         return 0;
     }
-
     /* Loopback can connect only to loopback */
     if (!!(tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) !=
         ucs_sockaddr_is_inaddr_loopback(
                 (const struct sockaddr*)&iface->config.ifaddr)) {
         return 0;
     }
-
     if (tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) {
         local_addr_ns = (uct_iface_local_addr_ns_t*)(tcp_dev_addr + 1);
         return uct_iface_local_is_reachable(local_addr_ns,
                                             UCS_SYS_NS_TYPE_NET);
     }
-
     /* We always report that a peer is reachable. connect() call will
      * fail if the peer is unreachable when creating UCT/TCP EP */
     return 1;
-}
-
-static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
-                                      const uct_device_addr_t *dev_addr,
-                                      const uct_iface_addr_t *iface_addr)
-{
-    const uct_iface_is_reachable_params_t params = {
-        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
-        .device_addr        = dev_addr,
-        .iface_addr         = iface_addr,
-        .info_string        = NULL,
-        .info_string_length = 0
-    };
-    
-    return uct_tcp_iface_is_reachable_v2(tl_iface, &params);
 }
 
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
@@ -581,7 +561,7 @@ static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = uct_tcp_ep_connect_to_ep_v2,
-    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)uct_tcp_iface_is_reachable_v2
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
