@@ -31,9 +31,6 @@ typedef struct {
  * packed in the worker address */
 #define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
 
-/* The maximum buffer length of the diagnostic information when the peer is
- * unreachable */
-#define UCP_WIREUP_UNREACHABLE_INFO_STRING_DEFAULT_LENGTH 4096
 
 /**
  * Wireup message types

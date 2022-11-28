@@ -70,7 +70,7 @@ static uct_scopy_iface_ops_t uct_knem_iface_ops = {
         .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
         .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
         .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-        .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)uct_sm_iface_is_reachable_v2
+        .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_unsupported
     },
     .ep_tx = uct_knem_ep_tx,
 };

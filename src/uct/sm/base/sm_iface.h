@@ -42,9 +42,6 @@ ucs_status_t uct_sm_iface_get_device_address(uct_iface_t *tl_iface,
 int uct_sm_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr);
 
-int uct_sm_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                                 const uct_iface_is_reachable_params_t *params);
-
 ucs_status_t uct_sm_iface_fence(uct_iface_t *tl_iface, unsigned flags);
 
 size_t uct_sm_iface_get_device_addr_len();
