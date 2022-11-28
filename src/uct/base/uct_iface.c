@@ -225,8 +225,8 @@ int uct_iface_is_reachable_v2(const uct_iface_h iface,
     const uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR &
-					                     UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR &
-					                     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING &
+                                         UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR &
+                                         UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING &
                                          UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
                     "UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR, "
                     "UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR, "
