@@ -709,11 +709,9 @@ int uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uint8_t my_type                    = uct_rc_mlx5_iface_get_address_type(tl_iface);
 
     if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
-        if ((info_string != NULL) && (info_string_length > 0)) {
-            snprintf(info_string, info_string_length,
-                     "IB iface %p: is unreachable due to address type mismatch, "
-                     "local=%d, remote=%d", iface, my_type, *(uint8_t*)iface_addr);
-        }
+        snprintf(info_string, info_string_length,
+                 "IB iface %p: is unreachable due to address type mismatch, "
+                 "local=%d, remote=%d", iface, my_type, *(uint8_t*)iface_addr);
         return 0;
     }
 

@@ -215,7 +215,10 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
                                                  NULL));
 
         const uct_iface_is_reachable_params_t params1      = {
-            .field_mask         = 0,
+            .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                  UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
+                                  UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                                  UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
             .device_addr        = (uct_device_addr_t*)ib_addr1,
             .iface_addr         = NULL,
             .info_string        = (char*)ucs_malloc(4096, "test ib pkey"),
@@ -223,35 +226,18 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         };
 
         const uct_iface_is_reachable_params_t params2      = {
-            .field_mask         = 0,
+            .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                  UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
+                                  UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                                  UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
             .device_addr        = (uct_device_addr_t*)ib_addr2,
             .iface_addr         = NULL,
             .info_string        = (char*)ucs_malloc(4096, "test ib pkey"),
             .info_string_length = 4096
         };
 
-        const uct_iface_is_reachable_params_t params_null1 = {
-            .field_mask         = 0,
-            .device_addr        = (uct_device_addr_t*)ib_addr1,
-            .iface_addr         = NULL,
-            .info_string        = NULL,
-            .info_string_length = 0
-        };
-
-        const uct_iface_is_reachable_params_t params_null2 = {
-            .field_mask         = 0,
-            .device_addr        = (uct_device_addr_t*)ib_addr2,
-            .iface_addr         = NULL,
-            .info_string        = NULL,
-            .info_string_length = 0
-        };
-
         EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(), &params1));
         EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(), &params2));
-
-        /* Test null buffer pointer */
-        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(), &params_null1));
-        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(), &params_null2));
 
         ucs_free(params1.info_string);
         ucs_free(params2.info_string);
