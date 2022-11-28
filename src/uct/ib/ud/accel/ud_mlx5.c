@@ -734,7 +734,7 @@ ucs_status_t uct_ud_mlx5_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     }
 
     ucs_for_each_bit(dir, dirs) {
-        ucs_assert(dir < UCT_IB_DIR_NUM);
+        ucs_assert(dir < UCT_IB_DIR_LAST);
         uct_ib_mlx5dv_arm_cq(&iface->cq[dir], 0);
     }
 

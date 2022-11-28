@@ -322,7 +322,7 @@ typedef struct uct_ib_mlx5_iface_config {
 #endif
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
     ucs_ternary_auto_value_t ar_enable;
-    int                      cqe_zipping_enable;
+    int                      cqe_zip_enable[UCT_IB_DIR_LAST];
 } uct_ib_mlx5_iface_config_t;
 
 

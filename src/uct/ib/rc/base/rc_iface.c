@@ -966,7 +966,7 @@ uint64_t uct_rc_iface_arm_cq_check(uct_rc_iface_t *iface, unsigned events,
 ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-    int solicited[UCT_IB_DIR_NUM], dir;
+    int solicited[UCT_IB_DIR_LAST], dir;
     ucs_status_t status;
     uint64_t dirs;
 
@@ -977,7 +977,7 @@ ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 
     dirs = uct_rc_iface_arm_cq_check(iface, events, solicited);
     ucs_for_each_bit(dir, dirs) {
-        ucs_assert(dir < UCT_IB_DIR_NUM);
+        ucs_assert(dir < UCT_IB_DIR_LAST);
         status = uct_ib_iface_arm_cq(&iface->super, dir, solicited[dir]);
         if (status != UCS_OK) {
             return status;

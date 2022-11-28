@@ -68,10 +68,17 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY_AUTO},
 
-    {"CQE_ZIPPING_ENABLE", "no",
-     "Enable CQE zipping feature. CQE zipping reduces PCI utilization by\n"
+    {"TX_CQE_ZIP_ENABLE", "no",
+     "Enable CQE zipping feature for sender side. CQE zipping reduces PCI utilization by\n"
      "merging several similar CQEs to a single CQE written by the device.",
-     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zipping_enable), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zip_enable[UCT_IB_DIR_TX]),
+     UCS_CONFIG_TYPE_BOOL},
+
+    {"RX_CQE_ZIP_ENABLE", "no",
+     "Enable CQE zipping feature for receiver side. CQE zipping reduces PCI utilization by\n"
+     "merging several similar CQEs to a single CQE written by the device.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zip_enable[UCT_IB_DIR_RX]),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -80,16 +87,19 @@ void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
                                    const uct_ib_mlx5_iface_config_t *mlx5_config,
                                    uct_ib_iface_init_attr_t *init_attr)
 {
-    if (!mlx5_config->cqe_zipping_enable) {
-        return;
-    }
+    uct_ib_dir_t dir;
 
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE64_ZIP) {
-        init_attr->cqe_zip_sizes |= 64;
-    }
+    for (dir = 0; dir < UCT_IB_DIR_LAST; ++dir) {
+        if (!mlx5_config->cqe_zip_enable[dir]) {
+            continue;
+        }
 
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE128_ZIP) {
-        init_attr->cqe_zip_sizes |= 128;
+        if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE64_ZIP) {
+            init_attr->cqe_zip_sizes[dir] |= 64;
+        }
+        if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE128_ZIP) {
+            init_attr->cqe_zip_sizes[dir] |= 128;
+        }
     }
 }
 
