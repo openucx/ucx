@@ -585,7 +585,7 @@ static int
 uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                const uct_ib_address_t *remote_ib_addr,
                                unsigned prefix_bits,
-                               char* info_string,
+                               char *info_string,
                                size_t info_string_length)
 {
     sa_family_t local_ib_addr_af         = local_gid_info->roce_info.addr_family;
@@ -697,7 +697,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                  const uct_iface_is_reachable_params_t *params)
 {
     const uct_device_addr_t *dev_addr = params->device_addr;
-    char* info_string                 = params->info_string;
+    char *info_string                 = params->info_string;
     size_t info_string_length         = params->info_string_length;
     uct_ib_iface_t *iface             = ucs_derived_of(tl_iface, uct_ib_iface_t);
     int is_local_eth                  = uct_ib_iface_is_roce(iface);
