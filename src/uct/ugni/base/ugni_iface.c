@@ -42,28 +42,11 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-int uct_ugni_iface_is_reachable_v2(uct_iface_h tl_iface,
-                                   const uct_iface_is_reachable_params_t *params)
-{
-    return 1;
-}
-
 int uct_ugni_iface_is_reachable(uct_iface_h tl_iface,
                                 const uct_device_addr_t *dev_addr,
                                 const uct_iface_addr_t *iface_addr)
 {
-    const uct_iface_is_reachable_params_t params = {
-        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
-        .device_addr        = dev_addr,
-        .iface_addr         = iface_addr,
-        .info_string        = NULL,
-        .info_string_length = 0
-    };
-    
-    return uct_ugni_iface_is_reachable_v2(tl_iface, &params);
+    return 1;
 }
 
 static ucs_mpool_ops_t uct_ugni_flush_mpool_ops = {
