@@ -1220,38 +1220,14 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             ucp_rsc_index_t rsc_index,
                             const ucp_address_entry_t *ae)
 {
-    int ret;
-    ucp_context_h context                        = ep->worker->context;
-    ucp_worker_iface_t *wiface                   = ucp_worker_iface(ep->worker, rsc_index);
-    const uct_iface_is_reachable_params_t params = {
-        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
-        .device_addr        = ae->dev_addr,
-        .iface_addr         = ae->iface_addr,
-        .info_string        = (char*)ucs_malloc(UCP_WIREUP_UNREACHABLE_INFO_STRING_DEFAULT_LENGTH,
-                                                "wireup diag"),
-        .info_string_length = UCP_WIREUP_UNREACHABLE_INFO_STRING_DEFAULT_LENGTH
-    };
+    ucp_context_h context      = ep->worker->context;
+    ucp_worker_iface_t *wiface = ucp_worker_iface(ep->worker, rsc_index);
 
-    if (params.info_string == NULL) {
-        ucs_error("failed to allocate memory for uct_iface_is_reachable_params_t param");
-        return UCS_ERR_NO_MEMORY;
-    }
-    
-    params.info_string[0] = '\0';
-    ret = ((context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
+    return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
            (/* assume reachability is checked by CM, if EP selects lanes
              * during CM phase */
-             (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
-             uct_iface_is_reachable_v2(wiface->iface, &params)));
-    if (!ret && (params.info_string != NULL) && (params.info_string[0] != '\0')) {
-        ucs_diag("%s", params.info_string);
-    }
-
-    ucs_free(params.info_string);
-    return ret;
+            (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
+            uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr));
 }
 
 static void

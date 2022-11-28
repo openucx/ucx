@@ -69,32 +69,12 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static int uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                                              const uct_iface_is_reachable_params_t *params)
-{
-    const uct_device_addr_t *dev_addr  = params->device_addr;
-    const uct_iface_addr_t *iface_addr = params->iface_addr;
-
-    return (ucs_get_system_id() == *((const uint64_t*)dev_addr)) &&
-           (getpid() != *(pid_t*)iface_addr);
-}
-
 static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
                                            const uct_device_addr_t *dev_addr,
                                            const uct_iface_addr_t *iface_addr)
 {
-    const uct_iface_is_reachable_params_t params = {
-        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
-        .device_addr        = dev_addr,
-        .iface_addr         = iface_addr,
-        .info_string        = NULL,
-        .info_string_length = 0,
-    };
-    
-    return uct_cuda_ipc_iface_is_reachable_v2(tl_iface, &params);
+    return (ucs_get_system_id() == *((const uint64_t*)dev_addr)) &&
+           (getpid() != *(pid_t*)iface_addr);
 }
 
 static double uct_cuda_ipc_iface_get_bw()
@@ -501,7 +481,7 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)uct_cuda_ipc_iface_is_reachable_v2
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_unsupported
 };
 
 
