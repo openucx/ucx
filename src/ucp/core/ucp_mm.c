@@ -691,7 +691,7 @@ ucp_memh_alloc(ucp_context_h context, void *address, size_t length,
         goto err_dealloc;
     }
 
-    status = ucp_memh_init_uct_reg(context, memh, UCT_MD_MEM_ACCESS_ALL);
+    status = ucp_memh_init_uct_reg(context, memh, uct_flags);
     if (status != UCS_OK) {
         goto err_free_memh;
     }
