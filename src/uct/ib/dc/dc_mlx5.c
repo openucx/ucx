@@ -909,6 +909,8 @@ int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
         if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
             snprintf(params->info_string, params->info_string_length,
                      "iface %p: unreachable due to DC version mismatch", iface);
+        } else {
+            ucs_debug("iface %p: unreachable due to DC version mismatch", iface);
         }
         return 0;
     }
@@ -918,6 +920,8 @@ int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
         if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
             snprintf(params->info_string, params->info_string_length,
                      "iface %p: unreachable due to TM mismatch", iface);
+        } else {
+            ucs_debug("iface %p: unreachable due to TM mismatch", iface);
         }
     }
 

@@ -620,7 +620,12 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                      "different addr_family detected. local %s remote %s",
                      ucs_sockaddr_address_family_str(local_ib_addr_af),
                      ucs_sockaddr_address_family_str(remote_ib_addr_af));
+        } else {
+            ucs_debug("different addr_family detected. local %s remote %s",
+                      ucs_sockaddr_address_family_str(local_ib_addr_af),
+                      ucs_sockaddr_address_family_str(remote_ib_addr_af));
         }
+
         return 0;
     }
 
@@ -640,6 +645,16 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                      uct_ib_gid_str((union ibv_gid*)(remote_ib_addr + 1),
                                     remote_str, sizeof(remote_str)));
         }
+        else {
+            ucs_debug("different RoCE versions detected. local %s (gid=%s) remote %s (gid=%s)",
+                      uct_ib_roce_version_str(local_roce_ver),
+                      uct_ib_gid_str(&local_gid_info->gid, local_str,
+                                     sizeof(local_str)),
+                      uct_ib_roce_version_str(remote_roce_ver),
+                      uct_ib_gid_str((union ibv_gid*)(remote_ib_addr + 1),
+                                     remote_str, sizeof(remote_str)));
+        }
+
         return 0;
     }
 
@@ -712,7 +727,13 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                          "lpkey=%d, rpkey=%d", iface,
                          !((pack_params.pkey | iface->pkey) & UCT_IB_PKEY_MEMBERSHIP_MASK) ?
                          "membership" : "mismatch", iface->pkey, pack_params.pkey);
+            } else {
+                ucs_debug("IB iface %p: is unreachable due to pkeys %s, "
+                          "lpkey=%d, rpkey=%d", iface,
+                          !((pack_params.pkey | iface->pkey) & UCT_IB_PKEY_MEMBERSHIP_MASK) ?
+                          "membership" : "mismatch", iface->pkey, pack_params.pkey);
             }
+
             return 0;
     }
 
@@ -727,6 +748,11 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                          "0x%"PRIx64"!=0x%"PRIx64, iface,
                          be64toh(iface->gid_info.gid.global.subnet_prefix),
                          be64toh(pack_params.gid.global.subnet_prefix));
+            } else { 
+                ucs_debug("IB iface %p: is unreachable due to subnet mismatch "
+                          "0x%"PRIx64"!=0x%"PRIx64, iface,
+                          be64toh(iface->gid_info.gid.global.subnet_prefix),
+                          be64toh(pack_params.gid.global.subnet_prefix));
             }
         }
         return ret;
@@ -743,6 +769,10 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                          "IB iface %p: roce is unreachable lgid=%s rgid=%s", iface,
                          uct_ib_gid_str(&iface->gid_info.gid, local_str, sizeof(local_str)),
                          uct_ib_gid_str((union ibv_gid*)(ib_addr + 1), remote_str, sizeof(remote_str)));
+            } else {
+                ucs_debug("IB iface %p: roce is unreachable lgid=%s rgid=%s", iface,
+                          uct_ib_gid_str(&iface->gid_info.gid, local_str, sizeof(local_str)),
+                          uct_ib_gid_str((union ibv_gid*)(ib_addr + 1), remote_str, sizeof(remote_str)));
             }
         }
         return ret;
@@ -752,6 +782,9 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
             snprintf(params->info_string, params->info_string_length,
                      "IB iface %p: local and remote have different link layers and "
                      "therefore are unreachable", iface);
+        } else {
+            ucs_debug("IB iface %p: local and remote have different link layers and "
+                      "therefore are unreachable", iface);
         }
         
         return 0;
