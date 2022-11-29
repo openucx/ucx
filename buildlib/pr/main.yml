@@ -265,6 +265,12 @@ stages:
         proto_enable: yes
     - template: tests.yml
       parameters:
+        name: gpu_proto_enable
+        demands: ucx_gpu -equals yes
+        test_perf: 0
+        proto_enable: yes
+    - template: tests.yml
+      parameters:
         name: BlueField
         demands: ucx_bf -equals yes
         test_perf: 0
