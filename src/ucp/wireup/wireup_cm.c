@@ -358,7 +358,7 @@ err:
 }
 
 static void
-ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
+ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep)
 {
     ucp_lane_index_t lane_idx;
 
@@ -367,15 +367,13 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
             continue;
         }
 
-        /* During discarding transfer the pending queues content from the
-         * previously configured UCP EP to a temporary queue for further
-         * replaying */
-        ucp_worker_discard_uct_ep(ucp_ep, ucp_ep_get_lane(ucp_ep, lane_idx),
-                                  ucp_ep_get_rsc_index(ucp_ep, lane_idx),
-                                  UCT_FLUSH_FLAG_CANCEL,
-                                  ucp_request_purge_enqueue_cb, queue,
-                                  (ucp_send_nbx_callback_t)ucs_empty_function,
-                                  NULL);
+        /* During discarding, UCT EP's pending queues 
+         * are expected to be empty */
+        ucp_worker_discard_uct_ep(
+                ucp_ep, ucp_ep_get_lane(ucp_ep, lane_idx),
+                ucp_ep_get_rsc_index(ucp_ep, lane_idx), UCT_FLUSH_FLAG_CANCEL,
+                (uct_pending_purge_callback_t)ucs_empty_function_do_assert_void,
+                NULL, (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
         ucp_ep_set_lane(ucp_ep, lane_idx, NULL);
     }
 }
@@ -450,17 +448,16 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_queue_head_init(&tmp_pending_queue);
-
     /* To silence Coverity warning */
     UCS_STATIC_ASSERT(ucs_static_array_size(ep_init_flags_prio) > 0);
 
+    ucp_wireup_eps_pending_extract(ep, &tmp_pending_queue);
     for (i = 0; i < ucs_static_array_size(ep_init_flags_prio); ++i) {
         ep_init_flags = ep_init_flags_prio[i];
 
         /* Cleanup the previously created UCP EP. The one that was created on
          * the previous call to this client's resolve_cb */
-        ucp_wireup_cm_ep_cleanup(ep, &tmp_pending_queue);
+        ucp_wireup_cm_ep_cleanup(ep);
 
         status = ucp_cm_ep_client_initial_config_get(ep, ep_init_flags,
                                         &cm_wireup_ep->cm_resolve_tl_bitmap,
@@ -483,9 +480,6 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
         if (status != UCS_OK) {
             goto err;
         }
-
-        /* Replay pending requests from the tmp_pending_queue */
-        ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
 
         if (i < (ucs_static_array_size(ep_init_flags_prio) - 1)) {
             /* Can use another variant of endpoint's initialization flags for
@@ -523,6 +517,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
                                                 &params);
     ucs_free(priv_data);
 
+    ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
     if (status != UCS_OK) {
         goto err;
     }
@@ -531,6 +526,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     goto out;
 
 try_fallback:
+    ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
     if (ucp_cm_client_try_fallback_cms(ep)) {
         /* Can fallback to the next CM to retry getting CM initial config to
          * fit to CM private data */

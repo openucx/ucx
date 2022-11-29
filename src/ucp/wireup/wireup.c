@@ -454,7 +454,6 @@ unsigned ucp_wireup_eps_progress(void *arg)
     ucp_ep_h ucp_ep = arg;
     ucp_wireup_ep_t *wireup_ep;
     ucs_queue_head_t tmp_pending_queue;
-    int pending_count;
     ucp_lane_index_t lane;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
@@ -479,7 +478,7 @@ unsigned ucp_wireup_eps_progress(void *arg)
     /* Move wireup pending queue to temporary queue and remove references to
      * the wireup progress function
      */
-    ucs_queue_head_init(&tmp_pending_queue);
+    ucp_wireup_eps_pending_extract(ucp_ep, &tmp_pending_queue);
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
         if (wireup_ep == NULL) {
@@ -491,9 +490,6 @@ unsigned ucp_wireup_eps_progress(void *arg)
 
         ucs_trace("ep %p: switching wireup_ep %p to ready state", ucp_ep,
                   wireup_ep);
-        pending_count = ucp_wireup_ep_pending_extract(wireup_ep,
-                                                      &tmp_pending_queue);
-        ucp_worker_flush_ops_count_add(ucp_ep->worker, -pending_count);
 
         /* Switch to real transport and destroy proxy endpoint (aux_ep as well) */
         ucp_proxy_ep_replace(&wireup_ep->super);
@@ -1366,7 +1362,6 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucs_status_t status;
 
     *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
-    ucs_queue_head_init(replay_pending_queue);
 
     if (!ucp_ep_has_cm_lane(ep) ||
         (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
@@ -1419,8 +1414,6 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                               old_key->lanes[reuse_lane].rsc_index,
                               ucp_ep_config(ep)->p2p_lanes &
                                       UCS_BIT(reuse_lane));
-        ucp_wireup_ep_pending_queue_purge(uct_ep, ucp_request_purge_enqueue_cb,
-                                          replay_pending_queue);
 
         /* reset the UCT EP from the previous WIREUP lane and destroy its WIREUP EP,
          * since it's not needed anymore in the new configuration, UCT EP will be
@@ -1440,8 +1433,10 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
                 ucp_worker_discard_uct_ep(
                         ep, uct_ep, UCP_NULL_RESOURCE, UCT_FLUSH_FLAG_LOCAL,
-                        ucp_request_purge_enqueue_cb, replay_pending_queue,
-                        (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
+                        (uct_pending_purge_callback_t)
+                                ucs_empty_function_do_assert_void,
+                        NULL, (ucp_send_nbx_callback_t)ucs_empty_function,
+                        NULL);
                 ucp_ep_set_lane(ep, lane, NULL);
             }
         } else if (uct_ep != NULL) {
@@ -1496,6 +1491,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
+    ucp_wireup_eps_pending_extract(ep, &replay_pending_queue);
 
     status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
                                      remote_address, addr_indices, &key, 1);
@@ -1584,12 +1580,11 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     }
 
-    ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
-
     ucp_worker_keepalive_add_ep(ep);
     status = UCS_OK;
 
 out:
+    ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
     ucs_log_indent(-1);
     return status;
 }
