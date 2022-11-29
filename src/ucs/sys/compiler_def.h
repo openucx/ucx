@@ -49,8 +49,10 @@
 #define UCS_F_CTOR __attribute__((constructor))
 #define UCS_F_DTOR __attribute__((destructor))
 
-/* Silence "defined but not used" error for static function */
-#define UCS_F_MAYBE_UNUSED __attribute__((used))
+/* Silence "defined but not used" error for static function,
+ * remove it by linker if it's not used at all.
+ */
+#define UCS_F_MAYBE_UNUSED __attribute__((unused))
 
 /* Non-null return */
 #define UCS_F_NON_NULL __attribute__((nonnull))

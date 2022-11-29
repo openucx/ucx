@@ -51,8 +51,8 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t* patch);
  *
  * @return Original function pointer for 'symbol'.
  */
-static void* UCS_F_MAYBE_UNUSED
-ucm_reloc_get_orig(const char *symbol, void *replacement)
+static UCS_F_MAYBE_UNUSED
+void* ucm_reloc_get_orig(const char *symbol, void *replacement)
 {
     const char *error;
     void *func_ptr;
