@@ -214,6 +214,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
                                                  (uct_device_addr_t*)ib_addr1,
                                                  NULL));
 
+        /* Test reachable v2 API with string buffer */
         const uct_iface_is_reachable_params_t params1      = {
             .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
                                   UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
@@ -242,6 +243,24 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         ucs_free(params1.info_string);
         ucs_free(params2.info_string);
 
+        /* Test reachable v2 API without string buffer */
+        const uct_iface_is_reachable_params_t params_null1      = {
+            .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                  UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
+            .device_addr        = (uct_device_addr_t*)ib_addr1,
+            .iface_addr         = NULL
+        };
+
+        const uct_iface_is_reachable_params_t params_null2      = {
+            .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                  UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
+            .device_addr        = (uct_device_addr_t*)ib_addr2,
+            .iface_addr         = NULL
+        };
+
+        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(), &params_null1));
+        EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(), &params_null2));
+        
         if (res) {
             test_uct_ib::send_recv_short();
         }

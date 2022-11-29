@@ -885,14 +885,11 @@ int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
                                    const uct_iface_addr_t *iface_addr)
 {
-    const uct_iface_is_reachable_params_t params = {
-        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
-        .device_addr        = dev_addr,
-        .iface_addr         = iface_addr
-    };
-    
-    return uct_dc_mlx5_iface_is_reachable_v2(tl_iface, &params);
+    return uct_iface_is_reachable_v2_wrapper(tl_iface,
+                                             dev_addr,
+                                             iface_addr, 
+                                             (uct_iface_is_reachable_v2_func_t)
+                                              uct_dc_mlx5_iface_is_reachable_v2);
 }
 
 int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
