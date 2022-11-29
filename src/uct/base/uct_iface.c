@@ -924,7 +924,7 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
 
 ucs_status_t
 uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
-                                  const uct_device_addr_t* dev_addr,
+                                  const uct_device_addr_t *dev_addr,
                                   const uct_iface_addr_t *iface_addr,
                                   uct_iface_is_reachable_v2_func_t iface_is_reachable_v2)
 {
