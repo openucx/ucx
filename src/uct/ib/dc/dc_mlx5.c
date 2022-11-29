@@ -887,13 +887,9 @@ int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
 {
     const uct_iface_is_reachable_params_t params = {
         .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
-                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH,
+                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
         .device_addr        = dev_addr,
-        .iface_addr         = iface_addr,
-        .info_string        = NULL,
-        .info_string_length = 0
+        .iface_addr         = iface_addr
     };
     
     return uct_dc_mlx5_iface_is_reachable_v2(tl_iface, &params);
@@ -903,8 +899,6 @@ int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                       const uct_iface_is_reachable_params_t *params)
 {
     const uct_iface_addr_t *iface_addr = params->iface_addr;
-    char *info_string                  = params->info_string;
-    size_t info_string_length          = params->info_string_length;
     uct_dc_mlx5_iface_addr_t *addr     = (uct_dc_mlx5_iface_addr_t *)iface_addr;
     uct_dc_mlx5_iface_t UCS_V_UNUSED *iface;
 
@@ -912,15 +906,19 @@ int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     ucs_assert_always(iface_addr != NULL);
 
     if ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) != iface->version_flag) {
-        snprintf(info_string, info_string_length,
-                 "iface %p: unreachable due to DC version mismatch", iface);
+        if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
+            snprintf(params->info_string, params->info_string_length,
+                     "iface %p: unreachable due to DC version mismatch", iface);
+        }
         return 0;
     }
 
     if (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) !=
         UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        snprintf(info_string, info_string_length,
-                 "iface %p: unreachable due to TM mismatch", iface);
+        if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
+            snprintf(params->info_string, params->info_string_length,
+                     "iface %p: unreachable due to TM mismatch", iface);
+        }
     }
 
     return uct_ib_iface_is_reachable_v2(tl_iface, params);
