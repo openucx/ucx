@@ -854,7 +854,7 @@ ucp_is_resource_in_transports_list(const char *tl_name,
                                    uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
 {
     uint64_t dummy_mask, tmp_tl_cfg_mask;
-    uint8_t tmp_rsc_flags;
+    uint8_t tmp_rsc_flags, dummy_flags;
     ucp_tl_alias_t *alias;
     char info[32];
     unsigned alias_arr_count;
@@ -881,16 +881,18 @@ ucp_is_resource_in_transports_list(const char *tl_name,
         dummy_mask      = 0;
         tmp_rsc_flags   = 0;
         tmp_tl_cfg_mask = 0;
+        dummy_flags     = 0;
         if (ucp_tls_array_is_present(alias->tls, alias_arr_count, tl_name, info,
                                      &tmp_rsc_flags, &dummy_mask)) {
             if (ucp_config_is_tl_name_present(allow_list, alias->alias, 1,
-                                              &tmp_rsc_flags,
-                                              &tmp_tl_cfg_mask)) {
+                                              &dummy_flags, &tmp_tl_cfg_mask)) {
                 if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
                     *rsc_flags   |= tmp_rsc_flags;
                     *tl_cfg_mask |= tmp_tl_cfg_mask;
                     return 1;
-                } else {
+                } else if (!(tmp_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
+                    /* Disable the transport only if it is not used in the alias
+                     * as an auxiliary transport. */
                     return 0;
                 }
             }
