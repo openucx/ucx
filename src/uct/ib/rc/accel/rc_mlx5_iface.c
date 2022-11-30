@@ -723,7 +723,9 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
 {
     return uct_iface_is_reachable_v2_wrapper(tl_iface,
                                              dev_addr,
-                                             iface_addr);
+                                             iface_addr,
+                                             (uct_iface_is_reachable_v2_func_t)
+                                             uct_rc_mlx5_iface_is_reachable_v2);
 }
 
 ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)

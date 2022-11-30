@@ -931,10 +931,9 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
 ucs_status_t
 uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
                                   const uct_device_addr_t *dev_addr,
-                                  const uct_iface_addr_t *iface_addr)
+                                  const uct_iface_addr_t *iface_addr,
+                                  uct_iface_is_reachable_v2_func_t iface_is_reachable_v2)
 {
-    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-
     const uct_iface_is_reachable_params_t params = {
         .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
                               UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
@@ -942,5 +941,5 @@ uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
         .iface_addr         = iface_addr
     };
     
-    return iface->internal_ops->iface_is_reachable_v2(tl_iface, &params);
+    return iface_is_reachable_v2(tl_iface, &params);
 }
