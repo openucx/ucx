@@ -224,14 +224,14 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
 {
     const uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
 
-    UCT_CHECK_PARAM(ucs_test_all_flags(params->field_mask,
-                                       UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
-                                       UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH),
-                                       "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING and "
-                                       "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH "
-                                       "should be set together");
-
-    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
+    if (params->field_mask & (UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING | 
+                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH)) {
+        UCT_CHECK_PARAM(ucs_test_all_flags(params->field_mask,
+                                           UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                                           UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH),
+                                           "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING and "
+                                           "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH "
+                                           "should be set together");
         UCT_CHECK_PARAM((params->info_string != NULL),
                         "info_string shouldn't be null");
         UCT_CHECK_PARAM((params->info_string_length > 0),
