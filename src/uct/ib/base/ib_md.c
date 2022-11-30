@@ -2054,6 +2054,11 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
+    status = uct_ib_device_check_ports(dev);
+    if (status != UCS_OK) {
+        goto err_md_free;
+    }
+
     if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr)) {
         md->dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }

@@ -1011,6 +1011,11 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_lru_cleanup;
     }
 
+    status = uct_ib_device_check_ports(dev);
+    if (status != UCS_OK) {
+        goto err_lru_cleanup;
+    }
+
     cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
@@ -1713,6 +1718,11 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev = &md->super.dev;
 
     status = uct_ib_device_query(dev, ibv_device);
+    if (status != UCS_OK) {
+        goto err_md_free;
+    }
+
+    status = uct_ib_device_check_ports(dev);
     if (status != UCS_OK) {
         goto err_md_free;
     }

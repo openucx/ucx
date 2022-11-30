@@ -301,6 +301,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev);
 
+ucs_status_t uct_ib_device_check_ports(uct_ib_device_t *dev);
 
 /**
  * @return device specification.
