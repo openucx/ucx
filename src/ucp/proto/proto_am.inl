@@ -596,11 +596,13 @@ ucp_proto_get_short_max(const ucp_request_t *req,
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
-                    ssize_t length)
+                    ssize_t length, const ucp_request_param_t *param)
 {
     return (ucs_likely(length <= max_eager_short->memtype_off) ||
-            (length <= max_eager_short->memtype_on &&
-             ucs_memtype_cache_is_empty()));
+            ((length <= max_eager_short->memtype_on) &&
+             (ucs_memtype_cache_is_empty() ||
+              ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) &&
+               (param->memory_type == UCS_MEMORY_TYPE_HOST)))));
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
