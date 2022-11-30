@@ -82,6 +82,7 @@ uct_cma_iface_is_reachable(const uct_iface_h tl_iface,
     if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
         return ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == iface_addr->pid_ns;
     }
+    
     return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID);
 }
 
