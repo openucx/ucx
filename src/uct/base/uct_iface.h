@@ -102,7 +102,7 @@ enum {
     } while (0)
 
 /**
- * Output diagnostic message in buffer or console.
+ * Output diagnostic message in terminal and copy it into buffer when _condition is true.
  */
 #define UCT_OUTPUT_DIAGNOSTIC_MESSAGE(_condition, _buffer, _length, _diag_message, ...) \
     do { \
