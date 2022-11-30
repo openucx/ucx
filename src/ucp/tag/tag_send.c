@@ -148,18 +148,20 @@ ucp_tag_send_req_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t length, ucp_tag_t tag)
+ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t length,
+                    ucp_tag_t tag, const ucp_request_param_t *param)
 {
     ucs_status_t status;
 
-    if (ucp_proto_is_inline(ep, &ucp_ep_config(ep)->tag.max_eager_short, length)) {
+    if (ucp_proto_is_inline(ep, &ucp_ep_config(ep)->tag.max_eager_short,
+                            length, param)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
         status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
                                  tag, buffer, length);
     } else if (ucp_proto_is_inline(ep,
                                    &ucp_ep_config(ep)->tag.offload.max_eager_short,
-                                   length)) {
+                                   length, param)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
         status = uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer,
                                         length);
@@ -252,7 +254,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
                 (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
 
     if (ucs_likely(attr_mask == 0)) {
-        status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count, tag);
+        status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count, tag,
+                                  param);
         ucp_request_send_check_status(status, ret, goto out);
         datatype      = ucp_dt_make_contig(1);
         contig_length = count;
@@ -261,7 +264,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
             contig_length = ucp_contig_dt_length(datatype, count);
             status        = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer,
-                                             contig_length, tag);
+                                             contig_length, tag, param);
             ucp_request_send_check_status(status, ret, goto out);
         }
     } else if (attr_mask == UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {

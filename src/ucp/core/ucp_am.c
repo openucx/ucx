@@ -926,13 +926,15 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
                       const void *header, size_t header_length,
                       const void *buffer, size_t length,
-                      const ucp_memtype_thresh_t *max_eager_short)
+                      const ucp_memtype_thresh_t *max_eager_short,
+                      const ucp_request_param_t *param)
 {
     if (ucs_unlikely(flags & UCP_AM_SEND_FLAG_RNDV)) {
         return UCS_ERR_NO_RESOURCE;
     }
 
-    if (ucp_proto_is_inline(ep, max_eager_short, header_length + length)) {
+    if (ucp_proto_is_inline(ep, max_eager_short,
+                            header_length + length, param)) {
         return ucp_am_send_short(ep, id, flags, header, header_length, buffer,
                                  length, flags & UCP_AM_SEND_FLAG_REPLY);
     }
@@ -1019,7 +1021,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
 
     if (ucs_likely(attr_mask == 0)) {
         status = ucp_am_try_send_short(ep, id, flags, header, header_length,
-                                       buffer, count, max_short);
+                                       buffer, count, max_short, param);
         ucp_request_send_check_status(status, ret, goto out);
         datatype      = ucp_dt_make_contig(1);
         contig_length = count;
@@ -1028,7 +1030,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
             contig_length = ucp_contig_dt_length(datatype, count);
             status = ucp_am_try_send_short(ep, id, flags, header, header_length,
-                                           buffer, contig_length, max_short);
+                                           buffer, contig_length, max_short,
+                                           param);
             ucp_request_send_check_status(status, ret, goto out);
         } else {
             contig_length = 0ul;
