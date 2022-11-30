@@ -219,17 +219,23 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
-int uct_iface_is_reachable_v2(const uct_iface_h iface,
+int uct_iface_is_reachable_v2(uct_iface_h iface,
                               const uct_iface_is_reachable_params_t *params)
 {
     const uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
 
-    if ((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) ||
-        (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH)) {
-            UCT_CHECK_PARAM((params->info_string != NULL),
-                             "info_string shouldn't be null");
-            UCT_CHECK_PARAM((params->info_string_length > 0),
-                             "info_string_length should be greater than zero");
+    UCT_CHECK_PARAM(ucs_test_all_flags(params->field_mask,
+                                       UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                                       UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH),
+                                       "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING and "
+                                       "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH "
+                                       "should be set together");
+
+    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
+        UCT_CHECK_PARAM((params->info_string != NULL),
+                        "info_string shouldn't be null");
+        UCT_CHECK_PARAM((params->info_string_length > 0),
+                        "info_string_length should be greater than zero");
     }
     
     return base_iface->internal_ops->iface_is_reachable_v2(iface, params);
@@ -925,9 +931,10 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
 ucs_status_t
 uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
                                   const uct_device_addr_t *dev_addr,
-                                  const uct_iface_addr_t *iface_addr,
-                                  uct_iface_is_reachable_v2_func_t iface_is_reachable_v2)
+                                  const uct_iface_addr_t *iface_addr)
 {
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
     const uct_iface_is_reachable_params_t params = {
         .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
                               UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
@@ -935,5 +942,5 @@ uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
         .iface_addr         = iface_addr
     };
     
-    return iface_is_reachable_v2(tl_iface, &params);
+    return iface->internal_ops->iface_is_reachable_v2(tl_iface, &params);
 }

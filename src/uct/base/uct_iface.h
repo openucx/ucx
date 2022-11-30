@@ -101,6 +101,18 @@ enum {
         } \
     } while (0)
 
+/**
+ * Output diagnostic message in buffer or console.
+ */
+#define UCT_OUTPUT_DIAGNOSTIC_MESSAGE(_condition, _buffer, _length, _diag_message, ...) \
+    do { \
+        if (_condition) { \
+            snprintf(_buffer, _length, _diag_message, ## __VA_ARGS__); \
+        } else { \
+            ucs_diag(_diag_message, ## __VA_ARGS__); \
+        } \
+    } while (0)
+
 
 /**
  * In release mode - do nothing.
@@ -257,7 +269,7 @@ typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
 
 /* Check if remote iface address is reachable */
 typedef ucs_status_t (*uct_iface_is_reachable_v2_func_t)(
-        const uct_iface_h iface,
+        uct_iface_h iface,
         const uct_iface_is_reachable_params_t *params);
 
 /* Internal operations, not exposed by the external API */
@@ -994,11 +1006,11 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
                           const uct_device_addr_t *device_addr,
                           const uct_ep_addr_t *ep_addr);
 
+
 ucs_status_t
 uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
                                   const uct_device_addr_t *dev_addr,
-                                  const uct_iface_addr_t *iface_addr,
-                                  uct_iface_is_reachable_v2_func_t iface_is_reachable_v2);
+                                  const uct_iface_addr_t *iface_addr);
 
 
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_short(uct_ep_operation_t op)

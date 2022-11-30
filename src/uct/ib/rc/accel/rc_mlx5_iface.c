@@ -707,14 +707,10 @@ int uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uint8_t my_type                    = uct_rc_mlx5_iface_get_address_type(tl_iface);
 
     if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
-        if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
-            snprintf(params->info_string, params->info_string_length,
-                     "IB iface %p: is unreachable due to address type mismatch, "
-                     "local=%d, remote=%d", iface, my_type, *(uint8_t*)iface_addr);
-        } else {
-            ucs_debug("IB iface %p: is unreachable due to address type mismatch, "
-                      "local=%d, remote=%d", iface, my_type, *(uint8_t*)iface_addr);
-        }
+        UCT_OUTPUT_DIAGNOSTIC_MESSAGE((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING),
+                                      params->info_string, params->info_string_length,
+                                      "IB iface %p: is unreachable due to address type mismatch, "
+                                      "local=%d, remote=%d", iface, my_type, *(uint8_t*)iface_addr);
         return 0;
     }
 
@@ -727,9 +723,7 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
 {
     return uct_iface_is_reachable_v2_wrapper(tl_iface,
                                              dev_addr,
-                                             iface_addr, 
-                                             (uct_iface_is_reachable_v2_func_t)
-                                              uct_rc_mlx5_iface_is_reachable_v2);
+                                             iface_addr);
 }
 
 ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)

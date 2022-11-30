@@ -865,7 +865,7 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  *
  * @return Nonzero if reachable, 0 if not.
  */
-int uct_iface_is_reachable_v2(const uct_iface_h iface,
+int uct_iface_is_reachable_v2(uct_iface_h iface,
                               const uct_iface_is_reachable_params_t *params);
 
 

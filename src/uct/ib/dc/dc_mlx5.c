@@ -887,9 +887,7 @@ int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
 {
     return uct_iface_is_reachable_v2_wrapper(tl_iface,
                                              dev_addr,
-                                             iface_addr, 
-                                             (uct_iface_is_reachable_v2_func_t)
-                                              uct_dc_mlx5_iface_is_reachable_v2);
+                                             iface_addr);
 }
 
 int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
@@ -903,23 +901,18 @@ int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     ucs_assert_always(iface_addr != NULL);
 
     if ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) != iface->version_flag) {
-        if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
-            snprintf(params->info_string, params->info_string_length,
-                     "iface %p: unreachable due to DC version mismatch", iface);
-        } else {
-            ucs_debug("iface %p: unreachable due to DC version mismatch", iface);
-        }
+        UCT_OUTPUT_DIAGNOSTIC_MESSAGE((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING),
+                                      params->info_string, params->info_string_length,
+                                      "iface %p: unreachable due to DC version mismatch", iface);
         return 0;
     }
 
     if (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) !=
         UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
-            snprintf(params->info_string, params->info_string_length,
-                     "iface %p: unreachable due to TM mismatch", iface);
-        } else {
-            ucs_debug("iface %p: unreachable due to TM mismatch", iface);
-        }
+        UCT_OUTPUT_DIAGNOSTIC_MESSAGE((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING),
+                                      params->info_string, params->info_string_length,
+                                      "iface %p: unreachable due to TM mismatch", iface);
+        return 0;
     }
 
     return uct_ib_iface_is_reachable_v2(tl_iface, params);
