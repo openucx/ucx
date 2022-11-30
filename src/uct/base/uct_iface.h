@@ -108,9 +108,8 @@ enum {
     do { \
         if (_condition) { \
             snprintf(_buffer, _length, _diag_message, ## __VA_ARGS__); \
-        } else { \
-            ucs_diag(_diag_message, ## __VA_ARGS__); \
         } \
+        ucs_debug(_diag_message, ## __VA_ARGS__); \
     } while (0)
 
 
