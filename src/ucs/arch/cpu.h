@@ -171,6 +171,10 @@ static inline int ucs_cpu_prefer_relaxed_order()
 }
 
 
+#define UCS_CPU_EST_BCOPY_BW_AMD         (5008 * UCS_MBYTE)
+#define UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM (12000 * UCS_MBYTE)
+
+
 END_C_DECLS
 
 #endif

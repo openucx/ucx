@@ -22,6 +22,8 @@
 #define UCS_CPU_CACHE_TYPE_FILE  "type"
 #define UCS_CPU_CACHE_SIZE_FILE  "size"
 
+#define UCS_CPU_EST_BCOPY_BW_DEFAULT (7000 * UCS_MBYTE)
+
 /* cache size array. index - cache type (ucs_cpu_cache_type_t), value - cache value,
  * 0 means cache is not supported */
 static size_t ucs_cpu_cache_size[UCS_CPU_CACHE_LAST] = {0};
@@ -77,14 +79,14 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
 };
 
 const size_t ucs_cpu_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
-    [UCS_CPU_VENDOR_UNKNOWN]     = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_INTEL]       = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_AMD]         = 5008 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_GENERIC_ARM] = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_GENERIC_PPC] = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_FUJITSU_ARM] = 12000 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_GENERIC_RV64G] = 5800 * UCS_MBYTE
-    [UCS_CPU_VENDOR_ZHAOXIN]     = 5800 * UCS_MBYTE
+    [UCS_CPU_VENDOR_UNKNOWN]     = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_INTEL]       = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_AMD]         = UCS_CPU_EST_BCOPY_BW_AMD,
+    [UCS_CPU_VENDOR_GENERIC_ARM] = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_GENERIC_PPC] = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_FUJITSU_ARM] = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,
+    [UCS_CPU_VENDOR_GENERIC_RV64G] = 5800 * UCS_MBYTE,
+    [UCS_CPU_VENDOR_ZHAOXIN]     = UCS_CPU_EST_BCOPY_BW_DEFAULT
 };
 
 static void ucs_sysfs_get_cache_size()
