@@ -1024,9 +1024,6 @@ ucs_status_t uct_rc_iface_estimate_perf(uct_iface_h tl_iface,
 void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface)
 {
     ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
-                            &iface->tx.cq_available, UCS_VFS_TYPE_INT,
-                            "cq_available");
-    ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
                             &iface->tx.reads_available, UCS_VFS_TYPE_SSIZET,
                             "reads_available");
     ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
@@ -1043,6 +1040,10 @@ void uct_rc_iface_vfs_refresh(uct_iface_h iface)
 
     /* Add iface resources */
     uct_rc_iface_vfs_populate(rc_iface);
+
+    ucs_vfs_obj_add_ro_file(rc_iface, ucs_vfs_show_primitive,
+                            &rc_iface->tx.cq_available, UCS_VFS_TYPE_INT,
+                            "cq_available");
 
     /* Add objects for EPs */
     ucs_list_for_each(ep, &rc_iface->ep_list, list) {
