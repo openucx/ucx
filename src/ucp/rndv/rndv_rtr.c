@@ -309,15 +309,16 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
     }
 }
 
-static void ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
+static ucs_status_t ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
 {
     ucs_mpool_put_inline(req->send.rndv.mdesc);
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
+        req->status = UCS_ERR_CANCELED;
         ucp_proto_rndv_ppln_recv_frag_clean(req);
-        ucp_proto_request_bcopy_id_reset(req);
-    } else {
-        ucp_proto_request_zcopy_id_reset(req);
+        return UCS_ERR_CANCELED;
     }
+
+    return ucp_proto_request_zcopy_id_reset(req);
 }
 
 static void ucp_proto_rndv_rtr_mtype_copy_completion(uct_completion_t *uct_comp)

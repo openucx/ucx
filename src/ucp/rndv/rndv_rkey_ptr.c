@@ -180,6 +180,6 @@ ucp_proto_t ucp_rndv_rkey_ptr_proto = {
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
