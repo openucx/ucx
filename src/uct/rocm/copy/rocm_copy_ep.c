@@ -265,7 +265,7 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     ucs_status_t status          = UCS_OK;
     uct_iov_t *iov;
 
-    if (length <= iface->config.short_h2d_thresh) {
+    if (length <= iface->config.h2d_thresh) {
         uct_rocm_memcpy_h2d((void*)remote_addr, buffer, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
@@ -300,7 +300,7 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
     ucs_status_t status          = UCS_OK;
     uct_iov_t *iov;
 
-    if (length <= iface->config.short_d2h_thresh) {
+    if (length <= iface->config.d2h_thresh) {
         uct_rocm_memcpy_d2h(buffer, (void*)remote_addr, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
