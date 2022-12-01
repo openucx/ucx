@@ -1781,13 +1781,13 @@ const ucp_request_send_proto_t ucp_am_reply_proto = {
     .only_hdr_size          = sizeof(ucp_am_hdr_t) + sizeof(ucp_am_reply_ftr_t)
 };
 
-void ucp_am_proto_request_zcopy_reset(ucp_request_t *request)
+ucs_status_t ucp_am_proto_request_zcopy_reset(ucp_request_t *request)
 {
     ucs_assert(request->send.msg_proto.am.header.reg_desc != NULL);
     ucs_mpool_put_inline(request->send.msg_proto.am.header.reg_desc);
     request->send.msg_proto.am.header.reg_desc = NULL;
 
-    ucp_proto_request_zcopy_reset(request);
+    return ucp_proto_request_zcopy_reset(request);
 }
 
 void ucp_proto_am_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)

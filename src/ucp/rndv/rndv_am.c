@@ -140,7 +140,7 @@ ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_rndv_am_bcopy_progress},
     .abort    = ucp_proto_rndv_am_bcopy_abort,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rndv_am_zcopy_send_func(

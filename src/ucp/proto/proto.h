@@ -274,8 +274,14 @@ typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
  * the specific protocol. Used to switch a send request to a different protocol.
  *
  * @param [in]  request Request to reset.
+ *
+ * @return UCS_OK           - The request was reset successfully and can be used
+ *                            to resend the operation.
+ *         UCS_ERR_CANCELED - The request was canceled and released, since it's
+ *                            a part of a higher-level operation and should not
+ *                            be reused.
  */
-typedef void (*ucp_request_reset_func_t)(ucp_request_t *request);
+typedef ucs_status_t (*ucp_request_reset_func_t)(ucp_request_t *request);
 
 
 /**

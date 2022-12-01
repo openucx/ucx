@@ -100,6 +100,12 @@ ucp_proto_request_zcopy_complete_success(ucp_request_t *req)
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_multi_frag_is_completed(ucp_request_t *req)
+{
+    return req->send.state.completed_size == req->send.state.dt_iter.length;
+}
+
 /**
  * Add 'frag_size' to 'req->send.state.completed_size' and return nonzero if
  * completed_size reached dt_iter.length
@@ -115,11 +121,12 @@ ucp_proto_common_frag_complete(ucp_request_t *req, size_t frag_size,
                   req->send.state.dt_iter.length);
 
     ucs_assertv(req->send.state.completed_size <=
-                        req->send.state.dt_iter.length,
-                "completed_size=%zu dt_iter.length=%zu",
+                req->send.state.dt_iter.length,
+                "req %p: proto %s completed_size=%zu dt_iter.length=%zu", req,
+                req->send.proto_config->proto->name,
                 req->send.state.completed_size, req->send.state.dt_iter.length);
 
-    return req->send.state.completed_size == req->send.state.dt_iter.length;
+    return ucp_proto_common_multi_frag_is_completed(req);
 }
 
 /* Adjust a zero-copy operation to a minimal fragment size, by overlapping with
