@@ -60,6 +60,7 @@ public:
 
         if (variant_flags & VARIANT_PROTO) {
             modify_config("PROTO_ENABLE", "y");
+            modify_config("PROTO_REQUEST_RESET", "y");
         }
 
         int mem_type_pair_index = get_variant_value() % m_mem_type_pairs.size();
