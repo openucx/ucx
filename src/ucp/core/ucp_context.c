@@ -60,6 +60,8 @@
 
 #define UCP_AM_HANDLER_ENTRY(_id) [_id] = &ucp_am_handler_##_id,
 
+#define UCP_CPU_EST_BCOPY_BW_DEFAULT (5800 * UCS_MBYTE)
+
 
 /* Declare all am handlers */
 UCP_AM_HANDLER_FOREACH(UCP_AM_HANDLER_DECL)
@@ -115,6 +117,16 @@ const char *ucp_object_versions[] = {
     [UCP_OBJECT_VERSION_V1]   = "v1",
     [UCP_OBJECT_VERSION_V2]   = "v2",
     [UCP_OBJECT_VERSION_LAST] = NULL
+};
+
+const size_t ucp_context_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
+    [UCS_CPU_VENDOR_UNKNOWN]     = UCP_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_INTEL]       = UCP_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_AMD]         = UCS_CPU_EST_BCOPY_BW_AMD,
+    [UCS_CPU_VENDOR_GENERIC_ARM] = UCP_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_GENERIC_PPC] = UCP_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_FUJITSU_ARM] = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,
+    [UCS_CPU_VENDOR_ZHAOXIN]     = UCP_CPU_EST_BCOPY_BW_DEFAULT
 };
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
@@ -1685,6 +1697,11 @@ ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
     return UCS_OK;
 }
 
+static double ucp_context_get_memcpy_bw()
+{
+    return ucp_context_est_bcopy_bw[ucs_arch_get_cpu_vendor()];
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -1722,10 +1739,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
-        context->config.ext.bcopy_bw = ucs_cpu_get_memcpy_bw();
+        if (context->config.ext.proto_enable) {
+            context->config.ext.bcopy_bw = ucs_cpu_get_memcpy_bw();
+        } else {
+            context->config.ext.bcopy_bw = ucp_context_get_memcpy_bw();
+        }
     }
-    ucs_debug("estimated bcopy bandwidth is %f",
-              context->config.ext.bcopy_bw);
+    ucs_debug("estimated bcopy bandwidth is %f", context->config.ext.bcopy_bw);
 
     if (config->protos.mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
         context->proto_bitmap = UCS_MASK(ucp_protocols_count());
