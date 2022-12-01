@@ -346,19 +346,24 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
         for (md_index = 0; md_index < component_attr.md_resource_count; ++md_index) {
             status = uct_md_config_read(components[cmpt_index], NULL, NULL,
                                         &md_config);
-            CHKERR_JUMP(UCS_OK != status, "read MD config",
-                        release_component_list);
+            if (UCS_OK != status) {
+                fprintf(stderr, "Failed to read MD config: %s\n",
+                        component_attr.md_resources[md_index].md_name);
+                continue;
+            }
 
             status = uct_md_open(components[cmpt_index],
                                  component_attr.md_resources[md_index].md_name,
                                  md_config, &iface_p->md);
             uct_config_release(md_config);
-            CHKERR_JUMP(UCS_OK != status, "open memory domains",
-                        release_component_list);
+            if (UCS_OK != status) {
+                fprintf(stderr, "Failed to open MD: %s\n",
+                        component_attr.md_resources[md_index].md_name);
+                continue;
+            }
 
             status = uct_md_query(iface_p->md, &iface_p->md_attr);
-            CHKERR_JUMP(UCS_OK != status, "query iface",
-                        close_md);
+            CHKERR_JUMP(UCS_OK != status, "query iface", close_md);
 
             status = uct_md_query_tl_resources(iface_p->md, &tl_resources,
                                                &num_tl_resources);
@@ -389,19 +394,18 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
 
                     fprintf(stdout, "Using "UCT_TL_RESOURCE_DESC_FMT"\n",
                             UCT_TL_RESOURCE_DESC_ARG(&tl_resources[tl_index]));
-                    goto release_tl_resources;
+                    break;
                 }
             }
 
-release_tl_resources:
             uct_release_tl_resource_list(tl_resources);
-            if ((status == UCS_OK) &&
-                (tl_index < num_tl_resources)) {
+            if ((status == UCS_OK) && (tl_index < num_tl_resources)) {
                 goto release_component_list;
             }
 
             tl_resources     = NULL;
             num_tl_resources = 0;
+close_md:
             uct_md_close(iface_p->md);
         }
     }
@@ -414,9 +418,6 @@ release_component_list:
     uct_release_component_list(components);
 error_ret:
     return status;
-close_md:
-    uct_md_close(iface_p->md);
-    goto release_component_list;
 }
 
 int print_err_usage()
