@@ -434,6 +434,10 @@ void safe_usleep(double usec) {
 }
 
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
+    if (ifa_addr == NULL) {
+        return false;
+    }
+
     if (ifa_addr->sa_family == AF_INET6) {
         /* Skip IPv6 link-local and loopback address, that could not be used for
            connection establishment */
