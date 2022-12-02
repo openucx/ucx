@@ -101,6 +101,7 @@ enum {
         } \
     } while (0)
 
+
 /**
  * Output diagnostic message in terminal and copy it into buffer when _condition is true.
  */
