@@ -12,6 +12,7 @@
 #include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
@@ -268,10 +269,11 @@ KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
  * MLX5 IB memory domain.
  */
 typedef struct uct_ib_mlx5_md {
-    uct_ib_md_t              super;
-    uint32_t                 flags;
-    ucs_mpool_t              dbrec_pool;
-    ucs_recursive_spinlock_t dbrec_lock;
+    uct_ib_md_t               super;
+    uint32_t                  flags;
+    ucs_mpool_t               dbrec_pool;
+    ucs_recursive_spinlock_t  dbrec_lock;
+    uct_ib_port_select_mode_t port_select_mode;
 #if HAVE_DEVX
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;

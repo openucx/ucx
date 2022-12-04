@@ -136,8 +136,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     if (uct_ib_iface_is_roce(&rc_iface->super)) {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,
                           rc_iface->super.config.sl);
-        uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
-                                               &opt_param_mask);
+        if (iface->tx.port_affinity) {
+            uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
+                                                   &opt_param_mask);
+        }
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
                           rc_iface->super.config.sl);
