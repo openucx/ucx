@@ -104,7 +104,7 @@ void test_md::init()
     auto status = uct_md_open(GetParam().component, GetParam().md_name.c_str(),
                               m_md_config, &md);
     if (status == UCS_ERR_UNREACHABLE) {
-        UCS_TEST_SKIP_R("There are no active ports on the device"); 
+        UCS_TEST_SKIP_R("There are no active ports on the device");
     }
     ASSERT_UCS_OK(status);
     m_md.reset(md, uct_md_close);

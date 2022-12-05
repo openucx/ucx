@@ -1096,15 +1096,13 @@ ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state)
 }
 
 ucs_status_t uct_ib_device_check_ports(uct_ib_device_t *dev) {
-    ucs_status_t status;
-    uint8_t port_num;
+    ucs_status_t status = UCS_ERR_UNREACHABLE;
+    uint8_t port_num    = dev->first_port;
 
-    for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
-         ++port_num)
-    {
+    for (; port_num < dev->first_port + dev->num_ports; ++port_num) {
         status = uct_ib_device_port_check(dev, port_num, 0);
         if (status == UCS_OK) {
-            return UCS_OK;
+            break;
         }
     }
     return status;
