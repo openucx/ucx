@@ -86,16 +86,18 @@ ucp_proto_rndv_get_common_send_get_rkey(
 
     if (req->send.rndv.rkey_count != 0) {
         iov_index = req->send.rndv.rkey_index;
+        ucs_info("<<zizhao>> iov_index=%lu, rkey_index=%lu", iov_index, (size_t)lpriv->super.rkey_index);
         return ucp_rkey_get_tl_rkey(req->send.rndv.rma_array[iov_index].rkey,
                                     lpriv->super.rkey_index);
     }
     return ucp_rkey_get_tl_rkey(req->send.rndv.rkey, lpriv->super.rkey_index);
 }
 
-static UCS_F_ALWAYS_INLINE uct_rkey_t
+static UCS_F_ALWAYS_INLINE uint64_t
 ucp_proto_rndv_get_common_send_get_address(
     ucp_request_t *req, size_t offset) {
     size_t iov_index, iov_offset;
+    uint64_t remote_address;
 
     if (req->send.rndv.rkey_count != 0) {
         iov_index  = req->send.rndv.rkey_index;
@@ -103,9 +105,13 @@ ucp_proto_rndv_get_common_send_get_address(
         if (iov_index != 0) {
             iov_offset = req->send.rndv.rma_array[iov_index - 1].accumulate_size;
         }
-        return req->send.rndv.remote_address + offset - iov_offset;
+        remote_address = req->send.rndv.rma_array[iov_index].remote_address;
+        ucs_info("<<zizhao>> iov_index=%lu, iov_offset=%lu", iov_index, iov_offset);
+        ucs_info("<<zizhao>> remote_address=%p, offset=%lu", (void*)remote_address, offset);
+        return remote_address + offset - iov_offset;
     }
-    return req->send.rndv.remote_address + offset;
+    remote_address = req->send.rndv.remote_address;
+    return remote_address + offset;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
@@ -129,13 +135,13 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
     if (ucs_unlikely(uct_comp->status != UCS_OK)) {
-        ucp_proto_rndv_rkey_destroy(req);
+        ucp_proto_rndv_all_rkey_destroy(req);
         ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
         return;
     }
 
     UCP_WORKER_STAT_RNDV(req->send.ep->worker, GET_ZCOPY, +1);
-    ucp_proto_rndv_recv_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
+    ucp_proto_rndv_recv_all_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
 }
 
 static ucs_status_t
@@ -208,7 +214,7 @@ ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_rndv_all_rkey_destroy(req);
     ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
 }
 

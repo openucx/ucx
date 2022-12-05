@@ -121,6 +121,7 @@ ucp_proto_rndv_rtr_common_complete(ucp_request_t *req, unsigned dt_mask)
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter, dt_mask);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, dt_mask);
+
     if (req->send.rndv.rkey != NULL) {
         ucp_proto_rndv_rkey_destroy(req);
     }

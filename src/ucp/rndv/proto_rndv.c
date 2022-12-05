@@ -731,6 +731,8 @@ ucp_proto_rndv_receive_start_common(ucp_worker_h worker,
     req->send.rndv.remote_req_id  = send_req_hdr->req_id;
     req->send.rndv.remote_address = remote_address;
     req->send.rndv.offset         = 0;
+    req->send.rndv.rkey_count     = 0;
+    req->send.rndv.rma_array      = NULL;
     ucp_request_set_super(req, recv_req);
 
     if (ucs_likely(remote_size <= recv_req->recv.length)) {
@@ -835,7 +837,6 @@ ucp_proto_rndv_unpack_iov_rkeys(const void* buffer, size_t buffer_length,
         status = UCS_ERR_NO_MEMORY;
         goto finish;
     }
-    req->send.rndv.rkey_count = iov_count;
     ucs_info("<<zizhao>> iov_count:%u", iov_count);
 
     accumulate_size = 0;
@@ -854,15 +855,16 @@ ucp_proto_rndv_unpack_iov_rkeys(const void* buffer, size_t buffer_length,
         }
         accumulate_size += remote_size;
         req->send.rndv.rma_array[iov_index].accumulate_size = accumulate_size;
-        req->send.rndv.rma_array[iov_index].remote_address = remote_address;
-        req->send.rndv.rma_array[iov_index].remote_size = remote_size;
-        req->send.rndv.rma_array[iov_index].rkey = rkey;
+        req->send.rndv.rma_array[iov_index].remote_address  = remote_address;
+        req->send.rndv.rma_array[iov_index].remote_size     = remote_size;
+        req->send.rndv.rma_array[iov_index].rkey            = rkey;
         ucs_info("<<zizhao>> iov_index:%u", iov_index);
         ucs_info("<<zizhao>> rkey_length:%lu", rkey_length);
         ucs_info("<<zizhao>> address:%p", (void*)remote_address);
         ucs_info("<<zizhao>> size:%lu", remote_size);
     }
 
+    req->send.rndv.rkey_count = iov_count;
     req->send.rndv.rkey_index = 0;
     goto finish;
 
@@ -870,22 +872,10 @@ destroy_rkey:
     if (rkey != NULL) {
         ucp_rkey_destroy(rkey);
     }
+    req->send.rndv.rkey_count = iov_index;
+    ucp_proto_rndv_multi_rkey_destroy(req);
 finish:
     return status;
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_release_iov_rkeys(ucp_request_t *req) {
-    uint32_t iov_count, iov_index;
-    ucp_rkey_h rkey;
-    iov_count = req->send.rndv.rkey_count;
-    for (iov_index = 0; iov_index != iov_count; ++iov_index) {
-        rkey = req->send.rndv.rma_array[iov_index].rkey;
-        if (rkey != NULL) {
-            ucp_rkey_destroy(rkey);
-        }
-    }
-    ucs_free(req->send.rndv.rma_array);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -903,9 +893,9 @@ ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
     ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
                (op_id < UCP_OP_ID_RNDV_LAST));
 
-    /* TODO: use remote key instead of use endpoint protocols */
+    /* TODO: use all remote key instead of use the first */
     proto_select   = &ep_config->proto_select;
-    rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    rkey_cfg_index = req->send.rndv.rma_array[0].rkey->cfg_index;
 
     ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, op_flags,
                                 req->send.state.dt_iter.dt_class,
@@ -969,6 +959,8 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.rndv.remote_req_id  = rts->sreq.req_id;
     req->send.rndv.remote_address = 0;
     req->send.rndv.offset         = 0;
+    req->send.rndv.rkey_count     = 0;
+    req->send.rndv.rma_array      = NULL;
     ucp_request_set_super(req, recv_req);
 
     status = ucp_proto_rndv_unpack_iov_rkeys(buffer, buffer_length, req);
@@ -999,7 +991,7 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
 
 fallback_rtr:
     ucs_info("<<zizhao>> fallback_rtr iov_index:%s", req->send.proto_config->proto->name);
-    ucp_proto_rndv_release_iov_rkeys(req);
+    ucp_proto_rndv_multi_rkey_destroy(req);
     req->send.rndv.remote_address = 0;
 send_request:
 #if ENABLE_DEBUG_DATA

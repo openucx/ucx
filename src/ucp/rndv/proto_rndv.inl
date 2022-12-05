@@ -121,6 +121,7 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     }
 
 pack_done:
+    ucs_info("<<zizhao>> rts->size:%lu, rts->address:%p", rts->size, (void*)rts->address);
     return hdr_len + rkey_size;
 }
 
@@ -171,6 +172,28 @@ static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
+{
+    size_t count = req->send.rndv.rkey_count;
+    size_t index;
+
+    ucs_assert(req->send.rndv.rma_array != NULL);
+    for (index = 0; index != count; ++index) {
+        ucs_assert(req->send.rndv.rma_array[index].rkey != NULL);
+        ucp_rkey_destroy(req->send.rndv.rma_array[index].rkey);
+#if UCS_ENABLE_ASSERT
+        req->send.rndv.rma_array[index].rkey = NULL;
+#endif
+    }
+    ucs_free(req->send.rndv.rma_array);
+#if UCS_ENABLE_ASSERT
+    req->send.rndv.rma_array = NULL;
+#endif
+    req->send.rndv.rkey_count = 0;
+    req->send.rndv.rkey_index = 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 {
     ucs_assert(req->send.rndv.rkey != NULL);
@@ -181,9 +204,29 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_all_rkey_destroy(ucp_request_t *req)
+{
+    size_t count = req->send.rndv.rkey_count;
+    if (count == 0) {
+        ucp_proto_rndv_rkey_destroy(req);
+        return;
+    }
+    ucp_proto_rndv_multi_rkey_destroy(req);
+    return;
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_recv_complete_with_ats(ucp_request_t *req, uint8_t ats_stage)
 {
     ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_request_set_stage(req, ats_stage);
+    ucp_request_send(req);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_recv_all_complete_with_ats(ucp_request_t *req, uint8_t ats_stage)
+{
+    ucp_proto_rndv_all_rkey_destroy(req);
     ucp_proto_request_set_stage(req, ats_stage);
     ucp_request_send(req);
 }
