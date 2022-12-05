@@ -97,17 +97,17 @@ test_md::test_md()
 
 void test_md::init()
 {
-    uct_md_h h;
+    uct_md_h md;
 
     ucs::test_base::init();
 
     auto status = uct_md_open(GetParam().component, GetParam().md_name.c_str(),
-                              m_md_config, &h);
+                              m_md_config, &md);
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("There are no active ports on the device"); 
     }
     ASSERT_UCS_OK(status);
-    m_md.reset(h, uct_md_close);
+    m_md.reset(md, uct_md_close);
 
     m_md_attr.field_mask = UINT64_MAX;
     status               = uct_md_query_v2(m_md, &m_md_attr);
