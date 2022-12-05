@@ -38,6 +38,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
                                uint64_t rndv_modes, size_t max_length,
                                ucs_linear_func_t unpack_time,
                                ucp_proto_perf_node_t *unpack_perf_node,
+                               ucp_md_map_t md_map,
                                ucs_memory_type_t mem_type,
                                ucs_sys_device_t sys_dev)
 {
@@ -64,7 +65,8 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
         .perf_bias           = 0.0,
         .mem_info.type       = mem_type,
         .mem_info.sys_dev    = sys_dev,
-        .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME
+        .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
+        .md_map              = md_map
     };
     ucs_status_t status;
 
@@ -207,7 +209,7 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
     }
 
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, SIZE_MAX,
-                                            UCS_LINEAR_FUNC_ZERO, NULL,
+                                            UCS_LINEAR_FUNC_ZERO, NULL, 0,
                                             init_params->select_param->mem_type,
                                             init_params->select_param->sys_dev);
     if (status != UCS_OK) {
@@ -338,7 +340,9 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
     } else {
         /* Data was not placed in user buffer, which means it was placed to
            the remote address we published - the rendezvous fragment */
-        ucp_proto_rndv_mtype_copy(req, uct_ep_put_zcopy,
+        ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
+                                  ucp_proto_rndv_mtype_get_req_memh(req),
+                                  uct_ep_put_zcopy,
                                   ucp_proto_rndv_rtr_mtype_copy_completion,
                                   "out to");
     }
@@ -368,9 +372,10 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_rndv_rtr_priv_t *rpriv = init_params->priv;
     const uint64_t rndv_modes        = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
+    ucp_context_h context            = init_params->worker->context;
     ucp_proto_perf_node_t *unpack_perf_node;
     ucs_linear_func_t unpack_time;
-    ucp_md_map_t md_map;
+    ucp_md_map_t md_map, dummy_md_map;
     ucs_status_t status;
     size_t frag_size;
 
@@ -378,7 +383,7 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_rndv_mtype_init(init_params, &md_map, &frag_size);
+    status = ucp_proto_rndv_mtype_init(init_params, &dummy_md_map, &frag_size);
     if (status != UCS_OK) {
         return status;
     }
@@ -391,9 +396,13 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
         return status;
     }
 
+    /* Make sure that key of the md used to allocate a bounce buffer will be
+     * packed to the RTR rkey
+     */
+    md_map = UCS_BIT(context->alloc_md_index[UCS_MEMORY_TYPE_HOST]);
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
                                             unpack_time, unpack_perf_node,
-                                            UCS_MEMORY_TYPE_HOST,
+                                            md_map, UCS_MEMORY_TYPE_HOST,
                                             UCS_SYS_DEVICE_ID_UNKNOWN);
     ucp_proto_perf_node_deref(&unpack_perf_node);
 

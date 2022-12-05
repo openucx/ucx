@@ -236,6 +236,10 @@ struct ucp_request {
 
                         /* Pointer for access to remote memory */
                         void           *rkey_ptr_addr;
+
+                        /* Pointer to packed RKEY, used only by rkey_ptr mtype
+                         * protocol */
+                        const void     *rkey_buffer;
                     };
 
                     union {
