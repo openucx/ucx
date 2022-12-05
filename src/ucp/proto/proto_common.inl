@@ -295,4 +295,70 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     return packed_rkey_size;
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
+                            uint64_t distance_dev_map,
+                            const ucs_sys_dev_distance_t *dev_distance,
+                            void *rkey_buffer)
+{
+    const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
+    ucp_mem_h *memh = dt_iter->type.iov.memh;
+    void *p = rkey_buffer;
+    uint32_t iov_count, iov_index;
+    uint32_t *ppacked_rkey_size;
+    size_t total_size, packed_rkey_size;
+
+    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_IOV);
+    /* 
+     * proto pack format:
+     * | count(32/64)| address(64)| length(32/64)| rkey size(32)| rkey buffer|
+     *               | address(64)| length(32/64)| rkey size(32)| rkey buffer|
+     *               | address(64)| length(32/64)| rkey size(32)| rkey buffer|
+     */
+    iov_count     = ucp_datatype_iter_iov_count(dt_iter);
+    *(uint32_t*)p = iov_count;
+    p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
+    total_size    = sizeof(uint32_t);
+
+    ucs_info("<<zizhao>> iov_count:%u", iov_count);
+    for (iov_index = 0; iov_index != iov_count; ++iov_index) {
+        ucs_assert(ucs_test_all_flags(memh[iov_index]->md_map, md_map));
+        *(uint64_t*)p = (uintptr_t)dt_iter->type.iov.iov[iov_index].buffer;
+        p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint64_t));
+
+        *(size_t*)p = dt_iter->type.iov.iov[iov_index].length;
+        p           = UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
+
+        ppacked_rkey_size = (uint32_t*)p;
+        p                 = UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
+        packed_rkey_size  = ucp_rkey_pack_memh(req->send.ep->worker->context,
+                                               md_map,
+                                               memh[iov_index], &dt_iter->mem_info,
+                                               distance_dev_map, dev_distance,
+                                               p);
+
+        ucs_info("<<zizhao>> mdmap:%lu, iov_mdmap:%lu", md_map, memh[iov_index]->md_map);
+        ucs_info("<<zizhao>> iov_index:%u", iov_index);
+        ucs_info("<<zizhao>> rkey_length:%lu", packed_rkey_size);
+        ucs_info("<<zizhao>> address:%p", (void*)dt_iter->type.iov.iov[iov_index].buffer);
+        ucs_info("<<zizhao>> size:%lu", dt_iter->type.iov.iov[iov_index].length);
+        ucs_info("<<zizhao>> ctx:%p, iov_ctx:%p", req->send.ep->worker->context, memh[iov_index]->context);
+        ucs_info("<<zizhao>> mdmap:%lu", *(const size_t*)p);
+        ucs_info("<<zizhao>> mdmap:%lu", *((const size_t*)p + 1));
+
+        if (packed_rkey_size < 0) {
+            ucs_error("failed to pack remote key: %s",
+                      ucs_status_string((ucs_status_t)packed_rkey_size));
+            return 0;
+        }
+        *ppacked_rkey_size = packed_rkey_size;
+        p = UCS_PTR_BYTE_OFFSET(p, packed_rkey_size);
+
+        total_size += sizeof(uint64_t) + sizeof(uint32_t) + sizeof(size_t) +
+                      packed_rkey_size;
+    }
+
+    return total_size;
+}
+
 #endif

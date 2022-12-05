@@ -85,6 +85,7 @@ size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
                                       ucp_datatype_iter_t *next_iter,
                                       uct_iov_t *iov, size_t max_iov);
 
+size_t ucp_datatype_iter_iov_count(const ucp_datatype_iter_t *dt_iter);
 
 void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
                            ucs_string_buffer_t *strb);

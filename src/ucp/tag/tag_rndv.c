@@ -134,7 +134,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
     ucs_status_t status;
 
     rpriv        = req->send.proto_config->priv;
-    max_rts_size = sizeof(ucp_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
+    max_rts_size = ucp_proto_rndv_max_rts_size(req);
 
     status = UCS_PROFILE_CALL(ucp_proto_rndv_rts_request_init, req);
     if (status != UCS_OK) {

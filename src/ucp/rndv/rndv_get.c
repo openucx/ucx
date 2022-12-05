@@ -79,13 +79,41 @@ ucp_proto_rndv_get_common_request_init(ucp_request_t *req)
     ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
 }
 
+static UCS_F_ALWAYS_INLINE uct_rkey_t
+ucp_proto_rndv_get_common_send_get_rkey(
+    ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv) {
+    size_t iov_index;
+
+    if (req->send.rndv.rkey_count != 0) {
+        iov_index = req->send.rndv.rkey_index;
+        return ucp_rkey_get_tl_rkey(req->send.rndv.rma_array[iov_index].rkey,
+                                    lpriv->super.rkey_index);
+    }
+    return ucp_rkey_get_tl_rkey(req->send.rndv.rkey, lpriv->super.rkey_index);
+}
+
+static UCS_F_ALWAYS_INLINE uct_rkey_t
+ucp_proto_rndv_get_common_send_get_address(
+    ucp_request_t *req, size_t offset) {
+    size_t iov_index, iov_offset;
+
+    if (req->send.rndv.rkey_count != 0) {
+        iov_index  = req->send.rndv.rkey_index;
+        iov_offset = 0;
+        if (iov_index != 0) {
+            iov_offset = req->send.rndv.rma_array[iov_index - 1].accumulate_size;
+        }
+        return req->send.rndv.remote_address + offset - iov_offset;
+    }
+    return req->send.rndv.remote_address + offset;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         const uct_iov_t *iov, size_t offset, uct_completion_t *comp)
 {
-    uct_rkey_t tl_rkey      = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
-                                                   lpriv->super.rkey_index);
-    uint64_t remote_address = req->send.rndv.remote_address + offset;
+    uct_rkey_t tl_rkey      = ucp_proto_rndv_get_common_send_get_rkey(req, lpriv);
+    uint64_t remote_address = ucp_proto_rndv_get_common_send_get_address(req, offset);
 
     return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
                             iov, 1, remote_address, tl_rkey, comp);

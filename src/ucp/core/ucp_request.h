@@ -227,8 +227,23 @@ struct ucp_request {
                     /* Remote buffer address for get/put operation */
                     uint64_t          remote_address;
 
-                    /* Key for remote buffer operation */
-                    ucp_rkey_h        rkey;
+                    union {
+                        /* Key for remote buffer operation */
+                        ucp_rkey_h    rkey;
+                        /* Key index, if if rkey_count != 0 */
+                        size_t        rkey_index;
+                    };
+
+                    /* Key counts for remote buffer operation */
+                    size_t            rkey_count;
+
+                    /* rma infomation array, if rkey_count != 0 */
+                    struct {
+                        ucp_rkey_h    rkey;
+                        uint64_t      remote_address;
+                        size_t        remote_size;
+                        size_t        accumulate_size;
+                    } *rma_array;
 
                     union {
                         /* Descriptor for staging rendezvous data */

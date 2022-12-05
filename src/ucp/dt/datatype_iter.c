@@ -24,7 +24,7 @@ ucp_datatype_iter_iov_at(const ucp_datatype_iter_t *dt_iter, size_t index)
     return &dt_iter->type.iov.iov[index];
 }
 
-static size_t ucp_datatype_iter_iov_count(ucp_datatype_iter_t *dt_iter)
+size_t ucp_datatype_iter_iov_count(const ucp_datatype_iter_t *dt_iter)
 {
     size_t iov_count, length;
 
