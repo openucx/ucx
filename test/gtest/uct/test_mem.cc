@@ -101,6 +101,9 @@ UCS_TEST_P(test_mem, md_alloc) {
         ASSERT_UCS_OK(status);
 
         status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name, md_config, &md);
+        if (status == UCS_ERR_UNREACHABLE) {
+            UCS_TEST_SKIP_R("There are no active ports on the device");
+        }
         uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
@@ -173,6 +176,9 @@ UCS_TEST_P(test_mem, md_fixed) {
         ASSERT_UCS_OK(status);
 
         status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name, md_config, &md);
+        if (status == UCS_ERR_UNREACHABLE) {
+            UCS_TEST_SKIP_R("There are no active ports on the device");
+        }
         uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
