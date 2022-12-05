@@ -346,11 +346,8 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
         for (md_index = 0; md_index < component_attr.md_resource_count; ++md_index) {
             status = uct_md_config_read(components[cmpt_index], NULL, NULL,
                                         &md_config);
-            if (UCS_OK != status) {
-                fprintf(stderr, "Failed to read MD config: %s\n",
-                        component_attr.md_resources[md_index].md_name);
-                continue;
-            }
+            CHKERR_JUMP(UCS_OK != status, "read MD config",
+                        release_component_list);
 
             status = uct_md_open(components[cmpt_index],
                                  component_attr.md_resources[md_index].md_name,
