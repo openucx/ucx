@@ -246,20 +246,6 @@ AS_IF([test "x$with_docs_only" = xyes],
 
 
      #
-     # Enable fault injection code
-     #
-     AC_ARG_ENABLE([fault-injection],
-         AS_HELP_STRING([--enable-fault-injection],
-                        [Enable fault injection code, default: NO]),
-         [],
-         [enable_fault_injection=no])
-     AS_IF([test "x$enable_fault_injection" = xyes],
-        [AS_MESSAGE([enabling with fault injection code])
-         AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
-        [:])
-
-
-     #
      # Disable checking user parameters
      #
      AC_ARG_ENABLE([params-check],
