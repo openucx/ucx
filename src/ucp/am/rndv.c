@@ -53,9 +53,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_rndv_proto_progress, (self),
                    req->send.msg_proto.am.header.length;
 
     status = UCS_PROFILE_CALL(ucp_proto_am_bcopy_single_progress, req,
-                                    UCP_AM_ID_RNDV_RTS, rpriv->lane,
-                                    ucp_am_rndv_rts_pack, req, max_rts_size,
-                                    ucp_am_rndv_rts_complete, 0);
+                              UCP_AM_ID_RNDV_RTS, rpriv->lane,
+                              ucp_am_rndv_rts_pack, req, max_rts_size,
+                              ucp_am_rndv_rts_complete, 0);
     return ucp_proto_am_handle_user_header_send_status(req, status);
 }
 

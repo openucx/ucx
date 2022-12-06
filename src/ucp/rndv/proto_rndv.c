@@ -798,8 +798,6 @@ ucp_proto_rndv_unpack_iov_rkey_buffer(const void* p, const void* p_end,
 
     *rkey_length = *(const uint32_t*)p;
     p = UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
-    ucs_info("<<zizhao>> mdmap:%lu", *(const size_t*)p);
-    ucs_info("<<zizhao>> mdmap:%lu", *((const size_t*)p + 1));
 
     *rkey_buffer = p;
     p = UCS_PTR_BYTE_OFFSET(p, *rkey_length);
@@ -837,7 +835,6 @@ ucp_proto_rndv_unpack_iov_rkeys(const void* buffer, size_t buffer_length,
         status = UCS_ERR_NO_MEMORY;
         goto finish;
     }
-    ucs_info("<<zizhao>> iov_count:%u", iov_count);
 
     accumulate_size = 0;
     for (iov_index = 0; iov_index != iov_count; ++iov_index) {
@@ -858,10 +855,8 @@ ucp_proto_rndv_unpack_iov_rkeys(const void* buffer, size_t buffer_length,
         req->send.rndv.rma_array[iov_index].remote_address  = remote_address;
         req->send.rndv.rma_array[iov_index].remote_size     = remote_size;
         req->send.rndv.rma_array[iov_index].rkey            = rkey;
-        ucs_info("<<zizhao>> iov_index:%u", iov_index);
-        ucs_info("<<zizhao>> rkey_length:%lu", rkey_length);
-        ucs_info("<<zizhao>> address:%p", (void*)remote_address);
-        ucs_info("<<zizhao>> size:%lu", remote_size);
+        ucs_debug("index=%u rkey_size=%lu address=%p size=%lu",
+                  iov_index, rkey_length, (void*)remote_address, remote_size);
     }
 
     req->send.rndv.rkey_count = iov_count;
@@ -888,7 +883,7 @@ ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
-    ucs_status_t status = UCS_OK;
+    ucs_status_t status;
 
     ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
                (op_id < UCP_OP_ID_RNDV_LAST));
@@ -926,10 +921,8 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
     ucp_ep_h ep;
     ucs_status_t status;
 
-    ucs_info("<<zizhao>> msg size %lu buf size %lu", rts->size, recv_req->recv.length);
     /* Short receive: complete with error, and send reply to sender */
     if (rts->size > recv_req->recv.length) {
-        ucs_info("<<zizhao>> rts->size:%lu", rts->size);
         ucp_proto_rndv_receive_start_common(worker, &rts->sreq, recv_req,
                                             0, rts->size, buffer, 0);
         return;
@@ -937,7 +930,6 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
 
     /* IOV data: local IOV is not supported */
     if (ucp_datatype_class(recv_req->recv.datatype) != UCP_DATATYPE_CONTIG) {
-        ucs_info("<<zizhao>> datatype:%lu", recv_req->recv.datatype);
         ucp_proto_rndv_receive_start_common(worker, &rts->sreq, recv_req,
                                             0, 0, buffer, 0);
         return;
@@ -984,13 +976,12 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
         goto release_request;
     }
     if (req->send.proto_config->proto != &ucp_rndv_get_zcopy_proto) {
-        ucs_info("<<zizhao>> fallback proto:%p", req->send.proto_config->proto);
+        ucs_info("fallback proto %s", req->send.proto_config->proto->name);
         goto fallback_rtr;
     }
     goto send_request;
 
 fallback_rtr:
-    ucs_info("<<zizhao>> fallback_rtr iov_index:%s", req->send.proto_config->proto->name);
     ucp_proto_rndv_multi_rkey_destroy(req);
     req->send.rndv.remote_address = 0;
 send_request:

@@ -121,7 +121,6 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     }
 
 pack_done:
-    ucs_info("<<zizhao>> rts->size:%lu, rts->address:%p", rts->size, (void*)rts->address);
     return hdr_len + rkey_size;
 }
 
@@ -187,7 +186,7 @@ ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
     }
     ucs_free(req->send.rndv.rma_array);
 #if UCS_ENABLE_ASSERT
-    req->send.rndv.rma_array = NULL;
+    req->send.rndv.rma_array  = NULL;
 #endif
     req->send.rndv.rkey_count = 0;
     req->send.rndv.rkey_index = 0;
@@ -312,16 +311,14 @@ ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
 
     if (req->send.rndv.rkey_count != 0) {
         iov_index = req->send.rndv.rkey_index;
-        // ucs_assertv(total_offset <= req->send.rndv.rma_array[iov_index].accumulate_size,
-        //             "req=%p total_offset=%zu rma_array[%lu].accumulate_size=%zu",
-        //             req, total_offset, iov_index,
-        //             req->send.rndv.rma_array[iov_index].accumulate_size);
+        ucs_assertv(total_offset <= req->send.rndv.rma_array[iov_index].accumulate_size,
+                    "req=%p total_offset=%zu rma_array[%lu].accumulate_size=%zu",
+                    req, total_offset, iov_index,
+                    req->send.rndv.rma_array[iov_index].accumulate_size);
         if (total_offset >= req->send.rndv.rma_array[iov_index].accumulate_size) {
             iov_index = ++req->send.rndv.rkey_index;
         }
         iov_length = req->send.rndv.rma_array[iov_index].accumulate_size - total_offset;
-        ucs_info("<<zizhao>> iov_index=%lu, iov_length=%lu", iov_index, iov_length);
-        ucs_info("<<zizhao>> offset=%lu, total_length=%lu", total_offset, total_length);
     }
 
     if (ucs_likely(total_length < max_frag_sum)) {

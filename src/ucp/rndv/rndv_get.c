@@ -83,10 +83,8 @@ static UCS_F_ALWAYS_INLINE uct_rkey_t
 ucp_proto_rndv_get_common_send_get_rkey(
     ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv) {
     size_t iov_index;
-
     if (req->send.rndv.rkey_count != 0) {
         iov_index = req->send.rndv.rkey_index;
-        ucs_info("<<zizhao>> iov_index=%lu, rkey_index=%lu", iov_index, (size_t)lpriv->super.rkey_index);
         return ucp_rkey_get_tl_rkey(req->send.rndv.rma_array[iov_index].rkey,
                                     lpriv->super.rkey_index);
     }
@@ -106,8 +104,6 @@ ucp_proto_rndv_get_common_send_get_address(
             iov_offset = req->send.rndv.rma_array[iov_index - 1].accumulate_size;
         }
         remote_address = req->send.rndv.rma_array[iov_index].remote_address;
-        ucs_info("<<zizhao>> iov_index=%lu, iov_offset=%lu", iov_index, iov_offset);
-        ucs_info("<<zizhao>> remote_address=%p, offset=%lu", (void*)remote_address, offset);
         return remote_address + offset - iov_offset;
     }
     remote_address = req->send.rndv.remote_address;

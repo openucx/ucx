@@ -320,7 +320,6 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
     p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
     total_size    = sizeof(uint32_t);
 
-    ucs_info("<<zizhao>> iov_count:%u", iov_count);
     for (iov_index = 0; iov_index != iov_count; ++iov_index) {
         ucs_assert(ucs_test_all_flags(memh[iov_index]->md_map, md_map));
         *(uint64_t*)p = (uintptr_t)dt_iter->type.iov.iov[iov_index].buffer;
@@ -337,14 +336,10 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
                                                distance_dev_map, dev_distance,
                                                p);
 
-        ucs_info("<<zizhao>> mdmap:%lu, iov_mdmap:%lu", md_map, memh[iov_index]->md_map);
-        ucs_info("<<zizhao>> iov_index:%u", iov_index);
-        ucs_info("<<zizhao>> rkey_length:%lu", packed_rkey_size);
-        ucs_info("<<zizhao>> address:%p", (void*)dt_iter->type.iov.iov[iov_index].buffer);
-        ucs_info("<<zizhao>> size:%lu", dt_iter->type.iov.iov[iov_index].length);
-        ucs_info("<<zizhao>> ctx:%p, iov_ctx:%p", req->send.ep->worker->context, memh[iov_index]->context);
-        ucs_info("<<zizhao>> mdmap:%lu", *(const size_t*)p);
-        ucs_info("<<zizhao>> mdmap:%lu", *((const size_t*)p + 1));
+        ucs_debug("index=%u rkey_size=%lu address=%p size=%lu",
+                  iov_index, packed_rkey_size,
+                  (void*)dt_iter->type.iov.iov[iov_index].buffer,
+                  dt_iter->type.iov.iov[iov_index].length);
 
         if (packed_rkey_size < 0) {
             ucs_error("failed to pack remote key: %s",
