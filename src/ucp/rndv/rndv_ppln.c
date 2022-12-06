@@ -179,11 +179,28 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
                                       "ppln_send");
 }
 
+static ucs_status_t ucp_proto_rndv_recv_ppln_reset(ucp_request_t *req)
+{
+    ucs_assert(req->send.rndv.ppln.ack_data_size == 0);
+
+    if (!ucp_proto_common_multi_frag_is_completed(req)) {
+        return UCS_OK;
+    }
+
+    req->status                    = UCS_OK;
+    req->send.state.dt_iter.offset = 0;
+    ucp_proto_request_restart(req);
+    return UCS_OK;
+}
+
 void ucp_proto_rndv_ppln_recv_frag_clean(ucp_request_t *freq)
 {
-    ucp_proto_rndv_ppln_frag_complete(
-            freq, 0, 0, (ucp_proto_complete_cb_t)ucs_empty_function,
-            "ppln_recv_clean");
+    ucp_send_request_id_release(freq);
+
+    /* abort freq since super request may change protocol */
+    ucp_proto_rndv_ppln_frag_complete(freq, 0, 1,
+                                      ucp_proto_rndv_recv_ppln_reset,
+                                      "ppln_recv_clean");
 }
 
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
@@ -239,7 +256,8 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         ucp_proto_request_select_proto(freq, &rpriv->frag_proto,
                                        freq->send.state.dt_iter.length);
 
-        ucp_trace_req(req, "send fragment request %p", freq);
+        ucp_trace_req(req, "send freq %p offset %zu size %zu", freq,
+                      freq->send.rndv.offset, freq->send.state.dt_iter.length);
         ucp_request_send(freq);
 
         ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
@@ -290,7 +308,7 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_send_ppln_atp_progress,
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
 static ucs_status_t
@@ -315,6 +333,23 @@ ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
                                        ucp_proto_rndv_recv_complete);
 }
 
+ucs_status_t ucp_proto_rndv_ppln_reset(ucp_request_t *req)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        return UCS_OK;
+    }
+
+    ucs_assert(req->send.state.completed_size == 0);
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+
+    if ((req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_SEND) &&
+        (req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_ACK)) {
+        ucp_proto_fatal_invalid_stage(req, "reset");
+    }
+
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_recv_ppln_proto = {
     .name     = "rndv/recv/ppln",
     .desc     = NULL,
@@ -326,5 +361,5 @@ ucp_proto_t ucp_rndv_recv_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_recv_ppln_ats_progress,
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_ppln_reset
 };

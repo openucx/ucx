@@ -754,8 +754,15 @@ void ucp_proto_request_restart(ucp_request_t *req)
 {
     ucs_status_t status;
 
+    ucp_trace_req(req, "proto %s at stage %d restarting",
+                  req->send.proto_config->proto->name, req->send.proto_stage);
+
     ucp_proto_request_check_reset_state(req);
-    req->send.proto_config->proto->reset(req);
+    status = req->send.proto_config->proto->reset(req);
+    if (status != UCS_OK) {
+        ucs_assert_always(status == UCS_ERR_CANCELED);
+        return;
+    }
 
     status = ucp_proto_request_init(req);
     if (status == UCS_OK) {
@@ -780,17 +787,20 @@ void ucp_proto_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)
     ucp_request_complete_send(req, status);
 }
 
-void ucp_proto_request_bcopy_reset(ucp_request_t *req)
+ucs_status_t ucp_proto_request_bcopy_reset(ucp_request_t *req)
 {
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
 }
 
-void ucp_proto_request_bcopy_id_reset(ucp_request_t *req)
+ucs_status_t ucp_proto_request_bcopy_id_reset(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         ucp_send_request_id_release(req);
-        ucp_proto_request_bcopy_reset(req);
+        return ucp_proto_request_bcopy_reset(req);
     }
+
+    return UCS_OK;
 }
 
 void ucp_proto_request_zcopy_abort(ucp_request_t *req, ucs_status_t status)
@@ -798,19 +808,23 @@ void ucp_proto_request_zcopy_abort(ucp_request_t *req, ucs_status_t status)
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }
 
-void ucp_proto_request_zcopy_reset(ucp_request_t *req)
+ucs_status_t ucp_proto_request_zcopy_reset(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
     }
+
+    return UCS_OK;
 }
 
-void ucp_proto_request_zcopy_id_reset(ucp_request_t *req)
+ucs_status_t ucp_proto_request_zcopy_id_reset(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         ucp_send_request_id_release(req);
         ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
     }
+
+    return UCS_OK;
 }
 
 static void ucp_proto_stub_fatal_not_implemented(const char *func_name,
@@ -829,4 +843,11 @@ void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,
 void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req)
 {
     ucp_proto_stub_fatal_not_implemented("reset", req);
+}
+
+void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name)
+{
+    ucs_fatal("req %p: proto %s is in invalid stage %d on %s", req,
+              req->send.proto_config->proto->name, req->send.proto_stage,
+              func_name);
 }

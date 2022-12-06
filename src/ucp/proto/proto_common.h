@@ -278,19 +278,21 @@ void ucp_proto_request_restart(ucp_request_t *req);
 
 void ucp_proto_request_bcopy_abort(ucp_request_t *req, ucs_status_t status);
 
-void ucp_proto_request_bcopy_reset(ucp_request_t *req);
+ucs_status_t ucp_proto_request_bcopy_reset(ucp_request_t *req);
 
-void ucp_proto_request_bcopy_id_reset(ucp_request_t *req);
+ucs_status_t ucp_proto_request_bcopy_id_reset(ucp_request_t *req);
 
 void ucp_proto_request_zcopy_abort(ucp_request_t *req, ucs_status_t status);
 
-void ucp_proto_request_zcopy_reset(ucp_request_t *req);
+ucs_status_t ucp_proto_request_zcopy_reset(ucp_request_t *req);
 
-void ucp_proto_request_zcopy_id_reset(ucp_request_t *req);
+ucs_status_t ucp_proto_request_zcopy_id_reset(ucp_request_t *req);
 
 void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,
                                            ucs_status_t status);
 
 void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req);
+
+void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name);
 
 #endif
