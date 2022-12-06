@@ -47,9 +47,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
 #if defined (HAVE_MPI)
     printf("  Note: test can be also launched as an MPI application\n");
     printf("\n");
-#elif defined (HAVE_RTE)
-    printf("  Note: this test can be also launched as an libRTE application\n");
-    printf("\n");
 #endif
     printf("  Usage: %s [ server-hostname ] [ options ]\n", program);
     printf("\n");

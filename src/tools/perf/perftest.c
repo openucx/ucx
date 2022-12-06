@@ -670,133 +670,6 @@ static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
                    ctx->flags, is_final, ctx->server_addr == NULL,
                    is_multi_thread);
 }
-#elif defined (HAVE_RTE)
-static unsigned ext_rte_group_size(void *rte_group)
-{
-    rte_group_t group = (rte_group_t)rte_group;
-    return rte_group_size(group);
-}
-
-static unsigned ext_rte_group_index(void *rte_group)
-{
-    rte_group_t group = (rte_group_t)rte_group;
-    return rte_group_rank(group);
-}
-
-static void ext_rte_barrier(void *rte_group, void (*progress)(void *arg),
-                            void *arg)
-{
-#if _OPENMP
-#pragma omp barrier
-
-#pragma omp master
-#endif
-  {
-    rte_group_t group = (rte_group_t)rte_group;
-    int rc;
-
-    rc = rte_barrier(group);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_barrier");
-    }
-  }
-#if _OPENMP
-#pragma omp barrier
-#endif
-}
-
-static void ext_rte_post_vec(void *rte_group, const struct iovec* iovec,
-                             int iovcnt, void **req)
-{
-    rte_group_t group = (rte_group_t)rte_group;
-    rte_srs_session_t session;
-    rte_iovec_t *r_vec;
-    int i, rc;
-
-    rc = rte_srs_session_create(group, 0, &session);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_session_create");
-    }
-
-    r_vec = calloc(iovcnt, sizeof(rte_iovec_t));
-    if (r_vec == NULL) {
-        return;
-    }
-    for (i = 0; i < iovcnt; ++i) {
-        r_vec[i].iov_base = iovec[i].iov_base;
-        r_vec[i].type     = rte_datatype_uint8_t;
-        r_vec[i].count    = iovec[i].iov_len;
-    }
-    rc = rte_srs_set_data(session, "KEY_PERF", r_vec, iovcnt);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_set_data");
-    }
-    *req = session;
-    free(r_vec);
-}
-
-static void ext_rte_recv(void *rte_group, unsigned src, void *buffer,
-                         size_t max, void *req)
-{
-    rte_group_t group         = (rte_group_t)rte_group;
-    rte_srs_session_t session = (rte_srs_session_t)req;
-    void *rte_buffer = NULL;
-    rte_iovec_t r_vec;
-    uint32_t offset;
-    int size;
-    int rc;
-
-    rc = rte_srs_get_data(session, rte_group_index_to_ec(group, src),
-                          "KEY_PERF", &rte_buffer, &size);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_get_data");
-        return;
-    }
-
-    r_vec.iov_base = buffer;
-    r_vec.type     = rte_datatype_uint8_t;
-    r_vec.count    = max;
-
-    offset = 0;
-    rte_unpack(&r_vec, rte_buffer, &offset);
-
-    rc = rte_srs_session_destroy(session);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_session_destroy");
-    }
-    free(rte_buffer);
-}
-
-static void ext_rte_exchange_vec(void *rte_group, void * req)
-{
-    rte_srs_session_t session = (rte_srs_session_t)req;
-    int rc;
-
-    rc = rte_srs_exchange_data(session);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_exchange_data");
-    }
-}
-
-static void ext_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                           const char *extra_info, void *arg, int is_final,
-                           int is_multi_thread)
-{
-    struct perftest_context *ctx = arg;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, extra_info,
-                   ctx->flags, is_final, ctx->server_addr == NULL,
-                   is_multi_thread);
-}
-
-static ucx_perf_rte_t ext_rte = {
-    .group_size    = ext_rte_group_size,
-    .group_index   = ext_rte_group_index,
-    .barrier       = ext_rte_barrier,
-    .report        = ext_rte_report,
-    .post_vec      = ext_rte_post_vec,
-    .recv          = ext_rte_recv,
-    .exchange_vec  = ext_rte_exchange_vec,
-};
 #endif
 
 static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
@@ -850,20 +723,6 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.super.rte_group  = NULL;
     ctx->params.super.rte        = &mpi_rte;
     ctx->params.super.report_arg = ctx;
-#elif defined (HAVE_RTE)
-    rte_group_t group;
-
-    ucs_trace_func("");
-
-    rte_init(NULL, NULL, &group);
-    /* Let the last rank print the results */
-    if (rte_group_rank(group) == (rte_group_size(group) - 1)) {
-        ctx->flags |= TEST_FLAG_PRINT_RESULTS;
-    }
-
-    ctx->params.super.rte_group  = group;
-    ctx->params.super.rte        = &ext_rte;
-    ctx->params.super.report_arg = ctx;
 #endif
     return UCS_OK;
 }
@@ -878,8 +737,6 @@ static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
     ucs_assert(buffer != NULL);
     ucs_assertv(size == MPI_RTE_BSEND_BUFFER_SIZE, "size=%d", size);
     free(buffer);
-#elif defined (HAVE_RTE)
-    rte_finalize();
 #endif
     return UCS_OK;
 }
@@ -985,11 +842,7 @@ int main(int argc, char **argv)
     if (ctx.mpi) {
         mpi_rte = 1;
     } else {
-#ifdef HAVE_RTE
-        mpi_rte = 1;
-#else
         mpi_rte = 0;
-#endif
     }
 
     status = check_system(&ctx);

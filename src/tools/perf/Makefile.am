@@ -23,9 +23,9 @@ ucx_perftest_SOURCES = \
 	perftest_run.c \
 	perftest_params.c
 
-ucx_perftest_CPPFLAGS = $(BASE_CPPFLAGS) $(RTE_CPPFLAGS)
+ucx_perftest_CPPFLAGS = $(BASE_CPPFLAGS)
 ucx_perftest_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS)
-ucx_perftest_LDFLAGS  = $(RTE_LDFLAGS) $(LDFLAGS_DYNAMIC_LIST_DATA)
+ucx_perftest_LDFLAGS  = $(LDFLAGS_DYNAMIC_LIST_DATA)
 ucx_perftest_LDADD    = \
 	$(abs_top_builddir)/src/uct/libuct.la \
 	$(abs_top_builddir)/src/ucp/libucp.la \
