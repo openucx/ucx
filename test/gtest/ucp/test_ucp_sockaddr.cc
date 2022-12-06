@@ -165,7 +165,7 @@ public:
              * isn't as such, we continue to the next one. */
             skip = 1;
         } else if ((has_transport("tcp") || has_transport("all")) &&
-                   (ifa->ifa_addr->sa_family == AF_INET6)) {
+                   ((ifa->ifa_addr != NULL) && (ifa->ifa_addr->sa_family == AF_INET6))) {
             /* the tcp transport (and 'all' which may fallback to tcp_sockcm)
              * can run either on an rdma-enabled interface (IPoIB/RoCE)
              * or any interface with IPv4 address because IPv6 isn't supported
@@ -185,7 +185,7 @@ public:
         ASSERT_EQ(ret, 0);
 
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-            if (is_skip_interface(ifa) || !ucs::is_interface_usable(ifa)) {
+            if (!ucs::is_interface_usable(ifa) || is_skip_interface(ifa)) {
                 continue;
             }
 
