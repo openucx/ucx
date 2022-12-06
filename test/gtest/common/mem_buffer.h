@@ -88,6 +88,10 @@ public:
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
 
+    /* Return free memory on the BAR1 / GPU. If GPU is not used
+     * SIZE_MAX is returned */
+    static const size_t get_bar1_free_size();
+
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
     virtual ~mem_buffer();
