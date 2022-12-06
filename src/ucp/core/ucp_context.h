@@ -74,8 +74,6 @@ typedef struct ucp_context_config {
     size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
     /** Memory type of fragments used for RNDV pipeline protocol */
     ucs_memory_type_t                      rndv_frag_mem_type;
-    /** Preferred location should be used when selecting fragment location */
-    int                                    rndv_frag_preferred_loc;
     /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Enabling 2-stage pipeline rndv protocol */
@@ -582,9 +580,8 @@ ucp_cmpt_attr_by_md_index(ucp_context_h context, ucp_md_index_t md_index)
 static UCS_F_ALWAYS_INLINE void
 ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
-    mem_info->type          = UCS_MEMORY_TYPE_HOST;
-    mem_info->sys_dev       = UCS_SYS_DEVICE_ID_UNKNOWN;
-    mem_info->preferred_dev = UCS_SYS_DEVICE_ID_CPU;
+    mem_info->type    = UCS_MEMORY_TYPE_HOST;
+    mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -635,9 +632,8 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     ucp_memory_detect_internal(context, address, length, &mem_info_internal);
 
-    mem_info->type          = mem_info_internal.type;
-    mem_info->preferred_dev = mem_info_internal.preferred_dev;
-    mem_info->sys_dev       = mem_info_internal.sys_dev;
+    mem_info->type    = mem_info_internal.type;
+    mem_info->sys_dev = mem_info_internal.sys_dev;
 }
 
 

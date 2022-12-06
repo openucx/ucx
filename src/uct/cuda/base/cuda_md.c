@@ -124,7 +124,6 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     size_t alloc_length;
     ucs_status_t status;
     size_t total_bytes;
-    int preferred_location;
     CUresult cu_err;
 
     attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
@@ -161,25 +160,7 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
          * in that case. Therefore, checking whether the allocation was not
          * allocated in a context should also allows us to identify
          * virtual/stream-ordered CUDA allocations. */
-        mem_info->type          = UCS_MEMORY_TYPE_CUDA_MANAGED;
-        mem_info->preferred_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-
-        cu_err = cuMemRangeGetAttribute(&preferred_location, 4,
-                                        CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION,
-                                        (CUdeviceptr)address, length);
-        if ((cu_err == CUDA_SUCCESS) &&
-            (preferred_location != CU_DEVICE_INVALID)) {
-
-            if (preferred_location == CU_DEVICE_CPU) {
-                mem_info->preferred_dev = UCS_SYS_DEVICE_ID_CPU;
-            } else {
-                status = uct_cuda_base_get_sys_dev(preferred_location,
-                                                   &mem_info->preferred_dev);
-                if (status != UCS_OK) {
-                    mem_info->preferred_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-                }
-            }
-        }
+        mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
         goto out_default_range;
     }
 
@@ -282,7 +263,6 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
     ucs_memory_info_t default_mem_info = {
         .type              = UCS_MEMORY_TYPE_HOST,
         .sys_dev           = UCS_SYS_DEVICE_ID_UNKNOWN,
-        .preferred_dev     = UCS_SYS_DEVICE_ID_UNKNOWN,
         .base_address      = (void*)address,
         .alloc_length      = length
     };
@@ -294,9 +274,7 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
     CUresult cu_err;
 
     if (!(mem_attr->field_mask &
-          (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-           UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
-           UCT_MD_MEM_ATTR_FIELD_PREFERRED_DEV |
+          (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE | UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
            UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
            UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
            UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
@@ -333,10 +311,6 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
         mem_attr->sys_dev = addr_mem_info.sys_dev;
-    }
-
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_PREFERRED_DEV) {
-        mem_attr->preferred_dev = addr_mem_info.preferred_dev;
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {

@@ -31,7 +31,6 @@ extern ucs_memtype_cache_t *ucs_memtype_cache_global_instance;
 typedef struct ucs_memory_info {
     ucs_memory_type_t type;          /**< Memory type */
     ucs_sys_device_t  sys_dev;       /**< System device index */
-    ucs_sys_device_t  preferred_dev; /**< Preferred system device index */
     void              *base_address; /**< Base address of the underlying allocation */
     size_t            alloc_length;  /**< Whole length of the underlying allocation */
 } ucs_memory_info_t;

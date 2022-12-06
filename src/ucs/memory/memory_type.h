@@ -22,13 +22,6 @@ BEGIN_C_DECLS
 
 
 /**
- * Memory types that can have a preferred location attribute set.
- */
-#define UCS_MEMORY_TYPES_CAN_HAVE_PREFERRED_LOC \
-    (UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED))
-
-
-/**
  * Enumerate all memory types
  */
 #define ucs_memory_type_for_each(_x) \
@@ -61,9 +54,6 @@ extern const char *ucs_memory_type_names[];
  * Array of string descriptions for each memory type
  */
 extern const char *ucs_memory_type_descs[];
-
-
-ucs_memory_type_t ucs_memory_type_get_pinned_type(ucs_memory_type_t mem_type);
 
 
 END_C_DECLS
