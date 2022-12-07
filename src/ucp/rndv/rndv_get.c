@@ -96,7 +96,8 @@ ucp_proto_rndv_get_rkey_index(ucp_request_t *req, ucp_rkey_h rkey,
 
 static UCS_F_ALWAYS_INLINE uct_rkey_t
 ucp_proto_rndv_get_tl_rkey(
-    ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv) {
+    ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv)
+{
     size_t iov_index;
     ucp_rkey_h rkey;
     ucp_md_index_t rkey_index;
@@ -111,7 +112,8 @@ ucp_proto_rndv_get_tl_rkey(
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
-ucp_proto_rndv_get_remote_address(ucp_request_t *req, size_t offset) {
+ucp_proto_rndv_get_remote_address(ucp_request_t *req, size_t offset)
+{
     size_t iov_index, iov_offset;
     uint64_t remote_address;
 
