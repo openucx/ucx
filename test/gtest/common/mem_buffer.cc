@@ -149,7 +149,7 @@ void mem_buffer::set_device_context()
     device_set = true;
 }
 
-const size_t mem_buffer::get_bar1_free_size()
+size_t mem_buffer::get_bar1_free_size()
 {
     /* All gtest CUDA tests explicitly assume that all memory allocations are
      * done on the device 0. The same assumption is followed here. */

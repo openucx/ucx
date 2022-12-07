@@ -183,8 +183,11 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
     max_length = ucs_min(max_length, (size_t)(4.1 * (double)UCS_GBYTE));
 
     /* Trim by BAR1 size if relevant */
-    max_length = ucs_min(max_length,
-                         (size_t)(0.8 * mem_buffer::get_bar1_free_size()));
+    if (mem_type == UCS_MEMORY_TYPE_CUDA ||
+        mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        max_length = ucs_min(max_length,
+                (size_t)(0.8 * mem_buffer::get_bar1_free_size()));
+    }
 
     /* Trim by memory size */
     max_length = ucs::limit_buffer_size(max_length);
