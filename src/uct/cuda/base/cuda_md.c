@@ -124,6 +124,7 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     size_t alloc_length;
     ucs_status_t status;
     size_t total_bytes;
+    int preferred_location;
     CUresult cu_err;
 
     attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
@@ -161,6 +162,16 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
          * allocated in a context should also allows us to identify
          * virtual/stream-ordered CUDA allocations. */
         mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+
+        /* If preferred location attribute is set to CPU, then mark sys_dev
+         * attribute of the memory range as host/ID_UNKNOWN. UCP may decide to
+         * use host bounce buffers to stage pages belonging to this range. */
+        cu_err = cuMemRangeGetAttribute(&preferred_location, 4,
+                                        CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION,
+                                        (CUdeviceptr)address, length);
+        if ((cu_err == CUDA_SUCCESS) && (preferred_location == CU_DEVICE_CPU)) {
+            mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
         goto out_default_range;
     }
 
