@@ -306,7 +306,8 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
     void *p = rkey_buffer;
     uint32_t iov_count, iov_index;
     uint32_t *ppacked_rkey_size;
-    size_t total_size, packed_rkey_size;
+    ssize_t packed_rkey_size;
+    size_t total_size;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_IOV);
     /* 
@@ -336,7 +337,7 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
                                                distance_dev_map, dev_distance,
                                                p);
 
-        ucs_debug("index=%u rkey_size=%lu address=%p size=%lu",
+        ucs_debug("index=%u rkey_size=%ld address=%p size=%lu",
                   iov_index, packed_rkey_size,
                   (void*)dt_iter->type.iov.iov[iov_index].buffer,
                   dt_iter->type.iov.iov[iov_index].length);

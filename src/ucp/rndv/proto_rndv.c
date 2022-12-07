@@ -731,7 +731,7 @@ ucp_proto_rndv_receive_start_common(ucp_worker_h worker,
     req->send.rndv.remote_req_id  = send_req_hdr->req_id;
     req->send.rndv.remote_address = remote_address;
     req->send.rndv.offset         = 0;
-    req->send.rndv.rkey_count     = 0;
+    req->send.rndv.rma_count      = 0;
     req->send.rndv.rma_array      = NULL;
     ucp_request_set_super(req, recv_req);
 
@@ -859,15 +859,15 @@ ucp_proto_rndv_unpack_iov_rkeys(const void* buffer, size_t buffer_length,
                   iov_index, rkey_length, (void*)remote_address, remote_size);
     }
 
-    req->send.rndv.rkey_count = iov_count;
-    req->send.rndv.rkey_index = 0;
+    req->send.rndv.rma_count = iov_count;
+    req->send.rndv.rma_index = 0;
     goto finish;
 
 destroy_rkey:
     if (rkey != NULL) {
         ucp_rkey_destroy(rkey);
     }
-    req->send.rndv.rkey_count = iov_index;
+    req->send.rndv.rma_count = iov_index;
     ucp_proto_rndv_multi_rkey_destroy(req);
 finish:
     return status;
@@ -951,7 +951,7 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.rndv.remote_req_id  = rts->sreq.req_id;
     req->send.rndv.remote_address = 0;
     req->send.rndv.offset         = 0;
-    req->send.rndv.rkey_count     = 0;
+    req->send.rndv.rma_count      = 0;
     req->send.rndv.rma_array      = NULL;
     ucp_request_set_super(req, recv_req);
 
@@ -972,7 +972,6 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                              rts->size, sg_count);
     if (status != UCS_OK) {
         ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
-        ucs_mpool_put(req);
         goto release_request;
     }
     if (req->send.proto_config->proto != &ucp_rndv_get_zcopy_proto) {
@@ -1023,6 +1022,8 @@ ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
     req->send.rndv.remote_address = rtr->address;
     req->send.rndv.remote_req_id  = rtr->rreq_id;
     req->send.rndv.offset         = rtr->offset;
+    req->send.rndv.rma_count      = 0;
+    req->send.rndv.rma_array      = NULL;
 
     ucs_assert(rtr->size == req->send.state.dt_iter.length);
     status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND,

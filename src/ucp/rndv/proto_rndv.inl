@@ -173,7 +173,7 @@ static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
 {
-    size_t count = req->send.rndv.rkey_count;
+    size_t count = req->send.rndv.rma_count;
     size_t index;
 
     ucs_assert(req->send.rndv.rma_array != NULL);
@@ -188,8 +188,8 @@ ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
 #if UCS_ENABLE_ASSERT
     req->send.rndv.rma_array  = NULL;
 #endif
-    req->send.rndv.rkey_count = 0;
-    req->send.rndv.rkey_index = 0;
+    req->send.rndv.rma_count = 0;
+    req->send.rndv.rma_index = 0;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -205,7 +205,7 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_all_rkey_destroy(ucp_request_t *req)
 {
-    size_t count = req->send.rndv.rkey_count;
+    size_t count = req->send.rndv.rma_count;
     if (count == 0) {
         ucp_proto_rndv_rkey_destroy(req);
         return;
@@ -307,19 +307,6 @@ ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
     size_t total_length = ucp_proto_rndv_request_total_length(req);
     size_t max_frag_sum = rpriv->mpriv.max_frag_sum;
     size_t lane_offset, max_payload, scaled_length;
-    size_t iov_index, iov_length = ULONG_MAX;
-
-    if (req->send.rndv.rkey_count != 0) {
-        iov_index = req->send.rndv.rkey_index;
-        ucs_assertv(total_offset <= req->send.rndv.rma_array[iov_index].accumulate_size,
-                    "req=%p total_offset=%zu rma_array[%lu].accumulate_size=%zu",
-                    req, total_offset, iov_index,
-                    req->send.rndv.rma_array[iov_index].accumulate_size);
-        if (total_offset >= req->send.rndv.rma_array[iov_index].accumulate_size) {
-            iov_index = ++req->send.rndv.rkey_index;
-        }
-        iov_length = req->send.rndv.rma_array[iov_index].accumulate_size - total_offset;
-    }
 
     if (ucs_likely(total_length < max_frag_sum)) {
         /* Each lane sends less than its maximal fragment size */
@@ -341,10 +328,6 @@ ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
                     lpriv->max_frag_sum, lane_offset);
 
         max_payload = lpriv->max_frag_sum - lane_offset;
-    }
-
-    if (iov_length < max_payload) {
-        max_payload = iov_length;
     }
 
     ucp_trace_req(req,

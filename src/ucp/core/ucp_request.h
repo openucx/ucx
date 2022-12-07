@@ -230,14 +230,14 @@ struct ucp_request {
                     union {
                         /* Key for remote buffer operation */
                         ucp_rkey_h    rkey;
-                        /* Key index, if if rkey_count != 0 */
-                        size_t        rkey_index;
+                        /* Index of rma_array, if if rma_count != 0 */
+                        size_t        rma_index;
                     };
 
                     /* Key counts for remote buffer operation */
-                    size_t            rkey_count;
+                    size_t            rma_count;
 
-                    /* rma infomation array, if rkey_count != 0 */
+                    /* Remote infomation array, if rma_count != 0 */
                     struct {
                         ucp_rkey_h    rkey;
                         uint64_t      remote_address;
