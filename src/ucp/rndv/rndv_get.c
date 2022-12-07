@@ -86,6 +86,8 @@ ucp_proto_rndv_get_rkey_index(ucp_request_t *req, ucp_rkey_h rkey,
     ucp_ep_h ep                 = req->send.ep;
     ucp_ep_config_t *ep_config  = ucp_ep_config(ep);
     ucp_md_index_t dst_md_index = ep_config->key.lanes[lane].dst_md_index;
+
+    ucs_assert(rkey != NULL);
     if (!(rkey->md_map & UCS_BIT(dst_md_index))) {
         return UCP_NULL_RESOURCE;
     }

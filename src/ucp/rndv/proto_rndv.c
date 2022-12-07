@@ -924,14 +924,14 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
     /* Short receive: complete with error, and send reply to sender */
     if (rts->size > recv_req->recv.length) {
         ucp_proto_rndv_receive_start_common(worker, &rts->sreq, recv_req,
-                                            0, rts->size, buffer, 0);
+                                            rts->address, rts->size, buffer, 0);
         return;
     }
 
     /* IOV data: local IOV is not supported */
     if (ucp_datatype_class(recv_req->recv.datatype) != UCP_DATATYPE_CONTIG) {
         ucp_proto_rndv_receive_start_common(worker, &rts->sreq, recv_req,
-                                            0, 0, buffer, 0);
+                                            rts->address, rts->size, buffer, 0);
         return;
     }
 
@@ -999,7 +999,7 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                   const ucp_rndv_rts_hdr_t *rts,
                                   const void *rkey_buffer, size_t rkey_length)
 {
-    if (ucs_unlikely(rts->address == 0 && rts->size != 0)) {
+    if (ucs_unlikely(rts->address == 0 && rts->size != 0 && rkey_length != 0)) {
         ucp_proto_rndv_receive_iov_start(worker, recv_req, rts, rkey_buffer, rkey_length);
         return;
     }
