@@ -314,6 +314,10 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
     size_t total_size;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_IOV);
+    if (md_map == 0) {
+        return 0;
+    }
+
     /* 
      * proto pack format:
      * | count(32/64)| address(64)| length(32/64)| rkey size(32)| rkey buffer|

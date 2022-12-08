@@ -811,7 +811,8 @@ ucp_proto_rndv_unpack_iov_rkey_buffer(const void *p, const void *p_end,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t buffer_length,
-                                ucp_request_t *req) {
+                                ucp_request_t *req)
+{
     const void *p              = buffer, *p_end;
     ucp_ep_h ep                = req->send.ep;
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -861,9 +862,9 @@ ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t buffer_length,
         ucs_debug("index=%u rkey_size=%lu address=%p size=%lu",
                   iov_index, rkey_length, (void*)remote_address, remote_size);
     }
-
     req->send.rndv.rma_count = iov_count;
     req->send.rndv.rma_index = 0;
+    status                   = UCS_OK;
     goto finish;
 
 destroy_rkey:
@@ -879,8 +880,8 @@ finish:
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
                                 ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                                uint16_t op_flags, size_t length,
-                                uint8_t sg_count) {
+                                uint16_t op_flags, size_t length, uint8_t sg_count)
+{
     ucp_ep_h ep                = req->send.ep;
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_worker_cfg_index_t rkey_cfg_index;
