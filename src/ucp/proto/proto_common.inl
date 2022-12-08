@@ -211,11 +211,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
 
     /* Set pointer to request's protocol configuration */
     ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
-    /* FIX ME: IOV RTS has plenty of rkeys, which means "proto_config.rkey_cfg_index"
-    * would be different. Because key-type of hash table <ucp_proto_select_hash> 
-    * don't contains "rkey_cfg_index", different rkey_cf_index could get the same
-    * hash value. */
-    // ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
+    ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
     ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
     return UCS_OK;
 }
@@ -249,7 +245,8 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 
     ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
                                 op_flags, req->send.state.dt_iter.dt_class,
-                                &req->send.state.dt_iter.mem_info, sg_count);
+                                &req->send.state.dt_iter.mem_info, sg_count,
+                                rkey_cfg_index);
 
     status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
                               proto_select, rkey_cfg_index, &sel_param,
