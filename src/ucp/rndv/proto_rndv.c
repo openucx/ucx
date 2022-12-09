@@ -883,7 +883,7 @@ ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
                                 uint16_t op_flags, size_t length, uint8_t sg_count)
 {
     ucp_ep_h ep                = req->send.ep;
-    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_rkey_h rkey;
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
@@ -892,9 +892,10 @@ ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
     ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
                (op_id < UCP_OP_ID_RNDV_LAST));
 
-    /* TODO: use all remote key instead of use the first */
-    proto_select   = &ep_config->proto_select;
-    rkey_cfg_index = req->send.rndv.rma_array[0].rkey->cfg_index;
+    /* TODO: use all remote key to select protos */
+    rkey           = req->send.rndv.rma_array[0].rkey;
+    proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
+    rkey_cfg_index = rkey->cfg_index;
 
     ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, op_flags,
                                 req->send.state.dt_iter.dt_class,
