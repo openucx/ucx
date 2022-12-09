@@ -352,15 +352,17 @@ void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
     } else if (get_variant_value() & TEST_RMA) {
         wait_for_value(&m_recv_data[length], recv_data);
 
+        ucs_memory_cpu_load_fence();
         vec_type::iterator end = m_recv_data.begin() + length;
         vec_type::iterator it  = std::find_if(m_recv_data.begin(), end,
                                               [recv_data](uint64_t data) {
                                                   return data != recv_data;
                                               });
-        ASSERT_EQ(recv_data, *it) << "length " << length
-                                  << ", invalid data at index "
-                                  << std::distance(m_recv_data.begin(), it)
-                                  << ((it == end) ? " (control)" : "");
+        uint64_t data          = *it;
+        ASSERT_EQ(recv_data, data) << "length " << length
+                                   << ", invalid data at index "
+                                   << std::distance(m_recv_data.begin(), it)
+                                   << ((it == end) ? " (control)" : "");
     }
 }
 
