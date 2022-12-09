@@ -252,7 +252,7 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params)
         mem_info.type    = params->super.super.rkey_config_key->mem_type;
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     0, op_flags, UCP_DATATYPE_CONTIG, &mem_info,
-                                    1, params->super.super.rkey_cfg_index);
+                                    1);
     }
 
     /* Initialize estimated memory registration map */
@@ -666,8 +666,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
 
     ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, op_flags,
                                 req->send.state.dt_iter.dt_class,
-                                &req->send.state.dt_iter.mem_info, sg_count,
-                                rkey_cfg_index);
+                                &req->send.state.dt_iter.mem_info, sg_count);
 
     status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
                               proto_select, rkey_cfg_index, &sel_param, length);
@@ -899,8 +898,7 @@ ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
 
     ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, op_flags,
                                 req->send.state.dt_iter.dt_class,
-                                &req->send.state.dt_iter.mem_info, sg_count,
-                                rkey_cfg_index);
+                                &req->send.state.dt_iter.mem_info, sg_count);
 
     status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
                               proto_select, rkey_cfg_index, &sel_param, length);

@@ -117,8 +117,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
                             ucp_operation_id_t op_id, uint32_t op_attr_mask,
                             uint16_t op_flags, ucp_dt_class_t dt_class,
-                            const ucp_memory_info_t *mem_info, uint8_t sg_count,
-                            uint8_t rkey_cfg_index)
+                            const ucp_memory_info_t *mem_info, uint8_t sg_count)
 {
     if (dt_class == UCP_DATATYPE_CONTIG) {
         ucs_assert(sg_count == 1);
@@ -129,14 +128,14 @@ ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
     /* construct a protocol lookup key based on all operation parameters
      * op_flags are modifiers for the operation, for now only FAST_CMPL is
      * supported */
-    select_param->op_id          = op_id;
-    select_param->op_flags       = op_flags |
-                                   ucp_proto_select_op_attr_to_flags(op_attr_mask);
-    select_param->dt_class       = dt_class;
-    select_param->mem_type       = mem_info->type;
-    select_param->sys_dev        = mem_info->sys_dev;
-    select_param->sg_count       = sg_count;
-    select_param->rkey_cfg_index = rkey_cfg_index;
+    select_param->op_id      = op_id;
+    select_param->op_flags   = op_flags |
+                               ucp_proto_select_op_attr_to_flags(op_attr_mask);
+    select_param->dt_class   = dt_class;
+    select_param->mem_type   = mem_info->type;
+    select_param->sys_dev    = mem_info->sys_dev;
+    select_param->sg_count   = sg_count;
+    select_param->padding    = 0;
 }
 
 static UCS_F_ALWAYS_INLINE int
