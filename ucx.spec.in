@@ -103,7 +103,6 @@ Provides header files and examples for developing with UCX.
            %{?debug:--enable-profiling} \
            %{?debug:--enable-frame-pointer} \
            %{?debug:--enable-stats} \
-           %{?debug:--enable-fault-injection} \
            %{?debug:--enable-debug-data} \
            %{?debug:--enable-mt} \
            --without-go \
