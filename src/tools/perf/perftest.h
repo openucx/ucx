@@ -12,8 +12,6 @@
 
 #if defined (HAVE_MPI)
 #  include <mpi.h>
-#elif defined (HAVE_RTE)
-#   include<rte.h>
 #endif
 
 

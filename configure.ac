@@ -229,7 +229,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/sysdep.m4])
      m4_include([config/m4/ucm.m4])
      m4_include([config/m4/mpi.m4])
-     m4_include([config/m4/rte.m4])
      m4_include([config/m4/fuse3.m4])
      m4_include([config/m4/go.m4])
      m4_include([config/m4/java.m4])
