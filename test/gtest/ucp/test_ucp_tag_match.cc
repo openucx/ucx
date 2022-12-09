@@ -262,97 +262,6 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
     request_free(ucx_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=inf") {
-    static const size_t size = 3000000;
-
-    entity &sender2 = sender();
-    create_entity(true);
-    sender().connect(&receiver(), get_ep_params());
-
-    for (int is_exp = 0; is_exp <= 1; ++is_exp) {
-
-        UCS_TEST_MESSAGE << "Testing " << (is_exp ? "" : "un") << "expected mode, size " << size;
-
-        std::vector<char> sendbuf1(size, 0);
-        std::vector<char> sendbuf2(size, 0);
-        std::vector<char> recvbuf1(size, 0);
-        std::vector<char> recvbuf2(size, 0);
-
-        ucs::fill_random(sendbuf1);
-        ucs::fill_random(sendbuf2);
-
-        /* Two sends with different tags */
-
-        request *sreq1, *sreq2;
-        sreq1 = (request*)ucp_tag_send_nb(sender().ep(), &sendbuf1[0], sendbuf1.size(),
-                                          DATATYPE, 1, send_callback);
-        ASSERT_TRUE(!UCS_PTR_IS_ERR(sreq1));
-
-        sreq2 = (request*)ucp_tag_send_nb(sender2.ep(), &sendbuf2[0], sendbuf2.size(),
-                                          DATATYPE, 2, send_callback);
-        ASSERT_TRUE(!UCS_PTR_IS_ERR(sreq2));
-
-
-        /* In unexpected mode, we progress all to put the messages on the
-         *  unexpected queue
-         */
-        if (!is_exp) {
-            short_progress_loop();
-        }
-
-        /* Two receives with any tag */
-
-        request *rreq1, *rreq2;
-
-        rreq1 = recv_nb(&recvbuf1[0], recvbuf1.size(), DATATYPE, 0, 0);
-        ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq1));
-
-        rreq2 = recv_nb(&recvbuf2[0], recvbuf2.size(), DATATYPE, 0, 0);
-        ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq2));
-
-
-        /* Wait for receives */
-        wait(rreq1);
-        wait(rreq2);
-
-        short_progress_loop();
-
-        /* Release sends */
-        if (sreq1 != NULL) {
-            wait(sreq1);
-            EXPECT_TRUE(sreq1->completed);
-            request_free(sreq1);
-        }
-        if (sreq2 != NULL) {
-            wait(sreq2);
-            EXPECT_TRUE(sreq2->completed);
-            request_free(sreq2);
-        }
-
-        /* Receives should be completed with correct length */
-        ASSERT_TRUE(rreq1->completed);
-        ASSERT_TRUE(rreq2->completed);
-
-        EXPECT_EQ(size, rreq1->info.length);
-        EXPECT_EQ(size, rreq2->info.length);
-
-        /* The order may be any, but the messages have to be received correctly */
-        if (rreq1->info.sender_tag == 1u) {
-            ASSERT_EQ(2u, rreq2->info.sender_tag);
-            EXPECT_EQ(sendbuf1, recvbuf1);
-            EXPECT_EQ(sendbuf2, recvbuf2);
-        } else {
-            ASSERT_EQ(2u, rreq1->info.sender_tag);
-            ASSERT_EQ(1u, rreq2->info.sender_tag);
-            EXPECT_EQ(sendbuf2, recvbuf1);
-            EXPECT_EQ(sendbuf1, recvbuf2);
-        }
-
-        request_free(rreq1);
-        request_free(rreq2);
-    }
-}
-
 UCS_TEST_P(test_ucp_tag_match, send_recv_nb_partial_exp_medium) {
     static const size_t size = 50000;
 
@@ -540,6 +449,143 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match)
+
+class ucp_tag_send_nb_recv_medium_wildcard : public test_ucp_tag_match
+{
+protected:
+    void test()
+    {
+        static const size_t size = 3000000;
+
+        entity &sender2 = sender();
+        create_entity(true);
+        sender().connect(&receiver(), get_ep_params());
+
+        for (int is_exp = 0; is_exp <= 1; ++is_exp) {
+
+            UCS_TEST_MESSAGE << "Testing " << (is_exp ? "" : "un")
+                             << "expected mode, size " << size;
+
+            std::vector<char> sendbuf1(size, 0);
+            std::vector<char> sendbuf2(size, 0);
+            std::vector<char> recvbuf1(size, 0);
+            std::vector<char> recvbuf2(size, 0);
+
+            ucs::fill_random(sendbuf1);
+            ucs::fill_random(sendbuf2);
+
+            /* Two sends with different tags */
+
+            request *sreq1, *sreq2;
+            sreq1 = (request*)ucp_tag_send_nb(sender().ep(), &sendbuf1[0],
+                                              sendbuf1.size(), DATATYPE, 1,
+                                              send_callback);
+            ASSERT_TRUE(!UCS_PTR_IS_ERR(sreq1));
+
+            sreq2 = (request*)ucp_tag_send_nb(sender2.ep(), &sendbuf2[0],
+                                              sendbuf2.size(), DATATYPE, 2,
+                                              send_callback);
+            ASSERT_TRUE(!UCS_PTR_IS_ERR(sreq2));
+
+            /* In unexpected mode, we progress all to put the messages on the
+             *  unexpected queue
+             */
+            if (!is_exp) {
+                short_progress_loop();
+            }
+
+            /* Two receives with any tag */
+
+            request *rreq1, *rreq2;
+
+            rreq1 = recv_nb(&recvbuf1[0], recvbuf1.size(), DATATYPE, 0, 0);
+            ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq1));
+
+            rreq2 = recv_nb(&recvbuf2[0], recvbuf2.size(), DATATYPE, 0, 0);
+            ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq2));
+
+            /* Wait for receives */
+            wait(rreq1);
+            wait(rreq2);
+
+            short_progress_loop();
+
+            /* Release sends */
+            if (sreq1 != NULL) {
+                wait(sreq1);
+                EXPECT_TRUE(sreq1->completed);
+                request_free(sreq1);
+            }
+            if (sreq2 != NULL) {
+                wait(sreq2);
+                EXPECT_TRUE(sreq2->completed);
+                request_free(sreq2);
+            }
+
+            /* Receives should be completed with correct length */
+            ASSERT_TRUE(rreq1->completed);
+            ASSERT_TRUE(rreq2->completed);
+
+            EXPECT_EQ(size, rreq1->info.length);
+            EXPECT_EQ(size, rreq2->info.length);
+
+            /* The order may be any, but the messages have to be received correctly */
+            if (rreq1->info.sender_tag == 1u) {
+                ASSERT_EQ(2u, rreq2->info.sender_tag);
+                EXPECT_EQ(sendbuf1, recvbuf1);
+                EXPECT_EQ(sendbuf2, recvbuf2);
+            } else {
+                ASSERT_EQ(2u, rreq1->info.sender_tag);
+                ASSERT_EQ(1u, rreq2->info.sender_tag);
+                EXPECT_EQ(sendbuf2, recvbuf1);
+                EXPECT_EQ(sendbuf1, recvbuf2);
+            }
+
+            request_free(rreq1);
+            request_free(rreq2);
+        }
+    }
+};
+
+UCP_INSTANTIATE_TEST_CASE(ucp_tag_send_nb_recv_medium_wildcard)
+
+UCS_TEST_P(ucp_tag_send_nb_recv_medium_wildcard, test, "RNDV_THRESH=inf")
+{
+    test();
+}
+
+class ucp_tag_wcd_hw_proto_small_rxq : public ucp_tag_send_nb_recv_medium_wildcard
+{
+public:
+    virtual void init()
+    {
+        enable_tag_mp_offload();
+        ASSERT_TRUE(use_proto());
+        modify_config("PROTO_ENABLE", "y", SETENV_IF_NOT_EXIST);
+        modify_config("RNDV_THRESH", "inf");
+        modify_config("TM_THRESH", "1");
+        modify_config("RC_RX_QUEUE_LEN", "1024", SETENV_IF_NOT_EXIST);
+        test_ucp_tag::init();
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        UCS_STATIC_ASSERT(!(ENABLE_PROTO & RECV_REQ_INTERNAL));
+
+        add_variant_with_value(variants, get_ctx_params(),
+                               RECV_REQ_INTERNAL | ENABLE_PROTO, "req_int_proto");
+    }
+};
+
+UCP_INSTANTIATE_TEST_CASE(ucp_tag_wcd_hw_proto_small_rxq)
+
+UCS_TEST_P(ucp_tag_wcd_hw_proto_small_rxq, test)
+{
+    if (!has_any_transport( { "rc_x", "dc_x", "ib" } )) {
+        UCS_TEST_SKIP_R("no rc/dc transports");
+    }
+
+    test();
+}
 
 class test_ucp_tag_match_rndv : public test_ucp_tag_match {
 public:
