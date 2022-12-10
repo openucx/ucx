@@ -305,7 +305,7 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
     ucp_mem_h *memh = dt_iter->type.iov.memh;
     void *p = rkey_buffer;
     uint32_t iov_count, iov_index;
-    uint32_t *ppacked_rkey_size;
+    uint32_t packed_count, *ppacked_count, *ppacked_rkey_size;
     ssize_t packed_rkey_size;
     size_t total_size;
 
@@ -320,13 +320,19 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
      *               | address(64)| length(32/64)| rkey size(32)| rkey buffer|
      *               | address(64)| length(32/64)| rkey size(32)| rkey buffer|
      */
-    iov_count     = ucp_datatype_iter_iov_count(dt_iter);
-    *(uint32_t*)p = iov_count;
+    ppacked_count = (uint32_t*)p;
     p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
-    total_size    = sizeof(uint32_t);
-
+    iov_count     = ucp_datatype_iter_iov_count(dt_iter);
+    packed_count  = iov_count;
+    total_size    = 0;
     for (iov_index = 0; iov_index != iov_count; ++iov_index) {
         ucs_assert(ucs_test_all_flags(memh[iov_index]->md_map, md_map));
+        if (dt_iter->type.iov.iov[iov_index].length == 0) {
+            ucs_warn("iov[%u] block size is 0", iov_index);
+            --packed_count;
+            continue;
+        }
+
         *(uint64_t*)p = (uintptr_t)dt_iter->type.iov.iov[iov_index].buffer;
         p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint64_t));
 
@@ -357,7 +363,10 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
         total_size += sizeof(uint64_t) + sizeof(uint32_t) + sizeof(size_t) +
                       packed_rkey_size;
     }
-
+    if (packed_count != 0) {
+        *ppacked_count = packed_count;
+        total_size    += sizeof(uint32_t); 
+    }
     return total_size;
 }
 
