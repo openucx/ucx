@@ -1178,6 +1178,9 @@ static void ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
 {
     ucp_worker_h worker             = sreq->send.ep->worker;
     ucs_memory_type_t frag_mem_type = worker->context->config.ext.rndv_frag_mem_type;
+#if 0
+    ucs_memory_info_t mem_info;
+#endif
     ucp_request_t *freq;
     ucp_mem_desc_t *mdesc;
 
@@ -1187,6 +1190,12 @@ static void ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
     if (ucs_unlikely(freq == NULL)) {
         ucs_fatal("failed to allocate fragment receive request");
     }
+
+#if 0
+    ucp_memory_detect(sreq->send.ep->worker->context, sreq->send.buffer,
+                      sreq->send.length, &mem_info);
+    frag_mem_type = mem_info.preferred_type;
+#endif
 
     mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
                                UCS_SYS_DEVICE_ID_UNKNOWN);
@@ -1340,6 +1349,9 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
     unsigned memh_index;
     const uct_component_attr_t *cmpt_attr;
     ucp_md_map_t alloc_md_map;
+#if 0
+    ucs_memory_info_t mem_info;
+#endif
 
     ucp_trace_req(rreq, "using rndv pipeline protocol rndv_req %p", rndv_req);
 
@@ -1363,6 +1375,12 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         if (frndv_req == NULL) {
             ucs_fatal("failed to allocate fragment rendezvous reply");
         }
+
+#if 0
+        ucp_memory_detect(context, rndv_req->send.buffer, rndv_req->send.length,
+                          &mem_info);
+        frag_mem_type = mem_info.preferred_type;
+#endif
 
         /* allocate fragment recv buffer desc*/
         mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,

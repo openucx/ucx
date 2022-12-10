@@ -123,11 +123,14 @@ static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length,
 {
     ucm_event_t event;
 
-    event.mem_type.address  = (void*)ptr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* indicate unknown type
-                                                       and let cuda_md detect
-                                                       attributes */
+    event.mem_type.address            = (void*)ptr;
+    event.mem_type.size               = length;
+    event.mem_type.mem_type           = UCS_MEMORY_TYPE_LAST; /* indicate unknown type
+                                                                 and let cuda_md detect
+                                                                 attributes */
+    event.mem_type.preferred_mem_type = UCS_MEMORY_TYPE_LAST; /* indicate unknown type
+                                                                 and let cuda_md detect
+                                                                 attributes */
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
 }
 
@@ -155,9 +158,10 @@ static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr,
         length = 1; /* set minimum length */
     }
 
-    event.mem_type.address  = (void*)ptr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = mem_type;
+    event.mem_type.address            = (void*)ptr;
+    event.mem_type.size               = length;
+    event.mem_type.mem_type           = mem_type;
+    event.mem_type.preferred_mem_type = mem_type;
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
@@ -376,9 +380,10 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);
 
-    event.mem_type.address  = addr;
-    event.mem_type.size     = length;
-    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+    event.mem_type.address            = addr;
+    event.mem_type.size               = length;
+    event.mem_type.mem_type           = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+    event.mem_type.preferred_mem_type = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
 
     ucm_event_enter();
     handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);

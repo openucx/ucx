@@ -124,6 +124,7 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     size_t alloc_length;
     ucs_status_t status;
     size_t total_bytes;
+    int preferred_location;
     CUresult cu_err;
 
     attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
@@ -160,7 +161,19 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
          * in that case. Therefore, checking whether the allocation was not
          * allocated in a context should also allows us to identify
          * virtual/stream-ordered CUDA allocations. */
-        mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+        mem_info->type           = UCS_MEMORY_TYPE_CUDA_MANAGED;
+
+        /* set preferred location to device by default; if user has set a
+         * preference explicitly, then change preferred_type accordingly */
+        mem_info->preferred_type = UCS_MEMORY_TYPE_CUDA;
+        cu_err = cuMemRangeGetAttribute(&preferred_location, 4,
+                                        CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION,
+                                        (CUdeviceptr)address, length);
+        if ((cu_err == CUDA_SUCCESS) &&
+            (preferred_location != CU_DEVICE_INVALID)) {
+            mem_info->preferred_type = (preferred_location == CU_DEVICE_CPU) ?
+                                       UCS_MEMORY_TYPE_HOST : UCS_MEMORY_TYPE_CUDA;
+        }
         goto out_default_range;
     }
 
@@ -262,6 +275,7 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
 {
     ucs_memory_info_t default_mem_info = {
         .type              = UCS_MEMORY_TYPE_HOST,
+        .preferred_type    = UCS_MEMORY_TYPE_HOST,
         .sys_dev           = UCS_SYS_DEVICE_ID_UNKNOWN,
         .base_address      = (void*)address,
         .alloc_length      = length
@@ -300,6 +314,7 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
 
         ucs_memtype_cache_update(addr_mem_info.base_address,
                                  addr_mem_info.alloc_length, addr_mem_info.type,
+                                 addr_mem_info.preferred_type,
                                  addr_mem_info.sys_dev);
     } else {
         addr_mem_info = default_mem_info;

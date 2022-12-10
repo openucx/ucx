@@ -279,6 +279,7 @@ protected:
         }
 
         ucs_memtype_cache_update(ptr, size, mem_type,
+                                 UCS_MEMORY_TYPE_LAST,
                                  UCS_SYS_DEVICE_ID_UNKNOWN);
     }
 

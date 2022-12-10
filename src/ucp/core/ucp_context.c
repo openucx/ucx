@@ -2228,10 +2228,11 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
                       address, length, tl_md->rsc.md_name,
                       ucs_memory_type_names[mem_attr.mem_type],
                       ucs_topo_sys_device_get_name(mem_attr.sys_dev));
-        mem_info->type         = mem_attr.mem_type;
-        mem_info->sys_dev      = mem_attr.sys_dev;
-        mem_info->base_address = mem_attr.base_address;
-        mem_info->alloc_length = mem_attr.alloc_length;
+        mem_info->type           = mem_attr.mem_type;
+        mem_info->preferred_type = mem_attr.preferred_mem_type;
+        mem_info->sys_dev        = mem_attr.sys_dev;
+        mem_info->base_address   = mem_attr.base_address;
+        mem_info->alloc_length   = mem_attr.alloc_length;
         return;
     }
 
