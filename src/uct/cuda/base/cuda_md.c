@@ -325,6 +325,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                  uct_md_resource_desc_t **resources_p,
                                  unsigned *num_resources_p)
 {
+    const unsigned sys_device_priority = 10;
     ucs_sys_device_t sys_dev;
     CUdevice cuda_device;
     cudaError_t cudaErr;
@@ -342,7 +343,8 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
         if (status == UCS_OK) {
             ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
                               cuda_device);
-            status = ucs_topo_sys_device_set_name(sys_dev, device_name);
+            status = ucs_topo_sys_device_set_name(sys_dev, device_name,
+                                                  sys_device_priority);
             ucs_assert_always(status == UCS_OK);
         }
     }

@@ -821,13 +821,17 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
 {
-    uct_tcp_md_t *tcp_md = ucs_derived_of(md, uct_tcp_md_t);
+    uct_tcp_md_t *tcp_md               = ucs_derived_of(md, uct_tcp_md_t);
+    const unsigned sys_device_priority = 10;
     uct_tl_device_resource_t *devices, *tmp;
     struct dirent *entry;
     unsigned num_devices;
     int is_active, i;
     ucs_status_t status;
     DIR *dir;
+    const char *sysfs_path;
+    char path_buffer[PATH_MAX], dev_path[PATH_MAX];
+    ucs_sys_device_t sys_dev;
 
     dir = opendir(UCT_TCP_IFACE_NETDEV_DIR);
     if (dir == NULL) {
@@ -883,11 +887,19 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         }
         devices = tmp;
 
+        ucs_snprintf_safe(dev_path, PATH_MAX, "%s/%s", UCT_TCP_IFACE_NETDEV_DIR,
+                          entry->d_name);
+        sysfs_path = uct_iface_get_sysfs_path(dev_path, entry->d_name,
+                                              path_buffer);
+
+        sys_dev = ucs_topo_get_sysfs_dev(entry->d_name, sysfs_path,
+                                         sys_device_priority);
+
         ucs_snprintf_zero(devices[num_devices].name,
                           sizeof(devices[num_devices].name),
                           "%s", entry->d_name);
         devices[num_devices].type       = UCT_DEVICE_TYPE_NET;
-        devices[num_devices].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        devices[num_devices].sys_device = sys_dev;
         ++num_devices;
     }
 

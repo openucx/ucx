@@ -33,6 +33,7 @@ typedef int64_t ucs_bus_id_bit_rep_t;
 typedef struct {
     ucs_sys_bus_id_t bus_id;
     char             *name;
+    unsigned         name_priority;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -169,9 +170,9 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
             ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
         }
 
-        ucs_topo_global_ctx.devices[*sys_dev].bus_id = *bus_id;
-        ucs_topo_global_ctx.devices[*sys_dev].name   = name;
-
+        ucs_topo_global_ctx.devices[*sys_dev].bus_id        = *bus_id;
+        ucs_topo_global_ctx.devices[*sys_dev].name          = name;
+        ucs_topo_global_ctx.devices[*sys_dev].name_priority = 0;
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
@@ -324,6 +325,45 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
     return ucs_string_buffer_cstr(&strb);
 }
 
+ucs_sys_device_t ucs_topo_get_sysfs_dev(const char *dev_name,
+                                        const char *sysfs_path,
+                                        unsigned name_priority)
+{
+    ucs_sys_device_t sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    const char *bdf_name;
+    ucs_status_t status;
+
+    if (sysfs_path == NULL) {
+        goto out_unknown;
+    }
+
+    bdf_name = strrchr(sysfs_path, '/');
+    if (bdf_name == NULL) {
+        goto out_unknown;
+    }
+
+    ++bdf_name; /* Move past '/' separator */
+
+    status = ucs_topo_find_device_by_bdf_name(bdf_name, &sys_dev);
+    if (status != UCS_OK) {
+        goto out_unknown;
+    }
+
+    status = ucs_topo_sys_device_set_name(sys_dev, dev_name, name_priority);
+    if (status != UCS_OK) {
+        ucs_debug("%s: ucs_topo_sys_device_set_name failed, using default name "
+                  "%s",
+                  dev_name, ucs_topo_sys_device_get_name(sys_dev));
+    }
+
+    ucs_debug("%s: bdf_name %s sys_dev %d", dev_name, bdf_name, sys_dev);
+    return sys_dev;
+
+out_unknown:
+    ucs_debug("%s: system device unknown", dev_name);
+    return UCS_SYS_DEVICE_ID_UNKNOWN;
+}
+
 const char *
 ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
 {
@@ -367,8 +407,8 @@ ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev)
     return UCS_ERR_INVALID_PARAM;
 }
 
-ucs_status_t
-ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev, const char *name)
+ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
+                                          const char *name, unsigned priority)
 {
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
@@ -379,9 +419,12 @@ ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev, const char *name)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_free(ucs_topo_global_ctx.devices[sys_dev].name);
-    ucs_topo_global_ctx.devices[sys_dev].name = ucs_strdup(name,
-                                                           "sys_dev_name");
+    if (priority > ucs_topo_global_ctx.devices[sys_dev].name_priority) {
+        ucs_free(ucs_topo_global_ctx.devices[sys_dev].name);
+        ucs_topo_global_ctx.devices[sys_dev].name = ucs_strdup(name,
+                                                               "sys_dev_name");
+        ucs_topo_global_ctx.devices[sys_dev].name_priority = priority;
+    }
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return UCS_OK;
