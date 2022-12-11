@@ -1419,6 +1419,13 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
     return size / t * 1e-5;
 }
 
+static int
+ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
+{
+    return context->config.ext.proto_enable ||
+           (ucs_popcount(md_map) < UCP_MAX_OP_MDS);
+}
+
 static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_bw_info_t *bw_info,
@@ -1451,7 +1458,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
     while ((num_lanes < bw_info->max_lanes) &&
-           (ucs_popcount(md_map) < UCP_MAX_OP_MDS)) {
+           ucp_wireup_is_md_map_count_valid(context, md_map)) {
         if (excl_lane == UCP_NULL_LANE) {
             status = ucp_wireup_select_transport(select_ctx, select_params,
                                                  &bw_info->criteria, tl_bitmap,
@@ -1694,7 +1701,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     bw_info.criteria.title            = "high-bw remote memory access";
     bw_info.criteria.lane_type        = UCP_LANE_TYPE_RMA_BW;
-    bw_info.max_lanes                 = context->config.ext.max_rndv_lanes;
+    bw_info.max_lanes                 = context->config.ext.proto_enable ?
+                                        UCP_PROTO_MAX_LANES :
+                                        context->config.ext.max_rndv_lanes;
     bw_info.criteria.local_cmpt_flags = 0;
 
     /* If error handling is requested we require memory invalidation
