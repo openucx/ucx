@@ -126,20 +126,18 @@ pack_done:
 
 static UCS_F_ALWAYS_INLINE size_t 
 ucp_proto_rndv_max_rts_size(const ucp_request_t *req) {
-    size_t max_rts_size, iov_packed_size, iov_count;
+    size_t iov_packed_size, iov_count;
     const ucp_proto_rndv_ctrl_priv_t *rpriv;
 
     rpriv = req->send.proto_config->priv;
-    if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_IOV) {
-        iov_packed_size = sizeof(uint64_t) + sizeof(size_t) + sizeof(uint32_t) +
-                          rpriv->packed_rkey_size;
-        iov_count       = ucp_datatype_iter_iov_count(&req->send.state.dt_iter);
-        max_rts_size    = sizeof(ucp_rndv_rts_hdr_t) +
-                          sizeof(uint32_t) + iov_packed_size * iov_count;
-    } else {
-        max_rts_size = sizeof(ucp_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
+    if (req->send.state.dt_iter.dt_class != UCP_DATATYPE_IOV) {
+        return sizeof(ucp_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
     }
-    return max_rts_size;
+    iov_packed_size = sizeof(uint64_t) + sizeof(size_t) + sizeof(uint32_t) +
+                      rpriv->packed_rkey_size;
+    iov_count       = ucp_datatype_iter_iov_count(&req->send.state.dt_iter);
+    return sizeof(ucp_rndv_rts_hdr_t) + sizeof(uint32_t) +
+           iov_packed_size * iov_count;
 }
 
 static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_pack_ack(ucp_request_t *req,

@@ -880,11 +880,12 @@ finish:
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
                                 ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                                uint16_t op_flags, size_t length, uint8_t sg_count)
+                                uint16_t op_flags, uint8_t sg_count)
 {
-    ucp_ep_h ep                = req->send.ep;
+    ucp_ep_h ep = req->send.ep;
     ucp_rkey_h rkey;
     ucp_worker_cfg_index_t rkey_cfg_index;
+    size_t length;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
     ucs_status_t status;
@@ -894,9 +895,9 @@ ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
 
     /* TODO: use all remote key to select protos */
     rkey           = req->send.rndv.rma_array[0].rkey;
+    length         = req->send.rndv.rma_array[0].remote_size;
     proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
     rkey_cfg_index = rkey->cfg_index;
-
     ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, op_flags,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
@@ -970,7 +971,7 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
     op_id  = UCP_OP_ID_RNDV_RECV;
     status = ucp_proto_rndv_iov_select_proto(worker, req, op_id,
                                              recv_req->recv.op_attr, 0,
-                                             rts->size, sg_count);
+                                             sg_count);
     if (status != UCS_OK) {
         ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
         goto release_request;

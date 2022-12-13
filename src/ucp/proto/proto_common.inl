@@ -310,7 +310,7 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
     size_t total_size;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_IOV);
-    if (md_map == 0) {
+    if (md_map == 0 || dt_iter->length == 0) {
         return 0;
     }
 
@@ -326,27 +326,26 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
     packed_count  = iov_count;
     total_size    = 0;
     for (iov_index = 0; iov_index != iov_count; ++iov_index) {
-        ucs_assert(ucs_test_all_flags(memh[iov_index]->md_map, md_map));
         if (dt_iter->type.iov.iov[iov_index].length == 0) {
-            ucs_warn("iov[%u] block size is 0", iov_index);
+            ucs_info("iov[%u] block size is 0", iov_index);
             --packed_count;
             continue;
         }
 
+        ucs_assert(ucs_test_all_flags(memh[iov_index]->md_map, md_map));
+
         *(uint64_t*)p = (uintptr_t)dt_iter->type.iov.iov[iov_index].buffer;
         p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint64_t));
-
-        *(size_t*)p = dt_iter->type.iov.iov[iov_index].length;
-        p           = UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
+        *(size_t*)p   = dt_iter->type.iov.iov[iov_index].length;
+        p             = UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
 
         ppacked_rkey_size = (uint32_t*)p;
         p                 = UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
         packed_rkey_size  = ucp_rkey_pack_memh(req->send.ep->worker->context,
-                                               md_map,
-                                               memh[iov_index], &dt_iter->mem_info,
+                                               md_map, memh[iov_index],
+                                               &dt_iter->mem_info,
                                                distance_dev_map, dev_distance,
                                                p);
-
         ucs_debug("index=%u rkey_size=%ld address=%p size=%lu",
                   iov_index, packed_rkey_size,
                   (void*)dt_iter->type.iov.iov[iov_index].buffer,
