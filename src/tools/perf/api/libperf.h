@@ -97,6 +97,19 @@ enum {
 };
 
 
+enum {
+    UCP_PERF_DAEMON_AM_ID_INIT      = 0,
+    UCP_PERF_DAEMON_AM_ID_PEER_INIT = 1,
+    UCP_PERF_DAEMON_AM_ID_REQ       = 2,
+    UCP_PERF_DAEMON_AM_ID_SEND_ACK  = 3,
+    UCP_PERF_DAEMON_AM_ID_RECV_ACK  = 4,
+    UCP_PERF_DAEMON_AM_ID_OP        = 5,
+    UCP_PERF_DAEMON_AM_ID_FIN       = 6
+};
+
+
+#define UCP_PERF_TEST_DAEMON_ADDRESS_MAX_NUMBER 2
+
 #define UCT_PERF_TEST_PARAMS_FMT             "%s/%s"
 #define UCT_PERF_TEST_PARAMS_ARG(_params)    (_params)->uct.tl_name, \
                                              (_params)->uct.dev_name
@@ -216,14 +229,22 @@ typedef struct ucx_perf_params {
     } uct;
 
     struct {
-        unsigned               nonblocking_mode; /* TBD */
-        ucp_perf_datatype_t    send_datatype;
-        ucp_perf_datatype_t    recv_datatype;
-        size_t                 am_hdr_size; /* UCP Active Message header size
-                                               (not included in message size) */
+        unsigned                nonblocking_mode; /* TBD */
+        ucp_perf_datatype_t     send_datatype;
+        ucp_perf_datatype_t     recv_datatype;
+        size_t                  am_hdr_size; /* UCP Active Message header size
+                                                (not included in message size) */
+        struct sockaddr_storage daemon_addrs[UCP_PERF_TEST_DAEMON_ADDRESS_MAX_NUMBER];
+        size_t                  daemon_addrs_num;
     } ucp;
 
 } ucx_perf_params_t;
+
+
+typedef struct {
+    uint64_t addr;
+    uint64_t length;
+} ucp_perf_daemon_req_t;
 
 
 /* Allocators for each memory type */

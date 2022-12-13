@@ -189,6 +189,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.am_hdr_size   = 0;
+    params->super.ucp.daemon_addrs_num = 0;
     strcpy(params->super.uct.dev_name, TL_RESOURCE_NAME_NONE);
     strcpy(params->super.uct.tl_name,  TL_RESOURCE_NAME_NONE);
 
