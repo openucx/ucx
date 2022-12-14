@@ -24,7 +24,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
 {
     ucp_context_h context                    = params->super.super.worker->context;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
-    const uint8_t dt_type = params->super.super.select_param->dt_class;
+    uint8_t dt_type;
     ucp_rsc_index_t mem_sys_dev, ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
     const uct_md_attr_v2_t *md_attr;
@@ -38,8 +38,9 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
      */
     *md_map      = 0;
     *sys_dev_map = 0;
-
-    if (dt_type != UCP_DATATYPE_CONTIG && dt_type != UCP_DATATYPE_IOV) {
+    dt_type      = params->super.super.select_param->dt_class;
+    if (dt_type != UCP_DATATYPE_CONTIG && !(dt_type == UCP_DATATYPE_IOV &&
+        params->remote_op_id == UCP_OP_ID_RNDV_RECV)) {
         return;
     }
 

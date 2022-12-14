@@ -32,6 +32,19 @@ ucp_datatype_iter_is_class(const ucp_datatype_iter_t *dt_iter,
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
+                            uint8_t *sg_count)
+{
+    dt_iter->dt_class               = UCP_DATATYPE_CONTIG;
+    dt_iter->length                 = length;
+    dt_iter->offset                 = 0;
+    dt_iter->type.contig.buffer     = NULL;
+    dt_iter->type.contig.memh       = NULL;
+    *sg_count                       = 1;
+    ucp_memory_info_set_host(&dt_iter->mem_info);
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer, size_t length,
                               ucp_datatype_t datatype, ucp_datatype_iter_t *dt_iter)
 {
@@ -47,6 +60,10 @@ ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
                            ucp_datatype_iter_t *dt_iter, uint8_t *sg_count)
 {
     const ucp_dt_iov_t *iov = (const ucp_dt_iov_t*)buffer;
+    if (length == 0) {
+        ucp_datatype_iter_init_null(dt_iter, length, sg_count);
+        return;
+    }
 
     dt_iter->length              = length;
     dt_iter->type.iov.iov        = iov;
@@ -117,19 +134,6 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
                                        is_pack, dt_iter);
         *sg_count = 0;
     }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
-                            uint8_t *sg_count)
-{
-    dt_iter->dt_class               = UCP_DATATYPE_CONTIG;
-    dt_iter->length                 = length;
-    dt_iter->offset                 = 0;
-    dt_iter->type.contig.buffer     = NULL;
-    dt_iter->type.contig.memh       = NULL;
-    *sg_count                       = 1;
-    ucp_memory_info_set_host(&dt_iter->mem_info);
 }
 
 static UCS_F_ALWAYS_INLINE void

@@ -46,7 +46,7 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
 
     ucs_assert(dt_iter->type.iov.memh == NULL);
 
-    if (md_map == 0 || dt_iter->length == 0) {
+    if (md_map == 0) {
         return UCS_OK;
     }
 
