@@ -1425,8 +1425,7 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
 {
     unsigned num_lanes     = 0;
     double min_overhead    = DBL_MAX;
-    ucp_context_h context  = worker->context;
-    const double max_ratio = 1. / context->config.ext.multi_lane_max_ratio;
+    const double max_ratio = 1. / 200;
     ucs_status_t status;
     int show_error;
     unsigned sinfo_index;
