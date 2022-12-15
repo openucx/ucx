@@ -37,6 +37,9 @@ public:
         if (use_proto()) {
             modify_config("PROTO_ENABLE", "y");
             modify_config("MAX_EAGER_LANES", "2");
+        } else if (RUNNING_ON_VALGRIND && m_ucp_config->ctx.proto_enable) {
+            UCS_TEST_SKIP_R("FIXME: skip forced UCX_PROTO_ENABLE=y because "
+                            "it does not completely support HWTM");
         } else {
             // TODO:
             // 1. test offload and offload MP as different variants
