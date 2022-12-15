@@ -445,7 +445,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
         cur_ctx = &ctxs[thread_idx];
         pthread_join(cur_ctx->thread, &thread_status);
-        if (UCS_PTR_IS_ERR(UCS_OK)) {
+        if (UCS_PTR_IS_ERR(thread_status)) {
             status = UCS_PTR_STATUS(thread_status);
         }
     }
