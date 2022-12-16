@@ -464,7 +464,8 @@ bool is_interface_usable(struct ifaddrs *ifa)
     return ucs_netif_flags_is_active(ifa->ifa_flags) &&
            ucs::is_inet_addr(ifa->ifa_addr) &&
            !netif_has_sysfs_file(ifa->ifa_name, "bridge") &&
-           !netif_has_sysfs_file(ifa->ifa_name, "brport");
+           !netif_has_sysfs_file(ifa->ifa_name, "brport") &&
+           !netif_has_sysfs_file(ifa->ifa_name, "wireless");
 }
 
 static std::vector<std::string> read_dir(const std::string& path)
