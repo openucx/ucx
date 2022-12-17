@@ -118,7 +118,7 @@ GTEST_LIB_CHECK([1.5.0], [true], [true])
 # Valgrind support
 #
 AC_ARG_WITH([valgrind],
-    AC_HELP_STRING([--with-valgrind],
+    AS_HELP_STRING([--with-valgrind],
                    [Enable Valgrind annotations (small runtime overhead, default NO)]),
     [],
     [with_valgrind=no]
@@ -139,7 +139,7 @@ AS_IF([test "x$with_valgrind" = xno],
 # NUMA support
 #
 AC_ARG_ENABLE([numa],
-    AC_HELP_STRING([--disable-numa], [Disable NUMA support]),
+    AS_HELP_STRING([--disable-numa], [Disable NUMA support]),
     [],
     [enable_numa=guess])
 AS_IF([test "x$enable_numa" = xno],

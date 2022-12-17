@@ -10,7 +10,7 @@
 
 go_happy="no"
 AC_ARG_WITH([go],
-            [AC_HELP_STRING([--with-go=(PATH)],
+            [AS_HELP_STRING([--with-go=(PATH)],
                             [Compile GO UCX bindings (default is guess).])
             ], [], [with_go=guess])
 
