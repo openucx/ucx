@@ -99,12 +99,10 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     rts->sreq.req_id = ucp_send_request_get_id(req);
     rts->sreq.ep_id  = ucp_send_request_get_ep_remote_id(req);
     rts->size        = req->send.state.dt_iter.length;
-    rts->address     = 0;
     rpriv            = req->send.proto_config->priv;
-    rkey_size        = 0;
 
     if (rts->size == 0) {
-        goto pack_done;
+        goto pack_no_rkey;
     }
     if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
         rts->address = (uintptr_t)req->send.state.dt_iter.type.contig.buffer;
@@ -114,12 +112,16 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
         goto pack_done;
     }
     if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_IOV) {
-        rkey_size = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey_iov, req,
-                                     rpriv->md_map, rpriv->sys_dev_map,
-                                     rpriv->sys_dev_distance, rkey_buffer);
+        rts->address = UCS_ERR_INVALID_ADDR;
+        rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey_iov, req,
+                                        rpriv->md_map, rpriv->sys_dev_map,
+                                        rpriv->sys_dev_distance, rkey_buffer);
         goto pack_done;
     }
 
+pack_no_rkey:
+    rts->address = 0;
+    rkey_size    = 0;
 pack_done:
     return hdr_len + rkey_size;
 }

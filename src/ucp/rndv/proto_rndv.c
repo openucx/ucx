@@ -810,9 +810,8 @@ ucp_proto_rndv_unpack_iov_rkey_buffer(const void *p, const void *p_end,
     return p;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t buffer_length,
-                                ucp_request_t *req)
+static ucs_status_t ucp_proto_rndv_unpack_iov_rkeys(
+        const void *buffer, size_t length, ucp_request_t *req)
 {
     const void *p              = buffer, *p_end;
     ucp_ep_h ep                = req->send.ep;
@@ -825,7 +824,7 @@ ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t buffer_length,
     size_t remote_size, accumulate_size;
     ucs_status_t status;
 
-    p_end = UCS_PTR_BYTE_OFFSET(p, buffer_length);
+    p_end = UCS_PTR_BYTE_OFFSET(p, length);
     p     = ucp_proto_rndv_unpack_iov_count(p, &iov_count);
     if (iov_count == 0) {
         ucs_info("iov count is 0");
@@ -878,10 +877,9 @@ finish:
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
-                                ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                                uint16_t op_flags, uint8_t sg_count)
+static ucs_status_t ucp_proto_rndv_iov_select_proto(
+        ucp_worker_h worker, ucp_request_t *req, ucp_operation_id_t op_id,
+        uint32_t op_attr_mask, uint16_t op_flags, uint8_t sg_count)
 {
     ucp_ep_h ep = req->send.ep;
     ucp_rkey_h rkey;
@@ -917,10 +915,9 @@ ucp_proto_rndv_iov_select_proto(ucp_worker_h worker, ucp_request_t *req,
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
-                                 const ucp_rndv_rts_hdr_t *rts,
-                                 const void *buffer, size_t buffer_length)
+static void ucp_proto_rndv_receive_iov_start(
+        ucp_worker_h worker, ucp_request_t *recv_req,
+        const ucp_rndv_rts_hdr_t *rts, const void *buffer, size_t length)
 {
     void *recv_buffer = recv_req->recv.buffer;
     ucp_request_t *req;
@@ -929,12 +926,10 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
     ucp_ep_h ep;
     ucs_status_t status;
 
-    /* Short receive: complete with error, and send reply to sender */
-    /* IOV data: local IOV is not supported */
-    if ((rts->size > recv_req->recv.length) ||
-        (ucp_datatype_class(recv_req->recv.datatype) != UCP_DATATYPE_CONTIG)) {
+    if (rts->size == 0 || length == 0 || rts->size > recv_req->recv.length ||
+        ucp_datatype_class(recv_req->recv.datatype) != UCP_DATATYPE_CONTIG) {
         ucp_proto_rndv_receive_start_common(worker, &rts->sreq, recv_req,
-                                            rts->address, rts->size, buffer, 0);
+                                            0, rts->size, buffer, 0);
         return;
     }
 
@@ -958,7 +953,7 @@ ucp_proto_rndv_receive_iov_start(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.rndv.rma_array      = NULL;
     ucp_request_set_super(req, recv_req);
 
-    status = ucp_proto_rndv_unpack_iov_rkeys(buffer, buffer_length, req);
+    status = ucp_proto_rndv_unpack_iov_rkeys(buffer, length, req);
     if (status != UCS_OK) {
         goto release_request;
     }
@@ -1002,7 +997,7 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                   const ucp_rndv_rts_hdr_t *rts,
                                   const void *rkey_buffer, size_t rkey_length)
 {
-    if (ucs_unlikely(rts->address == 0 && rts->size != 0 && rkey_length != 0)) {
+    if (ucs_unlikely(rts->address == UCS_ERR_INVALID_ADDR)) {
         ucp_proto_rndv_receive_iov_start(worker, recv_req, rts, rkey_buffer, rkey_length);
         return;
     }
