@@ -5,7 +5,7 @@
 
 cma_happy="no"
 AC_ARG_ENABLE([cma],
-              [AC_HELP_STRING([--enable-cma],
+              [AS_HELP_STRING([--enable-cma],
                               [Enable Cross Memory Attach])],
                               [],
                               [enable_cma=yes])
