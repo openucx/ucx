@@ -417,8 +417,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, worker_addr_version),
    UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
 
-  {"PROTO_INFO", "n", "Enable printing protocols information.",
-   ucs_offsetof(ucp_context_config_t, proto_info), UCS_CONFIG_TYPE_BOOL},
+  {"PROTO_INFO", "n",
+   "Enable printing protocols information. The value is interpreted as follows:\n"
+   " 'y'          : Print information for all protocols\n"
+   " 'n'          : Do not print any protocol information\n"
+   " glob_pattern : Print information for operations matching the glob pattern.\n"
+   "                For example: '*tag*gpu*', '*put*fast*host*'",
+   ucs_offsetof(ucp_context_config_t, proto_info), UCS_CONFIG_TYPE_STRING},
 
   {"RNDV_ALIGN_THRESH", "64kB",
    "If the rendezvous payload size is larger than this value, it could be split\n"

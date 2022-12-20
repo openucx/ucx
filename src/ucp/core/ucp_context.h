@@ -160,7 +160,7 @@ typedef struct ucp_context_config {
     /** Threshold for enabling RNDV data split alignment */
     size_t                                 rndv_align_thresh;
     /** Print protocols information */
-    int                                    proto_info;
+    char                                   *proto_info;
     /** MD to compare for transport selection scores */
     char                                   *select_distance_md;
     /** Directory to write protocol selection information */
