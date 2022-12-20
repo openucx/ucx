@@ -921,13 +921,13 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
     int device_enabled, tl_enabled;
 
     /* Find the enabled devices */
-    device_enabled = (*rsc_flags & UCP_TL_RSC_FLAG_SOCKADDR) ||
-                     ucp_is_resource_in_device_list(resource, config->devices,
-                                                    &dev_cfg_masks[resource->dev_type],
-                                                    resource->dev_type);
+    device_enabled = ucp_is_resource_in_device_list(
+            resource, config->devices, &dev_cfg_masks[resource->dev_type],
+            resource->dev_type);
 
 
     /* Find the enabled UCTs */
+    *rsc_flags = 0;
     tl_enabled = ucp_is_resource_in_transports_list(resource->tl_name,
                                                     &config->tls, rsc_flags,
                                                     tl_cfg_mask);
@@ -946,14 +946,15 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
            (resource1->sys_device == resource2->sys_device));
 }
 
-static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *md,
-                                           ucp_md_index_t md_index,
-                                           const ucp_config_t *config,
-                                           const uct_tl_resource_desc_t *resource,
-                                           uint8_t rsc_flags, unsigned *num_resources_p,
-                                           uint64_t dev_cfg_masks[],
-                                           uint64_t *tl_cfg_mask)
+static void
+ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *md,
+                               ucp_md_index_t md_index,
+                               const ucp_config_t *config,
+                               const uct_tl_resource_desc_t *resource,
+                               unsigned *num_resources_p,
+                               uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
 {
+    uint8_t rsc_flags;
     ucp_rsc_index_t dev_index, i;
 
     if (ucp_is_resource_enabled(resource, config, &rsc_flags, dev_cfg_masks,
@@ -1041,7 +1042,7 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
                             context->tl_cmpts[md->cmpt_index].attr.name);
         ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
         ucp_add_tl_resource_if_enabled(context, md, md_index, config,
-                                       &tl_resources[i], 0, num_resources_p,
+                                       &tl_resources[i], num_resources_p,
                                        dev_cfg_masks, tl_cfg_mask);
     }
 
@@ -1106,7 +1107,7 @@ const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_c
     ucp_tl_resource_desc_t *rsc;
 
     for (rsc = context->tl_rscs; rsc < context->tl_rscs + context->num_tls; ++rsc) {
-        if (!(rsc->flags & UCP_TL_RSC_FLAG_SOCKADDR) && (rsc->tl_name_csum == tl_name_csum)) {
+        if (rsc->tl_name_csum == tl_name_csum) {
             return rsc->tl_rsc.tl_name;
         }
     }
@@ -1344,12 +1345,12 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
     unsigned num_usable_tls;
 
     /* Error check: Make sure there is at least one transport that is not
-     * sockaddr or auxiliary */
+     * auxiliary */
     num_usable_tls = 0;
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         ucs_assert(context->tl_rscs != NULL);
         resource = &context->tl_rscs[tl_id];
-        if (!(resource->flags & (UCP_TL_RSC_FLAG_AUX|UCP_TL_RSC_FLAG_SOCKADDR))) {
+        if (!(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
             num_usable_tls++;
         }
     }
@@ -2188,11 +2189,11 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
 
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
         ucp_tl_resource_desc_t *rsc = &context->tl_rscs[rsc_index];
-        fprintf(stream, "#      resource %-2d :  md %-2d dev %-2d flags %c%c "
-                UCT_TL_RESOURCE_DESC_FMT"\n",
+        fprintf(stream,
+                "#      resource %-2d :  md %-2d dev %-2d flags "
+                "%c " UCT_TL_RESOURCE_DESC_FMT "\n",
                 rsc_index, rsc->md_index, rsc->dev_index,
-                (rsc->flags & UCP_TL_RSC_FLAG_AUX)      ? 'a' : '-',
-                (rsc->flags & UCP_TL_RSC_FLAG_SOCKADDR) ? 's' : '-',
+                (rsc->flags & UCP_TL_RSC_FLAG_AUX) ? 'a' : '-',
                 UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));
     }
 

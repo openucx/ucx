@@ -479,9 +479,6 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     UCS_BITMAP_FOR_EACH_BIT(sender().worker()->context->tl_bitmap, tl) {
         const ucp_tl_resource_desc_t &rsc =
                 sender().worker()->context->tl_rscs[tl];
-        if (rsc.flags & UCP_TL_RSC_FLAG_SOCKADDR) {
-            continue;
-        }
         packed_dev_priorities.insert(
                 ucp_worker_iface_get_attr(sender().worker(), tl)->priority);
         packed_sys_devices.insert(rsc.tl_rsc.sys_device);
