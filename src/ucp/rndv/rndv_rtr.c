@@ -379,6 +379,7 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     ucp_md_map_t md_map, dummy_md_map;
     ucs_status_t status;
     size_t frag_size;
+    ucp_md_index_t md_index;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 1)) {
         return UCS_ERR_UNSUPPORTED;
@@ -400,7 +401,12 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     /* Make sure that key of the md used to allocate a bounce buffer will be
      * packed to the RTR rkey
      */
-    md_map = UCS_BIT(context->alloc_md_index[UCS_MEMORY_TYPE_HOST]);
+    status = ucp_mm_get_alloc_md_index(context, &md_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    md_map = UCS_BIT(md_index);
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
                                             unpack_time, unpack_perf_node,
                                             md_map, UCS_MEMORY_TYPE_HOST,

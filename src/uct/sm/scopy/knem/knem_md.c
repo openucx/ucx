@@ -36,26 +36,6 @@ static ucs_config_field_t uct_knem_md_config_table[] = {
     {NULL}
 };
 
-ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
-{
-    uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
-
-    md_attr->rkey_packed_size = sizeof(uct_knem_key_t);
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->alloc_mem_types  = 0;
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->detect_mem_types = 0;
-    md_attr->dmabuf_mem_types = 0;
-    md_attr->max_alloc        = 0;
-    md_attr->max_reg          = ULONG_MAX;
-    md_attr->reg_cost         = md->reg_cost;
-
-    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
-    return UCS_OK;
-}
-
 static ucs_status_t
 uct_knem_query_md_resources(uct_component_t *component,
                             uct_md_resource_desc_t **resources_p,
@@ -169,7 +149,7 @@ static ucs_status_t uct_knem_mem_reg(uct_md_h md, void *address, size_t length,
      return status;
 }
 
-static ucs_status_t uct_knem_mem_dereg_internal(uct_md_h md, uct_knem_key_t *key)
+static void uct_knem_mem_dereg_internal(uct_md_h md, uct_knem_key_t *key)
 {
     int rc;
     uct_knem_md_t *knem_md = (uct_knem_md_t *)md;
@@ -183,25 +163,59 @@ static ucs_status_t uct_knem_mem_dereg_internal(uct_md_h md, uct_knem_key_t *key
     if (rc < 0) {
         ucs_error("KNEM destroy region failed, err = %m");
     }
-
-    return UCS_OK;
 }
 
 static ucs_status_t uct_knem_mem_dereg(uct_md_h md,
                                        const uct_md_mem_dereg_params_t *params)
 {
     uct_knem_key_t *key;
-    ucs_status_t status;
 
     UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(params);
 
-    key    = (uct_knem_key_t *)params->memh;
-    status = uct_knem_mem_dereg_internal(md, key);
-    if (status == UCS_OK) {
-        ucs_free(key);
+    key = (uct_knem_key_t*)params->memh;
+    uct_knem_mem_dereg_internal(md, key);
+    ucs_free(key);
+
+    return UCS_OK;
+}
+
+int uct_knem_md_check_mem_reg(uct_md_h md)
+{
+    uint8_t buff;
+    uct_knem_key_t key;
+
+    if (uct_knem_mem_reg_internal(md, &buff, sizeof(buff), 0, 1, &key) !=
+        UCS_OK) {
+        return 0;
     }
 
-    return status;
+    uct_knem_mem_dereg_internal(md, &key);
+    return 1;
+}
+
+ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
+{
+    uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
+
+    md_attr->flags         = UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types = 0;
+    if (uct_knem_md_check_mem_reg(uct_md)) {
+        md_attr->flags         |= UCT_MD_FLAG_REG;
+        md_attr->reg_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    }
+
+    md_attr->rkey_packed_size = sizeof(uct_knem_key_t);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->alloc_mem_types  = 0;
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->detect_mem_types = 0;
+    md_attr->dmabuf_mem_types = 0;
+    md_attr->max_alloc        = 0;
+    md_attr->max_reg          = ULONG_MAX;
+    md_attr->reg_cost         = md->reg_cost;
+
+    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+    return UCS_OK;
 }
 
 static ucs_status_t

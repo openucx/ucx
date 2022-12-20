@@ -274,6 +274,7 @@ typedef struct ucp_context {
 
     /* Index of memory domain that is used to allocate memory of the given type
      * using ucp_memh_alloc(). */
+    int                           alloc_md_index_initialized;
     ucp_md_index_t                alloc_md_index[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration for given memory type,
