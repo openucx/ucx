@@ -51,7 +51,7 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
                          &iov_cnt);
 
     if (header_length != 0) {
-        ucp_add_uct_iov_elem(iov,req->send.msg_proto.am.header.user_ptr,
+        ucp_add_uct_iov_elem(iov, req->send.msg_proto.am.header.ptr,
                              header_length, UCT_MEM_HANDLE_NULL, &iov_cnt);
     }
 
@@ -165,7 +165,7 @@ ucp_proto_t ucp_am_eager_short_reply_proto = {
     .init     = ucp_am_eager_short_reply_proto_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_short_reply_proto_progress},
-    .abort    = ucp_proto_request_bcopy_abort,
+    .abort    = ucp_proto_am_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
@@ -402,7 +402,7 @@ ucp_proto_t ucp_am_eager_single_zcopy_proto = {
     .init     = ucp_am_eager_single_zcopy_proto_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_zcopy_proto_progress},
-    .abort    = ucp_proto_request_zcopy_abort,
+    .abort    = ucp_proto_am_request_zcopy_abort,
     .reset    = ucp_am_proto_request_zcopy_reset
 };
 
@@ -458,6 +458,6 @@ ucp_proto_t ucp_am_eager_single_zcopy_reply_proto = {
     .init     = ucp_am_eager_single_zcopy_reply_proto_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_single_zcopy_reply_proto_progress},
-    .abort    = ucp_proto_request_zcopy_abort,
+    .abort    = ucp_proto_am_request_zcopy_abort,
     .reset    = ucp_am_proto_request_zcopy_reset
 };

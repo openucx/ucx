@@ -2492,7 +2492,8 @@ protected:
     void test_am_send_recv(size_t size, size_t hdr_size = 0ul,
                            size_t num_iters = m_num_iters,
                            bool send_prereg_memh = false,
-                           bool recv_prereg_memh = false)
+                           bool recv_prereg_memh = false,
+                           uint32_t flags = 0)
     {
         /* Both send and recv preregistered memory handles are not supported,
          * since MDs shouldn't be resetted at least on one side to allow RKEY
@@ -2536,6 +2537,9 @@ protected:
                 param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
                 param.memh         = smemh;
             }
+
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
+            param.flags         = flags;
 
             ucs_status_ptr_t sreq = ucp_am_send_nbx(sender().ep(), 0,
                                                     &shdr[0], hdr_size,
@@ -2773,6 +2777,32 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
     /* The test checks that memory registration won't happen during RNDV GET
      * Zcopy if a memory buffer was preregistered */
     test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, true, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=y",
+           "ZCOPY_THRESH=inf")
+{
+    test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=y",
+           "ZCOPY_THRESH=inf")
+{
+    test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
+                      UCP_AM_SEND_FLAG_COPY_HEADER);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=y")
+{
+    test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
+                      UCP_AM_SEND_FLAG_COPY_HEADER);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=y",
+           "RNDV_THRESH=0")
+{
+    test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
+                      UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
 

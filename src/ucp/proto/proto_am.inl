@@ -45,9 +45,10 @@ static UCS_F_ALWAYS_INLINE void ucp_am_release_user_header(ucp_request_t *req)
 {
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED)) {
         ucs_assert(req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER);
-        ucs_mpool_set_put_inline(req->send.msg_proto.am.header.user_ptr);
+        ucs_mpool_set_put_inline(req->send.msg_proto.am.header.ptr);
+        req->flags &= ~UCP_REQUEST_FLAG_USER_HEADER_COPIED;
 #if UCS_ENABLE_ASSERT
-        req->send.msg_proto.am.header.user_ptr = NULL;
+        req->send.msg_proto.am.header.ptr = NULL;
 #endif
     }
 }
@@ -675,9 +676,8 @@ ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
     hdr_state.offset = 0ul;
 
     ucp_dt_pack(req->send.ep->worker, ucp_dt_make_contig(1),
-                UCS_MEMORY_TYPE_HOST, buffer,
-                req->send.msg_proto.am.header.user_ptr, &hdr_state,
-                req->send.msg_proto.am.header.length);
+                UCS_MEMORY_TYPE_HOST, buffer, req->send.msg_proto.am.header.ptr,
+                &hdr_state, req->send.msg_proto.am.header.length);
 }
 
 #endif
