@@ -141,8 +141,6 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context);
 
 void ucp_mem_rcache_cleanup(ucp_context_h context);
 
-ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context);
-
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)
 {
