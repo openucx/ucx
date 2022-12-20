@@ -86,14 +86,17 @@ enum uct_perf_attr_field {
     /** Enables @ref uct_perf_attr_t::recv_overhead */
     UCT_PERF_ATTR_FIELD_RECV_OVERHEAD      = UCS_BIT(7),
 
+    /** Enables @ref uct_perf_attr_t::progress_overhead */
+    UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD  = UCS_BIT(8),
+
     /** Enables @ref uct_perf_attr_t::bandwidth */
-    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
+    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(9),
 
     /** Enables @ref uct_perf_attr_t::latency */
-    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
+    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(10),
 
     /** Enable @ref uct_perf_attr_t::max_inflight_eps */
-    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10)
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(11)
 };
 
 
@@ -166,6 +169,12 @@ typedef struct {
      * This field is set by the UCT layer.
      */
     double              recv_overhead;
+
+    /**
+     * This is the time spent progressing the request, in seconds.
+     * This field is set by the UCT layer.
+     */
+    double              progress_overhead;
 
     /**
      * Bandwidth model. This field is set by the UCT layer.

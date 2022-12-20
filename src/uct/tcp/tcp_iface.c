@@ -550,6 +550,24 @@ err:
     return status;
 }
 
+ucs_status_t
+uct_tcp_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    ucs_status_t status;
+
+    status = uct_base_iface_estimate_perf(iface, perf_attr);
+
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD) {
+        perf_attr->progress_overhead = 100e-9;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_mpool_ops_t uct_tcp_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -559,7 +577,7 @@ static ucs_mpool_ops_t uct_tcp_mpool_ops = {
 };
 
 static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf,
+    .iface_estimate_perf = uct_tcp_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
