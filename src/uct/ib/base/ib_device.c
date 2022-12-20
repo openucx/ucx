@@ -145,6 +145,9 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"BlueField 2", {0x15b3, 0xa2d6},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 61},
+  {"BlueField 3", {0x15b3, 0xa2dc},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 61},
   {"Generic HCA", {0, 0}, 0, 0},
   {NULL}
 };
