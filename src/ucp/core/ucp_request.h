@@ -186,10 +186,20 @@ struct ucp_request {
 
                         struct {
                             struct {
-                                void           *user_ptr;
-                                ucp_mem_desc_t *reg_desc; /* pointer to pre-registered buffer,
-                                                             used for sending header with
-                                                             zcopy protocol */
+                                /* Pointer to buffer used for sending header.
+                                 * - When UCP_AM_SEND_FLAG_COPY_HEADER is set
+                                 *   and reg_desc is NULL ptr holds
+                                 *   address of ucx mpool buffer.
+                                 * - When UCP_AM_SEND_FLAG_COPY_HEADER is not set
+                                 *   ptr holds address of external buffer, provided
+                                 *   by the user, that is expected to be valid
+                                 *   during the send operation.
+                                 */
+                                void           *ptr;
+                                /* pointer to pre-registered buffer,
+                                 * used for sending header with zcopy protocol.
+                                 */
+                                ucp_mem_desc_t *reg_desc;
                                 uint32_t       length;
                             } header UCS_S_PACKED; /* packed to avoid 32-bit
                                                       padding */

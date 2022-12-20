@@ -138,4 +138,6 @@ ucs_status_t ucp_am_proto_request_zcopy_reset(ucp_request_t *request);
 
 void ucp_proto_am_request_bcopy_abort(ucp_request_t *req, ucs_status_t status);
 
+void ucp_proto_am_request_zcopy_abort(ucp_request_t *req, ucs_status_t status);
+
 #endif
