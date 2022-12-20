@@ -112,7 +112,7 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
         goto pack_done;
     }
     if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_IOV) {
-        rts->address = UCS_ERR_INVALID_ADDR;
+        rts->address = 0;
         rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey_iov, req,
                                         rpriv->md_map, rpriv->sys_dev_map,
                                         rpriv->sys_dev_distance, rkey_buffer);
@@ -245,6 +245,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
 
     ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
+    freq->send.rndv.rma_count = 0;
 
     *freq_p = freq;
     return UCS_OK;
