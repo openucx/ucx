@@ -13,6 +13,7 @@
 #include "rocm_ipc_md.h"
 
 #include <uct/rocm/base/rocm_base.h>
+#include <uct/rocm/base/rocm_signal.h>
 #include <uct/base/uct_iov.inl>
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_ep_t, const uct_ep_params_t *params)
@@ -63,10 +64,9 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     size_t size = uct_iov_get_length(iov);
     ucs_status_t ret = UCS_OK;
     void *base_addr, *local_addr = iov->buffer;
-    uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_ipc_iface_t);
     void *remote_base_addr, *remote_copy_addr;
     void *dst_addr, *src_addr;
-    uct_rocm_ipc_signal_desc_t *rocm_ipc_signal;
+    uct_rocm_base_signal_desc_t *rocm_ipc_signal;
     void *tmp_base_ptr;
     size_t tmp_base_size;
     hsa_agent_t *gpu_agents;
@@ -140,7 +140,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         src_agent = remote_agent;
     }
 
-    rocm_ipc_signal = ucs_mpool_get(&iface->signal_pool);
+    rocm_ipc_signal = uct_rocm_base_get_signal();
     hsa_signal_store_screlease(rocm_ipc_signal->signal, 1);
 
     status = hsa_amd_memory_async_copy(dst_addr, dst_agent, src_addr, src_agent,
@@ -154,7 +154,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
 
     rocm_ipc_signal->comp = comp;
     rocm_ipc_signal->mapped_addr = remote_base_addr;
-    ucs_queue_push(&iface->signal_queue, &rocm_ipc_signal->queue);
+    uct_rocm_base_signal_push(rocm_ipc_signal);
 
     ucs_trace("rocm async copy issued :%p remote:%p, local:%p  len:%ld",
               rocm_ipc_signal, (void *)remote_addr, local_addr, size);
