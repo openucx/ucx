@@ -365,26 +365,6 @@ static size_t ucp_wireup_max_lanes(ucp_lane_type_t lane_type)
 }
 
 /**
- * Get bitmap of memory types that Memory Domain can be registered with taking
- * into account context's maps of Memory Domains that provide registration for
- * given memory type.
- */
-static uint64_t
-ucp_wireup_select_reg_mem_types(ucp_context_h context, ucp_md_index_t md_index)
-{
-    uint64_t reg_mem_types = 0;
-    ucs_memory_type_t mem_type;
-
-    ucs_memory_type_for_each(mem_type) {
-        if (context->reg_md_map[mem_type] & UCS_BIT(md_index)) {
-            reg_mem_types |= UCS_BIT(mem_type);
-        }
-    }
-
-    return reg_mem_types;
-}
-
-/**
  * Select a local and remote transport
  */
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
@@ -423,7 +403,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score;
     uint8_t priority;
-    uint64_t reg_mem_types;
     ucp_md_index_t md_index;
 
     p            = tls_info;
@@ -515,8 +494,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             local_md_flags &= ~UCT_MD_FLAG_INVALIDATE;
         }
 
-        reg_mem_types = ucp_wireup_select_reg_mem_types(context, md_index);
-
         /* Check that local md and interface satisfy the criteria */
         if (!ucp_wireup_check_flags(resource, md_attr->flags, local_md_flags,
                                     criteria->title, ucp_wireup_md_flags, p,
@@ -527,7 +504,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             !ucp_wireup_check_flags(resource, md_attr->alloc_mem_types,
                                     criteria->alloc_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
-            !ucp_wireup_check_flags(resource, reg_mem_types,
+            !ucp_wireup_check_flags(resource, md_attr->reg_mem_types,
                                     criteria->reg_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
             !ucp_wireup_check_select_flags(resource, iface_attr->cap.flags,
