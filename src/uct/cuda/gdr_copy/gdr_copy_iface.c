@@ -135,6 +135,10 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->recv_overhead = 0;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD) {
+        perf_attr->progress_overhead = 0;
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         perf_attr->latency = UCT_GDR_COPY_IFACE_LATENCY;
     }

@@ -370,6 +370,10 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
         perf_attr->recv_overhead = 0;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD) {
+        perf_attr->progress_overhead = 0;
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         /* In case of async mem copy, the latency is not part of the overhead
            and it's a standalone property */
