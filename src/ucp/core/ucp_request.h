@@ -224,26 +224,27 @@ struct ucp_request {
                     /* Remote request ID to acknowledge */
                     ucs_ptr_map_key_t remote_req_id;
 
-                    /* Remote buffer address for get/put operation */
-                    uint64_t          remote_address;
-
                     union {
-                        /* Key for remote buffer operation */
-                        ucp_rkey_h rkey;
-                        /* Index of rma_array, if if rma_count != 0 */
-                        size_t     rma_index;
+                        struct {
+                            /* Remote buffer address for get/put operation */
+                            uint64_t   remote_address;
+                            /* Key for remote buffer operation */
+                            ucp_rkey_h rkey;
+                        };
+                        struct {
+                            /* Remote infomation array, if rma_count != 0 */
+                            struct {
+                                ucp_rkey_h rkey;
+                                uint64_t   remote_address;
+                                size_t     remote_size;
+                                size_t     accumulate_size;
+                            } * rma_array;
+                            /* Index of rma_array, if if rma_count != 0 */
+                            size_t rma_index;
+                        };
                     };
-
                     /* Key counts for remote buffer operation */
                     size_t rma_count;
-
-                    /* Remote infomation array, if rma_count != 0 */
-                    struct {
-                        ucp_rkey_h rkey;
-                        uint64_t   remote_address;
-                        size_t     remote_size;
-                        size_t     accumulate_size;
-                    } *rma_array;
 
                     union {
                         /* Descriptor for staging rendezvous data */

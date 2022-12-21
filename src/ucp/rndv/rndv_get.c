@@ -79,9 +79,8 @@ ucp_proto_rndv_get_common_request_init(ucp_request_t *req)
     ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
 }
 
-static UCS_F_ALWAYS_INLINE uct_rkey_t
-ucp_proto_rndv_get_rkey_index(ucp_request_t *req, ucp_rkey_h rkey,
-                              ucp_lane_index_t lane)
+static UCS_F_ALWAYS_INLINE uct_rkey_t ucp_proto_rndv_get_rkey_index(
+        ucp_request_t *req, ucp_rkey_h rkey, ucp_lane_index_t lane)
 {
     ucp_ep_h ep                 = req->send.ep;
     ucp_ep_config_t *ep_config  = ucp_ep_config(ep);
@@ -94,9 +93,8 @@ ucp_proto_rndv_get_rkey_index(ucp_request_t *req, ucp_rkey_h rkey,
     return ucs_bitmap2idx(rkey->md_map, dst_md_index);
 }
 
-static UCS_F_ALWAYS_INLINE uct_rkey_t
-ucp_proto_rndv_get_tl_rkey(
-    ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv)
+static UCS_F_ALWAYS_INLINE uct_rkey_t ucp_proto_rndv_get_tl_rkey(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv)
 {
     size_t iov_index;
     ucp_rkey_h rkey;
@@ -105,7 +103,8 @@ ucp_proto_rndv_get_tl_rkey(
     if (req->send.rndv.rma_count != 0) {
         iov_index  = req->send.rndv.rma_index;
         rkey       = req->send.rndv.rma_array[iov_index].rkey;
-        rkey_index = ucp_proto_rndv_get_rkey_index(req, rkey, lpriv->super.lane);
+        rkey_index = ucp_proto_rndv_get_rkey_index(req, rkey,
+                                                   lpriv->super.lane);
         return ucp_rkey_get_tl_rkey(rkey, rkey_index);
     }
     return ucp_rkey_get_tl_rkey(req->send.rndv.rkey, lpriv->super.rkey_index);
@@ -157,7 +156,8 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
     }
 
     UCP_WORKER_STAT_RNDV(req->send.ep->worker, GET_ZCOPY, +1);
-    ucp_proto_rndv_recv_all_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
+    ucp_proto_rndv_recv_all_complete_with_ats(req,
+                                              UCP_PROTO_RNDV_GET_STAGE_ATS);
 }
 
 static ucs_status_t
@@ -178,11 +178,9 @@ ucp_proto_rndv_get_zcopy_query(const ucp_proto_query_params_t *params,
     ucp_proto_rndv_bulk_query(params, attr);
 }
 
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_get_zcopy_max_payload(ucp_request_t *req,
-                                     const ucp_proto_rndv_bulk_priv_t *rpriv,
-                                     const ucp_proto_multi_lane_priv_t *lpriv,
-                                     ucp_lane_index_t *lane_shift)
+static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_get_zcopy_max_payload(
+        ucp_request_t *req, const ucp_proto_rndv_bulk_priv_t *rpriv,
+        const ucp_proto_multi_lane_priv_t *lpriv, ucp_lane_index_t *lane_shift)
 {
     size_t total_offset = ucp_proto_rndv_request_total_offset(req);
     size_t iov_index, iov_length;
@@ -194,14 +192,16 @@ ucp_proto_rndv_get_zcopy_max_payload(ucp_request_t *req,
         return max_payload;
     }
     iov_index = req->send.rndv.rma_index;
-    ucs_assertv(total_offset <= req->send.rndv.rma_array[iov_index].accumulate_size,
+    ucs_assertv(total_offset <=
+                        req->send.rndv.rma_array[iov_index].accumulate_size,
                 "req=%p total_offset=%zu rma_array[%lu].accumulate_size=%zu",
                 req, total_offset, iov_index,
                 req->send.rndv.rma_array[iov_index].accumulate_size);
     if (total_offset == req->send.rndv.rma_array[iov_index].accumulate_size) {
         iov_index = ++req->send.rndv.rma_index;
     }
-    iov_length = req->send.rndv.rma_array[iov_index].accumulate_size - total_offset;
+    iov_length = req->send.rndv.rma_array[iov_index].accumulate_size -
+                 total_offset;
     if (iov_length < max_payload) {
         max_payload = iov_length;
         *lane_shift = 0;

@@ -171,6 +171,14 @@ static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_multi_rkey_reset(ucp_request_t *req)
+{
+    req->send.rndv.rma_count = 0;
+    req->send.rndv.rma_index = 0;
+    req->send.rndv.rma_array = NULL;
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
 {
     size_t count = req->send.rndv.rma_count;
@@ -185,11 +193,7 @@ ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
 #endif
     }
     ucs_free(req->send.rndv.rma_array);
-#if UCS_ENABLE_ASSERT
-    req->send.rndv.rma_array  = NULL;
-#endif
-    req->send.rndv.rma_count = 0;
-    req->send.rndv.rma_index = 0;
+    ucp_proto_rndv_multi_rkey_reset(req);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -245,7 +249,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
 
     ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
-    freq->send.rndv.rma_count = 0;
+    ucp_proto_rndv_multi_rkey_reset(freq);
 
     *freq_p = freq;
     return UCS_OK;
