@@ -1,5 +1,5 @@
-/*
- * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ /*
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -12,6 +12,7 @@
 #include "rocm_copy_ep.h"
 
 #include <uct/rocm/base/rocm_base.h>
+#include <uct/rocm/base/rocm_signal.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 
@@ -30,6 +31,11 @@ static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
      "Threshold for switching to hsa memcpy for host-to-device copies",
      ucs_offsetof(uct_rocm_copy_iface_config_t, h2d_thresh),
      UCS_CONFIG_TYPE_MEMUNITS},
+
+     {"ENABLE_ASYNC_ZCOPY", "y",
+     "Enable asynchronous zcopy operations",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, enable_async_zcopy),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -119,11 +125,11 @@ static uct_iface_ops_t uct_rocm_copy_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_copy_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_copy_ep_t),
-    .iface_flush              = uct_base_iface_flush,
+    .iface_flush              = uct_rocm_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_progress_enable    = uct_base_iface_progress_enable,
+    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress           = uct_rocm_base_iface_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_copy_iface_t),
     .iface_query              = uct_rocm_copy_iface_query,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
@@ -205,17 +211,17 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h work
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_COPY_TL_NAME));
 
-    self->id                      = ucs_generate_uuid((uintptr_t)self);
-    self->config.d2h_thresh       = config->d2h_thresh;
-    self->config.h2d_thresh       = config->h2d_thresh;
-    hsa_signal_create(1, 0, NULL, &self->hsa_signal);
+    self->id                        = ucs_generate_uuid((uintptr_t)self);
+    self->config.d2h_thresh         = config->d2h_thresh;
+    self->config.h2d_thresh         = config->h2d_thresh;
+    self->config.enable_async_zcopy = config->enable_async_zcopy;
 
-    return UCS_OK;
+    return uct_rocm_base_signal_init();
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rocm_copy_iface_t)
 {
-    hsa_signal_destroy(self->hsa_signal);
+    uct_rocm_base_signal_finalize();
 }
 
 UCS_CLASS_DEFINE(uct_rocm_copy_iface_t, uct_base_iface_t);
