@@ -28,7 +28,9 @@ public class UcpListenerTest  extends UcxTest {
             return Collections.list(NetworkInterface.getNetworkInterfaces()).stream()
                 .filter(iface -> {
                     try {
-                        return iface.isUp() && !iface.isLoopback();
+                        return iface.isUp() && !iface.isLoopback() &&
+                            !iface.isVirtual() &&
+                            !iface.getName().contains("docker");
                     } catch (SocketException e) {
                         return false;
                     }
