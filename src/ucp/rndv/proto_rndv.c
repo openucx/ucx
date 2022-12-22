@@ -730,10 +730,10 @@ ucp_proto_rndv_receive_start_common(ucp_worker_h worker,
 
     /* Initialize send request */
     ucp_proto_request_send_init(req, ep, 0);
+    ucp_proto_rndv_multi_rkey_reset(req);
     req->send.rndv.remote_req_id  = send_req_hdr->req_id;
     req->send.rndv.remote_address = remote_address;
     req->send.rndv.offset         = 0;
-    req->send.rndv.rma_count      = 0;
     ucp_request_set_super(req, recv_req);
 
     if (ucs_likely(remote_size <= recv_req->recv.length)) {
@@ -950,9 +950,9 @@ static void ucp_proto_rndv_receive_iov_start(ucp_worker_h worker,
 
     /* Initialize send request */
     ucp_proto_request_send_init(req, ep, 0);
+    ucp_proto_rndv_multi_rkey_reset(req);
     req->send.rndv.remote_req_id = rts->sreq.req_id;
     req->send.rndv.offset        = 0;
-    ucp_proto_rndv_multi_rkey_reset(req);
     ucp_request_set_super(req, recv_req);
 
     status = ucp_proto_rndv_unpack_iov_rkeys(buffer, length, req);
@@ -1021,10 +1021,10 @@ ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
     rkey_length = header_length - sizeof(*rtr);
 
     ucp_proto_rndv_check_rkey_length(rtr->address, rkey_length, "rtr");
+    ucp_proto_rndv_multi_rkey_reset(req);
     req->send.rndv.remote_address = rtr->address;
     req->send.rndv.remote_req_id  = rtr->rreq_id;
     req->send.rndv.offset         = rtr->offset;
-    req->send.rndv.rma_count      = 0;
 
     ucs_assert(rtr->size == req->send.state.dt_iter.length);
     status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND,

@@ -173,9 +173,11 @@ static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_multi_rkey_reset(ucp_request_t *req)
 {
-    req->send.rndv.rma_count = 0;
-    req->send.rndv.rma_index = 0;
     req->send.rndv.rma_array = NULL;
+    req->send.rndv.rma_count = 0;
+#if UCS_ENABLE_ASSERT
+    req->send.rndv.rma_index = 0;
+#endif
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -188,9 +190,6 @@ ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
     for (index = 0; index != count; ++index) {
         ucs_assert(req->send.rndv.rma_array[index].rkey != NULL);
         ucp_rkey_destroy(req->send.rndv.rma_array[index].rkey);
-#if UCS_ENABLE_ASSERT
-        req->send.rndv.rma_array[index].rkey = NULL;
-#endif
     }
     ucs_free(req->send.rndv.rma_array);
     ucp_proto_rndv_multi_rkey_reset(req);
