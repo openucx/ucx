@@ -370,7 +370,7 @@ ucp_am_zcopy_pack_user_header(ucp_request_t *req)
     }
 
     if (req->send.msg_proto.am.header.length != 0) {
-        ucs_assert(req->send.msg_proto.am.header.user_ptr != NULL);
+        ucs_assert(req->send.msg_proto.am.header.ptr != NULL);
         ucp_am_pack_user_header(reg_desc + 1, req);
     }
 
@@ -576,7 +576,7 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
     req->send.lane = ucp_ep_get_am_lane(ep);
     status         = ucp_am_send_short(ep, req->send.msg_proto.am.am_id,
                                        req->send.msg_proto.am.flags,
-                                       req->send.msg_proto.am.header.user_ptr,
+                                       req->send.msg_proto.am.header.ptr,
                                        req->send.msg_proto.am.header.length,
                                        req->send.buffer, req->send.length, 0);
     status         = ucp_am_handle_user_header_send_status(req, status);
@@ -592,7 +592,7 @@ static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
     req->send.lane = ucp_ep_get_am_lane(ep);
     status         = ucp_am_send_short(ep, req->send.msg_proto.am.am_id,
                                        req->send.msg_proto.am.flags,
-                                       req->send.msg_proto.am.header.user_ptr,
+                                       req->send.msg_proto.am.header.ptr,
                                        req->send.msg_proto.am.header.length,
                                        req->send.buffer, req->send.length, 1);
     status         = ucp_am_handle_user_header_send_status(req, status);
@@ -806,7 +806,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.ep                           = ep;
     req->send.msg_proto.am.am_id           = am_id;
     req->send.msg_proto.am.flags           = flags;
-    req->send.msg_proto.am.header.user_ptr = (void*)header;
+    req->send.msg_proto.am.header.ptr      = (void*)header;
     req->send.msg_proto.am.header.reg_desc = NULL;
     req->send.msg_proto.am.header.length   = header_length;
     req->send.buffer                       = (void*)buffer;
@@ -1061,7 +1061,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     if (worker->context->config.ext.proto_enable) {
         req->send.msg_proto.am.am_id           = id;
         req->send.msg_proto.am.flags           = flags;
-        req->send.msg_proto.am.header.user_ptr = (void*)header;
+        req->send.msg_proto.am.header.ptr      = (void*)header;
         req->send.msg_proto.am.header.reg_desc = NULL;
         req->send.msg_proto.am.header.length   = header_length;
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
@@ -1784,6 +1784,26 @@ const ucp_request_send_proto_t ucp_am_reply_proto = {
 ucs_status_t ucp_am_proto_request_zcopy_reset(ucp_request_t *request)
 {
     ucs_assert(request->send.msg_proto.am.header.reg_desc != NULL);
+    /* Zcopy pack function releases header if it's stored in mpool buffer
+     * and set copied flag to zero. Zcopy pack function is always called
+     * before reset function.
+     */
+    ucs_assert(!(request->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED));
+
+    /* If user header is not guaranteed to be valid,
+     * use mpool buffer for storing the user header.
+     */
+    if ((request->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER) &&
+        (request->send.msg_proto.am.header.length != 0)) {
+        request->send.msg_proto.am.header.ptr = ucs_mpool_set_get_inline(
+                &request->send.ep->worker->am_mps,
+                request->send.msg_proto.am.header.length);
+        memcpy(request->send.msg_proto.am.header.ptr,
+               request->send.msg_proto.am.header.reg_desc + 1,
+               request->send.msg_proto.am.header.length);
+        request->flags |= UCP_REQUEST_FLAG_USER_HEADER_COPIED;
+    }
+
     ucs_mpool_put_inline(request->send.msg_proto.am.header.reg_desc);
     request->send.msg_proto.am.header.reg_desc = NULL;
 
@@ -1794,4 +1814,10 @@ void ucp_proto_am_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_am_release_user_header(req);
     ucp_proto_request_bcopy_abort(req, status);
+}
+
+void ucp_proto_am_request_zcopy_abort(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_am_release_user_header(req);
+    ucp_proto_request_zcopy_abort(req, status);
 }
