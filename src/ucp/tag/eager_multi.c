@@ -38,7 +38,7 @@ ucp_proto_eager_multi_init_common(ucp_proto_multi_init_params_t *params,
      * tag offload). I. e. would need to check one more condition below:
      * ucp_ep_config_key_has_tag_lane(params->super.super.ep_config_key)
      */
-    if (params->super.super.select_param->op_id != op_id) {
+    if (!ucp_proto_init_check_op(&params->super.super, UCS_BIT(op_id))) {
         return UCS_ERR_UNSUPPORTED;
     }
 

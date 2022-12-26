@@ -12,6 +12,7 @@
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 
 
@@ -103,7 +104,9 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_GET);
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return ucp_proto_multi_init(&params, init_params->priv,
                                 init_params->priv_size);
@@ -194,7 +197,9 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_GET);
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return ucp_proto_multi_init(&params, init_params->priv,
                                 init_params->priv_size);
