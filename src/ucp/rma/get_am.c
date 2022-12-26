@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.inl>
 
 
@@ -96,7 +97,9 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_GET);
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return ucp_proto_single_init(&params);
 }

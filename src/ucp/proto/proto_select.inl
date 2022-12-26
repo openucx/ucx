@@ -57,7 +57,7 @@ ucp_proto_perf_range_search(const ucp_proto_select_elem_t *select_elem,
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t
-ucp_proto_select_op_attr_to_flags(uint32_t op_attr_mask)
+ucp_proto_select_op_attr_pack(uint32_t op_attr_mask)
 {
     UCS_STATIC_ASSERT(
             (UCP_PROTO_SELECT_OP_ATTR_MASK / UCP_PROTO_SELECT_OP_ATTR_BASE) <
@@ -66,10 +66,17 @@ ucp_proto_select_op_attr_to_flags(uint32_t op_attr_mask)
 }
 
 static UCS_F_ALWAYS_INLINE uint32_t
-ucp_proto_select_op_attr_from_flags(uint8_t flags)
+ucp_proto_select_op_attr_unpack(uint8_t op_attr)
 {
-    return (flags * UCP_PROTO_SELECT_OP_ATTR_BASE) &
+    return (op_attr * UCP_PROTO_SELECT_OP_ATTR_BASE) &
            UCP_PROTO_SELECT_OP_ATTR_MASK;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_operation_id_t
+ucp_proto_select_op_id(const ucp_proto_select_param_t *select_param)
+{
+    return (ucp_operation_id_t)(select_param->op_id_flags &
+                                (UCP_PROTO_SELECT_OP_FLAGS_BASE - 1));
 }
 
 static UCS_F_ALWAYS_INLINE const ucp_proto_threshold_elem_t*
@@ -94,7 +101,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
             /* key was found in hash - select by message size */
             select_elem = &kh_value(&proto_select->hash, khiter);
         } else {
-            select_elem = ucp_proto_select_lookup_slow(worker, proto_select,
+            select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 0,
                                                        ep_cfg_index,
                                                        rkey_cfg_index,
                                                        &key.param);
@@ -116,7 +123,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
                             ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                            uint16_t op_flags, ucp_dt_class_t dt_class,
+                            unsigned op_flags, ucp_dt_class_t dt_class,
                             const ucp_memory_info_t *mem_info, uint8_t sg_count)
 {
     if (dt_class == UCP_DATATYPE_CONTIG) {
@@ -128,14 +135,16 @@ ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
     /* construct a protocol lookup key based on all operation parameters
      * op_flags are modifiers for the operation, for now only FAST_CMPL is
      * supported */
-    select_param->op_id      = op_id;
-    select_param->op_flags   = op_flags |
-                               ucp_proto_select_op_attr_to_flags(op_attr_mask);
-    select_param->dt_class   = dt_class;
-    select_param->mem_type   = mem_info->type;
-    select_param->sys_dev    = mem_info->sys_dev;
-    select_param->sg_count   = sg_count;
-    select_param->padding    = 0;
+    ucs_assertv(!(op_id & op_flags), "op_id=0x%x op_flags=0x%x", op_id,
+                op_flags);
+    select_param->op_id_flags = op_id | op_flags;
+    select_param->op_attr     = ucp_proto_select_op_attr_pack(op_attr_mask);
+    select_param->dt_class    = dt_class;
+    select_param->mem_type    = mem_info->type;
+    select_param->sys_dev     = mem_info->sys_dev;
+    select_param->sg_count    = sg_count;
+    select_param->padding[0]  = 0;
+    select_param->padding[1]  = 0;
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -151,7 +160,7 @@ ucp_proto_select_is_short(ucp_ep_h ep,
 static UCS_F_ALWAYS_INLINE ucp_proto_perf_type_t
 ucp_proto_select_param_perf_type(const ucp_proto_select_param_t *select_param)
 {
-    if (ucp_proto_select_op_attr_from_flags(select_param->op_flags) &
+    if (ucp_proto_select_op_attr_unpack(select_param->op_attr) &
         UCP_OP_ATTR_FLAG_MULTI_SEND) {
         return UCP_PROTO_PERF_TYPE_MULTI;
     } else {

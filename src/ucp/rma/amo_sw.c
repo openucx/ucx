@@ -15,6 +15,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.h>
 
 
@@ -416,9 +417,8 @@ static ucs_status_t ucp_proto_amo_sw_progress_post(uct_pending_req_t *self)
 static ucs_status_t
 ucp_proto_amo_sw_init_post(const ucp_proto_init_params_t *init_params)
 {
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_AMO_POST);
-
-    if (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_AMO_POST)) ||
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -444,9 +444,10 @@ static ucs_status_t ucp_proto_amo_sw_progress_fetch(uct_pending_req_t *self)
 static ucs_status_t
 ucp_proto_amo_sw_init_fetch(const ucp_proto_init_params_t *init_params)
 {
-    if (((init_params->select_param->op_id != UCP_OP_ID_AMO_FETCH) &&
-         (init_params->select_param->op_id != UCP_OP_ID_AMO_CSWAP)) ||
-         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+    if (!ucp_proto_init_check_op(init_params,
+                                 UCS_BIT(UCP_OP_ID_AMO_FETCH) |
+                                 UCS_BIT(UCP_OP_ID_AMO_CSWAP)) ||
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

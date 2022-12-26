@@ -530,7 +530,7 @@ ucp_proto_common_init_xfer_perf(const ucp_proto_common_init_params_t *params,
 
     xfer_perf->node = ucp_proto_perf_node_new_data("xfer", "");
 
-    op_attr_mask = ucp_proto_select_op_attr_from_flags(select_param->op_flags);
+    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
 
     if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
@@ -580,7 +580,7 @@ ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
 
     recv_perf->node = ucp_proto_perf_node_new_data("recv-ovrh", "");
 
-    op_attr_mask = ucp_proto_select_op_attr_from_flags(select_param->op_flags);
+    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
 
     if (/* Don't care about receiver time for one-sided remote access */
         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) ||
@@ -707,4 +707,11 @@ out_deref_send_perf:
 out_deref_xfer_perf:
     ucp_proto_perf_node_deref(&xfer_perf.node);
     return status;
+}
+
+int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
+                            uint64_t op_id_mask)
+{
+    return !!(UCS_BIT(ucp_proto_select_op_id(init_params->select_param)) &
+              op_id_mask);
 }

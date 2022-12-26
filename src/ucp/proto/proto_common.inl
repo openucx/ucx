@@ -25,7 +25,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
-    if (req->send.proto_config->select_param.op_id == UCP_OP_ID_TAG_SEND) {
+    if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
+        UCP_OP_ID_TAG_SEND) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
@@ -86,7 +87,8 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_CONTIG_IOV);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
-    if (req->send.proto_config->select_param.op_id == UCP_OP_ID_TAG_SEND) {
+    if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
+        UCP_OP_ID_TAG_SEND) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
@@ -237,7 +239,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           const void *buffer, size_t count,
                           ucp_datatype_t datatype, size_t contig_length,
                           const ucp_request_param_t *param,
-                          size_t header_length, uint16_t op_flags)
+                          size_t header_length, unsigned op_flags)
 {
     ucp_worker_h worker = ep->worker;
     ucp_proto_select_param_t sel_param;

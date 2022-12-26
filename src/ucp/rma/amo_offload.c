@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.inl>
 
 
@@ -172,9 +173,8 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
         .tl_cap_flags        = 0
     };
 
-    UCP_RMA_PROTO_INIT_CHECK(init_params, op_id);
-
-    if (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) {
+    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
+        !ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
         return UCS_ERR_UNSUPPORTED;
     }
 
