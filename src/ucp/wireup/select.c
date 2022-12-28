@@ -365,26 +365,6 @@ static size_t ucp_wireup_max_lanes(ucp_lane_type_t lane_type)
 }
 
 /**
- * Get bitmap of memory types that Memory Domain can be registered with taking
- * into account context's maps of Memory Domains that provide registration for
- * given memory type.
- */
-static uint64_t
-ucp_wireup_select_reg_mem_types(ucp_context_h context, ucp_md_index_t md_index)
-{
-    uint64_t reg_mem_types = 0;
-    ucs_memory_type_t mem_type;
-
-    ucs_memory_type_for_each(mem_type) {
-        if (context->reg_md_map[mem_type] & UCS_BIT(md_index)) {
-            reg_mem_types |= UCS_BIT(mem_type);
-        }
-    }
-
-    return reg_mem_types;
-}
-
-/**
  * Select a local and remote transport
  */
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
@@ -423,7 +403,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     int is_reachable;
     double score;
     uint8_t priority;
-    uint64_t reg_mem_types;
     ucp_md_index_t md_index;
 
     p            = tls_info;
@@ -515,8 +494,6 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             local_md_flags &= ~UCT_MD_FLAG_INVALIDATE;
         }
 
-        reg_mem_types = ucp_wireup_select_reg_mem_types(context, md_index);
-
         /* Check that local md and interface satisfy the criteria */
         if (!ucp_wireup_check_flags(resource, md_attr->flags, local_md_flags,
                                     criteria->title, ucp_wireup_md_flags, p,
@@ -527,7 +504,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             !ucp_wireup_check_flags(resource, md_attr->alloc_mem_types,
                                     criteria->alloc_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
-            !ucp_wireup_check_flags(resource, reg_mem_types,
+            !ucp_wireup_check_flags(resource, md_attr->reg_mem_types,
                                     criteria->reg_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
             !ucp_wireup_check_select_flags(resource, iface_attr->cap.flags,
@@ -1419,6 +1396,13 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
     return size / t * 1e-5;
 }
 
+static int
+ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
+{
+    return context->config.ext.proto_enable ||
+           (ucs_popcount(md_map) < UCP_MAX_OP_MDS);
+}
+
 static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_bw_info_t *bw_info,
@@ -1451,7 +1435,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
     while ((num_lanes < bw_info->max_lanes) &&
-           (ucs_popcount(md_map) < UCP_MAX_OP_MDS)) {
+           ucp_wireup_is_md_map_count_valid(context, md_map)) {
         if (excl_lane == UCP_NULL_LANE) {
             status = ucp_wireup_select_transport(select_ctx, select_params,
                                                  &bw_info->criteria, tl_bitmap,
@@ -1694,7 +1678,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     bw_info.criteria.title            = "high-bw remote memory access";
     bw_info.criteria.lane_type        = UCP_LANE_TYPE_RMA_BW;
-    bw_info.max_lanes                 = context->config.ext.max_rndv_lanes;
+    bw_info.max_lanes                 = context->config.ext.proto_enable ?
+                                        UCP_PROTO_MAX_LANES :
+                                        context->config.ext.max_rndv_lanes;
     bw_info.criteria.local_cmpt_flags = 0;
 
     /* If error handling is requested we require memory invalidation

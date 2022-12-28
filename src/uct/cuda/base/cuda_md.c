@@ -231,6 +231,17 @@ static int uct_cuda_copy_get_dmabuf_fd(const ucs_memory_info_t *addr_mem_info)
     /* Get fxn ptr for cuMemGetHandleForAddressRange in case installed libcuda
      * does not have the definition for it even though 11.7 header includes the
      * declaration and avoid link error */
+#if CUDA_VERSION >= 12000
+    CUdriverProcAddressQueryResult proc_addr_res;
+    cu_err = cuGetProcAddress("cuMemGetHandleForAddressRange",
+                              (void**)&get_handle_func, 12000,
+                              CU_GET_PROC_ADDRESS_DEFAULT, &proc_addr_res);
+    if ((cu_err != CUDA_SUCCESS) ||
+        (proc_addr_res != CU_GET_PROC_ADDRESS_SUCCESS)) {
+        ucs_debug("cuMemGetHandleForAddressRange not found");
+        return UCT_DMABUF_FD_INVALID;
+    }
+#else
     cu_err = cuGetProcAddress("cuMemGetHandleForAddressRange",
                               (void**)&get_handle_func, 11070,
                               CU_GET_PROC_ADDRESS_DEFAULT);
@@ -238,6 +249,7 @@ static int uct_cuda_copy_get_dmabuf_fd(const ucs_memory_info_t *addr_mem_info)
         ucs_debug("cuMemGetHandleForAddressRange not found");
         return UCT_DMABUF_FD_INVALID;
     }
+#endif
 
     cu_err = get_handle_func((void*)&fd, (uintptr_t)addr_mem_info->base_address,
                              addr_mem_info->alloc_length,
@@ -338,6 +350,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                  uct_md_resource_desc_t **resources_p,
                                  unsigned *num_resources_p)
 {
+    const unsigned sys_device_priority = 10;
     ucs_sys_device_t sys_dev;
     CUdevice cuda_device;
     cudaError_t cudaErr;
@@ -355,7 +368,8 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
         if (status == UCS_OK) {
             ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
                               cuda_device);
-            status = ucs_topo_sys_device_set_name(sys_dev, device_name);
+            status = ucs_topo_sys_device_set_name(sys_dev, device_name,
+                                                  sys_device_priority);
             ucs_assert_always(status == UCS_OK);
         }
     }

@@ -731,7 +731,12 @@ typedef enum {
     UCP_OP_ATTR_FIELD_RECV_INFO     = UCS_BIT(7),  /**< recv_info field */
     UCP_OP_ATTR_FIELD_MEMH          = UCS_BIT(8),  /**< memory handle field */
 
-    UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
+    UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< Deny immediate completion,
+                                                        i.e NULL cannot be returned.
+                                                        If a completion callback is
+                                                        provided, it can be called
+                                                        before the function
+                                                        returns. */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
                                                         even if it delays remote
                                                         data delivery. Note for

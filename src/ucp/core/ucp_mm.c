@@ -1362,59 +1362,28 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
     }
 }
 
-ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context)
+ucs_status_t
+ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx)
 {
     const ucs_memory_type_t alloc_mem_type = UCS_MEMORY_TYPE_HOST;
-    UCS_STRING_BUFFER_ONSTACK(strb, 256);
-    ucp_mem_dummy_handle_t reg_memh = {
-        .memh.alloc_md_index = UCP_NULL_RESOURCE
-    };
     ucp_mem_h alloc_memh;
-    ucs_memory_type_t mem_type;
-    ucp_md_index_t md_index;
     ucs_status_t status;
-    uint8_t buff;
 
-    status = ucp_memh_alloc(context, NULL, 1, alloc_mem_type,
-                            UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_HIDE_ERRORS,
-                            "get_alloc_md_id", &alloc_memh);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    context->alloc_md_index[alloc_mem_type] = alloc_memh->alloc_md_index;
-    ucp_memh_put(context, alloc_memh);
-
-    status = ucp_memh_register(context, &reg_memh.memh,
-                               context->reg_md_map[alloc_mem_type], &buff,
-                               sizeof(buff), alloc_mem_type,
-                               UCT_MD_MEM_ACCESS_ALL |
-                               UCT_MD_MEM_FLAG_HIDE_ERRORS);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    context->reg_md_map[alloc_mem_type] = reg_memh.memh.md_map;
-    ucp_memh_dereg(context, &reg_memh.memh, reg_memh.memh.md_map);
-
-    /* If we have a dmabuf provider for a memory type, it means we can register
-     * memory of this type with any md that supports dmabuf registration. */
-    ucs_memory_type_for_each(mem_type) {
-        if (context->dmabuf_mds[mem_type] != UCP_NULL_RESOURCE) {
-            context->reg_md_map[mem_type] |= context->dmabuf_reg_md_map;
+    if (!context->alloc_md_index_initialized) {
+        status = ucp_memh_alloc(context, NULL, 1, alloc_mem_type,
+                                UCT_MD_MEM_ACCESS_ALL |
+                                UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                "get_alloc_md_id", &alloc_memh);
+        if (status != UCS_OK) {
+            return status;
         }
 
-        ucs_string_buffer_reset(&strb);
-        ucs_for_each_bit(md_index, context->reg_md_map[mem_type]) {
-            ucs_string_buffer_appendf(&strb, "%s, ",
-                                      context->tl_mds[md_index].rsc.md_name);
-        }
-        ucs_string_buffer_rtrim(&strb, ", ");
-
-        ucs_debug("register %s memory on: %s", ucs_memory_type_names[mem_type],
-                  ucs_string_buffer_cstr(&strb));
+        context->alloc_md_index_initialized     = 1;
+        context->alloc_md_index[alloc_mem_type] = alloc_memh->alloc_md_index;
+        ucp_memh_put(context, alloc_memh);
     }
 
+    *md_idx = context->alloc_md_index[alloc_mem_type];
     return UCS_OK;
 }
 

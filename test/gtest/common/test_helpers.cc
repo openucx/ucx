@@ -434,6 +434,10 @@ void safe_usleep(double usec) {
 }
 
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
+    if (ifa_addr == NULL) {
+        return false;
+    }
+
     if (ifa_addr->sa_family == AF_INET6) {
         /* Skip IPv6 link-local and loopback address, that could not be used for
            connection establishment */
@@ -460,7 +464,8 @@ bool is_interface_usable(struct ifaddrs *ifa)
     return ucs_netif_flags_is_active(ifa->ifa_flags) &&
            ucs::is_inet_addr(ifa->ifa_addr) &&
            !netif_has_sysfs_file(ifa->ifa_name, "bridge") &&
-           !netif_has_sysfs_file(ifa->ifa_name, "brport");
+           !netif_has_sysfs_file(ifa->ifa_name, "brport") &&
+           !netif_has_sysfs_file(ifa->ifa_name, "wireless");
 }
 
 static std::vector<std::string> read_dir(const std::string& path)

@@ -163,7 +163,18 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context);
 
 void ucp_mem_rcache_cleanup(ucp_context_h context);
 
-ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context);
+/**
+ * Get memory domain index that is used to allocate host memory type.
+ *
+ * @param [in]  context UCP context containing memory domain indexes to use for
+ *                      the memory allocation.
+ * @param [out] md_idx  Index of the memory domain that is used to allocate host
+ *                      memory.
+ * 
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t
+ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)

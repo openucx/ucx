@@ -417,7 +417,7 @@ ucp_proto_t ucp_rndv_put_zcopy_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
 
@@ -462,7 +462,9 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
     }
 
     ucp_proto_rndv_put_common_request_init(req);
-    ucp_proto_rndv_mtype_copy(req, uct_ep_get_zcopy,
+    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
+                              ucp_proto_rndv_mtype_get_req_memh(req),
+                              uct_ep_get_zcopy,
                               ucp_proto_rndv_put_mtype_pack_completion,
                               "in from");
 
@@ -554,5 +556,5 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };

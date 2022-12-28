@@ -352,15 +352,17 @@ void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
     } else if (get_variant_value() & TEST_RMA) {
         wait_for_value(&m_recv_data[length], recv_data);
 
+        ucs_memory_cpu_load_fence();
         vec_type::iterator end = m_recv_data.begin() + length;
         vec_type::iterator it  = std::find_if(m_recv_data.begin(), end,
                                               [recv_data](uint64_t data) {
                                                   return data != recv_data;
                                               });
-        ASSERT_EQ(recv_data, *it) << "length " << length
-                                  << ", invalid data at index "
-                                  << std::distance(m_recv_data.begin(), it)
-                                  << ((it == end) ? " (control)" : "");
+        uint64_t data          = *it;
+        ASSERT_EQ(recv_data, data) << "length " << length
+                                   << ", invalid data at index "
+                                   << std::distance(m_recv_data.begin(), it)
+                                   << ((it == end) ? " (control)" : "");
     }
 }
 
@@ -477,9 +479,6 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     UCS_BITMAP_FOR_EACH_BIT(sender().worker()->context->tl_bitmap, tl) {
         const ucp_tl_resource_desc_t &rsc =
                 sender().worker()->context->tl_rscs[tl];
-        if (rsc.flags & UCP_TL_RSC_FLAG_SOCKADDR) {
-            continue;
-        }
         packed_dev_priorities.insert(
                 ucp_worker_iface_get_attr(sender().worker(), tl)->priority);
         packed_sys_devices.insert(rsc.tl_rsc.sys_device);

@@ -56,6 +56,9 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                                      lane);
         ep_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
         md_index   = ucp_proto_common_get_md_index(&params->super.super, lane);
+
+        ucs_assertv(md_index < UCP_MAX_MDS, "md_index=%u", md_index);
+
         cmpt_attr  = ucp_cmpt_attr_by_md_index(context, md_index);
         md_attr    = &context->tl_mds[md_index].attr;
 
@@ -66,10 +69,14 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
-        /* Check the memory domain requires remote key, and capable of
-         * registering the memory type
+        if (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY)) {
+            continue;
+        }
+
+        /* Check that memory domain is requested by the protocol or
+         * it is capable of registering the memory type
          */
-        if (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY) ||
+        if (!(params->md_map & UCS_BIT(md_index)) &&
             !(context->reg_md_map[params->mem_info.type] & UCS_BIT(md_index))) {
             continue;
         }
@@ -414,7 +421,8 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .mem_info.type       = init_params->select_param->mem_type,
         .mem_info.sys_dev    = init_params->select_param->sys_dev,
-        .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME
+        .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
+        .md_map              = 0
     };
 
     return ucp_proto_rndv_ctrl_init(&params);
@@ -444,14 +452,16 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
     ucp_request_complete_send(req, status);
 }
 
-void ucp_proto_rndv_rts_reset(ucp_request_t *req)
+ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
 {
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        return;
+        return UCS_OK;
     }
 
+    ucs_assert(req->send.state.completed_size == 0);
     ucp_send_request_id_release(req);
     ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -586,7 +596,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     return status;
 }
 
-static size_t ucp_proto_rndv_ats_pack_ack(void *dest, void *arg)
+size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg)
 {
     ucp_request_t *req = arg;
 
@@ -605,7 +615,7 @@ ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req)
 
     return ucp_proto_rndv_ack_progress(req, req->send.proto_config->priv,
                                        UCP_AM_ID_RNDV_ATS,
-                                       ucp_proto_rndv_ats_pack_ack,
+                                       ucp_proto_rndv_common_pack_ack,
                                        ucp_proto_rndv_ats_complete);
 }
 
@@ -660,6 +670,9 @@ ucp_proto_rndv_unpack_contig_rkey(const void *buffer, size_t length,
 
     req->send.rndv.rma_count   = 0;
     req->send.rndv.rkey        = rkey;
+    /* Caching rkey_buffer pointer for later unpacking of shm keys in
+     * rkey_ptr mtype ppln protocol. */
+    req->send.rndv.rkey_buffer = buffer;
     return status;
 }
 

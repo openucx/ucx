@@ -70,8 +70,9 @@ ucp_am_eager_zcopy_pack_user_header(ucp_request_t *req)
     }
 
     if (req->send.msg_proto.am.header.length != 0) {
-        ucs_assert(req->send.msg_proto.am.header.user_ptr != NULL);
+        ucs_assert(req->send.msg_proto.am.header.ptr != NULL);
         ucp_am_pack_user_header(reg_desc + 1, req);
+        ucp_am_release_user_header(req);
     }
 
     req->send.msg_proto.am.header.reg_desc = reg_desc;
