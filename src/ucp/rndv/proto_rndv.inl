@@ -99,39 +99,34 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     rts->sreq.req_id = ucp_send_request_get_id(req);
     rts->sreq.ep_id  = ucp_send_request_get_ep_remote_id(req);
     rts->size        = req->send.state.dt_iter.length;
+    rts->address     = 0;
     rpriv            = req->send.proto_config->priv;
 
     if (rts->size == 0) {
-        goto pack_no_rkey;
+        return hdr_len;
     }
     if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
         rts->address = (uintptr_t)req->send.state.dt_iter.type.contig.buffer;
-        rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey, req,
+        rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey_contig, req,
                                         rpriv->md_map, rpriv->sys_dev_map,
                                         rpriv->sys_dev_distance, rkey_buffer);
-        goto pack_done;
+        return hdr_len + rkey_size;
     }
     if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_IOV) {
-        rts->address = 0;
         rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey_iov, req,
                                         rpriv->md_map, rpriv->sys_dev_map,
                                         rpriv->sys_dev_distance, rkey_buffer);
-        goto pack_done;
+        return hdr_len + rkey_size;
     }
 
-pack_no_rkey:
-    rts->address = 0;
-    rkey_size    = 0;
-pack_done:
-    return hdr_len + rkey_size;
+    return hdr_len;
 }
 
 static UCS_F_ALWAYS_INLINE size_t 
 ucp_proto_rndv_max_rts_size(const ucp_request_t *req) {
+    const ucp_proto_rndv_ctrl_priv_t *rpriv = req->send.proto_config->priv;
     size_t iov_packed_size, iov_count;
-    const ucp_proto_rndv_ctrl_priv_t *rpriv;
 
-    rpriv = req->send.proto_config->priv;
     if (req->send.state.dt_iter.dt_class != UCP_DATATYPE_IOV) {
         return sizeof(ucp_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
     }
@@ -171,7 +166,7 @@ static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_multi_rkey_reset(ucp_request_t *req)
+ucp_proto_rndv_iov_rkeys_reset(ucp_request_t *req)
 {
     req->send.rndv.rma_array = NULL;
     req->send.rndv.rma_count = 0;
@@ -181,7 +176,7 @@ ucp_proto_rndv_multi_rkey_reset(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
+ucp_proto_rndv_iov_rkeys_destroy(ucp_request_t *req)
 {
     size_t count = req->send.rndv.rma_count;
     size_t index;
@@ -192,11 +187,11 @@ ucp_proto_rndv_multi_rkey_destroy(ucp_request_t *req)
         ucp_rkey_destroy(req->send.rndv.rma_array[index].rkey);
     }
     ucs_free(req->send.rndv.rma_array);
-    ucp_proto_rndv_multi_rkey_reset(req);
+    ucp_proto_rndv_iov_rkeys_reset(req);
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
+ucp_proto_rndv_contig_rkey_destroy(ucp_request_t *req)
 {
     ucs_assert(req->send.rndv.rkey != NULL);
     ucp_rkey_destroy(req->send.rndv.rkey);
@@ -206,29 +201,21 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_all_rkey_destroy(ucp_request_t *req)
+ucp_proto_rndv_common_rkeys_destroy(ucp_request_t *req)
 {
     size_t count = req->send.rndv.rma_count;
     if (count == 0) {
-        ucp_proto_rndv_rkey_destroy(req);
+        ucp_proto_rndv_contig_rkey_destroy(req);
         return;
     }
-    ucp_proto_rndv_multi_rkey_destroy(req);
+    ucp_proto_rndv_iov_rkeys_destroy(req);
     return;
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_recv_complete_with_ats(ucp_request_t *req, uint8_t ats_stage)
 {
-    ucp_proto_rndv_rkey_destroy(req);
-    ucp_proto_request_set_stage(req, ats_stage);
-    ucp_request_send(req);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_recv_all_complete_with_ats(ucp_request_t *req, uint8_t ats_stage)
-{
-    ucp_proto_rndv_all_rkey_destroy(req);
+    ucp_proto_rndv_common_rkeys_destroy(req);
     ucp_proto_request_set_stage(req, ats_stage);
     ucp_request_send(req);
 }
@@ -248,7 +235,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
 
     ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
-    ucp_proto_rndv_multi_rkey_reset(freq);
+    ucp_proto_rndv_iov_rkeys_reset(freq);
 
     *freq_p = freq;
     return UCS_OK;

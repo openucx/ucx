@@ -122,7 +122,7 @@ ucp_proto_rndv_rtr_common_complete(ucp_request_t *req, unsigned dt_mask)
                                 &req->send.state.dt_iter, dt_mask);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, dt_mask);
     if (req->send.rndv.rkey != NULL) {
-        ucp_proto_rndv_rkey_destroy(req);
+        ucp_proto_rndv_contig_rkey_destroy(req);
     }
 
     ucp_proto_rndv_recv_complete(req);
@@ -159,10 +159,10 @@ static size_t ucp_proto_rndv_rtr_pack_with_rkey(void *dest, void *arg)
 
     ucp_proto_rndv_rtr_hdr_pack(req, rtr, dt_iter->type.contig.buffer);
 
-    rkey_size = ucp_proto_request_pack_rkey(req, rpriv->super.md_map,
-                                            rpriv->super.sys_dev_map,
-                                            rpriv->super.sys_dev_distance,
-                                            rtr + 1);
+    rkey_size = ucp_proto_request_pack_rkey_contig(req, rpriv->super.md_map,
+                                                   rpriv->super.sys_dev_map,
+                                                   rpriv->super.sys_dev_distance,
+                                                   rtr + 1);
     ucs_assertv(rkey_size == rpriv->super.packed_rkey_size,
                 "rkey_size=%zu exp=%zu", rkey_size,
                 rpriv->super.packed_rkey_size);

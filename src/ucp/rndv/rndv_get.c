@@ -105,9 +105,11 @@ static UCS_F_ALWAYS_INLINE uct_rkey_t ucp_proto_rndv_get_tl_rkey(
         rkey       = req->send.rndv.rma_array[iov_index].rkey;
         rkey_index = ucp_proto_rndv_get_rkey_index(req, rkey,
                                                    lpriv->super.lane);
-        return ucp_rkey_get_tl_rkey(rkey, rkey_index);
+    } else {
+        rkey       = req->send.rndv.rkey;
+        rkey_index = lpriv->super.rkey_index;
     }
-    return ucp_rkey_get_tl_rkey(req->send.rndv.rkey, lpriv->super.rkey_index);
+    return ucp_rkey_get_tl_rkey(rkey, rkey_index);
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
@@ -150,14 +152,13 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
     if (ucs_unlikely(uct_comp->status != UCS_OK)) {
-        ucp_proto_rndv_all_rkey_destroy(req);
+        ucp_proto_rndv_common_rkeys_destroy(req);
         ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
         return;
     }
 
     UCP_WORKER_STAT_RNDV(req->send.ep->worker, GET_ZCOPY, +1);
-    ucp_proto_rndv_recv_all_complete_with_ats(req,
-                                              UCP_PROTO_RNDV_GET_STAGE_ATS);
+    ucp_proto_rndv_recv_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
 }
 
 static ucs_status_t
@@ -261,7 +262,7 @@ ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_proto_rndv_all_rkey_destroy(req);
+    ucp_proto_rndv_common_rkeys_destroy(req);
     ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
 }
 

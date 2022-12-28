@@ -268,17 +268,14 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
-                            uint64_t distance_dev_map,
-                            const ucs_sys_dev_distance_t *dev_distance,
-                            void *rkey_buffer)
+ucp_proto_request_pack_rkey_contig(ucp_request_t *req, ucp_md_map_t md_map,
+                                   uint64_t distance_dev_map,
+                                   const ucs_sys_dev_distance_t *dev_distance,
+                                   void *rkey_buffer)
 {
     const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ssize_t packed_rkey_size;
 
-    /* For contiguous buffer, pack one rkey
-     * TODO to support IOV datatype write N [address+length] records,
-     */
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
     ucs_assert(ucs_test_all_flags(dt_iter->type.contig.memh->md_map, md_map));
 
@@ -297,9 +294,9 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
 
 static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
-                            uint64_t distance_dev_map,
-                            const ucs_sys_dev_distance_t *dev_distance,
-                            void *rkey_buffer)
+                                uint64_t distance_dev_map,
+                                const ucs_sys_dev_distance_t *dev_distance,
+                                void *rkey_buffer)
 {
     const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ucp_mem_h *memh = dt_iter->type.iov.memh;
@@ -315,10 +312,10 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
     }
 
     /* 
-     * proto pack format:
-     * | count(32/64)| address(64)| length(32/64)| rkey size(32)| rkey buffer|
-     *               | address(64)| length(32/64)| rkey size(32)| rkey buffer|
-     *               | address(64)| length(32/64)| rkey size(32)| rkey buffer|
+     * packed IOV rkeys format:
+     * | count(32)| address(64)| length(32/64)| rkey size(32)| rkey buffer|
+     *            | address(64)| length(32/64)| rkey size(32)| rkey buffer|
+     *            | address(64)| length(32/64)| rkey size(32)| rkey buffer|
      */
     ppacked_count = (uint32_t*)p;
     p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
@@ -346,7 +343,7 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
                                                &dt_iter->mem_info,
                                                distance_dev_map, dev_distance,
                                                p);
-        ucs_debug("index=%u rkey_size=%ld address=%p size=%lu",
+        ucs_debug("packed iov rkey index=%u rkey_size=%ld address=%p size=%lu",
                   iov_index, packed_rkey_size,
                   (void*)dt_iter->type.iov.iov[iov_index].buffer,
                   dt_iter->type.iov.iov[iov_index].length);
@@ -359,9 +356,10 @@ ucp_proto_request_pack_rkey_iov(ucp_request_t *req, ucp_md_map_t md_map,
         *ppacked_rkey_size = packed_rkey_size;
         p = UCS_PTR_BYTE_OFFSET(p, packed_rkey_size);
 
-        total_size += sizeof(uint64_t) + sizeof(uint32_t) + sizeof(size_t) +
+        total_size += sizeof(uint64_t) + sizeof(size_t) + sizeof(uint32_t) +
                       packed_rkey_size;
     }
+
     if (packed_count != 0) {
         *ppacked_count = packed_count;
         total_size    += sizeof(uint32_t); 
