@@ -265,7 +265,7 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
 static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_completion(ucp_request_t *req)
 {
     ucp_trace_req(req, "ucp_proto_rndv_rkey_ptr_mtype_completion");
-    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_rndv_contig_rkey_destroy(req);
     ucp_proto_request_zcopy_complete(req, UCS_OK);
     return UCS_OK;
 }
