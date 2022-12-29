@@ -58,7 +58,8 @@ void uct_ib_mlx5dv_dct_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
  */
 ucs_status_t
 uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
-                                 uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs);
+                                 uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs,
+                                 int silent);
 
 /**
  * Closes CQ and SRQ which are needed for creating QP.
