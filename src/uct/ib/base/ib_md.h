@@ -617,7 +617,7 @@ ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
 /**
  * Check if IB md device has ECE capability
  */
-ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md);
+void uct_ib_md_ece_check(uct_ib_md_t *md);
 
 
 ucs_status_t
