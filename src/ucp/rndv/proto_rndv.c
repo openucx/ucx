@@ -782,15 +782,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_unpack_common_rkey(
 
     ucs_assert(buffer != NULL);
 
-    if (remote_address != 0) {
+    if (remote_address != 0 || remote_size == 0) {
         ucp_proto_rndv_check_rkey_length(remote_address, length, "rts");
         req->send.rndv.remote_address = remote_address;
         return ucp_proto_rndv_unpack_contig_rkey(buffer, length, ep, ep_config,
                                                  req);
     }
 
-    if (req->send.state.dt_iter.dt_class != UCP_DATATYPE_CONTIG ||
-        remote_size == 0) {
+    if (req->send.state.dt_iter.dt_class != UCP_DATATYPE_CONTIG) {
         goto unpack_nothing;
     }
 
