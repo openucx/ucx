@@ -1613,9 +1613,8 @@ UCT_IB_MD_DEFINE_ENTRY(devx, uct_ib_mlx5_devx_md_ops);
 
 #endif
 
-static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
+static void uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 {
-    ucs_status_t status = UCS_OK;
 #if HAVE_DC_DV
     struct ibv_context *ctx            = dev->ibv_context;
     uct_ib_qp_init_attr_t qp_init_attr = {};
@@ -1624,16 +1623,16 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     uct_ib_mlx5dv_qp_tmp_objs_t qp_tmp_objs;
     struct ibv_pd *pd;
     struct ibv_qp *qp;
+    ucs_status_t status;
     int ret;
 
     pd = ibv_alloc_pd(ctx);
     if (pd == NULL) {
-        ucs_error("%s: ibv_alloc_pd() failed: %m", uct_ib_device_name(dev));
-        status = UCS_ERR_IO_ERROR;
+        ucs_debug("%s: ibv_alloc_pd() failed: %m", uct_ib_device_name(dev));
         goto out;
     }
 
-    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, pd, &qp_tmp_objs);
+    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, pd, &qp_tmp_objs, 1);
     if (status != UCS_OK) {
         goto out_dealloc_pd;
     }
@@ -1647,7 +1646,6 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     if (qp == NULL) {
         ucs_debug("%s: mlx5dv_create_qp(DCT) failed: %m",
                   uct_ib_device_name(dev));
-        status = UCS_OK;
         goto out_qp_tmp_objs_close;
     }
 
@@ -1663,7 +1661,6 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     if (ret != 0) {
         ucs_debug("failed to ibv_modify_qp(DCT, INIT) on %s: %m",
                   uct_ib_device_name(dev));
-        status = UCS_OK;
         goto out_destroy_qp;
     }
 
@@ -1686,12 +1683,10 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     if (ret != 0) {
         ucs_debug("%s: failed to ibv_modify_qp(DCT, RTR): %m",
                   uct_ib_device_name(dev));
-        status = UCS_OK;
         goto out_destroy_qp;
     }
 
     dev->flags |= UCT_IB_DEVICE_FLAG_DC;
-    status      = UCS_OK;
 
 out_destroy_qp:
     uct_ib_destroy_qp(qp);
@@ -1701,11 +1696,8 @@ out_dealloc_pd:
     ibv_dealloc_pd(pd);
 out:
 #endif
-    if (status == UCS_OK) {
-        ucs_debug("%s: DC %s supported", uct_ib_device_name(dev),
-                  (dev->flags & UCT_IB_DEVICE_FLAG_DC) ? "is" : "is not");
-    }
-    return status;
+    ucs_debug("%s: DC %s supported", uct_ib_device_name(dev),
+              (dev->flags & UCT_IB_DEVICE_FLAG_DC) ? "is" : "is not");
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops;
@@ -1759,10 +1751,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 #endif
     }
 
-    status = uct_ib_mlx5dv_check_dc(dev);
-    if (status != UCS_OK) {
-        goto err_md_free;
-    }
+    uct_ib_mlx5dv_check_dc(dev);
 
     md->super.ops        = &uct_ib_mlx5_md_ops;
     md->max_rd_atomic_dc = IBV_DEV_ATTR(dev, max_qp_rd_atom);
@@ -1777,10 +1766,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->super.name = UCT_IB_MD_NAME(mlx5);
 
-    status = uct_ib_md_ece_check(&md->super);
-    if (status != UCS_OK) {
-        goto err_md_close_common;
-    }
+    uct_ib_md_ece_check(&md->super);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 
@@ -1788,12 +1774,6 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     *p_md = &md->super;
     return UCS_OK;
 
-err_md_close_common:
-    /* Coverity thinks that this goto label is unreachable, because "status"
-     * variable is always set to UCS_OK in case of ibv_set_ece() is unavailable
-     * in uct_ib_md_ece_check() */
-    /* coverity[unreachable] */
-    uct_ib_md_close_common(&md->super);
 err_md_free:
     uct_ib_md_free(&md->super);
 err_free_context:

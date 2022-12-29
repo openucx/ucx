@@ -68,7 +68,6 @@ protected:
 
     size_t                        m_comp_count;
 
-private:
     ucs::handle<uct_md_config_t*> m_md_config;
     ucs::handle<uct_md_h>         m_md;
     uct_md_attr_v2_t              m_md_attr;
