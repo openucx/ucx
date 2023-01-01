@@ -216,6 +216,23 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset);
 
 
 /**
+ * Remove one token from the end of the string.
+ *
+ * @param [inout] strb     String buffer to remove characters from.
+ * @param [in]    delim    C-string with the set of characters that are used as
+ *                         token delimiters.
+ *                         If NULL, this function removes whitespace characters,
+ *                         as defined by isspace (3).
+ *
+ * This function removes characters from the end of the input string 'strb', up
+ * to and including the first character that appears in 'delim'.
+ * If none of the characters in 'strb' appears in 'delim', the string remains
+ * unchanged.
+ */
+void ucs_string_buffer_rbrk(ucs_string_buffer_t *strb, const char *delim);
+
+
+/**
  * Return a temporary pointer to a C-style string which represents the string
  * buffer. The returned string is valid only as long as no other operation is
  * done on the string buffer (including append).
