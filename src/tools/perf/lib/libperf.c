@@ -1555,10 +1555,12 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
 
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                               UCP_PARAM_FIELD_REQUEST_SIZE |
-                              UCP_PARAM_FIELD_REQUEST_INIT;
+                              UCP_PARAM_FIELD_REQUEST_INIT |
+                              UCP_PARAM_FIELD_NAME;
     ucp_params.features     = 0;
     ucp_params.request_size = sizeof(ucp_perf_request_t);
     ucp_params.request_init = ucp_perf_request_init;
+    ucp_params.name         = "perftest";
 
     if (perf->params.thread_count > 1) {
         /* when there is more than one thread, a ucp_worker would be created for

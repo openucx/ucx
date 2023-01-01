@@ -2928,7 +2928,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
 static int do_server(const options_t& test_opts)
 {
     DemoServer server(test_opts);
-    if (!server.init()) {
+    if (!server.init("iodemo_server")) {
         return -1;
     }
 
@@ -2952,7 +2952,7 @@ static int do_client(options_t& test_opts)
     }
 
     DemoClient client(test_opts);
-    if (!client.init()) {
+    if (!client.init("iodemo_client")) {
         return -1;
     }
 
