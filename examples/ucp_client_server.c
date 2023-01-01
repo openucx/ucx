@@ -1069,7 +1069,8 @@ static int init_context(ucp_context_h *ucp_context, ucp_worker_h *ucp_worker,
     memset(&ucp_params, 0, sizeof(ucp_params));
 
     /* UCP initialization */
-    ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
+    ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES | UCP_PARAM_FIELD_NAME;
+    ucp_params.name       = "client_server";
 
     if (send_recv_type == CLIENT_SERVER_SEND_RECV_STREAM) {
         ucp_params.features = UCP_FEATURE_STREAM;
