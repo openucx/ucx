@@ -151,6 +151,11 @@ void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
     ucs_string_buffer_rtrim(strb, "|");
 }
 
+static int ucs_string_buffer_match_charset(char ch, const char *charset)
+{
+    return (charset == NULL) ? isspace(ch) : (strchr(charset, ch) != NULL);
+}
+
 void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
 {
     char *ptr = ucs_array_end(&strb->str);
@@ -162,9 +167,8 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
 
     do {
         --ptr;
-        if (((charset == NULL) && !isspace(*ptr)) ||
-            ((charset != NULL) && (strchr(charset, *ptr) == NULL))) {
-            /* if the last character should NOT be removed - stop */
+        /* if the last character should NOT be removed - stop */
+        if (!ucs_string_buffer_match_charset(*ptr, charset)) {
             break;
         }
 
@@ -172,6 +176,24 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
     } while (!ucs_array_is_empty(&strb->str));
 
     ucs_string_buffer_add_null_terminator(strb);
+}
+
+void ucs_string_buffer_rbrk(ucs_string_buffer_t *strb, const char *delim)
+{
+    char *begin = ucs_array_begin(&strb->str);
+    char *ptr;
+
+    if (ucs_array_is_empty(&strb->str)) {
+        return;
+    }
+
+    for (ptr = ucs_array_last(&strb->str); ptr >= begin; --ptr) {
+        if (ucs_string_buffer_match_charset(*ptr, delim)) {
+            ucs_array_set_length(&strb->str, UCS_PTR_BYTE_DIFF(begin, ptr));
+            ucs_string_buffer_add_null_terminator(strb);
+            break;
+        }
+    }
 }
 
 const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb)
