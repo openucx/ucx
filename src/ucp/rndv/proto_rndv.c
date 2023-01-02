@@ -24,7 +24,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
 {
     ucp_context_h context                    = params->super.super.worker->context;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
-    uint8_t dt_type;
+    uint8_t dt_type                          = params->super.super.select_param->dt_class;
     ucp_rsc_index_t mem_sys_dev, ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
     const uct_md_attr_v2_t *md_attr;
@@ -38,7 +38,6 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
      */
     *md_map      = 0;
     *sys_dev_map = 0;
-    dt_type      = params->super.super.select_param->dt_class;
     if (dt_type == UCP_DATATYPE_GENERIC) {
         return;
     }
@@ -657,10 +656,10 @@ ucp_proto_rndv_unpack_contig_rkey(const void *buffer, size_t length,
     ucs_status_t status;
 
     /* Do not unpack rkeys from MDs with rkey_ptr capability, except
-        * rkey_ptr_lane. Examples are: sysv and posix. Such keys, if packed,
-        * are unpacked only once and cached in the peer_mem hash on ep. It is
-        * done by the specific protocols (if selected) which use them.
-        */
+     * rkey_ptr_lane. Examples are: sysv and posix. Such keys, if packed,
+     * are unpacked only once and cached in the peer_mem hash on ep. It is
+     * done by the specific protocols (if selected) which use them.
+     */
     status = ucp_ep_rkey_unpack_internal(
             ep, buffer, length, ep_config->key.reachable_md_map,
             ep_config->rndv.proto_rndv_rkey_skip_mds, &rkey);
@@ -668,7 +667,7 @@ ucp_proto_rndv_unpack_contig_rkey(const void *buffer, size_t length,
         return status;
     }
 
-    req->send.rndv.rma_count   = 0;
+    req->send.rndv.rdata_count = 0;
     req->send.rndv.rkey        = rkey;
     /* Caching rkey_buffer pointer for later unpacking of shm keys in
      * rkey_ptr mtype ppln protocol. */
@@ -677,10 +676,10 @@ ucp_proto_rndv_unpack_contig_rkey(const void *buffer, size_t length,
 }
 
 static UCS_F_ALWAYS_INLINE const void *
-ucp_proto_rndv_unpack_iov_count(const void *p, uint32_t *iov_count)
+ucp_proto_rndv_unpack_iov_count(const void *p, size_t *iov_count)
 {
-    *iov_count = *(const uint32_t*)p;
-    return UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
+    *iov_count = *(const size_t*)p;
+    return UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
 }
 
 static UCS_F_ALWAYS_INLINE const void *
@@ -695,8 +694,8 @@ ucp_proto_rndv_unpack_iov_rkey_buffer(const void *p, const void **rkey_buffer,
     *remote_size = *(const size_t*)p;
     p            = UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
 
-    *rkey_length = *(const uint32_t*)p;
-    p            = UCS_PTR_BYTE_OFFSET(p, sizeof(uint32_t));
+    *rkey_length = *(const size_t*)p;
+    p            = UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
 
     *rkey_buffer = p;
     p            = UCS_PTR_BYTE_OFFSET(p, *rkey_length);
@@ -712,7 +711,7 @@ ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t length, ucp_ep_h ep,
 #if UCS_ENABLE_ASSERT
     const void *p_end = UCS_PTR_BYTE_OFFSET(p, length);
 #endif
-    uint32_t iov_count, iov_index;
+    size_t iov_count, iov_index;
     ucp_rkey_h rkey;
     const void *rkey_buffer;
     size_t rkey_length;
@@ -725,9 +724,9 @@ ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t length, ucp_ep_h ep,
         return UCS_ERR_NO_MESSAGE;
     }
 
-    req->send.rndv.rma_array = ucs_malloc(
-            iov_count * sizeof(*req->send.rndv.rma_array), "proto_rndv");
-    if (req->send.rndv.rma_array == NULL) {
+    req->send.rndv.rdata = ucs_malloc(
+            iov_count * sizeof(*req->send.rndv.rdata), "proto_rndv");
+    if (req->send.rndv.rdata == NULL) {
         ucs_error("failed to allocate rma array");
         status = UCS_ERR_NO_MEMORY;
         goto finish;
@@ -749,20 +748,20 @@ ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t length, ucp_ep_h ep,
             goto destroy_rkey;
         }
         accumulate_size                                    += remote_size;
-        req->send.rndv.rma_array[iov_index].accumulate_size = accumulate_size;
-        req->send.rndv.rma_array[iov_index].remote_address  = remote_address;
-        req->send.rndv.rma_array[iov_index].remote_size     = remote_size;
-        req->send.rndv.rma_array[iov_index].rkey            = rkey;
-        ucs_debug("index=%u rkey_size=%lu address=%p size=%lu", iov_index,
+        req->send.rndv.rdata[iov_index].accumulate_size = accumulate_size;
+        req->send.rndv.rdata[iov_index].remote_address  = remote_address;
+        req->send.rndv.rdata[iov_index].remote_size     = remote_size;
+        req->send.rndv.rdata[iov_index].rkey            = rkey;
+        ucs_debug("index=%lu rkey_size=%lu address=%p size=%lu", iov_index,
                   rkey_length, (void*)remote_address, remote_size);
     }
-    req->send.rndv.rma_count = iov_count;
-    req->send.rndv.rma_index = 0;
-    status                   = UCS_OK;
+    req->send.rndv.rdata_count = iov_count;
+    req->send.rndv.rdata_idx   = 0;
+    status                     = UCS_OK;
     goto finish;
 
 destroy_rkey:
-    req->send.rndv.rma_count = iov_index;
+    req->send.rndv.rdata_count = iov_index;
     ucp_proto_rndv_iov_rkeys_destroy(req);
 finish:
     ucs_assertv(p <= p_end, "bounds error 0x%" PRIx64 ">0x%" PRIx64,
@@ -771,32 +770,33 @@ finish:
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_unpack_common_rkey(
-        const void *buffer, size_t length, uint64_t remote_address,
+        const void *rkey_buffer, size_t rkey_length, uint64_t remote_address,
         size_t remote_size, ucp_ep_h ep, ucp_request_t *req)
 {
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
 
-    if (length == 0) {
+    if (rkey_length == 0) {
         goto unpack_nothing;
     }
 
-    ucs_assert(buffer != NULL);
+    ucs_assert(rkey_buffer != NULL);
 
     if (remote_address != 0 || remote_size == 0) {
-        ucp_proto_rndv_check_rkey_length(remote_address, length, "rts");
+        ucp_proto_rndv_check_rkey_length(remote_address, rkey_length, "rts");
         req->send.rndv.remote_address = remote_address;
-        return ucp_proto_rndv_unpack_contig_rkey(buffer, length, ep, ep_config,
-                                                 req);
+        return ucp_proto_rndv_unpack_contig_rkey(rkey_buffer, rkey_length, ep,
+                                                 ep_config, req);
     }
 
     if (req->send.state.dt_iter.dt_class != UCP_DATATYPE_CONTIG) {
         goto unpack_nothing;
     }
 
-    return ucp_proto_rndv_unpack_iov_rkeys(buffer, length, ep, ep_config, req);
+    return ucp_proto_rndv_unpack_iov_rkeys(rkey_buffer, rkey_length, ep,
+                                           ep_config, req);
 
 unpack_nothing:
-    req->send.rndv.rma_count      = 0;
+    req->send.rndv.rdata_count    = 0;
     req->send.rndv.remote_address = remote_address;
     req->send.rndv.rkey           = NULL;
     return UCS_OK;
@@ -809,7 +809,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                           uint8_t sg_count)
 {
     ucp_ep_h ep = req->send.ep;
-    size_t rma_index;
+    size_t rdata_idx;
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
@@ -819,18 +819,20 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
     ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
                (op_id < UCP_OP_ID_RNDV_LAST));
 
-    if (req->send.rndv.rkey == NULL) {
-        proto_select   = &ucp_ep_config(ep)->proto_select;
-        rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-    } else if (req->send.rndv.rma_count == 0) {
+    if (req->send.rndv.rdata_count != 0) {
+        rdata_idx      = req->send.rndv.rdata_idx;
+        rkey           = req->send.rndv.rdata[rdata_idx].rkey;
+        length         = req->send.rndv.rdata[rdata_idx].remote_size;
+        proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
+        rkey_cfg_index = rkey->cfg_index;
+    } else if (req->send.rndv.rkey != NULL) {
         rkey           = req->send.rndv.rkey;
         proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
         rkey_cfg_index = rkey->cfg_index;
     } else {
-        rma_index      = req->send.rndv.rma_index;
-        rkey           = req->send.rndv.rma_array[rma_index].rkey;
-        proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
-        rkey_cfg_index = rkey->cfg_index;
+        /* No remote key, use endpoint protocols */
+        proto_select   = &ucp_ep_config(ep)->proto_select;
+        rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
     }
 
     ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, op_flags,
@@ -843,7 +845,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
         goto err_destroy_rkey;
     }
 
-    if (req->send.rndv.rma_count != 0 &&
+    if (req->send.rndv.rdata_count != 0 &&
         req->send.proto_config->proto != &ucp_rndv_get_zcopy_proto) {
         ucp_proto_rndv_iov_rkeys_destroy(req);
         req->send.rndv.remote_address = 0;
@@ -865,8 +867,6 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                   const ucp_rndv_rts_hdr_t *rts,
                                   const void *rkey_buffer, size_t rkey_length)
 {
-    uint64_t remote_address = rts->address;
-    size_t remote_size      = rts->size;
     ucp_operation_id_t op_id;
     ucs_status_t status;
     ucp_request_t *req;
@@ -890,12 +890,12 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.rndv.offset        = 0;
     ucp_request_set_super(req, recv_req);
 
-    if (ucs_likely(remote_size <= recv_req->recv.length)) {
+    if (ucs_likely(rts->size <= recv_req->recv.length)) {
         op_id            = UCP_OP_ID_RNDV_RECV;
         recv_req->status = UCS_OK;
         UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init_from_dt_state,
                               worker->context, recv_req->recv.buffer,
-                              remote_size, recv_req->recv.datatype,
+                              rts->size, recv_req->recv.datatype,
                               &recv_req->recv.state, &req->send.state.dt_iter,
                               &sg_count);
     } else {
@@ -904,19 +904,19 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
         op_id            = UCP_OP_ID_RNDV_RECV_DROP;
         recv_req->status = UCS_ERR_MESSAGE_TRUNCATED;
         ucp_request_recv_generic_dt_finish(recv_req);
-        ucp_datatype_iter_init_null(&req->send.state.dt_iter, remote_size,
+        ucp_datatype_iter_init_null(&req->send.state.dt_iter, rts->size,
                                     &sg_count);
     }
 
     status = ucp_proto_rndv_unpack_common_rkey(rkey_buffer, rkey_length,
-                                               remote_address, remote_size, ep,
+                                               rts->address, rts->size, ep,
                                                req);
     if (status != UCS_OK) {
         goto release_request;
     }
 
     status = ucp_proto_rndv_send_reply(worker, req, op_id,
-                                       recv_req->recv.op_attr, 0, remote_size,
+                                       recv_req->recv.op_attr, 0, rts->size,
                                        sg_count);
     if (status != UCS_OK) {
         goto release_request;
