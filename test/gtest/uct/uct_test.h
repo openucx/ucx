@@ -222,8 +222,6 @@ protected:
 
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
-        void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
-        void cuda_mem_free(const uct_allocated_memory_t *mem) const;
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
