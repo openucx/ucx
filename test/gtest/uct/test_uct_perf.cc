@@ -15,7 +15,6 @@ extern "C" {
 #define MB                        pow(1024, -2)
 #define UCT_PERF_TEST_MULTIPLIER  5
 #define UCT_ARM_PERF_TEST_MULTIPLIER  15
-#define UCT_CUDA_PERF_TEST_MULTIPLIER  5
 
 class test_uct_perf : public uct_test, public test_perf {
 public:
@@ -51,7 +50,7 @@ void test_uct_perf::test_execute(unsigned flags = 0,
         }
     }
 
-    if (has_transport("tcp")) {
+    if (has_transport("tcp") || has_transport("cuda_copy")) {
         check_perf = false; /* TODO calibrate expected performance based on transport */
         max_iter   = 1000lu;
     }
@@ -63,11 +62,6 @@ void test_uct_perf::test_execute(unsigned flags = 0,
 
         test.send_mem_type = send_mem_type;
         test.recv_mem_type = recv_mem_type;
-
-        if (has_transport("cuda_copy")) {
-            test.max *= UCT_CUDA_PERF_TEST_MULTIPLIER;
-            test.min /= UCT_CUDA_PERF_TEST_MULTIPLIER;
-        }
 
         if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
             test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
