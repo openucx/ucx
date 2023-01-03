@@ -338,6 +338,8 @@ struct ucp_request {
                     uint64_t              remote_addr; /* Remote address */
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;       /* Atomic argument */
+                    uint64_t              result;      /* Atomic result */
+                    void                  *reply_buffer;
                     uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
                 } amo;
 

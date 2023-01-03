@@ -1,0 +1,20 @@
+# host -> host
+add_HH    -t ucp_add
+fadd_HH   -t ucp_fadd
+swap_HH   -t ucp_swap
+cswap_HH  -t ucp_cswap
+# cuda -> cuda
+add_DD    -t ucp_add    -m cuda,cuda
+fadd_DD   -t ucp_fadd   -m cuda,cuda
+swap_DD   -t ucp_swap   -m cuda,cuda
+cswap_DD  -t ucp_cswap  -m cuda,cuda
+# host -> cuda
+add_HD    -t ucp_add    -m host,cuda
+fadd_HD   -t ucp_fadd   -m host,cuda
+swap_HD   -t ucp_swap   -m host,cuda
+cswap_HD  -t ucp_cswap  -m host,cuda
+# cuda -> host
+add_DH    -t ucp_add    -m cuda,host
+fadd_DH   -t ucp_fadd   -m cuda,host
+swap_DH   -t ucp_swap   -m cuda,host
+cswap_DH  -t ucp_cswap  -m cuda,host
