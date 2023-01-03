@@ -141,8 +141,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
 
     ucs_trace_req("stream_send_nbx buffer %p count %zu to %s cb %p flags %u",
                   buffer, count, ucp_ep_peer_name(ep),
-                  param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK ?
-                  param->cb.send : NULL, flags);
+                  ucp_request_param_send_callback(param), flags);
 
     if (ucs_unlikely(flags != 0)) {
         ret = UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);

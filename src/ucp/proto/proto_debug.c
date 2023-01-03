@@ -323,7 +323,8 @@ static int
 ucp_proto_select_is_fetch_op(const ucp_proto_select_param_t *select_param)
 {
     return UCS_BIT(ucp_proto_select_op_id(select_param)) &
-           (UCS_BIT(UCP_OP_ID_GET) | UCS_BIT(UCP_OP_ID_RNDV_RECV));
+           (UCS_BIT(UCP_OP_ID_GET) | UCS_BIT(UCP_OP_ID_RNDV_RECV) |
+            UCS_BIT(UCP_OP_ID_AMO_FETCH));
 }
 
 static int
@@ -338,6 +339,29 @@ ucp_proto_select_is_am_op(const ucp_proto_select_param_t *select_param)
 {
     return UCS_BIT(ucp_proto_select_op_id(select_param)) &
            UCP_PROTO_RNDV_OP_ID_MASK;
+}
+
+static int
+ucp_proto_select_is_atomic_op(const ucp_proto_select_param_t *select_param)
+{
+    return UCS_BIT(ucp_proto_select_op_id(select_param)) &
+           (UCS_BIT(UCP_OP_ID_AMO_POST) | UCS_BIT(UCP_OP_ID_AMO_FETCH) |
+            UCS_BIT(UCP_OP_ID_AMO_CSWAP));
+}
+static void ucp_proto_debug_mem_info_str(ucs_string_buffer_t *strb,
+                                         ucs_memory_type_t mem_type,
+                                         ucs_sys_device_t sys_dev)
+{
+    const char *sysdev_name;
+
+    ucs_string_buffer_appendf(strb, "%s", ucs_memory_type_names[mem_type]);
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_string_buffer_appendf(strb, " memory");
+    } else {
+        sysdev_name = ucs_topo_sys_device_get_name(sys_dev);
+        ucs_string_buffer_appendf(strb, "/%s", sysdev_name);
+    }
 }
 
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
@@ -359,7 +383,6 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     };
     unsigned op_flags                    = select_param->op_id_flags &
                                            (UCP_PROTO_SELECT_OP_FLAGS_BASE - 1);
-    const char *sysdev_name;
     uint32_t op_attr_mask;
 
     ucs_string_buffer_appendf(
@@ -385,10 +408,24 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
         ucs_string_buffer_appendf(strb, ")");
     }
 
+    if (ucp_proto_select_op_id(select_param) == UCP_OP_ID_AMO_POST) {
+        /* No need to print reply buffer info for AMO post */
+        return;
+    }
+
     if (ucp_proto_select_is_fetch_op(select_param)) {
         ucs_string_buffer_appendf(strb, " into ");
+    } else if (ucp_proto_select_op_id(select_param) == UCP_OP_ID_AMO_CSWAP) {
+        ucs_string_buffer_appendf(strb, " of ");
     } else {
         ucs_string_buffer_appendf(strb, " from ");
+    }
+
+    if (ucp_proto_select_is_atomic_op(select_param)) {
+        /* Atomic fetch/cswap prints the reply buffer info */
+        ucp_proto_debug_mem_info_str(strb, select_param->op.reply.mem_type,
+                                     select_param->op.reply.sys_dev);
+        return;
     }
 
     if (select_param->dt_class != UCP_DATATYPE_CONTIG) {
@@ -400,15 +437,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
         ucs_string_buffer_appendf(strb, " ");
     }
 
-    ucs_string_buffer_appendf(strb, "%s",
-                              ucs_memory_type_names[select_param->mem_type]);
-
-    if (select_param->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_string_buffer_appendf(strb, " memory");
-    } else {
-        sysdev_name = ucs_topo_sys_device_get_name(select_param->sys_dev);
-        ucs_string_buffer_appendf(strb, "/%s", sysdev_name);
-    }
+    ucp_proto_debug_mem_info_str(strb, select_param->mem_type,
+                                 select_param->sys_dev);
 }
 
 void ucp_proto_config_info_str(ucp_worker_h worker,
@@ -468,17 +498,25 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
 {
     ucp_proto_select_param_str(select_param, operation_names, strb);
 
-    if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
-        return;
+    if (rkey_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        if (ucp_proto_select_is_fetch_op(select_param)) {
+            ucs_string_buffer_appendf(strb, " from ");
+        } else if (ucp_proto_select_op_id(select_param) ==
+                   UCP_OP_ID_AMO_CSWAP) {
+            ucs_string_buffer_appendf(strb, " with ");
+        } else {
+            ucs_string_buffer_appendf(strb, " to ");
+        }
+
+        ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key,
+                                   strb);
     }
 
-    if (ucp_proto_select_is_fetch_op(select_param)) {
-        ucs_string_buffer_appendf(strb, " from ");
-    } else {
-        ucs_string_buffer_appendf(strb, " to ");
+    if (ucp_proto_select_is_atomic_op(select_param)) {
+        ucs_string_buffer_appendf(strb, ", arg in ");
+        ucp_proto_debug_mem_info_str(strb, select_param->mem_type,
+                                     select_param->sys_dev);
     }
-
-    ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key, strb);
 }
 
 static ucp_proto_perf_node_t *

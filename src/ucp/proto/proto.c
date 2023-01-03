@@ -13,10 +13,10 @@
 #include <ucs/sys/string.h>
 
 #define UCP_PROTO_AMO_FOR_EACH(_macro, _id) \
-    _macro(ucp_amo_proto_##_id##32) \
-    _macro(ucp_amo_proto_##_id##64) \
-    _macro(ucp_amo_proto_##_id##32_mtype) \
-    _macro(ucp_amo_proto_##_id##64_mtype)
+    _macro(ucp_amo32##_##_id##_proto) \
+    _macro(ucp_amo64##_##_id##_proto) \
+    _macro(ucp_amo32##_##_id##_mtype_proto) \
+    _macro(ucp_amo64##_##_id##_mtype_proto)
 
 #define UCP_PROTO_FOR_EACH(_macro) \
     _macro(ucp_reconfig_proto) \
