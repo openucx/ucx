@@ -9,6 +9,7 @@
 
 #include "cuda_copy_ep.h"
 #include "cuda_copy_iface.h"
+#include "cuda_copy_md.h"
 
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
@@ -87,8 +88,8 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
 
     if ((status == UCS_ERR_UNSUPPORTED) ||
         (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN)) {
-        status = uct_cuda_base_detect_memory_type(md, address, length,
-                                                  &mem_info.type);
+        status = uct_cuda_copy_md_detect_memory_type(md, address, length,
+                                                     &mem_info.type);
         if (status != UCS_OK) {
             return UCS_MEMORY_TYPE_HOST;
         }

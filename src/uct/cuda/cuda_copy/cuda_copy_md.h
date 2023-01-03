@@ -34,4 +34,10 @@ typedef struct uct_cuda_copy_md_config {
     double                      max_reg_ratio;
 } uct_cuda_copy_md_config_t;
 
+
+ucs_status_t uct_cuda_copy_md_detect_memory_type(uct_md_h md,
+                                                 const void *address,
+                                                 size_t length,
+                                                 ucs_memory_type_t *mem_type_p);
+
 #endif
