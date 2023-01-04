@@ -21,12 +21,8 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
     ucs_memory_type_t mem_type = init_params->select_param->mem_type;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (worker->mem_type_ep[mem_type] == NULL)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if ((init_params->select_param->op_id != UCP_OP_ID_RNDV_SEND) &&
-        (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV)) {
+        (worker->mem_type_ep[mem_type] == NULL) ||
+        !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -157,13 +153,13 @@ ucp_proto_rndv_mtype_query_desc(const ucp_proto_query_params_t *params,
     ucp_rsc_index_t rsc_index  = ucp_ep_get_rsc_index(mtype_ep, lane);
     const char *tl_name        = context->tl_rscs[rsc_index].tl_rsc.tl_name;
 
-    if (params->select_param->op_id == UCP_OP_ID_RNDV_SEND) {
+    if (ucp_proto_select_op_id(params->select_param) == UCP_OP_ID_RNDV_SEND) {
         ucs_string_buffer_appendf(&strb, "%s, ", tl_name);
     }
 
     ucs_string_buffer_appendf(&strb, "%s", xfer_desc);
 
-    if (params->select_param->op_id == UCP_OP_ID_RNDV_RECV) {
+    if (ucp_proto_select_op_id(params->select_param) == UCP_OP_ID_RNDV_RECV) {
         ucs_string_buffer_appendf(&strb, ", %s", tl_name);
     }
 }
