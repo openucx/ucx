@@ -108,4 +108,45 @@ ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 }
 
+static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)
+{
+    return (memh->parent != NULL) && (memh->parent != memh);
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_memh_is_buffer_in_range(const ucp_mem_h memh,
+                                                           const void *buffer,
+                                                           size_t length)
+{
+    const void *memh_address = ucp_memh_address(memh);
+
+    if ((buffer < memh_address) ||
+        (UCS_PTR_BYTE_OFFSET(buffer, length) >
+         UCS_PTR_BYTE_OFFSET(memh_address, ucp_memh_length(memh)))) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_memh_is_iov_buffer_in_range(const ucp_mem_h memh, const void *buffer,
+                                size_t iov_count, ucs_string_buffer_t *err_msg)
+{
+    const ucp_dt_iov_t *iov = (const ucp_dt_iov_t*)buffer;
+    size_t iov_index;
+
+    for (iov_index = 0; iov_index < iov_count; ++iov_index) {
+        if (!ucp_memh_is_buffer_in_range(memh, iov[iov_index].buffer,
+                                         iov[iov_index].length)) {
+            ucs_string_buffer_appendf(err_msg,
+                                      "iov[%zu] [buffer %p length %zu]",
+                                      iov_index, iov[iov_index].buffer,
+                                      iov[iov_index].length);
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 #endif

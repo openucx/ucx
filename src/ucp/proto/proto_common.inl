@@ -248,9 +248,12 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 
     ucp_proto_request_send_init(req, ep, 0);
 
-    UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init, worker->context,
-                          (void*)buffer, count, datatype, contig_length, 1,
-                          &req->send.state.dt_iter, &sg_count);
+    status = UCS_PROFILE_CALL(ucp_datatype_iter_init, worker->context,
+                              (void*)buffer, count, datatype, contig_length, 1,
+                              &req->send.state.dt_iter, &sg_count, param);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
                                 op_flags, req->send.state.dt_iter.dt_class,
@@ -260,8 +263,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                               proto_select, rkey_cfg_index, &sel_param,
                               req->send.state.dt_iter.length + header_length);
     if (status != UCS_OK) {
-        ucp_request_put_param(param, req);
-        return UCS_STATUS_PTR(status);
+        goto err;
     }
 
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
@@ -274,6 +276,10 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     ucs_trace_req("returning send request %p: %s buffer %p count %zu",
                   req, ucp_operation_names[op_id], buffer, count);
     return req + 1;
+
+err:
+    ucp_request_put_param(param, req);
+    return UCS_STATUS_PTR(status);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
