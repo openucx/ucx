@@ -25,6 +25,7 @@ function azure_set_variable() {
     test "x$RUNNING_IN_AZURE" = "xno" && return
     name=$1
     value=$2
+    # Do not remove 'set +x': https://developercommunity.visualstudio.com/t/pipeline-variable-incorrectly-inserts-single-quote/375679#T-N394968
     set +x
     echo "##vso[task.setvariable variable=${name}]${value}"
 }
