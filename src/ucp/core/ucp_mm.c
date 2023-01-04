@@ -350,7 +350,7 @@ void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     }
 
     /* Have a parent memory handle from rcache */
-    if ((memh->parent != NULL) && (memh->parent != memh)) {
+    if (ucp_memh_is_user_memh(memh)) {
         ucp_memh_dereg(context, memh, md_map & ~memh->parent->md_map);
         ucp_memh_put(context, memh->parent);
     } else {
@@ -462,11 +462,15 @@ static void ucp_memh_set(ucp_mem_h memh, ucp_context_h context, void* address,
                          size_t length, ucs_memory_type_t mem_type,
                          uint8_t memh_flags, uct_alloc_method_t method)
 {
+    ucp_memory_info_t info;
+
+    ucp_memory_detect(context, address, length, &info);
     memh->super.super.start = (uintptr_t)address;
     memh->super.super.end   = (uintptr_t)address + length;
     memh->flags             = memh_flags;
     memh->context           = context;
     memh->mem_type          = mem_type;
+    memh->sys_dev           = info.sys_dev;
     memh->alloc_method      = method;
     memh->alloc_md_index    = UCP_NULL_RESOURCE;
 }
@@ -1248,12 +1252,17 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
     ucp_context_h context = (ucp_context_h)ctx;
     ucp_mem_h memh        = ucs_derived_of(rregion, ucp_mem_t);
     ucp_mem_attr_t *attr  = arg;
+    const void *address   = (void*)memh->super.super.start;
+    size_t length         = memh->super.super.end - memh->super.super.start;
+    ucp_memory_info_t info;
 
+    ucp_memory_detect(context, address, length, &info);
     memh->context        = context;
     memh->md_map         = 0;
     memh->alloc_md_index = UCP_NULL_RESOURCE;
     memh->alloc_method   = UCT_ALLOC_METHOD_LAST;
     memh->mem_type       = attr->mem_type;
+    memh->sys_dev        = info.sys_dev;
 
     return UCS_OK;
 }

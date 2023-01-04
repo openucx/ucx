@@ -10,6 +10,7 @@
 #include "ucp_request.h"
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
+#include "ucp_mm.inl"
 
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
@@ -17,6 +18,7 @@
 #include <ucs/datastruct/mpool_set.inl>
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/debug/debug_int.h>
+#include <ucp/dt/datatype_iter.inl>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>
 
