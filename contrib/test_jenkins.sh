@@ -1041,6 +1041,14 @@ test_malloc_hook() {
 	fi
 }
 
+test_no_cuda_context() {
+	echo "==== Running no CUDA context test ===="
+	if [ -x ./test/apps/test_no_cuda_ctx ]
+	then
+		./test/apps/test_no_cuda_ctx
+	fi
+}
+
 run_gtest_watchdog_test() {
 	watchdog_timeout=$1
 	sleep_time=$2
@@ -1283,6 +1291,7 @@ run_tests() {
 	do_distributed_task 1 4 test_malloc_hook
 	do_distributed_task 2 4 test_init_mt
 	do_distributed_task 3 4 run_ucp_client_server
+	do_distributed_task 0 4 test_no_cuda_context
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello
