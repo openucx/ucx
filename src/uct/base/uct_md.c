@@ -554,7 +554,7 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)
 
 ucs_status_t
 uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr, size_t length,
-                  unsigned advice)
+                  uct_mem_advice_t advice)
 {
     if ((length == 0) || (addr == NULL)) {
         return UCS_ERR_INVALID_PARAM;
