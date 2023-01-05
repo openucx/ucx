@@ -223,6 +223,34 @@ UCS_TEST_F(test_string_buffer, rtrim) {
     ucs_string_buffer_cleanup(&strb);
 }
 
+UCS_TEST_F(test_string_buffer, rbrk) {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+
+    ucs_string_buffer_appendf(&strb, "one.two.three..");
+
+    ucs_string_buffer_rbrk(&strb, ".");
+    EXPECT_EQ(std::string("one.two.three."), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_rbrk(&strb, ".");
+    EXPECT_EQ(std::string("one.two.three"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_rbrk(&strb, ".");
+    EXPECT_EQ(std::string("one.two"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_rbrk(&strb, ".");
+    EXPECT_EQ(std::string("one"), ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_rbrk(&strb, ".");
+    EXPECT_EQ(std::string("one"), ucs_string_buffer_cstr(&strb));
+}
+
+UCS_TEST_F(test_string_buffer, rbrk_empty) {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+
+    ucs_string_buffer_rbrk(&strb, ".");
+    EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
+}
+
 void test_string_buffer::test_fixed(ucs_string_buffer_t *strb, size_t capacity)
 {
     ucs_string_buffer_appendf(strb, "%s", "im");

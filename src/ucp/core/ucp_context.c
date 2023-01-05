@@ -2216,7 +2216,7 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
         ucp_tl_resource_desc_t *rsc = &context->tl_rscs[rsc_index];
         fprintf(stream,
                 "#      resource %-2d :  md %-2d dev %-2d flags "
-                "%c " UCT_TL_RESOURCE_DESC_FMT "\n",
+                "%c- " UCT_TL_RESOURCE_DESC_FMT "\n",
                 rsc_index, rsc->md_index, rsc->dev_index,
                 (rsc->flags & UCP_TL_RSC_FLAG_AUX) ? 'a' : '-',
                 UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));

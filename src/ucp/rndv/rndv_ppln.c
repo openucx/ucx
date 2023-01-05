@@ -53,18 +53,17 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        ((select_param->op_id != UCP_OP_ID_RNDV_SEND) &&
-         (select_param->op_id != UCP_OP_ID_RNDV_RECV)) ||
+        !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     /* Select a protocol for rndv recv */
-    sel_param          = *select_param;
-    sel_param.op_flags = UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG |
-                         UCP_PROTO_SELECT_OP_FLAG_INTERNAL |
-                         ucp_proto_select_op_attr_to_flags(
-                                 UCP_OP_ATTR_FLAG_MULTI_SEND);
+    sel_param             = *select_param;
+    sel_param.op_id_flags = ucp_proto_select_op_id(select_param) |
+                            UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+    sel_param.op_attr     = ucp_proto_select_op_attr_pack(
+            UCP_OP_ATTR_FLAG_MULTI_SEND);
 
     proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
                                         init_params->rkey_cfg_index,
@@ -73,7 +72,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
         return UCS_OK;
     }
 
-    select_elem = ucp_proto_select_lookup_slow(worker, proto_select,
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
                                                init_params->ep_cfg_index,
                                                init_params->rkey_cfg_index,
                                                &sel_param);
@@ -279,7 +278,7 @@ static size_t ucp_proto_rndv_ppln_pack_ack(void *dest, void *arg)
 static ucs_status_t
 ucp_proto_rndv_send_ppln_init(const ucp_proto_init_params_t *init_params)
 {
-    if (init_params->select_param->op_id != UCP_OP_ID_RNDV_SEND) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -314,7 +313,7 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
 static ucs_status_t
 ucp_proto_rndv_recv_ppln_init(const ucp_proto_init_params_t *init_params)
 {
-    if (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
         return UCS_ERR_UNSUPPORTED;
     }
 

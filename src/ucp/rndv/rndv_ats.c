@@ -36,9 +36,10 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
      * data, or a rendezvous receive which should ignore the data.
      * In either case, we just need to send an ATS.
      */
-    if (init_params->select_param->op_id == UCP_OP_ID_RNDV_RECV) {
+    if (ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
         range0->max_length = 0;
-    } else if (init_params->select_param->op_id == UCP_OP_ID_RNDV_RECV_DROP) {
+    } else if (ucp_proto_init_check_op(init_params,
+                                       UCS_BIT(UCP_OP_ID_RNDV_RECV_DROP))) {
         range0->max_length = SIZE_MAX;
     } else {
         return UCS_ERR_UNSUPPORTED;

@@ -562,13 +562,15 @@ int main(int argc, char **argv)
 
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                               UCP_PARAM_FIELD_REQUEST_SIZE |
-                              UCP_PARAM_FIELD_REQUEST_INIT;
+                              UCP_PARAM_FIELD_REQUEST_INIT |
+                              UCP_PARAM_FIELD_NAME;
     ucp_params.features     = UCP_FEATURE_TAG;
     if (ucp_test_mode == TEST_MODE_WAIT || ucp_test_mode == TEST_MODE_EVENTFD) {
         ucp_params.features |= UCP_FEATURE_WAKEUP;
     }
     ucp_params.request_size    = sizeof(struct ucx_context);
     ucp_params.request_init    = request_init;
+    ucp_params.name            = "hello_world";
 
     status = ucp_init(&ucp_params, config, &ucp_context);
 

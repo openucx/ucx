@@ -18,6 +18,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/math.h>
 }
+#include <sys/resource.h>
 #include <net/if_arp.h>
 #include <ifaddrs.h>
 #include <netdb.h>
@@ -912,3 +913,39 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_fork)
 
+class test_md_memlock_limit : public test_md {
+protected:
+    void init() override
+    {
+        ucs::test_base::init();
+        check_skip_test();
+
+        if (getrlimit(RLIMIT_MEMLOCK, &m_previous_limit) != 0) {
+            UCS_TEST_SKIP_R("Cannot get the previous memlock limit");
+        }
+        const struct rlimit new_limit = {1, m_previous_limit.rlim_max};
+        if (setrlimit(RLIMIT_MEMLOCK, &new_limit) != 0) {
+            UCS_TEST_SKIP_R("Cannot set the new memlock limit");
+        }
+    }
+
+    void cleanup() override
+    {
+        if (setrlimit(RLIMIT_MEMLOCK, &m_previous_limit) != 0) {
+            UCS_TEST_ABORT("Failed to restore memlock limit. "
+                           "Can cause other tests failures!");
+        }
+        test_md::cleanup();
+    }
+
+    struct rlimit m_previous_limit;
+};
+
+UCS_TEST_P(test_md_memlock_limit, md_open)
+{
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
+}
+
+UCT_MD_INSTANTIATE_TEST_CASE(test_md_memlock_limit)

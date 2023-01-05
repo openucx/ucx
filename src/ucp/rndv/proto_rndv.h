@@ -19,6 +19,11 @@
 #define UCP_PROTO_RNDV_ATP_NAME "ATP"
 
 
+/* Mask of rendezvous operations */
+#define UCP_PROTO_RNDV_OP_ID_MASK \
+    (UCS_BIT(UCP_OP_ID_RNDV_SEND) | UCS_BIT(UCP_OP_ID_RNDV_RECV))
+
+
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the

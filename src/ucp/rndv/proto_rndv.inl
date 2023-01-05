@@ -9,6 +9,7 @@
 
 #include "proto_rndv.h"
 
+#include <ucp/proto/proto_init.h>
 #include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_am.inl>
 #include <ucp/proto/proto_single.inl>
@@ -388,21 +389,22 @@ ucp_proto_rndv_bulk_max_payload_align(ucp_request_t *req,
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_request_is_ppln_frag(ucp_request_t *req)
 {
-    return req->send.proto_config->select_param.op_flags &
+    return req->send.proto_config->select_param.op_id_flags &
            UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
 }
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_init_params_is_ppln_frag(const ucp_proto_init_params_t *params)
 {
-    return params->select_param->op_flags & UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+    return params->select_param->op_id_flags &
+           UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
 }
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_op_check(const ucp_proto_init_params_t *params,
                         ucp_operation_id_t op_id, int support_ppln)
 {
-    return (params->select_param->op_id == op_id) &&
+    return ucp_proto_init_check_op(params, UCS_BIT(op_id)) &&
            (support_ppln || !ucp_proto_rndv_init_params_is_ppln_frag(params));
 }
 
