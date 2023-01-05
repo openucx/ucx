@@ -2225,8 +2225,8 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream);
  * @param [in]  worker            Worker object that is associated with the
  *                                address object.
  * @param [in] address            Address to release; the address object has to
- *                                be allocated using @ref ucp_worker_get_address
- *                                "ucp_worker_get_address()" routine.
+ *                                be allocated using @ref ucp_worker_query
+ *                                "ucp_worker_query()" routine.
  *
  * @todo We should consider to change it to return int so we can catch the
  * errors when worker != address
