@@ -1975,9 +1975,8 @@ void uct_ib_md_close(uct_md_h uct_md)
     md->ops->cleanup(md);
 }
 
-ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
+void uct_ib_md_ece_check(uct_ib_md_t *md)
 {
-    ucs_status_t status  = UCS_OK;
 #if HAVE_DECL_IBV_SET_ECE
     uct_ib_device_t *dev = &md->dev;
     struct ibv_pd *pd    = md->pd;
@@ -1988,8 +1987,7 @@ ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
 
     cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        status = UCS_ERR_IO_ERROR;
-        goto out;
+        return;
     }
 
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
@@ -2003,7 +2001,6 @@ ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
 
     dummy_qp = ibv_create_qp(pd, &qp_init_attr);
     if (dummy_qp == NULL) {
-        status = UCS_ERR_IO_ERROR;
         goto free_cq;
     }
 
@@ -2016,9 +2013,7 @@ ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
     ibv_destroy_qp(dummy_qp);
 free_cq:
     ibv_destroy_cq(cq);
-out:
 #endif
-    return status;
 }
 
 static uct_ib_md_ops_t uct_ib_verbs_md_ops;
@@ -2079,20 +2074,11 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     md->name       = UCT_IB_MD_NAME(verbs);
     md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
-    status = uct_ib_md_ece_check(md);
-    if (status != UCS_OK) {
-        goto err_md_close_common;
-    }
+    uct_ib_md_ece_check(md);
 
     *p_md = md;
     return UCS_OK;
 
-err_md_close_common:
-    /* Coverity thinks that this goto label is unreachable, because "status"
-     * variable is always set to UCS_OK in case of ibv_set_ece() is unavailable
-     * in uct_ib_md_ece_check() */
-    /* coverity[unreachable] */
-    uct_ib_md_close_common(md);
 err_device_config_release:
     uct_ib_md_release_device_config(md);
 err_md_free:

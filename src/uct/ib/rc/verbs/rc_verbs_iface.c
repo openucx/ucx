@@ -539,7 +539,7 @@ uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        ucs_error("failed to create cq %m");
+        ucs_debug("failed to create cq %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
