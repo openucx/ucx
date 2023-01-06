@@ -118,6 +118,10 @@
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
+#define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
+    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
+
+
 static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
 {
     CUcontext ctx;
