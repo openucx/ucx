@@ -85,6 +85,18 @@ public:
         return m_count;
     };
 
+    ssize_t extent() const
+    {
+        if (UCP_DT_IS_CONTIG(m_dt) || UCP_DT_IS_GENERIC(m_dt)) {
+            return m_length;
+        } else if (UCP_DT_IS_IOV(m_dt)) {
+            return m_count;
+        }
+
+        ADD_FAILURE() << "Not supported datatype";
+        return -1;
+    }
+
 private:
     uintptr_t       m_origin;
     size_t          m_length;
