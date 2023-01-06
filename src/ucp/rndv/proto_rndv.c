@@ -724,8 +724,8 @@ ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t length, ucp_ep_h ep,
         return UCS_ERR_NO_MESSAGE;
     }
 
-    req->send.rndv.rdata = ucs_malloc(
-            iov_count * sizeof(*req->send.rndv.rdata), "proto_rndv");
+    req->send.rndv.rdata = ucs_malloc(iov_count * sizeof(*req->send.rndv.rdata),
+                                      "proto_rndv");
     if (req->send.rndv.rdata == NULL) {
         ucs_error("failed to allocate rma array");
         status = UCS_ERR_NO_MEMORY;
@@ -746,7 +746,7 @@ ucp_proto_rndv_unpack_iov_rkeys(const void *buffer, size_t length, ucp_ep_h ep,
         if (status != UCS_OK) {
             goto destroy_rkey;
         }
-        accumulate_size                                    += rsize;
+        accumulate_size                                += rsize;
         req->send.rndv.rdata[iov_index].accumulate_size = accumulate_size;
         req->send.rndv.rdata[iov_index].raddress        = raddress;
         req->send.rndv.rdata[iov_index].rsize           = rsize;
@@ -894,10 +894,9 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
         op_id            = UCP_OP_ID_RNDV_RECV;
         recv_req->status = UCS_OK;
         UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init_from_dt_state,
-                              worker->context, recv_req->recv.buffer,
-                              rts->size, recv_req->recv.datatype,
-                              &recv_req->recv.state, &req->send.state.dt_iter,
-                              &sg_count);
+                              worker->context, recv_req->recv.buffer, rts->size,
+                              recv_req->recv.datatype, &recv_req->recv.state,
+                              &req->send.state.dt_iter, &sg_count);
     } else {
         /* Short receive: complete with error, and send reply to sender */
         rkey_length      = 0; /* Override rkey length to disable data fetch */
