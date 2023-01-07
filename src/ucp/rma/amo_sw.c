@@ -384,7 +384,9 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 static ucs_status_t
 ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags)
 {
-    ucp_proto_single_init_params_t params = {
+    const ucp_ep_config_key_t *ep_config_key = init_params->ep_config_key;
+    ucp_worker_h worker                      = init_params->worker;
+    ucp_proto_single_init_params_t params    = {
         .super.super         = *init_params,
         .super.latency       = 1.2e-6,
         .super.overhead      = 0,
@@ -405,6 +407,21 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = 0
     };
+    const ucp_ep_config_key_lane_t *lane_config;
+    const uct_iface_attr_t *iface_attr;
+
+    /* If the endpoint has device atomic lanes, it means the target worker
+       expects only device atomics, so we cannot use SW atomics. */
+    ucs_carray_for_each(lane_config, ep_config_key->lanes,
+                        ep_config_key->num_lanes) {
+        iface_attr = ucp_worker_iface_get_attr(worker, lane_config->rsc_index);
+        if ((lane_config->lane_types & UCS_BIT(UCP_LANE_TYPE_AMO)) &&
+            (iface_attr->cap.flags & UCT_IFACE_FLAG_ATOMIC_DEVICE)) {
+            ucs_trace("software atomics not supported because device atomics "
+                      "are selected");
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
 
     return ucp_proto_single_init(&params);
 }
