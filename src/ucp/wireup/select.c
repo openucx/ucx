@@ -1446,7 +1446,7 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
         overhead = ucp_wireup_get_lane_progress_overhead(
                 worker, sinfo[sinfo_index].rsc_index);
-        if ((overhead > 0) && ((min_overhead / overhead) < max_ratio)) {
+        if ((min_overhead > 0) && ((min_overhead / overhead) < max_ratio)) {
             continue;
         }
 
