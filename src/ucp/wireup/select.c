@@ -1410,14 +1410,7 @@ static double ucp_wireup_get_lane_progress_overhead(ucp_worker_h worker,
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
     uct_perf_attr_t perf_attr;
 
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
-                           UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD;
-
-    /* We use AM_SHORT as a dummy operation because we don't know which
-        protocol will be selected (anyway it has no effect on the value of
-        progress_overhead). */
-    perf_attr.operation = UCT_EP_OP_AM_SHORT;
-
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD;
     if (uct_iface_estimate_perf(wiface->iface, &perf_attr) != UCS_OK) {
         /* Skip the overhead check if no value was retrieved */
         return 0;
@@ -1428,7 +1421,7 @@ static double ucp_wireup_get_lane_progress_overhead(ucp_worker_h worker,
 
 static unsigned
 ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
-                          const ucp_wireup_select_info_t *sinfo_array,
+                          const ucp_wireup_select_info_t *sinfo,
                           unsigned num_sinfo, ucp_worker_h worker,
                           ucp_lane_type_t lane_type,
                           ucp_wireup_select_context_t *select_ctx)
@@ -1445,21 +1438,21 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
     /* Iterate over all elements and calculate minimum progress overhead */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
         overhead     = ucp_wireup_get_lane_progress_overhead(
-                worker, sinfo_array[sinfo_index].rsc_index);
+                worker, sinfo[sinfo_index].rsc_index);
         min_overhead = ucs_min(overhead, min_overhead);
     }
 
     /* Compare each element to minimum progress overhead and filter only fast lanes */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
         overhead = ucp_wireup_get_lane_progress_overhead(
-                worker, sinfo_array[sinfo_index].rsc_index);
-        if ((min_overhead > 0) && ((min_overhead / overhead) < max_ratio)) {
+                worker, sinfo[sinfo_index].rsc_index);
+        if ((overhead > 0) && ((min_overhead / overhead) < max_ratio)) {
             continue;
         }
 
         show_error = (num_lanes == 0);
-        status = ucp_wireup_add_lane(select_params, &sinfo_array[sinfo_index],
-                                     lane_type, show_error, select_ctx);
+        status     = ucp_wireup_add_lane(select_params, &sinfo[sinfo_index],
+                                         lane_type, show_error, select_ctx);
         if (status != UCS_OK) {
             break;
         }
