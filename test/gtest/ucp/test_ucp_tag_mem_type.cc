@@ -49,10 +49,11 @@ public:
             enable_tag_mp_offload();
 
             if (RUNNING_ON_VALGRIND) {
-                if (m_ucp_config->ctx.proto_enable) {
-                    UCS_TEST_SKIP_R("FIXME: skip forced UCX_PROTO_ENABLE=y because "
-                                    "it does not completely support HWTM");
+                if (variant_flags & VARIANT_PROTO) {
+                    skip_protov2();
                 }
+
+                skip_external_protov2();
 
                 m_env.push_back(
                         new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
