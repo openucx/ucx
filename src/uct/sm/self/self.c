@@ -12,6 +12,7 @@
 #include <uct/base/uct_iov.inl>
 #include <uct/sm/base/sm_ep.h>
 #include <uct/sm/base/sm_iface.h>
+#include <uct/sm/base/sm_md.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/cpu.h>
@@ -451,7 +452,7 @@ static uct_component_t uct_self_component = {
     .md_open            = uct_self_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_self_md_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = uct_sm_rkey_ptr,
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_SELF_NAME,
     .md_config          = {
@@ -462,7 +463,7 @@ static uct_component_t uct_self_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
-    .flags              = 0,
+    .flags              = UCT_MD_FLAG_RKEY_PTR,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
