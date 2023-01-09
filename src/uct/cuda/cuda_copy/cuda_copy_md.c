@@ -425,6 +425,7 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
     uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
     unsigned value         = 1;
     ucs_memory_info_t addr_mem_info;
+    ucs_memory_info_t dmabuf_addr_mem_info;
     const char *cu_err_str;
     ucs_status_t status;
     CUresult cu_err;
@@ -478,12 +479,15 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
-        mem_attr->dmabuf_fd = uct_cuda_copy_md_get_dmabuf_fd(&addr_mem_info);
-    }
+        dmabuf_addr_mem_info = addr_mem_info;
+        mem_attr->dmabuf_fd  = uct_cuda_copy_md_get_dmabuf_fd(&dmabuf_addr_mem_info);
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
-        mem_attr->dmabuf_offset = UCS_PTR_BYTE_DIFF(addr_mem_info.base_address,
-                                                    address);
+        /* if mask does not include DMABUF_FD, then better to not set
+         * DMABUF_OFFSET */
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
+            mem_attr->dmabuf_offset = UCS_PTR_BYTE_DIFF(dmabuf_addr_mem_info.base_address,
+                                                        address);
+        }
     }
 
     return UCS_OK;
