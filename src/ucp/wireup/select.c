@@ -1439,7 +1439,9 @@ static double ucp_wireup_get_lane_progress_overhead(ucp_worker_h worker,
         return 0;
     }
 
-    return perf_attr.progress_overhead;
+    /* We ignore overhead smaller than 10ns, because ratio calculation must
+     * have values larger than zero */
+    return ucs_max(10e-9, perf_attr.progress_overhead);
 }
 
 static unsigned
@@ -1469,7 +1471,7 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
         overhead = ucp_wireup_get_lane_progress_overhead(
                 worker, sinfo[sinfo_index].rsc_index);
-        if ((min_overhead > 0) && ((min_overhead / overhead) < max_ratio)) {
+        if ((min_overhead / overhead) < max_ratio) {
             continue;
         }
 
