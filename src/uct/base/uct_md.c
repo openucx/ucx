@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017. ALL RIGHTS RESERVED.
+* Copyright (c) Triad National Security, LLC. 2023. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -554,7 +555,7 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)
 
 ucs_status_t
 uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr, size_t length,
-                  unsigned advice)
+                  uct_mem_advice_t advice)
 {
     if ((length == 0) || (addr == NULL)) {
         return UCS_ERR_INVALID_PARAM;
