@@ -1430,18 +1430,20 @@ ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
 static double ucp_wireup_get_lane_progress_overhead(ucp_worker_h worker,
                                                     ucp_rsc_index_t rsc_index)
 {
+    static const min_valid_overhead = 10e-9;
+
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
     uct_perf_attr_t perf_attr;
 
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD;
     if (uct_iface_estimate_perf(wiface->iface, &perf_attr) != UCS_OK) {
         /* Skip the overhead check if no value was retrieved */
-        return 0;
+        return min_valid_overhead;
     }
 
     /* We ignore overhead smaller than 10ns, because ratio calculation must
      * have values larger than zero */
-    return ucs_max(10e-9, perf_attr.progress_overhead);
+    return ucs_max(min_valid_overhead, perf_attr.progress_overhead);
 }
 
 static unsigned
