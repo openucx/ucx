@@ -209,6 +209,8 @@ protected:
         }
 
         flush_req = sender().flush_worker_nb(0);
+        /* In some cases, there will be nothing to flush
+         * so we need to skip the progress loop */
         if ((flush_req == NULL) &&
             (get_variant_value() & TEST_DISCARD_DISABLED)) {
             UCS_TEST_MESSAGE << "all EPs returned UCS_OK in 'flush_worker_nb'";
