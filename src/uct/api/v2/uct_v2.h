@@ -171,7 +171,7 @@ typedef struct {
     double              recv_overhead;
 
     /**
-     * This is the time spent progressing the request, in seconds.
+     * This is the time spent progressing the iface, in seconds.
      * This field is set by the UCT layer.
      */
     double              progress_overhead;
