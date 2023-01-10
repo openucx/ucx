@@ -1430,8 +1430,7 @@ ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
 static double ucp_wireup_get_lane_progress_overhead(ucp_worker_h worker,
                                                     ucp_rsc_index_t rsc_index)
 {
-    static const min_valid_overhead = 10e-9;
-
+    static const double min_valid_overhead = 10e-9;
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
     uct_perf_attr_t perf_attr;
 
