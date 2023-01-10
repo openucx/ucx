@@ -47,6 +47,10 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of cuda events. -1 is infinite",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, max_cuda_ipc_events), UCS_CONFIG_TYPE_UINT},
 
+    {"BW", "auto",
+     "Effective p2p memory bandwidth",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
+
     {NULL}
 };
 
@@ -106,6 +110,8 @@ static double uct_cuda_ipc_iface_get_bw()
         return 250000.0 * UCS_MBYTE;
     case UCT_CUDA_BASE_GEN_A100:
         return 300000.0 * UCS_MBYTE;
+    case UCT_CUDA_BASE_GEN_H100:
+        return 400000.0 * UCS_MBYTE;
     default:
         return 6911.0  * UCS_MBYTE;
     }
@@ -218,7 +224,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = ucs_linear_func_make(1e-9, 0);
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = uct_cuda_ipc_iface_get_bw();
+    iface_attr->bandwidth.shared        = iface->config.bandwidth;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
 
@@ -500,6 +506,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     self->config.enable_cache        = config->enable_cache;
     self->config.enable_get_zcopy    = config->enable_get_zcopy;
     self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
+    self->config.bandwidth           = UCS_CONFIG_DBL_IS_AUTO(config->bandwidth) ?
+                                       uct_cuda_ipc_iface_get_bw() : config->bandwidth;
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_cuda_ipc_event_desc_t);
