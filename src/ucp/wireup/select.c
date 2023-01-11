@@ -26,6 +26,7 @@
                                             UCT_IFACE_FLAG_EVENT_RECV)
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
+#define UCP_WIREUP_MIN_VALID_OVERHEAD      10e-9
 
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
@@ -1407,19 +1408,18 @@ ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
 static double ucp_wireup_get_lane_progress_overhead(ucp_worker_h worker,
                                                     ucp_rsc_index_t rsc_index)
 {
-    static const double min_valid_overhead = 10e-9;
+    double overhead            = UCP_WIREUP_MIN_VALID_OVERHEAD;
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
     uct_perf_attr_t perf_attr;
 
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD;
-    if (uct_iface_estimate_perf(wiface->iface, &perf_attr) != UCS_OK) {
-        /* Skip the overhead check if no value was retrieved */
-        return min_valid_overhead;
+    if (uct_iface_estimate_perf(wiface->iface, &perf_attr) == UCS_OK) {
+        /* We ignore overhead smaller than 10ns, because ratio calculation must
+         * have values larger than zero */
+        overhead = ucs_max(overhead, perf_attr.progress_overhead);
     }
 
-    /* We ignore overhead smaller than 10ns, because ratio calculation must
-     * have values larger than zero */
-    return ucs_max(min_valid_overhead, perf_attr.progress_overhead);
+    return overhead;
 }
 
 static unsigned
@@ -1449,6 +1449,8 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
         overhead = ucp_wireup_get_lane_progress_overhead(
                 worker, sinfo[sinfo_index].rsc_index);
+        ucs_assertv(overhead > 0, "progress overhead has illegal value: %f",
+                    overhead);
         if ((min_overhead / overhead) < max_ratio) {
             continue;
         }
@@ -1508,9 +1510,9 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                 break;
             }
 
-            rsc_index  = sinfo[num_sinfo].rsc_index;
-            addr_index = sinfo[num_sinfo].addr_index;
-            dev_index  = context->tl_rscs[rsc_index].dev_index;
+            rsc_index                   = sinfo[num_sinfo].rsc_index;
+            addr_index                  = sinfo[num_sinfo].addr_index;
+            dev_index                   = context->tl_rscs[rsc_index].dev_index;
             sinfo[num_sinfo].path_index = dev_count.local[dev_index];
             num_sinfo++;
         } else {
