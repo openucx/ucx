@@ -253,6 +253,12 @@ struct ucp_worker_cm {
 };
 
 
+typedef struct ucp_worker_discard_req {
+    ucs_list_link_t req_list;
+    void            *req;
+} ucp_worker_discard_req_t;
+
+
 UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
@@ -352,6 +358,8 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    ucs_list_link_t discard_req_list;
 } ucp_worker_t;
 
 
