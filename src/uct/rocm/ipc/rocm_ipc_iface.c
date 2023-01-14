@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
@@ -13,10 +13,7 @@
 #include "rocm_ipc_ep.h"
 
 #include <uct/rocm/base/rocm_base.h>
-#include <ucs/arch/cpu.h>
-#include <ucs/type/class.h>
-#include <ucs/sys/string.h>
-
+#include <uct/rocm/base/rocm_signal.h>
 
 static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
 
@@ -130,31 +127,8 @@ uct_rocm_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
-    static const unsigned max_signals = 16;
-    unsigned count = 0;
-    uct_rocm_ipc_signal_desc_t *rocm_ipc_signal;
-    ucs_queue_iter_t iter;
 
-    ucs_queue_for_each_safe(rocm_ipc_signal, iter, &iface->signal_queue, queue) {
-        if (hsa_signal_load_scacquire(rocm_ipc_signal->signal) != 0) {
-            continue;
-        }
-
-        ucs_queue_del_iter(&iface->signal_queue, iter);
-        if (rocm_ipc_signal->comp != NULL) {
-            uct_invoke_completion(rocm_ipc_signal->comp, UCS_OK);
-        }
-
-        ucs_trace_poll("ROCM_IPC Signal Done :%p", rocm_ipc_signal);
-        ucs_mpool_put(rocm_ipc_signal);
-        count++;
-
-        if (count >= max_signals) {
-            break;
-        }
-    }
-
-    return count;
+    return uct_rocm_base_progress(&iface->signal_queue);
 }
 
 static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
@@ -178,36 +152,6 @@ static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
     .iface_is_reachable       = uct_rocm_ipc_iface_is_reachable
 };
 
-static void uct_rocm_ipc_signal_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
-{
-    uct_rocm_ipc_signal_desc_t *base = (uct_rocm_ipc_signal_desc_t *)obj;
-    hsa_status_t status;
-
-    memset(base, 0, sizeof(*base));
-    status = hsa_signal_create(1, 0, NULL, &base->signal);
-    if (status != HSA_STATUS_SUCCESS) {
-        ucs_fatal("fail to create signal");
-    }
-}
-
-static void uct_rocm_ipc_signal_desc_cleanup(ucs_mpool_t *mp, void *obj)
-{
-    uct_rocm_ipc_signal_desc_t *base = (uct_rocm_ipc_signal_desc_t *)obj;
-    hsa_status_t status;
-
-    status = hsa_signal_destroy(base->signal);
-    if (status != HSA_STATUS_SUCCESS) {
-        ucs_fatal("fail to destroy signal");
-    }
-}
-
-static ucs_mpool_ops_t uct_rocm_ipc_signal_desc_mpool_ops = {
-    .chunk_alloc   = ucs_mpool_chunk_malloc,
-    .chunk_release = ucs_mpool_chunk_free,
-    .obj_init      = uct_rocm_ipc_signal_desc_init,
-    .obj_cleanup   = uct_rocm_ipc_signal_desc_cleanup,
-    .obj_str       = NULL
-};
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
@@ -218,15 +162,15 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops, 
                               &uct_base_iface_internal_ops,
-			      md, worker, params,
+                              md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_IPC_TL_NAME));
 
     ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = sizeof(uct_rocm_ipc_signal_desc_t);
+    mp_params.elem_size       = sizeof(uct_rocm_base_signal_desc_t);
     mp_params.elems_per_chunk = 128;
     mp_params.max_elems       = 1024;
-    mp_params.ops             = &uct_rocm_ipc_signal_desc_mpool_ops;
+    mp_params.ops             = &uct_rocm_base_signal_desc_mpool_ops;
     mp_params.name            = "ROCM_IPC signal objects";
     status = ucs_mpool_init(&mp_params, &self->signal_pool);
     if (status != UCS_OK) {
