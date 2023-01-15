@@ -807,7 +807,8 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                           size_t length, uint8_t sg_count)
 {
     ucp_ep_h ep = req->send.ep;
-    size_t rdata_idx;
+    size_t rdata_count = req->send.rndv.rdata_count;
+    size_t rdata_idx, rdata_size;
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
@@ -817,13 +818,36 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
     ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
                (op_id < UCP_OP_ID_RNDV_LAST));
 
-    if (req->send.rndv.rdata_count != 0) {
-        rdata_idx      = req->send.rndv.rdata_idx;
-        rkey           = req->send.rndv.rdata[rdata_idx].rkey;
-        length         = req->send.rndv.rdata[rdata_idx].rsize;
-        proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
-        rkey_cfg_index = rkey->cfg_index;
-    } else if (req->send.rndv.rkey != NULL) {
+    if (rdata_count != 0) {
+        for (rdata_idx = 0; rdata_idx != rdata_count; ++rdata_idx) {
+            rkey           = req->send.rndv.rdata[rdata_idx].rkey;
+            rdata_size     = req->send.rndv.rdata[rdata_idx].rsize;
+            proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
+            rkey_cfg_index = rkey->cfg_index;
+
+            ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, 0,
+                                        req->send.state.dt_iter.dt_class,
+                                        &req->send.state.dt_iter.mem_info,
+                                        sg_count);
+            status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker,
+                                      ep, req, proto_select, rkey_cfg_index,
+                                      &sel_param, rdata_size);
+            if (status != UCS_OK) {
+                goto err_destroy_rkey;
+            }
+
+            if (req->send.proto_config->proto != &ucp_rndv_get_zcopy_proto) {
+                ucp_proto_rndv_iov_rkeys_destroy(req);
+                req->send.rndv.remote_address = 0;
+                req->send.rndv.rkey = NULL;
+                goto fallback;
+            }
+        }
+        goto finish;
+    }
+
+fallback:
+    if (req->send.rndv.rkey != NULL) {
         rkey           = req->send.rndv.rkey;
         proto_select   = &ucp_rkey_config(worker, rkey)->proto_select;
         rkey_cfg_index = rkey->cfg_index;
@@ -843,12 +867,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
         goto err_destroy_rkey;
     }
 
-    if (req->send.rndv.rdata_count != 0 &&
-        req->send.proto_config->proto != &ucp_rndv_get_zcopy_proto) {
-        ucp_proto_rndv_iov_rkeys_destroy(req);
-        req->send.rndv.remote_address = 0;
-    }
-
+finish:
     ucp_trace_req(req,
                   "%s rva 0x%" PRIx64 " length %zd rreq_id 0x%" PRIx64
                   " with protocol %s",
