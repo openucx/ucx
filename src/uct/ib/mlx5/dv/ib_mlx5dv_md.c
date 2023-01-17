@@ -850,8 +850,9 @@ uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        ucs_debug("ibv_create_cq(%s) failed: %m",
-                  ibv_get_device_name(ibv_device));
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
+                                       "%s: ibv_create_cq()",
+                                       ibv_get_device_name(ibv_device));
         goto close_ctx;
     }
 
@@ -1356,6 +1357,9 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
 
     dummy_cq = ibv_create_cq(md->super.dev.ibv_context, 1, NULL, NULL, 0);
     if (dummy_cq == NULL) {
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
+                                       "%s: ibv_create_cq()",
+                                       uct_ib_device_name(&md->super.dev));
         goto err;
     }
 
@@ -1369,6 +1373,9 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
 
     dummy_qp = ibv_create_qp(md->super.pd, &qp_init_attr);
     if (dummy_qp == NULL) {
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
+                                       "%s: ibv_create_qp()",
+                                       uct_ib_device_name(&md->super.dev));
         goto err_free_cq;
     }
 

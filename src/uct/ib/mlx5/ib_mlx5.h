@@ -867,7 +867,7 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     mem->mem  = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size,
                                      access_mode);
     if (mem->mem == NULL) {
-        ucs_log(level, "mlx5dv_devx_umem_reg() failed: %m");
+        uct_ib_check_memlock_limit_msg(level, "mlx5dv_devx_umem_reg()");
         status = UCS_ERR_NO_MEMORY;
         goto err_dofork;
     }
