@@ -1437,7 +1437,7 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
 {
     uct_dc_mlx5_iface_t *iface = arg;
     uint8_t pool_index;
-    uint8_t dci;
+    uint16_t dci;
     uct_dc_mlx5_dci_pool_t *dci_pool;
 
     ucs_assert(iface->tx.dci_release_prog_id != UCS_CALLBACKQ_ID_NULL);
@@ -1710,7 +1710,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
-    uint8_t dci_index          = ep->dci;
+    uint16_t dci_index         = ep->dci;
     uint16_t pi                = ntohs(cqe->wqe_counter);
     uint8_t pool_index;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);

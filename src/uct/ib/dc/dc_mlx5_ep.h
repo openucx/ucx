@@ -13,7 +13,8 @@
 
 #include "dc_mlx5.h"
 
-#define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
+#define UCT_DC_MLX5_EP_NO_DCI ((uint16_t)-1)
+#define UCT_DC_MLX5_POOL_NO_DCI ((uint16_t)-1)
 
 
 #define UCT_DC_MLX5_TXQP_DECL(_txqp, _txwq) \
@@ -70,7 +71,7 @@ typedef struct uct_dc_mlx5_base_av {
 struct uct_dc_mlx5_ep {
     uct_base_ep_t         super;
     ucs_arbiter_group_t   arb_group;
-    uint8_t               dci;
+    uint16_t              dci;
     uint8_t               atomic_mr_id;
     uint16_t              flags;
     uint16_t              flush_rkey_hi;
@@ -289,7 +290,7 @@ uct_dc_mlx5_iface_dci_sched_tx(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE uct_dc_mlx5_ep_t *
-uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uint16_t dci_index)
 {
     /* Can be used with dcs* policies only, with rand policy every dci may
      * be used by many eps */
@@ -396,7 +397,7 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t
-uct_dc_mlx5_iface_dci_pool_index(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_iface_dci_pool_index(uct_dc_mlx5_iface_t *iface, uint16_t dci_index)
 {
     ucs_assertv(iface->tx.dcis[dci_index].pool_index <
                         UCT_DC_MLX5_IFACE_MAX_DCI_POOLS,
@@ -406,7 +407,7 @@ uct_dc_mlx5_iface_dci_pool_index(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint16_t dci_index)
 {
     uint8_t pool_index           = uct_dc_mlx5_iface_dci_pool_index(iface,
                                                                     dci_index);
@@ -423,7 +424,7 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 /* Release endpoint's DCI below, if the endpoint does not have outstanding
  * operations */
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint16_t dci_index)
 {
     uct_dc_mlx5_ep_t *ep;
     ucs_arbiter_t *waitq;
@@ -446,7 +447,8 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     }
 
     pool_index = uct_dc_mlx5_ep_pool_index(ep);
-    ucs_assert(iface->tx.dci_pool[pool_index].stack_top > 0);
+    ucs_assert(iface->tx.dci_pool[pool_index].stack_top !=
+               UCT_DC_MLX5_POOL_NO_DCI);
 
     if (uct_dc_mlx5_iface_dci_has_outstanding(iface, dci_index)) {
         if (iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) {
@@ -502,13 +504,16 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
     }
 
     ucs_debug("iface %p: allocate dci %d for ep %p", iface, ep->dci, ep);
+    ucs_assertv(pool->stack_top != UCT_DC_MLX5_POOL_NO_DCI,
+                "dci alloc exceeds maximum limit %d (allocated:%d)",
+                (int)UCT_DC_MLX5_POOL_NO_DCI, pool->stack_top);
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint16_t dci)
 {
     uint8_t pool_index = uct_dc_mlx5_iface_dci_pool_index(iface, dci);
-    uint8_t stack_top;
+    uint16_t stack_top;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
@@ -529,11 +534,12 @@ uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_detach(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    uint8_t dci_index = ep->dci;
+    uint16_t dci_index = ep->dci;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
     ucs_assert(dci_index != UCT_DC_MLX5_EP_NO_DCI);
-    ucs_assert(iface->tx.dci_pool[uct_dc_mlx5_ep_pool_index(ep)].stack_top > 0);
+    ucs_assert(iface->tx.dci_pool[uct_dc_mlx5_ep_pool_index(ep)].stack_top !=
+               UCT_DC_MLX5_POOL_NO_DCI);
 
     if (uct_dc_mlx5_iface_dci_has_outstanding(iface, dci_index)) {
         return 0;

@@ -134,7 +134,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
 static void
 uct_dc_mlx5_dci_keepalive_handle_failure(uct_dc_mlx5_iface_t *iface,
                                          struct mlx5_cqe64 *cqe,
-                                         uint8_t dci_index,
+                                         uint16_t dci_index,
                                          ucs_status_t ep_status);
 
 
@@ -244,7 +244,7 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
-    uint8_t dci_index;
+    uint16_t dci_index;
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
@@ -340,7 +340,7 @@ static void uct_ib_mlx5dv_dci_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
 
 static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                                  uint8_t pool_index,
-                                                 uint8_t dci_index,
+                                                 uint16_t dci_index,
                                                  uint8_t path_index,
                                                  int full_handshake)
 {
@@ -733,11 +733,12 @@ static void uct_dc_mlx5_iface_dci_pool_destroy(uct_dc_mlx5_dci_pool_t *dci_pool)
 
 static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface,
                                            uint8_t num_dci_pools,
-                                           uint8_t num_dcis)
+                                           uint16_t num_dcis)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                           uct_ib_mlx5_md_t);
-    uint8_t pool_index, dci_index;
+    uint8_t pool_index;
+    uint16_t dci_index;
 
     ucs_assert(num_dci_pools <= iface->tx.num_dci_pools);
     ucs_assert(num_dcis <= uct_dc_mlx5_iface_total_ndci(iface));
@@ -766,9 +767,10 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
                               const uct_dc_mlx5_iface_config_t *config)
 {
     const uint8_t num_paths = iface->super.super.super.num_paths;
-    uint8_t dci_index       = 0;
+    uint16_t dci_index      = 0;
     uct_dc_mlx5_dci_pool_t *dci_pool;
-    uint8_t pool_index, i;
+    uint8_t pool_index;
+    uint16_t i;
     ucs_status_t status;
 
     iface->tx.dcis = ucs_calloc((iface->tx.ndci * iface->tx.num_dci_pools) +
@@ -1194,7 +1196,7 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
 static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
                                            struct mlx5_cqe64 *cqe,
-                                           uint8_t dci_index,
+                                           uint16_t dci_index,
                                            ucs_status_t status)
 {
     uct_dc_mlx5_ep_t *ep;
@@ -1223,7 +1225,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
     struct mlx5_cqe64 *cqe     = arg;
-    uint8_t dci_index          = uct_dc_mlx5_iface_dci_find(iface, cqe);
+    uint16_t dci_index         = uct_dc_mlx5_iface_dci_find(iface, cqe);
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci_index, txqp, txwq);
@@ -1399,7 +1401,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md,
                                                         uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
-    uint8_t num_dcis                   = config->ndci +
+    uint16_t num_dcis                  = config->ndci +
                                          UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
     unsigned tx_queue_len              = config->super.super.tx.queue_len;
     size_t sq_length;
@@ -1506,6 +1508,14 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     ucs_assert(self->tx.num_dci_pools <= UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
 
+    if ((uint32_t)self->tx.num_dci_pools * config->ndci >
+        UCT_DC_MLX5_MAX_DCI_NUM) {
+        ucs_error("dc interface must have at most %d dci (requested: %d)",
+                  UCT_DC_MLX5_MAX_DCI_NUM / self->tx.num_dci_pools,
+                  config->ndci);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self, config);
     if (status != UCS_OK) {
@@ -1601,7 +1611,7 @@ UCT_TL_DEFINE_ENTRY(&uct_ib_component, dc_mlx5, uct_dc_mlx5_query_tl_devices,
 static void
 uct_dc_mlx5_dci_keepalive_handle_failure(uct_dc_mlx5_iface_t *iface,
                                          struct mlx5_cqe64 *cqe,
-                                         uint8_t dci_index,
+                                         uint16_t dci_index,
                                          ucs_status_t ep_status)
 {
     uint16_t hw_ci = ntohs(cqe->wqe_counter);
@@ -1642,7 +1652,7 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
     int full_handshake = iface->flags &
                          UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE_FULL_HANDSHAKE;
     ucs_status_t status;
-    uint8_t dci_index;
+    uint16_t dci_index;
 
     if (ucs_likely(iface->flags & UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE)) {
         return UCS_OK;
@@ -1660,7 +1670,7 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
     return UCS_OK;
 }
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint16_t dci_index)
 {
     uct_ib_mlx5_txwq_t *txwq = &iface->tx.dcis[dci_index].txwq;
     ucs_status_t status;

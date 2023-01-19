@@ -35,6 +35,7 @@ struct ibv_ravh {
 
 #define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
 #define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 16
+#define UCT_DC_MLX5_MAX_DCI_NUM (0xFFFF - UCT_DC_MLX5_KEEPALIVE_NUM_DCIS)
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
     (!!((_addr)->flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))
@@ -177,7 +178,7 @@ typedef struct uct_dc_mlx5_iface_config {
 
 typedef void (*uct_dc_dci_handle_failure_func_t)(uct_dc_mlx5_iface_t *iface,
                                                  struct mlx5_cqe64 *cqe,
-                                                 uint8_t dci_index,
+                                                 uint16_t dci_index,
                                                  ucs_status_t status);
 
 
@@ -245,10 +246,10 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
  * ndci and these stacks are not intersected
  */
 typedef struct {
-    int8_t        stack_top;         /* dci stack top */
-    uint8_t       *stack;            /* LIFO of indexes of available dcis */
+    uint16_t      stack_top;         /* dci stack top */
+    uint16_t      *stack;            /* LIFO of indexes of available dcis */
     ucs_arbiter_t arbiter;           /* queue of requests waiting for DCI */
-    int8_t        release_stack_top; /* releasing dci's stack,
+    int16_t       release_stack_top; /* releasing dci's stack,
                                         points to last DCI to release
                                         or -1 if no DCI's to release */
 } uct_dc_mlx5_dci_pool_t;
@@ -260,7 +261,7 @@ struct uct_dc_mlx5_iface {
         /* Array of dcis */
         uct_dc_dci_t              *dcis;
 
-        uint8_t                   ndci;                        /* Number of DCIs */
+        uint16_t                  ndci;                        /* Number of DCIs */
 
         uint8_t                   port_affinity;               /* Whether to set port affinity */
 
@@ -299,7 +300,7 @@ struct uct_dc_mlx5_iface {
 
         uct_worker_cb_id_t        dci_release_prog_id;
 
-        uint8_t                   dci_pool_release_bitmap;
+        uint16_t                  dci_pool_release_bitmap;
 
         uint8_t                   av_fl_mlid;
 
@@ -315,7 +316,7 @@ struct uct_dc_mlx5_iface {
     /* iface flags, see uct_dc_mlx5_iface_flags_t */
     uint16_t                      flags;
 
-    uint8_t                       keepalive_dci;
+    uint16_t                      keepalive_dci;
 
     uct_ud_mlx5_iface_common_t    ud_common;
 };
@@ -361,7 +362,7 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
                                      uct_ib_mlx5_txwq_t *txwq,
                                      ucs_status_t ep_status);
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint16_t dci_index);
 
 #if HAVE_DEVX
 
@@ -405,7 +406,7 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 }
 #endif
 
-static UCS_F_ALWAYS_INLINE uint8_t
+static UCS_F_ALWAYS_INLINE uint16_t
 uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
 {
     return (iface->tx.ndci * iface->tx.num_dci_pools) +
@@ -419,7 +420,7 @@ uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
  * linear search is most probably the best way to go
  * because the number of dcis is usually small
  */
-static UCS_F_ALWAYS_INLINE uint8_t
+static UCS_F_ALWAYS_INLINE uint16_t
 uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
 {
     uint32_t qp_num;
@@ -449,7 +450,7 @@ uct_dc_mlx5_iface_has_tx_resources(uct_dc_mlx5_iface_t *iface)
 
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface,
-                                       uint8_t dci_index)
+                                       uint16_t dci_index)
 {
     return uct_rc_txqp_available(&iface->tx.dcis[dci_index].txqp) > 0;
 }

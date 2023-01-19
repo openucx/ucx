@@ -161,6 +161,12 @@ int test_dc::n_warnings         = 0;
 int test_dc::m_purge_count      = 0;
 uint32_t test_dc::m_am_rx_count = 0;
 
+UCS_TEST_P(test_dc, dcs_ep_dci_128, "DC_NUM_DCI=128") {
+}
+
+UCS_TEST_P(test_dc, dcs_ep_dci_256, "DC_NUM_DCI=256") {
+}
+
 UCS_TEST_P(test_dc, dcs_single) {
     ucs_status_t status;
     uct_dc_mlx5_ep_t *ep;
