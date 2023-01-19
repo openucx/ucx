@@ -190,6 +190,7 @@ communication and TCP sockets for inter-node communication.
   memory pointer type and copying to/from GPU memory.  
 
 It's possible to restrict the transports in use by setting `UCX_TLS=<tl1>,<tl2>,...`.
+`^` at the beginning turns the list into a deny list.
 The list of all transports supported by UCX on the current machine can be generated
 by `ucx_info -d` command.
 > **IMPORTANT NOTE**
@@ -221,8 +222,12 @@ In addition to the built-in transports it's possible to use aliases which specif
  
 For example:
 - `UCX_TLS=rc` will select RC, UD for bootstrap, and prefer accelerated transports
-- `UCX_TLS=rc,cuda` will select RC along with Cuda memory transports.
-
+- `UCX_TLS=rc,cuda` will select RC along with Cuda memory transports
+- `UCX_TLS=^rc` will select all available transports, except RC
+> **IMPORTANT NOTE**
+> `UCX_TLS=^ud` will select all available transports, except UD. However, UD
+will still be available for bootstrap. Only `UCX_TLS=^ud,ud:aux` will disable UD
+completely.
 
 <br/>
 
