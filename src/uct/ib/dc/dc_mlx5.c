@@ -1406,14 +1406,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     ucs_status_t status;
     unsigned tx_cq_size;
     unsigned num_dci_channels;
+    int max_dcis;
 
     ucs_trace_func("");
-
-    if (config->ndci < 1) {
-        ucs_error("dc interface must have at least 1 dci (requested: %d)",
-                  config->ndci);
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     init_attr.qp_type       = UCT_IB_QPT_DCI;
     init_attr.flags         = UCT_IB_CQ_IGNORE_OVERRUN |
@@ -1495,6 +1490,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     if ((params->field_mask & UCT_IFACE_PARAM_FIELD_FEATURES) &&
         !(params->features & UCT_IFACE_FEATURE_PUT)) {
         self->flags |= UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT;
+    }
+
+    max_dcis = ucs_min(INT8_MAX, UINT8_MAX / self->tx.num_dci_pools);
+    if ((config->ndci < 1) || (config->ndci > max_dcis)) {
+        ucs_error("dc interface must have 1..%d dcis (requested: %d)", max_dcis,
+                  config->ndci);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     uct_dc_mlx5_iface_init_tx_port_affinity(self, config);

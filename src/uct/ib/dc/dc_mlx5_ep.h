@@ -416,6 +416,8 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     ucs_debug("iface %p: release dci %d from ep %p", iface, dci_index, ep);
 
     pool->stack_top--;
+    ucs_assertv(pool->stack_top >= 0, "dci pool underflow, stack_top=%d",
+                (int)pool->stack_top);
     ucs_assert(pool->release_stack_top < pool->stack_top);
     pool->stack[pool->stack_top] = dci_index;
 }
@@ -501,6 +503,8 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
         (void)uct_dc_mlx5_ep_qp_to_err(ep);
     }
 
+    ucs_assertv(pool->stack_top > 0, "dci pool overflow, stack_top=%d",
+                (int)pool->stack_top);
     ucs_debug("iface %p: allocate dci %d for ep %p", iface, ep->dci, ep);
 }
 
