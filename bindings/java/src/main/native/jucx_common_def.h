@@ -123,7 +123,7 @@ void jucx_request_update_sender_tag(JNIEnv *env, jobject jucx_request, ucp_tag_t
 /**
  * @brief Function to handle result of ucx function submition, to handle immidiate completion.
  */
-void process_request(JNIEnv *env, jobject request, ucs_status_ptr_t status);
+void process_request(JNIEnv *env, const ucp_request_param_t *request_params, ucs_status_ptr_t status);
 
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg);
 
