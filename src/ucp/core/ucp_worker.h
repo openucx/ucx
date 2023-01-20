@@ -171,6 +171,15 @@ enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_LAST
 };
 
+/**
+ * UCP worker dicard uct ep state
+ */
+enum {
+    UCP_WORKER_DISCARD_UCT_EP_INIT,
+    UCP_WORKER_DISCARD_UCT_EP_START,
+    UCP_WORKER_DISCARD_UCT_EP_FLUSHED,
+    UCP_WORKER_DISCARD_UCT_EP_FINISHED,
+};
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
@@ -253,12 +262,6 @@ struct ucp_worker_cm {
 };
 
 
-typedef struct ucp_worker_discard_req {
-    ucs_list_link_t req_list;
-    void            *req;
-} ucp_worker_discard_req_t;
-
-
 UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
@@ -325,6 +328,7 @@ typedef struct ucp_worker {
 
     ucp_worker_rkey_config_hash_t    rkey_config_hash;    /* RKEY config key -> index */
     ucp_worker_discard_uct_ep_hash_t discard_uct_ep_hash; /* Hash of discarded UCT EPs */
+    uint32_t                         discard_uct_ep_comp; /* Counts of flush-completed discard uct ep */
     UCS_PTR_MAP_T(ep)                ep_map;              /* UCP ep key to ptr
                                                              mapping */
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
@@ -358,8 +362,6 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
-
-    ucs_list_link_t discard_req_list;
 } ucp_worker_t;
 
 
