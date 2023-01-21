@@ -806,13 +806,20 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory and new protocols ===="
 
+		export UCX_PROTO_ENABLE=y
+
 		# Add RMA tests to the list of tests
 		cat $ucx_inst_ptest/test_types_ucp_rma | grep cuda | sort -R >> $ucx_inst_ptest/test_types_short_ucp
-
-		export UCX_PROTO_ENABLE=y
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-		unset UCX_PROTO_ENABLE
 
+		# Run AMO tests
+		echo -e "4 -s 4\n8 -s 8" > "$ucx_inst_ptest/msg_atomic"
+		ucp_test_args_atomic="-b $ucx_inst_ptest/test_types_ucp_amo \
+			              -b $ucx_inst_ptest/msg_atomic \
+				      -n 1000 -w 1"
+		run_client_server_app "$ucx_perftest" "$ucp_test_args_atomic" "$(hostname)" 0 0
+
+		unset UCX_PROTO_ENABLE
 		unset CUDA_VISIBLE_DEVICES
 	fi
 }
