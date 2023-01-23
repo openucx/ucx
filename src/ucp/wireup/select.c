@@ -1428,58 +1428,63 @@ ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
            (ucs_popcount(md_map) < UCP_MAX_OP_MDS);
 }
 
-static double ucp_wireup_get_lane_progress_overhead(ucp_worker_h worker,
-                                                    ucp_rsc_index_t rsc_index)
+static double ucp_wireup_get_lane_bw(const ucp_wireup_select_info_t *sinfo,
+                                     ucp_worker_h worker,
+                                     const ucp_address_entry_t *address)
 {
-    double overhead            = UCP_WIREUP_MIN_VALID_OVERHEAD;
-    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
-    uct_perf_attr_t perf_attr;
+    ucp_context_h context = worker->context;
+    const uct_iface_attr_t *iface_attr;
+    double bw_local, bw_remote;
 
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_PROGRESS_OVERHEAD;
-    if (uct_iface_estimate_perf(wiface->iface, &perf_attr) == UCS_OK) {
-        /* We ignore overhead smaller than 10ns, because ratio calculation must
-         * have values larger than zero */
-        overhead = ucs_max(overhead, perf_attr.progress_overhead);
-    }
+    iface_attr = ucp_worker_iface_get_attr(worker, sinfo->rsc_index);
+    bw_local   = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+    bw_remote  = address[sinfo->addr_index].iface_attr.bandwidth;
 
-    return overhead;
+    return ucs_min(bw_local, bw_remote);
 }
 
 static unsigned
 ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
-                          const ucp_wireup_select_info_t *sinfo,
+                          const ucp_wireup_select_info_t *sinfo_array,
                           unsigned num_sinfo, ucp_worker_h worker,
                           ucp_lane_type_t lane_type,
                           ucp_wireup_select_context_t *select_ctx)
 {
     unsigned num_lanes     = 0;
-    double min_overhead    = DBL_MAX;
+    double max_bw          = 0;
     ucp_context_h context  = worker->context;
     const double max_ratio = 1. / context->config.ext.multi_lane_max_ratio;
     ucs_status_t status;
     int show_error;
     unsigned sinfo_index;
-    double overhead;
+    double lane_bw;
 
-    /* Iterate over all elements and calculate minimum progress overhead */
-    for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
-        overhead     = ucp_wireup_get_lane_progress_overhead(
-                worker, sinfo[sinfo_index].rsc_index);
-        min_overhead = ucs_min(overhead, min_overhead);
+    if (num_sinfo == 0) {
+        return 0;
     }
 
-    /* Compare each element to minimum progress overhead and filter only fast lanes */
+    /* Iterate over all elements and calculate max BW */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
-        overhead = ucp_wireup_get_lane_progress_overhead(
-                worker, sinfo[sinfo_index].rsc_index);
-        ucs_assertv(overhead > 0, "progress overhead has illegal value: %f",
-                    overhead);
-        if ((min_overhead / overhead) < max_ratio) {
+        lane_bw = ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
+                                         select_params->address->address_list);
+        max_bw  = ucs_max(lane_bw, max_bw);
+
+        printf("lane_bw %f\n", lane_bw);
+    }
+
+    ucs_assertv(max_bw > 0, "max_bw has illegal value: %f", max_bw);
+
+    /* Compare each element to max BW and filter only fast lanes */
+    for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
+        lane_bw = ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
+                                         select_params->address->address_list);
+
+        if ((lane_bw / max_bw) < max_ratio) {
             continue;
         }
 
         show_error = (num_lanes == 0);
-        status     = ucp_wireup_add_lane(select_params, &sinfo[sinfo_index],
+        status     = ucp_wireup_add_lane(select_params, &sinfo_array[sinfo_index],
                                          lane_type, show_error, select_ctx);
         if (status != UCS_OK) {
             break;
