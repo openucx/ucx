@@ -31,6 +31,9 @@ jobs:
         ubuntu20_cuda11:
           build_container: ubuntu20_cuda11
           artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda11.deb
+        ubuntu22_cuda11:
+          build_container: ubuntu22_cuda11
+          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda11.deb
 
     container: $[ variables['build_container'] ]
 
