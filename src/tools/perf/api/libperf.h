@@ -88,7 +88,8 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_WAKEUP           = UCS_BIT(10), /* Create context with wakeup feature enabled */
     UCX_PERF_TEST_FLAG_ERR_HANDLING     = UCS_BIT(11), /* Create UCP eps with error handling support */
     UCX_PERF_TEST_FLAG_LOOPBACK         = UCS_BIT(12), /* Use loopback connection */
-    UCX_PERF_TEST_FLAG_PREREG           = UCS_BIT(13) /* Pass pre-registered memory handle */
+    UCX_PERF_TEST_FLAG_PREREG           = UCS_BIT(13), /* Pass pre-registered memory handle */
+    UCX_PERF_TEST_FLAG_AM_RECV_COPY     = UCS_BIT(14)  /* Do additional memcopy during AM receive */
 };
 
 
