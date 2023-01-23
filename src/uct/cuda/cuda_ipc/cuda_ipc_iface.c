@@ -473,12 +473,70 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
+{
+    static const double latency  = 1.8e-6;
+    static const double overhead = 4.0e-6;
+
+    perf_attr->bandwidth.dedicated = 0;
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+
+        /* TODO:
+         *      1. differentiate read vs write perf
+         *      2. check if src,dst memory is cuda type;
+         *         (currently UCP does not pass mem types so cuda_ipc would
+         *          report zero bandwidth)
+         *      3. Check nvlinks and report bandwidth;
+         *         (for now not checking because we do not want to report zero
+         *          bandwidth for PCIe connected IPC-accessible devices)
+         */
+
+        perf_attr->bandwidth.shared = uct_cuda_ipc_iface_get_bw();
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
+        perf_attr->send_pre_overhead = overhead;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
+        /* In case of sync mem copy, the send operation CPU overhead includes
+           the latency of waiting for the copy to complete */
+        perf_attr->send_post_overhead = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
+        perf_attr->recv_overhead = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        /* In case of async mem copy, the latency is not part of the overhead
+           and it's a standalone property */
+        perf_attr->latency = ucs_linear_func_make(latency, 0.0);
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
+        perf_attr->max_inflight_eps = SIZE_MAX;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_cuda_ipc_event_desc_init,
     .obj_cleanup   = uct_cuda_ipc_event_desc_cleanup,
     .obj_str       = NULL
+};
+
+static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
+    .iface_estimate_perf = uct_cuda_ipc_estimate_perf,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
@@ -491,7 +549,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops,
-                              &uct_base_iface_internal_ops, md, worker, params,
+                              &uct_cuda_ipc_iface_internal_ops, md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG("cuda_ipc"));
 
