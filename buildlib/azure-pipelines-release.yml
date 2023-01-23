@@ -25,6 +25,8 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:3
     - container: ubuntu20_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:3
+    - container: ubuntu22_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda11:3
 
 stages:
   - stage: Prepare
