@@ -315,7 +315,13 @@ public:
             return test->am_rndv_recv(data, length, param);
         }
 
-        /* TODO: Add option to do memcopy here */
+        if (test->m_perf.params.flags & UCX_PERF_TEST_FLAG_AM_RECV_COPY) {
+            ucs_assertv(length == test->m_am_rx_length,
+                        "wrong buffer length %ld != %ld",
+                        length, test->m_am_rx_length);
+            memcpy(test->m_am_rx_buffer, data, test->m_am_rx_length);
+        }
+
         test->recv_completed();
         return UCS_OK;
     }

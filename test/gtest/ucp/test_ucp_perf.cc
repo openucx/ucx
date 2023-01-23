@@ -273,6 +273,13 @@ const test_perf::test_spec test_ucp_perf::tests[] =
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
+  { "am_lat_memcpy", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
+    UCX_PERF_TEST_FLAG_AM_RECV_COPY },
+
   { "am_lat_b", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_SLEEP,
