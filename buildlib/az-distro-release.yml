@@ -65,6 +65,8 @@ jobs:
       - bash: |
           set -eEx
           cd pkg-build
+          echo 10 > debian/compat   # https://www.debian.org/doc/manuals/maint-guide/dother.en.html#compat
+          sed -i 's|./contrib|../contrib|' debian/rules  # Hack
           dpkg-buildpackage -us -uc
           find .. -name '*.deb'
           find .. -name '*.deb' -exec cp {} "../${AZ_ARTIFACT_NAME}" \;

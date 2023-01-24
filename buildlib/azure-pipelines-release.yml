@@ -9,10 +9,14 @@ pr:
   - master
   - v*.*.x
 
+variables:
+  DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local
+
 resources:
   containers:
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:2
+      options: $(DOCKER_OPT_VOLUMES)
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:2
     - container: ubuntu16_cuda11
