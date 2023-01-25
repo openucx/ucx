@@ -291,6 +291,10 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucs_assert(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
     ucs_assert(!(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG));
 
+    if (!ucp_proto_common_init_check_err_handling(&params->super)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     /* Initialize 'rpriv' structure */
     status = ucp_proto_rndv_ctrl_init_priv(params);
     if (status != UCS_OK) {
@@ -408,7 +412,8 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .unpack_time         = UCS_LINEAR_FUNC_ZERO,
@@ -597,7 +602,7 @@ size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg)
     return ucp_proto_rndv_pack_ack(req, dest, req->send.state.dt_iter.length);
 }
 
-static ucs_status_t ucp_proto_rndv_ats_complete(ucp_request_t *req)
+ucs_status_t ucp_proto_rndv_ats_complete(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
     return ucp_proto_rndv_recv_complete(req);

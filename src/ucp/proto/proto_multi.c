@@ -41,6 +41,10 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
+    if (!ucp_proto_common_init_check_err_handling(&params->super)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     /* Find first lane */
     num_lanes = ucp_proto_common_find_lanes(&params->super,
                                             params->first.lane_type,

@@ -15,6 +15,14 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+int ucp_proto_common_init_check_err_handling(
+        const ucp_proto_common_init_params_t *init_params)
+{
+    return (init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING) ||
+           (init_params->super.ep_config_key->err_mode ==
+            UCP_ERR_HANDLING_MODE_NONE);
+}
+
 ucp_rsc_index_t
 ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
                                ucp_lane_index_t lane)
@@ -785,6 +793,13 @@ void ucp_proto_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, status);
+}
+
+void ucp_proto_request_bcopy_id_abort(ucp_request_t *req,
+                                      ucs_status_t status)
+{
+    ucp_send_request_id_release(req);
+    ucp_proto_request_bcopy_abort(req, status);
 }
 
 ucs_status_t ucp_proto_request_bcopy_reset(ucp_request_t *req)
