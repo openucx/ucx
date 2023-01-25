@@ -74,7 +74,8 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_caps_t rkey_ptr_caps;
     ucs_status_t status;
 
-    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0)) {
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
+        !ucp_proto_common_init_check_err_handling(&params.super)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -227,7 +228,8 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
 
     if (!context->config.ext.rndv_shm_ppln_enable ||
-        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND, 1)) {
+        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND, 1) ||
+        !ucp_proto_common_init_check_err_handling(&params.super)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

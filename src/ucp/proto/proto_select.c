@@ -267,6 +267,15 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
             continue;
         }
 
+        if (init_params.ep_config_key->err_mode != UCP_ERR_HANDLING_MODE_NONE) {
+            ucs_assertv(ucp_protocols[proto_id]->abort !=
+                        ucp_proto_abort_fatal_not_implemented,
+                        "selected protocol %s doesn't implement abort() "
+                        "function, but err handling mode is %d",
+                        ucp_protocols[proto_id]->name,
+                        init_params.ep_config_key->err_mode);
+        }
+
         ucp_proto_select_init_trace_caps(proto_id, &init_params);
         ucs_log_indent(-1);
 
