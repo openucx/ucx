@@ -606,8 +606,17 @@ uint16_t get_port() {
     return port;
 }
 
-void *mmap_fixed_address() {
-    return (void*)0xff0000000;
+void *mmap_fixed_address(size_t length) {
+    void *ptr = mmap(NULL, length, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED) {
+        return nullptr;
+    }
+
+    munmap(ptr, length);
+
+    /* coverity[use_after_free] */
+    return ptr;
 }
 
 std::string compact_string(const std::string &str, size_t length)

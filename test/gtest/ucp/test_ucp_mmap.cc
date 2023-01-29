@@ -850,7 +850,10 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size = (i + 1) * ((i % 2) ? 1000 : 1);
-        void *ptr = ucs::mmap_fixed_address();
+        void *ptr   = ucs::mmap_fixed_address(size);
+        if (ptr == nullptr) {
+            UCS_TEST_ABORT("mmap failed to allocate memory region");
+        }
 
         ucp_mem_h memh;
         ucp_mem_map_params_t params;
