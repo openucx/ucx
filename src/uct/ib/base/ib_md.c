@@ -307,8 +307,9 @@ uct_ib_md_print_mem_reg_err_msg(const char *title, void *address, size_t length,
     size_t page_size;
     size_t unused;
 
-    ucs_string_buffer_appendf(&msg, "%s(address=%p, length=%zu, access=0x%lx)",
-                              title, address, length, access_flags);
+    ucs_string_buffer_appendf(
+            &msg, "%s(address=%p, length=%zu, access=0x%lx) failed: %s", title,
+            address, length, access_flags, strerror(err));
 
     if (err == EINVAL) {
         /* Check if huge page is used */
@@ -321,7 +322,9 @@ uct_ib_md_print_mem_reg_err_msg(const char *title, void *address, size_t length,
         }
     }
 
-    uct_ib_mem_lock_limit_msg(ucs_string_buffer_cstr(&msg), err, level);
+    uct_ib_memlock_limit_msg(&msg, err);
+
+    ucs_log(level, "%s", ucs_string_buffer_cstr(&msg));
 }
 
 void *uct_ib_md_mem_handle_thread_func(void *arg)
@@ -1987,6 +1990,9 @@ void uct_ib_md_ece_check(uct_ib_md_t *md)
 
     cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
     if (cq == NULL) {
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
+                                       "%s: ibv_create_cq()",
+                                       uct_ib_device_name(dev));
         return;
     }
 
@@ -2001,6 +2007,9 @@ void uct_ib_md_ece_check(uct_ib_md_t *md)
 
     dummy_qp = ibv_create_qp(pd, &qp_init_attr);
     if (dummy_qp == NULL) {
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
+                                       "%s: ibv_create_qp()",
+                                       uct_ib_device_name(dev));
         goto free_cq;
     }
 

@@ -63,8 +63,7 @@ void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, uint32_t local_qp,
                                      uct_log_data_dump_func_t data_dump,
                                      char *buf, size_t max);
 
-void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno,
-                               ucs_log_level_t level);
+void uct_ib_memlock_limit_msg(ucs_string_buffer_t *message, int sys_errno);
 
 void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             uct_ib_iface_t *iface, struct ibv_qp *qp,
@@ -77,6 +76,15 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
                                   size_t length,
                                   uct_log_data_dump_func_t packet_dump_cb);
 
+#define uct_ib_check_memlock_limit_msg(level, _fmt, ...) \
+    ({ \
+        UCS_STRING_BUFFER_ONSTACK(_msg, 256); \
+        int _tmp_errno = errno; \
+        ucs_string_buffer_appendf(&_msg, _fmt, ## __VA_ARGS__); \
+        ucs_string_buffer_appendf(&_msg, " failed: %s", strerror(_tmp_errno)); \
+        uct_ib_memlock_limit_msg(&_msg, _tmp_errno); \
+        ucs_log(level, "%s", ucs_string_buffer_cstr(&_msg)); \
+    })
 
 #define uct_ib_log_post_send(_iface, _qp, _wr, _max_sge, _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \

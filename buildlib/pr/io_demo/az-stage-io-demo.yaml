@@ -55,14 +55,23 @@ steps:
 
 - bash: |
     set -eEx
+    source $(workspace)/buildlib/az-helpers.sh
     sudo /hpc/local/bin/lshca
     mkdir -p $(workspace)/${{ parameters.name }}
     # set UCX environment variables
     net_devices=""
+    output_ibdev2netdev=$(ibdev2netdev)
     for interface in ${{ parameters.roce_iface }} ; do
-      net_device=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${interface}' .*/\1:\2/p')
+      net_device=$( echo "${output_ibdev2netdev}" | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${interface}' .*/\1:\2/p')
       net_devices="${net_devices} ${net_device}"
     done
+    net_device_name=${net_device::-2}
+    azure_set_variable "net_device_name" "$net_device_name"
+    net_device_port=${net_device: -1}
+    azure_set_variable "net_device_port" "$net_device_port"
+    local_ack_t_err_counter_start=$(cat /sys/class/infiniband/${net_device_name}/ports/${net_device_port}/hw_counters/local_ack_timeout_err)
+    azure_set_variable "local_ack_t_err_counter_start" "$local_ack_t_err_counter_start"
+
     export UCX_NET_DEVICES=$(echo ${net_devices##*( )} | tr " ", ",")
     export UCX_TLS=${{ parameters.iodemo_tls }}
     export UCX_RNDV_THRESH=4k
@@ -95,6 +104,7 @@ steps:
 
 - bash: |
     set -eEx
+    source $(workspace)/buildlib/az-helpers.sh
     analyzer="/hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py"
     analyzer_args="-d $(workspace)/${{ parameters.name }}"
     analyzer_args="$analyzer_args --duration ${{ parameters.duration }}"
@@ -104,6 +114,19 @@ steps:
     fi
     analyzer_args="$analyzer_args ${{ parameters.analyzer_allow_list_args }}"
     python ${analyzer} ${analyzer_args}
+
+    if [ '${{ parameters.interference }}' == 'Yes' ] ; then
+        device_name=$(net_device_name)
+        device_port=$(net_device_port)
+        local_ack_t_err_counter_end=$(cat /sys/class/infiniband/${device_name}/ports/${device_port}/hw_counters/local_ack_timeout_err)
+        if [[ $local_ack_t_err_counter_end -gt $(local_ack_t_err_counter_start) ]] ; then
+          echo "local_ack_timeout_err counter was increased during iodemo with interference"
+        else
+          azure_log_error "local_ack_timeout_err counter was not increased ($(local_ack_t_err_counter_start))"
+          exit 1
+        fi
+    fi
+
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 2
 

@@ -971,13 +971,14 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
                                  &attr->ibv);
 #endif
     if (qp == NULL) {
-        ucs_error("iface=%p: failed to create %s QP "
-                  "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
-                  iface, uct_ib_qp_type_str(attr->qp_type),
-                  attr->cap.max_send_wr, attr->cap.max_send_sge,
-                  attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
-                  attr->cap.max_recv_wr, attr->cap.max_recv_sge,
-                  attr->max_inl_cqe[UCT_IB_DIR_RX]);
+        uct_ib_check_memlock_limit_msg(
+                UCS_LOG_LEVEL_ERROR,
+                "iface=%p: failed to create %s QP "
+                "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
+                iface, uct_ib_qp_type_str(attr->qp_type), attr->cap.max_send_wr,
+                attr->cap.max_send_sge, attr->cap.max_inline_data,
+                attr->max_inl_cqe[UCT_IB_DIR_TX], attr->cap.max_recv_wr,
+                attr->cap.max_recv_sge, attr->max_inl_cqe[UCT_IB_DIR_RX]);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -1003,8 +1004,6 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;
-    char message[128];
-    int cq_errno;
 #if HAVE_DECL_IBV_CREATE_CQ_EX
     struct ibv_cq_init_attr_ex cq_attr = {};
 
@@ -1020,10 +1019,8 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 
     if (cq == NULL) {
-        cq_errno = errno;
-        ucs_snprintf_safe(message, sizeof(message), "ibv_create_cq(cqe=%d)",
-                          cq_size);
-        uct_ib_mem_lock_limit_msg(message, cq_errno, UCS_LOG_LEVEL_ERROR);
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq(cqe=%d)", cq_size);
         return UCS_ERR_IO_ERROR;
     }
 

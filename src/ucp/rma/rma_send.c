@@ -254,10 +254,10 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    ucs_trace_req("put_nbx buffer %p count %zu remote_addr %"PRIx64" rkey %p to %s cb %p",
-                   buffer, count, remote_addr, rkey, ucp_ep_peer_name(ep),
-                   (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
-                   param->cb.send : NULL);
+    ucs_trace_req("put_nbx buffer %p count %zu remote_addr %" PRIx64
+                  " rkey %p to %s cb %p",
+                  buffer, count, remote_addr, rkey, ucp_ep_peer_name(ep),
+                  ucp_request_param_send_callback(param));
 
     attr_mask = param->op_attr_mask &
                 (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
@@ -371,10 +371,10 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    ucs_trace_req("get_nbx buffer %p count %zu remote_addr %"PRIx64" rkey %p from %s cb %p",
-                   buffer, count, remote_addr, rkey, ucp_ep_peer_name(ep),
-                   (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
-                   param->cb.send : NULL);
+    ucs_trace_req("get_nbx buffer %p count %zu remote_addr %" PRIx64
+                  " rkey %p from %s cb %p",
+                  buffer, count, remote_addr, rkey, ucp_ep_peer_name(ep),
+                  ucp_request_param_send_callback(param));
 
     if (worker->context->config.ext.proto_enable) {
         datatype = ucp_request_param_datatype(param);

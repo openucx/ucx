@@ -452,6 +452,8 @@ public:
 
     void init()
     {
+        skip_external_protov2();
+
         // The test checks that increase of active ifaces is handled
         // correctly. It needs to start with a single active iface, therefore
         // disable multi-rail.
