@@ -124,7 +124,7 @@ ucp_proto_rndv_get_remote_address(ucp_request_t *req, size_t offset)
         if (iov_index != 0) {
             iov_offset = req->send.rndv.rdata[iov_index - 1].accumulate_size;
         }
-        remote_address = req->send.rndv.rdata[iov_index].raddress;
+        remote_address = req->send.rndv.rdata[iov_index].address;
         return remote_address + offset - iov_offset;
     }
     remote_address = req->send.rndv.remote_address;

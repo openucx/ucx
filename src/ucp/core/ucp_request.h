@@ -245,8 +245,8 @@ struct ucp_request {
                             /* Remote infomation array, if rdata_count != 0 */
                             struct {
                                 ucp_rkey_h rkey;
-                                uint64_t   raddress;
-                                size_t     rsize;
+                                uint64_t   address;
+                                size_t     size;
                                 size_t     accumulate_size;
                             } * rdata;
                             /* Index of rdata, if if rdata_count != 0 */
