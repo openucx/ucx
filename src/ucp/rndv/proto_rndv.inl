@@ -107,6 +107,8 @@ ucp_proto_rndv_max_rts_size(const ucp_request_t *req) {
     iov_count       = ucp_datatype_iter_iov_count(&req->send.state.dt_iter);
     max_rts_size    = sizeof(ucp_rndv_rts_hdr_t) + sizeof(size_t) +
                       iov_packed_size * iov_count;
+
+    /* if RTS header is too big for bcopy, fall back to RTS/RTR/BCOPY */
     if (max_rts_size > max_bcopy_size) {
         return sizeof(ucp_rndv_rts_hdr_t);
     }
@@ -116,7 +118,7 @@ ucp_proto_rndv_max_rts_size(const ucp_request_t *req) {
 static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
         ucp_request_t *req, ucp_rndv_rts_hdr_t *rts, size_t hdr_len)
 {
-    void *rkey_buffer   = UCS_PTR_BYTE_OFFSET(rts, hdr_len);
+    void *rkey_buffer = UCS_PTR_BYTE_OFFSET(rts, hdr_len);
     const ucp_proto_rndv_ctrl_priv_t *rpriv;
     size_t rkey_size;
 
@@ -180,9 +182,7 @@ ucp_proto_rndv_iov_rkeys_reset(ucp_request_t *req)
 {
     req->send.rndv.rdata       = NULL;
     req->send.rndv.rdata_count = 0;
-#if UCS_ENABLE_ASSERT
     req->send.rndv.rdata_idx   = 0;
-#endif
 }
 
 static UCS_F_ALWAYS_INLINE void
