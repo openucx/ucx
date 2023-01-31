@@ -502,13 +502,42 @@ void test_thread::test() {
 
     EXPECT_TRUE(is_ptr_in_range(ptr, shm_seg_size, m_unmap_ranges));
 
-    ptr = mmap(NULL, shm_seg_size, PROT_READ|PROT_WRITE,
-               MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-    ASSERT_NE(MAP_FAILED, ptr) << strerror(errno);
-    madvise(ptr, shm_seg_size, MADV_DONTNEED);
+    /* madvise(DONTNEED) */
+    {
+        ptr = mmap(NULL, shm_seg_size, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        ASSERT_NE(MAP_FAILED, ptr) << strerror(errno);
+        madvise(ptr, shm_seg_size, MADV_DONTNEED);
 
-    EXPECT_TRUE(is_ptr_in_range(ptr, shm_seg_size, m_unmap_ranges));
-    munmap(ptr, shm_seg_size);
+        EXPECT_TRUE(is_ptr_in_range(ptr, shm_seg_size, m_unmap_ranges));
+        munmap(ptr, shm_seg_size);
+    }
+
+    /* mremap(FIXED) */
+    {
+        ptr = mmap(NULL, shm_seg_size, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        EXPECT_NE(MAP_FAILED, ptr);
+        memset(ptr, 'a', shm_seg_size);
+
+        void *ptr2 = mmap(NULL, shm_seg_size, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        EXPECT_NE(MAP_FAILED, ptr2) << strerror(errno);
+        memset(ptr2, 'b', shm_seg_size);
+
+        ptr_r = mremap(ptr, shm_seg_size, shm_seg_size,
+                       MREMAP_MAYMOVE | MREMAP_FIXED, ptr2);
+        EXPECT_NE(MAP_FAILED, ptr_r) << strerror(errno);
+        EXPECT_EQ(ptr2, ptr_r);
+        EXPECT_TRUE(is_ptr_in_range(ptr, shm_seg_size, m_unmap_ranges));
+
+        /* Check that the memory was remapped */
+        EXPECT_EQ('a', *(char*)ptr_r);
+
+        munmap(ptr2, shm_seg_size);
+        /* coverity[pass_freed_arg] */
+        EXPECT_TRUE(is_ptr_in_range(ptr2, shm_seg_size, m_unmap_ranges));
+    }
 
     /* Print results */
     pthread_mutex_lock(&lock);

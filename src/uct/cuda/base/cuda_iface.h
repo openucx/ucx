@@ -118,6 +118,10 @@
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
+#define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
+    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
+
+
 static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
 {
     CUcontext ctx;
@@ -136,7 +140,8 @@ static UCS_F_ALWAYS_INLINE int uct_cuda_base_context_match(CUcontext ctx1,
 typedef enum uct_cuda_base_gen {
     UCT_CUDA_BASE_GEN_P100 = 6,
     UCT_CUDA_BASE_GEN_V100 = 7,
-    UCT_CUDA_BASE_GEN_A100 = 8
+    UCT_CUDA_BASE_GEN_A100 = 8,
+    UCT_CUDA_BASE_GEN_H100 = 9
 } uct_cuda_base_gen_t;
 
 

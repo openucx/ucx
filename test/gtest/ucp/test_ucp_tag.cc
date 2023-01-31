@@ -185,6 +185,19 @@ void test_ucp_tag::check_offload_support(bool offload_required)
     }
 }
 
+void test_ucp_tag::skip_external_protov2() const
+{
+    if (m_ucp_config->ctx.proto_enable) {
+        skip_protov2();
+    }
+}
+
+void test_ucp_tag::skip_protov2() const
+{
+    UCS_TEST_SKIP_R("FIXME: skip forced UCX_PROTO_ENABLE=y because it does not "
+                    "completely support HWTM");
+}
+
 int test_ucp_tag::get_worker_index(int buf_index)
 {
     int worker_index = 0;

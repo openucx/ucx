@@ -60,6 +60,11 @@ typedef struct {
     unsigned long      recv_buffer;
 } ucx_perf_ep_info_t;
 
+typedef struct {
+    int          num_outstanding; /* Number of outstanding flush operations */
+    ucs_status_t status;          /* Cumulative status of all flush operations */
+} ucp_perf_flush_context_t;
+
 
 const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_LAST];
 
@@ -1196,14 +1201,68 @@ err:
     return status;
 }
 
+static void ucp_perf_worker_flush_callback(void *request, ucs_status_t status,
+                                           void *user_data)
+{
+    ucp_perf_flush_context_t *ctx = user_data;
+
+    --ctx->num_outstanding;
+    if (status != UCS_OK) {
+        ucs_error("worker flush callback got status %s",
+                  ucs_status_string(status));
+        ctx->status = status;
+    }
+    ucp_request_free(request);
+}
+
+static ucs_status_t ucp_perf_test_flush_workers(ucx_perf_context_t *perf)
+{
+    ucp_perf_flush_context_t ctx = {
+        .num_outstanding = 0,
+        .status          = UCS_OK
+    };
+    ucp_request_param_t param    = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FIELD_USER_DATA,
+        .cb.send      = ucp_perf_worker_flush_callback,
+        .user_data    = &ctx
+    };
+    void *flush_req;
+    unsigned i;
+
+    /* Initiate flush operation on all workers */
+    for (i = 0; i < perf->params.thread_count; i++) {
+        flush_req = ucp_worker_flush_nbx(perf->ucp.tctx[i].perf.ucp.worker,
+                                         &param);
+        if (UCS_PTR_IS_ERR(flush_req)) {
+            ctx.status = UCS_PTR_STATUS(flush_req);
+            ucs_error("ucp_worker_flush_nbx() failed on thread %d: %s", i,
+                      ucs_status_string(ctx.status));
+            break;
+        }
+
+        if (UCS_PTR_IS_PTR(flush_req)) {
+            ++ctx.num_outstanding;
+        }
+    }
+
+    /* Progress all workers in parallel to avoid deadlocks */
+    while (ctx.num_outstanding > 0) {
+        for (i = 0; i < perf->params.thread_count; i++) {
+            ucp_worker_progress(perf->ucp.tctx[i].perf.ucp.worker);
+        }
+    }
+
+    return ctx.status;
+}
+
 static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
                                                   uint64_t features)
 {
-    ucs_status_t status;
     unsigned group_size  = rte_call(perf, group_size);
     unsigned group_index = rte_call(perf, group_index);
     unsigned peer_index  = rte_peer_index(group_size, group_index);
-    unsigned i;
+    ucs_status_t status;
 
     if ((perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
         (group_size != 1)) {
@@ -1238,15 +1297,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     }
 
     /* force wireup completion */
-    for (i = 0; i < perf->params.thread_count; i++) {
-        status = ucp_worker_flush(perf->ucp.tctx[i].perf.ucp.worker);
-        if (status != UCS_OK) {
-            ucs_warn("ucp_worker_flush() failed on thread %d: %s",
-                     i, ucs_status_string(status));
-        }
-    }
-
-    return status;
+    return ucp_perf_test_flush_workers(perf);
 
 err_destroy_eps:
     ucp_perf_test_destroy_eps(perf);

@@ -23,7 +23,9 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
                               size_t size)
 {
     ucp_atomic_req_hdr_t *atomich = dest;
+    void *cswaph                  = UCS_PTR_BYTE_OFFSET(atomich + 1, size);
     ucp_ep_t *ep                  = req->send.ep;
+    ucp_worker_h worker           = ep->worker;
     size_t length;
 
     atomich->address    = req->send.amo.remote_addr;
@@ -32,14 +34,22 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
                                   UCS_PTR_MAP_KEY_INVALID;
     atomich->length     = size;
     atomich->opcode     = req->send.amo.uct_op;
+    length              = sizeof(*atomich) + size;
 
-    memcpy(atomich + 1, &req->send.amo.value, size);
-    length = sizeof(*atomich) + size;
-
-    if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
-        /* compare-swap has two arguments */
-        memcpy(UCS_PTR_BYTE_OFFSET(atomich + 1, size), req->send.buffer, size);
-        length += size;
+    if (worker->context->config.ext.proto_enable) {
+        ucp_dt_contig_pack(worker, atomich + 1, &req->send.amo.value, size,
+                           req->send.state.dt_iter.mem_info.type);
+        if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
+            ucp_dt_contig_pack(worker, cswaph, req->send.amo.reply_buffer, size,
+                               ucp_amo_request_reply_mem_type(req));
+            length += size;
+        }
+    } else {
+        memcpy(atomich + 1, &req->send.amo.value, size);
+        if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
+            memcpy(cswaph, req->send.buffer, size);
+            length += size;
+        }
     }
 
     return length;
@@ -290,10 +300,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_fl
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, hdr->req_id, 1, return UCS_OK,
                                "ATOMIC_REP %p", hdr);
+
+    if (worker->context->config.ext.proto_enable) {
+        ucp_dt_contig_unpack(worker, req->send.amo.reply_buffer, hdr + 1,
+                             frag_length, ucp_amo_request_reply_mem_type(req));
+    } else {
+        memcpy(req->send.buffer, hdr + 1, frag_length);
+    }
+
     ep = req->send.ep;
-    memcpy(req->send.buffer, hdr + 1, frag_length);
     ucp_request_complete_send(req, UCS_OK);
     ucp_ep_rma_remote_request_completed(ep);
+
     return UCS_OK;
 }
 
@@ -384,14 +402,16 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 static ucs_status_t
 ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags)
 {
-    ucp_proto_single_init_params_t params = {
+    const ucp_ep_config_key_t *ep_config_key = init_params->ep_config_key;
+    ucp_worker_h worker                      = init_params->worker;
+    ucp_proto_single_init_params_t params    = {
         .super.super         = *init_params,
         .super.latency       = 1.2e-6,
-        .super.overhead      = 0,
+        .super.overhead      = 40e-9,
         .super.cfg_thresh    = 0,
         .super.cfg_priority  = 20,
-        .super.min_length    = 0,
-        .super.max_length    = SIZE_MAX,
+        .super.min_length    = sizeof(uint32_t),
+        .super.max_length    = sizeof(uint64_t),
         .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -405,6 +425,21 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = 0
     };
+    const ucp_ep_config_key_lane_t *lane_config;
+    const uct_iface_attr_t *iface_attr;
+
+    /* If the endpoint has device atomic lanes, it means the target worker
+       expects only device atomics, so we cannot use SW atomics. */
+    ucs_carray_for_each(lane_config, ep_config_key->lanes,
+                        ep_config_key->num_lanes) {
+        iface_attr = ucp_worker_iface_get_attr(worker, lane_config->rsc_index);
+        if ((lane_config->lane_types & UCS_BIT(UCP_LANE_TYPE_AMO)) &&
+            (iface_attr->cap.flags & UCT_IFACE_FLAG_ATOMIC_DEVICE)) {
+            ucs_trace("software atomics not supported because device atomics "
+                      "are selected");
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
 
     return ucp_proto_single_init(&params);
 }

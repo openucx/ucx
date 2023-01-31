@@ -31,6 +31,9 @@ jobs:
         ubuntu20_cuda11:
           build_container: ubuntu20_cuda11
           artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda11.deb
+        ubuntu22_cuda11:
+          build_container: ubuntu22_cuda11
+          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda11.deb
 
     container: $[ variables['build_container'] ]
 
@@ -65,6 +68,8 @@ jobs:
       - bash: |
           set -eEx
           cd pkg-build
+          echo 10 > debian/compat   # https://www.debian.org/doc/manuals/maint-guide/dother.en.html#compat
+          sed -i 's|./contrib|../contrib|' debian/rules  # Hack
           dpkg-buildpackage -us -uc
           find .. -name '*.deb'
           find .. -name '*.deb' -exec cp {} "../${AZ_ARTIFACT_NAME}" \;

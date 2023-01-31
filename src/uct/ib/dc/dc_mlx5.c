@@ -400,8 +400,10 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
     qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
                                  &attr.super.ibv, &dv_attr);
     if (qp == NULL) {
-        ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI): failed: %m",
-                  UCT_IB_IFACE_ARG(ib_iface));
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI)",
+                                       uct_ib_device_name(dev),
+                                       UCT_IB_IFACE_ARG(ib_iface));
         status = UCS_ERR_IO_ERROR;
         goto err_put_res_domain;
     }
@@ -572,7 +574,9 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
     iface->rx.dct.verbs.qp = mlx5dv_create_qp(dev->ibv_context, &init_attr,
                                               &dv_init_attr);
     if (iface->rx.dct.verbs.qp == NULL) {
-        ucs_error("mlx5dv_create_qp(DCT) failed: %m");
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: mlx5dv_create_qp(DCT)",
+                                       uct_ib_device_name(dev));
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1324,8 +1328,9 @@ static ucs_status_t uct_dc_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
     dci_qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
                                      &qp_init_attr, &dv_attr);
     if (dci_qp == NULL) {
-        ucs_error("%s: mlx5dv_create_qp(DCI) failed: %m",
-                  uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: mlx5dv_create_qp(DCI)",
+                                       uct_ib_device_name(dev));
         status = UCS_ERR_IO_ERROR;
         goto out_qp_tmp_objs_close;
     }

@@ -130,4 +130,10 @@ ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id, ucp_lane_index_t lane,
     return (ucs_status_t)packed_len;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_memory_type_t
+ucp_amo_request_reply_mem_type(ucp_request_t *req)
+{
+    return req->send.proto_config->select_param.op.reply.mem_type;
+}
+
 #endif

@@ -19,6 +19,7 @@ RUN apt-get update && \
         udev \
         wget \
         environment-modules \
+        pkg-config \
     && apt-get remove -y openjdk-11-* || apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
