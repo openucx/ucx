@@ -2496,8 +2496,8 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     kh_foreach_value(&worker->discard_uct_ep_hash, req, {
         if (req->send.discard_uct_ep.state ==
             UCP_WORKER_DISCARD_UCT_EP_FLUSHED) {
-            kh_del(ucp_worker_discard_uct_ep_hash,
-                   &worker->discard_uct_ep_hash, __i);
+            kh_del(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
+                   __i);
             ucp_worker_discard_uct_ep_destroy_once(req);
         }
     });
@@ -2616,7 +2616,7 @@ ucp_worker_discard_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         ((elem->cb == ucp_worker_discard_uct_ep_destroy_progress) ||
          (elem->cb == ucp_worker_discard_uct_ep_progress))) {
         ((ucp_request_t*)arg)->send.discard_uct_ep.state =
-        UCP_WORKER_DISCARD_UCT_EP_FLUSHED;
+                UCP_WORKER_DISCARD_UCT_EP_FLUSHED;
         return 1;
     }
 
@@ -3433,11 +3433,11 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     iter = kh_put(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                   uct_ep, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
-        ucs_fatal("failed to put %p UCT EP into the %p worker hash",
-                  uct_ep, worker);
+        ucs_fatal("failed to put %p UCT EP into the %p worker hash", uct_ep,
+                  worker);
     } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
-        ucs_fatal("%p UCT EP is already present in the %p worker hash",
-                  uct_ep, worker);
+        ucs_fatal("%p UCT EP is already present in the %p worker hash", uct_ep,
+                  worker);
     }
     kh_value(&worker->discard_uct_ep_hash, iter) = req;
     ucp_worker_discard_uct_ep_progress(req);
