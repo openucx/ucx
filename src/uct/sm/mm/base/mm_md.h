@@ -9,6 +9,7 @@
 #define UCT_MM_MD_H_
 
 #include <uct/base/uct_md.h>
+#include <uct/sm/base/sm_md.h>
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
@@ -168,7 +169,7 @@ typedef struct uct_mm_component {
             .md_open            = uct_mm_md_open, \
             .cm_open            = ucs_empty_function_return_unsupported, \
             .rkey_unpack        = _rkey_unpack, \
-            .rkey_ptr           = uct_mm_rkey_ptr, \
+            .rkey_ptr           = uct_sm_rkey_ptr, \
             .rkey_release       = _rkey_release, \
             .name               = #_name, \
             .md_config          = { \
