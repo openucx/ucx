@@ -179,35 +179,6 @@ ucp_proto_rndv_get_zcopy_query(const ucp_proto_query_params_t *params,
     ucp_proto_rndv_bulk_query(params, attr);
 }
 
-static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_get_zcopy_max_payload(
-        ucp_request_t *req, const ucp_proto_rndv_bulk_priv_t *rpriv,
-        const ucp_proto_multi_lane_priv_t *lpriv, ucp_lane_index_t *lane_shift)
-{
-    size_t total_offset = ucp_proto_rndv_request_total_offset(req);
-    size_t iov_index, iov_length;
-    size_t max_payload;
-
-    max_payload = ucp_proto_rndv_bulk_max_payload_align(req, rpriv, lpriv,
-                                                        lane_shift);
-    if (req->send.rndv.rdata_count == 0) {
-        return max_payload;
-    }
-    iov_index = req->send.rndv.rdata_idx;
-    ucs_assertv(total_offset <= req->send.rndv.rdata[iov_index].accumulate_size,
-                "req=%p total_offset=%zu rdata[%lu].accumulate_size=%zu",
-                req, total_offset, iov_index,
-                req->send.rndv.rdata[iov_index].accumulate_size);
-    if (total_offset == req->send.rndv.rdata[iov_index].accumulate_size) {
-        iov_index = ++req->send.rndv.rdata_idx;
-    }
-    iov_length = req->send.rndv.rdata[iov_index].accumulate_size - total_offset;
-    if (iov_length < max_payload) {
-        max_payload = iov_length;
-        *lane_shift = 0;
-    }
-    return max_payload;
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
                                    const ucp_proto_multi_lane_priv_t *lpriv,
@@ -220,8 +191,9 @@ ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
     size_t max_payload;
     uct_iov_t iov;
 
-    max_payload = ucp_proto_rndv_get_zcopy_max_payload(req, rpriv, lpriv,
-                                                       lane_shift);
+    ucp_proto_rndv_request_next_rdata(req);
+    max_payload = ucp_proto_rndv_bulk_max_payload_rdata_align(req, rpriv, lpriv,
+                                                              lane_shift);
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter, max_payload,
                                lpriv->super.md_index,
                                UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,

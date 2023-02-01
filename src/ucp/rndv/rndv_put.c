@@ -351,8 +351,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_zcopy_send_func(
     size_t max_payload;
     uct_iov_t iov;
 
-    max_payload = ucp_proto_rndv_bulk_max_payload_align(req, &rpriv->bulk,
-                                                        lpriv, lane_shift);
+    max_payload = ucp_proto_rndv_bulk_max_payload_total_align(req, &rpriv->bulk,
+                                                              lpriv,
+                                                              lane_shift);
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter, max_payload,
                                lpriv->super.md_index,
                                UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
