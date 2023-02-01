@@ -127,6 +127,7 @@ noinst_HEADERS = \
 	type/float8.h \
 	async/async.h \
 	async/pipe.h \
+	async/eventfd.h \
 	async/signal.h \
 	async/thread.h \
 	async/async_int.h
@@ -145,6 +146,7 @@ libucs_la_SOURCES = \
 	async/async.c \
 	async/signal.c \
 	async/pipe.c \
+	async/eventfd.c \
 	async/thread.c \
 	config/global_opts.c \
 	config/ucm_opts.c \
