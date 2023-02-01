@@ -1918,7 +1918,7 @@ void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
         ucs_string_buffer_appendf(strb, "inter-node ");
     }
 
-    ucs_string_buffer_appendf(strb, "cfg#%d ", cfg_index);
+    ucs_string_buffer_appendf(strb, "cfg#%d", cfg_index);
 }
 
 static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
