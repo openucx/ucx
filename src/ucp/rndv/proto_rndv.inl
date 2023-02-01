@@ -304,24 +304,6 @@ ucp_proto_rndv_request_rdata_offset(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_request_common_length(ucp_request_t *req)
-{
-    if (req->send.rndv.rdata_count != 0) {
-        return ucp_proto_rndv_request_rdata_length(req);
-    }
-    return ucp_proto_rndv_request_total_length(req);
-}
-
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_request_common_offset(ucp_request_t *req)
-{
-    if (req->send.rndv.rdata_count != 0) {
-        return ucp_proto_rndv_request_rdata_offset(req);
-    }
-    return ucp_proto_rndv_request_total_offset(req);
-}
-
-static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_rndv_request_next_rdata(ucp_request_t *req)
 {
     size_t iov_index, accmulate_size, total_offset;
@@ -460,10 +442,18 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_bulk_max_payload_rdata_align(
         ucp_request_t *req, const ucp_proto_rndv_bulk_priv_t *rpriv,
         const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_lane_index_t *lane_shift) {
-    size_t total_offset = ucp_proto_rndv_request_common_offset(req);
-    size_t total_length = ucp_proto_rndv_request_common_length(req);
-    return ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv, total_length,
-                                           total_offset);
+    size_t max_payload, rdata_offset, rdata_length;
+
+    if (req->send.rndv.rdata_count == 0) {
+        return ucp_proto_rndv_bulk_max_payload_total_align(req, rpriv, lpriv,
+                                                           lane_shift);
+    }
+
+    rdata_offset = ucp_proto_rndv_request_rdata_offset(req);
+    rdata_length = ucp_proto_rndv_request_rdata_length(req);
+    max_payload  = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv,
+                                                   rdata_length, rdata_offset);
+    return ucs_min(max_payload, rdata_length - rdata_offset);
 }
 
 static UCS_F_ALWAYS_INLINE int

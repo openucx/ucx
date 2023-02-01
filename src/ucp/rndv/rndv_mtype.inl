@@ -94,8 +94,8 @@ ucp_proto_rndv_mtype_next_iov(ucp_request_t *req,
     size_t total_offset = ucp_proto_rndv_request_total_offset(req);
     size_t total_length = ucp_proto_rndv_request_total_length(req);
     size_t max_payload  = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv,
-                                                          total_offset,
-                                                          total_length);
+                                                          total_length,
+                                                          total_offset);
     size_t length       = ucp_datatype_iter_next(&req->send.state.dt_iter,
                                                  max_payload, next_iter);
     uct_mem_h memh      = ucp_proto_rndv_mtype_get_memh(req,

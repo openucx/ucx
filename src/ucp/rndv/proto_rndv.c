@@ -24,7 +24,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
 {
     ucp_context_h context                    = params->super.super.worker->context;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
-    uint8_t dt_type                          = params->super.super.select_param->dt_class;
+    uint8_t dt_type = params->super.super.select_param->dt_class;
     ucp_rsc_index_t mem_sys_dev, ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
     const uct_md_attr_v2_t *md_attr;
@@ -806,7 +806,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                           ucp_operation_id_t op_id, uint32_t op_attr_mask,
                           size_t length, uint8_t sg_count)
 {
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep        = req->send.ep;
     size_t rdata_count = req->send.rndv.rdata_count;
     size_t rdata_idx, rdata_size;
     ucp_worker_cfg_index_t rkey_cfg_index;
