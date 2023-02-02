@@ -11,6 +11,11 @@
 ### Features:
 ### Bugfixes:
 
+## 1.14.0 RC2 (February 2, 2023)
+### Bugfixes
+#### GPU (CUDA, ROCM)
+* Updated cuda_copy transport to use event fd instead of async callback
+
 ## 1.14.0 RC1 (January 25, 2023)
 ### Features:
 #### Core
