@@ -53,6 +53,13 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
     return status;
 }
 
+static void
+ucp_proto_rndv_ats_abort(ucp_request_t *request, ucs_status_t status)
+{
+    ucp_request_get_super(request)->status = status;
+    ucp_proto_rndv_ats_complete(request);
+}
+
 ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
     .desc     = "no data fetch",
@@ -60,6 +67,6 @@ ucp_proto_t ucp_rndv_ats_proto = {
     .init     = ucp_proto_rndv_ats_init,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_rndv_ats_progress},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_rndv_ats_abort,
     .reset    = (ucp_request_reset_func_t)ucs_empty_function_return_success
 };
