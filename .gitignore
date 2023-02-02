@@ -41,7 +41,6 @@ contrib/rpmdef.sh
 bindings/java/pom.xml
 src/ucs/ucs_stats_parser
 test/gtest/gtest
-test/perf/ucx_perftest
 build-*
 ucx*tar.gz
 src/tools/info/build_config.h
@@ -53,10 +52,9 @@ test/apps/test_link_map
 test/apps/test_ucp_dlopen
 test/apps/test_ucs_dlopen
 test/apps/sockaddr/sa
-test/examples/ucp_client_server
-test/examples/ucp_hello_world
-test/examples/uct_hello_world
-test/examples/ucx_profiling
+examples/ucp_client_server
+examples/ucp_hello_world
+examples/uct_hello_world
 rpm-dist
 cov_build*
 debian/changelog
@@ -99,6 +97,7 @@ test/apps/test_cuda_hook_dynamic
 test/apps/test_cuda_hook_static
 test/apps/test_ucp_config
 test/apps/test_memtrack_limit
+test/apps/test_tcmalloc
 test/apps/profiling/ucx_profiling
 test/apps/uct_info/uct_info
 test/apps/uct_info/uct_info_static
