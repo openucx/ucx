@@ -1666,7 +1666,7 @@ static void ucp_worker_add_feature_rsc(ucp_context_h context,
         return;
     }
 
-    ucs_string_buffer_appendf(strb, "%s(", feature_str);
+    ucs_string_buffer_appendf(strb, " %s(", feature_str);
 
     ucs_for_each_bit(lane, lanes_bitmap) {
         ucs_assert(lane < UCP_MAX_LANES); /* make coverity happy */
