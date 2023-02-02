@@ -1091,8 +1091,8 @@ public:
                          << " rkey_ptr: " << rkey_ptr;
         EXPECT_EQ(1, get_zcopy + send_rtr + rkey_ptr);
 
-        if (has_xpmem()) {
-            /* rkey_ptr expected to be selected if xpmem is available */
+        if (has_xpmem() || is_self()) {
+            /* rkey_ptr expected to be selected if xpmem is available or self is being used */
             EXPECT_EQ(1u, rkey_ptr);
         } else if (has_get_zcopy() && !m_ucp_config->ctx.proto_enable) {
             /* if any transports supports get_zcopy, expect it to be used */
