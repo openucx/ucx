@@ -942,7 +942,7 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
-static UCS_F_ALWAYS_INLINE uint16_t ucp_am_send_nbx_get_op_flag(uint32_t flags)
+static UCS_F_ALWAYS_INLINE uint8_t ucp_am_send_nbx_get_op_flag(uint32_t flags)
 {
     if (flags & UCP_AM_SEND_FLAG_EAGER) {
         return UCP_PROTO_SELECT_OP_FLAG_AM_EAGER;
