@@ -839,7 +839,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
             if (req->send.proto_config->proto != &ucp_rndv_get_zcopy_proto) {
                 ucp_proto_rndv_iov_rkeys_destroy(req);
                 req->send.rndv.remote_address = 0;
-                req->send.rndv.rkey = NULL;
+                req->send.rndv.rkey           = NULL;
                 goto fallback;
             }
         }
