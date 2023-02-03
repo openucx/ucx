@@ -320,14 +320,14 @@ ucp_proto_rndv_bulk_max_payload_align(ucp_request_t *req,
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_request_is_ppln_frag(ucp_request_t *req)
 {
-    return req->send.proto_config->select_param.op_id_flags &
+    return ucp_proto_select_op_flags(&req->send.proto_config->select_param) &
            UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
 }
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_init_params_is_ppln_frag(const ucp_proto_init_params_t *params)
 {
-    return params->select_param->op_id_flags &
+    return ucp_proto_select_op_flags(params->select_param) &
            UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
 }
 

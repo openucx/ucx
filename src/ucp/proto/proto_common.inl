@@ -277,7 +277,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           const void *buffer, size_t count,
                           ucp_datatype_t datatype, size_t contig_length,
                           const ucp_request_param_t *param,
-                          size_t header_length, unsigned op_flags)
+                          size_t header_length, uint8_t op_flags)
 {
     ucp_worker_h worker = ep->worker;
     ucp_proto_select_param_t sel_param;
