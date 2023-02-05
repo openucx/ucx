@@ -55,7 +55,7 @@ BuildRequires: librdmacm-devel
 BuildRequires: hsa-rocr-dev
 %endif
 %if %{with xpmem}
-BuildRequires: xpmem-devel
+BuildRequires: pkgconfig(cray-xpmem)
 %endif
 %if %{with vfs}
 BuildRequires: fuse3-devel
