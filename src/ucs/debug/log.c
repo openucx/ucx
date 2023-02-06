@@ -364,24 +364,32 @@ unsigned ucs_log_num_handlers()
     return ucs_log_handlers_count;
 }
 
-void ucs_log_dispatch(const char *file, unsigned line, const char *function,
+void ucs_log_dispatchv(const char *file, unsigned line, const char *function,
                       ucs_log_level_t level, ucs_log_component_config_t *comp_conf,
-                      const char *format, ...)
+                      const char *format, va_list* ap)
 {
     ucs_log_func_rc_t rc;
     unsigned idx;
-    va_list ap;
-
+    va_list used;
     /* Call handlers in reverse order */
     rc    = UCS_LOG_FUNC_RC_CONTINUE;
     idx = ucs_log_handlers_count;
     while ((idx > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
         --idx;
-        va_start(ap, format);
+        va_copy(used, *ap); 
         rc = ucs_log_handlers[idx](file, line, function,
-                                   level, comp_conf, format, ap);
-        va_end(ap);
+                                   level, comp_conf, format, used);
     }
+}
+
+void ucs_log_dispatch(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level, ucs_log_component_config_t *comp_conf,
+                      const char *format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    ucs_log_dispatchv(file, line, function, level, comp_conf, format, &ap);
+    va_end(ap);
 }
 
 void ucs_log_fatal_error(const char *format, ...)
@@ -592,4 +600,12 @@ void ucs_log_set_thread_name(const char *format, ...)
     memset(ucs_log_thread_name, 0, sizeof(ucs_log_thread_name));
     vsnprintf(ucs_log_thread_name, sizeof(ucs_log_thread_name) - 1, format, ap);
     va_end(ap);
+}
+
+void ucs_debugv(const char* fmt, va_list* vars)
+{
+    if (ucs_log_component_is_enabled(UCS_LOG_LEVEL_DEBUG, &ucs_global_opts.log_component)) {
+        ucs_log_dispatchv(__FILE__, __LINE__, __func__,
+                          UCS_LOG_LEVEL_DEBUG, &ucs_global_opts.log_component, fmt, vars);
+    }
 }

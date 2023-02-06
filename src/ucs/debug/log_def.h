@@ -61,7 +61,6 @@ BEGIN_C_DECLS
         } \
     } while (0)
 
-
 /**
  * Print a message regardless of current log level. Output can be
  * enabled/disabled via environment variable/configuration settings.
@@ -215,6 +214,13 @@ void ucs_log_print_backtrace(ucs_log_level_t level);
  * @param name           Thread name to set
  */
 void ucs_log_set_thread_name(const char *format, ...) UCS_F_PRINTF(1, 2);
+
+/**
+ * Output debug message
+ *
+ * @param name           Output debug message
+ */
+void ucs_debugv(const char* fmt, va_list* vars);
 
 END_C_DECLS
 

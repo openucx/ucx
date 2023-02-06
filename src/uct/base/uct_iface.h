@@ -103,18 +103,6 @@ enum {
 
 
 /**
- * Output diagnostic message in terminal and copy it into buffer when _condition is true.
- */
-#define UCT_OUTPUT_DIAGNOSTIC_MESSAGE(_condition, _buffer, _length, _diag_message, ...) \
-    do { \
-        if (_condition) { \
-            snprintf(_buffer, _length, _diag_message, ## __VA_ARGS__); \
-        } \
-        ucs_debug(_diag_message, ## __VA_ARGS__); \
-    } while (0)
-
-
-/**
  * In release mode - do nothing.
  *
  * In debug mode, if _condition is not true, return an error. This could be less
@@ -1013,6 +1001,8 @@ uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
                                   const uct_iface_addr_t *iface_addr,
                                   uct_iface_is_reachable_v2_func_t iface_is_reachable_v2);
 
+
+void uct_iface_unreachable(int cond, char* buffer, uint32_t length, const char* fmt, ...);
 
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_short(uct_ep_operation_t op)
 {

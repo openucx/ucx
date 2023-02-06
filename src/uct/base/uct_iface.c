@@ -232,9 +232,9 @@ int uct_iface_is_reachable_v2(uct_iface_h iface,
                                            "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING and "
                                            "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH "
                                            "should be set together");
-        UCT_CHECK_PARAM((params->info_string != NULL),
+        UCT_CHECK_PARAM(params->info_string != NULL,
                         "info_string shouldn't be null");
-        UCT_CHECK_PARAM((params->info_string_length > 0),
+        UCT_CHECK_PARAM(params->info_string_length > 0,
                         "info_string_length should be greater than zero");
     }
     
@@ -942,4 +942,17 @@ uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
     };
     
     return iface_is_reachable_v2(tl_iface, &params);
+}
+
+void uct_iface_unreachable(int cond, char* buffer, uint32_t length, const char* fmt, ...)
+{
+    va_list vars;
+    va_list copy;
+    va_start(vars, fmt);
+    va_copy(copy, vars);
+    if (cond) {
+        vsnprintf(buffer, length, fmt, vars);
+    }
+    ucs_debugv(fmt, &copy);
+    va_end(vars);
 }

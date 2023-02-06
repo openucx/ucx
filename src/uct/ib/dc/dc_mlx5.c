@@ -903,16 +903,16 @@ int uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     ucs_assert_always(iface_addr != NULL);
 
     if ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) != iface->version_flag) {
-        UCT_OUTPUT_DIAGNOSTIC_MESSAGE((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING),
-                                      params->info_string, params->info_string_length,
-                                      "iface %p: unreachable due to DC version mismatch", iface);
+        uct_iface_unreachable((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING),
+                              params->info_string, params->info_string_length,
+                              "iface %p: unreachable due to DC version mismatch", iface);
         return 0;
     }
 
     if (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) != UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        UCT_OUTPUT_DIAGNOSTIC_MESSAGE((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING),
-                                      params->info_string, params->info_string_length,
-                                      "iface %p: unreachable due to TM mismatch", iface);
+        uct_iface_unreachable((params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING),
+                              params->info_string, params->info_string_length,
+                              "iface %p: unreachable due to TM mismatch", iface);
         return 0;
     }
 
