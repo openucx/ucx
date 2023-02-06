@@ -379,6 +379,7 @@ void ucs_log_dispatchv(const char *file, unsigned line, const char *function,
         va_copy(used, *ap); 
         rc = ucs_log_handlers[idx](file, line, function,
                                    level, comp_conf, format, used);
+        va_end(used);
     }
 }
 
