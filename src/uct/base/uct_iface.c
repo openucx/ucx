@@ -954,5 +954,6 @@ void uct_iface_unreachable(int cond, char* buffer, uint32_t length, const char* 
         vsnprintf(buffer, length, fmt, vars);
     }
     ucs_debugv(fmt, &copy);
+    va_end(copy);
     va_end(vars);
 }
