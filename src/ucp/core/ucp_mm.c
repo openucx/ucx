@@ -835,6 +835,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         status = ucp_memh_init_uct_reg(context, memh, uct_flags);
         if (status != UCS_OK) {
             ucs_free(memh);
+            memh = NULL;
             goto out;
         }
     }
