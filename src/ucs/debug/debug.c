@@ -650,8 +650,13 @@ void ucs_debug_print_backtrace(FILE *stream, int strip)
     backtrace_h bckt;
     backtrace_line_h bckt_line;
     int i;
+    ucs_status_t status;
 
-    ucs_debug_backtrace_create(&bckt, strip);
+    status = ucs_debug_backtrace_create(&bckt, strip);
+    if (status != UCS_OK) {
+        return;
+    }
+
     fprintf(stream, "==== backtrace (tid:%7d) ====\n", ucs_get_tid());
     for (i = 0; ucs_debug_backtrace_next(bckt, &bckt_line); ++i) {
          fprintf(stream, UCS_DEBUG_BACKTRACE_LINE_FMT,

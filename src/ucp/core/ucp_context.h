@@ -29,13 +29,18 @@
 #include <ucs/type/param.h>
 
 
+/* Hash map of rcaches which contain imported memory handles got from peers */
+KHASH_TYPE(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*);
+typedef khash_t(ucp_context_imported_mem_hash) ucp_context_imported_mem_hash_t;
+
+KHASH_IMPL(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
+
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX      = UCS_BIT(0),
-    /* The flag indicates that the resource may be used for client-server
-     * connection establishment with a sockaddr */
-    UCP_TL_RSC_FLAG_SOCKADDR = UCS_BIT(1)
+    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
 
@@ -152,7 +157,7 @@ typedef struct ucp_context_config {
     /** Threshold for enabling RNDV data split alignment */
     size_t                                 rndv_align_thresh;
     /** Print protocols information */
-    int                                    proto_info;
+    char                                   *proto_info;
     /** MD to compare for transport selection scores */
     char                                   *select_distance_md;
     /** Directory to write protocol selection information */
@@ -269,6 +274,7 @@ typedef struct ucp_context {
 
     /* Index of memory domain that is used to allocate memory of the given type
      * using ucp_memh_alloc(). */
+    int                           alloc_md_index_initialized;
     ucp_md_index_t                alloc_md_index[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration for given memory type,
@@ -277,6 +283,10 @@ typedef struct ucp_context {
 
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
+
+    /* Map of MDs that provide registration of a memory buffer for a given
+       memory type to be exported to other processes. */
+    ucp_md_map_t                  export_md_map;
 
     /* Map of MDs that support dmabuf registration */
     ucp_md_map_t                  dmabuf_reg_md_map;
@@ -301,6 +311,9 @@ typedef struct ucp_context {
 
     /* Mem handle registration cache */
     ucs_rcache_t                  *rcache;
+
+    /* Hash of rcaches which contain imported memory handles got from peers */
+    ucp_context_imported_mem_hash_t *imported_mem_hash;
 
     struct {
 
@@ -357,6 +370,12 @@ typedef struct ucp_context {
     ucp_mt_lock_t                 mt_lock;
 
     char                          name[UCP_ENTITY_NAME_MAX];
+
+    /* Global unique identifier */
+    uint64_t                      uuid;
+
+    /* Next memory handle registration identifier */
+    uint64_t                      next_memh_reg_id;
 
     /* Save cached uct configurations */
     ucs_list_link_t               cached_key_list;

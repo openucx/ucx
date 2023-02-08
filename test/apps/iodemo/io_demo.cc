@@ -2093,8 +2093,7 @@ public:
         }
 
         if (!opts().src_addrs.empty()) {
-            addr_index = IoDemoRandom::rand(0U,
-                               (uint32_t)(opts().src_addrs.size() - 1));
+            addr_index = server_index % opts().src_addrs.size();
             ret = set_sockaddr(opts().src_addrs[addr_index], 0,
                                (struct sockaddr*)&src_addr);
             if (ret != true) {
@@ -2928,7 +2927,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
 static int do_server(const options_t& test_opts)
 {
     DemoServer server(test_opts);
-    if (!server.init()) {
+    if (!server.init("iodemo_server")) {
         return -1;
     }
 
@@ -2952,7 +2951,7 @@ static int do_client(options_t& test_opts)
     }
 
     DemoClient client(test_opts);
-    if (!client.init()) {
+    if (!client.init("iodemo_client")) {
         return -1;
     }
 

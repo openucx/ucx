@@ -307,8 +307,9 @@ uct_ib_md_print_mem_reg_err_msg(const char *title, void *address, size_t length,
     size_t page_size;
     size_t unused;
 
-    ucs_string_buffer_appendf(&msg, "%s(address=%p, length=%zu, access=0x%lx)",
-                              title, address, length, access_flags);
+    ucs_string_buffer_appendf(
+            &msg, "%s(address=%p, length=%zu, access=0x%lx) failed: %s", title,
+            address, length, access_flags, strerror(err));
 
     if (err == EINVAL) {
         /* Check if huge page is used */
@@ -321,7 +322,9 @@ uct_ib_md_print_mem_reg_err_msg(const char *title, void *address, size_t length,
         }
     }
 
-    uct_ib_mem_lock_limit_msg(ucs_string_buffer_cstr(&msg), err, level);
+    uct_ib_memlock_limit_msg(&msg, err);
+
+    ucs_log(level, "%s", ucs_string_buffer_cstr(&msg));
 }
 
 void *uct_ib_md_mem_handle_thread_func(void *arg)
@@ -445,7 +448,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
         cur_ctx = &ctxs[thread_idx];
         pthread_join(cur_ctx->thread, &thread_status);
-        if (UCS_PTR_IS_ERR(UCS_OK)) {
+        if (UCS_PTR_IS_ERR(thread_status)) {
             status = UCS_PTR_STATUS(thread_status);
         }
     }
@@ -1975,9 +1978,8 @@ void uct_ib_md_close(uct_md_h uct_md)
     md->ops->cleanup(md);
 }
 
-ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
+void uct_ib_md_ece_check(uct_ib_md_t *md)
 {
-    ucs_status_t status  = UCS_OK;
 #if HAVE_DECL_IBV_SET_ECE
     uct_ib_device_t *dev = &md->dev;
     struct ibv_pd *pd    = md->pd;
@@ -1988,8 +1990,10 @@ ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
 
     cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        status = UCS_ERR_IO_ERROR;
-        goto out;
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
+                                       "%s: ibv_create_cq()",
+                                       uct_ib_device_name(dev));
+        return;
     }
 
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
@@ -2003,7 +2007,9 @@ ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
 
     dummy_qp = ibv_create_qp(pd, &qp_init_attr);
     if (dummy_qp == NULL) {
-        status = UCS_ERR_IO_ERROR;
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
+                                       "%s: ibv_create_qp()",
+                                       uct_ib_device_name(dev));
         goto free_cq;
     }
 
@@ -2016,9 +2022,7 @@ ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
     ibv_destroy_qp(dummy_qp);
 free_cq:
     ibv_destroy_cq(cq);
-out:
 #endif
-    return status;
 }
 
 static uct_ib_md_ops_t uct_ib_verbs_md_ops;
@@ -2079,20 +2083,11 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     md->name       = UCT_IB_MD_NAME(verbs);
     md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
-    status = uct_ib_md_ece_check(md);
-    if (status != UCS_OK) {
-        goto err_md_close_common;
-    }
+    uct_ib_md_ece_check(md);
 
     *p_md = md;
     return UCS_OK;
 
-err_md_close_common:
-    /* Coverity thinks that this goto label is unreachable, because "status"
-     * variable is always set to UCS_OK in case of ibv_set_ece() is unavailable
-     * in uct_ib_md_ece_check() */
-    /* coverity[unreachable] */
-    uct_ib_md_close_common(md);
 err_device_config_release:
     uct_ib_md_release_device_config(md);
 err_md_free:

@@ -41,6 +41,10 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
+    if (!ucp_proto_common_init_check_err_handling(&params->super)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     /* Find first lane */
     num_lanes = ucp_proto_common_find_lanes(&params->super,
                                             params->first.lane_type,
@@ -55,7 +59,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     num_lanes += ucp_proto_common_find_lanes(&params->super,
                                              params->middle.lane_type,
                                              params->middle.tl_cap_flags,
-                                             params->max_lanes - 1,
+                                             UCP_PROTO_MAX_LANES - 1,
                                              UCS_BIT(lanes[0]), lanes + 1);
 
     /* Get bandwidth of all lanes and max_bandwidth */
@@ -83,7 +87,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     perf.sys_latency        = 0;
     lane_map                = 0;
     max_frag_ratio          = 0;
-    for (i = 0; i < num_lanes; ++i) {
+
+    for (i = 0; (i < num_lanes) && (ucs_popcount(lane_map) < params->max_lanes);
+         ++i) {
         lane      = lanes[i];
         lane_perf = &lanes_perf[lane];
         if ((lane_perf->bandwidth * max_bw_ratio) < max_bandwidth) {

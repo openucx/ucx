@@ -9,7 +9,7 @@
 # Memory allocator selection
 #
 AC_ARG_WITH([allocator],
-    [AC_HELP_STRING([--with-allocator=NAME],
+    [AS_HELP_STRING([--with-allocator=NAME],
         [Build UCX with predefined memory allocator. The supported values are:
          ptmalloc286. Default: ptmalloc286])],
         [],

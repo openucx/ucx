@@ -806,13 +806,20 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory and new protocols ===="
 
+		export UCX_PROTO_ENABLE=y
+
 		# Add RMA tests to the list of tests
 		cat $ucx_inst_ptest/test_types_ucp_rma | grep cuda | sort -R >> $ucx_inst_ptest/test_types_short_ucp
-
-		export UCX_PROTO_ENABLE=y
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-		unset UCX_PROTO_ENABLE
 
+		# Run AMO tests
+		echo -e "4 -s 4\n8 -s 8" > "$ucx_inst_ptest/msg_atomic"
+		ucp_test_args_atomic="-b $ucx_inst_ptest/test_types_ucp_amo \
+			              -b $ucx_inst_ptest/msg_atomic \
+				      -n 1000 -w 1"
+		run_client_server_app "$ucx_perftest" "$ucp_test_args_atomic" "$(hostname)" 0 0
+
+		unset UCX_PROTO_ENABLE
 		unset CUDA_VISIBLE_DEVICES
 	fi
 }
@@ -1038,6 +1045,14 @@ test_malloc_hook() {
 	if [ -x ./test/apps/test_tcmalloc ]
 	then
 		./test/apps/test_tcmalloc
+	fi
+}
+
+test_no_cuda_context() {
+	echo "==== Running no CUDA context test ===="
+	if [ -x ./test/apps/test_no_cuda_ctx ]
+	then
+		./test/apps/test_no_cuda_ctx
 	fi
 }
 
@@ -1283,6 +1298,7 @@ run_tests() {
 	do_distributed_task 1 4 test_malloc_hook
 	do_distributed_task 2 4 test_init_mt
 	do_distributed_task 3 4 run_ucp_client_server
+	do_distributed_task 0 4 test_no_cuda_context
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello

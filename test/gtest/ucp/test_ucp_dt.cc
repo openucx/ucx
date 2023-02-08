@@ -83,9 +83,13 @@ protected:
         m_dt_desc.make(GetParam(), &m_dt_buffer[0], m_dt_buffer.size(), iovcnt);
 
         uint8_t sg_count;
+        /* Pass empty param argument to disable memh initialization */
+        ucp_request_param_t param;
+        param.op_attr_mask = 0;
+
         ucp_datatype_iter_init(m_ucph.get(), m_dt_desc.buf(), m_dt_desc.count(),
                                m_dt_desc.dt(), m_dt_buffer.size(), is_pack,
-                               &m_dt_iter, &sg_count);
+                               &m_dt_iter, &sg_count, &param);
         if (!UCP_DT_IS_GENERIC(GetParam())) {
             EXPECT_EQ(iovcnt, sg_count);
         }

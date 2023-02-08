@@ -186,10 +186,20 @@ struct ucp_request {
 
                         struct {
                             struct {
-                                void           *user_ptr;
-                                ucp_mem_desc_t *reg_desc; /* pointer to pre-registered buffer,
-                                                             used for sending header with
-                                                             zcopy protocol */
+                                /* Pointer to buffer used for sending header.
+                                 * - When UCP_AM_SEND_FLAG_COPY_HEADER is set
+                                 *   and reg_desc is NULL ptr holds
+                                 *   address of ucx mpool buffer.
+                                 * - When UCP_AM_SEND_FLAG_COPY_HEADER is not set
+                                 *   ptr holds address of external buffer, provided
+                                 *   by the user, that is expected to be valid
+                                 *   during the send operation.
+                                 */
+                                void           *ptr;
+                                /* pointer to pre-registered buffer,
+                                 * used for sending header with zcopy protocol.
+                                 */
+                                ucp_mem_desc_t *reg_desc;
                                 uint32_t       length;
                             } header UCS_S_PACKED; /* packed to avoid 32-bit
                                                       padding */
@@ -236,6 +246,10 @@ struct ucp_request {
 
                         /* Pointer for access to remote memory */
                         void           *rkey_ptr_addr;
+
+                        /* Pointer to packed RKEY, used only by rkey_ptr mtype
+                         * protocol */
+                        const void     *rkey_buffer;
                     };
 
                     union {
@@ -294,14 +308,6 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    /* The length of the data that should be fetched from sender
-                     * side */
-                    size_t            length;
-                    /* Offset in the receiver's buffer */
-                    size_t            offset;
-                } rndv_rtr;
-
-                struct {
                     unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
                     uct_worker_cb_id_t prog_id; /* Progress callback ID */
                     uint32_t           cmpl_sn; /* Sequence number of the remote completion
@@ -332,6 +338,8 @@ struct ucp_request {
                     uint64_t              remote_addr; /* Remote address */
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;       /* Atomic argument */
+                    uint64_t              result;      /* Atomic result */
+                    void                  *reply_buffer;
                     uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
                 } amo;
 

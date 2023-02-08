@@ -8,9 +8,11 @@
 
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_request.h>
+#include <ucp/proto/proto_init.h>
+#include <ucp/proto/proto_select.inl>
 
 
-#define UCP_AM_OP_ID_MASK_ALL \
+#define UCP_PROTO_AM_OP_ID_MASK \
     (UCS_BIT(UCP_OP_ID_AM_SEND) | UCS_BIT(UCP_OP_ID_AM_SEND_REPLY))
 
 
@@ -26,14 +28,16 @@ static UCS_F_ALWAYS_INLINE int
 ucp_am_check_init_params(const ucp_proto_init_params_t *init_params,
                          uint64_t op_id_mask, uint16_t exclude_flags)
 {
-    return (UCS_BIT(init_params->select_param->op_id) & op_id_mask) &&
-           !(init_params->select_param->op_flags & exclude_flags);
+    return ucp_proto_init_check_op(init_params, op_id_mask) &&
+           !(ucp_proto_select_op_flags(init_params->select_param) &
+             exclude_flags);
 }
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_config_is_am(const ucp_proto_config_t *proto_config)
 {
-    return UCS_BIT(proto_config->select_param.op_id) & UCP_AM_OP_ID_MASK_ALL;
+    return ucp_proto_select_check_op(&proto_config->select_param,
+                                     UCP_PROTO_AM_OP_ID_MASK);
 }
 
 #endif

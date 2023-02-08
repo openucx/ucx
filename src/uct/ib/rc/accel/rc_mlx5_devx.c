@@ -14,7 +14,6 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
 #include <uct/ib/rc/base/rc_iface.h>
-#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 
 
 ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(
@@ -108,7 +107,7 @@ ucs_status_t uct_rc_mlx5_iface_devx_arm(uct_iface_h tl_iface, unsigned events)
         ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md              =
         uct_ib_mlx5_iface_md(&iface->super.super);
-    int solicited[UCT_IB_DIR_NUM], dir;
+    int solicited[UCT_IB_DIR_LAST], dir;
     ucs_status_t status;
     uint64_t dirs;
 
@@ -123,7 +122,7 @@ ucs_status_t uct_rc_mlx5_iface_devx_arm(uct_iface_h tl_iface, unsigned events)
 
     dirs = uct_rc_iface_arm_cq_check(&iface->super, events, solicited);
     ucs_for_each_bit(dir, dirs) {
-        ucs_assert(dir < UCT_IB_DIR_NUM);
+        ucs_assert(dir < UCT_IB_DIR_LAST);
         uct_ib_mlx5dv_arm_cq(&iface->cq[dir], solicited[dir]);
     }
 

@@ -106,4 +106,17 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            ucp_proto_perf_node_t *const tl_perf_node,
                            ucp_md_map_t reg_md_map);
 
+
+/**
+ * Check if protocol initialization parameters contain one of the specified
+ * operations.
+ *
+ * @param [in] init_params   Protocol initialization parameters.
+ * @param [in] op_id_mask    Bitmap of operations to check.
+ *
+ * @return Nonzero if one of the operations is present.
+ */
+int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
+                            uint64_t op_id_mask);
+
 #endif

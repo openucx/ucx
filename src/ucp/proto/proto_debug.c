@@ -11,8 +11,11 @@
 #include "proto_init.h"
 #include "proto_select.inl"
 
+#include <ucp/am/ucp_am.inl>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/datastruct/array.inl>
+#include <fnmatch.h>
 #include <ctype.h>
 
 
@@ -182,6 +185,19 @@ static void ucp_proto_table_row_separator(ucs_string_buffer_t *strb,
     ucs_string_buffer_appendc(strb, '\n', 1);
 }
 
+static int ucp_proto_debug_is_info_enabled(ucp_context_h context,
+                                           const char *select_param_str)
+{
+    const char *proto_info_config = context->config.ext.proto_info;
+    int bool_value;
+
+    if (ucs_config_sscanf_bool(proto_info_config, &bool_value, NULL)) {
+        return bool_value;
+    }
+
+    return fnmatch(proto_info_config, select_param_str, FNM_CASEFOLD) == 0;
+}
+
 static void
 ucp_proto_select_elem_info(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
@@ -191,7 +207,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
                            ucs_string_buffer_t *strb)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
-    UCS_STRING_BUFFER_ONSTACK(select_param_strb, UCP_PROTO_CONFIG_STR_MAX);
+    UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
     static const char *info_row_fmt = "| %*s | %-*s | %-*s |\n";
     ucs_array_t(ucp_proto_info_table) table;
     int hdr_col_width[2], col_width[3];
@@ -202,7 +218,11 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
 
     ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
                                 select_param, ucp_operation_descs, &ep_cfg_strb,
-                                &select_param_strb);
+                                &sel_param_strb);
+    if (!ucp_proto_debug_is_info_enabled(
+                worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
+        return;
+    }
 
     /* Populate the table and column widths */
     ucs_array_init_dynamic(&table);
@@ -238,7 +258,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
 
     /* Resize column[1] to match longest row including header */
     col_width[1] = ucs_max(col_width[1],
-                           (int)ucs_string_buffer_length(&select_param_strb) -
+                           (int)ucs_string_buffer_length(&sel_param_strb) -
                                    col_width[2]);
 
     /* Print header */
@@ -248,7 +268,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     ucs_string_buffer_appendf(strb, "| %*s | %-*s |\n", hdr_col_width[0],
                               ucs_string_buffer_cstr(&ep_cfg_strb),
                               hdr_col_width[1],
-                              ucs_string_buffer_cstr(&select_param_strb));
+                              ucs_string_buffer_cstr(&sel_param_strb));
 
     /* Print contents */
     ucp_proto_table_row_separator(strb, col_width, 3);
@@ -299,57 +319,112 @@ void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
                               select_short->lane, select_short->rkey_index);
 }
 
-static int ucp_proto_op_is_fetch(ucp_operation_id_t op_id)
+static int
+ucp_proto_select_is_fetch_op(const ucp_proto_select_param_t *select_param)
 {
-    return (op_id == UCP_OP_ID_GET) || (op_id == UCP_OP_ID_RNDV_RECV);
+    return ucp_proto_select_check_op(select_param,
+                                     UCS_BIT(UCP_OP_ID_GET) |
+                                     UCS_BIT(UCP_OP_ID_RNDV_RECV) |
+                                     UCS_BIT(UCP_OP_ID_AMO_FETCH));
+}
+
+static int
+ucp_proto_select_is_rndv_op(const ucp_proto_select_param_t *select_param)
+{
+    return ucp_proto_select_check_op(select_param, UCP_PROTO_RNDV_OP_ID_MASK);
+}
+
+static int
+ucp_proto_select_is_am_op(const ucp_proto_select_param_t *select_param)
+{
+    return ucp_proto_select_check_op(select_param, UCP_PROTO_AM_OP_ID_MASK);
+}
+
+static int
+ucp_proto_select_is_atomic_op(const ucp_proto_select_param_t *select_param)
+{
+    return ucp_proto_select_check_op(select_param,
+                                     UCS_BIT(UCP_OP_ID_AMO_POST) |
+                                     UCS_BIT(UCP_OP_ID_AMO_FETCH) |
+                                     UCS_BIT(UCP_OP_ID_AMO_CSWAP));
+}
+static void ucp_proto_debug_mem_info_str(ucs_string_buffer_t *strb,
+                                         ucs_memory_type_t mem_type,
+                                         ucs_sys_device_t sys_dev)
+{
+    const char *sysdev_name;
+
+    ucs_string_buffer_appendf(strb, "%s", ucs_memory_type_names[mem_type]);
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_string_buffer_appendf(strb, " memory");
+    } else {
+        sysdev_name = ucs_topo_sys_device_get_name(sys_dev);
+        ucs_string_buffer_appendf(strb, "/%s", sysdev_name);
+    }
 }
 
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 const char **operation_names,
                                 ucs_string_buffer_t *strb)
 {
-    static const uint64_t op_attr_bits = UCP_OP_ATTR_FLAG_FAST_CMPL |
-                                         UCP_OP_ATTR_FLAG_MULTI_SEND;
-    static const char *op_attr_names[] = {
+    static const uint32_t op_attr_bits   = UCP_OP_ATTR_FLAG_FAST_CMPL |
+                                           UCP_OP_ATTR_FLAG_MULTI_SEND;
+    static const char *op_attr_names[]   = {
         [ucs_ilog2(UCP_OP_ATTR_FLAG_FAST_CMPL)]  = "fast-completion",
         [ucs_ilog2(UCP_OP_ATTR_FLAG_MULTI_SEND)] = "multi",
     };
-    static const uint64_t op_flag_bits = UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG |
-                                         UCP_PROTO_SELECT_OP_FLAG_AM_EAGER |
-                                         UCP_PROTO_SELECT_OP_FLAG_AM_RNDV;
-    static const char *op_flag_names[] = {
-        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)] = "frag",
-        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)]  = "egr",
-        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)]   = "rndv",
+    static const char *rndv_flag_names[] = {
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)] = "frag"
     };
-    unsigned op_flags                  = select_param->op_flags;
-    const char *sysdev_name;
-    uint32_t op_attr_mask;
+    static const char *am_flag_names[]   = {
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)] = "egr",
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)]  = "rndv"
+    };
+    uint32_t op_attr_mask, op_flags;
 
-    ucs_string_buffer_appendf(strb, "%s", operation_names[select_param->op_id]);
+    ucs_string_buffer_appendf(
+            strb, "%s", operation_names[ucp_proto_select_op_id(select_param)]);
 
-    op_attr_mask = ucp_proto_select_op_attr_from_flags(op_flags);
+    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
+                   op_attr_bits;
+    op_flags     = ucp_proto_select_op_flags(select_param);
 
-    if ((op_attr_mask & op_attr_bits) || (op_flags & op_flag_bits)) {
+    if (op_attr_mask || op_flags) {
         ucs_string_buffer_appendf(strb, "(");
-        if (op_attr_mask & op_attr_bits) {
-            ucs_string_buffer_append_flags(strb, op_attr_mask & op_attr_bits,
-                                           op_attr_names);
+        if (op_attr_mask) {
+            ucs_string_buffer_append_flags(strb, op_attr_mask, op_attr_names);
             ucs_string_buffer_appendf(strb, ",");
         }
-        if (op_flags & op_flag_bits) {
-            ucs_string_buffer_append_flags(strb, op_flags & op_flag_bits,
-                                           op_flag_names);
-            ucs_string_buffer_appendf(strb, ",");
+        if (op_flags) {
+            if (ucp_proto_select_is_rndv_op(select_param)) {
+                ucs_string_buffer_append_flags(strb, op_flags, rndv_flag_names);
+            } else if (ucp_proto_select_is_am_op(select_param)) {
+                ucs_string_buffer_append_flags(strb, op_flags, am_flag_names);
+            }
         }
         ucs_string_buffer_rtrim(strb, ",");
         ucs_string_buffer_appendf(strb, ")");
     }
 
-    if (ucp_proto_op_is_fetch(select_param->op_id)) {
+    if (ucp_proto_select_op_id(select_param) == UCP_OP_ID_AMO_POST) {
+        /* No need to print reply buffer info for AMO post */
+        return;
+    }
+
+    if (ucp_proto_select_is_fetch_op(select_param)) {
         ucs_string_buffer_appendf(strb, " into ");
+    } else if (ucp_proto_select_op_id(select_param) == UCP_OP_ID_AMO_CSWAP) {
+        ucs_string_buffer_appendf(strb, " of ");
     } else {
         ucs_string_buffer_appendf(strb, " from ");
+    }
+
+    if (ucp_proto_select_is_atomic_op(select_param)) {
+        /* Atomic fetch/cswap prints the reply buffer info */
+        ucp_proto_debug_mem_info_str(strb, select_param->op.reply.mem_type,
+                                     select_param->op.reply.sys_dev);
+        return;
     }
 
     if (select_param->dt_class != UCP_DATATYPE_CONTIG) {
@@ -361,15 +436,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
         ucs_string_buffer_appendf(strb, " ");
     }
 
-    ucs_string_buffer_appendf(strb, "%s",
-                              ucs_memory_type_names[select_param->mem_type]);
-
-    if (select_param->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_string_buffer_appendf(strb, " memory");
-    } else {
-        sysdev_name = ucs_topo_sys_device_get_name(select_param->sys_dev);
-        ucs_string_buffer_appendf(strb, "/%s", sysdev_name);
-    }
+    ucp_proto_debug_mem_info_str(strb, select_param->mem_type,
+                                 select_param->sys_dev);
 }
 
 void ucp_proto_config_info_str(ucp_worker_h worker,
@@ -405,7 +473,7 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
 
     /* Emulate protocol selection process */
     ucs_assert(new_key_cfg_index == proto_config->rkey_cfg_index);
-    select_elem = ucp_proto_select_lookup_slow(worker, proto_select,
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
                                                proto_config->ep_cfg_index,
                                                proto_config->rkey_cfg_index,
                                                &proto_config->select_param);
@@ -429,17 +497,25 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
 {
     ucp_proto_select_param_str(select_param, operation_names, strb);
 
-    if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
-        return;
+    if (rkey_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        if (ucp_proto_select_is_fetch_op(select_param)) {
+            ucs_string_buffer_appendf(strb, " from ");
+        } else if (ucp_proto_select_op_id(select_param) ==
+                   UCP_OP_ID_AMO_CSWAP) {
+            ucs_string_buffer_appendf(strb, " with ");
+        } else {
+            ucs_string_buffer_appendf(strb, " to ");
+        }
+
+        ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key,
+                                   strb);
     }
 
-    if (ucp_proto_op_is_fetch(select_param->op_id)) {
-        ucs_string_buffer_appendf(strb, " from ");
-    } else {
-        ucs_string_buffer_appendf(strb, " to ");
+    if (ucp_proto_select_is_atomic_op(select_param)) {
+        ucs_string_buffer_appendf(strb, ", arg in ");
+        ucp_proto_debug_mem_info_str(strb, select_param->mem_type,
+                                     select_param->sys_dev);
     }
-
-    ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key, strb);
 }
 
 static ucp_proto_perf_node_t *
@@ -868,6 +944,14 @@ ucp_proto_select_write_info(ucp_worker_h worker,
     FILE *fp;
     int ret;
 
+    ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
+                                select_param, ucp_operation_names, &ep_cfg_strb,
+                                &sel_param_strb);
+    if (!ucp_proto_debug_is_info_enabled(
+                worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
+        return;
+    }
+
     ucs_fill_filename_template(worker->context->config.ext.proto_info_dir,
                                dir_path, sizeof(dir_path));
     ret = mkdir(dir_path, S_IRWXU | S_IRGRP | S_IXGRP);
@@ -876,9 +960,6 @@ ucp_proto_select_write_info(ucp_worker_h worker,
         return;
     }
 
-    ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
-                                select_param, ucp_operation_names, &ep_cfg_strb,
-                                &sel_param_strb);
     ucs_string_buffer_translate(&ep_cfg_strb, ucp_proto_debug_fix_filename);
     ucs_string_buffer_translate(&sel_param_strb, ucp_proto_debug_fix_filename);
 
@@ -923,22 +1004,14 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
                                  const ucp_proto_select_param_t *select_param,
                                  ucp_proto_select_elem_t *select_elem)
 {
-    ucs_string_buffer_t strb;
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
     char *line;
 
-    if (select_param->op_flags & UCP_PROTO_SELECT_OP_FLAG_INTERNAL) {
-        return;
-    }
-
     /* Print human-readable protocol selection table to the log */
-    if (worker->context->config.ext.proto_info) {
-        ucs_string_buffer_init(&strb);
-        ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                                   select_param, select_elem, &strb);
-        ucs_string_buffer_for_each_token(line, &strb, "\n") {
-            ucs_log_print_compact(line);
-        }
-        ucs_string_buffer_cleanup(&strb);
+    ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
+                               select_param, select_elem, &strb);
+    ucs_string_buffer_for_each_token(line, &strb, "\n") {
+        ucs_log_print_compact(line);
     }
 
     /* Print detailed protocol selection data to a user-configured path */
@@ -946,4 +1019,6 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
         ucp_proto_select_write_info(worker, ep_cfg_index, rkey_cfg_index,
                                     select_param, select_elem);
     }
+
+    ucs_string_buffer_cleanup(&strb);
 }

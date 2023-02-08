@@ -18,6 +18,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/math.h>
 }
+#include <sys/resource.h>
 #include <net/if_arp.h>
 #include <ifaddrs.h>
 #include <netdb.h>
@@ -817,14 +818,17 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
 UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
                      !check_caps(UCT_MD_FLAG_EXPORTED_MKEY))
 {
-    static const size_t size       = 1 * UCS_MBYTE;
-    static const unsigned md_flags = UCT_MD_MEM_ACCESS_REMOTE_PUT |
-                                     UCT_MD_MEM_ACCESS_REMOTE_GET;
+    size_t size   = ucs::rand() % UCS_MBYTE;
+    void *address = NULL;
     uct_mem_h export_memh;
     ucs_status_t status;
 
-    std::vector<uint8_t> mem_buffer(size);
-    status = reg_mem(md_flags, mem_buffer.data(), size, &export_memh);
+    status = ucs_mmap_alloc(&size, &address, 0, "test_md_exp_mkey");
+    ASSERT_UCS_OK(status);
+
+    UCS_TEST_MESSAGE << "allocated " << address << " of size " << size;
+
+    status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &export_memh);
     ASSERT_UCS_OK(status);
 
     std::vector<uint8_t> mkey_buffer(md_attr().exported_mkey_packed_size);
@@ -839,6 +843,9 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
     dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
     dereg_params.memh       = export_memh;
     status                  = uct_md_mem_dereg_v2(md(), &dereg_params);
+    ASSERT_UCS_OK(status);
+
+    status = ucs_mmap_free(address, size);
     ASSERT_UCS_OK(status);
 }
 
@@ -906,3 +913,39 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_fork)
 
+class test_md_memlock_limit : public test_md {
+protected:
+    void init() override
+    {
+        ucs::test_base::init();
+        check_skip_test();
+
+        if (getrlimit(RLIMIT_MEMLOCK, &m_previous_limit) != 0) {
+            UCS_TEST_SKIP_R("Cannot get the previous memlock limit");
+        }
+        const struct rlimit new_limit = {1, m_previous_limit.rlim_max};
+        if (setrlimit(RLIMIT_MEMLOCK, &new_limit) != 0) {
+            UCS_TEST_SKIP_R("Cannot set the new memlock limit");
+        }
+    }
+
+    void cleanup() override
+    {
+        if (setrlimit(RLIMIT_MEMLOCK, &m_previous_limit) != 0) {
+            UCS_TEST_ABORT("Failed to restore memlock limit. "
+                           "Can cause other tests failures!");
+        }
+        test_md::cleanup();
+    }
+
+    struct rlimit m_previous_limit;
+};
+
+UCS_TEST_P(test_md_memlock_limit, md_open)
+{
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
+                           GetParam().component, GetParam().md_name.c_str(),
+                           m_md_config);
+}
+
+UCT_MD_INSTANTIATE_TEST_CASE(test_md_memlock_limit)

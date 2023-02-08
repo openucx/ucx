@@ -155,8 +155,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
 
 ucs_status_t ucp_tag_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
-    if ((init_params->select_param->op_id != UCP_OP_ID_TAG_SEND) &&
-        (init_params->select_param->op_id != UCP_OP_ID_TAG_SEND_SYNC)) {
+    if (!ucp_proto_init_check_op(init_params,
+                                 UCS_BIT(UCP_OP_ID_TAG_SEND) |
+                                 UCS_BIT(UCP_OP_ID_TAG_SEND_SYNC))) {
         return UCS_ERR_UNSUPPORTED;
     }
 

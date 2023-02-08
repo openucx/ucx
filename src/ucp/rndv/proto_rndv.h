@@ -19,6 +19,11 @@
 #define UCP_PROTO_RNDV_ATP_NAME "ATP"
 
 
+/* Mask of rendezvous operations */
+#define UCP_PROTO_RNDV_OP_ID_MASK \
+    (UCS_BIT(UCP_OP_ID_RNDV_SEND) | UCS_BIT(UCP_OP_ID_RNDV_RECV))
+
+
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the
@@ -99,6 +104,8 @@ typedef struct {
     /* Name of the control message, e.g "RTS" */
     const char                     *ctrl_msg_name;
 
+    /* Map of mandatory mds which keys should be packed to the rkey */
+    ucp_md_map_t                   md_map;
 } ucp_proto_rndv_ctrl_init_params_t;
 
 
@@ -116,7 +123,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 
-void ucp_proto_rndv_rts_reset(ucp_request_t *req);
+ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
 
 ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *params,
                                      const char *name,
@@ -133,6 +140,10 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
 
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);
 
+
+size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg);
+
+ucs_status_t ucp_proto_rndv_ats_complete(ucp_request_t *req);
 
 void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
                                ucp_proto_query_attr_t *attr);

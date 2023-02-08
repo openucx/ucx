@@ -38,7 +38,7 @@ protected:
     typedef uint64_t               elem_type;
     typedef std::vector<elem_type> vec_type;
 
-    static const size_t BUFFER_LENGTH    = 16384;
+    static const size_t BUFFER_LENGTH  = 16384;
     static const ucp_datatype_t DT_U64 = ucp_dt_make_contig(sizeof(elem_type));
     static const uint64_t TAG          = 0xdeadbeef;
     static const elem_type SEND_DATA   = 0xdeadbeef12121212ull;
@@ -188,7 +188,7 @@ void test_ucp_wireup::init()
     }
 
     m_send_data.resize(BUFFER_LENGTH, 0);
-    m_recv_data.resize(BUFFER_LENGTH, 0);
+    m_recv_data.resize(BUFFER_LENGTH + 1, 0);
 
     if (get_variant_value() & (TEST_RMA | TEST_AMO)) {
         ucs_status_t status;
@@ -289,18 +289,24 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
 
         m_rkeys.push_back(ucs::handle<ucp_rkey_h>(rkey, ucp_rkey_destroy));
 
+        std::fill(m_send_data.begin(), m_send_data.end(), send_data);
         for (int i = 0; i < repeat; ++i) {
-            std::fill(m_send_data.begin(), m_send_data.end(), send_data + i);
-            void *req = ucp_put_nb(ep, &m_send_data[0],
-                                   m_send_data.size() * sizeof(m_send_data[0]),
-                                   (uintptr_t)&m_recv_data[0], rkey,
+            void *req = ucp_put_nb(ep, m_send_data.data(),
+                                   length * sizeof(m_send_data[0]),
+                                   (uintptr_t)m_recv_data.data(), rkey,
                                    send_completion);
-            if (UCS_PTR_IS_PTR(req)) {
-                reqs.push_back(req);
-            } else {
-                ASSERT_UCS_OK(UCS_PTR_STATUS(req));
-            }
+            ASSERT_UCS_PTR_OK(req);
+            reqs.push_back(req);
         }
+
+        ucs_status_t status = ucp_worker_fence(ep->worker);
+        ASSERT_UCS_OK(status);
+
+        void *req = ucp_put_nb(ep, &m_send_data[0], sizeof(m_send_data[0]),
+                               (uintptr_t)&m_recv_data[length], rkey,
+                               send_completion);
+        ASSERT_UCS_PTR_OK(req);
+        reqs.push_back(req);
     }
 }
 
@@ -344,11 +350,19 @@ void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
                                          recv_data));
         }
     } else if (get_variant_value() & TEST_RMA) {
-        for (size_t i = 0; i < length; ++i) {
-            while (m_recv_data[i] != recv_data + repeat - 1) {
-                progress();
-            }
-        }
+        wait_for_value(&m_recv_data[length], recv_data);
+
+        ucs_memory_cpu_load_fence();
+        vec_type::iterator end = m_recv_data.begin() + length;
+        vec_type::iterator it  = std::find_if(m_recv_data.begin(), end,
+                                              [recv_data](uint64_t data) {
+                                                  return data != recv_data;
+                                              });
+        uint64_t data          = *it;
+        ASSERT_EQ(recv_data, data) << "length " << length
+                                   << ", invalid data at index "
+                                   << std::distance(m_recv_data.begin(), it)
+                                   << ((it == end) ? " (control)" : "");
     }
 }
 
@@ -379,7 +393,7 @@ void test_ucp_wireup::send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker,
 {
     std::vector<void*> send_reqs;
     static uint64_t next_send_data = 0;
-    uint64_t send_data = next_send_data++;
+    uint64_t send_data = ++next_send_data;
 
     send_nb(send_ep, length, repeat, send_reqs, send_data);
     recv_b (recv_worker, recv_ep, length, repeat, send_data);
@@ -465,9 +479,6 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     UCS_BITMAP_FOR_EACH_BIT(sender().worker()->context->tl_bitmap, tl) {
         const ucp_tl_resource_desc_t &rsc =
                 sender().worker()->context->tl_rscs[tl];
-        if (rsc.flags & UCP_TL_RSC_FLAG_SOCKADDR) {
-            continue;
-        }
         packed_dev_priorities.insert(
                 ucp_worker_iface_get_attr(sender().worker(), tl)->priority);
         packed_sys_devices.insert(rsc.tl_rsc.sys_device);

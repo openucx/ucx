@@ -259,8 +259,7 @@ ucp_stream_recv_request_init(ucp_request_t *req, ucp_ep_h ep, void *buffer,
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
         req->flags         |= UCP_REQUEST_FLAG_CALLBACK;
         req->recv.stream.cb = param->cb.recv_stream;
-        req->user_data      = (param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA) ?
-                              param->user_data : NULL;
+        req->user_data      = ucp_request_param_user_data(param);
     }
 }
 

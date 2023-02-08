@@ -75,6 +75,14 @@ test_cuda_hook_dynamic_LDADD    = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
                                   $(CUDA_LIBS)
 
+noinst_PROGRAMS          += test_no_cuda_ctx
+test_no_cuda_ctx_SOURCES  = test_no_cuda_ctx.c
+test_no_cuda_ctx_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+test_no_cuda_ctx_CFLAGS   = $(BASE_CFLAGS)
+test_no_cuda_ctx_LDFLAGS  = $(CUDA_LDFLAGS)
+test_no_cuda_ctx_LDADD    = $(top_builddir)/src/ucp/libucp.la \
+                            $(CUDA_LIBS)
+
 if HAVE_CUDA_STATIC
 noinst_PROGRAMS                += test_cuda_hook_static
 test_cuda_hook_static_SOURCES   = test_cuda_hook.c

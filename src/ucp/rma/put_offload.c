@@ -13,6 +13,7 @@
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
 
@@ -64,17 +65,17 @@ ucp_proto_put_offload_short_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_PUT_SHORT,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .lane_type           = UCP_LANE_TYPE_RMA,
         .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
     };
 
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);
-
-    if (!ucp_proto_is_short_supported(init_params->select_param)) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+        !ucp_proto_is_short_supported(init_params->select_param)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -88,7 +89,7 @@ ucp_proto_t ucp_put_offload_short_proto = {
     .init     = ucp_proto_put_offload_short_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_put_offload_short_progress},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
@@ -164,8 +165,9 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_PUT_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
+                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_rma_lanes,
         .initial_reg_md_map  = 0,
@@ -176,7 +178,9 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return ucp_proto_multi_init(&params, init_params->priv,
                                 init_params->priv_size);
@@ -249,9 +253,10 @@ ucp_proto_put_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_PUT_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    |
+                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
+                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_rma_lanes,
         .initial_reg_md_map  = 0,
@@ -262,7 +267,9 @@ ucp_proto_put_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
     };
 
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return ucp_proto_multi_init(&params, init_params->priv,
                                 init_params->priv_size);

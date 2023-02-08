@@ -41,7 +41,8 @@ ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = sizeof(ucp_am_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
@@ -52,7 +53,7 @@ ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if (!ucp_am_check_init_params(init_params, UCP_AM_OP_ID_MASK_ALL,
+    if (!ucp_am_check_init_params(init_params, UCP_PROTO_AM_OP_ID_MASK,
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -210,8 +211,9 @@ ucp_am_eager_multi_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = sizeof(ucp_am_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY   |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
@@ -221,7 +223,7 @@ ucp_am_eager_multi_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
-    if (!ucp_am_check_init_params(init_params, UCP_AM_OP_ID_MASK_ALL,
+    if (!ucp_am_check_init_params(init_params, UCP_PROTO_AM_OP_ID_MASK,
                                   UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -321,6 +323,6 @@ ucp_proto_t ucp_am_eager_multi_zcopy_proto = {
     .init     = ucp_am_eager_multi_zcopy_proto_init,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_am_eager_multi_zcopy_proto_progress},
-    .abort    = ucp_proto_request_zcopy_abort,
+    .abort    = ucp_proto_am_request_zcopy_abort,
     .reset    = ucp_am_proto_request_zcopy_reset
 };

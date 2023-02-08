@@ -9,6 +9,7 @@
 #include <uct/base/uct_iface.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
+#include <ucs/async/eventfd.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
 #include <nvml.h>
@@ -118,6 +119,10 @@
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
+#define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
+    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
+
+
 static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
 {
     CUcontext ctx;
@@ -136,9 +141,15 @@ static UCS_F_ALWAYS_INLINE int uct_cuda_base_context_match(CUcontext ctx1,
 typedef enum uct_cuda_base_gen {
     UCT_CUDA_BASE_GEN_P100 = 6,
     UCT_CUDA_BASE_GEN_V100 = 7,
-    UCT_CUDA_BASE_GEN_A100 = 8
+    UCT_CUDA_BASE_GEN_A100 = 8,
+    UCT_CUDA_BASE_GEN_H100 = 9
 } uct_cuda_base_gen_t;
 
+
+typedef struct uct_cuda_iface {
+    uct_base_iface_t super;
+    int              eventfd;
+} uct_cuda_iface_t;
 
 ucs_status_t
 uct_cuda_base_query_devices_common(
@@ -153,5 +164,19 @@ uct_cuda_base_query_devices(
 ucs_status_t
 uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                           ucs_sys_device_t *sys_dev_p);
+
+ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
+
+#if (__CUDACC_VER_MAJOR__ >= 100000)
+void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);
+#else
+void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(CUstream hStream,  CUresult status,
+                                               void *arg);
+#endif
+
+UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_iface_ops_t *tl_ops,
+                    uct_iface_internal_ops_t *ops, uct_md_h md,
+                    uct_worker_h worker, const uct_iface_params_t *params,
+                    const uct_iface_config_t *tl_config, const char *dev_name);
 
 #endif

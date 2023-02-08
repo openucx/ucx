@@ -41,7 +41,7 @@ typedef struct {
     struct {
         uct_ib_mlx5_rxwq_t              wq;
     } rx;
-    uct_ib_mlx5_cq_t                    cq[UCT_IB_DIR_NUM];
+    uct_ib_mlx5_cq_t                    cq[UCT_IB_DIR_LAST];
     uct_ud_mlx5_iface_common_t          ud_mlx5_common;
 } uct_ud_mlx5_iface_t;
 

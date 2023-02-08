@@ -82,8 +82,12 @@ void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,
 
     ucp_datatype_iter_t dt_iter;
     uint8_t sg_count;
+    /* Pass empty param argument to disable memh initialization */
+    ucp_request_param_t param;
+    param.op_attr_mask = 0;
+
     ucp_datatype_iter_init(context(), buffer.ptr(), size, UCP_DATATYPE_CONTIG,
-                           size, 1, &dt_iter, &sg_count);
+                           size, 1, &dt_iter, &sg_count, &param);
 
     ucs_time_t start_time = ucs_get_time();
     ucs_time_t deadline   = start_time + ucs_time_from_sec(test_time_sec);
@@ -111,13 +115,14 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_proto_select_param_t select_param;
     ucs_string_buffer_t strb;
 
-    select_param.op_id      = UCP_OP_ID_TAG_SEND;
-    select_param.op_flags   = 0;
-    select_param.dt_class   = UCP_DATATYPE_CONTIG;
-    select_param.mem_type   = UCS_MEMORY_TYPE_HOST;
-    select_param.sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
-    select_param.sg_count   = 1;
-    select_param.padding    = 0;
+    select_param.op_id_flags   = UCP_OP_ID_TAG_SEND;
+    select_param.op_attr       = 0;
+    select_param.dt_class      = UCP_DATATYPE_CONTIG;
+    select_param.mem_type      = UCS_MEMORY_TYPE_HOST;
+    select_param.sys_dev       = UCS_SYS_DEVICE_ID_UNKNOWN;
+    select_param.sg_count      = 1;
+    select_param.op.padding[0] = 0;
+    select_param.op.padding[1] = 0;
 
     ucs_string_buffer_init(&strb);
     ucp_proto_select_param_str(&select_param, ucp_operation_names, &strb);

@@ -10,6 +10,7 @@
 
 #include "rdmacm_cm_ep.h"
 #include <uct/ib/base/ib_iface.h>
+#include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/async/async.h>
 
@@ -182,7 +183,8 @@ dummy_qp_ctx_init:
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
     if (ctx->cq == NULL) {
-        ucs_error("ibv_create_cq(%s) failed: %m", dev_name);
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: ibv_create_cq()", dev_name);
         return UCS_ERR_IO_ERROR;
     }
 

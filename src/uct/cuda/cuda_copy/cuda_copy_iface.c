@@ -15,7 +15,7 @@
 #include <uct/cuda/base/cuda_md.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
-#include <ucs/async/async.h>
+#include <ucs/async/eventfd.h>
 #include <ucs/arch/cpu.h>
 
 
@@ -73,7 +73,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
 
-    uct_base_iface_query(&iface->super, iface_attr);
+    uct_base_iface_query(&iface->super.super, iface_attr);
 
     iface_attr->iface_addr_len          = sizeof(uct_cuda_copy_iface_addr_t);
     iface_attr->device_addr_len         = 0;
@@ -87,7 +87,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                           UCT_IFACE_FLAG_EVENT_RECV      |
-                                          UCT_IFACE_FLAG_EVENT_ASYNC_CB;
+                                          UCT_IFACE_FLAG_EVENT_FD;
 
     iface_attr->cap.put.max_short       = UINT_MAX;
     iface_attr->cap.put.max_bcopy       = 0;
@@ -209,22 +209,6 @@ static unsigned uct_cuda_copy_iface_progress(uct_iface_h tl_iface)
     return count;
 }
 
-#if (__CUDACC_VER_MAJOR__ >= 100000)
-static void CUDA_CB myHostFn(void *cuda_copy_iface)
-#else
-static void CUDA_CB myHostCallback(CUstream hStream,  CUresult status,
-                                   void *cuda_copy_iface)
-#endif
-{
-    uct_cuda_copy_iface_t *iface = cuda_copy_iface;
-
-    ucs_assert(iface->async.event_cb != NULL);
-    /* notify user */
-    UCS_ASYNC_BLOCK(iface->super.worker->async);
-    iface->async.event_cb(iface->async.event_arg, 0);
-    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
-}
-
 static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
                                                     unsigned events)
 {
@@ -242,18 +226,30 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
         }
     }
 
+    status = ucs_async_eventfd_poll(iface->super.eventfd);
+    if (status == UCS_OK) {
+        return UCS_ERR_BUSY;
+    } else if (status == UCS_ERR_IO_ERROR) {
+        return status;
+    }
+
+    ucs_assertv(status == UCS_ERR_NO_PROGRESS, "%s", ucs_status_string(status));
+
     ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
         event_q = &q_desc->event_queue;
         stream  = &q_desc->stream;
         if (!ucs_queue_is_empty(event_q)) {
             status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
-                UCT_CUDADRV_FUNC_LOG_ERR(cuLaunchHostFunc(*stream,
-                                                          myHostFn, iface));
+                UCT_CUDADRV_FUNC_LOG_ERR(
+                        cuLaunchHostFunc(*stream,
+                                         uct_cuda_base_iface_stream_cb_fxn,
+                                         &iface->super));
 #else
-                UCT_CUDADRV_FUNC_LOG_ERR(cuStreamAddCallback(*stream,
-                                                             myHostCallback,
-                                                             iface, 0));
+                UCT_CUDADRV_FUNC_LOG_ERR(
+                        cuStreamAddCallback(*stream,
+                                            uct_cuda_base_iface_stream_cb_fxn,
+                                            &iface->super, 0));
 #endif
             if (UCS_OK != status) {
                 return status;
@@ -280,7 +276,7 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_cuda_copy_iface_progress,
-    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_success,
+    .iface_event_fd_get       = uct_cuda_base_iface_event_fd_get,
     .iface_event_arm          = uct_cuda_copy_iface_event_fd_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t),
     .iface_query              = uct_cuda_copy_iface_query,
@@ -410,11 +406,9 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     ucs_memory_type_t src, dst;
     ucs_mpool_params_t mp_params;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_copy_iface_ops,
+    UCS_CLASS_CALL_SUPER_INIT(uct_cuda_iface_t, &uct_cuda_copy_iface_ops,
                               &uct_cuda_copy_iface_internal_ops, md, worker,
-                              params,
-                              tl_config UCS_STATS_ARG(params->stats_root)
-                              UCS_STATS_ARG("cuda_copy"));
+                              params, tl_config, "cuda_copy");
 
     if (strncmp(params->mode.device.dev_name,
                 UCT_CUDA_DEV_NAME, strlen(UCT_CUDA_DEV_NAME)) != 0) {
@@ -439,9 +433,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         return UCS_ERR_IO_ERROR;
     }
 
-    uct_iface_set_async_event_params(params, &self->async.event_cb,
-                                     &self->async.event_arg);
-
     ucs_queue_head_init(&self->active_queue);
 
     for (src = 0; src < UCS_MEMORY_TYPE_LAST; ++src) {
@@ -464,7 +455,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
     ucs_queue_head_t *event_q;
     ucs_memory_type_t src, dst;
 
-    uct_base_iface_progress_disable(&self->super.super,
+    uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
     UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
@@ -495,7 +486,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
     ucs_mpool_cleanup(&self->cuda_event_desc, 1);
 }
 
-UCS_CLASS_DEFINE(uct_cuda_copy_iface_t, uct_base_iface_t);
+UCS_CLASS_DEFINE(uct_cuda_copy_iface_t, uct_cuda_iface_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_copy_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
                           const uct_iface_params_t*, const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_iface_t, uct_iface_t);

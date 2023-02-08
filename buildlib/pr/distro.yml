@@ -52,7 +52,7 @@ jobs:
     pool:
       name: MLNX
       demands:
-      - ucx_docker -equals yes
+      - ucx_ci_without_interference -equals yes
     strategy:
       matrix:
         ubuntu20:

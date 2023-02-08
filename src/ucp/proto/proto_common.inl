@@ -25,7 +25,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
-    if (req->send.proto_config->select_param.op_id == UCP_OP_ID_TAG_SEND) {
+    if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
+        UCP_OP_ID_TAG_SEND) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
@@ -86,7 +87,8 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_CONTIG_IOV);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
-    if (req->send.proto_config->select_param.op_id == UCP_OP_ID_TAG_SEND) {
+    if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
+        UCP_OP_ID_TAG_SEND) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
@@ -98,6 +100,12 @@ ucp_proto_request_zcopy_complete_success(ucp_request_t *req)
 {
     ucp_proto_request_zcopy_complete(req, UCS_OK);
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_multi_frag_is_completed(ucp_request_t *req)
+{
+    return req->send.state.completed_size == req->send.state.dt_iter.length;
 }
 
 /**
@@ -115,11 +123,12 @@ ucp_proto_common_frag_complete(ucp_request_t *req, size_t frag_size,
                   req->send.state.dt_iter.length);
 
     ucs_assertv(req->send.state.completed_size <=
-                        req->send.state.dt_iter.length,
-                "completed_size=%zu dt_iter.length=%zu",
+                req->send.state.dt_iter.length,
+                "req %p: proto %s completed_size=%zu dt_iter.length=%zu", req,
+                req->send.proto_config->proto->name,
                 req->send.state.completed_size, req->send.state.dt_iter.length);
 
-    return req->send.state.completed_size == req->send.state.dt_iter.length;
+    return ucp_proto_common_multi_frag_is_completed(req);
 }
 
 /* Adjust a zero-copy operation to a minimal fragment size, by overlapping with
@@ -223,33 +232,19 @@ ucp_proto_request_send_init(ucp_request_t *req, ucp_ep_h ep, uint32_t flags)
     req->send.ep = ep;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
-ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
-                          ucp_worker_cfg_index_t rkey_cfg_index,
-                          ucp_request_t *req, ucp_operation_id_t op_id,
-                          const void *buffer, size_t count,
-                          ucp_datatype_t datatype, size_t contig_length,
-                          const ucp_request_param_t *param,
-                          size_t header_length, uint16_t op_flags)
+
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_common(
+        ucp_worker_h worker, ucp_ep_h ep, ucp_proto_select_t *proto_select,
+        ucp_worker_cfg_index_t rkey_cfg_index, ucp_request_t *req,
+        const ucp_request_param_t *param,
+        const ucp_proto_select_param_t *select_param, size_t msg_length)
 {
-    ucp_worker_h worker = ep->worker;
-    ucp_proto_select_param_t sel_param;
+    ucs_string_buffer_t strb;
     ucs_status_t status;
-    uint8_t sg_count;
-
-    ucp_proto_request_send_init(req, ep, 0);
-
-    UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init, worker->context,
-                          (void*)buffer, count, datatype, contig_length, 1,
-                          &req->send.state.dt_iter, &sg_count);
-
-    ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
-                                op_flags, req->send.state.dt_iter.dt_class,
-                                &req->send.state.dt_iter.mem_info, sg_count);
 
     status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
-                              proto_select, rkey_cfg_index, &sel_param,
-                              req->send.state.dt_iter.length + header_length);
+                              proto_select, rkey_cfg_index, select_param,
+                              msg_length);
     if (status != UCS_OK) {
         ucp_request_put_param(param, req);
         return UCS_STATUS_PTR(status);
@@ -262,9 +257,90 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     }
 
     ucp_request_set_send_callback_param(param, req, send);
-    ucs_trace_req("returning send request %p: %s buffer %p count %zu",
-                  req, ucp_operation_names[op_id], buffer, count);
+
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+        ucs_string_buffer_init(&strb);
+        ucp_datatype_iter_str(&req->send.state.dt_iter, &strb);
+        ucs_trace_req("returning send request %p: %s %s", req,
+                      ucp_operation_names[ucp_proto_select_op_id(select_param)],
+                      ucs_string_buffer_cstr(&strb));
+        ucs_string_buffer_cleanup(&strb);
+    }
+
     return req + 1;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
+ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
+                          ucp_worker_cfg_index_t rkey_cfg_index,
+                          ucp_request_t *req, ucp_operation_id_t op_id,
+                          const void *buffer, size_t count,
+                          ucp_datatype_t datatype, size_t contig_length,
+                          const ucp_request_param_t *param,
+                          size_t header_length, uint8_t op_flags)
+{
+    ucp_worker_h worker = ep->worker;
+    ucp_proto_select_param_t sel_param;
+    ucs_status_t status;
+    size_t msg_length;
+    uint8_t sg_count;
+
+    ucp_proto_request_send_init(req, ep, 0);
+
+    status = UCS_PROFILE_CALL(ucp_datatype_iter_init, worker->context,
+                              (void*)buffer, count, datatype, contig_length, 1,
+                              &req->send.state.dt_iter, &sg_count, param);
+    if (status != UCS_OK) {
+        ucp_request_put_param(param, req);
+        return UCS_STATUS_PTR(status);
+    }
+
+    ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
+                                op_flags, req->send.state.dt_iter.dt_class,
+                                &req->send.state.dt_iter.mem_info, sg_count);
+
+    msg_length = req->send.state.dt_iter.length + header_length;
+    return ucp_proto_request_send_op_common(worker, ep, proto_select,
+                                            rkey_cfg_index, req, param,
+                                            &sel_param, msg_length);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_reply(
+        ucp_ep_h ep, ucp_proto_select_t *proto_select,
+        ucp_worker_cfg_index_t rkey_cfg_index, ucp_request_t *req,
+        ucp_operation_id_t op_id, const void *buffer, size_t count,
+        ucp_datatype_t datatype, size_t contig_length,
+        const ucp_request_param_t *param)
+{
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
+    ucp_proto_select_param_t sel_param;
+    ucp_memory_info_t reply_mem_info;
+    ucs_status_t status;
+    uint8_t sg_count;
+
+    ucp_proto_request_send_init(req, ep, 0);
+
+    status = UCS_PROFILE_CALL(ucp_datatype_iter_init, context, (void*)buffer,
+                              count, datatype, contig_length, 1,
+                              &req->send.state.dt_iter, &sg_count, param);
+    if (status != UCS_OK) {
+        ucp_request_put_param(param, req);
+        return UCS_STATUS_PTR(status);
+    }
+
+    UCS_PROFILE_CALL_VOID(ucp_memory_detect, context, param->reply_buffer,
+                          contig_length, &reply_mem_info);
+
+    ucp_proto_select_param_init_reply(&sel_param, op_id, param->op_attr_mask, 0,
+                                      req->send.state.dt_iter.dt_class,
+                                      &req->send.state.dt_iter.mem_info,
+                                      sg_count, &reply_mem_info);
+
+    return ucp_proto_request_send_op_common(worker, ep, proto_select,
+                                            rkey_cfg_index, req, param,
+                                            &sel_param,
+                                            req->send.state.dt_iter.length);
 }
 
 static UCS_F_ALWAYS_INLINE size_t

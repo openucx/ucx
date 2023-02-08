@@ -71,6 +71,15 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
+    {"LAG_PORT_AFFINITY", "auto",
+     "Specifies how DCI select port under RoCE LAG. The values are:\n"
+     " auto     Set DCI QP port affinity only if the hardware is configured\n"
+     "          to QUEUE_AFFINITY mode.\n"
+     " on       Always set DCI QP port affinity.\n"
+     " off      Never set DCI QP port affinity.\n",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_port_affinity),
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
     {"DCI_FULL_HANDSHAKE", "no",
      "Force full-handshake protocol for DC initiator. Enabling this mode\n"
      "increases network latency, but is more resilient to packet drops.\n"
@@ -391,8 +400,10 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
     qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
                                  &attr.super.ibv, &dv_attr);
     if (qp == NULL) {
-        ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI): failed: %m",
-                  UCT_IB_IFACE_ARG(ib_iface));
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI)",
+                                       uct_ib_device_name(dev),
+                                       UCT_IB_IFACE_ARG(ib_iface));
         status = UCS_ERR_IO_ERROR;
         goto err_put_res_domain;
     }
@@ -563,7 +574,9 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
     iface->rx.dct.verbs.qp = mlx5dv_create_qp(dev->ibv_context, &init_attr,
                                               &dv_init_attr);
     if (iface->rx.dct.verbs.qp == NULL) {
-        ucs_error("mlx5dv_create_qp(DCT) failed: %m");
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: mlx5dv_create_qp(DCT)",
+                                       uct_ib_device_name(dev));
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1325,7 +1338,7 @@ static ucs_status_t uct_dc_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
         return UCS_OK;
     }
 
-    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, md->super.pd, &qp_tmp_objs);
+    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, md->super.pd, &qp_tmp_objs, 0);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1337,8 +1350,9 @@ static ucs_status_t uct_dc_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
     dci_qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
                                      &qp_init_attr, &dv_attr);
     if (dci_qp == NULL) {
-        ucs_error("%s: mlx5dv_create_qp(DCI) failed: %m",
-                  uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: mlx5dv_create_qp(DCI)",
+                                       uct_ib_device_name(dev));
         status = UCS_ERR_IO_ERROR;
         goto out_qp_tmp_objs_close;
     }
@@ -1374,6 +1388,30 @@ static ucs_status_t uct_dc_mlx5_calc_sq_length(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
+static void
+uct_dc_mlx5_iface_init_tx_port_affinity(uct_dc_mlx5_iface_t *iface,
+                                        const uct_dc_mlx5_iface_config_t *config)
+{
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                          uct_ib_mlx5_md_t);
+
+    iface->tx.port_affinity = 0;
+    if (config->tx_port_affinity == UCS_CONFIG_ON) {
+        if ((md->port_select_mode == UCT_IB_MLX5_LAG_QUEUE_AFFINITY) ||
+            (md->port_select_mode == UCT_IB_MLX5_LAG_PORT_SELECT_FT)) {
+            iface->tx.port_affinity = 1;
+        } else {
+            ucs_warn("Device %s does not support set"
+                     "UCX_DC_MLX5_LAG_PORT_AFFINITY=on, port select mode is %d",
+                     uct_ib_device_name(&md->super.dev),
+                     md->port_select_mode);
+        }
+    } else if ((config->tx_port_affinity == UCS_CONFIG_AUTO) &&
+               (md->port_select_mode == UCT_IB_MLX5_LAG_QUEUE_AFFINITY)) {
+        iface->tx.port_affinity = 1;
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -1390,14 +1428,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     ucs_status_t status;
     unsigned tx_cq_size;
     unsigned num_dci_channels;
+    int max_dcis;
 
     ucs_trace_func("");
-
-    if (config->ndci < 1) {
-        ucs_error("dc interface must have at least 1 dci (requested: %d)",
-                  config->ndci);
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     init_attr.qp_type       = UCT_IB_QPT_DCI;
     init_attr.flags         = UCT_IB_CQ_IGNORE_OVERRUN |
@@ -1480,6 +1513,15 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         !(params->features & UCT_IFACE_FEATURE_PUT)) {
         self->flags |= UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT;
     }
+
+    max_dcis = ucs_min(INT8_MAX, UINT8_MAX / self->tx.num_dci_pools);
+    if ((config->ndci < 1) || (config->ndci > max_dcis)) {
+        ucs_error("dc interface must have 1..%d dcis (requested: %d)", max_dcis,
+                  config->ndci);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    uct_dc_mlx5_iface_init_tx_port_affinity(self, config);
 
     UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(self, config, dci, DCI, status, err);
     UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(self, config, dci_ka, KEEPALIVE,

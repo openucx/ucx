@@ -734,7 +734,7 @@ ucs_status_t uct_ud_mlx5_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     }
 
     ucs_for_each_bit(dir, dirs) {
-        ucs_assert(dir < UCT_IB_DIR_NUM);
+        ucs_assert(dir < UCT_IB_DIR_LAST);
         uct_ib_mlx5dv_arm_cq(&iface->cq[dir], 0);
     }
 
@@ -779,6 +779,7 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
     status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR, "ibv_create_qp()");
         return status;
     }
 
@@ -890,7 +891,7 @@ static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
         return UCS_OK;
     }
 
-    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, md->super.pd, &qp_tmp_objs);
+    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, md->super.pd, &qp_tmp_objs, 0);
     if (status != UCS_OK) {
         goto out;
     }

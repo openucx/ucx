@@ -8,9 +8,6 @@
 #  include "config.h"
 #endif
 
-#include "ib_mlx5_ifc.h"
-
-#include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5.inl>
 #include <ucs/arch/bitops.h>
 
@@ -54,20 +51,17 @@ void uct_ib_mlx5dv_dct_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
 
 ucs_status_t
 uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
-                                 uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs)
+                                 uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs,
+                                 int silent)
 {
     struct ibv_srq_init_attr srq_attr = {};
-    ucs_status_t status;
-    int cq_errno;
-    char message[128];
+    ucs_log_level_t level             = silent ? UCS_LOG_LEVEL_DEBUG :
+                                                 UCS_LOG_LEVEL_ERROR;
 
     qp_tmp_objs->cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
     if (qp_tmp_objs->cq == NULL) {
-        cq_errno = errno;
-        ucs_snprintf_safe(message, sizeof(message), "%s: ibv_create_cq()",
-                          uct_ib_device_name(dev));
-        uct_ib_mem_lock_limit_msg(message, cq_errno, UCS_LOG_LEVEL_ERROR);
-        status = UCS_ERR_IO_ERROR;
+        uct_ib_check_memlock_limit_msg(level, "%s: ibv_create_cq()",
+                                       uct_ib_device_name(dev));
         goto out;
     }
 
@@ -75,8 +69,8 @@ uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
     srq_attr.attr.max_wr  = 1;
     qp_tmp_objs->srq      = ibv_create_srq(pd, &srq_attr);
     if (qp_tmp_objs->srq == NULL) {
-        ucs_error("%s: ibv_create_srq() failed: %m", uct_ib_device_name(dev));
-        status = UCS_ERR_IO_ERROR;
+        uct_ib_check_memlock_limit_msg(level, "%s: ibv_create_srq()",
+                                       uct_ib_device_name(dev));
         goto out_destroy_cq;
     }
 
@@ -85,7 +79,7 @@ uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
 out_destroy_cq:
     ibv_destroy_cq(qp_tmp_objs->cq);
 out:
-    return status;
+    return UCS_ERR_IO_ERROR;
 }
 
 void uct_ib_mlx5dv_qp_tmp_objs_destroy(uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs)
@@ -630,7 +624,7 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     UCT_IB_MLX5DV_SET(cqc, cqctx, log_cq_size, log_cq_size);
     UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_sz, (cqe_size == 128) ? 1 : 0);
 
-    if (init_attr->cqe_zip_sizes & cqe_size) {
+    if (init_attr->cqe_zip_sizes[dir] & cqe_size) {
         UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_en, 1);
         UCT_IB_MLX5DV_SET(cqc, cqctx, cqe_comp_layout, 1);
     }
@@ -651,7 +645,7 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                UCT_IB_MLX5DV_GET(create_cq_out, out, cqn),
                                cq->devx.cq_buf, cq->devx.uar->uar->base_addr,
                                cq->devx.dbrec->db,
-                               !!(init_attr->cqe_zip_sizes & cqe_size));
+                               !!(init_attr->cqe_zip_sizes[dir] & cqe_size));
 
     iface->config.max_inl_cqe[dir] = uct_ib_mlx5_inl_cqe(inl, cqe_size);
     iface->cq[dir]                 = NULL;

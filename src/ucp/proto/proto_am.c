@@ -132,10 +132,10 @@ ucs_status_t ucp_proto_am_req_copy_header(ucp_request_t *req)
         return UCS_ERR_NO_MEMORY;
     }
 
-    memcpy(user_header, req->send.msg_proto.am.header.user_ptr,
+    memcpy(user_header, req->send.msg_proto.am.header.ptr,
            req->send.msg_proto.am.header.length);
-    req->flags |= UCP_REQUEST_FLAG_USER_HEADER_COPIED;
-    req->send.msg_proto.am.header.user_ptr = user_header;
+    req->flags                       |= UCP_REQUEST_FLAG_USER_HEADER_COPIED;
+    req->send.msg_proto.am.header.ptr = user_header;
 
     return UCS_OK;
 }

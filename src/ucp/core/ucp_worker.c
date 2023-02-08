@@ -1087,14 +1087,10 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         iface_params.field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE;
         resource = &context->tl_rscs[tl_id];
 
-        if (resource->flags & UCP_TL_RSC_FLAG_SOCKADDR) {
-            iface_params.open_mode            = UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT;
-        } else {
-            iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
-            iface_params.field_mask          |= UCT_IFACE_PARAM_FIELD_DEVICE;
-            iface_params.mode.device.tl_name  = resource->tl_rsc.tl_name;
-            iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
-        }
+        iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+        iface_params.field_mask          |= UCT_IFACE_PARAM_FIELD_DEVICE;
+        iface_params.mode.device.tl_name  = resource->tl_rsc.tl_name;
+        iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
 
         status = ucp_worker_iface_open(worker, tl_id, &iface_params,
                                        &worker->ifaces[iface_id++]);
@@ -1213,7 +1209,6 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     uct_md_h md                      = context->tl_mds[resource->md_index].md;
     ucs_sys_dev_distance_t distance  = {.latency = 0, .bandwidth = 0};
     uct_iface_config_t *iface_config;
-    const char *cfg_tl_name;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
@@ -1232,12 +1227,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     wiface->flags            = 0;
 
     /* Read interface or md configuration */
-    if (resource->flags & UCP_TL_RSC_FLAG_SOCKADDR) {
-        cfg_tl_name = NULL;
-    } else {
-        cfg_tl_name = resource->tl_rsc.tl_name;
-    }
-    status = uct_md_iface_config_read(md, cfg_tl_name, NULL, NULL, &iface_config);
+    status = uct_md_iface_config_read(md, resource->tl_rsc.tl_name, NULL, NULL,
+                                      &iface_config);
     if (status != UCS_OK) {
         goto err_free_iface;
     }
@@ -1675,7 +1666,7 @@ static void ucp_worker_add_feature_rsc(ucp_context_h context,
         return;
     }
 
-    ucs_string_buffer_appendf(strb, "%s(", feature_str);
+    ucs_string_buffer_appendf(strb, " %s(", feature_str);
 
     ucs_for_each_bit(lane, lanes_bitmap) {
         ucs_assert(lane < UCP_MAX_LANES); /* make coverity happy */

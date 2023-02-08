@@ -25,6 +25,7 @@ function azure_set_variable() {
     test "x$RUNNING_IN_AZURE" = "xno" && return
     name=$1
     value=$2
+    # Do not remove 'set +x': https://developercommunity.visualstudio.com/t/pipeline-variable-incorrectly-inserts-single-quote/375679#T-N394968
     set +x
     echo "##vso[task.setvariable variable=${name}]${value}"
 }
@@ -99,7 +100,7 @@ function az_init_modules() {
     . /etc/profile.d/modules.sh
     export MODULEPATH="/hpc/local/etc/modulefiles:$MODULEPATH"
     # Read module files (W/A if there're some network instabilities lead to autofs issues)
-    find /hpc/local/etc/modulefiles >/dev/null 2>&1
+    find /hpc/local/etc/modulefiles > /dev/null || true
 }
 
 #

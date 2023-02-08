@@ -136,13 +136,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-        req->recv.tag.cb    = param->cb.recv;
-
-        if (param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA) {
-            req->user_data = param->user_data;
-        } else {
-            req->user_data = NULL;
-        }
+        req->recv.tag.cb = param->cb.recv;
+        req->user_data   = ucp_request_param_user_data(param);
     }
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {

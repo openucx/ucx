@@ -12,6 +12,7 @@
 #include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
@@ -268,10 +269,11 @@ KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
  * MLX5 IB memory domain.
  */
 typedef struct uct_ib_mlx5_md {
-    uct_ib_md_t              super;
-    uint32_t                 flags;
-    ucs_mpool_t              dbrec_pool;
-    ucs_recursive_spinlock_t dbrec_lock;
+    uct_ib_md_t               super;
+    uint32_t                  flags;
+    ucs_mpool_t               dbrec_pool;
+    ucs_recursive_spinlock_t  dbrec_lock;
+    uct_ib_port_select_mode_t port_select_mode;
 #if HAVE_DEVX
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;
@@ -322,7 +324,7 @@ typedef struct uct_ib_mlx5_iface_config {
 #endif
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
     ucs_ternary_auto_value_t ar_enable;
-    int                      cqe_zipping_enable;
+    int                      cqe_zip_enable[UCT_IB_DIR_LAST];
 } uct_ib_mlx5_iface_config_t;
 
 
@@ -865,7 +867,7 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     mem->mem  = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size,
                                      access_mode);
     if (mem->mem == NULL) {
-        ucs_log(level, "mlx5dv_devx_umem_reg() failed: %m");
+        uct_ib_check_memlock_limit_msg(level, "mlx5dv_devx_umem_reg()");
         status = UCS_ERR_NO_MEMORY;
         goto err_dofork;
     }

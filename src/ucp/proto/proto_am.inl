@@ -45,9 +45,10 @@ static UCS_F_ALWAYS_INLINE void ucp_am_release_user_header(ucp_request_t *req)
 {
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED)) {
         ucs_assert(req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER);
-        ucs_mpool_set_put_inline(req->send.msg_proto.am.header.user_ptr);
+        ucs_mpool_set_put_inline(req->send.msg_proto.am.header.ptr);
+        req->flags &= ~UCP_REQUEST_FLAG_USER_HEADER_COPIED;
 #if UCS_ENABLE_ASSERT
-        req->send.msg_proto.am.header.user_ptr = NULL;
+        req->send.msg_proto.am.header.ptr = NULL;
 #endif
     }
 }
@@ -596,11 +597,13 @@ ucp_proto_get_short_max(const ucp_request_t *req,
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
-                    ssize_t length)
+                    ssize_t length, const ucp_request_param_t *param)
 {
     return (ucs_likely(length <= max_eager_short->memtype_off) ||
-            (length <= max_eager_short->memtype_on &&
-             ucs_memtype_cache_is_empty()));
+            ((length <= max_eager_short->memtype_on) &&
+             (ucs_memtype_cache_is_empty() ||
+              ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) &&
+               (param->memory_type == UCS_MEMORY_TYPE_HOST)))));
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
@@ -673,9 +676,8 @@ ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
     hdr_state.offset = 0ul;
 
     ucp_dt_pack(req->send.ep->worker, ucp_dt_make_contig(1),
-                UCS_MEMORY_TYPE_HOST, buffer,
-                req->send.msg_proto.am.header.user_ptr, &hdr_state,
-                req->send.msg_proto.am.header.length);
+                UCS_MEMORY_TYPE_HOST, buffer, req->send.msg_proto.am.header.ptr,
+                &hdr_state, req->send.msg_proto.am.header.length);
 }
 
 #endif

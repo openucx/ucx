@@ -12,7 +12,6 @@
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
-#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
@@ -366,8 +365,10 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     qp->verbs.qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
                                            &attr->super.ibv, &dv_attr);
     if (qp->verbs.qp == NULL) {
-        ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT"): failed: %m",
-                  UCT_IB_IFACE_ARG(ib_iface));
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: mlx5dv_create_qp("UCT_IB_IFACE_FMT")",
+                                       uct_ib_device_name(dev),
+                                       UCT_IB_IFACE_ARG(ib_iface));
         status = UCS_ERR_IO_ERROR;
         goto err;
     }

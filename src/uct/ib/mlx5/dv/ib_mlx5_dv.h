@@ -58,7 +58,8 @@ void uct_ib_mlx5dv_dct_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
  */
 ucs_status_t
 uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
-                                 uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs);
+                                 uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs,
+                                 int silent);
 
 /**
  * Closes CQ and SRQ which are needed for creating QP.
@@ -83,11 +84,6 @@ void uct_ib_mlx5dv_qp_init_attr(uct_ib_qp_init_attr_t *qp_init_attr,
  * Get internal AV information.
  */
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
-
-/**
- * Backports for legacy bare-metal support
- */
-struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq);
 
 void *uct_dv_get_info_uar0(void *uar);
 

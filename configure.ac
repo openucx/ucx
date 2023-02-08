@@ -28,7 +28,6 @@ config_flags="$*"
 valgrind_libpath=""
 
 AC_USE_SYSTEM_EXTENSIONS
-AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
 
 AC_CHECK_PROG(GITBIN, git, yes)
@@ -80,8 +79,7 @@ AC_PROG_LN_S
 AC_PROG_MKDIR_P
 AC_PROG_SED
 AC_PROG_INSTALL
-AC_PROG_LIBTOOL
-AC_HEADER_STDC
+LT_INIT
 LT_LIB_M
 AC_C_RESTRICT
 AC_FUNC_STRERROR_R
@@ -229,7 +227,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/sysdep.m4])
      m4_include([config/m4/ucm.m4])
      m4_include([config/m4/mpi.m4])
-     m4_include([config/m4/rte.m4])
      m4_include([config/m4/fuse3.m4])
      m4_include([config/m4/go.m4])
      m4_include([config/m4/java.m4])
@@ -243,20 +240,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([test/gtest/configure.m4])
      m4_include([test/apps/iodemo/configure.m4])
      m4_include([test/apps/uct_info/configure.m4])
-
-
-     #
-     # Enable fault injection code
-     #
-     AC_ARG_ENABLE([fault-injection],
-         AS_HELP_STRING([--enable-fault-injection],
-                        [Enable fault injection code, default: NO]),
-         [],
-         [enable_fault_injection=no])
-     AS_IF([test "x$enable_fault_injection" = xyes],
-        [AS_MESSAGE([enabling with fault injection code])
-         AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
-        [:])
 
 
      #

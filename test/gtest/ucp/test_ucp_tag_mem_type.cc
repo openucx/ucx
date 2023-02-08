@@ -49,6 +49,12 @@ public:
             enable_tag_mp_offload();
 
             if (RUNNING_ON_VALGRIND) {
+                if (variant_flags & VARIANT_PROTO) {
+                    skip_protov2();
+                }
+
+                skip_external_protov2();
+
                 m_env.push_back(
                         new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
                 m_env.push_back(
@@ -60,6 +66,7 @@ public:
 
         if (variant_flags & VARIANT_PROTO) {
             modify_config("PROTO_ENABLE", "y");
+            modify_config("PROTO_REQUEST_RESET", "y");
         }
 
         int mem_type_pair_index = get_variant_value() % m_mem_type_pairs.size();

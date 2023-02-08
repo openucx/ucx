@@ -163,6 +163,7 @@ typedef struct uct_dc_mlx5_iface_config {
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;
+    ucs_on_off_auto_value_t             tx_port_affinity;
     ucs_ternary_auto_value_t            dci_full_handshake;
     ucs_ternary_auto_value_t            dci_ka_full_handshake;
     ucs_ternary_auto_value_t            dct_full_handshake;
@@ -260,6 +261,8 @@ struct uct_dc_mlx5_iface {
         uct_dc_dci_t              *dcis;
 
         uint8_t                   ndci;                        /* Number of DCIs */
+
+        uint8_t                   port_affinity;               /* Whether to set port affinity */
 
         /* LIFO is only relevant for dcs allocation policy */
         uct_dc_mlx5_dci_pool_t    dci_pool[UCT_DC_MLX5_IFACE_MAX_DCI_POOLS];

@@ -68,10 +68,17 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY_AUTO},
 
-    {"CQE_ZIPPING_ENABLE", "no",
-     "Enable CQE zipping feature. CQE zipping reduces PCI utilization by\n"
+    {"TX_CQE_ZIP_ENABLE", "no",
+     "Enable CQE zipping feature for sender side. CQE zipping reduces PCI utilization by\n"
      "merging several similar CQEs to a single CQE written by the device.",
-     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zipping_enable), UCS_CONFIG_TYPE_BOOL},
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zip_enable[UCT_IB_DIR_TX]),
+     UCS_CONFIG_TYPE_BOOL},
+
+    {"RX_CQE_ZIP_ENABLE", "no",
+     "Enable CQE zipping feature for receiver side. CQE zipping reduces PCI utilization by\n"
+     "merging several similar CQEs to a single CQE written by the device.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zip_enable[UCT_IB_DIR_RX]),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -80,16 +87,19 @@ void uct_ib_mlx5_parse_cqe_zipping(uct_ib_mlx5_md_t *md,
                                    const uct_ib_mlx5_iface_config_t *mlx5_config,
                                    uct_ib_iface_init_attr_t *init_attr)
 {
-    if (!mlx5_config->cqe_zipping_enable) {
-        return;
-    }
+    uct_ib_dir_t dir;
 
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE64_ZIP) {
-        init_attr->cqe_zip_sizes |= 64;
-    }
+    for (dir = 0; dir < UCT_IB_DIR_LAST; ++dir) {
+        if (!mlx5_config->cqe_zip_enable[dir]) {
+            continue;
+        }
 
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE128_ZIP) {
-        init_attr->cqe_zip_sizes |= 128;
+        if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE64_ZIP) {
+            init_attr->cqe_zip_sizes[dir] |= 64;
+        }
+        if (md->flags & UCT_IB_MLX5_MD_FLAG_CQE128_ZIP) {
+            init_attr->cqe_zip_sizes[dir] |= 128;
+        }
     }
 }
 
@@ -104,8 +114,6 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};
     struct ibv_cq *cq;
-    char message[128];
-    int cq_errno;
 
     uct_ib_fill_cq_attr(&cq_attr, init_attr, iface, preferred_cpu,
                         uct_ib_cq_size(iface, init_attr, dir));
@@ -115,10 +123,9 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (cq == NULL) {
-        cq_errno = errno;
-        ucs_snprintf_safe(message, sizeof(message), "mlx5dv_create_cq(cqe=%d)",
-                          cq_attr.cqe);
-        uct_ib_mem_lock_limit_msg(message, cq_errno, UCS_LOG_LEVEL_ERROR);
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: mlx5dv_create_cq(cqe=%d)",
+                                       uct_ib_device_name(dev), cq_attr.cqe);
         return UCS_ERR_IO_ERROR;
     }
 

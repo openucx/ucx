@@ -102,10 +102,6 @@ enum {
     UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY = 0x100
 };
 
-enum {
-    UCT_IB_MLX5_PAGE_SHIFT = 12
-};
-
 struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    reserved_at_0[0x30];
     uint8_t    vhca_id[0x10];
@@ -573,8 +569,20 @@ struct uct_ib_mlx5_query_hca_cap_in_bits {
     uint8_t    reserved_at_40[0x40];
 };
 
+typedef enum {
+    /* QP are associated with port affinity */
+    UCT_IB_MLX5_LAG_QUEUE_AFFINITY = 0x0,
+    /* packets go to egress port through FT */
+    UCT_IB_MLX5_LAG_PORT_SELECT_FT = 0x1,
+    /* FDB select packet flow egress port */
+    UCT_IB_MLX5_LAG_MULTI_PORT_ESW = 0x2,
+    UCT_IB_MLX5_LAG_INVALID_MODE   = 0xFF
+} uct_ib_port_select_mode_t;
+
 struct uct_ib_mlx5_lag_context_bits {
-    uint8_t    reserved_at_0[0x1d];
+    uint8_t    reserved_at_0[0x15];
+    uint8_t    port_select_mode[0x3];
+    uint8_t    reserved_at_18[0x5];
     uint8_t    lag_state[0x3];
     uint8_t    reserved_at_20[0x20];
 };

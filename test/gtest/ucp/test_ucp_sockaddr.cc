@@ -165,7 +165,7 @@ public:
              * isn't as such, we continue to the next one. */
             skip = 1;
         } else if ((has_transport("tcp") || has_transport("all")) &&
-                   (ifa->ifa_addr->sa_family == AF_INET6)) {
+                   ((ifa->ifa_addr != NULL) && (ifa->ifa_addr->sa_family == AF_INET6))) {
             /* the tcp transport (and 'all' which may fallback to tcp_sockcm)
              * can run either on an rdma-enabled interface (IPoIB/RoCE)
              * or any interface with IPv4 address because IPv6 isn't supported
@@ -185,7 +185,7 @@ public:
         ASSERT_EQ(ret, 0);
 
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-            if (is_skip_interface(ifa) || !ucs::is_interface_usable(ifa)) {
+            if (!ucs::is_interface_usable(ifa) || is_skip_interface(ifa)) {
                 continue;
             }
 
@@ -2458,52 +2458,12 @@ protected:
         }
     }
 
-    enum {
-        SEND_PREREG_MEMH = UCS_BIT(0),
-        RECV_PREREG_MEMH = UCS_BIT(1)
-    };
-
-    void save_and_reset_mds(entity &e, std::vector<uct_md_h> &mds)
-    {
-        if (ucp_ep_config(e.ep())->key.rma_bw_md_map == 0) {
-            return;
-        }
-
-        ucp_tl_md_t *tl_md;
-        ucs_carray_for_each(tl_md, e.ucph()->tl_mds, e.ucph()->num_mds) {
-            mds.push_back(tl_md->md);
-            tl_md->md = NULL;
-        }
-    }
-
-    void restore_mds(entity &e, const std::vector<uct_md_h> &mds)
-    {
-        if (mds.empty()) {
-            return;
-        }
-
-        unsigned i = 0;
-        ucp_tl_md_t *tl_md;
-        ucs_carray_for_each(tl_md, e.ucph()->tl_mds, e.ucph()->num_mds) {
-            tl_md->md = mds[i++];
-        }
-    }
-
     void test_am_send_recv(size_t size, size_t hdr_size = 0ul,
                            size_t num_iters = m_num_iters,
                            bool send_prereg_memh = false,
-                           bool recv_prereg_memh = false)
+                           bool recv_prereg_memh = false,
+                           uint32_t flags = 0)
     {
-        /* Both send and recv preregistered memory handles are not supported,
-         * since MDs shouldn't be resetted at least on one side to allow RKEY
-         * packing */
-        ASSERT_FALSE(send_prereg_memh & recv_prereg_memh);
-
-        if ((send_prereg_memh || recv_prereg_memh) &&
-            m_ucp_config->ctx.proto_enable) {
-            UCS_TEST_SKIP_R("FIXME: proto_v2 does not support prereh memh");
-        }
-
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
         for (int i = 0; i < num_iters; i++) {
@@ -2513,19 +2473,11 @@ protected:
             std::string rhdr(hdr_size, 'y');
             ucp_mem_h smemh(NULL);
             ucp_mem_h rmemh(NULL);
-            std::vector<uct_md_h> mds;
 
             if (send_prereg_memh) {
                 smemh = sender().mem_map(&sb[0], size);
-                save_and_reset_mds(sender(), mds);
             } else if (recv_prereg_memh) {
-                if (i == 0) {
-                    /* Wait for a server endpoint to be created prior resetting
-                     * MDs which requires that a endpoint is valid */
-                    wait_for_server_ep();
-                }
                 rmemh = receiver().mem_map(&rb[0], size);
-                save_and_reset_mds(receiver(), mds);
             }
 
             rx_am_msg_arg arg(receiver(), &rhdr[0], &rb[0], rmemh);
@@ -2536,6 +2488,9 @@ protected:
                 param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
                 param.memh         = smemh;
             }
+
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
+            param.flags         = flags;
 
             ucs_status_ptr_t sreq = ucp_am_send_nbx(sender().ep(), 0,
                                                     &shdr[0], hdr_size,
@@ -2553,10 +2508,8 @@ protected:
             set_am_data_handler(receiver(), 0, NULL, NULL);
 
             if (smemh != NULL) {
-                restore_mds(sender(), mds);
                 sender().mem_unmap(smemh);
             } else if (rmemh != NULL) {
-                restore_mds(receiver(), mds);
                 receiver().mem_unmap(rmemh);
             }
         }
@@ -2773,6 +2726,39 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
     /* The test checks that memory registration won't happen during RNDV GET
      * Zcopy if a memory buffer was preregistered */
     test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, true, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols,
+           am_rndv_64k_prereg_proto_v2_single_rndv_put_zcopy_lane,
+           "RNDV_THRESH=0", "MAX_RNDV_LANES=1", "RNDV_SCHEME=put_zcopy",
+           "PROTO_ENABLE=y")
+{
+    test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
+}
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=y",
+           "ZCOPY_THRESH=inf")
+{
+    test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=y",
+           "ZCOPY_THRESH=inf")
+{
+    test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
+                      UCP_AM_SEND_FLAG_COPY_HEADER);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=y")
+{
+    test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
+                      UCP_AM_SEND_FLAG_COPY_HEADER);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=y",
+           "RNDV_THRESH=0")
+{
+    test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
+                      UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
 

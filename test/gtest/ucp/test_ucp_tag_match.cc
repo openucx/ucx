@@ -38,6 +38,10 @@ public:
             modify_config("PROTO_ENABLE", "y");
             modify_config("MAX_EAGER_LANES", "2");
         } else {
+            if (RUNNING_ON_VALGRIND) {
+                skip_external_protov2();
+            }
+
             // TODO:
             // 1. test offload and offload MP as different variants
             // 2. Enable offload for new protocols as well when it is fully

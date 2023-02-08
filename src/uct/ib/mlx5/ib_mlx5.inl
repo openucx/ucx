@@ -610,7 +610,7 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t wqe_index)
     return UCS_PTR_BYTE_OFFSET(srq->buf, (wqe_index & srq->mask) * srq->stride);
 }
 
-static void UCS_F_MAYBE_UNUSED
+static UCS_F_MAYBE_UNUSED void
 uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_mlx5_qp_t *qp,
                             uct_ib_mlx5_qp_attr_t *attr)

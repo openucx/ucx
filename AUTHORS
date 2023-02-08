@@ -1,4 +1,5 @@
 Akshay Venkatesh <akvenkatesh@nvidia.com>
+Alexey Rivkin <arivkin@nvidia.com>
 Alex Margolin <alex.margolin@huawei.com>
 Alex Mikheev <alexm@mellanox.com>
 Alina Sklarevich <alinas@mellanox.com>
@@ -13,13 +14,16 @@ Boris Karasev <boriska@nvidia.com>
 Brad Benton <bradford.benton@gmail.com>
 Changcheng Liu <jerrliu@nvidia.com>
 Corey J. Nolet <cjnolet@gmail.com>
+David Wootton <dwootton@us.ibm.com>
 Devendar Bureddy <devendar@mellanox.com>
 Devesh Sharma <devesh.sharma@broadcom.com>
 Dmitry Gladkov <dmitrygla@mellanox.com>
 Doug Jacobsen <dmjacobsen@lbl.gov>
+Edgar Gabriel <edgar.gabriel@amd.com>
 Elad Persiko <eladpe@mellanox.com>
 Eugene Voronov <eugene@mellanox.com>
 Evgeny Leksikov <evgenylek@mellanox.com>
+Fabian Ruhland <ruhland@hhu.de>
 Gilbert Lee <gilbert.lee@amd.com>
 Gilles Gouaillardet <gilles.gouaillardet@gmail.com>
 Gonzalo Brito Gadeschi <gonzalob@nvidia.com>
@@ -29,8 +33,10 @@ Hessam Mirsadeghi <hmirsadeghi@nvidia.com>
 Hiroyuki Sato <hiroysato@gmail.com>
 Howard Pritchard <howardp@lanl.gov>
 Huaxiang Fan <huaxiangf@nvidia.com>
+Hui Zhou <hzhou321@anl.gov>
 Igor Ivanov <igori@mellanox.com>
 Ilya Nelkenbaum <ilyan@mellanox.com>
+Ivan Kochin <ikochin@nvidia.com>
 Jakir Kham <jakirkham@gmail.com>
 Jason Gunthorpe <jgg@mellanox.com>
 Jeff Daily <jeff.daily@amd.com>
@@ -50,8 +56,10 @@ Mark Allen <markalle@us.ibm.com>
 Matthew Baker <bakermb@ornl.gov>
 Mike Dubman <miked@mellanox.com>
 Mikhail Brinskiy <mikhailb@mellanox.com>
+Min Fang <minf@nvidia.com>
 Nathan Hjelm <hjelmn@lanl.gov>
 Netanel Yosephian <netanelyo@mellanox.com>
+Ofir Farjon <ofarjon@nvidia.com>
 Olly Perks <olly.perks@arm.com>
 Pak Lui <Pak.Lui@amd.com>
 Pavan Balaji <balaji@anl.gov>
@@ -60,13 +68,16 @@ Peter Andreas Entschev <peter@entschev.com>
 Peter Rudenko <peterr@mellanox.com>
 Qiang Yu <Qiang.Yu@amd.com>
 Raul Akhmetshin <rakhmetshin@nvidia.com>
+Robert Dietrich <rdietrich@nvidia.com>
 Rohit Zambre <rzambre@uci.edu>
+Sam James <sam@gentoo.org>
 Sasha Kotchubievsky <sashakot@mellanox.com>
 Scott Saulters <ssaulters@nvidia.com>
 Sergey Lebedev <sergeyle@mellanox.com>
 Sergey Oblomov <sergeyo@mellanox.com>
 Sergey Shalnov <sergeysh@mellanox.com>
 Serguei Sagalovitch <Serguei.Sagalovitch@amd.com>
+Shachar Hasson <shasson@nvidia.com>
 Sheng Yang <shengyang1@huawei.com>
 Shuki Zanyovka <shuki.zanyovka@huawei.com>
 Sourav Chakraborty <souchakr@amd.com>
@@ -74,9 +85,11 @@ Srinivasan Subramanian <srinivasan.subramanian@amd.com>
 Stephen Richmond <srichmond@dancer.icl.utk.edu>
 Swen Boehm <boehms@ornl.gov>
 Tony Curtis <anthony.curtis@stonybrook.edu>
+Tzafrir Cohen <tzafrirc@nvidia.com>
 Valentin Petrov <valentinp@mellanox.com>
 Wenbin Lu <wenbin.lu@stonybrook.edu>
 Xin Zhao <xinz@mellanox.com>
+Xu Yifeng <yifeng.xyf@alibaba-inc.com>
 Yossi Itigin <yosefe@mellanox.com>
 Yuriy Shestakov <yuriis@mellanox.com>
 Zhu Yanjun <yanjunz@mellanox.com>

@@ -250,7 +250,8 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
-                                 support_ppln)) {
+                                 support_ppln) ||
+        !ucp_proto_common_init_check_err_handling(&params.super)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -417,7 +418,7 @@ ucp_proto_t ucp_rndv_put_zcopy_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
 
@@ -462,7 +463,9 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
     }
 
     ucp_proto_rndv_put_common_request_init(req);
-    ucp_proto_rndv_mtype_copy(req, uct_ep_get_zcopy,
+    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
+                              ucp_proto_rndv_mtype_get_req_memh(req),
+                              uct_ep_get_zcopy,
                               ucp_proto_rndv_put_mtype_pack_completion,
                               "in from");
 
@@ -554,5 +557,5 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
