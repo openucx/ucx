@@ -1435,6 +1435,7 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
     int show_error;
     unsigned sinfo_index;
     double lane_bw;
+    ucp_rsc_index_t rsc_index;
 
     if (num_sinfo == 0) {
         return 0;
@@ -1445,8 +1446,6 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
         lane_bw = ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
                                          select_params->address->address_list);
         max_bw  = ucs_max(lane_bw, max_bw);
-
-        printf("lane_bw %f\n", lane_bw);
     }
 
     ucs_assertv(max_bw > 0, "max_bw has illegal value: %f", max_bw);
@@ -1457,6 +1456,12 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
                                          select_params->address->address_list);
 
         if ((lane_bw / max_bw) < max_ratio) {
+            rsc_index = sinfo_array[sinfo_index].rsc_index;
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      " : BW lower than threshold (%f < %f), dropping lane",
+                      UCT_TL_RESOURCE_DESC_ARG(
+                              &context->tl_rscs[rsc_index].tl_rsc),
+                      lane_bw / max_bw, max_ratio);
             continue;
         }
 
