@@ -259,7 +259,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e1->iface(), &params_null1));
         EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(), &params_null2));
         
-        /* Test unreachable due to pkeys */
+        /* Test reachable v2 API is unreachable due to pkeys */
         uint16_t pkey_orig1 = iface1->pkey;
         uint16_t pkey_orig2 = iface2->pkey;
         iface1->pkey        = 1234;
