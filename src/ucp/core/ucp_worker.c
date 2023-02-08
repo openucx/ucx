@@ -2487,7 +2487,7 @@ static unsigned ucp_worker_discard_uct_ep_destroy_once(ucp_request_t *req)
     return 1;
 }
 
-static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
+static unsigned ucp_worker_discard_uct_eps_destroy_progress(void *arg)
 {
     ucp_request_t *req  = (ucp_request_t*)arg;
     ucp_worker_h worker = req->send.ep->worker;
@@ -2499,9 +2499,11 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
             kh_del(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                    __i);
             ucp_worker_discard_uct_ep_destroy_once(req);
+            --worker->discard_uct_ep_comp;
         }
     });
-    worker->discard_uct_ep_comp = 0;
+    ucs_assertv(worker->discard_uct_ep_comp == 0,
+                "worker->discard_uct_ep_comp=%u", worker->discard_uct_ep_comp);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     return 1;
@@ -2532,7 +2534,7 @@ static void ucp_worker_discard_uct_ep_destroy_async(ucp_request_t *req)
     req->send.discard_uct_ep.state = UCP_WORKER_DISCARD_UCT_EP_FLUSHED;
     if (discard_is_empty) {
         ucp_worker_discard_uct_ep_progress_register(
-                req, ucp_worker_discard_uct_ep_destroy_progress);
+                req, ucp_worker_discard_uct_eps_destroy_progress);
     }
 }
 
@@ -2613,7 +2615,7 @@ static int
 ucp_worker_discard_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     if ((elem->arg == arg) &&
-        ((elem->cb == ucp_worker_discard_uct_ep_destroy_progress) ||
+        ((elem->cb == ucp_worker_discard_uct_eps_destroy_progress) ||
          (elem->cb == ucp_worker_discard_uct_ep_progress))) {
         ((ucp_request_t*)arg)->send.discard_uct_ep.state =
                 UCP_WORKER_DISCARD_UCT_EP_FLUSHED;
