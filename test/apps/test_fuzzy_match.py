@@ -87,7 +87,7 @@ def has_ib():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Tester for config vars fuzzy matching')
     parser.add_argument('--ucx_info', help="Path to ucx_info binary", required=True)
-    parser.add_argument('-v', '--verbose', help="Add some debug prints", action='store_true', default=False)
+    parser.add_argument('-v', '--verbose', help="Add some debug prints", action='store_true', default=True)
     args = parser.parse_args()
 
     try:    
