@@ -2617,8 +2617,6 @@ ucp_worker_discard_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
     if ((elem->arg == arg) &&
         ((elem->cb == ucp_worker_discard_uct_eps_destroy_progress) ||
          (elem->cb == ucp_worker_discard_uct_ep_progress))) {
-        ((ucp_request_t*)arg)->send.discard_uct_ep.state =
-                UCP_WORKER_DISCARD_UCT_EP_FLUSHED;
         return 1;
     }
 
@@ -2668,11 +2666,7 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
          * could move a discard operation to the progress queue */
         ucs_callbackq_remove_if(&worker->uct->progress_q,
                                 ucp_worker_discard_remove_filter, req);
-        if (req->send.discard_uct_ep.state ==
-            UCP_WORKER_DISCARD_UCT_EP_FLUSHED) {
-            req->send.discard_uct_ep.state = UCP_WORKER_DISCARD_UCT_EP_FINISHED;
-            ucp_worker_discard_uct_ep_complete(req);
-        }
+        ucp_worker_discard_uct_ep_complete(req);
     })
 
     worker->flags |= UCP_WORKER_FLAG_DISCARD_DISABLED;
