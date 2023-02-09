@@ -19,14 +19,12 @@
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
-#include <float.h>
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
 #define UCP_WIREUP_UCT_EVENT_CAP_FLAGS     (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
                                             UCT_IFACE_FLAG_EVENT_RECV)
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
-#define UCP_WIREUP_MIN_VALID_OVERHEAD      10e-9
 
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
@@ -1458,7 +1456,7 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
     int show_error;
     unsigned sinfo_index;
     double lane_bw;
-    ucp_rsc_index_t rsc_index;
+    const ucp_wireup_select_info_t *sinfo;
 
     if (num_sinfo == 0) {
         return 0;
@@ -1475,22 +1473,22 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
 
     /* Compare each element to max BW and filter only fast lanes */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
-        lane_bw = ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
+        sinfo   = &sinfo_array[sinfo_index];
+        lane_bw = ucp_wireup_get_lane_bw(sinfo, worker,
                                          select_params->address->address_list);
 
         if ((lane_bw / max_bw) < max_ratio) {
-            rsc_index = sinfo_array[sinfo_index].rsc_index;
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : BW lower than threshold (%f < %f), dropping lane",
                       UCT_TL_RESOURCE_DESC_ARG(
-                              &context->tl_rscs[rsc_index].tl_rsc),
+                              &context->tl_rscs[sinfo->rsc_index].tl_rsc),
                       lane_bw / max_bw, max_ratio);
             continue;
         }
 
         show_error = (num_lanes == 0);
-        status     = ucp_wireup_add_lane(select_params, &sinfo_array[sinfo_index],
-                                         lane_type, show_error, select_ctx);
+        status     = ucp_wireup_add_lane(select_params, sinfo, lane_type,
+                                         show_error, select_ctx);
         if (status != UCS_OK) {
             break;
         }
