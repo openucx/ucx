@@ -70,9 +70,10 @@ jobs:
           cd $(tar tf ${tarball} | head -1) # go to extracted tarball directory
           echo 10 > debian/compat   # https://www.debian.org/doc/manuals/maint-guide/dother.en.htmdpl#compat
           dpkg-buildpackage -us -uc
-          find .. -name '*.deb'
-          find .. -name '*.deb' -exec cp {} "../${AZ_ARTIFACT_NAME}" \;
-          dpkg-deb -I "../${AZ_ARTIFACT_NAME}"
+          cd ..                             # Move back to the working directory
+          find . -name '*.deb'
+          find . -name '*.deb' -exec cp {} "${AZ_ARTIFACT_NAME}" \;
+          dpkg-deb -I "${AZ_ARTIFACT_NAME}"
         displayName: Build DEB package
         condition: and(succeeded(), contains(variables['artifact_name'], 'ubuntu'))
         env:
