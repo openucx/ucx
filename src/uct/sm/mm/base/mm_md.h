@@ -201,9 +201,6 @@ ucs_status_t uct_mm_seg_new(void *address, size_t length, uct_mm_seg_t **seg_p);
 void uct_mm_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr,
                      uint64_t max_alloc);
 
-ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
-                             void *handle, uint64_t raddr, void **laddr_p);
-
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p);
 
