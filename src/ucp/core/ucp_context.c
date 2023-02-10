@@ -1676,7 +1676,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     max_mds = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
-        memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
                         UCT_COMPONENT_ATTR_FIELD_NAME              |
