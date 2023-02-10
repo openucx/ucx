@@ -47,14 +47,9 @@ jobs:
       - bash: |
           set -eEx
           ./autogen.sh
-          mkdir pkg-build
+          mkdir -p pkg-build
           cd pkg-build
           ../contrib/configure-release --with-cuda --with-java=no
-        displayName: Configure
-
-      - bash: |
-          set -eEx
-          cd pkg-build
           ../contrib/buildrpm.sh -s -t -b --noclean
           cd rpm-dist/`uname -m`
           tar -cjf "../../../${AZ_ARTIFACT_NAME}" *.rpm
@@ -67,13 +62,18 @@ jobs:
 
       - bash: |
           set -eEx
-          cd pkg-build
-          echo 10 > debian/compat   # https://www.debian.org/doc/manuals/maint-guide/dother.en.html#compat
-          sed -i 's|./contrib|../contrib|' debian/rules  # Hack
+          ./autogen.sh
+          ./contrib/configure-release --with-cuda --with-java=no
+          make dist
+          tarball=$(echo ucx*.tar.gz)
+          tar -xzvf ${tarball}              # extract the sources in a subdirectory
+          cd $(tar tf ${tarball} | head -1) # go to extracted tarball directory
+          echo 10 > debian/compat   # https://www.debian.org/doc/manuals/maint-guide/dother.en.htmdpl#compat
           dpkg-buildpackage -us -uc
-          find .. -name '*.deb'
-          find .. -name '*.deb' -exec cp {} "../${AZ_ARTIFACT_NAME}" \;
-          dpkg-deb -I "../${AZ_ARTIFACT_NAME}"
+          cd ..                             # Move back to the working directory
+          find . -name '*.deb'
+          find . -name '*.deb' -exec cp {} "${AZ_ARTIFACT_NAME}" \;
+          dpkg-deb -I "${AZ_ARTIFACT_NAME}"
         displayName: Build DEB package
         condition: and(succeeded(), contains(variables['artifact_name'], 'ubuntu'))
         env:
