@@ -260,10 +260,10 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         EXPECT_EQ(res, uct_ib_iface_is_reachable_v2(m_e2->iface(), &params_null2));
         
         /* Test reachable v2 API is unreachable due to pkeys */
-        uint16_t pkey_orig1 = iface1->pkey;
-        uint16_t pkey_orig2 = iface2->pkey;
-        iface1->pkey        = 1234;
-        iface2->pkey        = 5678;
+        uint16_t pkey_orig1 = iface1->pkey; /* Backup the iface1's key before test */
+        uint16_t pkey_orig2 = iface2->pkey; /* Backup the iface2's key before test */
+        iface1->pkey        = 1234;         /* Set a wrong key to iface1 on purpose */
+        iface2->pkey        = 5678;         /* Set a wrong key to iface2 on purpose */
         
         memset(test_info_string, 0, sizeof(test_info_string));
         const uct_iface_is_reachable_params_t params_pkey1      = {
@@ -296,8 +296,8 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         EXPECT_LT(0, (uint64_t)strstr(test_info_string, "unreachable due to pkeys"));
         EXPECT_LT(0, (uint64_t)(strstr(test_info_string, "unreachable due to pkeys") - test_info_string));
         
-        iface1->pkey = pkey_orig1;
-        iface2->pkey = pkey_orig2;
+        iface1->pkey = pkey_orig1; /* Restore the correct key to iface1 after test */
+        iface2->pkey = pkey_orig2; /* Restore the correct key to iface2 after test */
 
         if (res) {
             test_uct_ib::send_recv_short();
