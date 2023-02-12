@@ -854,8 +854,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
 
     /* allocate endpoint */
     ucs_sockaddr_str(params->sockaddr.addr, peer_name, sizeof(peer_name));
-    ep_init_flags = ucp_ep_init_flags(worker, params) |
-                    ucp_cm_ep_init_flags(params);
+    ep_init_flags = ucp_ep_init_flags(worker, params);
 
     status = ucp_ep_create_base(worker, ep_init_flags, peer_name,
                                 "from api call", &ep);
