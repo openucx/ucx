@@ -69,7 +69,7 @@ jobs:
           tar -xzvf ${tarball}              # extract the sources in a subdirectory
           cd $(tar tf ${tarball} | head -1) # go to extracted tarball directory
           echo 10 > debian/compat   # https://www.debian.org/doc/manuals/maint-guide/dother.en.htmdpl#compat
-          dpkg-buildpackage -us -uc
+          dpkg-buildpackage -us -uc -Pcuda
           cd ..                             # Move back to the working directory
           find . -name '*.deb'
           find . -name '*.deb' -exec cp {} "${AZ_ARTIFACT_NAME}" \;
