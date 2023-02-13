@@ -1904,7 +1904,8 @@ void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
                         ucs_string_buffer_t *strb)
 {
     ucp_context_h context          = worker->context;
-    const ucp_ep_config_key_t *key = &worker->ep_config[cfg_index].key;
+    const ucp_ep_config_key_t *key = &ucs_array_elem(&worker->ep_config,
+                                                     cfg_index).key;
 
     if (!ucs_string_is_empty(context->name)) {
         ucs_string_buffer_appendf(strb, "%s ", context->name);
