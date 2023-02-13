@@ -2151,7 +2151,7 @@ ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
-    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
+    if (config->thresh.rndv == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
         status = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                 config->key.am_bw_lanes,
@@ -2164,8 +2164,8 @@ ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
         rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
         ucs_trace("active message rendezvous threshold is %zu", rndv_thresh);
     } else {
-        rndv_thresh       = context->config.ext.rndv_thresh;
-        rndv_local_thresh = context->config.ext.rndv_thresh;
+        rndv_thresh       = config->thresh.rndv;
+        rndv_local_thresh = config->thresh.rndv;
     }
 
     min_thresh     = ucs_max(iface_attr->cap.am.min_zcopy, min_rndv_thresh);
@@ -2201,7 +2201,7 @@ ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker, ucp_ep_config_t *config,
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
+    if (config->thresh.rndv == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
         status = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                 config->key.am_bw_lanes,
@@ -2212,8 +2212,8 @@ ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker, ucp_ep_config_t *config,
 
         rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
     } else {
-        rndv_thresh       = context->config.ext.rndv_thresh;
-        rndv_local_thresh = context->config.ext.rndv_thresh;
+        rndv_thresh       = config->thresh.rndv;
+        rndv_local_thresh = config->thresh.rndv;
     }
 
     min_thresh = ucs_max(iface_attr->cap.get.min_zcopy, min_rndv_thresh);
@@ -2320,7 +2320,8 @@ void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
 }
 
 static ssize_t
-ucp_ep_config_max_short(ucp_context_t *context, uct_iface_attr_t *iface_attr,
+ucp_ep_config_max_short(ucp_context_t *context, const ucp_ep_config_t *config,
+                        const uct_iface_attr_t *iface_attr,
                         uint64_t short_flag, size_t max_short, unsigned hdr_len,
                         size_t zcopy_thresh,
                         const ucp_rndv_thresh_t *rndv_thresh)
@@ -2333,13 +2334,17 @@ ucp_ep_config_max_short(ucp_context_t *context, uct_iface_attr_t *iface_attr,
 
     cfg_max_short = max_short - hdr_len;
 
-    if ((context->config.ext.zcopy_thresh != UCS_MEMUNITS_AUTO)) {
+    if (config->thresh.bcopy != UCS_MEMUNITS_AUTO) {
+        /* Adjust max_short if bcopy_thresh is set externally */
+        ucp_ep_config_adjust_max_short(&cfg_max_short, config->thresh.bcopy);
+    }
+
+    if (config->thresh.zcopy != UCS_MEMUNITS_AUTO) {
         /* Adjust max_short if zcopy_thresh is set externally */
         ucp_ep_config_adjust_max_short(&cfg_max_short, zcopy_thresh);
     }
 
-    if ((rndv_thresh != NULL) &&
-        (context->config.ext.rndv_thresh != UCS_MEMUNITS_AUTO)) {
+    if ((rndv_thresh != NULL) && (config->thresh.rndv != UCS_MEMUNITS_AUTO)) {
         /* Adjust max_short if rndv_thresh is set externally. Note local and
          * remote threshold values are the same if set externally, so can
          * compare with just one of them. */
@@ -2351,7 +2356,9 @@ ucp_ep_config_max_short(ucp_context_t *context, uct_iface_attr_t *iface_attr,
 }
 
 static void
-ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
+ucp_ep_config_init_attrs(ucp_worker_t *worker,
+                         const ucp_ep_config_t *ep_config,
+                         ucp_rsc_index_t rsc_index,
                          ucp_ep_msg_config_t *config, size_t max_bcopy,
                          size_t max_zcopy, size_t max_iov, size_t max_hdr,
                          uint64_t bcopy_flag, uint64_t zcopy_flag,
@@ -2384,7 +2391,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
     config->max_hdr   = max_hdr;
     config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
 
-    if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
+    if (ep_config->thresh.zcopy == UCS_MEMUNITS_AUTO) {
         config->zcopy_auto_thresh = 1;
         mem_type_zcopy_thresh     = 1;
         for (it = 0; it < UCP_MAX_IOV; ++it) {
@@ -2399,7 +2406,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
     } else {
         config->zcopy_auto_thresh    = 0;
         config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
-                ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
+                ucs_min(ep_config->thresh.zcopy, adjust_min_val);
         mem_type_zcopy_thresh        = config->zcopy_thresh[0];
     }
 
@@ -2440,7 +2447,8 @@ out:
 }
 
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
-                                const ucp_ep_config_key_t *key)
+                                const ucp_ep_config_key_t *key,
+                                unsigned ep_init_flags)
 {
     ucp_context_h context              = worker->context;
     ucp_lane_index_t tag_lanes[2]      = {UCP_NULL_LANE, UCP_NULL_LANE};
@@ -2466,6 +2474,23 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
     memset(config, 0, sizeof(*config));
 
+    if (context->config.ext.cm_use_all_devices &&
+        (ep_init_flags & UCP_EP_INIT_CM_PHASE)) {
+        /* Always use BCOPY protocol (which is supported by all transports) for
+         * CM initial configuration. This ensures that replaying requests
+         * submitted before connection being fully established will be done
+         * successfully after reconfiguration to other transports which may not
+         * support some protocols or limits */
+        config->thresh.bcopy = 0;
+        config->thresh.zcopy = SIZE_MAX;
+        config->thresh.rndv  = SIZE_MAX;
+        config->flags       |= UCP_EP_CONFIG_TMP;
+    } else {
+        config->thresh.bcopy = context->config.ext.bcopy_thresh;
+        config->thresh.zcopy = context->config.ext.zcopy_thresh;
+        config->thresh.rndv  = context->config.ext.rndv_thresh;
+    }
+
     status = ucp_ep_config_key_copy(&config->key, key);
     if (status != UCS_OK) {
         goto err;
@@ -2488,11 +2513,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->am.zcopy_auto_thresh        = 0;
     config->p2p_lanes                   = 0;
     config->uct_rkey_pack_flags         = 0;
-    if (context->config.ext.bcopy_thresh == UCS_MEMUNITS_AUTO) {
-        config->bcopy_thresh = 0;
-    } else {
-        config->bcopy_thresh = context->config.ext.bcopy_thresh;
-    }
     config->tag.lane                    = UCP_NULL_LANE;
     config->tag.proto                   = &ucp_tag_eager_proto;
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;
@@ -2643,7 +2663,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         rsc_index = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-            ucp_ep_config_init_attrs(worker, rsc_index, &config->tag.eager,
+            ucp_ep_config_init_attrs(worker, config, rsc_index,
+                                     &config->tag.eager,
                                      iface_attr->cap.tag.eager.max_bcopy,
                                      iface_attr->cap.tag.eager.max_zcopy,
                                      iface_attr->cap.tag.eager.max_iov, 0,
@@ -2685,7 +2706,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             }
 
             config->tag.eager.max_short = ucp_ep_config_max_short(
-                    worker->context, iface_attr, UCT_IFACE_FLAG_TAG_EAGER_SHORT,
+                    worker->context, config, iface_attr,
+                    UCT_IFACE_FLAG_TAG_EAGER_SHORT,
                     iface_attr->cap.tag.eager.max_short, 0,
                     config->tag.eager.zcopy_thresh[0],
                     &config->tag.rndv.am_thresh);
@@ -2704,7 +2726,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
             md_attr    = &context->tl_mds[config->md_index[lane]].attr;
-            ucp_ep_config_init_attrs(worker, rsc_index, &config->am,
+            ucp_ep_config_init_attrs(worker, config, rsc_index, &config->am,
                                      iface_attr->cap.am.max_bcopy,
                                      iface_attr->cap.am.max_zcopy,
                                      iface_attr->cap.am.max_iov,
@@ -2717,9 +2739,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
              * STREAM protocol implementations, do not adjust max_short value by
              * zcopy and rndv thresholds. */
             config->am.max_short = ucp_ep_config_max_short(
-                    worker->context, iface_attr, UCT_IFACE_FLAG_AM_SHORT,
-                    iface_attr->cap.am.max_short, sizeof(ucp_eager_hdr_t),
-                    SIZE_MAX, NULL);
+                    worker->context, config, iface_attr,
+                    UCT_IFACE_FLAG_AM_SHORT, iface_attr->cap.am.max_short,
+                    sizeof(ucp_eager_hdr_t), SIZE_MAX, NULL);
 
             /* Calculate rendezvous thresholds which may be used by UCP AM
              * protocol. */
@@ -2745,9 +2767,10 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             }
 
             am_max_eager_short = ucp_ep_config_max_short(
-                    worker->context, iface_attr, UCT_IFACE_FLAG_AM_SHORT,
-                    iface_attr->cap.am.max_short, sizeof(ucp_am_hdr_t),
-                    config->am.zcopy_thresh[0], &config->rndv.am_thresh);
+                    worker->context, config, iface_attr,
+                    UCT_IFACE_FLAG_AM_SHORT, iface_attr->cap.am.max_short,
+                    sizeof(ucp_am_hdr_t), config->am.zcopy_thresh[0],
+                    &config->rndv.am_thresh);
 
             ucp_ep_config_set_memtype_thresh(&config->am_u.max_eager_short,
                                              am_max_eager_short,
@@ -2779,8 +2802,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
             /* Calculate max short threshold for UCP AM short reply protocol */
             am_max_eager_short = ucp_ep_config_max_short(
-                    worker->context, iface_attr, UCT_IFACE_FLAG_AM_SHORT,
-                    iface_attr->cap.am.max_short,
+                    worker->context, config, iface_attr,
+                    UCT_IFACE_FLAG_AM_SHORT, iface_attr->cap.am.max_short,
                     sizeof(ucp_am_hdr_t) + sizeof(ucp_am_reply_ftr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
@@ -2828,11 +2851,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             }
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
                 rma_config->max_put_zcopy = iface_attr->cap.put.max_zcopy;
-                if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
+                if (config->thresh.zcopy == UCS_MEMUNITS_AUTO) {
                     /* TODO: Use calculated value for PUT Zcopy threshold */
                     rma_config->put_zcopy_thresh = 16384;
                 } else {
-                    rma_config->put_zcopy_thresh = context->config.ext.zcopy_thresh;
+                    rma_config->put_zcopy_thresh = config->thresh.zcopy;
 
                     ucp_ep_config_adjust_max_short(&rma_config->max_put_short,
                                                    rma_config->put_zcopy_thresh);
@@ -2851,10 +2874,10 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             }
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
                 rma_config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
-                if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
+                if (config->thresh.zcopy == UCS_MEMUNITS_AUTO) {
                     rma_config->get_zcopy_thresh = rma_zcopy_thresh;
                 } else {
-                    rma_config->get_zcopy_thresh = context->config.ext.zcopy_thresh;
+                    rma_config->get_zcopy_thresh = config->thresh.zcopy;
 
                     ucp_ep_config_adjust_max_short(&rma_config->max_get_short,
                                                    rma_config->get_zcopy_thresh);

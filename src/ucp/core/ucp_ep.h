@@ -164,8 +164,13 @@ enum {
     UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8),  /**< Endpoint requires an AM lane only */
     UCP_EP_INIT_KA_FROM_EXIST_LANES    = UCS_BIT(9),  /**< Use only existing lanes to create
                                                            keepalive lane */
-    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10)  /**< Endpoint allows selecting of auxiliary
+    UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10),  /**< Endpoint allows selecting of auxiliary
                                                            transports for AM lane */
+
+    UCP_EP_INIT_CM_PHASE_CLIENT        = UCP_EP_INIT_CM_WIREUP_CLIENT |
+                                         UCP_EP_INIT_CM_PHASE,
+    UCP_EP_INIT_CM_PHASE_SERVER        = UCP_EP_INIT_CM_WIREUP_SERVER |
+                                         UCP_EP_INIT_CM_PHASE,
 };
 
 
@@ -354,7 +359,15 @@ typedef struct {
 KHASH_DECLARE(ucp_ep_peer_mem_hash, uint64_t, ucp_ep_peer_mem_data_t);
 
 
+enum {
+    UCP_EP_CONFIG_TMP = UCS_BIT(0) /* Temporal configuration (if created during
+                                    * CM phase and CM_USE_ALL_DEVICES=y) */
+};
+
+
 struct ucp_ep_config {
+    /* Flags which describe the endpoint configuration */
+    uint8_t                 flags;
 
     /* A key which uniquely defines the configuration, and all other fields of
      * configuration (in the current worker) and defined only by it.
@@ -371,9 +384,6 @@ struct ucp_ep_config {
 
     /* Configuration for each lane that provides RMA */
     ucp_ep_rma_config_t     rma[UCP_MAX_LANES];
-
-    /* Threshold for switching from put_short to put_bcopy */
-    size_t                  bcopy_thresh;
 
     /* Configuration for AM lane */
     ucp_ep_msg_config_t     am;
@@ -451,6 +461,15 @@ struct ucp_ep_config {
         /* Maximal size for eager short with reply protocol */
         ucp_memtype_thresh_t             max_reply_eager_short;
     } am_u;
+
+    struct {
+        /* Threshold for switching from SHORT to BCOPY */
+        size_t bcopy;
+        /* Threshold for switching from BCOPY to ZCOPY */
+        size_t zcopy;
+        /* Threshold for switching from ZCOPY to RNDV */
+        size_t rndv;
+    } thresh;
 
     /* Protocol selection data */
     ucp_proto_select_t            proto_select;
@@ -707,7 +726,8 @@ void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
 void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
-                                const ucp_ep_config_key_t *key);
+                                const ucp_ep_config_key_t *key,
+                                unsigned ep_init_flags);
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 

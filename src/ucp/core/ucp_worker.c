@@ -1969,7 +1969,9 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     /* Search for the given key in the ep_config array */
     for (ep_cfg_index = 0; ep_cfg_index < worker->ep_config_count;
          ++ep_cfg_index) {
-        if (ucp_ep_config_is_equal(&worker->ep_config[ep_cfg_index].key, key)) {
+        ep_config = &worker->ep_config[ep_cfg_index];
+        if (!(ep_config->flags & UCP_EP_CONFIG_TMP) &&
+            ucp_ep_config_is_equal(&ep_config->key, key)) {
             goto out;
         }
     }
@@ -1983,7 +1985,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     /* Create new configuration */
     ep_cfg_index = worker->ep_config_count;
     ep_config    = &worker->ep_config[ep_cfg_index];
-    status       = ucp_ep_config_init(worker, ep_config, key);
+    status       = ucp_ep_config_init(worker, ep_config, key, ep_init_flags);
     if (status != UCS_OK) {
         return status;
     }
