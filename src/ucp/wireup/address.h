@@ -179,6 +179,27 @@ struct ucp_unpacked_address {
 
 
 /**
+ * Get multiple addresses length of resources specified in tl_bitmap.
+ * For every resource in tl_bitmap:
+ *    - if iface is CONNECT_TO_IFACE, get interface address length.
+ *    - if iface is CONNECT_TO_EP, get endpoint address length.
+ *
+ * @param [in]  worker        Worker object to get interface addresses length.
+ * @param [in]  key           Endpoint config key to get ep address length.
+ * @param [in]  tl_bitmap     Specifies the resources to get transport address
+ *                            length.
+ * @param [in]  pack_flags    UCP_ADDRESS_PACK_FLAG_xx flags to specify address
+ *                            format.
+ * @param [in]  addr_version  Address format version.
+ * @param [out] size_p        Filled with address length.
+ */
+ucs_status_t
+ucp_address_length(ucp_worker_h worker, const ucp_ep_config_key_t *key,
+                   const ucp_tl_bitmap_t *tl_bitmap, unsigned pack_flags,
+                   ucp_object_version_t addr_version, size_t *size_p);
+
+
+/**
  * Pack multiple addresses into a buffer, of resources specified in rsc_bitmap.
  * For every resource in rcs_bitmap:
  *    - if iface is CONNECT_TO_IFACE, pack interface address
