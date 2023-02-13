@@ -1452,6 +1452,7 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
     double max_bw          = 0;
     ucp_context_h context  = worker->context;
     const double max_ratio = 1. / context->config.ext.multi_lane_max_ratio;
+    const ucp_address_entry_t *address_list;
     ucs_status_t status;
     int show_error;
     unsigned sinfo_index;
@@ -1462,22 +1463,21 @@ ucp_wireup_add_fast_lanes(const ucp_wireup_select_params_t *select_params,
         return 0;
     }
 
+    address_list = select_params->address->address_list;
+
     /* Iterate over all elements and calculate max BW */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
         lane_bw = ucp_wireup_get_lane_bw(&sinfo_array[sinfo_index], worker,
-                                         select_params->address->address_list);
+                                         address_list);
         max_bw  = ucs_max(lane_bw, max_bw);
     }
-
-    ucs_assertv(max_bw > 0, "max_bw has illegal value: %f", max_bw);
 
     /* Compare each element to max BW and filter only fast lanes */
     for (sinfo_index = 0; sinfo_index < num_sinfo; ++sinfo_index) {
         sinfo   = &sinfo_array[sinfo_index];
-        lane_bw = ucp_wireup_get_lane_bw(sinfo, worker,
-                                         select_params->address->address_list);
+        lane_bw = ucp_wireup_get_lane_bw(sinfo, worker, address_list);
 
-        if ((lane_bw / max_bw) < max_ratio) {
+        if (lane_bw < (max_bw * max_ratio)) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : BW lower than threshold (%f < %f), dropping lane",
                       UCT_TL_RESOURCE_DESC_ARG(
