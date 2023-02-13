@@ -1447,7 +1447,7 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
 static unsigned
 ucp_wireup_add_fast_lanes(ucp_worker_h worker,
                           const ucp_wireup_select_params_t *select_params,
-                          ucs_array_t(select_info) *sinfo_array,
+                          const ucs_array_t(select_info) *sinfo_array,
                           ucp_lane_type_t lane_type,
                           ucp_wireup_select_context_t *select_ctx)
 {
@@ -1502,6 +1502,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_ep_h ep                          = select_params->ep;
     ucp_context_h context                = ep->worker->context;
     ucp_wireup_dev_usage_count dev_count = {};
+    UCS_ARRAY_DEFINE_ONSTACK(sinfo_array, select_info, UCP_MAX_LANES);
     const uct_iface_attr_t *iface_attr;
     const ucp_address_entry_t *ae;
     ucs_status_t status;
@@ -1511,7 +1512,6 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_md_map_t md_map;
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
-    UCS_ARRAY_DEFINE_ONSTACK(sinfo_array, select_info, UCP_MAX_LANES);
     ucp_wireup_select_info_t *sinfo;
 
     md_map                = bw_info->md_map;
