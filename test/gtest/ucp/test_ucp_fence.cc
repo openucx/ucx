@@ -28,7 +28,7 @@ public:
                                                 initial_buf, 1,
                                                 (uintptr_t)memheap_addr, rkey,
                                                 &param);
-        ucs_status_t status = request_wait(request);
+        ucs_status_t status = request_wait(request, {e});
         ASSERT_UCS_OK(status);
     }
 
@@ -39,7 +39,7 @@ public:
         void *request = ucp_atomic_fetch_nb(e->ep(), UCP_ATOMIC_FETCH_OP_FADD,
                                             *initial_buf, (T*)result_buf, sizeof(T),
                                             (uintptr_t)memheap_addr, rkey, send_cb);
-        request_wait(request);
+        request_wait(request, {e});
     }
 
     template <typename T, typename F>
@@ -95,7 +95,7 @@ public:
                 (test->*m_send_2)(m_entity, &zero, &result,
                                   m_memheap, m_rkey);
 
-                test->flush_worker(*m_entity);
+                test->flush_worker(*m_entity, 0, {m_entity});
 
                 if (result != (uint64_t)(i+1))
                     (*error)++;
@@ -115,14 +115,14 @@ public:
                      ucp_rkey_h rkey, void *memheap_ptr,
                      uint64_t initial_value, uint32_t* error) {
         ucs::ptr_vector<worker> m_workers;
-        std::vector<entity*> entities;
         m_workers.clear();
         m_workers.push_back(new worker(this, send1, send2, sender, rkey,
                                        memheap_ptr, initial_value, error));
-        entities.push_back(&receiver());
-        while (m_workers.at(0).running) {
+        if (!is_loopback()) {
             /* allow receiver to progress incoming ops */
-            progress(entities, 0);
+            while (m_workers.front()->running) {
+                progress({&receiver()});
+            }
         }
         m_workers.at(0).join();
         m_workers.clear();
