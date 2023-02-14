@@ -750,7 +750,14 @@ UCS_TEST_P(test_ucp_worker_thread_mode, query)
     worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_THREAD_MODE;
     ucs_status_t status    = ucp_worker_query(sender().worker(), &worker_attr);
     ASSERT_EQ(UCS_OK, status);
-    EXPECT_EQ(thread_mode(), worker_attr.thread_mode);
+
+    ucs_thread_mode_t mode = thread_mode();
+#if !ENABLE_MT
+    if (mode == UCS_THREAD_MODE_MULTI) {
+        mode = UCS_THREAD_MODE_SINGLE;
+    }
+#endif
+    EXPECT_EQ(mode, worker_attr.thread_mode);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_thread_mode, all, "all")
