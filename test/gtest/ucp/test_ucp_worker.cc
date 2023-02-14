@@ -730,8 +730,10 @@ public:
                                UCS_THREAD_MODE_SINGLE, "single");
         add_variant_with_value(variants, UCP_FEATURE_TAG,
                                UCS_THREAD_MODE_SERIALIZED, "serialized");
+#if ENABLE_MT
         add_variant_with_value(variants, UCP_FEATURE_TAG, UCS_THREAD_MODE_MULTI,
                                "multi");
+#endif
     }
 
     /// @override
@@ -758,14 +760,7 @@ UCS_TEST_P(test_ucp_worker_thread_mode, query)
     worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_THREAD_MODE;
     ucs_status_t status    = ucp_worker_query(sender().worker(), &worker_attr);
     ASSERT_EQ(UCS_OK, status);
-
-    ucs_thread_mode_t mode = thread_mode();
-#if !ENABLE_MT
-    if (mode == UCS_THREAD_MODE_MULTI) {
-        mode = UCS_THREAD_MODE_SINGLE;
-    }
-#endif
-    EXPECT_EQ(mode, worker_attr.thread_mode);
+    EXPECT_EQ(thread_mode(), worker_attr.thread_mode);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_thread_mode, all, "all")
