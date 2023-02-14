@@ -1508,6 +1508,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                                  UINT64_MAX, local_dev_bitmap,
                                                  remote_dev_bitmap, 0, sinfo);
             if (status != UCS_OK) {
+                ucs_array_pop_back(&sinfo_array);
                 break;
             }
 
