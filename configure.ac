@@ -220,6 +220,8 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
      AM_CONDITIONAL([HAVE_FUSE3], [false])
      AM_CONDITIONAL([IODEMO_CUDA], [false])
+     AM_CONDITIONAL([HAVE_GCOV], [false])
+     AM_CONDITIONAL([HAVE_LCOV], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -233,6 +235,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/cuda.m4])
      m4_include([config/m4/rocm.m4])
      m4_include([config/m4/gdrcopy.m4])
+     m4_include([config/m4/lcov.m4])
      m4_include([src/ucm/configure.m4])
      m4_include([src/ucs/configure.m4])
      m4_include([src/uct/configure.m4])
