@@ -185,13 +185,14 @@ void ucp_test::short_progress_loop(int worker_index) const {
 void ucp_test::flush_ep(const entity &e, int worker_index, int ep_index)
 {
     void *request = e.flush_ep_nb(worker_index, ep_index);
-    request_wait(request, worker_index);
+    request_wait(request, {}, worker_index);
 }
 
-void ucp_test::flush_worker(const entity &e, int worker_index)
+void ucp_test::flush_worker(const entity &e, int worker_index,
+                            const std::vector<entity*> &entities)
 {
     void *request = e.flush_worker_nb(worker_index);
-    request_wait(request, worker_index);
+    request_wait(request, entities, worker_index, false);
 }
 
 void ucp_test::flush_workers()
@@ -271,7 +272,8 @@ ucp_test::request_progress(void *req, const std::vector<entity*> &entities,
 }
 
 ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait,
-                                       bool wakeup)
+                                       bool wakeup,
+                                       const std::vector<entity*> &entity_list)
 {
     if (req == NULL) {
         return UCS_OK;
@@ -287,7 +289,8 @@ ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait,
     while (wait &&
            (ucp_request_check_status(req) == UCS_INPROGRESS) &&
            (ucs_get_time() < deadline)) {
-        check_events(entities(), wakeup, worker_index);
+        check_events(entity_list.empty() ? entities() : entity_list, wakeup,
+                     worker_index);
     }
 
     ucs_status_t status = ucp_request_check_status(req);
@@ -305,9 +308,11 @@ ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait,
     return status;
 }
 
-ucs_status_t ucp_test::request_wait(void *req, int worker_index, bool wakeup)
+ucs_status_t ucp_test::request_wait(void *req,
+                                    const std::vector<entity*> &entities,
+                                    int worker_index, bool wakeup)
 {
-    return request_process(req, worker_index, true, wakeup);
+    return request_process(req, worker_index, true, wakeup, entities);
 }
 
 ucs_status_t ucp_test::requests_wait(std::vector<void*> &reqs,
@@ -316,7 +321,7 @@ ucs_status_t ucp_test::requests_wait(std::vector<void*> &reqs,
     ucs_status_t ret_status = UCS_OK;
 
     while (!reqs.empty()) {
-        ucs_status_t status = request_wait(reqs.back(), worker_index);
+        ucs_status_t status = request_wait(reqs.back(), {}, worker_index);
         if (ret_status == UCS_OK) {
             // Save the first failure
             ret_status = status;
