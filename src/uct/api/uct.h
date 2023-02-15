@@ -2815,7 +2815,6 @@ UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface, unsigned flags,
  *                       unsupported - set to 0).
  * @return UCS_OK         - Ordering is inserted.
  */
-
 UCT_INLINE_API ucs_status_t uct_iface_fence(uct_iface_h iface, unsigned flags)
 {
     return iface->ops.iface_fence(iface, flags);
