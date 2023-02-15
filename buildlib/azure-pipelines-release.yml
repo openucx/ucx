@@ -14,19 +14,30 @@ variables:
 
 resources:
   containers:
-    - container: centos7_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:2
+    # x86_64
+    - container: centos7_cuda11_x86_64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos7-mofed5-cuda11:2
       options: $(DOCKER_OPT_VOLUMES)
-    - container: centos8_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:2
-    - container: ubuntu16_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:3
-    - container: ubuntu18_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:3
-    - container: ubuntu20_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:3
-    - container: ubuntu22_cuda11
+    - container: centos8_cuda11_x86_64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos8-mofed5-cuda11:2
+    - container: ubuntu16_cuda11_x86_64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu16.04-mofed5-cuda11:3
+    - container: ubuntu18_cuda11_x86_64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04-mofed5-cuda11:3
+    - container: ubuntu20_cuda11_x86_64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04-mofed5-cuda11:3
+    - container: ubuntu22_cuda11_x86_64
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda11:3
+    # aarch64
+    - container: centos8_cuda11_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/centos8-mofed5-cuda11:2
+    - container: ubuntu18_cuda11_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu18.04-mofed5-cuda11:4
+    - container: ubuntu20_cuda11_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu20.04-mofed5-cuda11:4
+    - container: ubuntu22_cuda11_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/ubuntu22.04-mofed5-cuda11:4
+
 
 stages:
   - stage: Prepare
@@ -35,7 +46,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_docker -equals yes
+          - ucx_docker
         steps:
           - checkout: self
             fetchDepth: 100
@@ -49,50 +60,23 @@ stages:
             name: Result
             displayName: Check build condition
 
-  # Create an empty draft to avoid race condition in distro releases
+
   - stage: GitHubDraft
     condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
     dependsOn: Prepare
     jobs:
-      - job: DraftRelease
-        displayName: Create draft release
-        container: centos7_cuda11
-        pool:
-          name: MLNX
-          demands:
-          - ucx_docker -equals yes
-        steps:
-        - checkout: self
-          clean: true
-          fetchDepth: 100
-          path: "we/need/to/go/deeper"
+    - template: az-GitHubDraft.yml
+      parameters:
+        name: x86_64
+        container: centos7_cuda11_x86_64
+        demands: ucx_docker
 
-        - bash: ./autogen.sh
-          displayName: Setup autotools
+    - template: az-GitHubDraft.yml
+      parameters:
+        name: aarch64
+        container: centos8_cuda11_aarch64
+        demands: ucx-arm64
 
-        - bash: |
-            set -eE
-            gcc --version
-            ./contrib/configure-release --with-java=no
-            ./contrib/buildrpm.sh -s -t -b
-          displayName: Build tarball
-
-        - task: GithubRelease@0
-          condition: eq(variables['Build.Reason'], 'IndividualCI')
-          displayName: Create/edit GitHub Draft Release
-          inputs:
-            githubConnection: release
-            repositoryName: openucx/ucx
-            action: edit
-            tag: $(Build.SourceBranchName)
-            isDraft: true
-            addChangeLog: false
-            releaseNotesSource: file
-            releaseNotesFile: NEWS
-            assetUploadMode: replace
-            assets: |
-              ./ucx-*.tar.gz
-              ./rpm-dist/ucx-*.src.rpm
 
   - stage: Build
     displayName: Build binary packages
@@ -102,6 +86,27 @@ stages:
     condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
     jobs:
       - template: az-distro-release.yml
+        parameters:
+          name: x86_64
+          demands: ucx_docker
+
+      - template: az-distro-release.yml
+        parameters:
+          name: aarch64
+          demands: ucx-arm64
+
+      - template: jucx/jucx-build.yml
+        parameters:
+          name: amd64   # x86_64
+          container: centos7_cuda11_x86_64
+          demands: ucx_docker
+
+      - template: jucx/jucx-build.yml
+        parameters:
+          name: aarch64 # ARM
+          container: centos8_cuda11_aarch64
+          demands: ucx-arm64
+
       - template: jucx/jucx-publish.yml
         parameters:
           ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:

@@ -1,0 +1,49 @@
+version: "3"
+
+#   NO ARM-based nvidia/cuda images available for old OS:
+#     Ubuntu16, CentOS7
+services:
+  centos8-mofed5-cuda11:
+    image: centos8-mofed5-cuda11:2
+    build:
+      context: .
+      network: host
+      dockerfile: centos-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        MOFED_OS: rhel8.2
+        CUDA_VERSION: 11.4.0
+        OS_VERSION: 8
+  ubuntu18.04-mofed5-cuda11:
+    image: ubuntu18.04-mofed5-cuda11:4
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        UBUNTU_VERSION: 18.04
+        CUDA_VERSION: 11.4.0
+        CUDA_COMPAT: 11-4
+  ubuntu20.04-mofed5-cuda11:
+    image: ubuntu20.04-mofed5-cuda11:4
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        UBUNTU_VERSION: 20.04
+        CUDA_VERSION: 11.4.0
+        CUDA_COMPAT: 11-4
+  ubuntu22.04-mofed5-cuda11:
+    image: ubuntu22.04-mofed5-cuda11:4
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        UBUNTU_VERSION: 22.04
+        CUDA_VERSION: 11.7.0
+        CUDA_COMPAT: 11-7

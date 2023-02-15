@@ -1,18 +1,22 @@
 parameters:
-  temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/tmp-settings.xml
+  temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/tmp-settings.xml
   gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg
   target: package
 
 jobs:
-  - job: jucx_release
+  - job: jucx_publish
+    displayName: JUCX publish
+    dependsOn:
+    - jucx_build_amd64
+    - jucx_build_aarch64
+    condition: succeeded()
 
     pool:
       name: MLNX
-      demands:
-        - harbor_registry -equals yes
+      demands: ucx_docker
 
     # we need to use lowest version for compatible
-    container: centos7_cuda11
+    container: centos7_cuda11_x86_64
 
     steps:
       - checkout: self
@@ -21,16 +25,24 @@ jobs:
         path: "we/need/to/go/deeper"
         # ^workaround agent issue with container in root path
 
+      - task: DownloadBuildArtifacts@0
+        displayName: Midterm artifacts get
+        inputs:
+          downloadType: 'specific'
+          itemPattern: 'libjucx_*.so/libjucx_*.so'
+          downloadPath: '$(System.DefaultWorkingDirectory)/bindings/java/resources'
+
       - bash: |
           set -eEx
           gcc --version
           ./autogen.sh
           ./contrib/configure-release --with-java
-        displayName: Configure
-
-      - bash: |
-          set -eEx
           make -s -j`nproc`
+          # Keep only libjucx_<platform>.so
+          rm -f $(Build.Repository.LocalPath)/bindings/java/resources/libjucx.so
+          rm $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/.libs/libjucx.so*
+          cp $(System.DefaultWorkingDirectory)/bindings/java/resources/libjucx_*.so/libjucx_*.so \
+            $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/.libs/
         displayName: Build ucx
 
       - bash: |
@@ -56,13 +68,14 @@ jobs:
         name: publicKey
 
       - bash: |
+          echo "Build target: ${{ parameters.target }}"
           source buildlib/az-helpers.sh
           az_init_modules
           az_module_load dev/mvn
           # use the lowest supported Java version for compatibility:
           az_module_load dev/jdk-1.8
           mvn --version
-          mkdir ${{ parameters.gpg_dir }}
+          mkdir -p ${{ parameters.gpg_dir }}
           export GPG_TTY=`tty`
           chmod 700 ${{ parameters.gpg_dir }}
           cp $(publicKey.secureFilePath)  ${{ parameters.gpg_dir }}/pubring.gpg

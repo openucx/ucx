@@ -1,0 +1,41 @@
+parameters:
+  name:
+  container:  
+  demands: []
+
+jobs:
+  - job: jucx_build_${{ parameters.name }}
+    displayName: JUCX build ${{ parameters.name }}
+
+    # we need to use lowest version for compatibility
+    container: ${{ parameters.container }}    
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        path: "we/need/to/go/deeper"
+        # ^workaround agent issue with container in root path
+
+      - bash: |
+          set -eEx
+          gcc --version
+          ./autogen.sh
+          ./contrib/configure-release --with-java
+        displayName: Configure
+
+      - bash: |
+          set -eEx
+          make -s -j`nproc`
+          mv $(Build.Repository.LocalPath)/bindings/java/resources/libjucx.so \
+             $(Build.Repository.LocalPath)/bindings/java/resources/libjucx_${{ parameters.name }}.so
+        displayName: Build ucx
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.Repository.LocalPath)/bindings/java/resources'
+          artifactName: libjucx_${{ parameters.name }}.so
+        displayName: Midterm artifact push

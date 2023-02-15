@@ -10,8 +10,8 @@
 # No extra debugging or profiling code.
 #
 
-basedir=$(cd $(dirname $0) && pwd)
-$basedir/../configure \
+basedir=$(cd "$(dirname "$0")" && pwd)
+"$basedir"/../configure \
 	--disable-logging \
 	--disable-debug \
 	--disable-assertions \
