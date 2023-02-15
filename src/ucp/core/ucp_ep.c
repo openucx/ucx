@@ -1926,8 +1926,9 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
                                               ucp_ep_thresh_params_t *params,
                                               int eager)
 {
-    ucp_context_h context = worker->context;
-    ucp_md_map_t md_map   = 0;
+    ucp_context_h context                = worker->context;
+    uint8_t num_paths[UCP_MAX_RESOURCES] = {};
+    ucp_md_map_t md_map                  = 0;
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
@@ -1940,6 +1941,11 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
     int i;
 
     memset(params, 0, sizeof(*params));
+
+    for (i = 0; (i < UCP_MAX_LANES) && (lanes[i] != UCP_NULL_LANE); i++) {
+        rsc_index = config->key.lanes[lanes[i]].rsc_index;
+        ++num_paths[rsc_index];
+    }
 
     for (i = 0; (i < UCP_MAX_LANES) && (lanes[i] != UCP_NULL_LANE); i++) {
         lane      = lanes[i];
@@ -1963,7 +1969,9 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
             }
         }
 
-        bw = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+        bw = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
+             num_paths[rsc_index];
+
         if (eager && (iface_attr->cap.am.max_bcopy > 0)) {
             /* Eager protocol has overhead for each fragment */
             perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
