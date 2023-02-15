@@ -730,8 +730,10 @@ public:
                                UCS_THREAD_MODE_SINGLE, "single");
         add_variant_with_value(variants, UCP_FEATURE_TAG,
                                UCS_THREAD_MODE_SERIALIZED, "serialized");
+#if ENABLE_MT
         add_variant_with_value(variants, UCP_FEATURE_TAG, UCS_THREAD_MODE_MULTI,
                                "multi");
+#endif
     }
 
     /// @override
