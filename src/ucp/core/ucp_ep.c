@@ -854,8 +854,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
 
     /* allocate endpoint */
     ucs_sockaddr_str(params->sockaddr.addr, peer_name, sizeof(peer_name));
-    ep_init_flags = ucp_ep_init_flags(worker, params) |
-                    ucp_cm_ep_init_flags(params);
+    ep_init_flags = ucp_ep_init_flags(worker, params);
 
     status = ucp_ep_create_base(worker, ep_init_flags, peer_name,
                                 "from api call", &ep);
@@ -1904,7 +1903,8 @@ void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
                         ucs_string_buffer_t *strb)
 {
     ucp_context_h context          = worker->context;
-    const ucp_ep_config_key_t *key = &worker->ep_config[cfg_index].key;
+    const ucp_ep_config_key_t *key = &ucs_array_elem(&worker->ep_config,
+                                                     cfg_index).key;
 
     if (!ucs_string_is_empty(context->name)) {
         ucs_string_buffer_appendf(strb, "%s ", context->name);
@@ -1918,7 +1918,7 @@ void ucp_ep_config_name(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
         ucs_string_buffer_appendf(strb, "inter-node ");
     }
 
-    ucs_string_buffer_appendf(strb, "cfg#%d ", cfg_index);
+    ucs_string_buffer_appendf(strb, "cfg#%d", cfg_index);
 }
 
 static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
@@ -1927,8 +1927,9 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
                                               ucp_ep_thresh_params_t *params,
                                               int eager)
 {
-    ucp_context_h context = worker->context;
-    ucp_md_map_t md_map   = 0;
+    ucp_context_h context                = worker->context;
+    uint8_t num_paths[UCP_MAX_RESOURCES] = {};
+    ucp_md_map_t md_map                  = 0;
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
@@ -1941,6 +1942,11 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
     int i;
 
     memset(params, 0, sizeof(*params));
+
+    for (i = 0; (i < UCP_MAX_LANES) && (lanes[i] != UCP_NULL_LANE); i++) {
+        rsc_index = config->key.lanes[lanes[i]].rsc_index;
+        ++num_paths[rsc_index];
+    }
 
     for (i = 0; (i < UCP_MAX_LANES) && (lanes[i] != UCP_NULL_LANE); i++) {
         lane      = lanes[i];
@@ -1964,7 +1970,9 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
             }
         }
 
-        bw = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+        bw = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
+             num_paths[rsc_index];
+
         if (eager && (iface_attr->cap.am.max_bcopy > 0)) {
             /* Eager protocol has overhead for each fragment */
             perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |

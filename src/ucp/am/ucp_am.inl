@@ -29,14 +29,15 @@ ucp_am_check_init_params(const ucp_proto_init_params_t *init_params,
                          uint64_t op_id_mask, uint16_t exclude_flags)
 {
     return ucp_proto_init_check_op(init_params, op_id_mask) &&
-           !(init_params->select_param->op_id_flags & exclude_flags);
+           !(ucp_proto_select_op_flags(init_params->select_param) &
+             exclude_flags);
 }
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_config_is_am(const ucp_proto_config_t *proto_config)
 {
-    return UCS_BIT(ucp_proto_select_op_id(&proto_config->select_param)) &
-           UCP_PROTO_AM_OP_ID_MASK;
+    return ucp_proto_select_check_op(&proto_config->select_param,
+                                     UCP_PROTO_AM_OP_ID_MASK);
 }
 
 #endif

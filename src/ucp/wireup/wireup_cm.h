@@ -20,8 +20,6 @@ typedef struct ucp_cm_client_connect_progress_arg {
 } ucp_cm_client_connect_progress_arg_t;
 
 
-unsigned ucp_cm_ep_init_flags(const ucp_ep_params_t *params);
-
 int ucp_ep_init_flags_has_cm(unsigned ep_init_flags);
 
 unsigned ucp_cm_client_try_next_cm_progress(void *arg);

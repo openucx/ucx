@@ -79,6 +79,19 @@ ucp_proto_select_op_id(const ucp_proto_select_param_t *select_param)
                                 (UCP_PROTO_SELECT_OP_FLAGS_BASE - 1));
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_select_check_op(const ucp_proto_select_param_t *select_param,
+                          uint64_t op_id_mask)
+{
+    return !!(UCS_BIT(ucp_proto_select_op_id(select_param)) & op_id_mask);
+}
+
+static UCS_F_ALWAYS_INLINE uint8_t
+ucp_proto_select_op_flags(const ucp_proto_select_param_t *select_param)
+{
+    return select_param->op_id_flags & ~(UCP_PROTO_SELECT_OP_FLAGS_BASE - 1);
+}
+
 static UCS_F_ALWAYS_INLINE const ucp_proto_threshold_elem_t*
 ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
                         ucp_worker_cfg_index_t ep_cfg_index,
@@ -122,7 +135,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
  */
 static UCS_F_ALWAYS_INLINE void ucp_proto_select_param_init_common(
         ucp_proto_select_param_t *select_param, ucp_operation_id_t op_id,
-        uint32_t op_attr_mask, unsigned op_flags, ucp_dt_class_t dt_class,
+        uint32_t op_attr_mask, uint8_t op_flags, ucp_dt_class_t dt_class,
         const ucp_memory_info_t *mem_info, uint8_t sg_count)
 {
     if (dt_class == UCP_DATATYPE_CONTIG) {
@@ -150,7 +163,7 @@ static UCS_F_ALWAYS_INLINE void ucp_proto_select_param_init_common(
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
                             ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                            unsigned op_flags, ucp_dt_class_t dt_class,
+                            uint8_t op_flags, ucp_dt_class_t dt_class,
                             const ucp_memory_info_t *mem_info, uint8_t sg_count)
 {
     ucp_proto_select_param_init_common(select_param, op_id, op_attr_mask,
@@ -161,7 +174,7 @@ ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
 
 static UCS_F_ALWAYS_INLINE void ucp_proto_select_param_init_reply(
         ucp_proto_select_param_t *select_param, ucp_operation_id_t op_id,
-        uint32_t op_attr_mask, unsigned op_flags, ucp_dt_class_t dt_class,
+        uint32_t op_attr_mask, uint8_t op_flags, ucp_dt_class_t dt_class,
         const ucp_memory_info_t *mem_info, uint8_t sg_count,
         const ucp_memory_info_t *reply_mem_info)
 {

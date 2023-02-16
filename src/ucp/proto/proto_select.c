@@ -217,7 +217,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     init_params.select_param   = select_param;
     init_params.ep_cfg_index   = ep_cfg_index;
     init_params.rkey_cfg_index = rkey_cfg_index;
-    init_params.ep_config_key  = &worker->ep_config[ep_cfg_index].key;
+    init_params.ep_config_key  = &ucs_array_elem(&worker->ep_config,
+                                                 ep_cfg_index).key;
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         init_params.rkey_config_key = NULL;
@@ -265,6 +266,15 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
             }
             ucs_log_indent(-1);
             continue;
+        }
+
+        if (init_params.ep_config_key->err_mode != UCP_ERR_HANDLING_MODE_NONE) {
+            ucs_assertv(ucp_protocols[proto_id]->abort !=
+                        ucp_proto_abort_fatal_not_implemented,
+                        "selected protocol %s doesn't implement abort() "
+                        "function, but err handling mode is %d",
+                        ucp_protocols[proto_id]->name,
+                        init_params.ep_config_key->err_mode);
         }
 
         ucp_proto_select_init_trace_caps(proto_id, &init_params);
@@ -825,7 +835,7 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-        return &worker->ep_config[ep_cfg_index].proto_select;
+        return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
     } else {
         rkey_config_key = worker->rkey_config[rkey_cfg_index].key;
 
@@ -851,7 +861,8 @@ void ucp_proto_config_query(ucp_worker_h worker,
         .priv          = proto_config->priv,
         .worker        = worker,
         .select_param  = &proto_config->select_param,
-        .ep_config_key = &worker->ep_config[proto_config->ep_cfg_index].key,
+        .ep_config_key = &ucs_array_elem(&worker->ep_config,
+                                         proto_config->ep_cfg_index).key,
         .msg_length    = msg_length
     };
 

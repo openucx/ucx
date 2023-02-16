@@ -54,7 +54,10 @@ typedef enum {
 
     /* Adjust maximum fragment size taking into account segment size to prevent
      * sending more than the remote side supports */
-    UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE  = UCS_BIT(8)
+    UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE  = UCS_BIT(8),
+
+    /* Supports error handling */
+    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9)
 } ucp_proto_common_init_flags_t;
 
 
@@ -176,6 +179,17 @@ typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
 typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
 
 
+/**
+ * Check if protocol can be used according to error handling requirements.
+ *
+ * @param [in] init_params      Protocol initialization parameters.
+ *
+ * @return Nonzero if protocol can be used.
+ */
+int ucp_proto_common_init_check_err_handling(
+        const ucp_proto_common_init_params_t *init_params);
+
+
 ucp_rsc_index_t
 ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
                                ucp_lane_index_t lane);
@@ -277,6 +291,8 @@ void ucp_proto_request_check_reset_state(const ucp_request_t *req);
 void ucp_proto_request_restart(ucp_request_t *req);
 
 void ucp_proto_request_bcopy_abort(ucp_request_t *req, ucs_status_t status);
+
+void ucp_proto_request_bcopy_id_abort(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_proto_request_bcopy_reset(ucp_request_t *req);
 

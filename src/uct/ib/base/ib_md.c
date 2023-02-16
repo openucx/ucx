@@ -1729,7 +1729,6 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
         if (status == UCS_OK) {
             ucs_debug("%s: md open by '%s' is successful", md_name,
                       uct_ib_ops[i]->name);
-            md->ops = uct_ib_ops[i]->ops;
             break;
         } else if (status != UCS_ERR_UNSUPPORTED) {
             goto out_free_dev_list;

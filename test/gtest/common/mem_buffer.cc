@@ -153,31 +153,48 @@ size_t mem_buffer::get_bar1_free_size()
 {
     /* All gtest CUDA tests explicitly assume that all memory allocations are
      * done on the device 0. The same assumption is followed here. */
-    size_t availible_size = SIZE_MAX;
+    size_t available_size = SIZE_MAX;
 
 #if HAVE_NVML_H
     nvmlReturn_t ret;
     nvmlDevice_t device;
     nvmlBAR1Memory_t bar1mem;
 
+    ret = nvmlInit_v2();
+    if (ret != NVML_SUCCESS) {
+        UCS_TEST_MESSAGE << "nvmlInit_v2 failed: " << nvmlErrorString(ret)
+                         << ", error code: " << ret;
+        return available_size;
+    }
+
     ret = nvmlDeviceGetHandleByIndex(0, &device);
     if (ret != NVML_SUCCESS) {
         /* For whatever reason we cannot open device handle.
          * As a result let's assume there is no limit on the size
          * and in the worse case scenario gtest will fail in runtime */
-        return availible_size;
+        UCS_TEST_MESSAGE << "nvmlDeviceGetHandleByIndex failed: "
+                         << nvmlErrorString(ret) << ", error code: " << ret;
+        return available_size;
     }
 
     ret = nvmlDeviceGetBAR1MemoryInfo(device, &bar1mem);
     if (ret != NVML_SUCCESS) {
         /* Similarly let's assume there is no limit on the size */
-        return availible_size;
+        UCS_TEST_MESSAGE << "nvmlDeviceGetBAR1MemoryInfo failed: "
+                         << nvmlErrorString(ret) << ", error code: " << ret;
+        return available_size;
     }
 
-    availible_size = (size_t)bar1mem.bar1Free;
+    available_size = (size_t)bar1mem.bar1Free;
+
+    ret = nvmlShutdown();
+    if (ret != NVML_SUCCESS) {
+        UCS_TEST_MESSAGE << "nvmlShutdown failed: " << nvmlErrorString(ret)
+                         << ", error code: " << ret;
+    }
 #endif
 
-    return availible_size;
+    return available_size;
 }
 
 void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)

@@ -66,6 +66,10 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
 {
     ucs_status_t status;
 
+    if (!ucp_proto_common_init_check_err_handling(&params->super)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     status = ucp_proto_single_init_priv(params, params->super.super.priv);
     if (status != UCS_OK) {
         return status;

@@ -40,19 +40,6 @@
     } while (0)
 
 
-unsigned
-ucp_cm_ep_init_flags(const ucp_ep_params_t *params)
-{
-    if (params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR) {
-        return UCP_EP_INIT_CM_WIREUP_CLIENT | UCP_EP_INIT_CM_PHASE;
-    }
-    if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
-        return UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
-    }
-
-    return 0;
-}
-
 int ucp_ep_init_flags_has_cm(unsigned ep_init_flags)
 {
     return !!(ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
@@ -1320,9 +1307,9 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep, const char *dev_name,
     ucp_context_dev_tl_bitmap(worker->context, dev_name, &ctx_tl_bitmap);
     ucp_tl_bitmap_validate(&tl_bitmap, &ctx_tl_bitmap);
 
-    status = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, 0, sa_data_version,
-                                      (void**)data_buf_p, data_buf_size_p,
-                                      ep_init_flags);
+    status = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, UCS_LOG_LEVEL_ERROR,
+                                      sa_data_version, (void**)data_buf_p,
+                                      data_buf_size_p, ep_init_flags);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);

@@ -86,14 +86,6 @@ void uct_mm_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr, uint64_t max_alloc)
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
 }
 
-ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
-                             void *handle, uint64_t raddr, void **laddr_p)
-{
-    /* rkey stores offset from the remote va */
-    *laddr_p = UCS_PTR_BYTE_OFFSET(raddr, (ptrdiff_t)rkey);
-    return UCS_OK;
-}
-
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p)
 {

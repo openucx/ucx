@@ -143,6 +143,7 @@ ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);
 
 size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg);
 
+ucs_status_t ucp_proto_rndv_ats_complete(ucp_request_t *req);
 
 void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
                                ucp_proto_query_attr_t *attr);

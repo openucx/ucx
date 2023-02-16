@@ -39,6 +39,10 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucp_worker_h worker                          = init_params->worker;
     ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
+    ucp_proto_common_init_params_t err_params    = {
+        .super = *init_params,
+        .flags = 0
+    };
     const ucp_proto_threshold_elem_t *thresh_elem;
     const ucp_proto_select_elem_t *select_elem;
     const ucp_proto_perf_range_t *frag_range;
@@ -54,6 +58,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
+        !ucp_proto_common_init_check_err_handling(&err_params) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         return UCS_ERR_UNSUPPORTED;
     }
