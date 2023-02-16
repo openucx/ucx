@@ -648,28 +648,35 @@ out:
 
 static double ucp_wireup_fp8_pack_unpack_latency(double latency)
 {
-    ucs_fp8_t packed_lat = UCS_FP8_PACK(LATENCY, latency);
+    ucs_fp8_t packed_lat = UCS_FP8_PACK(LATENCY, latency * UCS_NSEC_PER_SEC);
     return UCS_FP8_UNPACK(LATENCY, packed_lat) / UCS_NSEC_PER_SEC;
 }
 
+static double ucp_wireup_fp8_pack_unpack_bw(double bandwidth)
+{
+    ucs_fp8_t packed_bw = UCS_FP8_PACK(BANDWIDTH, bandwidth);
+    return UCS_FP8_UNPACK(BANDWIDTH, packed_bw);
+}
+
 static inline double
-ucp_wireup_tl_iface_latency(ucp_context_h context,
-                            const uct_iface_attr_t *iface_attr,
+ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
                             const ucp_address_iface_attr_t *remote_iface_attr)
 {
-    double local_lat, lat_nsec;
+    ucp_context_h context = wiface->worker->context;
+    double local_lat, lat_lossy;
 
     if (remote_iface_attr->addr_version == UCP_OBJECT_VERSION_V1) {
+        local_lat = ucp_wireup_iface_lat_distance_v1(wiface);
         /* Address v1 contains just latency overhead */
-        return ((iface_attr->latency.c + remote_iface_attr->lat_ovh) / 2) +
-                (iface_attr->latency.m * context->config.est_num_eps);
+        return ((local_lat + remote_iface_attr->lat_ovh) / 2) +
+               (wiface->attr.latency.m * context->config.est_num_eps);
     } else {
+        local_lat = ucp_wireup_iface_lat_distance_v2(wiface);
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local latency as well */
-        lat_nsec  = ucp_tl_iface_latency(context, &iface_attr->latency) *
-                    UCS_NSEC_PER_SEC;
-        local_lat = ucp_wireup_fp8_pack_unpack_latency(lat_nsec);
-        return (remote_iface_attr->lat_ovh + local_lat) / 2;
+        lat_lossy = ucp_wireup_fp8_pack_unpack_latency(local_lat);
+
+        return (remote_iface_attr->lat_ovh + lat_lossy) / 2;
     }
 }
 
@@ -968,14 +975,12 @@ static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
                                         void *arg)
 {
     /* best for 4k messages */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                               &wiface->attr,
-                                               &remote_addr->iface_attr) +
-                   wiface->attr.overhead +
-                   (4096.0 /
-                    ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
-                                                   &wiface->attr.bandwidth),
-                            remote_addr->iface_attr.bandwidth)));
+    return 1e-3 /
+           (ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
+            wiface->attr.overhead +
+            (4096.0 / ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
+                                                     &wiface->attr.bandwidth),
+                              remote_addr->iface_attr.bandwidth)));
 }
 
 static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
@@ -995,10 +1000,9 @@ static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
                                         void *arg)
 {
     /* best end-to-end latency and larger bcopy size */
-    return (1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                                &wiface->attr,
-                                                &remote_addr->iface_attr) +
-            wiface->attr.overhead + remote_addr->iface_attr.overhead));
+    return (1e-3 /
+            (ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
+             wiface->attr.overhead + remote_addr->iface_attr.overhead));
 }
 
 static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
@@ -1141,10 +1145,9 @@ double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  void *arg)
 {
     /* best one-sided latency */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                               &wiface->attr,
-                                               &remote_addr->iface_attr) +
-                   wiface->attr.overhead);
+    return 1e-3 /
+           (ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
+            wiface->attr.overhead);
 }
 
 static ucs_status_t
@@ -1197,10 +1200,9 @@ static double ucp_wireup_am_score_func(const ucp_worker_iface_t *wiface,
                                        void *arg)
 {
     /* best end-to-end latency */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                               &wiface->attr,
-                                               &remote_addr->iface_attr) +
-                   wiface->attr.overhead + remote_addr->iface_attr.overhead);
+    return 1e-3 /
+           (ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
+            wiface->attr.overhead + remote_addr->iface_attr.overhead);
 }
 
 static double ucp_tl_iface_bandwidth_ratio(ucp_context_h context,
@@ -1229,9 +1231,15 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     double eps                = 1e-3;
     double local_bw, remote_bw;
 
-    local_bw = ucp_tl_iface_bandwidth(context, &wiface->attr.bandwidth) *
-               ucp_tl_iface_bandwidth_ratio(context, local_dev_count[dev_index],
-                                            wiface->attr.dev_num_paths);
+    local_bw = ucp_wireup_iface_bw_distance(wiface) *
+         ucp_tl_iface_bandwidth_ratio(context, local_dev_count[dev_index],
+                                      wiface->attr.dev_num_paths);
+
+    if (remote_addr->iface_attr.addr_version == UCP_OBJECT_VERSION_V2) {
+        /* FP8 is a lossy compression method, so in order to create a symmetric
+         * calculation we pack/unpack the local bandwidth as well */
+        local_bw = ucp_wireup_fp8_pack_unpack_bw(local_bw);
+    }
 
     remote_bw = remote_addr->iface_attr.bandwidth *
                 ucp_tl_iface_bandwidth_ratio(
@@ -1252,11 +1260,10 @@ ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
      * a size which is likely to be used for high-bw memory access protocol, for
      * how long it would take to transfer it with a certain transport. */
     return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
-                ucp_wireup_iface_avail_bandwidth(
-                    wiface, remote_addr, dev_count->local, dev_count->remote)) +
-                ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                            &wiface->attr,
-                                            &remote_addr->iface_attr) +
+                 ucp_wireup_iface_avail_bandwidth(wiface, remote_addr,
+                                                  dev_count->local,
+                                                  dev_count->remote)) +
+                ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
                 wiface->attr.overhead +
                 ucs_linear_func_apply(md_attr->reg_cost,
                                       UCP_WIREUP_RMA_BW_TEST_MSG_SIZE));
@@ -1387,14 +1394,11 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
      */
     double size = ucs_min(wiface->attr.cap.am.max_bcopy,
                           remote_addr->iface_attr.seg_size);
-    double t    = (size /
-                   ucp_wireup_iface_avail_bandwidth(
-                       wiface, remote_addr, dev_count->local,
-                       dev_count->remote)) +
+    double t    = (size / ucp_wireup_iface_avail_bandwidth(wiface, remote_addr,
+                                                           dev_count->local,
+                                                           dev_count->remote)) +
                   wiface->attr.overhead + remote_addr->iface_attr.overhead +
-                  ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                              &wiface->attr,
-                                              &remote_addr->iface_attr);
+                  ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr);
 
     return size / t * 1e-5;
 }

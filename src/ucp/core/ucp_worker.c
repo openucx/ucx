@@ -1181,7 +1181,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-static ucs_status_t
+static void
 ucp_worker_get_sys_device_distance(ucp_context_h context,
                                    ucp_rsc_index_t rsc_index,
                                    ucs_sys_dev_distance_t *distance)
@@ -1189,6 +1189,8 @@ ucp_worker_get_sys_device_distance(ucp_context_h context,
     ucs_sys_device_t device     = UCS_SYS_DEVICE_ID_UNKNOWN;
     ucs_sys_device_t cmp_device = UCS_SYS_DEVICE_ID_UNKNOWN;
     ucp_rsc_index_t md_index, i;
+
+    *distance = ucs_topo_default_distance;
 
     for (i = 0; i < context->num_tls; i++) {
         md_index = context->tl_rscs[i].md_index;
@@ -1200,10 +1202,8 @@ ucp_worker_get_sys_device_distance(ucp_context_h context,
         device     = context->tl_rscs[rsc_index].tl_rsc.sys_device;
         cmp_device = context->tl_rscs[i].tl_rsc.sys_device;
 
-        return ucs_topo_get_distance(device, cmp_device, distance);
+        ucs_topo_get_distance(device, cmp_device, distance);
     }
-
-    return UCS_ERR_NO_RESOURCE;
 }
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
@@ -1213,7 +1213,6 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
     uct_md_h md                      = context->tl_mds[resource->md_index].md;
-    ucs_sys_dev_distance_t distance  = {.latency = 0, .bandwidth = 0};
     uct_iface_config_t *iface_config;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
@@ -1310,16 +1309,14 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto err_close_iface;
     }
 
+    ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
+                                       &wiface->distance);
     if (!context->config.ext.proto_enable) {
-        status = ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
-                                                    &distance);
-        if (status == UCS_OK) {
-            wiface->attr.latency.c          += distance.latency;
-            wiface->attr.bandwidth.shared    =
-                    ucs_min(wiface->attr.bandwidth.shared, distance.bandwidth);
-            wiface->attr.bandwidth.dedicated = ucs_min(
-                    wiface->attr.bandwidth.dedicated, distance.bandwidth);
-        }
+        wiface->attr.latency.c          += wiface->distance.latency;
+        wiface->attr.bandwidth.shared    = ucs_min(wiface->attr.bandwidth.shared,
+                                                   wiface->distance.bandwidth);
+        wiface->attr.bandwidth.dedicated = ucs_min(
+                wiface->attr.bandwidth.dedicated, wiface->distance.bandwidth);
     }
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",

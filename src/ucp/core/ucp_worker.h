@@ -236,6 +236,7 @@ struct ucp_worker_iface {
     ucp_worker_h                  worker;        /* The parent worker */
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
+    ucs_sys_dev_distance_t        distance;      /* Distance from given MD */
     int                           event_fd;      /* Event FD, or -1 if undefined */
     unsigned                      activate_count;/* How many times this iface has
                                                     been activated */
