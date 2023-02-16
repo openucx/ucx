@@ -991,6 +991,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     ucs_status_t status                                    = UCS_OK;
     uint8_t lag_state                                      = 0;
     uint64_t cap_flags                                     = 0;
+    uint8_t log_max_qp;
     uct_ib_uint128_t vhca_id;
     struct ibv_context *ctx;
     uct_ib_device_t *dev;
@@ -1084,6 +1085,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     md->port_select_mode = uct_ib_mlx5_devx_query_port_select(md);
 
+    log_max_qp       = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_qp);
     max_rd_atomic_dc = 1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
                                               log_max_ra_req_dc);
     ucs_assertv(max_rd_atomic_dc < UINT8_MAX, "max_rd_atomic_dc=%u",
@@ -1245,7 +1247,8 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_dbrec_mpool_cleanup;
     }
 
-    ucs_debug("%s: opened DEVX md", ibv_get_device_name(ibv_device));
+    ucs_debug("%s: opened DEVX md log_max_qp=%d",
+              uct_ib_device_name(dev), log_max_qp);
 
     dev->flags          |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags           |= UCT_IB_MLX5_MD_FLAG_DEVX;
