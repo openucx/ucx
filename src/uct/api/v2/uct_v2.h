@@ -93,7 +93,10 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
 
     /** Enable @ref uct_perf_attr_t::max_inflight_eps */
-    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10)
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10),
+
+    /** Enable @ref uct_perf_attr_t::remote_guid */
+    UCT_PERF_ATTR_FIELD_REMOTE_GUID        = UCS_BIT(11)
 };
 
 
@@ -109,47 +112,47 @@ typedef struct {
      * @ref uct_perf_attr_field. Fields not specified by this mask will be
      * ignored. This field must be initialized by the caller.
      */
-    uint64_t            field_mask;
+    uint64_t              field_mask;
 
     /**
      * Operation to report performance for.
      * This field must be initialized by the caller.
      */
-    uct_ep_operation_t  operation;
+    uct_ep_operation_t    operation;
 
     /**
      * Local memory type to use for determining performance.
      * This field must be initialized by the caller.
      */
-    ucs_memory_type_t   local_memory_type;
+    ucs_memory_type_t     local_memory_type;
 
     /**
      * Remote memory type to use for determining performance.
      * Relevant only for operations that have remote memory access.
      * This field must be initialized by the caller.
      */
-    ucs_memory_type_t   remote_memory_type;
+    ucs_memory_type_t     remote_memory_type;
 
     /**
      * System device where the local memory type resides.
      * Can be UCS_SYS_DEVICE_ID_UNKNOWN.
      * This field must be initialized by the caller.
      */
-    ucs_sys_device_t    local_sys_device;
+    ucs_sys_device_t      local_sys_device;
 
     /**
      * System device where the remote memory type resides.
      * Can be UCS_SYS_DEVICE_ID_UNKNOWN and be the same as local system device.
      * This field must be initialized by the caller.
      */
-    ucs_sys_device_t    remote_sys_device;
+    ucs_sys_device_t      remote_sys_device;
 
     /**
      * This is the time spent in the UCT layer to prepare message request and
      * pass it to the hardware or system software layers, in seconds.
      * This field is set by the UCT layer.
      */
-    double              send_pre_overhead;
+    double                send_pre_overhead;
 
     /**
      * This is the time spent in the UCT layer after the message request has
@@ -159,24 +162,24 @@ typedef struct {
      * remote side.
      * This field is set by the UCT layer.
      */
-    double              send_post_overhead;
+    double                send_post_overhead;
 
     /**
      * Message receive overhead time, in seconds.
      * This field is set by the UCT layer.
      */
-    double              recv_overhead;
+    double                recv_overhead;
 
     /**
      * Bandwidth model. This field is set by the UCT layer.
      */
-    uct_ppn_bandwidth_t bandwidth;
+    uct_ppn_bandwidth_t   bandwidth;
 
     /**
      * Latency as a function of number of endpoints.
      * This field is set by the UCT layer.
      */
-    ucs_linear_func_t   latency;
+    ucs_linear_func_t     latency;
 
     /**
      * Approximate maximum number of endpoints that could have outstanding
@@ -186,7 +189,13 @@ typedef struct {
      * large number of maximum inflight endpoints.
      * This field is set by the UCT layer.
      */
-    size_t              max_inflight_eps;
+    size_t                max_inflight_eps;
+
+    /**
+     * GUID of the system device where remote buffers reside. Refer to
+     * ucs_sys_device_guid_t. This field must be initialized by the caller.
+     */
+    ucs_sys_device_guid_t remote_guid;
 } uct_perf_attr_t;
 
 

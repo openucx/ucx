@@ -10,6 +10,7 @@
 #include "ucp_rkey.h"
 #include "ucp_worker.h"
 #include "ucp_ep.h"
+#include <ucs/sys/topo/base/topo.h>
 
 
 static UCS_F_ALWAYS_INLINE khint_t
@@ -18,7 +19,7 @@ ucp_rkey_config_hash_func(ucp_rkey_config_key_t rkey_config_key)
     return (khint_t)rkey_config_key.md_map ^
            (rkey_config_key.ep_cfg_index << 8) ^
            (rkey_config_key.sys_dev << 16) ^
-           (rkey_config_key.mem_type << 24);
+           (rkey_config_key.mem_type << 24); /* ignore guid for hash fxn */
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -28,7 +29,9 @@ ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
     return (rkey_config_key1.md_map == rkey_config_key2.md_map) &&
            (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
            (rkey_config_key1.sys_dev == rkey_config_key2.sys_dev) &&
-           (rkey_config_key1.mem_type == rkey_config_key2.mem_type);
+           (rkey_config_key1.mem_type == rkey_config_key2.mem_type) &&
+           ucs_topo_sys_device_guid_is_equal(rkey_config_key1.guid,
+                                             rkey_config_key2.guid);
 }
 
 static UCS_F_ALWAYS_INLINE ucp_rkey_config_t *
