@@ -1,5 +1,5 @@
 #
-# Copyright (C) Advanced Micro Devices, Inc. 2016 - 2018. ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2016 - 2023. ALL RIGHTS RESERVED.
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
@@ -97,6 +97,7 @@ AS_IF([test "x$with_rocm" != "xno"],
            AC_SUBST([ROCM_LIBS])
            AC_SUBST([ROCM_ROOT])],
           [AC_MSG_WARN([ROCm not found])])
+   AC_CHECK_FUNCS([hsa_amd_portable_export_dmabuf])
 
     CPPFLAGS="$SAVE_CPPFLAGS"
     LDFLAGS="$SAVE_LDFLAGS"
