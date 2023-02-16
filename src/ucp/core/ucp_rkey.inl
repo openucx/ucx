@@ -53,7 +53,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
                              ucp_rkey_h *rkey_p)
 {
-    ucp_ep_config_t *config = &ep->worker->ep_config[ep->cfg_index];
+    ucp_ep_config_t *config = &ucs_array_elem(&ep->worker->ep_config,
+                                              ep->cfg_index);
     return ucp_ep_rkey_unpack_internal(ep, buffer, length,
                                        config->key.reachable_md_map, 0, rkey_p);
 }

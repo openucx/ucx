@@ -105,7 +105,8 @@ ucp_proto_rndv_md_map_to_remote(const ucp_proto_rndv_ctrl_init_params_t *params,
     const ucp_ep_config_t *ep_config;
     uint64_t remote_md_map;
 
-    ep_config     = &worker->ep_config[params->super.super.ep_cfg_index];
+    ep_config     = &ucs_array_elem(&worker->ep_config,
+                                    params->super.super.ep_cfg_index);
     remote_md_map = 0;
 
     ucs_carray_for_each(lane_cfg, ep_config->key.lanes,
@@ -134,7 +135,8 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
 {
     ucp_worker_h worker                 = params->super.super.worker;
     ucp_worker_cfg_index_t ep_cfg_index = params->super.super.ep_cfg_index;
-    const ucp_ep_config_t *ep_config    = &worker->ep_config[ep_cfg_index];
+    const ucp_ep_config_t *ep_config    = &ucs_array_elem(&worker->ep_config,
+                                                          ep_cfg_index);
     ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
     const ucp_proto_select_elem_t *select_elem;
     ucp_rkey_config_key_t rkey_config_key;
