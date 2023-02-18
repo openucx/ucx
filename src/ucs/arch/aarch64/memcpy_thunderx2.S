@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **********************************************************************
- * Alternativ ely, you may choose to be licensed under the terms of the
+ * Alternatively, you may choose to be licensed under the terms of the
  * following license:
- j
+ *
  * Redistribution and use in source and binary forms, with or without 
  * modification, are permitted provided that the following conditions are met:
  * 
