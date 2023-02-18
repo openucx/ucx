@@ -82,6 +82,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
     uct_rdmacm_cm_reserved_qpn_blk_t *blk;
     uint64_t general_obj_types_caps;
+    uint8_t log_max_num_reserved_qpn;
     ucs_status_t status;
     void *cap;
 #endif
@@ -151,6 +152,8 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 
     ctx->log_reserved_qpn_granularity =
             UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap, log_reserved_qpn_granularity);
+    log_max_num_reserved_qpn          =
+            UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap, log_max_num_reserved_qpn);
 
     /* Try-allocate a reserved QPN block. If fails, fallback to dummy QP. */
     status = uct_rdmacm_cm_reserved_qpn_blk_alloc(ctx, verbs,
@@ -161,8 +164,9 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 
     uct_rdmacm_cm_reserved_qpn_blk_release(blk);
 
-    ucs_debug("%s reserved qpn cap: log_reserved_qpn_granularity is 0x%x",
-              dev_name, ctx->log_reserved_qpn_granularity);
+    ucs_debug("%s with reserved qpn cap log_max_num_reserved_qpn=%d "
+              "log_reserved_qpn_granularity=%d", dev_name,
+              log_max_num_reserved_qpn, ctx->log_reserved_qpn_granularity);
 
     ctx->use_reserved_qpn = 1;
 
