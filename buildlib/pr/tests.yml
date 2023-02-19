@@ -32,6 +32,7 @@ jobs:
           ./contrib/test_jenkins.sh
           exit $?
         displayName: Run ./contrib/test_jenkins.sh
+        retryCountOnTaskFailure: 2
         env:
           nworkers: ${{ parameters.num_workers }}
           worker: $(worker_id)
