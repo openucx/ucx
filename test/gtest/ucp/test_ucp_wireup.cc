@@ -733,7 +733,9 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     recv_b(sender().worker(), receiver().ep(), 8, 1);
 }
 
-UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
+
+// Cannot disconnect only one side when using self (using the same ep)
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, disconnect_nb_onesided, is_self()) {
     sender().connect(&receiver(), get_ep_params());
 
     std::vector<void*> sreqs;
