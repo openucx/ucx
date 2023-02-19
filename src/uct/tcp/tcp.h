@@ -407,6 +407,7 @@ typedef struct uct_tcp_iface {
         unsigned                  syn_cnt;           /* Number of SYN retransmits that TCP should send
                                                       * before aborting the attempt to connect.
                                                       * It cannot exceed 255. */
+        double                    max_bw;            /* Upper bound to TCP iface bandwidth */
         struct {
             ucs_time_t            idle;              /* The time the connection needs to remain
                                                       * idle before TCP starts sending keepalive
@@ -447,6 +448,7 @@ typedef struct uct_tcp_iface_config {
     uct_iface_mpool_config_t       tx_mpool;
     uct_iface_mpool_config_t       rx_mpool;
     ucs_range_spec_t               port_range;
+    double                         max_bw;
     struct {
         ucs_time_t                 idle;
         unsigned long              cnt;
