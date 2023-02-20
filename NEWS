@@ -11,6 +11,11 @@
 ### Features:
 ### Bugfixes:
 
+## 1.14.0 RC5 (February 20, 2023)
+### Bugfixes
+#### Build
+* Added publishing cuda .deb packages
+
 ## 1.14.0 RC4 (February 14, 2023)
 ### Bugfixes
 #### Build
