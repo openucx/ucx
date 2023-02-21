@@ -746,7 +746,10 @@ enum {
     UCT_MD_FLAG_SOCKADDR      = UCS_BIT(7),
 
     /**
-     * MD supports memory invalidation
+     * MD supports memory invalidation.
+     * @note This flag is equivalent to the combination of
+     *       UCT_MD_FLAG_INVALIDATE_RMA and UCT_MD_FLAG_INVALIDATE_AMO for
+     *       uct_md_attr_v2_t.flags
      */
     UCT_MD_FLAG_INVALIDATE    = UCS_BIT(8),
 
@@ -759,7 +762,13 @@ enum {
     /**
      * MD supports registering a dmabuf file descriptor.
      */
-    UCT_MD_FLAG_REG_DMABUF    = UCS_BIT(10)
+    UCT_MD_FLAG_REG_DMABUF    = UCS_BIT(10),
+
+    /**
+     * The enum must not be extended. Any additional flags must be defined in
+     * API v2 uct_md_flags_v2_t.
+     */
+    UCT_MD_FLAG_LAST          = UCS_BIT(11)
 };
 
 /**
