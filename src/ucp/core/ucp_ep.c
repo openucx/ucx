@@ -2545,7 +2545,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         if (ucp_ep_config_connect_p2p(worker, &config->key, rsc_index)) {
             config->p2p_lanes |= UCS_BIT(lane);
         } else if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
-            config->uct_rkey_pack_flags |= UCT_MD_MKEY_PACK_FLAG_INVALIDATE;
+            config->uct_rkey_pack_flags |= UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA;
         }
 
         cmpt_attr = ucp_cmpt_attr_by_md_index(context, config->md_index[lane]);
