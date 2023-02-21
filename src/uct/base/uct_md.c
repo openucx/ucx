@@ -494,28 +494,12 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_mem_check_flags(unsigned flags)
-{
-    if (!(flags & UCT_MD_MEM_ACCESS_ALL)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-    return UCS_OK;
-}
-
 ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         const uct_alloc_method_t *methods,
                                         unsigned num_methods,
                                         const uct_mem_alloc_params_t *params)
 {
-    ucs_status_t status;
-
     if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
-        status = uct_mem_check_flags(params->flags);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        /* assuming flags are valid */
         if (params->flags & UCT_MD_MEM_FLAG_FIXED) {
             if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS)) {
                 ucs_debug("UCT_MD_MEM_FLAG_FIXED requires setting of"
@@ -528,7 +512,7 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
                 ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
                 return UCS_ERR_INVALID_PARAM;
             }
-	    }
+        }
     }
 
     if (length == 0) {
@@ -580,21 +564,12 @@ ucs_status_t uct_md_mem_reg_v2(uct_md_h md, void *address, size_t length,
                                uct_mem_h *memh_p)
 {
     uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
-    ucs_status_t status;
 
     if ((length == 0) || (address == NULL)) {
         uct_md_log_mem_reg_error(flags,
                                  "uct_md_mem_reg(address=%p length=%zu): "
                                  "invalid parameters", address, length);
         return UCS_ERR_INVALID_PARAM;
-    }
-
-    status = uct_mem_check_flags(flags);
-    if (status != UCS_OK) {
-        uct_md_log_mem_reg_error(flags,
-                                 "uct_md_mem_reg_v2(flags=0x%lx): invalid"
-                                 " flags", flags);
-        return status;
     }
 
     return md->ops->mem_reg(md, address, length, params, memh_p);

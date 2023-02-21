@@ -274,23 +274,42 @@ typedef enum {
     /**
      * The flag is used indicate that remote access to a memory region
      * associated with the remote key must fail once the memory region is
-     * deregister using @ref uct_md_mem_dereg_v2 with
+     * deregistered using @ref uct_md_mem_dereg_v2 with
      * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set. Using
      * @ref uct_md_mem_dereg_v2 deregistration routine with
      * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set on an rkey that was
-     * generated without @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag will
-     * not function correctly, and may result in data corruption. In other words
-     * in order for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
-     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag must be set.
+     * generated without
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA and/or
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flags will not function
+     * correctly, and may result in data corruption. In other words, in order
+     * for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA and/or
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag must be set.
      */
-    UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0),
+    UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA = UCS_BIT(0),
+
+    /**
+     * The flag is used to indicate that the atomic operations must fail once
+     * the memory region is deregistered using @ref uct_md_mem_dereg_v2 with
+     * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set.
+     * Using @ref uct_md_mem_dereg_v2 deregistration routine with
+     * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set on an rkey that was
+     * generated without
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA and/or
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flags will not function
+     * correctly, and may result in data corruption. In other words, in order
+     * for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA and/or
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag must be set.
+     */
+    UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO = UCS_BIT(1),
 
     /**
      * The flag is used to indicate that the memory region should be packed in
      * order to be accessed by another process using the same device to perform
      * UCT operations.
      */
-    UCT_MD_MKEY_PACK_FLAG_EXPORT     = UCS_BIT(1)
+    UCT_MD_MKEY_PACK_FLAG_EXPORT         = UCS_BIT(2)
 } uct_md_mkey_pack_flags_t;
 
 
@@ -377,7 +396,7 @@ typedef struct uct_md_mem_reg_params {
     uint64_t                     field_mask;
 
     /**
-     * Operation specific flags, using bits from @ref uct_md_mem_flags_t.
+     * Operation specific flags, using bits from @ref uct_md_mem_flags.
      */
     uint64_t                     flags;
 
@@ -773,6 +792,31 @@ typedef struct {
      */
     char              global_id[UCT_MD_GLOBAL_ID_MAX];
 } uct_md_attr_v2_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief  Memory domain capability flags.
+ */
+typedef enum {
+    UCT_MD_FLAG_V2_FIRST       = UCT_MD_FLAG_LAST,
+
+    /**
+     * Memory domain supports invalidation of memory handle registered by
+     * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_RMA flag and packed
+     * key by @ref uct_md_mkey_pack_v2 with
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     */
+    UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
+
+    /**
+     * Memory domain supports invalidation of memory handle registered by
+     * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_REMOTE_ATOMIC flag and
+     * packed key by @ref uct_md_mkey_pack_v2 with
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     */
+    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12)
+} uct_md_flags_v2_t;
 
 
 /**
