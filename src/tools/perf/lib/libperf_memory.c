@@ -223,7 +223,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
 
     flags = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
              UCT_MD_MEM_FLAG_NONBLOCK : 0;
-    flags |= UCT_MD_MEM_ACCESS_ALL;
+    flags |= UCT_MD_MEM_ACCESS_RMA;
 
     /* Allocate send buffer memory */
     status = perf->send_allocator->uct_alloc(perf,
