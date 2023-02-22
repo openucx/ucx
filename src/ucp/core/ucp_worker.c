@@ -2503,7 +2503,8 @@ static unsigned ucp_worker_discard_uct_eps_destroy_progress(void *arg)
         }
     });
     ucs_assertv(worker->discard_uct_ep_comp == 0,
-                "worker->discard_uct_ep_comp=%u", worker->discard_uct_ep_comp);
+                "worker %p: leak of %u discarded uct endpoints",
+                worker, worker->discard_uct_ep_comp);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     return 1;
