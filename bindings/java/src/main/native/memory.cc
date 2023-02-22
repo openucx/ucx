@@ -57,3 +57,41 @@ Java_org_openucx_jucx_UcxUtils_getByteBufferViewNative(JNIEnv *env, jclass cls,
 {
     return env->NewDirectByteBuffer((void*)address, size);
 }
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpMemory_getMkeyBufferNative(JNIEnv *env, jclass cls,
+                                                        jlong mem_ptr,
+                                                        jobject jucx_mem_pack_params)
+{
+    ucp_memh_pack_params_t params = {};
+    void *memh_buffer = NULL;
+    size_t memh_size = 0;
+    jfieldID field;
+
+    jclass jucx_pack_params_class = env->GetObjectClass(jucx_mem_pack_params);
+    field = env->GetFieldID(jucx_pack_params_class, "fieldMask", "J");
+    params.field_mask = env->GetLongField(jucx_mem_pack_params, field);
+
+    if (params.field_mask & UCP_MEMH_PACK_PARAM_FIELD_FLAGS) {
+        field = env->GetFieldID(jucx_pack_params_class, "flags", "J");
+        params.flags = env->GetLongField(jucx_mem_pack_params, field);
+    }
+
+    ucs_status_t status = ucp_memh_pack((ucp_mem_h)mem_ptr, &params,
+                                        &memh_buffer, &memh_size);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    return env->NewDirectByteBuffer(memh_buffer, memh_size);
+}
+
+JNIEXPORT void JNICALL
+Java_org_openucx_jucx_ucp_UcpMemory_releaseMkeyBufferNative(JNIEnv *env, jclass cls,
+                                                            jobject memh_buf)
+{
+    ucp_memh_buffer_release_params_t params = {};
+
+    ucp_memh_buffer_release(env->GetDirectBufferAddress(memh_buf), &params);
+}
+

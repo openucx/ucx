@@ -12,6 +12,7 @@ public class UcpMemMapParams extends UcxParams {
     private int memType;
     private long address;
     private long length;
+    private long exportedMemh;
 
     @Override
     public UcpMemMapParams clear() {
@@ -21,6 +22,7 @@ public class UcpMemMapParams extends UcxParams {
         flags = 0;
         prot = 0;
         memType = 0;
+        exportedMemh = 0;
         return this;
     }
 
@@ -106,6 +108,12 @@ public class UcpMemMapParams extends UcxParams {
     public UcpMemMapParams setMemoryType(int memoryType) {
         this.fieldMask |= UcpConstants.UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
         this.memType = memoryType;
+        return this;
+    }
+
+    public UcpMemMapParams setExportedMemh(long expMemh) {
+        this.fieldMask |= UcpConstants.UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER;
+        this.exportedMemh = expMemh;
         return this;
     }
 }

@@ -31,6 +31,7 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     JUCX_DEFINE_LONG_CONSTANT(UCP_FEATURE_WAKEUP);
     JUCX_DEFINE_LONG_CONSTANT(UCP_FEATURE_STREAM);
     JUCX_DEFINE_LONG_CONSTANT(UCP_FEATURE_AM);
+    JUCX_DEFINE_LONG_CONSTANT(UCP_FEATURE_EXPORTED_MEMH);
 
     // UCP worker parameters
     JUCX_DEFINE_LONG_CONSTANT(UCP_WORKER_PARAM_FIELD_THREAD_MODE);
@@ -81,6 +82,7 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_PARAM_FIELD_FLAGS);
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_PARAM_FIELD_PROT);
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE);
+    JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER);
 
     // The enumeration list describes the memory mapping flags
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_NONBLOCK);
@@ -92,6 +94,12 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_PROT_LOCAL_WRITE);
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_PROT_REMOTE_READ);
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_PROT_REMOTE_WRITE);
+
+    // UCP memory packing parameters field mask
+    JUCX_DEFINE_LONG_CONSTANT(UCP_MEMH_PACK_PARAM_FIELD_FLAGS);
+
+    // The enumeration list describes the memory packing flags
+    JUCX_DEFINE_LONG_CONSTANT(UCP_MEMH_PACK_FLAG_EXPORT);
 
     // The enumeration defines behavior of @ref ucp_stream_recv_nb function
     JUCX_DEFINE_LONG_CONSTANT(UCP_STREAM_RECV_FLAG_WAITALL);
