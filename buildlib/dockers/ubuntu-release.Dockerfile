@@ -5,6 +5,7 @@ FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata && \
     apt-get install -y \
+        apt-file \
         automake \
         default-jdk \
         dh-make \
@@ -16,10 +17,12 @@ RUN apt-get update && \
         libtool \
         make \
         maven \
+        libnvidia-compute-525 \
         udev \
         wget \
         environment-modules \
         pkg-config \
+    && apt-get remove -y cuda-compat* \
     && apt-get remove -y openjdk-11-* || apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -46,5 +49,3 @@ ENV CPATH /usr/local/cuda/include:${CPATH}
 ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LD_LIBRARY_PATH}
 ENV LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LIBRARY_PATH}
 ENV PATH /usr/local/cuda/compat:${PATH}
-
-RUN ml_stub=$(find /usr -name libnvidia-ml.so) && ln -s $ml_stub /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1

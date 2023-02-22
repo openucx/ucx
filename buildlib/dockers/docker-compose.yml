@@ -2,7 +2,7 @@ version: "3.4"
 
 services:
   centos7-mofed5-cuda11:
-    image: centos7-mofed5-cuda11:2
+    image: centos7-mofed5-cuda11:6
     build:
       context: .
       network: host
@@ -13,7 +13,7 @@ services:
         CUDA_VERSION: 11.4.0
         OS_VERSION: 7
   centos7-mofed5.4-cuda11:
-    image: centos7-mofed5.4-cuda11
+    image: centos7-mofed5.4-cuda11:6
     build:
       context: .
       network: host
@@ -24,7 +24,7 @@ services:
         CUDA_VERSION: 11.2.0
         OS_VERSION: 7
   centos8-mofed5-cuda11:
-    image: centos8-mofed5-cuda11:2
+    image: centos8-mofed5-cuda11:6
     build:
       context: .
       network: host
@@ -35,7 +35,7 @@ services:
         CUDA_VERSION: 11.4.0
         OS_VERSION: 8
   ubuntu16.04-mofed5-cuda11:
-    image: ubuntu16.04-mofed5-cuda11:3
+    image: ubuntu16.04-mofed5-cuda11:6
     build:
       context: .
       network: host
@@ -45,7 +45,7 @@ services:
         UBUNTU_VERSION: 16.04
         CUDA_VERSION: 11.2.0
   ubuntu18.04-mofed5-cuda11:
-    image: ubuntu18.04-mofed5-cuda11:3
+    image: ubuntu18.04-mofed5-cuda11:6
     build:
       context: .
       network: host
@@ -55,7 +55,7 @@ services:
         UBUNTU_VERSION: 18.04
         CUDA_VERSION: 11.4.0
   ubuntu20.04-mofed5-cuda11:
-    image: ubuntu20.04-mofed5-cuda11:3
+    image: ubuntu20.04-mofed5-cuda11:6
     build:
       context: .
       network: host
@@ -65,7 +65,7 @@ services:
         UBUNTU_VERSION: 20.04
         CUDA_VERSION: 11.4.0
   ubuntu22.04-mofed5-cuda11:
-    image: ubuntu22.04-mofed5-cuda11:3
+    image: ubuntu22.04-mofed5-cuda11:6
     build:
       context: .
       network: host
