@@ -494,7 +494,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         } else if (ucp_wireup_connect_p2p(worker, rsc_index, has_cm)) {
             /* We should not need MD invalidate support for p2p lanes, since
              * both sides close the connection in case of error */
-            local_md_flags &= ~UCT_MD_FLAG_INVALIDATE;
+            local_md_flags &= ~(UCT_MD_FLAG_INVALIDATE     |
+                                UCT_MD_FLAG_INVALIDATE_RMA |
+                                UCT_MD_FLAG_INVALIDATE_AMO);
         }
 
         /* Check that local md and interface satisfy the criteria */
@@ -1747,7 +1749,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     /* If error handling is requested we require memory invalidation
      * support to provide correct data integrity in case of error */
     if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
-        bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE;
+        bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE_RMA;
     }
 
     /* RNDV protocol can't mix different schemes, i.e. wireup has to

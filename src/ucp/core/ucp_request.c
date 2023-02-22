@@ -379,7 +379,7 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_request_t *req)
             ucs_assert(ucp_ep_get_iface_attr(ep, lane)->cap.flags &
                        UCT_IFACE_FLAG_GET_ZCOPY);
             ucs_assert(ucp_ep_md_attr(ep, lane)->flags &
-                       UCT_MD_FLAG_INVALIDATE);
+                       UCT_MD_FLAG_INVALIDATE_RMA);
             inv_map |= UCS_BIT(ucp_ep_md_index(ep, lane));
         }
     }
