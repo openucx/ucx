@@ -332,7 +332,6 @@ struct ucp_request {
                     uct_worker_cb_id_t cb_id;
                     /* Index of UCT EP to be flushed and destroyed */
                     ucp_rsc_index_t    rsc_index;
-                    int8_t             state;
                 } discard_uct_ep;
 
                 struct {
