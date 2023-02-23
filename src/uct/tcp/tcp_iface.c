@@ -17,6 +17,7 @@
 #include <sys/poll.h>
 #include <netinet/tcp.h>
 #include <dirent.h>
+#include <float.h>
 
 #define UCT_TCP_IFACE_NETDEV_DIR "/sys/class/net"
 
@@ -85,6 +86,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Generate a random TCP port number from that range. A value of zero means\n"
    "let the operating system select the port number.",
    ucs_offsetof(uct_tcp_iface_config_t, port_range), UCS_CONFIG_TYPE_RANGE_SPEC},
+
+   {"MAX_BW", "2200MBs",
+    "Upper bound to TCP iface bandwidth. 'auto' means BW is unlimited.",
+    ucs_offsetof(uct_tcp_iface_config_t, max_bw), UCS_CONFIG_TYPE_BW},
 
 #ifdef UCT_TCP_EP_KEEPALIVE
   {"KEEPIDLE", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE) "s",
@@ -221,7 +226,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     ucs_status_t status;
     int is_default;
     char sysfs_path[PATH_MAX];
-    double pci_bw, network_bw;
+    double pci_bw, network_bw, calculated_bw;
 
     uct_base_iface_query(&iface->super, attr);
 
@@ -233,7 +238,10 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     ucs_snprintf_safe(sysfs_path, PATH_MAX, "%s/%s/device",
                       UCT_TCP_IFACE_NETDEV_DIR, iface->if_name);
     pci_bw                 = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
-    attr->bandwidth.shared = ucs_min(pci_bw, network_bw);
+    calculated_bw          = ucs_min(pci_bw, network_bw);
+
+    /* Bandwidth is bounded by TCP stack computation time */
+    attr->bandwidth.shared = ucs_min(calculated_bw, iface->config.max_bw);
 
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_tcp_iface_addr_t);
@@ -663,6 +671,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         self->config.keepalive.idle =
             ucs_time_from_sec(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE);
     }
+
+    self->config.max_bw = UCS_CONFIG_DBL_IS_AUTO(config->max_bw) ?
+                                  DBL_MAX :
+                                  config->max_bw;
 
     if (self->config.tx_seg_size > self->config.rx_seg_size) {
         ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
