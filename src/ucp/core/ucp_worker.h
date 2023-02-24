@@ -171,6 +171,7 @@ enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_LAST
 };
 
+
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
                              ((_flags) & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \

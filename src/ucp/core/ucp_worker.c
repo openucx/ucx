@@ -2622,8 +2622,7 @@ ucp_worker_discard_uct_ep_purge(uct_pending_req_t *self, void *arg)
 
     /* If there is a pending request during UCT EP discarding, it means
      * UCS_ERR_NO_RESOURCE was returned from the flush operation, the operation
-     * was added to a pending queue. Marked as FLUSHED, it will complete in
-     * ucp_worker_discard_uct_ep_cleanup. */
+     * was added to a pending queue. complete the discarding operation */
     ucs_assert_always(req->send.discard_uct_ep.cb_id == UCS_CALLBACKQ_ID_NULL);
 }
 
@@ -2637,6 +2636,7 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
      * operations. Do cleanup of discarding functionality after trying to
      * destroy UCP EPs in order to destroy all remaining UCP EPs here (they are
      * destroyed during discarding operation completion for all UCT EPs) */
+
     kh_foreach(&worker->discard_uct_ep_hash, uct_ep, req, {
         ucs_assert(uct_ep == req->send.discard_uct_ep.uct_ep);
 
