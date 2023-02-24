@@ -171,6 +171,14 @@ enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_LAST
 };
 
+/**
+ * UCP worker dicard uct ep state
+ */
+enum {
+    UCP_WORKER_DISCARD_UCT_EP_INIT,
+    UCP_WORKER_DISCARD_UCT_EP_FLUSHED,
+    UCP_WORKER_DISCARD_UCT_EP_DESTROYED,
+};
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
