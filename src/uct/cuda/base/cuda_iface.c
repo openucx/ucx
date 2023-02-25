@@ -287,6 +287,36 @@ uct_cuda_base_nvml_get_device_index(const char *bus_str, unsigned *index)
     return UCS_OK;
 }
 
+ucs_status_t
+uct_cuda_base_nvml_get_estimate_perf(const char *bus_str1, const char *bus_str2,
+                                     double *bw)
+{
+    ucs_status_t status;
+    unsigned index1, index2;
+    unsigned device_count;
+    double *bw_ptr;
+    size_t offset;
+
+    status = uct_cuda_base_nvml_get_device_index(bus_str1, &index1);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_base_nvml_get_device_index(bus_str2, &index2);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    UCT_NVML_FUNC(nvmlDeviceGetCount(&device_count), UCS_LOG_LEVEL_DEBUG);
+
+    offset = (sizeof(double) * device_count * index1) +
+             (sizeof(double) * index2);
+    bw_ptr = UCS_PTR_BYTE_OFFSET(uct_cuda_base_nvml_bw, offset);
+    *bw    = *bw_ptr;
+
+    return UCS_OK;
+}
+
 void uct_cuda_base_nvml_init()
 {
     unsigned device_count;
@@ -295,7 +325,6 @@ void uct_cuda_base_nvml_init()
     double *bw_ptr;
     nvmlDevice_t device_i, device_j;
 
-    UCT_NVML_FUNC(nvmlInit(), UCS_LOG_LEVEL_DEBUG);
     UCT_NVML_FUNC(nvmlDeviceGetCount(&device_count), UCS_LOG_LEVEL_DEBUG);
 
     /* Assumes that nvml detects all devices on the system */
@@ -329,7 +358,7 @@ void uct_cuda_base_nvml_init()
     }
 
 out:
-    UCT_NVML_FUNC(nvmlShutdown(), UCS_LOG_LEVEL_DEBUG);
+    return;
 }
 
 void uct_cuda_base_nvml_cleanup()
@@ -360,9 +389,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_iface_t)
 UCS_CLASS_DEFINE(uct_cuda_iface_t, uct_base_iface_t);
 
 UCS_STATIC_INIT {
+    UCT_NVML_FUNC(nvmlInit(), UCS_LOG_LEVEL_DEBUG);
     uct_cuda_base_nvml_init();
 }
 
 UCS_STATIC_CLEANUP {
     uct_cuda_base_nvml_cleanup();
+    UCT_NVML_FUNC(nvmlShutdown(), UCS_LOG_LEVEL_DEBUG);
 }
