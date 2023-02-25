@@ -151,6 +151,8 @@ typedef struct uct_cuda_iface {
     int              eventfd;
 } uct_cuda_iface_t;
 
+extern double *uct_cuda_base_nvml_bw;
+
 ucs_status_t
 uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,
