@@ -22,9 +22,6 @@ jobs:
         centos8_cuda11:
           build_container: centos8_cuda11
           artifact_name: $(POSTFIX)-centos8-mofed5-cuda11.tar.bz2
-        ubuntu16_cuda11:
-          build_container: ubuntu16_cuda11
-          artifact_name: $(POSTFIX)-ubuntu16.04-mofed5-cuda11.tar.bz2
         ubuntu18_cuda11:
           build_container: ubuntu18_cuda11
           artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda11.tar.bz2
@@ -62,6 +59,8 @@ jobs:
 
       - bash: |
           set -eEx
+
+          # Build
           ./autogen.sh
           ./contrib/configure-release --with-cuda --with-java=no
           make dist
@@ -71,11 +70,20 @@ jobs:
           echo 10 > debian/compat   # https://www.debian.org/doc/manuals/maint-guide/dother.en.htmdpl#compat
           dpkg-buildpackage -us -uc -Pcuda
           cd ..                             # Move back to the working directory
-          find . -name '*.deb'
-          VER="${POSTFIX#ucx-}"   # Remove 'ucx' prefix from the POSTFIX string
-          # Rename DEB files
+
+          # Rename DEB files          
+          VER="${POSTFIX#ucx-}"     # Remove 'ucx-' prefix from the POSTFIX string
           find . -name "ucx*.deb" -exec bash -c 'mv "$1" "${1%%_*}-'"${VER}"'.deb"' _ {} \;
+          find . -name '*.deb'      # Show new names
+
+          # Remove superfluous dependency
+          dpkg-deb -R "ucx-cuda-${VER}.deb" tmp    # Extract
+          sed -i 's/libnvidia-compute-[0-9]* | libnvidia-ml1, //g' tmp/DEBIAN/control
+          dpkg-deb -b tmp "ucx-cuda-${VER}.deb"        # Rebuild
+          dpkg-deb -I "ucx-cuda-${VER}.deb"
           dpkg-deb -I "ucx-${VER}.deb"
+
+          # Package
           tar -cjf "${AZ_ARTIFACT_NAME}" *.deb  # Package all DEBs
           tar -tjf "${AZ_ARTIFACT_NAME}"
         displayName: Build DEB package
