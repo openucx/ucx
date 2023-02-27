@@ -378,29 +378,31 @@ ucp_proto_request_pack_iov_rkeys(ucp_request_t *req, ucp_md_map_t md_map,
     ucp_mem_h *memh                    = dt_iter->type.iov.memh;
     void *p                            = rkey_buffer;
     size_t iov_count, iov_index;
-    size_t packed_count, *ppacked_count, *ppacked_rkey_size;
+    uint64_t packed_count, *ppacked_count, *ppacked_rkey_size;
     ssize_t packed_rkey_size;
     size_t total_size;
 
-    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_IOV);
-    if (md_map == 0 || dt_iter->length == 0) {
+    ucs_assertv(dt_iter->dt_class == UCP_DATATYPE_IOV,
+                "Cannot pack iov rkeys for datatype %s",
+                ucp_datatype_class_names[dt_iter->dt_class]);
+    if ((md_map == 0) || (dt_iter->length == 0)) {
         return 0;
     }
 
     /* 
      * packed IOV rkeys format:
-     * | count(32/64)| address(64)| length(32/64)| rkey size(32/64)| rkey buffer|
-     *               | address(64)| length(32/64)| rkey size(32/64)| rkey buffer|
-     *               | address(64)| length(32/64)| rkey size(32/64)| rkey buffer|
+     * | count(64)| address(64)| length(64)| rkey size(64)| rkey buffer|
+     *            | address(64)| length(64)| rkey size(64)| rkey buffer|
+     *            | address(64)| length(64)| rkey size(64)| rkey buffer|
      */
-    ppacked_count = (size_t*)p;
-    p             = UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
+    ppacked_count = (uint64_t*)p;
+    p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint64_t));
     iov_count     = ucp_datatype_iter_iov_count(dt_iter);
     packed_count  = iov_count;
     total_size    = 0;
     for (iov_index = 0; iov_index != iov_count; ++iov_index) {
         if (dt_iter->type.iov.iov[iov_index].length == 0) {
-            ucs_info("iov[%lu] block size is 0", iov_index);
+            ucs_trace_data("iov[%lu] block size is 0", iov_index);
             --packed_count;
             continue;
         }
@@ -409,36 +411,38 @@ ucp_proto_request_pack_iov_rkeys(ucp_request_t *req, ucp_md_map_t md_map,
 
         *(uint64_t*)p = (uintptr_t)dt_iter->type.iov.iov[iov_index].buffer;
         p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint64_t));
-        *(size_t*)p   = dt_iter->type.iov.iov[iov_index].length;
-        p             = UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
+        *(uint64_t*)p = dt_iter->type.iov.iov[iov_index].length;
+        p             = UCS_PTR_BYTE_OFFSET(p, sizeof(uint64_t));
 
-        ppacked_rkey_size = (size_t*)p;
-        p                 = UCS_PTR_BYTE_OFFSET(p, sizeof(size_t));
+        ppacked_rkey_size = (uint64_t*)p;
+        p                 = UCS_PTR_BYTE_OFFSET(p, sizeof(uint64_t));
         packed_rkey_size  = ucp_rkey_pack_memh(req->send.ep->worker->context,
                                                md_map, memh[iov_index],
                                                &dt_iter->mem_info,
                                                distance_dev_map, dev_distance,
                                                p);
-        ucs_debug("packed iov rkey index=%lu rkey_size=%ld address=%p size=%lu",
-                  iov_index, packed_rkey_size,
-                  (void*)dt_iter->type.iov.iov[iov_index].buffer,
-                  dt_iter->type.iov.iov[iov_index].length);
 
         if (packed_rkey_size < 0) {
             ucs_error("failed to pack remote key: %s",
                       ucs_status_string((ucs_status_t)packed_rkey_size));
             return 0;
         }
+
+        ucs_debug("packed iov rkey index=%lu rkey_size=%ld address=%p size=%lu",
+                  iov_index, packed_rkey_size,
+                  (void*)dt_iter->type.iov.iov[iov_index].buffer,
+                  dt_iter->type.iov.iov[iov_index].length);
+
         *ppacked_rkey_size = packed_rkey_size;
         p = UCS_PTR_BYTE_OFFSET(p, packed_rkey_size);
 
-        total_size += sizeof(uint64_t) + sizeof(size_t) + sizeof(size_t) +
+        total_size += sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t) +
                       packed_rkey_size;
     }
 
     if (packed_count != 0) {
         *ppacked_count = packed_count;
-        total_size    += sizeof(size_t);
+        total_size    += sizeof(uint64_t);
     }
     return total_size;
 }
