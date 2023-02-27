@@ -10,6 +10,7 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
 #include <ucs/async/eventfd.h>
+#include <src/ucs/sys/math.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
 #include <nvml.h>
