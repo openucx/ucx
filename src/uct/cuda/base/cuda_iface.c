@@ -98,10 +98,11 @@ double uct_cuda_base_nvml_get_nvlink_common_bw(nvmlDevice_t device1)
 
 unsigned uct_cuda_base_nvml_get_nvswitch_num_nvlinks(nvmlDevice_t device1)
 {
-    unsigned num_links;
+    unsigned num_links = 0;
+
+#if defined(NVML_FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT)
     nvmlFieldValue_t value;
     nvmlReturn_t nvml_err;
-
     value.fieldId = NVML_FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT;
     nvml_err = nvmlDeviceGetFieldValues(device1, 1, &value);
     if (nvml_err != NVML_SUCCESS) {
@@ -111,6 +112,7 @@ unsigned uct_cuda_base_nvml_get_nvswitch_num_nvlinks(nvmlDevice_t device1)
     num_links = ((value.nvmlReturn == NVML_SUCCESS) &&
                  (value.valueType == NVML_VALUE_TYPE_UNSIGNED_INT)) ?
                 value.value.uiVal : 0;
+#endif
 
     return num_links;
 }
