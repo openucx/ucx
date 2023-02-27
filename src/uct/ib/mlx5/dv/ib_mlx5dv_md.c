@@ -44,8 +44,6 @@ typedef struct uct_ib_mlx5_mem {
 } uct_ib_mlx5_mem_t;
 
 
-static const char uct_ib_mkey_token[] = "uct_ib_mkey_token";
-
 static ucs_status_t
 uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address, size_t length,
                     uint64_t access_flags, int dmabuf_fd, size_t dmabuf_offset,
@@ -133,6 +131,8 @@ static uint32_t uct_ib_mlx5_flush_rkey_make()
 }
 
 #if HAVE_DEVX
+
+static const char uct_ib_mkey_token[] = "uct_ib_mkey_token";
 
 typedef struct uct_ib_mlx5_dbrec_page {
     uct_ib_mlx5_devx_umem_t    mem;
