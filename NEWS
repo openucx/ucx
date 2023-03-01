@@ -11,6 +11,12 @@
 ### Features:
 ### Bugfixes:
 
+## 1.14.0 RC6 (March 1, 2023)
+### Bugfixes
+#### Build
+* Multiple fixes and improvements in generation of .deb packages
+* Dropped support for Ubuntu16
+
 ## 1.14.0 RC5 (February 20, 2023)
 ### Bugfixes
 #### Build
