@@ -48,8 +48,16 @@ Please review our ["Membership Voluntary Consensus Standard"](https://ucfconsort
 ### Release Builds
 
 Building UCX is typically a combination of running "configure" and "make".
-Execute the following commands to install the UCX system from within the
-directory at the top of the tree:
+If using a release tarball execute the following commands to install the
+UCX system from within the directory at the top of the tree:
+
+```sh
+$ ./contrib/configure-release --prefix=/where/to/install
+$ make -j8
+$ make install
+```
+
+If directly cloning the git repository use:
 
 ```sh
 $ ./autogen.sh
