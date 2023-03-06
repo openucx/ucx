@@ -2108,7 +2108,6 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
     ucp_worker_h worker = select_params->ep->worker;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
-    ucp_rsc_index_t iface_id;
     ucp_address_entry_t *ae;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -2131,9 +2130,14 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
     }
 
     /* If the local context matching at least one remote device address, it's
-       intra-node */
-    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        wiface = worker->ifaces[iface_id];
+       intra-node. Only selected lanes are compared to verify reachability. */
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        rsc_index = key->lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->attr.device_addr_len == 0) {
             continue;
         }
