@@ -11,13 +11,17 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/time/time_def.h>
 #include <limits.h>
+#include <unistd.h>
 
 BEGIN_C_DECLS
 
 #define UCS_PROFILE_STACK_MAX       64
-#define UCS_PROFILE_FILE_VERSION    2u
+#define UCS_PROFILE_FILE_VERSION    3u
 #define UCS_PROFILE_LOC_ID_UNKNOWN  -1
 #define UCS_PROFILE_LOC_ID_DISABLED 0
+
+/* Minimum backwards compatible version */
+#define UCS_PROFILE_FILE_MIN_VERSION 3u
 
 
 /**
@@ -55,22 +59,34 @@ typedef enum {
  *    < ucs_profile_record_t > * ucs_profile_thread_header_t::num_records
  *
  * ] * ucs_profile_thread_header_t::num_threads
+ * <env variables string>
  */
+
+
+/**
+ * Profile output file block/section offset and size
+*/
+typedef struct {
+    uint64_t offset;
+    uint64_t size;
+} UCS_S_PACKED ucs_profile_block_header_t;
 
 
 /**
  * Profile output file header
  */
 typedef struct ucs_profile_header {
-    uint32_t                 version;       /**< File format version */
-    char                     ucs_path[1024];/**< UCX library path*/
-    char                     cmdline[1024]; /**< Command line */
-    char                     hostname[64];  /**< Host name */
-    uint32_t                 pid;           /**< Process ID */
-    uint32_t                 mode;          /**< Bitmask of profiling modes */
-    uint32_t                 num_locations; /**< Number of locations in the file */
-    uint32_t                 num_threads;   /**< Number of threads in the file */
-    uint64_t                 one_second;    /**< How much time is one second on the sampled machine */
+    uint32_t                   version;        /**< File format version */
+    uint32_t                   feature_flags;  /**< Feature flags bitmask */
+    char                       ucs_path[1024]; /**< UCX library path*/
+    char                       cmdline[1024];  /**< Command line */
+    char                       hostname[64];   /**< Host name */
+    uint32_t                   pid;            /**< Process ID */
+    uint32_t                   mode;           /**< Bitmask of profiling modes */
+    ucs_profile_block_header_t env_vars;       /**< Size and offset of environment variables string*/
+    ucs_profile_block_header_t locations;      /**< Size and offset of locations*/
+    ucs_profile_block_header_t threads;        /**< Size and offset of threads*/
+    uint64_t one_second;                       /**< How much time is one second on the sampled machine */
 } UCS_S_PACKED ucs_profile_header_t;
 
 
@@ -173,6 +189,18 @@ void ucs_profile_record(ucs_profile_context_t *ctx, ucs_profile_type_t type,
                         const char *file, int line, const char *function,
                         volatile ucs_profile_loc_id_t *loc_id_p);
 
+
+/**
+ * Calculates number of threads in the profiled execution 
+ * given total number of profiling records, num of location and threads
+ * 
+ * @param   total_num_records   accumulated num of records from all threads
+ * @param   header              profiling header struct 
+ * 
+ * @return  number of threads in the profiled code
+ */
+unsigned ucs_profile_calc_num_threads(size_t total_num_records,
+                                      const ucs_profile_header_t *header);
 
 /**
  * Record a profiling event.
