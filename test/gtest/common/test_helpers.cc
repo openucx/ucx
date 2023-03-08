@@ -335,8 +335,9 @@ int test_time_multiplier()
 
 ucs_time_t get_deadline(double timeout_in_sec)
 {
-    return ucs_get_time() + ucs_time_from_sec(timeout_in_sec *
-                                              test_time_multiplier());
+    return ucs_get_time() +
+           ucs_time_from_sec(ucs_min(watchdog_get_timeout() * 0.75,
+                                     timeout_in_sec * test_time_multiplier()));
 }
 
 int max_tcp_connections()
