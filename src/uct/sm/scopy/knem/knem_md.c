@@ -213,7 +213,6 @@ ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->max_alloc        = 0;
     md_attr->max_reg          = ULONG_MAX;
     md_attr->reg_cost         = md->reg_cost;
-
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
