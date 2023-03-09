@@ -20,7 +20,7 @@
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
 {
     ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
-    return &ep->worker->ep_config[ep->cfg_index];
+    return &ucs_array_elem(&ep->worker->ep_config, ep->cfg_index);
 }
 
 static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,

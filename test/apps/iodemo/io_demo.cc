@@ -2093,8 +2093,7 @@ public:
         }
 
         if (!opts().src_addrs.empty()) {
-            addr_index = IoDemoRandom::rand(0U,
-                               (uint32_t)(opts().src_addrs.size() - 1));
+            addr_index = server_index % opts().src_addrs.size();
             ret = set_sockaddr(opts().src_addrs[addr_index], 0,
                                (struct sockaddr*)&src_addr);
             if (ret != true) {

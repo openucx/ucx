@@ -733,7 +733,9 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     recv_b(sender().worker(), receiver().ep(), 8, 1);
 }
 
-UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
+
+// Cannot disconnect only one side when using self (using the same ep)
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, disconnect_nb_onesided, is_self()) {
     sender().connect(&receiver(), get_ep_params());
 
     std::vector<void*> sreqs;
@@ -1657,7 +1659,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric_ib, different_pci_bw_connect,
 {
     /* Enable cross-dev connection */
     /* coverity[tainted_string_argument] */
-    ucs::scoped_setenv path_mtu_env("UCX_RC_PATH_MTU", "1024");
+    ucs::scoped_setenv path_mtu_env("UCX_IB_PATH_MTU", "1024");
 
     {
         std::string config_str = pci_bw_config(20, 20);

@@ -26,7 +26,7 @@ typedef struct uct_cuda_copy_queue_desc {
 
 
 typedef struct uct_cuda_copy_iface {
-    uct_base_iface_t            super;
+    uct_cuda_iface_t            super;
     /* used to store uuid and check iface reachability */
     uct_cuda_copy_iface_addr_t  id;
     /* pool of cuda events to check completion of memcpy operations */
@@ -35,6 +35,8 @@ typedef struct uct_cuda_copy_iface {
     ucs_queue_head_t            active_queue;
     /* stream used to issue short operations */
     cudaStream_t                short_stream;
+    /* fd to get event notifications */
+    int                         eventfd;
     /* stream used to issue short operations */
     CUcontext                   cuda_context;
     /* array of queue descriptors for each src/dst memory type combination */

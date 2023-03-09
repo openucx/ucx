@@ -222,7 +222,8 @@ private:
     static void set_ucp_config(ucp_config_t *config, const std::string& tls);
     static bool check_tls(const std::string& tls);
     ucs_status_t request_process(void *req, int worker_index, bool wait,
-                                 bool wakeup = false);
+                                 bool wakeup = false,
+                                 const std::vector<entity*> &entities = {});
 
 protected:
     using variant_vec_t       = std::vector<ucp_test_variant>;
@@ -241,7 +242,8 @@ protected:
     unsigned progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
-    void flush_worker(const entity &e, int worker_index = 0);
+    void flush_worker(const entity &e, int worker_index = 0,
+                      const std::vector<entity*> &entities = {});
     void flush_workers();
     void disconnect(entity& entity);
     void check_events(const std::vector<entity*> &entities, bool wakeup,
@@ -249,7 +251,9 @@ protected:
     ucs_status_t
     request_progress(void *req, const std::vector<entity*> &entities,
                      double timeout = 10.0, int worker_index = 0);
-    ucs_status_t request_wait(void *req, int worker_index = 0, bool wakeup = false);
+    ucs_status_t request_wait(void *req,
+                              const std::vector<entity*> &entities = {},
+                              int worker_index = 0, bool wakeup = false);
     ucs_status_t requests_wait(std::vector<void*> &reqs, int worker_index = 0);
     ucs_status_t requests_wait(const std::initializer_list<void*> reqs_list,
                                int worker_index = 0);

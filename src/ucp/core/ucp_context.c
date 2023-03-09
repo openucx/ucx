@@ -1302,9 +1302,8 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
         return status;
     }
 
-    tl_md->pack_flags_mask = (tl_md->attr.flags & UCT_MD_FLAG_INVALIDATE) ?
-                                     UCT_MD_MKEY_PACK_FLAG_INVALIDATE :
-                                     0;
+    tl_md->pack_flags_mask = (tl_md->attr.flags & UCT_MD_FLAG_INVALIDATE_RMA) ?
+                             UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA : 0;
     return UCS_OK;
 }
 
@@ -1676,7 +1675,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     max_mds = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
-        memset(&context->tl_cmpts[i].attr, 0, sizeof(context->tl_cmpts[i].attr));
         context->tl_cmpts[i].cmpt = uct_components[i];
         context->tl_cmpts[i].attr.field_mask =
                         UCT_COMPONENT_ATTR_FIELD_NAME              |

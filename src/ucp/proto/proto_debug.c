@@ -322,31 +322,31 @@ void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
 static int
 ucp_proto_select_is_fetch_op(const ucp_proto_select_param_t *select_param)
 {
-    return UCS_BIT(ucp_proto_select_op_id(select_param)) &
-           (UCS_BIT(UCP_OP_ID_GET) | UCS_BIT(UCP_OP_ID_RNDV_RECV) |
-            UCS_BIT(UCP_OP_ID_AMO_FETCH));
+    return ucp_proto_select_check_op(select_param,
+                                     UCS_BIT(UCP_OP_ID_GET) |
+                                     UCS_BIT(UCP_OP_ID_RNDV_RECV) |
+                                     UCS_BIT(UCP_OP_ID_AMO_FETCH));
 }
 
 static int
 ucp_proto_select_is_rndv_op(const ucp_proto_select_param_t *select_param)
 {
-    return UCS_BIT(ucp_proto_select_op_id(select_param)) &
-           UCP_PROTO_AM_OP_ID_MASK;
+    return ucp_proto_select_check_op(select_param, UCP_PROTO_RNDV_OP_ID_MASK);
 }
 
 static int
 ucp_proto_select_is_am_op(const ucp_proto_select_param_t *select_param)
 {
-    return UCS_BIT(ucp_proto_select_op_id(select_param)) &
-           UCP_PROTO_RNDV_OP_ID_MASK;
+    return ucp_proto_select_check_op(select_param, UCP_PROTO_AM_OP_ID_MASK);
 }
 
 static int
 ucp_proto_select_is_atomic_op(const ucp_proto_select_param_t *select_param)
 {
-    return UCS_BIT(ucp_proto_select_op_id(select_param)) &
-           (UCS_BIT(UCP_OP_ID_AMO_POST) | UCS_BIT(UCP_OP_ID_AMO_FETCH) |
-            UCS_BIT(UCP_OP_ID_AMO_CSWAP));
+    return ucp_proto_select_check_op(select_param,
+                                     UCS_BIT(UCP_OP_ID_AMO_POST) |
+                                     UCS_BIT(UCP_OP_ID_AMO_FETCH) |
+                                     UCS_BIT(UCP_OP_ID_AMO_CSWAP));
 }
 static void ucp_proto_debug_mem_info_str(ucs_string_buffer_t *strb,
                                          ucs_memory_type_t mem_type,
@@ -381,15 +381,14 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
         [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)] = "egr",
         [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)]  = "rndv"
     };
-    unsigned op_flags                    = select_param->op_id_flags &
-                                           (UCP_PROTO_SELECT_OP_FLAGS_BASE - 1);
-    uint32_t op_attr_mask;
+    uint32_t op_attr_mask, op_flags;
 
     ucs_string_buffer_appendf(
             strb, "%s", operation_names[ucp_proto_select_op_id(select_param)]);
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
                    op_attr_bits;
+    op_flags     = ucp_proto_select_op_flags(select_param);
 
     if (op_attr_mask || op_flags) {
         ucs_string_buffer_appendf(strb, "(");

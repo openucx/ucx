@@ -14,6 +14,7 @@
 #include "address.h"
 
 #include <ucs/algorithm/qsort_r.h>
+#include <ucs/datastruct/array.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/sock.h>
 #include <ucp/core/ucp_ep.inl>
@@ -97,6 +98,8 @@ typedef struct {
     unsigned                  ucp_ep_init_flags;         /* Endpoint init extra flags */
     ucp_tl_bitmap_t           tl_bitmap;                 /* TL bitmap of selected resources */
 } ucp_wireup_select_context_t;
+
+UCS_ARRAY_DEFINE_INLINE(select_info, unsigned, ucp_wireup_select_info_t);
 
 static const char *ucp_wireup_cmpt_flags[] = {
     [ucs_ilog2(UCT_COMPONENT_FLAG_RKEY_PTR)]     = "obtain remote memory pointer",
@@ -491,7 +494,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         } else if (ucp_wireup_connect_p2p(worker, rsc_index, has_cm)) {
             /* We should not need MD invalidate support for p2p lanes, since
              * both sides close the connection in case of error */
-            local_md_flags &= ~UCT_MD_FLAG_INVALIDATE;
+            local_md_flags &= ~(UCT_MD_FLAG_INVALIDATE     |
+                                UCT_MD_FLAG_INVALIDATE_RMA |
+                                UCT_MD_FLAG_INVALIDATE_AMO);
         }
 
         /* Check that local md and interface satisfy the criteria */
@@ -1403,6 +1408,70 @@ ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
            (ucs_popcount(md_map) < UCP_MAX_OP_MDS);
 }
 
+static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
+                                     const ucp_wireup_select_info_t *sinfo,
+                                     const ucp_address_entry_t *address)
+{
+    ucp_context_h context = worker->context;
+    const uct_iface_attr_t *iface_attr;
+    double bw_local, bw_remote;
+
+    iface_attr = ucp_worker_iface_get_attr(worker, sinfo->rsc_index);
+    bw_local   = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+    bw_remote  = address[sinfo->addr_index].iface_attr.bandwidth;
+
+    return ucs_min(bw_local, bw_remote);
+}
+
+static unsigned
+ucp_wireup_add_fast_lanes(ucp_worker_h worker,
+                          const ucp_wireup_select_params_t *select_params,
+                          const ucs_array_t(select_info) *sinfo_array,
+                          ucp_lane_type_t lane_type,
+                          ucp_wireup_select_context_t *select_ctx)
+{
+    ucp_lane_index_t num_lanes = 0;
+    double max_bw              = 0;
+    ucp_context_h context      = worker->context;
+    const double max_ratio     = 1. / context->config.ext.multi_lane_max_ratio;
+    const ucp_address_entry_t *address_list;
+    ucs_status_t status;
+    double lane_bw;
+    const ucp_wireup_select_info_t *sinfo;
+
+    address_list = select_params->address->address_list;
+
+    /* Iterate over all elements and calculate max BW */
+    ucs_array_for_each(sinfo, sinfo_array) {
+        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, address_list);
+        max_bw  = ucs_max(lane_bw, max_bw);
+    }
+
+    /* Compare each element to max BW and filter only fast lanes */
+    ucs_array_for_each(sinfo, sinfo_array) {
+        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, address_list);
+
+        if (lane_bw < (max_bw * max_ratio)) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      " : bandwidth %.2f lower than %.2f x %.2f, dropping lane",
+                      UCT_TL_RESOURCE_DESC_ARG(
+                              &context->tl_rscs[sinfo->rsc_index].tl_rsc),
+                      lane_bw, max_ratio, max_bw);
+            continue;
+        }
+
+        status = ucp_wireup_add_lane(select_params, sinfo, lane_type,
+                                     num_lanes == 0, select_ctx);
+        if (status != UCS_OK) {
+            break;
+        }
+
+        num_lanes++;
+    }
+
+    return num_lanes;
+}
+
 static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_bw_info_t *bw_info,
@@ -1411,21 +1480,19 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
 {
     ucp_ep_h ep                          = select_params->ep;
     ucp_context_h context                = ep->worker->context;
-    ucp_wireup_select_info_t sinfo       = {0};
     ucp_wireup_dev_usage_count dev_count = {};
+    UCS_ARRAY_DEFINE_ONSTACK(sinfo_array, select_info, UCP_MAX_LANES);
     const uct_iface_attr_t *iface_attr;
     const ucp_address_entry_t *ae;
     ucs_status_t status;
-    unsigned num_lanes;
     uint64_t local_dev_bitmap;
     uint64_t remote_dev_bitmap;
     ucp_rsc_index_t dev_index;
     ucp_md_map_t md_map;
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
-    int show_error;
+    ucp_wireup_select_info_t *sinfo;
 
-    num_lanes             = 0;
     md_map                = bw_info->md_map;
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
@@ -1434,30 +1501,25 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     /* lookup for requested number of lanes or limit of MD map
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
-    while ((num_lanes < bw_info->max_lanes) &&
+    while ((ucs_array_length(&sinfo_array) < bw_info->max_lanes) &&
            ucp_wireup_is_md_map_count_valid(context, md_map)) {
         if (excl_lane == UCP_NULL_LANE) {
+            sinfo  = ucs_array_append_fixed(select_info, &sinfo_array);
             status = ucp_wireup_select_transport(select_ctx, select_params,
                                                  &bw_info->criteria, tl_bitmap,
                                                  UINT64_MAX, local_dev_bitmap,
-                                                 remote_dev_bitmap, 0, &sinfo);
+                                                 remote_dev_bitmap, 0, sinfo);
             if (status != UCS_OK) {
+                ucs_array_pop_back(&sinfo_array);
                 break;
             }
 
-            rsc_index        = sinfo.rsc_index;
-            addr_index       = sinfo.addr_index;
-            dev_index        = context->tl_rscs[rsc_index].dev_index;
-            sinfo.path_index = dev_count.local[dev_index];
-            show_error       = (num_lanes == 0);
-            status           = ucp_wireup_add_lane(select_params, &sinfo,
-                                                   bw_info->criteria.lane_type,
-                                                   show_error, select_ctx);
-            if (status != UCS_OK) {
-                break;
-            }
+            rsc_index         = sinfo->rsc_index;
+            addr_index        = sinfo->addr_index;
+            dev_index         = context->tl_rscs[rsc_index].dev_index;
+            sinfo->path_index = dev_count.local[dev_index];
 
-            num_lanes++;
+
         } else {
             /* disqualify/count lane_desc_idx */
             addr_index      = select_ctx->lane_descs[excl_lane].addr_index;
@@ -1487,7 +1549,8 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     bw_info->criteria.arg = NULL; /* To suppress compiler warning */
 
-    return num_lanes;
+    return ucp_wireup_add_fast_lanes(ep->worker, select_params, &sinfo_array,
+                                     bw_info->criteria.lane_type, select_ctx);
 }
 
 static ucs_status_t
@@ -1686,7 +1749,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     /* If error handling is requested we require memory invalidation
      * support to provide correct data integrity in case of error */
     if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
-        bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE;
+        bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE_RMA;
     }
 
     /* RNDV protocol can't mix different schemes, i.e. wireup has to
@@ -2045,7 +2108,6 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
     ucp_worker_h worker = select_params->ep->worker;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
-    ucp_rsc_index_t iface_id;
     ucp_address_entry_t *ae;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -2068,9 +2130,14 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
     }
 
     /* If the local context matching at least one remote device address, it's
-       intra-node */
-    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        wiface = worker->ifaces[iface_id];
+       intra-node. Only selected lanes are compared to verify reachability. */
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        rsc_index = key->lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->attr.device_addr_len == 0) {
             continue;
         }

@@ -35,11 +35,8 @@
 
 #define UCT_IB_MD_MEM_DEREG_CHECK_PARAMS(_ib_md, _params) \
     do { \
-        ucs_status_t _status; \
-        \
-        UCT_MD_MEM_DEREG_CHECK_PARAMS( \
-                _params, (_ib_md)->cap_flags & UCT_MD_FLAG_INVALIDATE); \
-        _status = uct_ib_md_mem_dereg_params_invalidate_check(_params); \
+        ucs_status_t _status = \
+                uct_ib_md_mem_dereg_params_invalidate_check(_ib_md, _params); \
         if (_status != UCS_OK) { \
             return _status; \
         } \
@@ -759,6 +756,11 @@ uct_ib_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
         memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
     }
 
+    if (params->flags & (UCT_MD_MEM_ACCESS_REMOTE_GET |
+                         UCT_MD_MEM_ACCESS_REMOTE_PUT)) {
+        memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_RMA;
+    }
+
     status = uct_ib_md_reg_mr(md, address, length, access_flags,
                               params->dmabuf_fd, params->dmabuf_offset, silent,
                               memh, UCT_IB_MR_DEFAULT);
@@ -1003,6 +1005,10 @@ uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
             ucs_trace("created atomic key 0x%x for 0x%x", memh->atomic_rkey,
                       memh->lkey);
         } else if (status == UCS_ERR_UNSUPPORTED) {
+            if (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO) {
+                return UCS_ERR_IO_ERROR;
+            }
+
             /* ignore for atomic MR */
         } else {
             return status;
@@ -1016,7 +1022,8 @@ uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     }
 
     if (flags & UCT_MD_MKEY_PACK_FLAG_EXPORT) {
-        if (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE) {
+        if (flags & (UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
+                     UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO)) {
             ucs_error("packing a memory key which should support invalidation"
                       "and exporting is unsupported");
             return UCS_ERR_UNSUPPORTED;
@@ -1030,7 +1037,7 @@ uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         }
 
         mkey = memh->exported_lkey;
-    } else if ((flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE) &&
+    } else if ((flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) &&
                ((atomic_rkey != UCT_IB_INVALID_MKEY) ||
                 !(memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC))) {
         /**
@@ -1729,7 +1736,6 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
         if (status == UCS_OK) {
             ucs_debug("%s: md open by '%s' is successful", md_name,
                       uct_ib_ops[i]->name);
-            md->ops = uct_ib_ops[i]->ops;
             break;
         } else if (status != UCS_ERR_UNSUPPORTED) {
             goto out_free_dev_list;
