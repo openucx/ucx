@@ -280,6 +280,7 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->detect_mem_types          = 0;
     md_attr->dmabuf_mem_types          = 0;
     md_attr->reg_mem_types             = md->reg_mem_types;
+    md_attr->reg_nonblock_mem_types    = md->reg_nonblock_mem_types;
     md_attr->cache_mem_types           = UCS_MASK(UCS_MEMORY_TYPE_LAST);
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost                  = md->reg_cost;
