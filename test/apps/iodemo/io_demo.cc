@@ -85,6 +85,7 @@ typedef struct {
     bool                     use_am;
     bool                     debug_timeout;
     bool                     use_epoll;
+    uint64_t                 client_id;
     ucs_memory_type_t        memory_type;
     unsigned                 progress_count;
     std::vector<const char*> src_addrs;
@@ -875,7 +876,7 @@ protected:
 
     P2pDemoCommon(const options_t &test_opts, uint32_t iov_buf_filler) :
         UcxContext(test_opts.iomsg_size, test_opts.connect_timeout,
-                   test_opts.use_am, test_opts.use_epoll),
+                   test_opts.use_am, test_opts.use_epoll, test_opts.client_id),
         _test_opts(test_opts),
         _io_msg_pool(test_opts.iomsg_size, "io messages"),
         _send_callback_pool(0, "send callbacks"),
@@ -2683,6 +2684,8 @@ static int parse_window_size(const char *optarg, long &window_size,
 
 static int parse_args(int argc, char **argv, options_t *test_opts)
 {
+    static const char *optstring =
+            "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADC:HP:m:L:I:zV";
     char *str;
     bool found;
     int c;
@@ -2708,13 +2711,13 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->use_am                = false;
     test_opts->debug_timeout         = false;
     test_opts->use_epoll             = false;
+    test_opts->client_id             = UcxContext::CLIENT_ID_UNDEFINED;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
     test_opts->progress_count        = 1;
     test_opts->prereg                = false;
     test_opts->per_conn_info         = false;
 
-    while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:zV")) != -1) {
+    while ((c = getopt(argc, argv, optstring)) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2838,6 +2841,14 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'e':
             test_opts->use_epoll = true;
             break;
+        case 'C':
+            test_opts->client_id = atoi(optarg);
+            if (test_opts->client_id == UcxContext::CLIENT_ID_UNDEFINED) {
+                std::cout << "Invalid client id '" << optarg << "'"
+                          << std::endl;
+                return -1;
+            }
+            break;
         case 'H':
             UcxLog::use_human_time = true;
             break;
@@ -2898,6 +2909,8 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -v                          Set verbose mode" << std::endl;
             std::cout << "  -q                          Enable data integrity and transaction check" << std::endl;
             std::cout << "  -A                          Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
+            std::cout << "  -C <client-id>              Send client id during connection establishment, "
+                      << "must be != " << UcxContext::CLIENT_ID_UNDEFINED << std::endl;
             std::cout << "  -D                          Enable debugging mode for IO operation timeouts" << std::endl;
             std::cout << "  -H                          Use human-readable timestamps" << std::endl;
             std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
