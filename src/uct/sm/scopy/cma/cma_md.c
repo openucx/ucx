@@ -206,7 +206,9 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
     cma_md->super.ops       = &md_ops;
     cma_md->super.component = &uct_cma_component;
     cma_md->extra_caps      = (md_config->mem_invalidate == UCS_YES) ?
-                              UCT_MD_FLAG_INVALIDATE : 0ul;
+                              (UCT_MD_FLAG_INVALIDATE     |
+                               UCT_MD_FLAG_INVALIDATE_RMA |
+                               UCT_MD_FLAG_INVALIDATE_AMO) : 0ul;
     *md_p                   = &cma_md->super;
 
     return UCS_OK;
