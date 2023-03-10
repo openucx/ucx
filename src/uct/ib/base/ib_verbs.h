@@ -67,12 +67,6 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #endif
 
 
-#if HAVE_ODP_IMPLICIT
-#  define UCT_IB_HAVE_ODP_IMPLICIT(_attr)           ((_attr)->odp_caps.general_caps & IBV_ODP_SUPPORT_IMPLICIT)
-#else
-#  define UCT_IB_HAVE_ODP_IMPLICIT(_attr)           0
-#endif
-
 #if !HAVE_DECL_IBV_ACCESS_RELAXED_ORDERING
 #  define IBV_ACCESS_RELAXED_ORDERING               0
 #endif

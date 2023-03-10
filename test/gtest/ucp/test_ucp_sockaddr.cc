@@ -3061,8 +3061,6 @@ protected:
 
     test_ucp_sockaddr_protocols_err_sender() {
         configure_peer_failure_settings();
-        m_env.push_back(new ucs::scoped_setenv("UCX_IB_REG_METHODS",
-                                               "rcache,odp,direct"));
     }
 
     void entity_disconnect(entity &e)

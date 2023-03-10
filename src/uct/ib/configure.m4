@@ -222,18 +222,6 @@ AS_IF([test "x$with_ib" = "xyes"],
        AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps],
                         [], [], [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_DECLS(IBV_ACCESS_ON_DEMAND, [with_odp=yes], [],
-                      [[#include <infiniband/verbs.h>]])
-
-       AS_IF([test "x$with_odp" = "xyes" ], [
-           AC_DEFINE([HAVE_ODP], 1, [ODP support])
-
-           AC_CHECK_DECLS(IBV_ODP_SUPPORT_IMPLICIT, [with_odp_i=yes], [],
-                          [[#include <infiniband/verbs.h>]])
-
-           AS_IF([test "x$with_odp_i" = "xyes" ], [
-               AC_DEFINE([HAVE_ODP_IMPLICIT], 1, [Implicit ODP support])])])
-
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
                        IBV_QPF_GRH_REQUIRED],
                       [], [], [[#include <infiniband/verbs.h>]])
