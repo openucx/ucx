@@ -175,8 +175,12 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
         *base_size = info.sizeInBytes;
     }
     if (dev_type != NULL) {
-        status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE,
-                                    dev_type);
+        if (info.type == HSA_EXT_POINTER_TYPE_UNKNOWN) {
+            *dev_type = HSA_DEVICE_TYPE_CPU;
+        } else {
+            status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE,
+                                        dev_type);
+        }
     }
 
     return status;
