@@ -80,19 +80,20 @@ static int uct_cuda_copy_md_is_dmabuf_supported()
 static ucs_status_t
 uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->dmabuf_mem_types = 0;
+    md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->reg_nonblock_mem_types = 0;
+    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->alloc_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->detect_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->dmabuf_mem_types       = 0;
     if (uct_cuda_copy_md_is_dmabuf_supported()) {
         md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     }

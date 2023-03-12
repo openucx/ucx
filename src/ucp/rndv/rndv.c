@@ -1621,8 +1621,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     ucp_ep_rndv_zcopy_config_t *put_zcopy;
     ucs_memory_type_t src_mem_type;
 
-    UCS_ASYNC_BLOCK(&worker->async);
-
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_receive", 0);
 
     /* if receiving a message on an already closed endpoint, stop processing */
@@ -1659,7 +1657,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
                               UCP_AM_ID_RNDV_ATS, "send_ats");
         ucp_request_recv_generic_dt_finish(rreq);
         ucp_rndv_zcopy_recv_req_complete(rreq, UCS_ERR_MESSAGE_TRUNCATED);
-        goto out;
+        return;
     }
 
     /* if the receive side is not connected yet then the RTS was received on a stub ep */
@@ -1670,7 +1668,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     if (ucp_rndv_is_rkey_ptr(rndv_rts_hdr, rkey_buf, ep, rreq->recv.mem_type,
                              rndv_mode)) {
         ucp_rndv_do_rkey_ptr(rndv_req, rreq, rndv_rts_hdr, rkey_buf);
-        goto out;
+        return;
     }
 
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
@@ -1683,7 +1681,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             status = ucp_rndv_req_send_rma_get(rndv_req, rreq, rndv_rts_hdr,
                                                rkey_buf);
             if (status == UCS_OK) {
-                goto out;
+                return;
             }
 
             /* fallback to non get zcopy protocol */
@@ -1705,7 +1703,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
                                                 is_get_zcopy_failed)) {
                 /* send FRAG RTR for sender to PUT the fragment. */
                 ucp_rndv_send_frag_rtr(worker, rndv_req, rreq, rndv_rts_hdr);
-                goto out;
+                return;
             } else if (is_get_zcopy_supported) {
                 ucs_assert(is_get_zcopy_failed);
 
@@ -1714,7 +1712,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
                         worker, rndv_req, rreq, rndv_rts_hdr->sreq.req_id,
                         rkey_buf, rndv_rts_hdr->address, rndv_rts_hdr->size, 0);
                 if (status == UCS_OK) {
-                    goto out;
+                    return;
                 }
             }
         }
@@ -1743,14 +1741,10 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
     ucp_rndv_req_send_rtr(rndv_req, rreq, rndv_rts_hdr->sreq.req_id,
                           rndv_rts_hdr->size, 0ul, rndv_req->send.rndv.mdesc);
-
-out:
-    UCS_ASYNC_UNBLOCK(&worker->async);
     return;
 
 err:
     ucp_rndv_recv_req_complete(rreq, status);
-    goto out;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
