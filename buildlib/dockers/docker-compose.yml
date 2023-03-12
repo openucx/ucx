@@ -1,5 +1,8 @@
 version: "3.4"
 
+# Find driver version based on CUDA version, OS and CPU arch (515 in this case):
+# https://developer.nvidia.com/cuda-11-7-0-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=22.04&target_type=runfile_local
+
 services:
   centos7-mofed5-cuda11:
     image: centos7-mofed5-cuda11:2
@@ -34,16 +37,6 @@ services:
         MOFED_OS: rhel8.2
         CUDA_VERSION: 11.4.0
         OS_VERSION: 8
-  ubuntu16.04-mofed5-cuda11:
-    image: ubuntu16.04-mofed5-cuda11:3
-    build:
-      context: .
-      network: host
-      dockerfile: ubuntu-release.Dockerfile
-      args:
-        MOFED_VERSION: 5.0-1.0.0.0
-        UBUNTU_VERSION: 16.04
-        CUDA_VERSION: 11.2.0
   ubuntu18.04-mofed5-cuda11:
     image: ubuntu18.04-mofed5-cuda11:3
     build:
@@ -54,6 +47,7 @@ services:
         MOFED_VERSION: 5.0-1.0.0.0
         UBUNTU_VERSION: 18.04
         CUDA_VERSION: 11.4.0
+        NV_DRIVER_VERSION: 470
   ubuntu20.04-mofed5-cuda11:
     image: ubuntu20.04-mofed5-cuda11:3
     build:
@@ -64,6 +58,7 @@ services:
         MOFED_VERSION: 5.0-1.0.0.0
         UBUNTU_VERSION: 20.04
         CUDA_VERSION: 11.4.0
+        NV_DRIVER_VERSION: 470
   ubuntu22.04-mofed5-cuda11:
     image: ubuntu22.04-mofed5-cuda11:3
     build:
@@ -74,3 +69,4 @@ services:
         MOFED_VERSION: 5.4-3.6.8.1
         UBUNTU_VERSION: 22.04
         CUDA_VERSION: 11.7.0
+        NV_DRIVER_VERSION: 515

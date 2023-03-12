@@ -41,7 +41,7 @@ Package: ucx-gdrcopy
 Section: libs
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Architecture: any
-Build-Profiles: <cuda>
+Build-Profiles: <gdrcopy>
 Description: Unified Communication X - gdrcopy support
  UCX is a communication library implementing high-performance messaging.
  .
