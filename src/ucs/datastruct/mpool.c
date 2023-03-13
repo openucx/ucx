@@ -287,11 +287,7 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
         if (data->ops->obj_init != NULL) {
             data->ops->obj_init(mp, elem + 1, chunk);
         }
-
-        ucs_mpool_add_to_freelist(mp, elem, 0);
-        if (data->tail == NULL) {
-            data->tail = elem;
-        }
+        ucs_mpool_add_to_freelist(mp, elem);
     }
 
     chunk->next  = data->chunks;
