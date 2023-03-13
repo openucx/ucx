@@ -245,12 +245,6 @@ typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
 typedef void (*uct_ib_iface_destroy_cq_func_t)(uct_ib_iface_t *iface,
                                                uct_ib_dir_t dir);
 
-typedef ucs_status_t (*uct_ib_iface_arm_cq_func_t)(uct_ib_iface_t *iface,
-                                                   uct_ib_dir_t dir,
-                                                   int solicited_only);
-
-typedef ucs_status_t (*uct_ib_iface_pre_arm_func_t)(uct_ib_iface_t *iface);
-
 typedef void (*uct_ib_iface_event_cq_func_t)(uct_ib_iface_t *iface,
                                              uct_ib_dir_t dir);
 
