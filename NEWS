@@ -11,33 +11,7 @@
 ### Features:
 ### Bugfixes:
 
-## 1.14.0 RC6 (March 1, 2023)
-### Bugfixes
-#### Build
-* Multiple fixes and improvements in generation of .deb packages
-* Dropped support for Ubuntu16
-
-## 1.14.0 RC5 (February 20, 2023)
-### Bugfixes
-#### Build
-* Added publishing cuda .deb packages
-
-## 1.14.0 RC4 (February 14, 2023)
-### Bugfixes
-#### Build
-* Fixed UCX cuda support in .deb packages
-
-## 1.14.0 RC3 (February 10, 2023)
-### Bugfixes
-#### Build
-* Fixed generation of .deb packages
-
-## 1.14.0 RC2 (February 2, 2023)
-### Bugfixes
-#### GPU (CUDA, ROCM)
-* Updated cuda_copy transport to use event fd instead of async callback
-
-## 1.14.0 RC1 (January 25, 2023)
+## 1.14.0 (March 13, 2023)
 ### Features:
 #### Core
 #### UCP
@@ -133,6 +107,7 @@
 #### UCM
 * Fixed segfault in malloc when compiled with -flto
 #### GPU (CUDA, ROCM)
+* Updated cuda_copy transport to use event fd instead of async callback
 * Fixed ROCM IPC transport (use remote agent if available)
 * Fixed clang compilation errors in CUDA copy transport
 * Fixed ROCM memtype detection
@@ -148,6 +123,7 @@
 * Build Debian package with multi-thread support
 * Fixed configure warning by using POSIX compliant sh syntax
 * Multiple fixes for Debian package build
+* Dropped support for Ubuntu16
 
 ## 1.13.1 (September 7, 2022)
 #### Bugfixes
