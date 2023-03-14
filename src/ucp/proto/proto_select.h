@@ -179,13 +179,12 @@ ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
 void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short);
 
 
-void
-ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_select,
-                            ucp_worker_cfg_index_t ep_cfg_index,
-                            ucp_worker_cfg_index_t rkey_cfg_index,
-                            ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                            unsigned proto_flags,
-                            ucp_proto_select_short_t *proto_short);
+void ucp_proto_select_short_init(ucp_worker_h worker,
+                                 ucp_proto_select_t *proto_select,
+                                 ucp_worker_cfg_index_t ep_cfg_index,
+                                 ucp_worker_cfg_index_t rkey_cfg_index,
+                                 ucp_operation_id_t op_id, unsigned proto_flags,
+                                 ucp_proto_select_short_t *proto_short);
 
 
 int ucp_proto_select_get_valid_range(
