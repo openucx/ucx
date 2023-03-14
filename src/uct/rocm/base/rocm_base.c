@@ -9,10 +9,10 @@
 
 #include "rocm_base.h"
 
+#include <ucs/sys/string.h>
 #include <ucs/sys/module.h>
 
 #include <pthread.h>
-
 
 #define MAX_AGENTS 63
 static struct agents {
@@ -22,7 +22,7 @@ static struct agents {
     hsa_agent_t gpu_agents[MAX_AGENTS];
 } uct_rocm_base_agents;
 
-static int uct_rocm_base_last_device_agent_used;
+static int uct_rocm_base_last_device_agent_used = -1;
 
 int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents)
 {
@@ -30,28 +30,100 @@ int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents)
     return uct_rocm_base_agents.num_gpu;
 }
 
+static ucs_status_t
+uct_rocm_base_get_sys_dev(hsa_agent_t agent, ucs_sys_device_t *sys_dev_p)
+{
+    hsa_status_t status;
+    ucs_sys_bus_id_t bus_id;
+    uint32_t bdfid;
+    uint32_t domainid;
+
+    status = hsa_agent_get_info(agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_BDFID,
+                                &bdfid);
+    if (status != HSA_STATUS_SUCCESS) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+    bus_id.bus  = (bdfid & (0xFF << 8)) >> 8;
+    bus_id.slot = (bdfid & (0x1F << 3)) >> 3;
+
+    status = hsa_agent_get_info(agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_DOMAIN,
+                                &domainid);
+    if (status != HSA_STATUS_SUCCESS) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+    bus_id.domain = domainid;
+
+    /* function is always set to 0 */
+    bus_id.function = 0;
+
+    return ucs_topo_find_device_by_bus_id(&bus_id, sys_dev_p);
+}
+
+static void
+uct_rocm_base_get_initial_device(ucs_sys_device_t *sys_dev_p)
+{
+    ucs_sys_device_t sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    int last_agent = uct_rocm_base_last_device_agent_used;
+    char* env_value;
+    int device;
+
+    if (uct_rocm_base_agents.num_gpu == 1) {
+        uct_rocm_base_get_sys_dev(uct_rocm_base_agents.gpu_agents[0],
+                                  &sys_dev);
+    } else if (uct_rocm_base_last_device_agent_used != -1) {
+        /* there was already a memory pointer identified as ROCm memory
+           which allowed us to identify the GPU that is being used by
+           this process */
+        uct_rocm_base_get_sys_dev(uct_rocm_base_agents.agents[last_agent],
+                                  &sys_dev);
+    } else {
+        /* check HIP_VISIBLE_DEVICES. Only use it if the environment variable
+           is restricting the view to a single device. */
+        env_value = getenv("HIP_VISIBLE_DEVICES");
+        if ((env_value != NULL) && (!strchr(env_value, ','))) {
+            device = atoi(env_value);
+            uct_rocm_base_get_sys_dev(uct_rocm_base_agents.gpu_agents[device],
+                                      &sys_dev);
+        }
+    }
+
+    *sys_dev_p = sys_dev;
+}
+
 static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
 {
+    const unsigned sys_device_priority = 10;
     hsa_device_type_t device_type;
+    ucs_sys_device_t sys_dev;
+    char device_name[10];
+    ucs_status_t status;
 
     ucs_assert(uct_rocm_base_agents.num < MAX_AGENTS);
 
     hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
     if (device_type == HSA_DEVICE_TYPE_CPU) {
-        ucs_trace("%d found cpu agent %lu", getpid(), agent.handle);
+        ucs_trace("found cpu agent %lu", agent.handle);
     }
     else if (device_type == HSA_DEVICE_TYPE_GPU) {
-        uint32_t bdfid = 0;
-        uct_rocm_base_last_device_agent_used = uct_rocm_base_agents.num;
-        uct_rocm_base_agents.gpu_agents[uct_rocm_base_agents.num_gpu++] = agent;
-        hsa_agent_get_info(agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_BDFID, &bdfid);
-        ucs_trace("%d found gpu agent %lu bdfid %x", getpid(), agent.handle, bdfid);
+        uct_rocm_base_agents.gpu_agents[uct_rocm_base_agents.num_gpu] = agent;
+
+        status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
+        if (status == UCS_OK) {
+            ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
+                              uct_rocm_base_agents.num_gpu);
+            ucs_topo_sys_device_set_name(sys_dev, device_name,
+                                         sys_device_priority);
+        }
+        ucs_trace("found gpu agent %lu", agent.handle);
+        uct_rocm_base_agents.num_gpu++;
     }
     else {
-        ucs_trace("%d found unknown agent %lu", getpid(), agent.handle);
+        ucs_trace("found unknown agent %lu", agent.handle);
     }
 
-    uct_rocm_base_agents.agents[uct_rocm_base_agents.num++] = agent;
+    uct_rocm_base_agents.agents[uct_rocm_base_agents.num] = agent;
+    uct_rocm_base_agents.num++;
+
     return HSA_STATUS_SUCCESS;
 }
 
@@ -111,9 +183,12 @@ ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
                                          uct_tl_device_resource_t **tl_devices_p,
                                          unsigned *num_tl_devices_p)
 {
+    ucs_sys_device_t sys_dev;
+
+    uct_rocm_base_get_initial_device(&sys_dev);
     return uct_single_device_resource(md, md->component->name,
                                       UCT_DEVICE_TYPE_ACC,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN, tl_devices_p,
+                                      sys_dev, tl_devices_p,
                                       num_tl_devices_p);
 }
 
@@ -191,27 +266,22 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
                                               ucs_memory_type_t *mem_type_p)
 {
     hsa_status_t status;
-    hsa_amd_pointer_info_t info;
     hsa_device_type_t dev_type;
+    hsa_amd_pointer_type_t hsa_mem_type;
+    hsa_agent_t agent;
 
     *mem_type_p = UCS_MEMORY_TYPE_HOST;
     if (addr == NULL) {
         return UCS_OK;
     }
 
-    info.size = sizeof(hsa_amd_pointer_info_t);
-    status    = hsa_amd_pointer_info((void*)addr, &info, NULL, NULL, NULL);
+    status = uct_rocm_base_get_ptr_info((void *)addr, length, NULL, NULL,
+                                        &hsa_mem_type, &agent, &dev_type);
     if ((status == HSA_STATUS_SUCCESS) &&
-        (info.type == HSA_EXT_POINTER_TYPE_HSA)) {
-        status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE,
-                                    &dev_type);
-        if ((status == HSA_STATUS_SUCCESS) &&
-            (dev_type == HSA_DEVICE_TYPE_GPU)) {
-            uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(
-                    info.agentOwner);
-            *mem_type_p = UCS_MEMORY_TYPE_ROCM;
-            return UCS_OK;
-        }
+        (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
+        (dev_type == HSA_DEVICE_TYPE_GPU)) {
+        uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
+        *mem_type_p = UCS_MEMORY_TYPE_ROCM;
     }
 
     return UCS_OK;
@@ -221,20 +291,36 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                      const size_t length,
                                      uct_md_mem_attr_t *mem_attr_p)
 {
-    ucs_status_t status;
-    ucs_memory_type_t mem_type;
+    hsa_status_t status;
+    hsa_device_type_t dev_type;
+    hsa_amd_pointer_type_t hsa_mem_type;
+    hsa_agent_t agent;
+    ucs_sys_device_t sys_dev;
+    ucs_status_t ucs_status;
 
-    status = uct_rocm_base_detect_memory_type(md, addr, length, &mem_type);
-    if (status != UCS_OK) {
+    status = uct_rocm_base_get_ptr_info((void*)addr, length, NULL, NULL,
+                                        &hsa_mem_type, &agent, &dev_type);
+    if (status != HSA_STATUS_SUCCESS) {
         return status;
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
-        mem_attr_p->mem_type = mem_type;
+        mem_attr_p->mem_type = UCS_MEMORY_TYPE_HOST;
+        if ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
+            (dev_type == HSA_DEVICE_TYPE_GPU)) {
+            mem_attr_p->mem_type = UCS_MEMORY_TYPE_ROCM;
+        }
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
         mem_attr_p->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        if ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
+            (dev_type == HSA_DEVICE_TYPE_GPU)) {
+            ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
+            if (ucs_status == UCS_OK) {
+                mem_attr_p->sys_dev = sys_dev;
+            }
+        }
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
@@ -280,10 +366,12 @@ static hsa_status_t uct_rocm_hsa_pool_callback(hsa_amd_memory_pool_t pool, void*
 
 ucs_status_t uct_rocm_base_get_last_device_pool(hsa_amd_memory_pool_t *pool)
 {
+    hsa_agent_t agent = uct_rocm_base_agents.gpu_agents[0];
     hsa_status_t hsa_status;
-    hsa_agent_t agent;
 
-    agent = uct_rocm_base_get_dev_agent(uct_rocm_base_last_device_agent_used);
+    if (uct_rocm_base_last_device_agent_used != -1) {
+        agent = uct_rocm_base_get_dev_agent(uct_rocm_base_last_device_agent_used);
+    }
     hsa_status = hsa_amd_agent_iterate_memory_pools(agent,
                                                     uct_rocm_hsa_pool_callback,
                                                     (void*)pool);
