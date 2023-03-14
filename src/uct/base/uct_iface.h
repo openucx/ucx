@@ -255,13 +255,19 @@ typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
         const uct_ep_connect_to_ep_params_t *params);
 
 
+/* Check if remote iface address is reachable */
+typedef ucs_status_t (*uct_iface_is_reachable_v2_func_t)(
+        uct_iface_h iface,
+        const uct_iface_is_reachable_params_t *params);
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
-    uct_iface_estimate_perf_func_t iface_estimate_perf;
-    uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
-    uct_ep_query_func_t            ep_query;
-    uct_ep_invalidate_func_t       ep_invalidate;
-    uct_ep_connect_to_ep_v2_func_t ep_connect_to_ep_v2;
+    uct_iface_estimate_perf_func_t   iface_estimate_perf;
+    uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
+    uct_ep_query_func_t              ep_query;
+    uct_ep_invalidate_func_t         ep_invalidate;
+    uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
+    uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
 } uct_iface_internal_ops_t;
 
 
@@ -1000,6 +1006,16 @@ ucs_status_t
 uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
                           const uct_device_addr_t *device_addr,
                           const uct_ep_addr_t *ep_addr);
+
+
+ucs_status_t
+uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
+                                  const uct_device_addr_t *dev_addr,
+                                  const uct_iface_addr_t *iface_addr,
+                                  uct_iface_is_reachable_v2_func_t iface_is_reachable_v2);
+
+
+void uct_iface_unreachable(int cond, char* buffer, uint32_t length, const char* fmt, ...);
 
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_short(uct_ep_operation_t op)
 {

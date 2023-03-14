@@ -219,11 +219,26 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
-int uct_iface_is_reachable_v2(const uct_iface_h iface,
+int uct_iface_is_reachable_v2(uct_iface_h iface,
                               const uct_iface_is_reachable_params_t *params)
 {
-    ucs_fatal("uct_iface_is_reachable_v2 not supported yet");
-    return 0;
+    const uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
+
+    if (params->field_mask & (UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING | 
+                              UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH)) {
+        UCT_CHECK_PARAM(ucs_test_all_flags(params->field_mask,
+                                           UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                                           UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH),
+                                           "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING and "
+                                           "UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH "
+                                           "should be set together");
+        UCT_CHECK_PARAM(params->info_string != NULL,
+                        "info_string shouldn't be null");
+        UCT_CHECK_PARAM(params->info_string_length > 0,
+                        "info_string_length should be greater than zero");
+    }
+    
+    return base_iface->internal_ops->iface_is_reachable_v2(iface, params);
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
@@ -457,11 +472,12 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 }
 
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
+    .iface_estimate_perf   = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
@@ -961,4 +977,34 @@ uct_base_ep_connect_to_ep(uct_ep_h tl_ep,
     const static uct_ep_connect_to_ep_params_t param = {.field_mask = 0};
 
     return uct_ep_connect_to_ep_v2(tl_ep, device_addr, ep_addr, &param);
+}
+
+ucs_status_t
+uct_iface_is_reachable_v2_wrapper(const uct_iface_h tl_iface,
+                                  const uct_device_addr_t *dev_addr,
+                                  const uct_iface_addr_t *iface_addr,
+                                  uct_iface_is_reachable_v2_func_t iface_is_reachable_v2)
+{
+    const uct_iface_is_reachable_params_t params = {
+        .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
+        .device_addr        = dev_addr,
+        .iface_addr         = iface_addr
+    };
+    
+    return iface_is_reachable_v2(tl_iface, &params);
+}
+
+void uct_iface_unreachable(int cond, char* buffer, uint32_t length, const char* fmt, ...)
+{
+    va_list vars;
+    va_list copy;
+    va_start(vars, fmt);
+    va_copy(copy, vars);
+    if (cond) {
+        vsnprintf(buffer, length, fmt, vars);
+    }
+    ucs_debugv(fmt, &copy);
+    va_end(copy);
+    va_end(vars);
 }
