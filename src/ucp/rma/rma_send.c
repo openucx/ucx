@@ -251,6 +251,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     ucp_request_t *req;
     uint32_t attr_mask;
 
+    UCP_REQUEST_CHECK_PARAM(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -368,6 +369,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
     }
 
+    UCP_REQUEST_CHECK_PARAM(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 

@@ -749,7 +749,9 @@ typedef enum {
     UCP_OP_ATTR_FLAG_MULTI_SEND     = UCS_BIT(19)  /**< optimize for bandwidth of
                                                         multiple in-flight operations,
                                                         rather than for the latency
-                                                        of a single operation */
+                                                        of a single operation.
+                                                        This flag and UCP_OP_ATTR_FLAG_FAST_CMPL
+                                                        are mutually exclusive. */
 } ucp_op_attr_t;
 
 
