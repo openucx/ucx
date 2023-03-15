@@ -368,8 +368,6 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 const char **operation_names,
                                 ucs_string_buffer_t *strb)
 {
-    static const uint32_t op_attr_bits   = UCP_OP_ATTR_FLAG_FAST_CMPL |
-                                           UCP_OP_ATTR_FLAG_MULTI_SEND;
     static const char *op_attr_names[]   = {
         [ucs_ilog2(UCP_OP_ATTR_FLAG_FAST_CMPL)]  = "fast-completion",
         [ucs_ilog2(UCP_OP_ATTR_FLAG_MULTI_SEND)] = "multi",
@@ -386,8 +384,7 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     ucs_string_buffer_appendf(
             strb, "%s", operation_names[ucp_proto_select_op_id(select_param)]);
 
-    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
-                   op_attr_bits;
+    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
     op_flags     = ucp_proto_select_op_flags(select_param);
 
     if (op_attr_mask || op_flags) {
