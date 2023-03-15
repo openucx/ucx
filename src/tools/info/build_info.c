@@ -1,7 +1,7 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
 *
-* See file LICENSE for terms  .
+* See file LICENSE for terms.
 */
 
 #ifdef HAVE_CONFIG_H
