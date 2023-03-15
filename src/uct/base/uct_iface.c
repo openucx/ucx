@@ -219,11 +219,11 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
-int uct_iface_is_reachable_v2(const uct_iface_h iface,
-                              const uct_iface_is_reachable_params_t *params)
+int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                              uct_iface_is_reachable_params_t *params)
 {
-    ucs_fatal("uct_iface_is_reachable_v2 not supported yet");
-    return 0;
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
@@ -456,12 +456,51 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+int uct_base_iface_is_reachable_v2(const uct_iface_h iface,
+                                   uct_iface_is_reachable_params_t *params)
+{
+    void *dev_addr;
+    ucs_status_t status;
+    uct_iface_attr_t attr;
+
+    status = uct_iface_query(iface, &attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    dev_addr = ucs_malloc(attr.device_addr_len, "ucp_tmp_dev_addr");
+    if (dev_addr == NULL) {
+        ucs_error("failed to allocated device address of size %zu",
+                  attr.device_addr_len);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    status = uct_iface_get_device_address(iface, dev_addr);
+    if (status != UCS_OK) {
+        ucs_free(dev_addr);
+        return status;
+    }
+
+    params->is_self = !memcmp(params->device_addr, dev_addr,
+                              attr.device_addr_len);
+    ucs_free(dev_addr);
+
+    params->info_string_length = 0;
+    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
+        params->info_string[0] = '\0';
+    }
+
+    return uct_iface_is_reachable(iface, params->device_addr,
+                                  params->iface_addr);
+}
+
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
+    .iface_estimate_perf   = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2,
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)

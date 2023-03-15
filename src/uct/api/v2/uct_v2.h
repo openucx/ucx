@@ -554,6 +554,13 @@ typedef struct uct_iface_is_reachable_params {
      * This value must be specified in conjunction with @a info_string.
      */
     size_t                        info_string_length;
+
+    /**
+     * Output parameter; Indicates whether both addresses describe the same
+     * device.
+     */
+    int                           is_self;
+
 } uct_iface_is_reachable_params_t;
 
 
@@ -903,14 +910,14 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * check is a local operation it does not detect issues such as network
  * mis-configuration or lack of connectivity.
  *
- * @param [in]  iface       Local interface to check reachability from.
- * @param [in]  params      Operation parameters, see @ref
- *                          uct_iface_is_reachable_params_t.
+ * @param [in]    iface   Local interface to check reachability from.
+ * @param [inout] params  Operation parameters, see @ref
+ *                        uct_iface_is_reachable_params_t.
  *
  * @return Nonzero if reachable, 0 if not.
  */
 int uct_iface_is_reachable_v2(uct_iface_h iface,
-                              const uct_iface_is_reachable_params_t *params);
+                              uct_iface_is_reachable_params_t *params);
 
 
 /**
