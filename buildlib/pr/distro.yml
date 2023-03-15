@@ -167,7 +167,7 @@ jobs:
           env LD_LIBRARY_PATH=$UCX_PR_LIB_PATH \
             ${cmd_prefix} \
             $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/hworld &
-          server_pid=$!
+          server_pid=$!curl -X GET http://localhost:8000/current_time
 
           sleep 5
           env LD_LIBRARY_PATH=$UCX_V11_LIB_PATH \
