@@ -1159,7 +1159,7 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
 
     for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; lane++) {
         iface_attr = ucp_worker_iface_get_attr(worker,
-                                               ucp_ep_config(ep)->key.lanes[lane].rsc_index);
+                                               ucp_ep_get_rsc_index(ep, lane));
         if (ucs_test_all_flags(iface_attr->cap.flags, caps)) {
             return true;
         }
