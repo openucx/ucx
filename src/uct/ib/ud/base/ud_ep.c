@@ -501,7 +501,7 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
                                                const uct_ud_iface_addr_t *if_addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
-    uct_ib_device_t UCS_V_UNUSED *dev = uct_ib_iface_device(&iface->super);
+    uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super);
     char buf[128];
 
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
@@ -671,12 +671,12 @@ uct_ud_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                            const uct_ep_addr_t *uct_ep_addr,
                            const uct_ep_connect_to_ep_params_t *param)
 {
-    uct_ud_ep_t *ep                   = ucs_derived_of(tl_ep, uct_ud_ep_t);
-    uct_ud_iface_t *iface             = ucs_derived_of(ep->super.super.iface,
-                                                       uct_ud_iface_t);
-    const uct_ib_address_t *ib_addr   = (const uct_ib_address_t*)dev_addr;
-    const uct_ud_ep_addr_t *ep_addr   = (const uct_ud_ep_addr_t*)uct_ep_addr;
-    uct_ib_device_t UCS_V_UNUSED *dev = uct_ib_iface_device(&iface->super);
+    uct_ud_ep_t *ep                 = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_iface_t *iface           = ucs_derived_of(ep->super.super.iface,
+                                                     uct_ud_iface_t);
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t*)dev_addr;
+    const uct_ud_ep_addr_t *ep_addr = (const uct_ud_ep_addr_t*)uct_ep_addr;
+    uct_ib_device_t *dev            = uct_ib_iface_device(&iface->super);
     void *peer_address;
     char buf[128];
 

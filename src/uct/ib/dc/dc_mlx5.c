@@ -899,7 +899,7 @@ int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_iface_addr_t *iface_addr)
 {
     uct_dc_mlx5_iface_addr_t *addr = (uct_dc_mlx5_iface_addr_t *)iface_addr;
-    uct_dc_mlx5_iface_t UCS_V_UNUSED *iface;
+    uct_dc_mlx5_iface_t *iface;
 
     iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     ucs_assert_always(iface_addr != NULL);

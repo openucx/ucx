@@ -72,7 +72,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     uct_mem_h *prev_uct_memh;
     ucp_md_map_t new_md_map;
     const uct_md_attr_v2_t *md_attr;
-    void *end_address UCS_V_UNUSED;
+    void *end_address;
     unsigned prev_num_memh;
     unsigned md_index;
     ucs_status_t status;

@@ -67,7 +67,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     ucp_ep_ext_t *ep_ext = ep->ext;
     ucp_recv_desc_t *rdesc, *tmp_rdesc;
     ucs_queue_iter_t iter;
-    size_t UCS_V_UNUSED count;
+    size_t count;
 
     if (!(ep->worker->context->config.features & UCP_FEATURE_AM)) {
         return;
