@@ -2146,8 +2146,8 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
                 continue;
             }
 
-            params.field_mask = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                                UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR;
+            params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                 UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR;
             params.device_addr = ae->dev_addr;
             params.iface_addr  = ae->iface_addr;
             uct_iface_is_reachable_v2(wiface->iface, &params);
