@@ -102,9 +102,9 @@ void ucp_proto_select_init_trace_caps(
         .msg_length    = proto_caps->min_length
     };
     const UCS_V_UNUSED ucs_linear_func_t *perf;
-    size_t UCS_V_UNUSED range_start, range_end;
+    size_t range_start, range_end;
     ucp_proto_query_attr_t query_attr;
-    int UCS_V_UNUSED range_index;
+    int range_index;
     char min_length_str[64];
     char thresh_str[64];
 

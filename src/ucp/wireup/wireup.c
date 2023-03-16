@@ -310,7 +310,7 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
     ucp_lane_index_t lane, remote_lane;
     unsigned *ep_addr_indexes;
     unsigned ep_addr_index;
-    uint64_t UCS_V_UNUSED used_remote_lanes;
+    uint64_t used_remote_lanes;
 
     /* Initialize the counters of ep address index for each address entry */
     ep_addr_indexes = ucs_alloca(sizeof(ep_addr_index) *

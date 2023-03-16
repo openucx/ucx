@@ -294,7 +294,7 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
     char src_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     size_t dest_addr_size;
-    int UCS_V_UNUSED conn_errno;
+    int conn_errno;
     int ret;
 
     status = ucs_sockaddr_sizeof(dest_addr, &dest_addr_size);

@@ -428,7 +428,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
                                                        priv);
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
-    uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(group, uct_rc_ep_t,
+    uct_rc_ep_t *ep                 = ucs_container_of(group, uct_rc_ep_t,
                                                        arb_group);
     ucs_arbiter_cb_result_t result;
 

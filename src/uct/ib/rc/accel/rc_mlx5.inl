@@ -1396,7 +1396,6 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
                                  int poll_flags)
 {
-    uct_ib_mlx5_srq_seg_t UCS_V_UNUSED *seg;
     struct mlx5_cqe64 *cqe;
     unsigned byte_len;
     uint16_t max_batch;
@@ -1404,11 +1403,12 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     void *rc_hdr;
     unsigned flags;
 #if IBV_HW_TM
+    uct_ib_mlx5_srq_seg_t *seg;
     struct ibv_tmh *tmh;
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
-    uct_rc_mlx5_mp_context_t UCS_V_UNUSED *dummy_ctx;
+    uct_rc_mlx5_mp_context_t *dummy_ctx;
 #endif
 
     ucs_assert((poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) ||
