@@ -761,20 +761,12 @@ uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         goto no_odp;
     }
 
-    if (md->super.config.odp.max_size == UCS_MEMUNITS_AUTO) {
-        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_extended_translation_offset)) {
-            md->super.config.odp.max_size = 1ul << 55;
-        } else {
-            md->super.config.odp.max_size = 1ul << 28;
-        }
-
-        md->super.reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_extended_translation_offset)) {
+        goto no_odp;
     }
 
-    return UCS_OK;
-
+    md->super.reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
 no_odp:
-    md->super.config.odp.max_size = 0;
     return UCS_OK;
 }
 

@@ -92,7 +92,6 @@ typedef struct uct_ib_md_ext_config {
     struct {
         int                  prefetch;     /**< Auto-prefetch non-blocking memory
                                                 registrations / allocations */
-        size_t               max_size;     /**< Maximal memory region size for ODP */
     } odp;
 
     unsigned long            gid_index;    /**< IB GID index to use */

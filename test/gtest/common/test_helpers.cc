@@ -469,6 +469,27 @@ bool is_interface_usable(struct ifaddrs *ifa)
            !netif_has_sysfs_file(ifa->ifa_name, "wireless");
 }
 
+
+ssize_t get_proc_self_status_field(const std::string &parameter)
+{
+    const std::string path("/proc/self/status");
+    std::ifstream proc_stats(path);
+    std::string line, name;
+    ssize_t value;
+
+    while (std::getline(proc_stats, line)) {
+        if (!(std::istringstream(line) >> name >> value)) {
+            continue;
+        }
+        if (name == (parameter + ":")) {
+            return value;
+        }
+    }
+
+    UCS_TEST_MESSAGE << path << " does not contain " << parameter << " value";
+    return -1;
+}
+
 static std::vector<std::string> read_dir(const std::string& path)
 {
     std::vector<std::string> result;
