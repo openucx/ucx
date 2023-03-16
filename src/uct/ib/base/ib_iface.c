@@ -687,7 +687,8 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                               sizeof(pack_params.gid.raw)) &&
                       (iface->pkey == pack_params.pkey);
 
-    return uct_ib_iface_is_reachable(tl_iface, params->device_addr, params->iface_addr);
+    return uct_ib_iface_is_reachable(tl_iface, params->device_addr,
+                                     params->iface_addr);
 }
 
 int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
