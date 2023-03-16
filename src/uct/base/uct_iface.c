@@ -223,6 +223,11 @@ int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
                               uct_iface_is_reachable_params_t *params)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    if (iface->internal_ops->iface_is_reachable_v2 == NULL) {
+        return uct_base_iface_is_reachable_v2(tl_iface, params);
+    }
+
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
 }
 
@@ -465,20 +470,20 @@ int uct_base_iface_is_reachable_v2(const uct_iface_h iface,
 
     status = uct_iface_query(iface, &attr);
     if (status != UCS_OK) {
-        return status;
+        return 0;
     }
 
-    dev_addr = ucs_malloc(attr.device_addr_len, "ucp_tmp_dev_addr");
+    dev_addr = ucs_malloc(attr.device_addr_len, "uct_tmp_dev_addr");
     if (dev_addr == NULL) {
         ucs_error("failed to allocated device address of size %zu",
                   attr.device_addr_len);
-        return UCS_ERR_NO_MEMORY;
+        return 0;
     }
 
     status = uct_iface_get_device_address(iface, dev_addr);
     if (status != UCS_OK) {
         ucs_free(dev_addr);
-        return status;
+        return 0;
     }
 
     params->is_self = !memcmp(params->device_addr, dev_addr,
