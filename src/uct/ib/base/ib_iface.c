@@ -668,6 +668,28 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     return ret;
 }
 
+int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                 uct_iface_is_reachable_params_t *params)
+{
+    uct_ib_iface_t *iface           = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    const uct_ib_address_t *ib_addr = (const void*)params->device_addr;
+    uct_ib_address_pack_params_t pack_params;
+
+    params->info_string_length = 0;
+    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
+        params->info_string[0] = '\0';
+    }
+
+    uct_ib_address_unpack(ib_addr, &pack_params);
+
+    params->is_self = (uct_ib_iface_port_attr(iface)->lid == pack_params.lid) &&
+                      !memcmp(iface->gid_info.gid.raw, pack_params.gid.raw,
+                              sizeof(pack_params.gid.raw)) &&
+                      (iface->pkey == pack_params.pkey);
+
+    return uct_ib_iface_is_reachable(tl_iface, params->device_addr, params->iface_addr);
+}
+
 int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
                               const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr)
