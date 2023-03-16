@@ -14,6 +14,7 @@
 #define OSHM_LOOP_ATOMIC 500
 #define FIELD_WIDTH 20
 #define FLOAT_PRECISION 2
+#define HEADER "# Atomic Fetch & Add Benchmark\n"
 
 
 union data_types {
@@ -43,8 +44,7 @@ void init(int* rank, int* npes)
     }
 }
 
-void
-print_operation_rate (int myid, char * operation, double rate, double lat)
+void print_operation_rate (int myid, char * operation, double rate, double lat)
 {
     if (myid == 0) {
         fprintf(stdout, "%-*s%*.*f%*.*f\n", 20, operation, FIELD_WIDTH,
@@ -101,6 +101,16 @@ double benchmark_fadd (int my_rank, int npes, union data_types *buffer, int buff
     return 0;
 }
 
+void print_header_local(int myid)
+{
+    if (myid == 0) {
+        fprintf(stdout, HEADER);
+        fprintf(stdout, "%-*s%*s%*s\n", 20, "# Operation", FIELD_WIDTH,
+                "Million ops/s", FIELD_WIDTH, "Latency (us)");
+        fflush(stdout);
+    }
+}
+
 static void usage()
 {
     printf("Usage:   shmem_fadd [options]\n");
@@ -130,7 +140,7 @@ int main(int argc, char **argv)
     }
 
     num_iters  = 10000;
-    msg_size   = 32;
+    msg_size   = 8;
     while ((c = getopt (argc, argv, "n:s:wqfh")) != -1) {
         switch (c) {
             break;
@@ -156,6 +166,8 @@ int main(int argc, char **argv)
 
     memset(msg_buffer, 0xff, msg_size);
 
+    print_header_local(my_rank);
+
     shmem_barrier_all();
 
     benchmark_fadd(my_rank, npes, msg_buffer, msg_size, num_iters);
@@ -165,5 +177,6 @@ int main(int argc, char **argv)
     shfree(msg_buffer);
 
     shmem_finalize();
+
     return 0;
 }
