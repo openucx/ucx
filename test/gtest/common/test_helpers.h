@@ -22,6 +22,7 @@
 
 #include <errno.h>
 #include <iostream>
+#include <fstream>
 #include <stdexcept>
 #include <sstream>
 #include <vector>
@@ -315,6 +316,10 @@ bool is_inet_addr(const struct sockaddr* ifa_addr);
  */
 bool is_interface_usable(struct ifaddrs *ifa);
 
+/**
+ * Return the value of the requested /proc/self/status parameter
+ */
+ssize_t get_proc_self_status_field(const std::string &parameter);
 
 /**
  * Return the name of the given network device if it is supported by rdmacm.

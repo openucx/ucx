@@ -102,10 +102,6 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Force prefetch of memory regions created with ODP.\n",
      ucs_offsetof(uct_ib_md_config_t, ext.odp.prefetch), UCS_CONFIG_TYPE_BOOL},
 
-    {"ODP_MAX_SIZE", "auto",
-     "Maximal memory region size to enable ODP for. 0 - disable.\n",
-     ucs_offsetof(uct_ib_md_config_t, ext.odp.max_size), UCS_CONFIG_TYPE_MEMUNITS},
-
     {"DEVICE_SPECS", "",
      "Array of custom device specification. Each element is a string of the following format:\n"
      "  <vendor-id>:<device-id>[:name[:<flags>[:<priority>]]]\n"
@@ -623,7 +619,7 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
 
     if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
-        (length <= md->config.odp.max_size)) {
+        (md->reg_nonblock_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
         access_flags |= IBV_ACCESS_ON_DEMAND;
     }
 
@@ -1606,10 +1602,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                           UCT_MD_FLAG_NEED_MEMH |
                           UCT_MD_FLAG_NEED_RKEY |
                           UCT_MD_FLAG_ADVISE;
-
-    if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
-        md->config.odp.max_size = 0;
-    }
 
     uct_ib_md_parse_relaxed_order(md, md_config);
     uct_ib_md_init_memh_size(md, memh_base_size, mr_size);

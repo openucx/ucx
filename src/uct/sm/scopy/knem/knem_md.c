@@ -197,8 +197,9 @@ ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
 
-    md_attr->flags         = UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types = 0;
+    md_attr->flags                  = UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types          = 0;
+    md_attr->reg_nonblock_mem_types = 0;
     if (uct_knem_md_check_mem_reg(uct_md)) {
         md_attr->flags         |= UCT_MD_FLAG_REG;
         md_attr->reg_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_HOST);
