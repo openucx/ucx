@@ -1014,7 +1014,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         }
 
         /* Close the endpoint to the client */
-        ep_close(ucp_data_worker, server_ep, UCP_EP_CLOSE_MODE_FORCE);
+        ep_close(ucp_data_worker, server_ep, UCP_EP_CLOSE_FLAG_FORCE);
 
         /* Reinitialize the server's context to be used for the next client */
         context.conn_request = NULL;
@@ -1023,7 +1023,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
     }
 
 err_ep:
-    ep_close(ucp_data_worker, server_ep, UCP_EP_CLOSE_MODE_FORCE);
+    ep_close(ucp_data_worker, server_ep, UCP_EP_CLOSE_FLAG_FORCE);
 err_listener:
     ucp_listener_destroy(context.listener);
 err_worker:
@@ -1049,7 +1049,7 @@ static int run_client(ucp_worker_h ucp_worker, char *server_addr,
     ret = client_server_do_work(ucp_worker, client_ep, send_recv_type, 0);
 
     /* Close the endpoint to the server */
-    ep_close(ucp_worker, client_ep, UCP_EP_CLOSE_MODE_FLUSH);
+    ep_close(ucp_worker, client_ep, UCP_EP_CLOSE_FLAG_FORCE);
 
 out:
     return ret;
