@@ -393,6 +393,10 @@ static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
     err_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
                                                             UCS_LOG_LEVEL_ERROR;
 
+    if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
+        uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
+    }
+
     reg_params.flags         = uct_flags;
     reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
     reg_params.dmabuf_offset = 0;
@@ -441,10 +445,12 @@ static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
             goto out_close_dmabuf_fd;
         }
 
-        ucs_trace("register address %p length %zu dmabuf-fd %d on md[%d]=%s %p",
+        ucs_trace("register address %p length %zu dmabuf-fd %d flags %ld "
+                  "on md[%d]=%s %p",
                   address, length,
                   (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
                                                         UCT_DMABUF_FD_INVALID,
+                  reg_params.flags,
                   md_index, context->tl_mds[md_index].rsc.md_name,
                   memh->uct[md_index]);
         md_map_registered |= UCS_BIT(md_index);

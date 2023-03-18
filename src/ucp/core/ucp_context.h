@@ -162,6 +162,8 @@ typedef struct ucp_context_config {
     char                                   *select_distance_md;
     /** Directory to write protocol selection information */
     char                                   *proto_info_dir;
+    /** Memory types that perform non-blocking registration by default */
+    uint64_t                               reg_nb_mem_types;
 } ucp_context_config_t;
 
 

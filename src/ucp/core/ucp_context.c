@@ -444,6 +444,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "directory.",
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
 
+  {"REG_NONBLOCK_MEM_TYPES", "",
+   "Perform only non-blocking memory registration for these memory types:\n"
+   "page registration may be deferred until it is accessed by the CPU or a transport.",
+   ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
   {NULL}
 };
 
@@ -1507,6 +1513,11 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             }
 
             ucs_memory_type_for_each(mem_type) {
+                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
+                    continue;
+                }
+
                 if (md_attr->flags & UCT_MD_FLAG_REG) {
                     if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
