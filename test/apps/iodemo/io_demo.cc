@@ -32,8 +32,9 @@
 #include <cuda_runtime.h>
 #endif
 
-#define ALIGNMENT           4096
-#define BUSY_PROGRESS_COUNT 1000
+#define ALIGNMENT               4096
+#define BUSY_PROGRESS_COUNT     1000
+#define MAX_SERVER_REPEAT_COUNT (65536U - 1024U)
 
 /* IO operation type */
 typedef enum {
@@ -62,7 +63,7 @@ const bool do_assert = false;
 
 /* test options */
 typedef struct {
-    std::vector<const char*> servers;
+    std::vector<std::string> servers;
     int                      port_num;
     double                   connect_timeout;
     double                   client_timeout;
@@ -2068,7 +2069,7 @@ public:
 
     void connect(size_t server_index)
     {
-        const char *server = opts().servers[server_index];
+        const char *server = opts().servers[server_index].c_str();
         struct sockaddr_storage *src_addr_p = NULL;
         struct sockaddr_storage dst_addr, src_addr;
         uint32_t addr_index;
@@ -2682,6 +2683,40 @@ static int parse_window_size(const char *optarg, long &window_size,
     return 0;
 }
 
+static int add_servers(const char *server, std::vector<std::string> &servers)
+{
+    const char *repeat_separator;
+    const char *port_separator;
+    std::string server_repeated;
+    int repeat_count;
+
+    port_separator = strchr(server, ':');
+    if (port_separator == NULL) {
+        servers.push_back(server);
+        return 0;
+    }
+
+    repeat_separator = strchr(port_separator + 1, ':');
+    if (repeat_separator == NULL) {
+        servers.push_back(server);
+        return 0;
+    }
+
+    server_repeated = std::string(server, repeat_separator - server);
+    repeat_count    = atoi(repeat_separator + 1);
+    if ((repeat_count == 0) || (repeat_count > MAX_SERVER_REPEAT_COUNT)) {
+        std::cout << "Server repeat_count should be in the range "
+                  << "[1.. " << MAX_SERVER_REPEAT_COUNT << "]" << std::endl;
+        return -1;
+    }
+
+    for (int i = 0; i < repeat_count; i++) {
+        servers.push_back(server_repeated);
+    }
+
+    return 0;
+}
+
 static int parse_args(int argc, char **argv, options_t *test_opts)
 {
     static const char *optstring =
@@ -2881,8 +2916,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             break;
         case 'h':
         default:
-            std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
-            std::cout << "       or io_demo [options] [server_address0:port0] [server_address1:port1]..." << std::endl;
+            std::cout << "Usage: io_demo [options] [server_address[:port:[repeat_count]]]" << std::endl;
+            std::cout << "Server repeat_count should be in the range "
+                      << "[1.. " << MAX_SERVER_REPEAT_COUNT << "]" << std::endl;
             std::cout << "" << std::endl;
             std::cout << "Supported options are:" << std::endl;
             std::cout << "  -p <port>                   TCP port number to use" << std::endl;
@@ -2929,7 +2965,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     }
 
     while (optind < argc) {
-        test_opts->servers.push_back(argv[optind++]);
+        if (add_servers(argv[optind++], test_opts->servers) != 0) {
+            return -1;
+        };
     }
 
     adjust_opts(test_opts);
