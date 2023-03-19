@@ -81,15 +81,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 /*
  * Atomics support
  */
-#if HAVE_DECL_IBV_QUERY_DEVICE_EX
-#  define IBV_HAVE_ATOMIC_HCA(_attr)            ((_attr)->orig_attr.atomic_cap == IBV_ATOMIC_HCA)
-#  define IBV_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->orig_attr.atomic_cap == IBV_ATOMIC_GLOB)
-#  define IBV_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
-#else
-#  define IBV_HAVE_ATOMIC_HCA(_attr)            ((_attr)->atomic_cap == IBV_ATOMIC_HCA)
-#  define IBV_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->atomic_cap == IBV_ATOMIC_GLOB)
-#  define IBV_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
-#endif
+#define IBV_DEVICE_ATOMIC_HCA(dev)              (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_HCA)
 
 
 /* Ethernet link layer */
