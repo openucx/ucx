@@ -150,9 +150,13 @@ typedef struct uct_dc_mlx5_iface_flush_addr {
  *
  */
 typedef enum {
+    /* Policies with dedicated DCI per active connection */
     UCT_DC_TX_POLICY_DCS,
     UCT_DC_TX_POLICY_DCS_QUOTA,
-    UCT_DC_TX_POLICY_RAND,
+    /* Policies with shared DCI */
+    UCT_DC_TX_POLICY_SHARED_FIRST,
+    UCT_DC_TX_POLICY_RAND = UCT_DC_TX_POLICY_SHARED_FIRST,
+    UCT_DC_TX_POLICY_HW_DCS,
     UCT_DC_TX_POLICY_LAST
 } uct_dc_tx_policy_t;
 
