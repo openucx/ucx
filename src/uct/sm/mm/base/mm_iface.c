@@ -697,7 +697,7 @@ err:
 
 static void uct_mm_iface_log_created(uct_mm_iface_t *iface)
 {
-    uct_mm_seg_t UCS_V_UNUSED *seg = iface->recv_fifo_mem.memh;
+    uct_mm_seg_t *seg = iface->recv_fifo_mem.memh;
 
     ucs_debug("created mm iface %p FIFO id 0x%"PRIx64
               " va %p size %zu (%u x %u elems)",

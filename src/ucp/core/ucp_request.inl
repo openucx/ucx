@@ -1044,7 +1044,7 @@ ucp_send_request_get_id(const ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
 {
     ucp_ep_h ep;
-    ucs_status_t UCS_V_UNUSED status;
+    ucs_status_t status;
 
     ucs_assert(!(req->flags &
                  (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)));

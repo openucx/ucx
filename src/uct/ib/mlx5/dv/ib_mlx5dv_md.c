@@ -822,7 +822,7 @@ static struct ibv_context *
 uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 {
     struct mlx5dv_context_attr dv_attr = {};
-    struct mlx5dv_devx_event_channel UCS_V_UNUSED *event_channel;
+    struct mlx5dv_devx_event_channel *event_channel;
     struct ibv_context *ctx;
     struct ibv_cq *cq;
 

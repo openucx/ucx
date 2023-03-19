@@ -790,11 +790,10 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
                                            const uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev        = uct_ib_iface_device(iface);
-    uint16_t pkey_tbl_len       = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
-    int UCS_V_UNUSED pkey_found = 0;
-    uint16_t lim_pkey           = UCT_IB_ADDRESS_INVALID_PKEY;
-    uint16_t lim_pkey_index     = UINT16_MAX;
+    uct_ib_device_t *dev    = uct_ib_iface_device(iface);
+    uint16_t pkey_tbl_len   = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
+    uint16_t lim_pkey       = UCT_IB_ADDRESS_INVALID_PKEY;
+    uint16_t lim_pkey_index = UINT16_MAX;
     uint16_t pkey_index, port_pkey, pkey;
 
     if (uct_ib_iface_is_roce(iface)) {
@@ -835,7 +834,6 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
             if (pkey & UCT_IB_PKEY_MEMBERSHIP_MASK) {
                 iface->pkey_index = pkey_index;
                 iface->pkey       = pkey;
-                pkey_found        = 1;
                 goto out_pkey_found;
             } else if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
                 /* limited PKEY has not yet been found */
@@ -844,8 +842,6 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
             }
         }
     }
-
-    ucs_assert(!pkey_found);
 
     if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
         /* PKEY neither with full nor with limited membership was found */

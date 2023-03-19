@@ -153,7 +153,7 @@ static size_t ucp_proto_rndv_rtr_pack_with_rkey(void *dest, void *arg)
     ucp_rndv_rtr_hdr_t *rtr            = dest;
     ucp_request_t *req                 = arg;
     const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    const ucp_proto_rndv_rtr_priv_t UCS_V_UNUSED *rpriv;
+    const ucp_proto_rndv_rtr_priv_t *rpriv;
     size_t rkey_size;
 
     rpriv = req->send.proto_config->priv;

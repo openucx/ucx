@@ -88,7 +88,7 @@ ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
                                ucp_ep_match_conn_sn_t conn_sn,
                                ucs_conn_match_queue_type_t conn_queue_type)
 {
-    ucp_ep_flags_t UCS_V_UNUSED exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX;
+    ucp_ep_flags_t exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX;
     ucs_conn_match_elem_t *conn_match;
     ucp_ep_h ep;
 

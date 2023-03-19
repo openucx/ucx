@@ -1603,7 +1603,7 @@ static unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
     ucs_time_t now             = ucs_get_time();
     uint64_t ep_key;
     uct_dc_mlx5_ep_t *ep;
-    ucs_status_t UCS_V_UNUSED status;
+    ucs_status_t status;
 
     if (ucs_likely(now < iface->tx.fc_hard_req_resend_time)) {
         return 0;
