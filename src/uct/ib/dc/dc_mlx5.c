@@ -32,6 +32,7 @@ static const char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
     [UCT_DC_TX_POLICY_RAND]          = "rand",
+    [UCT_DC_TX_POLICY_HW_DCS]        = "hw_dcs",
     [UCT_DC_TX_POLICY_LAST]          = NULL
 };
 
@@ -52,7 +53,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
     {"NUM_DCI", "8",
-     "Number of DC initiator QPs (DCI) used by the interface.",
+     "Number of DC initiator QPs (DCI) used by the interface. Not relevant for hw_dcs policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
 
     {"TX_POLICY", "dcs_quota",
@@ -67,7 +68,10 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      "           This policy ensures that there will be no starvation among endpoints.\n"
      "\n"
      "rand       Every endpoint is assigned with a randomly selected DCI.\n"
-     "           Multiple endpoints may share the same DCI.",
+     "           Multiple endpoints may share the same DCI.\n"
+     "\n"
+     "hw_dcs     A single DCI that operates as a HW DCS queue. The channels are assigned\n"
+     "           in a round-robin fashion.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
@@ -110,9 +114,9 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, fc_hard_req_timeout),
      UCS_CONFIG_TYPE_TIME_UNITS},
 
-    {"NUM_DCI_CHANNELS", "1",
-     "Number of stream channels per DCI to be used in DCI-rand mode. A value "
-     "of 1 disables DCI multi-channel support.",
+    {"NUM_DCI_CHANNELS", "8",
+     "Number of stream channels per DCI to be used. A value "
+     "of 1 disables DCI multi-channel support. Relevant only for hw_dcs policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
      UCS_CONFIG_TYPE_UINT},
 
@@ -223,7 +227,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     /* Error handling is not supported with random dci policy
      * TODO: Fix */
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
         iface_attr->cap.flags &= ~(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    |
                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM);
@@ -436,7 +440,7 @@ init_qp:
         goto err;
     }
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
         ucs_arbiter_group_init(&dci->arb_group);
     } else {
         dci->ep = NULL;
@@ -747,7 +751,7 @@ static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface,
                             &iface->tx.dcis[dci_index].txqp);
         uct_ib_mlx5_destroy_qp(md, &iface->tx.dcis[dci_index].txwq.super);
 
-        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
             ucs_arbiter_group_cleanup(&iface->tx.dcis[dci_index].arb_group);
         }
         uct_ib_mlx5_qp_mmio_cleanup(&iface->tx.dcis[dci_index].txwq.super,
@@ -1027,7 +1031,7 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
     ucs_arbiter_group_cleanup(&fc_ep->arb_group);
     uct_rc_fc_cleanup(&fc_ep->fc);
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
         txqp = &iface->tx.dcis[fc_ep->dci].txqp;
         ucs_queue_for_each_safe(op, iter, &txqp->outstanding, queue) {
             if (op->handler == uct_dc_mlx5_ep_fc_pure_grant_send_completion) {
@@ -1200,7 +1204,7 @@ static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
     uct_dc_mlx5_ep_t *ep;
     ucs_log_level_t  level;
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
         ep    = NULL;
         level = UCS_LOG_LEVEL_FATAL; /* error handling is not supported with rand dci */
     } else {
@@ -1399,16 +1403,18 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md,
                                                         uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
-    uint8_t num_dcis                   = config->ndci +
-                                         UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
     unsigned tx_queue_len              = config->super.super.tx.queue_len;
     size_t sq_length;
     ucs_status_t status;
     unsigned tx_cq_size;
     unsigned num_dci_channels;
     int max_dcis;
+    uint8_t num_cq_dcis;
 
     ucs_trace_func("");
+
+    self->tx.policy = config->tx_policy;
+    self->tx.ndci   = uct_dc_mlx5_iface_is_hw_dcs(self) ? 1 : config->ndci;
 
     init_attr.qp_type       = UCT_IB_QPT_DCI;
     init_attr.flags         = UCT_IB_CQ_IGNORE_OVERRUN |
@@ -1425,7 +1431,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         return status;
     }
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * num_dcis;
+    num_cq_dcis = self->tx.ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
+    init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * num_cq_dcis;
     uct_ib_mlx5_parse_cqe_zipping(md, &config->rc_mlx5_common.super,
                                   &init_attr);
 
@@ -1440,8 +1447,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     /* driver will round up num cqes to pow of 2 if needed */
     if (ucs_roundup_pow2(tx_cq_size) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
-        ucs_error("Can't allocate TX resources, try to decrease dcis number (%d)"
-                  " or tx qp length (%d)", config->ndci, tx_queue_len);
+        ucs_error("Can't allocate TX resources, try to decrease dcis number (%u)"
+                  " or tx qp length (%d)", self->tx.ndci, tx_queue_len);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1453,8 +1460,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     uct_dc_mlx5_iface_init_version(self, tl_md);
 
-    self->tx.ndci                          = config->ndci;
-    self->tx.policy                        = (uct_dc_tx_policy_t)config->tx_policy;
     self->tx.fc_seq                        = 0;
     self->tx.fc_hard_req_timeout           = config->fc_hard_req_timeout;
     self->tx.fc_hard_req_resend_time       = ucs_get_time();
@@ -1469,15 +1474,24 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
 
     self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);
-    self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_rand(self) ?
+    self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_shared(self) ?
                          uct_dc_mlx5_iface_dci_do_rand_pending_tx :
                          uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
 
-    /* calculate num_dci_channels: select minimum from requested by runtime
-     * and supported by HCA, must be power of two */
-    num_dci_channels = ucs_roundup_pow2(ucs_max(config->num_dci_channels, 1));
-    self->tx.num_dci_channels = ucs_min(num_dci_channels,
-                                        UCS_BIT(md->log_max_dci_stream_channels));
+    if (config->num_dci_channels == 0) {
+        ucs_error("num_dci_channels must be larger than 0");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (uct_dc_mlx5_iface_is_hw_dcs(self)) {
+        /* Calculate num_dci_channels: select minimum from requested by runtime
+         * and supported by HCA, must be power of two */
+        num_dci_channels          = ucs_roundup_pow2(config->num_dci_channels);
+        self->tx.num_dci_channels = ucs_min(num_dci_channels,
+                                            UCS_BIT(md->log_max_dci_stream_channels));
+    } else {
+        self->tx.num_dci_channels = 1;
+    }
 
     self->tx.dci_pool_release_bitmap = 0;
 
@@ -1493,9 +1507,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
 
     max_dcis = ucs_min(INT8_MAX, UINT8_MAX / self->tx.num_dci_pools);
-    if ((config->ndci < 1) || (config->ndci > max_dcis)) {
-        ucs_error("dc interface must have 1..%d dcis (requested: %d)", max_dcis,
-                  config->ndci);
+    if ((self->tx.ndci < 1) || (self->tx.ndci > max_dcis)) {
+        ucs_error("dc interface must have 1..%d dcis (requested: %u)", max_dcis,
+                  self->tx.ndci);
         return UCS_ERR_INVALID_PARAM;
     }
 
