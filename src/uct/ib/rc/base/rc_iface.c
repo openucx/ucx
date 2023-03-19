@@ -592,7 +592,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                                      "RETRY_COUNT",
                                                      config->tx.retry_count,
                                                      UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.ooo_rw         = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
     self->tx.in_pending         = 0;
 #endif
