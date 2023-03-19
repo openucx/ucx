@@ -830,7 +830,6 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_srq *srq)
 {
     uct_rc_iface_fill_attr(iface, attr, max_send_wr, srq);
-    uct_ib_iface_fill_attr(&iface->super, attr);
 
     return uct_ib_iface_create_qp(&iface->super, attr, qp_p);
 }
