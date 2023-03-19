@@ -1118,7 +1118,7 @@ out_list_add:
         }
 
         status = ucs_async_set_event_handler(
-                UCS_ASYNC_MODE_THREAD,
+                UCS_ASYNC_MODE_THREAD_SPINLOCK,
                 ucs_async_pipe_rfd(&ucs_rcache_global_context.pipe),
                 UCS_EVENT_SET_EVREAD, ucs_rcache_invalidate_handler, NULL,
                 NULL);
