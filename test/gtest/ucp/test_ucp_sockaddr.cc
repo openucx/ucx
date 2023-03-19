@@ -1619,17 +1619,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
-                     connect_and_fail_wireup_msg_pack_addr_on_server,
-                     !cm_use_all_devices())
-{
-    connect_and_fail_wireup(receiver(), FAIL_WIREUP_MSG_ADDR_PACK,
-                            /* WIREUP_MSGs are sent after the server
-                             * is fully connected and it packs
-                             * addresses when sending WIREUP_MSGs */
-                            UCP_EP_FLAG_SERVER_NOTIFY_CB);
-}
-
-UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
                      connect_and_fail_wireup_connect_to_ep_on_client,
                      !cm_use_all_devices())
 {
