@@ -227,31 +227,35 @@ uct_base_iface_is_reachable_v2(const uct_iface_h iface,
     ucs_status_t status;
     uct_iface_attr_t attr;
 
-    status = uct_iface_query(iface, &attr);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    dev_addr = ucs_malloc(attr.device_addr_len, "uct_tmp_dev_addr");
-    if (dev_addr == NULL) {
-        ucs_error("failed to allocated device address of size %zu",
-                  attr.device_addr_len);
-        return 0;
-    }
-
-    status = uct_iface_get_device_address(iface, dev_addr);
-    if (status != UCS_OK) {
-        ucs_free(dev_addr);
-        return 0;
-    }
-
-    params->is_self = !memcmp(params->device_addr, dev_addr,
-                              attr.device_addr_len);
-    ucs_free(dev_addr);
-
+    params->is_self            = 0;
     params->info_string_length = 0;
+
     if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
         params->info_string[0] = '\0';
+    }
+
+    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_IS_SELF) {
+        status = uct_iface_query(iface, &attr);
+        if (status != UCS_OK) {
+            return 0;
+        }
+
+        dev_addr = ucs_malloc(attr.device_addr_len, "uct_tmp_dev_addr");
+        if (dev_addr == NULL) {
+            ucs_error("failed to allocated device address of size %zu",
+                      attr.device_addr_len);
+            return 0;
+        }
+
+        status = uct_iface_get_device_address(iface, dev_addr);
+        if (status != UCS_OK) {
+            ucs_free(dev_addr);
+            return 0;
+        }
+
+        params->is_self = !memcmp(params->device_addr, dev_addr,
+                                  attr.device_addr_len);
+        ucs_free(dev_addr);
     }
 
     return uct_iface_is_reachable(iface, params->device_addr,
