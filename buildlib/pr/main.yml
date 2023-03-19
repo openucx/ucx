@@ -17,6 +17,7 @@ resources:
       options: $(DOCKER_OPT_ARGS) --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+      options: $(DOCKER_OPT_ARGS)
     - container: fedora34
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -154,6 +155,7 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu2004_rocm_5_4_0
       image: registry.hub.docker.com/rocm/ucx:rocm-5.4.0
+      options: $(DOCKER_OPT_ARGS)
 
 stages:
   - stage: Codestyle
