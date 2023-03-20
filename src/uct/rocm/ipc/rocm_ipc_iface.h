@@ -8,6 +8,7 @@
 #define ROCM_IPC_IFACE_H
 
 #include <uct/base/uct_iface.h>
+#include "rocm_ipc_cache.h"
 
 #include <hsa.h>
 
@@ -17,6 +18,7 @@ typedef struct uct_rocm_ipc_iface {
     uct_base_iface_t super;
     ucs_mpool_t signal_pool;
     ucs_queue_head_t signal_queue;
+    uct_rocm_ipc_cache_t *remote_memh_cache;
 } uct_rocm_ipc_iface_t;
 
 typedef struct uct_rocm_ipc_iface_config {
