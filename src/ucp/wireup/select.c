@@ -2105,7 +2105,8 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
         const ucp_wireup_select_params_t *select_params,
         ucp_ep_config_key_t *key)
 {
-    ucp_worker_h worker = select_params->ep->worker;
+    ucp_worker_h worker   = select_params->ep->worker;
+    ucp_context_h context = worker->context;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
     ucp_address_entry_t *ae;
@@ -2142,7 +2143,9 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
         }
 
         ucp_unpacked_address_for_each(ae, select_params->address) {
-            if (wiface->attr.device_addr_len != ae->dev_addr_len) {
+            if ((wiface->attr.device_addr_len != ae->dev_addr_len) ||
+                (context->tl_rscs[rsc_index].tl_name_csum !=
+                 ae->tl_name_csum)) {
                 continue;
             }
 
