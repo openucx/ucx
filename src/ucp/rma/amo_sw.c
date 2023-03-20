@@ -351,8 +351,8 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
 
 UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REQ,
                          ucp_atomic_req_handler, ucp_amo_sw_dump_packet, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REP, ucp_atomic_rep_handler,
-              ucp_amo_sw_dump_packet, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REP,
+                         ucp_atomic_rep_handler, ucp_amo_sw_dump_packet, 0);
 
 static size_t ucp_proto_amo_sw_post_pack_cb(void *dest, void *arg)
 {
