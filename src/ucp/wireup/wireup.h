@@ -32,6 +32,10 @@ typedef struct {
 #define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
 
 
+#define UCP_WIREUP_UCT_EVENT_CAP_FLAGS \
+    (UCT_IFACE_FLAG_EVENT_SEND_COMP | UCT_IFACE_FLAG_EVENT_RECV)
+
+
 /**
  * Wireup message types
  */

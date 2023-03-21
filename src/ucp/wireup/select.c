@@ -22,8 +22,6 @@
 #include <inttypes.h>
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
-#define UCP_WIREUP_UCT_EVENT_CAP_FLAGS     (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
-                                            UCT_IFACE_FLAG_EVENT_RECV)
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
 
