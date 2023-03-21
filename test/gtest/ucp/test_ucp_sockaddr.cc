@@ -1498,10 +1498,10 @@ protected:
                             fail_injection);
         } else if (fail_wireup_type == FAIL_WIREUP_MSG_ADDR_PACK) {
             /* Emulate failure of preparation of WIREUP MSG sending by setting
-             * the device address getter to the function that always returns
+             * the iface address getter to the function that always returns
              * error */
-            iface->ops.iface_get_device_address =
-                    reinterpret_cast<uct_iface_get_device_address_func_t>(
+            iface->ops.iface_get_address =
+                    reinterpret_cast<uct_iface_get_address_func_t>(
                             fail_injection);
         }
     }
@@ -1620,8 +1620,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
                      connect_and_fail_wireup_msg_pack_addr_on_server,
-                     !cm_use_all_devices() || (has_transport("dc_mlx5") &&
-                                               !has_transport("ud_x")))
+                     !cm_use_all_devices())
 {
     connect_and_fail_wireup(receiver(), FAIL_WIREUP_MSG_ADDR_PACK,
                             /* WIREUP_MSGs are sent after the server
