@@ -254,8 +254,8 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR        = UCS_BIT(0), /**< device_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR         = UCS_BIT(1), /**< iface_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING        = UCS_BIT(2), /**< info_string field */
-    UCT_IFACE_IS_REACHABLE_FIELD_IS_SELF            = UCS_BIT(3), /**< is_self field */
-    UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(4)  /**< info_string_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_IS_SELF            = UCS_BIT(4) /**< is_self field */
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -560,7 +560,7 @@ typedef struct uct_iface_is_reachable_params {
      * Output parameter; Indicates whether both addresses describe the same
      * device.
      */
-    int                           is_self;
+    int                           is_same_device;
 } uct_iface_is_reachable_params_t;
 
 

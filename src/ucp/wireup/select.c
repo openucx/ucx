@@ -2155,7 +2155,7 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
             params.device_addr = ae->dev_addr;
             params.iface_addr  = ae->iface_addr;
             uct_iface_is_reachable_v2(wiface->iface, &params);
-            if (params.is_self) {
+            if (params.is_same_device) {
                 key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
                 return UCS_OK;
             }

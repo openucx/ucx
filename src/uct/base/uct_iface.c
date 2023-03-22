@@ -227,7 +227,7 @@ uct_base_iface_is_reachable_v2(const uct_iface_h iface,
     ucs_status_t status;
     uct_iface_attr_t attr;
 
-    params->is_self            = 0;
+    params->is_same_device     = 0;
     params->info_string_length = 0;
 
     if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
@@ -253,8 +253,8 @@ uct_base_iface_is_reachable_v2(const uct_iface_h iface,
             return 0;
         }
 
-        params->is_self = !memcmp(params->device_addr, dev_addr,
-                                  attr.device_addr_len);
+        params->is_same_device = !memcmp(params->device_addr, dev_addr,
+                                         attr.device_addr_len);
         ucs_free(dev_addr);
     }
 
