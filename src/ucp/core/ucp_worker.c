@@ -620,8 +620,13 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         return UCS_OK;
     } else if (*progress_count == 0) {
         /* Arm the interface to wait for next event */
-        ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV);
-        status = uct_iface_event_arm(wiface->iface, UCT_EVENT_RECV);
+        ucs_assertv(ucs_test_all_flags(wiface->attr.cap.event_flags,
+                                       UCP_WIREUP_UCT_EVENT_CAP_FLAGS),
+                    "event flags 0x%" PRIx64 ", required 0x%" PRIx64,
+                    wiface->attr.cap.event_flags,
+                    UCP_WIREUP_UCT_EVENT_CAP_FLAGS);
+        status = uct_iface_event_arm(wiface->iface,
+                                     UCT_EVENT_RECV | UCT_EVENT_SEND_COMP);
         if (status == UCS_OK) {
             ucs_trace("armed iface %p", wiface->iface);
 
@@ -726,7 +731,8 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
     ucp_worker_set_am_handlers(wiface, 1);
 
     /* Prepare for next receive event */
-    if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV) {
+    if (ucs_test_all_flags(wiface->attr.cap.event_flags,
+                           UCP_WIREUP_UCT_EVENT_CAP_FLAGS)) {
         ucp_worker_iface_check_events(wiface, force);
     }
 }
@@ -1391,8 +1397,8 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
 
         if (context->config.ext.adaptive_progress &&
-            (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV))
-        {
+            ucs_test_all_flags(wiface->attr.cap.event_flags,
+                               UCP_WIREUP_UCT_EVENT_CAP_FLAGS)) {
             ucp_worker_iface_deactivate(wiface, 1);
         } else {
             ucp_worker_iface_activate(wiface, 0);
