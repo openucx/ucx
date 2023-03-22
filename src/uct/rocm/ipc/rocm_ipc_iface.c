@@ -26,20 +26,22 @@ static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
 
 static double uct_rocm_ipc_iface_get_bw()
 {
-    double bw = 30.0 * UCS_GBYTE;
+    static double bw = -1.0;
     hsa_amd_link_info_type_t type;
 
-    uct_rocm_base_get_link_type(&type);
-    switch (type) {
-    case HSA_AMD_LINK_INFO_TYPE_PCIE:
-        bw = 200.0 * UCS_GBYTE;
-        break;
-    case HSA_AMD_LINK_INFO_TYPE_XGMI:
-        bw = 400.0 * UCS_GBYTE;
-        break;
-    default:
-        bw = 100.0 * UCS_GBYTE;
-        break;
+    if (bw < 0.0) {
+        uct_rocm_base_get_link_type(&type);
+        switch (type) {
+        case HSA_AMD_LINK_INFO_TYPE_PCIE:
+            bw = 200.0 * UCS_GBYTE;
+            break;
+        case HSA_AMD_LINK_INFO_TYPE_XGMI:
+            bw = 400.0 * UCS_GBYTE;
+            break;
+        default:
+            bw = 100.0 * UCS_GBYTE;
+            break;
+        }
     }
     return bw;
 }
