@@ -156,7 +156,6 @@ typedef enum uct_rc_fence_mode {
 typedef struct uct_rc_iface_common_config {
     uct_ib_iface_config_t    super;
     unsigned long            max_rd_atomic;
-    int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
     unsigned long            ece;
 
@@ -297,8 +296,6 @@ struct uct_rc_iface {
         uint8_t              rnr_retry;
         uint8_t              retry_cnt;
         uint8_t              max_rd_atomic;
-        /* Enable out-of-order RDMA data placement */
-        uint8_t              ooo_rw;
         uint8_t              flush_remote;
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
