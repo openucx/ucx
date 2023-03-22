@@ -161,6 +161,19 @@ typedef enum {
 } uct_dc_tx_policy_t;
 
 
+/**
+ * dct port affinity policies for RoCE LAG device
+ * - default: use the first physical port number for affinity
+ * - random : use random slave port number for affinity
+ * - [1, lag_level]: use given value as the slave port number for affinity
+ */
+typedef enum {
+    UCT_DC_MLX5_DCT_AFFINITY_DEFAULT,
+    UCT_DC_MLX5_DCT_AFFINITY_RANDOM,
+    UCT_DC_MLX5_DCT_AFFINITY_LAST
+} uct_dc_mlx5_dct_affinity_t;
+
+
 typedef struct uct_dc_mlx5_iface_config {
     uct_rc_iface_common_config_t        super;
     uct_rc_mlx5_iface_common_config_t   rc_mlx5_common;
@@ -171,6 +184,7 @@ typedef struct uct_dc_mlx5_iface_config {
     ucs_ternary_auto_value_t            dci_full_handshake;
     ucs_ternary_auto_value_t            dci_ka_full_handshake;
     ucs_ternary_auto_value_t            dct_full_handshake;
+    unsigned                            dct_affinity;
     unsigned                            quota;
     unsigned                            rand_seed;
     ucs_time_t                          fc_hard_req_timeout;
@@ -312,6 +326,8 @@ struct uct_dc_mlx5_iface {
 
     struct {
         uct_ib_mlx5_qp_t          dct;
+
+        uint8_t                   port_affinity;
     } rx;
 
     uint8_t                       version_flag;

@@ -1061,9 +1061,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     status = uct_ib_mlx5_devx_query_lag(md, &lag_state);
-    if (status != UCS_OK) {
-        dev->lag_level = 0;
-    } else if (lag_state == 0) {
+    if ((status != UCS_OK) || (lag_state == 0)) {
         dev->lag_level = 1;
     } else {
         dev->lag_level = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, num_lag_ports);
