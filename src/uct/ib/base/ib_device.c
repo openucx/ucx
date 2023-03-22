@@ -528,8 +528,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
 
     if (dev->num_ports > UCT_IB_DEV_MAX_PORTS) {
         ucs_debug("%s has %d ports, but only up to %d are supported",
-                  ibv_get_device_name(ibv_device), dev->num_ports,
-                  UCT_IB_DEV_MAX_PORTS);
+                  dev_name, dev->num_ports, UCT_IB_DEV_MAX_PORTS);
         dev->num_ports = UCT_IB_DEV_MAX_PORTS;
     }
 
