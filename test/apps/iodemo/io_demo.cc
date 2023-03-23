@@ -32,8 +32,9 @@
 #include <cuda_runtime.h>
 #endif
 
-#define ALIGNMENT           4096
-#define BUSY_PROGRESS_COUNT 1000
+#define ALIGNMENT               4096
+#define BUSY_PROGRESS_COUNT     1000
+#define MAX_SERVER_REPEAT_COUNT (65536U - 1024U)
 
 /* IO operation type */
 typedef enum {
@@ -62,7 +63,7 @@ const bool do_assert = false;
 
 /* test options */
 typedef struct {
-    std::vector<const char*> servers;
+    std::vector<std::string> servers;
     int                      port_num;
     double                   connect_timeout;
     double                   client_timeout;
@@ -85,6 +86,7 @@ typedef struct {
     bool                     use_am;
     bool                     debug_timeout;
     bool                     use_epoll;
+    uint64_t                 client_id;
     ucs_memory_type_t        memory_type;
     unsigned                 progress_count;
     std::vector<const char*> src_addrs;
@@ -875,7 +877,7 @@ protected:
 
     P2pDemoCommon(const options_t &test_opts, uint32_t iov_buf_filler) :
         UcxContext(test_opts.iomsg_size, test_opts.connect_timeout,
-                   test_opts.use_am, test_opts.use_epoll),
+                   test_opts.use_am, test_opts.use_epoll, test_opts.client_id),
         _test_opts(test_opts),
         _io_msg_pool(test_opts.iomsg_size, "io messages"),
         _send_callback_pool(0, "send callbacks"),
@@ -2067,7 +2069,7 @@ public:
 
     void connect(size_t server_index)
     {
-        const char *server = opts().servers[server_index];
+        const char *server = opts().servers[server_index].c_str();
         struct sockaddr_storage *src_addr_p = NULL;
         struct sockaddr_storage dst_addr, src_addr;
         uint32_t addr_index;
@@ -2093,8 +2095,7 @@ public:
         }
 
         if (!opts().src_addrs.empty()) {
-            addr_index = IoDemoRandom::rand(0U,
-                               (uint32_t)(opts().src_addrs.size() - 1));
+            addr_index = server_index % opts().src_addrs.size();
             ret = set_sockaddr(opts().src_addrs[addr_index], 0,
                                (struct sockaddr*)&src_addr);
             if (ret != true) {
@@ -2682,8 +2683,44 @@ static int parse_window_size(const char *optarg, long &window_size,
     return 0;
 }
 
+static int add_servers(const char *server, std::vector<std::string> &servers)
+{
+    const char *repeat_separator;
+    const char *port_separator;
+    std::string server_repeated;
+    int repeat_count;
+
+    port_separator = strchr(server, ':');
+    if (port_separator == NULL) {
+        servers.push_back(server);
+        return 0;
+    }
+
+    repeat_separator = strchr(port_separator + 1, ':');
+    if (repeat_separator == NULL) {
+        servers.push_back(server);
+        return 0;
+    }
+
+    server_repeated = std::string(server, repeat_separator - server);
+    repeat_count    = atoi(repeat_separator + 1);
+    if ((repeat_count == 0) || (repeat_count > MAX_SERVER_REPEAT_COUNT)) {
+        std::cout << "Server repeat_count should be in the range "
+                  << "[1.. " << MAX_SERVER_REPEAT_COUNT << "]" << std::endl;
+        return -1;
+    }
+
+    for (int i = 0; i < repeat_count; i++) {
+        servers.push_back(server_repeated);
+    }
+
+    return 0;
+}
+
 static int parse_args(int argc, char **argv, options_t *test_opts)
 {
+    static const char *optstring =
+            "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADC:HP:m:L:I:zV";
     char *str;
     bool found;
     int c;
@@ -2709,13 +2746,13 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->use_am                = false;
     test_opts->debug_timeout         = false;
     test_opts->use_epoll             = false;
+    test_opts->client_id             = UcxContext::CLIENT_ID_UNDEFINED;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
     test_opts->progress_count        = 1;
     test_opts->prereg                = false;
     test_opts->per_conn_info         = false;
 
-    while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:zV")) != -1) {
+    while ((c = getopt(argc, argv, optstring)) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2839,6 +2876,14 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'e':
             test_opts->use_epoll = true;
             break;
+        case 'C':
+            test_opts->client_id = atoi(optarg);
+            if (test_opts->client_id == UcxContext::CLIENT_ID_UNDEFINED) {
+                std::cout << "Invalid client id '" << optarg << "'"
+                          << std::endl;
+                return -1;
+            }
+            break;
         case 'H':
             UcxLog::use_human_time = true;
             break;
@@ -2871,8 +2916,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             break;
         case 'h':
         default:
-            std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
-            std::cout << "       or io_demo [options] [server_address0:port0] [server_address1:port1]..." << std::endl;
+            std::cout << "Usage: io_demo [options] [server_address[:port:[repeat_count]]]" << std::endl;
+            std::cout << "Server repeat_count should be in the range "
+                      << "[1.. " << MAX_SERVER_REPEAT_COUNT << "]" << std::endl;
             std::cout << "" << std::endl;
             std::cout << "Supported options are:" << std::endl;
             std::cout << "  -p <port>                   TCP port number to use" << std::endl;
@@ -2899,6 +2945,8 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -v                          Set verbose mode" << std::endl;
             std::cout << "  -q                          Enable data integrity and transaction check" << std::endl;
             std::cout << "  -A                          Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
+            std::cout << "  -C <client-id>              Send client id during connection establishment, "
+                      << "must be != " << UcxContext::CLIENT_ID_UNDEFINED << std::endl;
             std::cout << "  -D                          Enable debugging mode for IO operation timeouts" << std::endl;
             std::cout << "  -H                          Use human-readable timestamps" << std::endl;
             std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
@@ -2917,7 +2965,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     }
 
     while (optind < argc) {
-        test_opts->servers.push_back(argv[optind++]);
+        if (add_servers(argv[optind++], test_opts->servers) != 0) {
+            return -1;
+        };
     }
 
     adjust_opts(test_opts);

@@ -525,6 +525,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     self->err_handler_arg   = UCT_IFACE_PARAM_VALUE(params, err_handler_arg,
                                                     ERR_HANDLER_ARG, NULL);
     self->progress_flags    = 0;
+
     uct_worker_progress_init(&self->prog);
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {

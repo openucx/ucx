@@ -157,6 +157,15 @@ public class UcpParams extends UcxParams {
     }
 
     /**
+     * Request support for exporting memory.
+     */
+    public UcpParams requestExportedMemFeature() {
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
+        this.features |= UcpConstants.UCP_FEATURE_EXPORTED_MEMH;
+        return this;
+    }
+
+    /**
      * The routine sets runtime UCP library configuration.
      */
     public UcpParams setConfig(String key, String value) {

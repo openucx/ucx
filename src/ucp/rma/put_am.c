@@ -92,7 +92,8 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = sizeof(ucp_put_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .max_lanes           = 1,
         .initial_reg_md_map  = 0,

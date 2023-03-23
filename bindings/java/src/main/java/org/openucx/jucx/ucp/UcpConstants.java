@@ -39,6 +39,7 @@ public class UcpConstants {
     static long UCP_FEATURE_WAKEUP;
     static long UCP_FEATURE_STREAM;
     static long UCP_FEATURE_AM;
+    static long UCP_FEATURE_EXPORTED_MEMH;
 
     /**
      * UCP worker parameters field mask.
@@ -110,6 +111,7 @@ public class UcpConstants {
     static long UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     static long UCP_MEM_MAP_PARAM_FIELD_PROT;
     static long UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+    static long UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER;
 
     /**
      *  The enumeration list describes the memory mapping flags.
@@ -117,6 +119,16 @@ public class UcpConstants {
     static long UCP_MEM_MAP_NONBLOCK;
     static long UCP_MEM_MAP_ALLOCATE;
     static long UCP_MEM_MAP_FIXED;
+
+    /**
+     * UCP memory handle packing parameters field mask.
+     */
+    static long UCP_MEMH_PACK_PARAM_FIELD_FLAGS;
+
+    /**
+     * The enumeration describes the memory handle packing flags.
+     */
+    static long UCP_MEMH_PACK_FLAG_EXPORT;
 
     /**
      * The enumeration list describes the memory mapping protections supported by

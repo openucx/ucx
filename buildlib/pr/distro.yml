@@ -53,6 +53,7 @@ jobs:
       name: MLNX
       demands:
       - ucx_dummy -equals yes
+
     strategy:
       matrix:
         ubuntu20:

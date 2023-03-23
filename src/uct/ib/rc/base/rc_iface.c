@@ -505,8 +505,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     srq_init_attr.srq_context    = iface;
     srq                          = ibv_create_srq(pd, &srq_init_attr);
     if (srq == NULL) {
-        uct_ib_mem_lock_limit_msg("ibv_create_srq()", errno,
-                                  UCS_LOG_LEVEL_ERROR);
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR, "ibv_create_srq()");
         return UCS_ERR_IO_ERROR;
     }
     iface->rx.srq.quota          = srq_init_attr.attr.max_wr;
@@ -593,7 +592,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                                      "RETRY_COUNT",
                                                      config->tx.retry_count,
                                                      UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.ooo_rw         = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
     self->tx.in_pending         = 0;
 #endif
@@ -831,7 +829,6 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_srq *srq)
 {
     uct_rc_iface_fill_attr(iface, attr, max_send_wr, srq);
-    uct_ib_iface_fill_attr(&iface->super, attr);
 
     return uct_ib_iface_create_qp(&iface->super, attr, qp_p);
 }

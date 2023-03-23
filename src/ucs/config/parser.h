@@ -153,6 +153,8 @@ typedef struct ucs_config_bw_spec {
 
 extern ucs_list_link_t ucs_config_global_list;
 
+#define UCS_CONFIG_UINT_ENUM_INDEX(_value) (UINT_MAX - (_value))
+
 /*
  * Parsing and printing different data types
  */
@@ -199,6 +201,10 @@ int ucs_config_sprintf_on_off_auto(char *buf, size_t max, const void *src, const
 int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_enum(char *buf, size_t max, const void *src, const void *arg);
 void ucs_config_help_enum(char *buf, size_t max, const void *arg);
+
+int ucs_config_sscanf_uint_enum(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_uint_enum(char *buf, size_t max, const void *src, const void *arg);
+void ucs_config_help_uint_enum(char *buf, size_t max, const void *arg);
 
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_bitmap(char *buf, size_t max, const void *src, const void *arg);
@@ -325,6 +331,10 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_ENUM(t)    {ucs_config_sscanf_enum,      ucs_config_sprintf_enum, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
                                     ucs_config_help_enum,        t}
+
+#define UCS_CONFIG_TYPE_UINT_ENUM(t) {ucs_config_sscanf_uint_enum, ucs_config_sprintf_uint_enum, \
+                                      ucs_config_clone_uint,       ucs_config_release_nop, \
+                                      ucs_config_help_uint_enum,   t}
 
 #define UCS_CONFIG_TYPE_BITMAP(t)  {ucs_config_sscanf_bitmap,    ucs_config_sprintf_bitmap, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \

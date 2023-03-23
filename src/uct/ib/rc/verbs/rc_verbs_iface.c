@@ -496,7 +496,7 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
     .iface_get_address        = ucs_empty_function_return_success,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable,
-    };
+};
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
@@ -539,7 +539,7 @@ uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        ucs_debug("failed to create cq %m");
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG, "ibv_create_cq()");
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
@@ -549,6 +549,7 @@ uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
 
     qp = ibv_create_qp(pd, &qp_init_attr);
     if (qp == NULL) {
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG, "ibv_create_qp()");
         status = UCS_ERR_UNSUPPORTED;
         goto err_destroy_cq;
     }

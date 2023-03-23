@@ -840,10 +840,10 @@ uct_tcp_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                             const uct_ep_addr_t *ep_addr,
                             const uct_ep_connect_to_ep_params_t *param)
 {
-    uct_tcp_ep_t *ep                    = ucs_derived_of(tl_ep, uct_tcp_ep_t);
-    uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
-                                                         uct_tcp_iface_t);
-    uct_tcp_ep_addr_t *addr             = (uct_tcp_ep_addr_t*)ep_addr;
+    uct_tcp_ep_t *ep        = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    uct_tcp_iface_t  *iface = ucs_derived_of(ep->super.super.iface,
+                                             uct_tcp_iface_t);
+    uct_tcp_ep_addr_t *addr = (uct_tcp_ep_addr_t*)ep_addr;
     ucs_status_t status;
 
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);

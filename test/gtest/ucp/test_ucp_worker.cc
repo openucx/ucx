@@ -209,6 +209,14 @@ protected:
         }
 
         flush_req = sender().flush_worker_nb(0);
+        /* In some cases, there will be nothing to flush, so we need to skip
+         * the progress loop */
+        if ((flush_req == NULL) &&
+            (get_variant_value() & TEST_DISCARD_DISABLED)) {
+            UCS_TEST_MESSAGE << "all EPs returned UCS_OK in 'flush_worker_nb'";
+            goto out;
+        }
+
         ASSERT_FALSE(flush_req == NULL);
         ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
 
@@ -722,8 +730,10 @@ public:
                                UCS_THREAD_MODE_SINGLE, "single");
         add_variant_with_value(variants, UCP_FEATURE_TAG,
                                UCS_THREAD_MODE_SERIALIZED, "serialized");
+#if ENABLE_MT
         add_variant_with_value(variants, UCP_FEATURE_TAG, UCS_THREAD_MODE_MULTI,
                                "multi");
+#endif
     }
 
     /// @override

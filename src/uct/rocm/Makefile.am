@@ -16,10 +16,12 @@ libuct_rocm_la_LDFLAGS  = $(ROCM_LDFLAGS) $(ROCM_LIBS) -version-info $(SOVERSION
                           $(patsubst %, -Xlinker %, -rpath $(ROCM_ROOT)/lib64)
 
 noinst_HEADERS = \
-	base/rocm_base.h
+	base/rocm_base.h \
+	base/rocm_signal.h
 
 libuct_rocm_la_SOURCES = \
-	base/rocm_base.c
+	base/rocm_base.c \
+	base/rocm_signal.c
 
 noinst_HEADERS += \
     copy/rocm_copy_md.h \

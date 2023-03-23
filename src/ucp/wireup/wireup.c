@@ -310,7 +310,7 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
     ucp_lane_index_t lane, remote_lane;
     unsigned *ep_addr_indexes;
     unsigned ep_addr_index;
-    uint64_t UCS_V_UNUSED used_remote_lanes;
+    uint64_t used_remote_lanes;
 
     /* Initialize the counters of ep address index for each address entry */
     ep_addr_indexes = ucs_alloca(sizeof(ep_addr_index) *
@@ -1770,6 +1770,19 @@ ucp_ep_params_err_handling_mode(const ucp_ep_params_t *params)
 {
     return (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) ?
            params->err_mode : UCP_ERR_HANDLING_MODE_NONE;
+}
+
+static unsigned
+ucp_cm_ep_init_flags(const ucp_ep_params_t *params)
+{
+    if (params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR) {
+        return UCP_EP_INIT_CM_WIREUP_CLIENT | UCP_EP_INIT_CM_PHASE;
+    }
+    if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
+        return UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
+    }
+
+    return 0;
 }
 
 unsigned ucp_ep_init_flags(const ucp_worker_h worker,

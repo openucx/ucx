@@ -115,14 +115,14 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_proto_select_param_t select_param;
     ucs_string_buffer_t strb;
 
-    select_param.op_id_flags = UCP_OP_ID_TAG_SEND;
-    select_param.op_attr     = 0;
-    select_param.dt_class    = UCP_DATATYPE_CONTIG;
-    select_param.mem_type    = UCS_MEMORY_TYPE_HOST;
-    select_param.sys_dev     = UCS_SYS_DEVICE_ID_UNKNOWN;
-    select_param.sg_count    = 1;
-    select_param.padding[0]  = 0;
-    select_param.padding[1]  = 0;
+    select_param.op_id_flags   = UCP_OP_ID_TAG_SEND;
+    select_param.op_attr       = 0;
+    select_param.dt_class      = UCP_DATATYPE_CONTIG;
+    select_param.mem_type      = UCS_MEMORY_TYPE_HOST;
+    select_param.sys_dev       = UCS_SYS_DEVICE_ID_UNKNOWN;
+    select_param.sg_count      = 1;
+    select_param.op.padding[0] = 0;
+    select_param.op.padding[1] = 0;
 
     ucs_string_buffer_init(&strb);
     ucp_proto_select_param_str(&select_param, ucp_operation_names, &strb);
@@ -133,9 +133,11 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_worker_cfg_index_t ep_cfg_index   = sender().ep()->cfg_index;
     ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
 
-    auto select_elem = ucp_proto_select_lookup(
-            worker, &worker->ep_config[ep_cfg_index].proto_select, ep_cfg_index,
-            rkey_cfg_index, &select_param, 0);
+    auto proto_select = &ucs_array_elem(&worker->ep_config,
+                                        ep_cfg_index).proto_select;
+    auto select_elem  = ucp_proto_select_lookup(worker, proto_select,
+                                                ep_cfg_index, rkey_cfg_index,
+                                                &select_param, 0);
     EXPECT_NE(nullptr, select_elem);
 
     ucp_ep_print_info(sender().ep(), stdout);

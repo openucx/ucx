@@ -28,7 +28,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
                                                  uct_cuda_ipc_iface_t);
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->remote_pid = *(const pid_t*)params->iface_addr;
 

@@ -10,6 +10,7 @@
 
 #include "rdmacm_cm_ep.h"
 #include <uct/ib/base/ib_iface.h>
+#include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/async/async.h>
 
@@ -81,6 +82,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
     uct_rdmacm_cm_reserved_qpn_blk_t *blk;
     uint64_t general_obj_types_caps;
+    uint8_t log_max_num_reserved_qpn;
     ucs_status_t status;
     void *cap;
 #endif
@@ -150,6 +152,8 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 
     ctx->log_reserved_qpn_granularity =
             UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap, log_reserved_qpn_granularity);
+    log_max_num_reserved_qpn          =
+            UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap, log_max_num_reserved_qpn);
 
     /* Try-allocate a reserved QPN block. If fails, fallback to dummy QP. */
     status = uct_rdmacm_cm_reserved_qpn_blk_alloc(ctx, verbs,
@@ -160,8 +164,9 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 
     uct_rdmacm_cm_reserved_qpn_blk_release(blk);
 
-    ucs_debug("%s reserved qpn cap: log_reserved_qpn_granularity is 0x%x",
-              dev_name, ctx->log_reserved_qpn_granularity);
+    ucs_debug("%s with reserved qpn cap log_max_num_reserved_qpn=%d "
+              "log_reserved_qpn_granularity=%d", dev_name,
+              log_max_num_reserved_qpn, ctx->log_reserved_qpn_granularity);
 
     ctx->use_reserved_qpn = 1;
 
@@ -182,7 +187,8 @@ dummy_qp_ctx_init:
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
     if (ctx->cq == NULL) {
-        ucs_error("ibv_create_cq(%s) failed: %m", dev_name);
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: ibv_create_cq()", dev_name);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -932,11 +938,10 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     self->ev_ch = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
+        status  = UCS_ERR_IO_ERROR;
         if ((errno == ENODEV) || (errno == ENOENT)) {
-            status  = UCS_ERR_IO_ERROR;
             log_lvl = UCS_LOG_LEVEL_DIAG;
         } else {
-            status  = UCS_ERR_IO_ERROR;
             log_lvl = UCS_LOG_LEVEL_ERROR;
         }
 

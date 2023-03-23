@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019-2022. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -13,13 +13,14 @@
 #include "rocm_copy_md.h"
 #include "rocm_copy_cache.h"
 
-
 #include <uct/rocm/base/rocm_base.h>
+#include <uct/rocm/base/rocm_signal.h>
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/profile/profile.h>
 
 #include <hsa_ext_amd.h>
 
@@ -87,16 +88,14 @@ uct_rocm_copy_get_mapped_host_ptr(uct_ep_h tl_ep, void *ptr, size_t size,
     return mapped_ptr;
 }
 
-ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep,
-                                    uint64_t remote_addr,
-                                    const uct_iov_t *iov,
-                                    uct_rkey_t rkey,
-                                    int is_put)
+ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
+                                    const uct_iov_t *iov, uct_rkey_t rkey,
+                                    int is_put, uct_completion_t *comp)
 {
     size_t size                        = uct_iov_get_length(iov);
     uct_rocm_copy_iface_t *iface       = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
-    hsa_signal_t signal                = iface->hsa_signal;
     uct_rocm_copy_key_t *rocm_copy_key = (uct_rocm_copy_key_t *) rkey;
+    ucs_status_t ret                   = UCS_INPROGRESS;
     void *remote_addr_mod = NULL, *iov_buffer_mod = NULL;
     bool remote_addr_is_host = 0, iov_buffer_is_host = 0;
     hsa_status_t status;
@@ -105,6 +104,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep,
     hsa_device_type_t dev_type;
     hsa_amd_pointer_type_t remote_addr_mem_type, iov_buffer_mem_type;
     size_t dev_size;
+    uct_rocm_base_signal_desc_t *rocm_copy_signal;
 
     ucs_trace("remote addr %p rkey %p size %zu",
               (void*)remote_addr, (void*)rkey, size);
@@ -200,16 +200,34 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep,
         dst_addr = iov_buffer_mod;
     }
 
-    hsa_signal_store_screlease(signal, 1);
-    status = hsa_amd_memory_async_copy(dst_addr, agent,
-                                       src_addr, agent,
-                                       size, 0, NULL, signal);
+    rocm_copy_signal = ucs_mpool_get(&iface->signal_pool);
+    hsa_signal_store_screlease(rocm_copy_signal->signal, 1);
 
-    while (hsa_signal_wait_scacquire(signal, HSA_SIGNAL_CONDITION_LT, 1,
-                                     UINT64_MAX, HSA_WAIT_STATE_ACTIVE));
+    status = UCS_PROFILE_CALL_ALWAYS(hsa_amd_memory_async_copy, dst_addr, agent,
+                                     src_addr, agent, size, 0, NULL,
+                                     rocm_copy_signal->signal);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("copy error");
+        ucs_mpool_put(rocm_copy_signal);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if ((comp == NULL) || !iface->config.enable_async_zcopy) {
+        while (UCS_PROFILE_CALL_ALWAYS(hsa_signal_wait_scacquire,
+                                       rocm_copy_signal->signal,
+                                       HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX,
+                                       HSA_WAIT_STATE_ACTIVE));
+        ucs_mpool_put(rocm_copy_signal);
+        ret = UCS_OK;
+    } else {
+        rocm_copy_signal->comp        = comp;
+        rocm_copy_signal->mapped_addr = dst_addr;
+        ucs_queue_push(&iface->signal_queue, &rocm_copy_signal->queue);
+    }
+
     ucs_trace("hsa async copy from src %p to dst %p, len %ld status %d",
               src_addr, dst_addr, size, (int)status);
-    return UCS_OK;
+    return ret;
 }
 
 ucs_status_t uct_rocm_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
@@ -224,7 +242,8 @@ ucs_status_t uct_rocm_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
         uct_rocm_memcpy_d2h(iov->buffer, (void *)remote_addr, size);
         status = UCS_OK;
     } else {
-        status = uct_rocm_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 0);
+        status = UCS_PROFILE_CALL_ALWAYS(uct_rocm_copy_ep_zcopy, tl_ep,
+                                         remote_addr, iov, rkey, 0, comp);
     }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
@@ -246,7 +265,8 @@ ucs_status_t uct_rocm_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
         uct_rocm_memcpy_h2d((void *)remote_addr, iov->buffer, size);
         status = UCS_OK;
     } else {
-        status = uct_rocm_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 1);
+        status = UCS_PROFILE_CALL_ALWAYS(uct_rocm_copy_ep_zcopy, tl_ep,
+                                         remote_addr, iov, rkey, 1, comp);
     }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
@@ -277,7 +297,8 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
         iov->buffer = (void*)buffer;
         iov->length = length;
         iov->count  = 1;
-        status      = uct_rocm_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 1);
+        status      = UCS_PROFILE_CALL_ALWAYS(uct_rocm_copy_ep_zcopy, tl_ep,
+                                              remote_addr, iov, rkey, 1, NULL);
         if (status != UCS_OK) {
             ucs_error("error in uct_rocm_copy_ep_zcopy %s",
                       ucs_status_string(status));
@@ -312,7 +333,8 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
         iov->buffer = buffer;
         iov->length = length;
         iov->count  = 1;
-        status      = uct_rocm_copy_ep_zcopy(tl_ep, remote_addr, iov, rkey, 0);
+        status      = UCS_PROFILE_CALL_ALWAYS(uct_rocm_copy_ep_zcopy, tl_ep,
+                                              remote_addr, iov, rkey, 0, NULL);
         if (status != UCS_OK) {
             ucs_error("error in uct_rocm_copy_ep_zcopy %s",
                       ucs_status_string(status));

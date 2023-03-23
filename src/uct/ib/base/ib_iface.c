@@ -790,11 +790,10 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
                                            const uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev        = uct_ib_iface_device(iface);
-    uint16_t pkey_tbl_len       = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
-    int UCS_V_UNUSED pkey_found = 0;
-    uint16_t lim_pkey           = UCT_IB_ADDRESS_INVALID_PKEY;
-    uint16_t lim_pkey_index     = UINT16_MAX;
+    uct_ib_device_t *dev    = uct_ib_iface_device(iface);
+    uint16_t pkey_tbl_len   = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
+    uint16_t lim_pkey       = UCT_IB_ADDRESS_INVALID_PKEY;
+    uint16_t lim_pkey_index = UINT16_MAX;
     uint16_t pkey_index, port_pkey, pkey;
 
     if (uct_ib_iface_is_roce(iface)) {
@@ -835,7 +834,6 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
             if (pkey & UCT_IB_PKEY_MEMBERSHIP_MASK) {
                 iface->pkey_index = pkey_index;
                 iface->pkey       = pkey;
-                pkey_found        = 1;
                 goto out_pkey_found;
             } else if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
                 /* limited PKEY has not yet been found */
@@ -844,8 +842,6 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
             }
         }
     }
-
-    ucs_assert(!pkey_found);
 
     if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
         /* PKEY neither with full nor with limited membership was found */
@@ -971,13 +967,14 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
                                  &attr->ibv);
 #endif
     if (qp == NULL) {
-        ucs_error("iface=%p: failed to create %s QP "
-                  "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
-                  iface, uct_ib_qp_type_str(attr->qp_type),
-                  attr->cap.max_send_wr, attr->cap.max_send_sge,
-                  attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
-                  attr->cap.max_recv_wr, attr->cap.max_recv_sge,
-                  attr->max_inl_cqe[UCT_IB_DIR_RX]);
+        uct_ib_check_memlock_limit_msg(
+                UCS_LOG_LEVEL_ERROR,
+                "iface=%p: failed to create %s QP "
+                "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
+                iface, uct_ib_qp_type_str(attr->qp_type), attr->cap.max_send_wr,
+                attr->cap.max_send_sge, attr->cap.max_inline_data,
+                attr->max_inl_cqe[UCT_IB_DIR_TX], attr->cap.max_recv_wr,
+                attr->cap.max_recv_sge, attr->max_inl_cqe[UCT_IB_DIR_RX]);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -1003,8 +1000,6 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;
-    char message[128];
-    int cq_errno;
 #if HAVE_DECL_IBV_CREATE_CQ_EX
     struct ibv_cq_init_attr_ex cq_attr = {};
 
@@ -1020,10 +1015,8 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 
     if (cq == NULL) {
-        cq_errno = errno;
-        ucs_snprintf_safe(message, sizeof(message), "ibv_create_cq(cqe=%d)",
-                          cq_size);
-        uct_ib_mem_lock_limit_msg(message, cq_errno, UCS_LOG_LEVEL_ERROR);
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq(cqe=%d)", cq_size);
         return UCS_ERR_IO_ERROR;
     }
 

@@ -78,6 +78,14 @@ public class UcpContext extends UcxNativeStruct implements Closeable {
         return result;
     }
 
+    public UcpMemory importMemory(ByteBuffer buf) {
+        UcpMemMapParams params = new UcpMemMapParams().setExportedMemh(UcxUtils.getAddress(buf));
+        UcpMemory result = memoryMapNative(getNativeId(), params);
+
+        result.setByteBufferReference(buf);
+        return result;
+    }
+
     /**
      * Associates memory allocated/mapped region with communication operations.
      * The network stack associated with an application context

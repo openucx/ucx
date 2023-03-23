@@ -568,7 +568,7 @@ ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
         } else {
             /* Calculate threshold */
             lane         = req->send.lane;
-            rsc_index    = ucp_ep_config(req->send.ep)->key.lanes[lane].rsc_index;
+            rsc_index    = ucp_ep_get_rsc_index(req->send.ep, lane);
             worker       = req->send.ep->worker;
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
                               &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,

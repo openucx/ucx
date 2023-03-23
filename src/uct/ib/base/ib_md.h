@@ -13,7 +13,6 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
-#include <ucs/memory/numa.h>
 #include <ucs/memory/rcache.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
@@ -64,8 +63,14 @@ enum {
     UCT_IB_MEM_FLAG_RELAXED_ORDERING = UCS_BIT(4), /**< The memory region will issue
                                                         PCIe writes with relaxed order
                                                         attribute */
-    UCT_IB_MEM_FLAG_NO_RCACHE        = UCS_BIT(5)  /**< Memory handle wasn't stored
+    UCT_IB_MEM_FLAG_NO_RCACHE        = UCS_BIT(5), /**< Memory handle wasn't stored
                                                         in RCACHE */
+#if ENABLE_PARAMS_CHECK
+    UCT_IB_MEM_ACCESS_REMOTE_RMA     = UCS_BIT(6) /**< RMA access was requested
+                                                        for the memory region */
+#else
+    UCT_IB_MEM_ACCESS_REMOTE_RMA     = 0
+#endif
 };
 
 enum {
@@ -85,10 +90,8 @@ typedef struct uct_ib_md_ext_config {
     int                      enable_indirect_atomic; /** Enable indirect atomic */
 
     struct {
-        ucs_numa_policy_t    numa_policy;  /**< NUMA policy flags for ODP */
         int                  prefetch;     /**< Auto-prefetch non-blocking memory
                                                 registrations / allocations */
-        size_t               max_size;     /**< Maximal memory region size for ODP */
     } odp;
 
     unsigned long            gid_index;    /**< IB GID index to use */
@@ -134,7 +137,6 @@ typedef enum {
 typedef struct uct_ib_md {
     uct_md_t                 super;
     ucs_rcache_t             *rcache;   /**< Registration cache (can be NULL) */
-    uct_mem_h                global_odp;/**< Implicit ODP memory handle */
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     ucs_linear_func_t        reg_cost;  /**< Memory registration cost */
@@ -153,6 +155,7 @@ typedef struct uct_ib_md {
     int                      fork_init;
     size_t                   memh_struct_size;
     uint64_t                 reg_mem_types;
+    uint64_t                 reg_nonblock_mem_types;
     uint64_t                 cap_flags;
     char                     *name;
     /* flush_remote rkey is used as atomic_mr_id value (8-16 bits of rkey)
@@ -558,25 +561,63 @@ static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
 }
 
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ib_md_mem_dereg_params_invalidate_check(
-        const uct_md_mem_dereg_params_t *params)
+static UCS_F_ALWAYS_INLINE UCS_F_MAYBE_UNUSED ucs_status_t
+uct_ib_md_rkey_mem_dereg_invalidate_check(uint32_t rkey, uint32_t access_mask,
+                                          uint64_t cap_mask)
 {
-    uct_ib_mem_t *ib_memh;
-    unsigned flags;
+    if (!access_mask) {
+        return UCS_OK;
+    }
 
-    if (ENABLE_PARAMS_CHECK) {
-        ib_memh = (uct_ib_mem_t*)UCT_MD_MEM_DEREG_FIELD_VALUE(params, memh,
-                                                              FIELD_MEMH, NULL);
-        flags   = UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
-        if ((flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) &&
-            (ib_memh->indirect_rkey == UCT_IB_INVALID_MKEY)) {
-            return UCS_ERR_INVALID_PARAM;
-        }
+    if (!cap_mask) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (rkey == UCT_IB_INVALID_MKEY) {
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
 }
+
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_ib_md_mem_dereg_params_invalidate_check(
+        const uct_ib_md_t *md, const uct_md_mem_dereg_params_t *params)
+{
+    uct_ib_mem_t *ib_memh;
+    unsigned flags;
+    ucs_status_t status;
+
+    if (!ENABLE_PARAMS_CHECK) {
+        return UCS_OK;
+    }
+
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params,
+                                  md->cap_flags & (UCT_MD_FLAG_INVALIDATE_RMA |
+                                                   UCT_MD_FLAG_INVALIDATE_AMO));
+
+    ib_memh = (uct_ib_mem_t*)UCT_MD_MEM_DEREG_FIELD_VALUE(params, memh,
+                                                          FIELD_MEMH, NULL);
+    flags   = UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    if (!(flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE)) {
+        return UCS_OK;
+    }
+
+    status = uct_ib_md_rkey_mem_dereg_invalidate_check(
+            ib_memh->indirect_rkey,
+            ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_RMA,
+            md->cap_flags & UCT_MD_FLAG_INVALIDATE_RMA);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_ib_md_rkey_mem_dereg_invalidate_check(
+            ib_memh->atomic_rkey,
+            ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC,
+            md->cap_flags & UCT_MD_FLAG_INVALIDATE_AMO);
+}
+
 
 static UCS_F_ALWAYS_INLINE int
 uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {

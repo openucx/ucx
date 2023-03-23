@@ -570,7 +570,7 @@ public:
         {
             // Suppress possible reject/unreachable errors
             scoped_log_handler slh(wrap_errors_logger);
-            send_status = request_wait(send_req, 0, wakeup);
+            send_status = request_wait(send_req, {}, 0, wakeup);
             if (!check_send_status(send_status, to, recv_req, cb_type)) {
                 return;
             }
@@ -581,7 +581,7 @@ public:
             wait_for_flag(&am_rx_arg.received);
             set_am_data_handler(to, 0, NULL, NULL);
         } else {
-            request_wait(recv_req, 0, wakeup);
+            request_wait(recv_req, {}, 0, wakeup);
         }
         EXPECT_EQ(send_data, recv_data);
     }
@@ -3061,8 +3061,6 @@ protected:
 
     test_ucp_sockaddr_protocols_err_sender() {
         configure_peer_failure_settings();
-        m_env.push_back(new ucs::scoped_setenv("UCX_IB_REG_METHODS",
-                                               "rcache,odp,direct"));
     }
 
     void entity_disconnect(entity &e)

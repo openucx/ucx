@@ -80,7 +80,8 @@ static void ucm_event_call_orig(ucm_event_type_t event_type, ucm_event_t *event,
             event->mremap.result = ucm_orig_mremap(event->mremap.address,
                                                    event->mremap.old_size,
                                                    event->mremap.new_size,
-                                                   event->mremap.flags);
+                                                   event->mremap.flags,
+                                                   event->mremap.new_address);
         }
         break;
     case UCM_EVENT_SHMAT:
@@ -247,9 +248,11 @@ void ucm_vm_munmap(void *addr, size_t length)
 }
 
 UCS_F_NOINLINE
-void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
+void *
+ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags, ...)
 {
     ucm_event_t event;
+    va_list ap;
 
     ucm_event_enter();
 
@@ -263,6 +266,14 @@ void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
     event.mremap.old_size = old_size;
     event.mremap.new_size = new_size;
     event.mremap.flags    = flags;
+    if (flags & MREMAP_FIXED) {
+        va_start(ap, flags);
+        event.mremap.new_address = va_arg(ap, void*);
+        va_end(ap);
+    } else {
+        event.mremap.new_address = NULL;
+    }
+
     ucm_event_dispatch(UCM_EVENT_MREMAP, &event);
 
     if (event.mremap.result != MAP_FAILED) {

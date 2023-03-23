@@ -134,6 +134,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        sleep      : go to sleep after posting requests\n");
     printf("     -H <size>      active message header size (%zu), not included in message size\n",
                                 ctx->params.super.ucp.am_hdr_size);
+    printf("     -y             do additional memcopy to the user memory in active message receive handler\n");
     printf("     -z             pass pre-registered memory handle\n");
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
@@ -413,6 +414,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
                                             &params->super.recv_mem_type)) {
             return UCS_ERR_INVALID_PARAM;
         }
+        return UCS_OK;
+    case 'y':
+        params->super.flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
         return UCS_OK;
     case 'z':
         params->super.flags |= UCX_PERF_TEST_FLAG_PREREG;

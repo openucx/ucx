@@ -50,7 +50,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
     }
-    UCT_IB_MLX5DV_SET(dctc, dctc, port, ib_iface->config.port_num);
+    UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->rx.port_affinity);
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak,
                       iface->super.super.config.min_rnr_timer);
 

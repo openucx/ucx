@@ -924,21 +924,36 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
 void uct_test::entity::mem_alloc_host(size_t length,
                                       uct_allocated_memory_t *mem) const {
 
-    void *address = NULL;
+    void *address             = NULL;
+    unsigned mem_access_flags = 0;
     ucs_status_t status;
     uct_mem_alloc_params_t params;
+
+    if (iface_params().field_mask & UCT_IFACE_PARAM_FIELD_FEATURES) {
+        if (iface_params().features & (UCT_IFACE_FEATURE_PUT |
+                                       UCT_IFACE_FEATURE_GET)) {
+            mem_access_flags = UCT_MD_MEM_ACCESS_RMA;
+        }
+
+        if (iface_params().features & (UCT_IFACE_FEATURE_AMO32 |
+                                       UCT_IFACE_FEATURE_AMO64)) {
+            mem_access_flags |= UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
+        }
+    } else {
+        mem_access_flags |= UCT_MD_MEM_ACCESS_ALL;
+    }
 
     params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS     |
                              UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS   |
                              UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE  |
                              UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-    params.flags           = UCT_MD_MEM_ACCESS_ALL;
+    params.flags           = mem_access_flags;
     params.name            = "uct_test";
     params.mem_type        = UCS_MEMORY_TYPE_HOST;
     params.address         = address;
 
     if (md_attr().flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
-        status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
+        status = uct_iface_mem_alloc(m_iface, length, mem_access_flags,
                                      "uct_test", mem);
         ASSERT_UCS_OK(status);
     } else {

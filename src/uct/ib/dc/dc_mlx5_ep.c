@@ -645,7 +645,7 @@ uct_dc_mlx5_ep_flush_cancel(uct_dc_mlx5_ep_t *ep)
     ucs_status_t status;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
         /* flush(cancel) is supported only with error handling, which is not
          * supported by random policy */
         return UCS_ERR_UNSUPPORTED;
@@ -1288,7 +1288,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     uct_dc_mlx5_ep_keepalive_cleanup(self);
 
     if ((self->dci == UCT_DC_MLX5_EP_NO_DCI) ||
-        uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        uct_dc_mlx5_iface_is_dci_shared(iface)) {
         return;
     }
 
@@ -1386,7 +1386,7 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
     uint8_t pool_index = uct_dc_mlx5_ep_pool_index(ep);
 
-    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_shared(iface));
     ucs_assertv(ep->dci == UCT_DC_MLX5_EP_NO_DCI,
                 "ep %p (iface=%p) has DCI=%d (pool %d) while it is scheduled "
                 "in DCI wait queue", ep, iface, ep->dci,
@@ -1441,7 +1441,7 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
     uct_dc_mlx5_dci_pool_t *dci_pool;
 
     ucs_assert(iface->tx.dci_release_prog_id != UCS_CALLBACKQ_ID_NULL);
-    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_shared(iface));
     UCS_STATIC_ASSERT((sizeof(iface->tx.dci_pool_release_bitmap) * 8) <=
                        UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
 
@@ -1546,7 +1546,7 @@ uct_dc_mlx5_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *gro
                                                     priv);
     uct_rc_pending_req_t *freq;
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface) &&
+    if (uct_dc_mlx5_iface_is_dci_shared(iface) &&
         (uct_dc_mlx5_pending_req_priv(req)->ep != ep)) {
         /* Element belongs to another ep - do not remove it */
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
@@ -1586,7 +1586,7 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep,
                             &args);
 
     if ((ep->dci != UCT_DC_MLX5_EP_NO_DCI) &&
-        !uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        !uct_dc_mlx5_iface_is_dci_shared(iface)) {
         uct_dc_mlx5_iface_dci_detach(iface, ep);
     }
 }
@@ -1603,7 +1603,7 @@ static unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
     ucs_time_t now             = ucs_get_time();
     uint64_t ep_key;
     uct_dc_mlx5_ep_t *ep;
-    ucs_status_t UCS_V_UNUSED status;
+    ucs_status_t status;
 
     if (ucs_likely(now < iface->tx.fc_hard_req_resend_time)) {
         return 0;
@@ -1721,7 +1721,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
               iface, ep, dci_index, txwq->super.qp_num,
               ucs_status_string(ep_status));
 
-    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_shared(iface));
 
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);

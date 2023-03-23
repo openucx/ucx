@@ -494,6 +494,7 @@ static void print_md_info(uct_component_h component,
 
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, access);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, alloc);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, reg_nonblock);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, reg);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, cache);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, detect);

@@ -23,7 +23,9 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
                               size_t size)
 {
     ucp_atomic_req_hdr_t *atomich = dest;
+    void *cswaph                  = UCS_PTR_BYTE_OFFSET(atomich + 1, size);
     ucp_ep_t *ep                  = req->send.ep;
+    ucp_worker_h worker           = ep->worker;
     size_t length;
 
     atomich->address    = req->send.amo.remote_addr;
@@ -32,14 +34,22 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
                                   UCS_PTR_MAP_KEY_INVALID;
     atomich->length     = size;
     atomich->opcode     = req->send.amo.uct_op;
+    length              = sizeof(*atomich) + size;
 
-    memcpy(atomich + 1, &req->send.amo.value, size);
-    length = sizeof(*atomich) + size;
-
-    if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
-        /* compare-swap has two arguments */
-        memcpy(UCS_PTR_BYTE_OFFSET(atomich + 1, size), req->send.buffer, size);
-        length += size;
+    if (worker->context->config.ext.proto_enable) {
+        ucp_dt_contig_pack(worker, atomich + 1, &req->send.amo.value, size,
+                           req->send.state.dt_iter.mem_info.type);
+        if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
+            ucp_dt_contig_pack(worker, cswaph, req->send.amo.reply_buffer, size,
+                               ucp_amo_request_reply_mem_type(req));
+            length += size;
+        }
+    } else {
+        memcpy(atomich + 1, &req->send.amo.value, size);
+        if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
+            memcpy(cswaph, req->send.buffer, size);
+            length += size;
+        }
     }
 
     return length;
@@ -290,10 +300,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_fl
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, hdr->req_id, 1, return UCS_OK,
                                "ATOMIC_REP %p", hdr);
+
+    if (worker->context->config.ext.proto_enable) {
+        ucp_dt_contig_unpack(worker, req->send.amo.reply_buffer, hdr + 1,
+                             frag_length, ucp_amo_request_reply_mem_type(req));
+    } else {
+        memcpy(req->send.buffer, hdr + 1, frag_length);
+    }
+
     ep = req->send.ep;
-    memcpy(req->send.buffer, hdr + 1, frag_length);
     ucp_request_complete_send(req, UCS_OK);
     ucp_ep_rma_remote_request_completed(ep);
+
     return UCS_OK;
 }
 
@@ -333,8 +351,8 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
 
 UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REQ,
                          ucp_atomic_req_handler, ucp_amo_sw_dump_packet, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REP, ucp_atomic_rep_handler,
-              ucp_amo_sw_dump_packet, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REP,
+                         ucp_atomic_rep_handler, ucp_amo_sw_dump_packet, 0);
 
 static size_t ucp_proto_amo_sw_post_pack_cb(void *dest, void *arg)
 {
@@ -389,11 +407,11 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
     ucp_proto_single_init_params_t params    = {
         .super.super         = *init_params,
         .super.latency       = 1.2e-6,
-        .super.overhead      = 0,
+        .super.overhead      = 40e-9,
         .super.cfg_thresh    = 0,
         .super.cfg_priority  = 20,
-        .super.min_length    = 0,
-        .super.max_length    = SIZE_MAX,
+        .super.min_length    = sizeof(uint32_t),
+        .super.max_length    = sizeof(uint64_t),
         .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,

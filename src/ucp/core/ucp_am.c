@@ -67,7 +67,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     ucp_ep_ext_t *ep_ext = ep->ext;
     ucp_recv_desc_t *rdesc, *tmp_rdesc;
     ucs_queue_iter_t iter;
-    size_t UCS_V_UNUSED count;
+    size_t count;
 
     if (!(ep->worker->context->config.features & UCP_FEATURE_AM)) {
         return;
@@ -942,7 +942,7 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
-static UCS_F_ALWAYS_INLINE uint16_t ucp_am_send_nbx_get_op_flag(uint32_t flags)
+static UCS_F_ALWAYS_INLINE uint8_t ucp_am_send_nbx_get_op_flag(uint32_t flags)
 {
     if (flags & UCP_AM_SEND_FLAG_EAGER) {
         return UCP_PROTO_SELECT_OP_FLAG_AM_EAGER;
@@ -1752,14 +1752,14 @@ out:
     return UCS_OK;
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE,
-              ucp_am_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_FIRST,
-              ucp_am_long_first_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE,
-              ucp_am_long_middle_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_REPLY,
-              ucp_am_handler_reply, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE, ucp_am_handler,
+                         NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_FIRST,
+                         ucp_am_long_first_handler, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE,
+                         ucp_am_long_middle_handler, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_REPLY,
+                         ucp_am_handler_reply, NULL, 0);
 
 const ucp_request_send_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,

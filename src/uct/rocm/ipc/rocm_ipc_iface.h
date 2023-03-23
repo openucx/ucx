@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -12,13 +12,6 @@
 #include <hsa.h>
 
 #define UCT_ROCM_IPC_TL_NAME "rocm_ipc"
-
-typedef struct uct_rocm_ipc_signal_desc {
-    hsa_signal_t signal;
-    void *mapped_addr;
-    uct_completion_t *comp;
-    ucs_queue_elem_t queue;
-} uct_rocm_ipc_signal_desc_t;
 
 typedef struct uct_rocm_ipc_iface {
     uct_base_iface_t super;

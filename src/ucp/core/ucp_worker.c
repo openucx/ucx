@@ -620,8 +620,13 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         return UCS_OK;
     } else if (*progress_count == 0) {
         /* Arm the interface to wait for next event */
-        ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV);
-        status = uct_iface_event_arm(wiface->iface, UCT_EVENT_RECV);
+        ucs_assertv(ucs_test_all_flags(wiface->attr.cap.event_flags,
+                                       UCP_WIREUP_UCT_EVENT_CAP_FLAGS),
+                    "event flags 0x%" PRIx64 ", required 0x%" PRIx64,
+                    wiface->attr.cap.event_flags,
+                    UCP_WIREUP_UCT_EVENT_CAP_FLAGS);
+        status = uct_iface_event_arm(wiface->iface,
+                                     UCT_EVENT_RECV | UCT_EVENT_SEND_COMP);
         if (status == UCS_OK) {
             ucs_trace("armed iface %p", wiface->iface);
 
@@ -726,7 +731,8 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
     ucp_worker_set_am_handlers(wiface, 1);
 
     /* Prepare for next receive event */
-    if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV) {
+    if (ucs_test_all_flags(wiface->attr.cap.event_flags,
+                           UCP_WIREUP_UCT_EVENT_CAP_FLAGS)) {
         ucp_worker_iface_check_events(wiface, force);
     }
 }
@@ -1391,8 +1397,8 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
 
         if (context->config.ext.adaptive_progress &&
-            (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV))
-        {
+            ucs_test_all_flags(wiface->attr.cap.event_flags,
+                               UCP_WIREUP_UCT_EVENT_CAP_FLAGS)) {
             ucp_worker_iface_deactivate(wiface, 1);
         } else {
             ucp_worker_iface_activate(wiface, 0);
@@ -1666,7 +1672,7 @@ static void ucp_worker_add_feature_rsc(ucp_context_h context,
         return;
     }
 
-    ucs_string_buffer_appendf(strb, "%s(", feature_str);
+    ucs_string_buffer_appendf(strb, " %s(", feature_str);
 
     ucs_for_each_bit(lane, lanes_bitmap) {
         ucs_assert(lane < UCP_MAX_LANES); /* make coverity happy */
@@ -1684,7 +1690,8 @@ static void ucp_worker_add_feature_rsc(ucp_context_h context,
 static void
 ucp_worker_print_used_tls(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
 {
-    const ucp_ep_config_key_t *key = &worker->ep_config[cfg_index].key;
+    const ucp_ep_config_key_t *key = &ucs_array_elem(&worker->ep_config,
+                                                     cfg_index).key;
     ucp_context_h context          = worker->context;
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_lane_map_t tag_lanes_map    = 0;
@@ -1967,28 +1974,31 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                        "empty endpoint configurations are not allowed");
 
     /* Search for the given key in the ep_config array */
-    for (ep_cfg_index = 0; ep_cfg_index < worker->ep_config_count;
-         ++ep_cfg_index) {
-        if (ucp_ep_config_is_equal(&worker->ep_config[ep_cfg_index].key, key)) {
+    ucs_array_for_each(ep_config, &worker->ep_config) {
+        if (ucp_ep_config_is_equal(&ep_config->key, key)) {
+            ep_cfg_index = ep_config - worker->ep_config.buffer;
             goto out;
         }
     }
 
-    if (worker->ep_config_count >= UCP_WORKER_MAX_EP_CONFIG) {
+    /* Create new configuration */
+    ucs_array_append(ep_config_arr, &worker->ep_config,
+                     return UCS_ERR_NO_MEMORY);
+    if (ucs_array_length(&worker->ep_config) >= UCP_WORKER_MAX_EP_CONFIG) {
+        ucs_array_pop_back(&worker->ep_config);
         ucs_error("too many ep configurations: %d (max: %d)",
-                  worker->ep_config_count, UCP_WORKER_MAX_EP_CONFIG);
+                  ucs_array_length(&worker->ep_config),
+                  UCP_WORKER_MAX_EP_CONFIG);
         return UCS_ERR_EXCEEDS_LIMIT;
     }
 
-    /* Create new configuration */
-    ep_cfg_index = worker->ep_config_count;
-    ep_config    = &worker->ep_config[ep_cfg_index];
-    status       = ucp_ep_config_init(worker, ep_config, key);
+    ep_config = ucs_array_last(&worker->ep_config);
+    status    = ucp_ep_config_init(worker, ep_config, key);
     if (status != UCS_OK) {
         return status;
     }
 
-    ++worker->ep_config_count;
+    ep_cfg_index = ucs_array_length(&worker->ep_config) - 1;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL) {
         /* Do not initialize short protocol thresholds for internal endpoints,
@@ -2032,7 +2042,8 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucs_sys_dev_distance_t *lanes_distance,
                            ucp_worker_cfg_index_t *cfg_index_p)
 {
-    const ucp_ep_config_t *ep_config = &worker->ep_config[key->ep_cfg_index];
+    const ucp_ep_config_t *ep_config = &ucs_array_elem(&worker->ep_config,
+                                                       key->ep_cfg_index);
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
     ucp_lane_index_t lane;
@@ -2123,15 +2134,17 @@ static void ucp_worker_keepalive_reset(ucp_worker_h worker)
 
 static void ucp_worker_destroy_configs(ucp_worker_h worker)
 {
-    unsigned i;
+    ucp_ep_config_t *ep_config;
+    ucp_rkey_config_t *rkey_config;
 
-    for (i = 0; i < worker->ep_config_count; ++i) {
-        ucp_ep_config_cleanup(worker, &worker->ep_config[i]);
+    ucs_array_for_each(ep_config, &worker->ep_config) {
+        ucp_ep_config_cleanup(worker, ep_config);
     }
-    worker->ep_config_count = 0;
+    ucs_array_cleanup_dynamic(&worker->ep_config);
 
-    for (i = 0; i < worker->rkey_config_count; ++i) {
-        ucp_proto_select_cleanup(&worker->rkey_config[i].proto_select);
+    ucs_carray_for_each(rkey_config, worker->rkey_config,
+                        worker->rkey_config_count) {
+        ucp_proto_select_cleanup(&rkey_config->proto_select);
     }
     worker->rkey_config_count = 0;
 }
@@ -2242,7 +2255,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->flush_ops_count      = 0;
     worker->inprogress           = 0;
     worker->rkey_config_count    = 0;
-    worker->ep_config_count      = 0;
     worker->num_active_ifaces    = 0;
     worker->num_ifaces           = 0;
     worker->am_message_id        = ucs_generate_uuid(0);
@@ -2324,6 +2336,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     if (status != UCS_OK) {
         goto err_destroy_ep_map;
     }
+
+    ucs_array_init_dynamic(&worker->ep_config);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,

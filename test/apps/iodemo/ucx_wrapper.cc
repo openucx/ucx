@@ -111,10 +111,10 @@ void UcxContext::UcxDisconnectCallback::operator()(ucs_status_t status)
 }
 
 UcxContext::UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
-                       bool use_epoll) :
+                       bool use_epoll, uint64_t client_id) :
     _context(NULL), _worker(NULL), _listener(NULL), _iomsg_recv_request(NULL),
     _iomsg_buffer(iomsg_size), _connect_timeout(connect_timeout),
-    _use_am(use_am), _worker_fd(-1), _epoll_fd(-1)
+    _use_am(use_am), _worker_fd(-1), _epoll_fd(-1), _client_id(client_id)
 {
     if (use_epoll) {
         _epoll_fd = epoll_create(1);
@@ -169,8 +169,11 @@ bool UcxContext::init(const char *name)
 
     /* Create worker */
     ucp_worker_params_t worker_params;
-    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE |
+                                UCP_WORKER_PARAM_FIELD_CLIENT_ID;
     worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+    worker_params.client_id   = _client_id;
+
     status = ucp_worker_create(_context, &worker_params, &_worker);
     if (status != UCS_OK) {
         ucp_cleanup(_context);
@@ -270,13 +273,15 @@ void UcxContext::connect_callback(ucp_conn_request_h conn_req, void *arg)
     ucp_conn_request_attr_t conn_req_attr;
     conn_req_t conn_request;
 
-    conn_req_attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+    conn_req_attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR |
+                               UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
     ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
     if (status == UCS_OK) {
         UCX_LOG << "got new connection request " << conn_req << " from client "
-                << UcxContext::sockaddr_str((const struct sockaddr*)
-                                            &conn_req_attr.client_address,
-                                            sizeof(conn_req_attr.client_address));
+                << UcxContext::sockaddr_str(
+                           (const struct sockaddr*)&conn_req_attr.client_address,
+                           sizeof(conn_req_attr.client_address))
+                << " client_id " << conn_req_attr.client_id;
     } else {
         UCX_LOG << "got new connection request " << conn_req
                 << ", ucp_conn_request_query() failed ("
@@ -817,6 +822,9 @@ void UcxConnection::connect(const struct sockaddr *src_saddr,
         ep_params.field_mask            |= UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
         ep_params.local_sockaddr.addr    = src_saddr;
         ep_params.local_sockaddr.addrlen = addrlen;
+    }
+    if (_context._client_id != UcxContext::CLIENT_ID_UNDEFINED) {
+        ep_params.flags |= UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID;
     }
 
     char sockaddr_str[UCS_SOCKADDR_STRING_LEN];

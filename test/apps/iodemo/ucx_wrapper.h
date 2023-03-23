@@ -112,8 +112,11 @@ protected:
 public:
     typedef std::vector<uint8_t> iomsg_buffer_t;
 
+    static const uint64_t CLIENT_ID_UNDEFINED = 0;
+
     UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
-               bool use_epoll = false);
+               bool use_epoll = false,
+               uint64_t client_id = CLIENT_ID_UNDEFINED);
 
     virtual ~UcxContext();
 
@@ -272,6 +275,7 @@ private:
     bool                        _use_am;
     int                         _worker_fd;
     int                         _epoll_fd;
+    uint64_t                    _client_id;
 };
 
 

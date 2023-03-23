@@ -156,14 +156,16 @@ UCS_PTR_MAP_IMPL(request, 0);
     }
 
 
+#define UCP_REQUEST_PARAM_FIELD(_param, _flag, _field, _default_value) \
+    ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_##_flag) ? \
+            (_param)->_field : (_default_value)
+
+
 #define ucp_request_set_callback_param(_param, _param_cb, _req, _req_cb) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
         ucp_request_set_user_callback(_req, _req_cb.cb, \
                                       (_param)->cb._param_cb, \
-                                      ((_param)->op_attr_mask & \
-                                       UCP_OP_ATTR_FIELD_USER_DATA) ? \
-                                              (_param)->user_data : \
-                                              NULL); \
+                                      ucp_request_param_user_data(_param)); \
     }
 
 
@@ -966,15 +968,26 @@ ucp_send_request_get_ep_remote_id(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE uint32_t
 ucp_request_param_flags(const ucp_request_param_t *param)
 {
-    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_FLAGS) ?
-           param->flags : 0;
+    return UCP_REQUEST_PARAM_FIELD(param, FLAGS, flags, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucp_datatype_t
 ucp_request_param_datatype(const ucp_request_param_t *param)
 {
-    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
-           param->datatype : ucp_dt_make_contig(1);
+    return UCP_REQUEST_PARAM_FIELD(param, DATATYPE, datatype,
+                                   ucp_dt_make_contig(1));
+}
+
+static UCS_F_ALWAYS_INLINE ucp_send_nbx_callback_t
+ucp_request_param_send_callback(const ucp_request_param_t *param)
+{
+    return UCP_REQUEST_PARAM_FIELD(param, CALLBACK, cb.send, NULL);
+}
+
+static UCS_F_ALWAYS_INLINE void *
+ucp_request_param_user_data(const ucp_request_param_t *param)
+{
+    return UCP_REQUEST_PARAM_FIELD(param, USER_DATA, user_data, NULL);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
@@ -1031,7 +1044,7 @@ ucp_send_request_get_id(const ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
 {
     ucp_ep_h ep;
-    ucs_status_t UCS_V_UNUSED status;
+    ucs_status_t status;
 
     ucs_assert(!(req->flags &
                  (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)));

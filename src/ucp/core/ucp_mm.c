@@ -72,7 +72,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     uct_mem_h *prev_uct_memh;
     ucp_md_map_t new_md_map;
     const uct_md_attr_v2_t *md_attr;
-    void *end_address UCS_V_UNUSED;
+    void *end_address;
     unsigned prev_num_memh;
     unsigned md_index;
     ucs_status_t status;
@@ -286,9 +286,18 @@ out:
 }
 
 static unsigned
-ucp_mem_map_params2uct_flags(const ucp_mem_map_params_t *params)
+ucp_mem_map_params2uct_flags(const ucp_context_h context,
+                             const ucp_mem_map_params_t *params)
 {
     unsigned flags = 0;
+
+    if (context->config.features & UCP_FEATURE_RMA) {
+        flags |= UCT_MD_MEM_ACCESS_RMA;
+    }
+
+    if (context->config.features & UCP_FEATURE_AMO) {
+        flags |= UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
+    }
 
     if (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) {
         if (params->flags & UCP_MEM_MAP_NONBLOCK) {
@@ -299,9 +308,6 @@ ucp_mem_map_params2uct_flags(const ucp_mem_map_params_t *params)
             flags |= UCT_MD_MEM_FLAG_FIXED;
         }
     }
-
-    flags |= UCT_MD_MEM_ACCESS_ALL;
-    /* TODO: disable atomic if ucp context does not have it */
 
     return flags;
 }
@@ -387,6 +393,10 @@ static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
     err_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
                                                             UCS_LOG_LEVEL_ERROR;
 
+    if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
+        uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
+    }
+
     reg_params.flags         = uct_flags;
     reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
     reg_params.dmabuf_offset = 0;
@@ -435,10 +445,12 @@ static ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
             goto out_close_dmabuf_fd;
         }
 
-        ucs_trace("register address %p length %zu dmabuf-fd %d on md[%d]=%s %p",
+        ucs_trace("register address %p length %zu dmabuf-fd %d flags %ld "
+                  "on md[%d]=%s %p",
                   address, length,
                   (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
                                                         UCT_DMABUF_FD_INVALID,
+                  reg_params.flags,
                   md_index, context->tl_mds[md_index].rsc.md_name,
                   memh->uct[md_index]);
         md_map_registered |= UCS_BIT(md_index);
@@ -818,7 +830,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         goto out;
     }
 
-    uct_flags = ucp_mem_map_params2uct_flags(params);
+    uct_flags = ucp_mem_map_params2uct_flags(context, params);
 
     if (memh_flags & UCP_MEMH_FLAG_IMPORTED) {
         status = ucp_memh_import(context, exported_memh_buffer, &memh);
@@ -1024,16 +1036,13 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
 static ucs_status_t
 ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
-    /* Need to get default flags from ucp_mem_map_params2uct_flags() */
-    ucp_mem_map_params_t mem_params = {};
     ucp_mem_desc_t *chunk_hdr;
     ucp_mem_h memh;
     ucs_status_t status;
 
     status = ucp_memh_alloc(worker->context, NULL,
                             *size_p + sizeof(*chunk_hdr), UCS_MEMORY_TYPE_HOST,
-                            ucp_mem_map_params2uct_flags(&mem_params),
-                            ucs_mpool_name(mp), &memh);
+                            UCT_MD_MEM_ACCESS_RMA, ucs_mpool_name(mp), &memh);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1375,14 +1384,15 @@ ucs_status_t
 ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx)
 {
     const ucs_memory_type_t alloc_mem_type = UCS_MEMORY_TYPE_HOST;
+    unsigned memh_reg_flags;
     ucp_mem_h alloc_memh;
     ucs_status_t status;
 
     if (!context->alloc_md_index_initialized) {
-        status = ucp_memh_alloc(context, NULL, 1, alloc_mem_type,
-                                UCT_MD_MEM_ACCESS_ALL |
-                                UCT_MD_MEM_FLAG_HIDE_ERRORS,
-                                "get_alloc_md_id", &alloc_memh);
+        memh_reg_flags = UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_HIDE_ERRORS;
+        status         = ucp_memh_alloc(context, NULL, 1, alloc_mem_type,
+                                        memh_reg_flags, "get_alloc_md_id",
+                                        &alloc_memh);
         if (status != UCS_OK) {
             return status;
         }

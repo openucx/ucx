@@ -1417,6 +1417,34 @@ ucs_status_ptr_t ucp_worker_flush_nb(ucp_worker_h worker, unsigned flags,
                                      ucp_send_callback_t cb);
 
 
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Close UCP endpoint modes.
+ * 
+ * @deprecated Use @ref ucp_ep_close_nbx and @ref ucp_ep_close_flags_t instead.
+ *
+ * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
+ */
+enum ucp_ep_close_mode {
+    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
+                                              the endpoint without any
+                                              confirmation from the peer. All
+                                              outstanding requests will be
+                                              completed with
+                                              @ref UCS_ERR_CANCELED error.
+                                              @note This mode may cause
+                                              transport level errors on remote
+                                              side, so it requires set
+                                              @ref UCP_ERR_HANDLING_MODE_PEER
+                                              for all endpoints created on
+                                              both (local and remote) sides to
+                                              avoid undefined behavior. */
+    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
+                                              flushes on all outstanding
+                                              operations. */
+};
+
+
 END_C_DECLS
 
 #endif

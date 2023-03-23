@@ -51,8 +51,19 @@ struct ucp_proto_select_param {
     uint8_t                 sg_count;   /* Number of non-contig scatter/gather
                                            entries. If the actual number is larger
                                            than UINT8_MAX, UINT8_MAX is used. */
-    uint8_t                 padding[2]; /* Make structure size be
-                                           sizeof(uint64_t) */
+    union {
+        /* Reply buffer parameters.
+         * Used for UCP_OP_ID_AMO_FETCH and UCP_OP_ID_AMO_CSWAP.
+         */
+        struct {
+            uint8_t         mem_type;   /* Reply buffer memory type */
+            uint8_t         sys_dev;    /* Reply buffer system device */
+        } UCS_S_PACKED reply;
+
+        /* Align struct size to uint64_t */
+        uint8_t             padding[2];
+
+    } UCS_S_PACKED op;
 } UCS_S_PACKED;
 
 

@@ -57,15 +57,11 @@ uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
     struct ibv_srq_init_attr srq_attr = {};
     ucs_log_level_t level             = silent ? UCS_LOG_LEVEL_DEBUG :
                                                  UCS_LOG_LEVEL_ERROR;
-    int cq_errno;
-    char message[128];
 
     qp_tmp_objs->cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
     if (qp_tmp_objs->cq == NULL) {
-        cq_errno = errno;
-        ucs_snprintf_safe(message, sizeof(message), "%s: ibv_create_cq()",
-                          uct_ib_device_name(dev));
-        uct_ib_mem_lock_limit_msg(message, cq_errno, level);
+        uct_ib_check_memlock_limit_msg(level, "%s: ibv_create_cq()",
+                                       uct_ib_device_name(dev));
         goto out;
     }
 
@@ -73,8 +69,8 @@ uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
     srq_attr.attr.max_wr  = 1;
     qp_tmp_objs->srq      = ibv_create_srq(pd, &srq_attr);
     if (qp_tmp_objs->srq == NULL) {
-        ucs_log(level, "%s: ibv_create_srq() failed: %m",
-                uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(level, "%s: ibv_create_srq()",
+                                       uct_ib_device_name(dev));
         goto out_destroy_cq;
     }
 

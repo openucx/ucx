@@ -17,6 +17,7 @@
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/profile/profile.h>
 #include <ucs/type/class.h>
+#include <ucs/sys/math.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/api/v2/uct_v2.h>
 #include <cuda_runtime.h>
@@ -79,19 +80,20 @@ static int uct_cuda_copy_md_is_dmabuf_supported()
 static ucs_status_t
 uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->dmabuf_mem_types = 0;
+    md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->reg_nonblock_mem_types = 0;
+    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->alloc_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->detect_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->dmabuf_mem_types       = 0;
     if (uct_cuda_copy_md_is_dmabuf_supported()) {
         md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     }
@@ -362,8 +364,7 @@ out_default_range:
     return UCS_OK;
 }
 
-static int
-uct_cuda_copy_md_get_dmabuf_fd(const ucs_memory_info_t *addr_mem_info)
+static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
 {
 #if CUDA_VERSION >= 11070
     PFN_cuMemGetHandleForAddressRange get_handle_func;
@@ -394,20 +395,18 @@ uct_cuda_copy_md_get_dmabuf_fd(const ucs_memory_info_t *addr_mem_info)
     }
 #endif
 
-    cu_err = get_handle_func((void*)&fd, (uintptr_t)addr_mem_info->base_address,
-                             addr_mem_info->alloc_length,
+    cu_err = get_handle_func((void*)&fd, address, length,
                              CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD, 0);
     if (cu_err == CUDA_SUCCESS) {
-        ucs_trace("dmabuf for address %p length %zu is fd %d",
-                  addr_mem_info->base_address, addr_mem_info->alloc_length, fd);
+        ucs_trace("dmabuf for address 0x%lx length %zu is fd %d", address,
+                  length, fd);
         return fd;
     }
 
     cuGetErrorString(cu_err, &cu_err_str);
-    ucs_debug("cuMemGetHandleForAddressRange(address=%p length=%zu DMA_BUF_FD) "
-              "failed: %s",
-              addr_mem_info->base_address, addr_mem_info->alloc_length,
-              cu_err_str);
+    ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
+              "DMA_BUF_FD) failed: %s",
+              address, length, cu_err_str);
 #endif
     return UCT_DMABUF_FD_INVALID;
 }
@@ -424,6 +423,7 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
     };
     uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
     unsigned value         = 1;
+    uintptr_t base_address, aligned_start, aligned_end;
     ucs_memory_info_t addr_mem_info;
     const char *cu_err_str;
     ucs_status_t status;
@@ -477,13 +477,20 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         mem_attr->alloc_length = addr_mem_info.alloc_length;
     }
 
+    base_address  = (uintptr_t)addr_mem_info.base_address;
+    aligned_start = ucs_align_down_pow2(base_address, ucs_get_page_size());
+
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
-        mem_attr->dmabuf_fd = uct_cuda_copy_md_get_dmabuf_fd(&addr_mem_info);
+        aligned_end = ucs_align_up_pow2(base_address +
+                                                addr_mem_info.alloc_length,
+                                        ucs_get_page_size());
+
+        mem_attr->dmabuf_fd = uct_cuda_copy_md_get_dmabuf_fd(
+                aligned_start, aligned_end - aligned_start);
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
-        mem_attr->dmabuf_offset = UCS_PTR_BYTE_DIFF(addr_mem_info.base_address,
-                                                    address);
+        mem_attr->dmabuf_offset = (uintptr_t)address - aligned_start;
     }
 
     return UCS_OK;

@@ -12,6 +12,7 @@
 #include <uct/base/uct_iov.inl>
 #include <uct/sm/base/sm_ep.h>
 #include <uct/sm/base/sm_iface.h>
+#include <uct/sm/base/sm_md.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/cpu.h>
@@ -121,7 +122,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
     attr->cap.am.max_iov          = SIZE_MAX;
 
     attr->latency                 = UCS_LINEAR_FUNC_ZERO;
-    attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
+    attr->bandwidth.dedicated     = 19360 * UCS_MBYTE;
     attr->bandwidth.shared        = 0;
     attr->overhead                = 10e-9;
     attr->priority                = 0;
@@ -392,18 +393,19 @@ static uct_iface_ops_t uct_self_iface_ops = {
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    attr->flags            = UCT_MD_FLAG_REG |
-                             UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->alloc_mem_types  = 0;
-    attr->detect_mem_types = 0;
-    attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->dmabuf_mem_types = 0;
-    attr->max_alloc        = 0;
-    attr->max_reg          = ULONG_MAX;
-    attr->rkey_packed_size = 0;
-    attr->reg_cost         = UCS_LINEAR_FUNC_ZERO;
+    attr->flags                  = UCT_MD_FLAG_REG |
+                                   UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
+    attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->alloc_mem_types        = 0;
+    attr->detect_mem_types       = 0;
+    attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->dmabuf_mem_types       = 0;
+    attr->max_alloc              = 0;
+    attr->max_reg                = ULONG_MAX;
+    attr->rkey_packed_size       = 0;
+    attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
@@ -451,7 +453,7 @@ static uct_component_t uct_self_component = {
     .md_open            = uct_self_md_open,
     .cm_open            = ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_self_md_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_ptr           = uct_sm_rkey_ptr,
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_SELF_NAME,
     .md_config          = {
@@ -462,7 +464,7 @@ static uct_component_t uct_self_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
-    .flags              = 0,
+    .flags              = UCT_COMPONENT_FLAG_RKEY_PTR,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
