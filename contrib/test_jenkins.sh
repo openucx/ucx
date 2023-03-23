@@ -73,6 +73,7 @@ MAKEP="make -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
 
 have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
+have_strace=$(strace -V || true)
 
 #
 # Set initial port number for client/server applications
@@ -918,7 +919,7 @@ test_profiling() {
 }
 
 test_ucs_load() {
-	if [ -z "${have_ptrace}" ]
+	if [ -z "${have_ptrace}" ] || [ -z "${have_strace}" ]
 	then
 		log_warning "==== Not running UCS library loading test ===="
 		return
