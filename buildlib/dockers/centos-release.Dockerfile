@@ -26,7 +26,6 @@ RUN yum install -y \
     ethtool \
     environment-modules \
     valgrind-devel \
-    strace \
     && yum clean all
 
 # MOFED

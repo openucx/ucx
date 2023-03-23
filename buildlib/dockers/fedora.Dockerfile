@@ -23,7 +23,6 @@ RUN dnf install -y \
     python \
     rdma-core-devel \
     rpm-build \
-    strace \
     && dnf clean dbcache packages
 RUN export BUILD_ROOT=/tmp/llvm-project && \
     git clone https://github.com/openucx/llvm-project.git --depth=1 -b ucx-clang-format --single-branch ${BUILD_ROOT} && \
