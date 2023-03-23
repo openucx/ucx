@@ -24,6 +24,7 @@ RUN dnf install -y \
     rpm-build \
     libusbx \
     fuse-libs \
+    strace \
     && dnf clean dbcache packages
 
 # MOFED

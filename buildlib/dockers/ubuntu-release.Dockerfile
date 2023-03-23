@@ -25,6 +25,7 @@ RUN apt-get update && \
         environment-modules \
         pkg-config \
         sudo \
+        strace \
     && apt-get remove -y openjdk-11-* cuda-compat* || apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
