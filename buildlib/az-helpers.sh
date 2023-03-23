@@ -133,6 +133,7 @@ function az_module_unload() {
 #
 # try load cuda modules if nvidia driver is installed
 #
+
 try_load_cuda_env() {
     num_gpus=0
     have_cuda=no
