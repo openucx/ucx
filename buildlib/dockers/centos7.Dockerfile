@@ -29,7 +29,6 @@ RUN yum install -y \
     lsof \
     ethtool \
     glibc-static \
-    strace \
     && yum clean all
 
 ARG MOFED_OS=rhel7.6
