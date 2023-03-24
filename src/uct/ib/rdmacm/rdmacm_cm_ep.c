@@ -237,7 +237,7 @@ out:
  * always move forward to prevent stale QPN.
  */
 static ucs_status_t
-uct_rdamcm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
+uct_rdmacm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
                                      uct_rdmacm_cm_device_context_t *ctx)
 {
     uint32_t qpns_per_obj = UCS_BIT(ctx->log_reserved_qpn_granularity);
@@ -277,7 +277,7 @@ out:
  * in this object were used and freed.
  */
 static void
-uct_rdamcm_cm_ep_destroy_reserved_qpn(uct_rdmacm_cm_device_context_t *ctx,
+uct_rdmacm_cm_ep_destroy_reserved_qpn(uct_rdmacm_cm_device_context_t *ctx,
                                       uct_rdmacm_cm_ep_t *cep)
 {
     uint32_t qpns_per_obj;
@@ -357,7 +357,7 @@ uct_rdmacm_cm_create_dummy_qp(uct_rdmacm_cm_device_context_t *ctx,
 }
 
 static ucs_status_t
-uct_rdamcm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
+uct_rdmacm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
                             uct_rdmacm_cm_ep_t *cep, uint32_t *qpn_p)
 {
     ucs_status_t status;
@@ -365,7 +365,7 @@ uct_rdamcm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
     ucs_assert(ucs_async_is_blocked(uct_rdmacm_cm_ep_get_async(cep)));
 
     if (ctx->use_reserved_qpn) {
-        status = uct_rdamcm_cm_ep_create_reserved_qpn(cep, ctx);
+        status = uct_rdmacm_cm_ep_create_reserved_qpn(cep, ctx);
     } else {
         /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
         status = uct_rdmacm_cm_create_dummy_qp(ctx, cep);
@@ -385,7 +385,7 @@ uct_rdamcm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
     return UCS_OK;
 }
 
-static void uct_rdamcm_cm_ep_destroy_qpn(uct_rdmacm_cm_ep_t *cep)
+static void uct_rdmacm_cm_ep_destroy_qpn(uct_rdmacm_cm_ep_t *cep)
 {
     uct_rdmacm_cm_device_context_t *ctx;
     ucs_status_t status;
@@ -403,7 +403,7 @@ static void uct_rdamcm_cm_ep_destroy_qpn(uct_rdmacm_cm_ep_t *cep)
     }
 
     if (ctx->use_reserved_qpn) {
-        uct_rdamcm_cm_ep_destroy_reserved_qpn(ctx, cep);
+        uct_rdmacm_cm_ep_destroy_reserved_qpn(ctx, cep);
     } else {
         uct_rdmacm_cm_ep_destroy_dummy_qp(ctx, cep);
     }
@@ -412,7 +412,7 @@ static void uct_rdamcm_cm_ep_destroy_qpn(uct_rdmacm_cm_ep_t *cep)
 }
 
 static ucs_status_t
-uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
+uct_rdmacm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
                             uct_rdmacm_cm_ep_t *cep)
 {
     uct_rdmacm_cm_device_context_t *ctx;
@@ -424,7 +424,7 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
         return status;
     }
 
-    status = uct_rdamcm_cm_ep_create_qpn(ctx, cep, &conn_param->qp_num);
+    status = uct_rdmacm_cm_ep_create_qpn(ctx, cep, &conn_param->qp_num);
     if (status != UCS_OK) {
         return status;
     }
@@ -464,7 +464,7 @@ ucs_status_t uct_rdmacm_cm_ep_resolve_cb(uct_rdmacm_cm_ep_t *cep,
     return uct_cm_ep_resolve_cb(&cep->super, &args);
 }
 
-static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
+static ucs_status_t uct_rdmacm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
                                                  const uct_ep_params_t *params)
 {
     uct_cm_base_ep_t *cm_ep    = &cep->super;
@@ -528,7 +528,7 @@ err:
 }
 
 static ucs_status_t
-uct_rdamcm_cm_ep_server_send_priv_data(uct_rdmacm_cm_ep_t *cep,
+uct_rdmacm_cm_ep_server_send_priv_data(uct_rdmacm_cm_ep_t *cep,
                                        const uct_ep_params_t *params)
 {
     uint8_t pack_priv_data[UCT_RDMACM_TCP_PRIV_DATA_LEN];
@@ -577,7 +577,7 @@ out:
     return status;
 }
 
-static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
+static ucs_status_t uct_rdmacm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                                                  const uct_ep_params_t *params)
 {
     struct rdma_cm_event *event             = (struct rdma_cm_event*)params->conn_request;
@@ -621,7 +621,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                   id, listen_ev_ch, cm, cm->ev_ch);
     }
 
-    return uct_rdamcm_cm_ep_server_send_priv_data(cep, params);
+    return uct_rdmacm_cm_ep_server_send_priv_data(cep, params);
 
 err:
     cep->id = NULL;
@@ -644,7 +644,7 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
         goto err;
     }
 
-    status = uct_rdamcm_cm_ep_set_qp_num(&conn_param, cep);
+    status = uct_rdmacm_cm_ep_set_qp_num(&conn_param, cep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -685,7 +685,7 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
     return UCS_OK;
 
 err_destroy_qpn:
-    uct_rdamcm_cm_ep_destroy_qpn(cep);
+    uct_rdmacm_cm_ep_destroy_qpn(cep);
 err:
     return status;
 }
@@ -793,9 +793,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     self->id     = NULL;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
-        status = uct_rdamcm_cm_ep_client_init(self, params);
+        status = uct_rdmacm_cm_ep_client_init(self, params);
     } else if (params->field_mask & UCT_EP_PARAM_FIELD_CONN_REQUEST) {
-        status = uct_rdamcm_cm_ep_server_init(self, params);
+        status = uct_rdmacm_cm_ep_server_init(self, params);
     } else {
         ucs_error("either UCT_EP_PARAM_FIELD_SOCKADDR or UCT_EP_PARAM_FIELD_CONN_REQUEST "
                   "has to be provided");
@@ -824,7 +824,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
 
     UCS_ASYNC_BLOCK(worker_priv->async);
 
-    uct_rdamcm_cm_ep_destroy_qpn(self);
+    uct_rdmacm_cm_ep_destroy_qpn(self);
 
     /* rdma_destroy_id() cleans all events not yet reported on progress thread,
      * so no events would be reported to the user after destroying the id */
