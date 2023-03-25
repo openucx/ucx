@@ -328,7 +328,7 @@ static size_t ucp_address_packed_length_size(ucp_worker_h worker, size_t length,
 }
 
 static ucs_status_t
-ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
+ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                            const ucp_tl_bitmap_t *tl_bitmap, uint64_t flags,
                            ucp_object_version_t addr_version,
                            ucp_address_packed_device_t **devices_p,
@@ -358,12 +358,13 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
         dev = ucp_address_get_device(context, rsc_index, devices, &num_devices);
 
         if (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
-            ucs_assert(ep != NULL);
+            ucs_assert(key != NULL);
             /* Each lane which matches the resource index adds an ep address
              * entry. The length and flags is packed in non-unified mode only.
              */
-            ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
-                if (ucp_ep_get_rsc_index(ep, lane) == rsc_index) {
+            for (lane = 0; lane < key->num_lanes; ++lane) {
+                if ((key->lanes[lane].rsc_index == rsc_index) &&
+                    ucp_ep_config_connect_p2p(worker, key, rsc_index)) {
                     dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker);
                     dev->tl_addrs_size += iface_attr->ep_addr_len;
                     dev->tl_addrs_size += sizeof(uint8_t); /* lane index */
@@ -1423,6 +1424,32 @@ out:
     return UCS_OK;
 }
 
+ucs_status_t
+ucp_address_length(ucp_worker_h worker, const ucp_ep_config_key_t *key,
+                   const ucp_tl_bitmap_t *tl_bitmap, unsigned pack_flags,
+                   ucp_object_version_t addr_version, size_t *size_p)
+{
+    ucp_address_packed_device_t *devices;
+    ucp_rsc_index_t num_devices;
+    ucs_status_t status;
+
+    /* Collect all devices required to pack their address */
+    status = ucp_address_gather_devices(worker, key, tl_bitmap, pack_flags,
+                                        addr_version, &devices, &num_devices);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    /* Calculate the required ucp address length */
+    *size_p = ucp_address_packed_size(worker, devices, num_devices, pack_flags,
+                                      addr_version);
+    status  = UCS_OK;
+    ucs_free(devices);
+
+out:
+    return status;
+}
+
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
                               const ucp_tl_bitmap_t *tl_bitmap,
                               unsigned pack_flags,
@@ -1432,16 +1459,20 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
 {
     ucp_address_packed_device_t *devices;
     ucp_rsc_index_t num_devices;
+    const ucp_ep_config_key_t *key;
     ucs_status_t status;
     void *buffer;
     size_t size;
 
     if (ep == NULL) {
         pack_flags &= ~UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+        key         = NULL;
+    } else {
+        key         = &ucp_ep_config(ep)->key;
     }
 
     /* Collect all devices we want to pack */
-    status = ucp_address_gather_devices(worker, ep, tl_bitmap, pack_flags,
+    status = ucp_address_gather_devices(worker, key, tl_bitmap, pack_flags,
                                         addr_version, &devices, &num_devices);
     if (status != UCS_OK) {
         goto out;

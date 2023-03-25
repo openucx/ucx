@@ -822,7 +822,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
-    ucp_ep_get_tl_bitmap(ep, &ep_tl_bitmap);
+    ucp_ep_get_tl_bitmap(&ucp_ep_config(ep)->key, &ep_tl_bitmap);
     ucp_tl_bitmap_validate(&ep_tl_bitmap, local_tl_bitmap);
 
     *ep_p = ep;
@@ -3327,18 +3327,19 @@ int ucp_ep_is_local_connected(ucp_ep_h ep)
     return is_local_connected;
 }
 
-void ucp_ep_get_tl_bitmap(ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
+void ucp_ep_get_tl_bitmap(const ucp_ep_config_key_t *key,
+                          ucp_tl_bitmap_t *tl_bitmap)
 {
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_idx;
 
     UCS_BITMAP_CLEAR(tl_bitmap);
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (lane == ucp_ep_get_cm_lane(ep)) {
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        if (lane == key->cm_lane) {
             continue;
         }
 
-        rsc_idx = ucp_ep_get_rsc_index(ep, lane);
+        rsc_idx = key->lanes[lane].rsc_index;
         if (rsc_idx == UCP_NULL_RESOURCE) {
             continue;
         }
