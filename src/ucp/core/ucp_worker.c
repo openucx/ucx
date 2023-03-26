@@ -1936,13 +1936,13 @@ ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
     if (worker->context->config.features & feature_flag) {
         ucp_proto_select_short_init(worker, &ep_config->proto_select,
                                     ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
-                                    op_id, 0, proto_flags, &proto_short);
+                                    op_id, proto_flags, &proto_short);
 
-         /* Short protocol should be either disabled, or use expected lane */
-         ucs_assertv((proto_short.max_length_host_mem < 0) ||
-                     (proto_short.lane == exp_lane),
-                     "max_length_host_mem %ld, lane %d",
-                     proto_short.max_length_host_mem, proto_short.lane);
+        /* Short protocol should be either disabled, or use expected lane */
+        ucs_assertv((proto_short.max_length_host_mem < 0) ||
+                            (proto_short.lane == exp_lane),
+                    "max_length_host_mem %ld, lane %d",
+                    proto_short.max_length_host_mem, proto_short.lane);
     } else {
         ucp_proto_select_short_disable(&proto_short);
     }
@@ -2106,8 +2106,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     if (worker->context->config.features & UCP_FEATURE_RMA) {
         ucp_proto_select_short_init(worker, &rkey_config->proto_select,
                                     key->ep_cfg_index, rkey_cfg_index,
-                                    UCP_OP_ID_PUT, UCP_OP_ATTR_FLAG_FAST_CMPL,
-                                    UCP_PROTO_FLAG_PUT_SHORT,
+                                    UCP_OP_ID_PUT, UCP_PROTO_FLAG_PUT_SHORT,
                                     &rkey_config->put_short);
     } else {
         ucp_proto_select_short_disable(&rkey_config->put_short);
