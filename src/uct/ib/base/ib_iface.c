@@ -683,7 +683,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
     if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_IS_SELF) {
         uct_ib_address_unpack(ib_addr, &pack_params);
 
-        params->is_self = (uct_ib_iface_port_attr(iface)->lid ==
+        params->is_same_device = (uct_ib_iface_port_attr(iface)->lid ==
                            pack_params.lid) &&
                           !memcmp(iface->gid_info.gid.raw, pack_params.gid.raw,
                                   sizeof(pack_params.gid.raw)) &&
