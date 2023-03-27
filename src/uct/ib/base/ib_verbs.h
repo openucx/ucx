@@ -71,6 +71,9 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #  define IBV_ACCESS_RELAXED_ORDERING               0
 #endif
 
+#if !HAVE_DECL_IBV_ACCESS_ON_DEMAND
+#  define IBV_ACCESS_ON_DEMAND                      0
+#endif
 
 /*
  * DC support

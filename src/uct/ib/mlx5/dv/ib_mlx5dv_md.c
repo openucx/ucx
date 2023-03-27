@@ -732,6 +732,12 @@ uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         goto no_odp;
     }
 
+    if (IBV_ACCESS_ON_DEMAND == 0) {
+        ucs_debug("%s: disable ODP because IBV_ACCESS_ON_DEMAND is not supported",
+                  uct_ib_device_name(&md->super.dev));
+        goto no_odp;
+    }
+
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, pg)) {
         goto no_odp;
     }

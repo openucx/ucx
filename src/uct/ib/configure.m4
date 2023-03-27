@@ -223,6 +223,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                         [], [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
+                       IBV_ACCESS_ON_DEMAND,
                        IBV_QPF_GRH_REQUIRED],
                       [], [], [[#include <infiniband/verbs.h>]])
 
