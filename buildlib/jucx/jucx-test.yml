@@ -4,7 +4,9 @@ parameters:
 
 jobs:
   - job: ${{ parameters.name }}
-
+    workspace:
+      clean: all
+      
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
