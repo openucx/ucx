@@ -85,6 +85,22 @@ jobs:
           CONTAINER: ubuntu20_cuda_11_5
         ubuntu20_cuda_11_6:
           CONTAINER: ubuntu20_cuda_11_6
+        centos7_cuda_12_0:
+          CONTAINER: centos7_cuda_12_0
+        centos7_cuda_12_1:
+          CONTAINER: centos7_cuda_12_1
+        ubuntu18_cuda_12_0:
+          CONTAINER: ubuntu18_cuda_12_0
+        ubuntu18_cuda_12_1:
+          CONTAINER: ubuntu18_cuda_12_1
+        ubuntu20_cuda_12_0:
+          CONTAINER: ubuntu20_cuda_12_0
+        ubuntu20_cuda_12_1:
+          CONTAINER: ubuntu20_cuda_12_1
+        ubuntu22_cuda_12_0:
+          CONTAINER: ubuntu22_cuda_12_0
+        ubuntu22_cuda_12_1:
+          CONTAINER: ubuntu22_cuda_12_1
 
     container: $[ variables['CONTAINER'] ]
     timeoutInMinutes: 35
