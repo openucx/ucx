@@ -1,7 +1,7 @@
 # Introduction
 
 This project uses Azure Pipelines a GitHub check to validate pull requests
-prior to merging. Each time a pull request is updated AZP will spawn VMs and
+prior to merging. Each time a pull request is updated, AZP will spawn VMs and
 run compiles and tests based on the instructions in the
 buildlib/azure-pipelines.yml file.
 
@@ -35,8 +35,8 @@ containers failure quickly.
 
 ## Dockerfiles
 
-Each container is described by a docker file in buildlib/. Dockerfiles can be
-built locally using the build command at the top of the Dockerfile. Every
+Each container is described by a docker file in buildlib/dockers/. Dockerfiles
+can be built locally using the build command at the top of the Dockerfile. Every
 container has a unique name and tag reflecting its content. So that builds
 continue to work on any stable branches the container version number should be
 incremented when a build-incompatible change is made.
@@ -59,7 +59,7 @@ If network connectivity is too poor for push, then the container can be built
 on a VM inside Azure using this command:
 
 ```shell
-$ az acr build --registry ucfconsort -t ucfconsort.azurecr.io/ucx/centos7:1 -f buildlib/centos7.Dockerfile buildlib/
+$ az acr build --registry ucfconsort -t ucfconsort.azurecr.io/ucx/centos7:1 -f buildlib/dockers/centos7.Dockerfile buildlib/
 ```
 
 ## Testing Containers Locally
@@ -80,12 +80,12 @@ This will duplicate what will happen when running inside AZP.
 # Release images
 To build release images there is a `docker-compose` config. Here is how to use it:
 ```sh
-cd buildlib
+cd buildlib/dockers
 docker-compose build
 ```
 
 Tag and push release images:
 ```sh
-./buildlib/push-release-images.sh
+./buildlib/dockers/push-release-images.sh
 ```
 

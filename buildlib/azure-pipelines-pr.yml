@@ -17,6 +17,7 @@ pr:
     - docs/CodeStyle.md
     - docs/LoggingStyle.md
     - docs/OptimizationStyle.md
+    - buildlib/azure-pipelines.md
     - README.md
     - NEWS
     - AUTHORS
