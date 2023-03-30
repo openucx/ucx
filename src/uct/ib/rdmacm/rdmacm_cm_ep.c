@@ -653,8 +653,11 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
     conn_param.private_data_len = sizeof(*hdr) + priv_data_length;
 
     hdr         = (uct_rdmacm_priv_data_hdr_t*)conn_param.private_data;
-    hdr->status = UCS_OK;
-    hdr->length = priv_data_length;
+    uct_rdmacm_hdr_set_length(hdr, priv_data_length);
+
+    ucs_assertv(uct_rdmacm_hdr_get_status(hdr) == UCS_OK, "hdr status: %s",
+                ucs_status_string(uct_rdmacm_hdr_get_status(hdr)));
+
     if (priv_data != NULL) {
         memcpy(hdr + 1, priv_data, priv_data_length);
     }

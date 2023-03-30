@@ -30,7 +30,6 @@ KHASH_MAP_INIT_INT64(uct_rdmacm_cm_device_contexts, struct uct_rdmacm_cm_device_
 
 typedef struct uct_rdmacm_priv_data_hdr {
     uint8_t length;     /* length of the private data */
-    uint8_t status;
 } uct_rdmacm_priv_data_hdr_t;
 
 
@@ -123,4 +122,32 @@ uct_rdmacm_cm_reserved_qpn_blk_alloc(uct_rdmacm_cm_device_context_t *ctx,
 void uct_rdmacm_cm_reserved_qpn_blk_release(
         uct_rdmacm_cm_reserved_qpn_blk_t *blk);
 
+#define RDMACM_HDR_REJECT_BIT 7
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_rdmacm_hdr_get_length(const uct_rdmacm_priv_data_hdr_t *hdr)
+{
+    return hdr->length & UCS_MASK(RDMACM_HDR_REJECT_BIT);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rdmacm_hdr_get_status(const uct_rdmacm_priv_data_hdr_t *hdr)
+{
+    if (hdr->length & UCS_BIT(RDMACM_HDR_REJECT_BIT)) {
+        return UCS_ERR_REJECTED;
+    }
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rdmacm_hdr_set_length(uct_rdmacm_priv_data_hdr_t *hdr, uint8_t length)
+{
+    hdr->length = length;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rdmacm_hdr_set_reject(uct_rdmacm_priv_data_hdr_t *hdr)
+{
+    hdr->length = UCS_BIT(RDMACM_HDR_REJECT_BIT);
+}
 #endif

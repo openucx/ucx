@@ -17,7 +17,6 @@
 #include <poll.h>
 #include <rdma/rdma_cma.h>
 
-
 ucs_status_t uct_rdmacm_cm_destroy_id(struct rdma_cm_id *id)
 {
     ucs_trace("destroying cm_id %p", id);
@@ -49,8 +48,7 @@ ucs_status_t uct_rdmacm_cm_reject(uct_rdmacm_cm_t *cm, struct rdma_cm_id *id)
     char remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char local_ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    hdr.length = 0;
-    hdr.status = (uint8_t)UCS_ERR_REJECTED;
+    uct_rdmacm_hdr_set_reject(&hdr);
 
     ucs_trace("reject on cm_id %p", id);
 
@@ -529,7 +527,7 @@ uct_rdmacm_cm_handle_event_connect_request(uct_rdmacm_cm_t *cm,
     ucs_sock_addr_t                     client_saddr;
     size_t                              size;
 
-    ucs_assert(hdr->status == UCS_OK);
+    ucs_assert(uct_rdmacm_hdr_get_status(hdr) == UCS_OK);
 
     uct_rdmacm_cm_id_to_dev_name(event->id, dev_name);
 
@@ -545,7 +543,7 @@ uct_rdmacm_cm_handle_event_connect_request(uct_rdmacm_cm_t *cm,
     remote_data.dev_addr              = dev_addr;
     remote_data.dev_addr_length       = addr_length;
     remote_data.conn_priv_data        = hdr + 1;
-    remote_data.conn_priv_data_length = hdr->length;
+    remote_data.conn_priv_data_length = uct_rdmacm_hdr_get_length(hdr);
 
     client_saddr.addr = rdma_get_peer_addr(event->id);
 
@@ -602,7 +600,7 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
     remote_data.conn_priv_data        = hdr + 1;
-    remote_data.conn_priv_data_length = hdr->length;
+    remote_data.conn_priv_data_length = uct_rdmacm_hdr_get_length(hdr);
 
     status = uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_ep_get_cm(cep),
                                           event->id, &dev_addr, &addr_length);
@@ -619,8 +617,8 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     remote_data.dev_addr          = dev_addr;
     remote_data.dev_addr_length   = addr_length;
 
-    uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data,
-                                       (ucs_status_t)hdr->status);
+    status = uct_rdmacm_hdr_get_status(hdr);
+    uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data, status);
     ucs_free(dev_addr);
 }
 
@@ -687,8 +685,9 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
             hdr = (const uct_rdmacm_priv_data_hdr_t*)event->param.conn.private_data;
 
             if ((hdr != NULL) && (event->param.conn.private_data_len > 0) &&
-                ((ucs_status_t)hdr->status == UCS_ERR_REJECTED)) {
-                ucs_assert(hdr->length == 0);
+                (uct_rdmacm_hdr_get_status(hdr) == UCS_ERR_REJECTED)) {
+
+                ucs_assert(uct_rdmacm_hdr_get_length(hdr) == 0);
                 /* the actual amount of data transferred to the remote side is
                  * transport dependent and may be larger than that requested.*/
                 ucs_assert(event->param.conn.private_data_len >= sizeof(*hdr));
