@@ -10,7 +10,7 @@ AlignAfterOpenBracket: true
 AlignOperands: true
 PointerAlignment: Right
 DerivePointerAlignment: false
-AlignTrailingComments: false
+AlignTrailingComments: true
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: false
