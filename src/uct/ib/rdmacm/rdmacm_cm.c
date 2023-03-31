@@ -171,6 +171,10 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     ctx->use_reserved_qpn = 1;
     ctx->reuse_qpn        = cm->config.reuse_qpn;
 
+    if (ctx->reuse_qpn) {
+        kh_init_inplace(uct_rdmacm_cm_peer_dev_ctxs, &ctx->peer_dev_ctxs);
+    }
+
     ucs_spinlock_init(&ctx->lock, 0);
     ucs_list_head_init(&ctx->blk_list);
     return UCS_OK;
