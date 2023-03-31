@@ -262,9 +262,10 @@ static ucs_status_t
 uct_rdmacm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
                                      uct_rdmacm_cm_device_context_t *ctx)
 {
-    uint32_t qpns_per_obj = UCS_BIT(ctx->log_reserved_qpn_granularity);
+    uint32_t qpns_per_obj                      =
+        UCS_BIT(ctx->log_reserved_qpn_granularity);
+    uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx = NULL;
     uct_rdmacm_cm_reserved_qpn_blk_t *blk;
-    uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx;
     ucs_status_t status;
 
     ucs_spin_lock(&ctx->lock);
@@ -305,6 +306,7 @@ uct_rdmacm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
     }
 
     if (ctx->reuse_qpn) {
+        ucs_assert(peer_dev_ctx != NULL);
         cep->qpn                   = blk->first_qpn +
                                      peer_dev_ctx->next_avail_qpn_offset++;
         blk->next_avail_qpn_offset = ucs_max(blk->next_avail_qpn_offset,
