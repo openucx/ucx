@@ -206,9 +206,19 @@ static void
 uct_rdmacm_cm_device_context_cleanup(uct_rdmacm_cm_device_context_t *ctx)
 {
     uct_rdmacm_cm_reserved_qpn_blk_t *blk, *tmp;
+    uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx;
     int ret;
 
     if (ctx->use_reserved_qpn) {
+        if (ctx->reuse_qpn) {
+            kh_foreach_value(&ctx->peer_dev_ctxs, peer_dev_ctx, {
+                ucs_free(peer_dev_ctx);
+            });
+
+            kh_destroy_inplace(uct_rdmacm_cm_peer_dev_ctxs,
+                               &ctx->peer_dev_ctxs);
+        }
+
         /* There can be some blks are not fully used, then they won't be
            destroyed in RDMACM CM EP, so need to be destroyed here. */
         ucs_list_for_each_safe(blk, tmp, &ctx->blk_list, entry) {
