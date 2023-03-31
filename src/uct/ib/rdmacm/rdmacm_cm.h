@@ -20,6 +20,7 @@
 
 
 KHASH_MAP_INIT_INT64(uct_rdmacm_cm_device_contexts, struct uct_rdmacm_cm_device_context*);
+KHASH_MAP_INIT_INT64(uct_rdmacm_cm_peer_dev_ctxs, struct uct_rdmacm_cm_peer_dev_ctx*);
 
 
 #define UCT_RDMACM_TCP_PRIV_DATA_LEN            56    /** See rdma_connect(3) */
@@ -81,7 +82,14 @@ typedef struct uct_rdmacm_cm_device_context {
     uint32_t        num_dummy_qps;
     struct ibv_cq   *cq;
     uint8_t         eth_ports;
+    khash_t(uct_rdmacm_cm_peer_dev_ctxs) peer_dev_ctxs;
 } uct_rdmacm_cm_device_context_t;
+
+
+typedef struct uct_rdmacm_cm_peer_dev_ctx {
+    uct_rdmacm_cm_reserved_qpn_blk_t *ref_qpn_blk;
+    uint32_t                         next_avail_qpn_offset;
+} uct_rdmacm_cm_peer_dev_ctx_t;
 
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_t, uct_cm_t, uct_component_h,
