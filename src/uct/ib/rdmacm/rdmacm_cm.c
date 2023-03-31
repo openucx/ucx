@@ -169,6 +169,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
               log_max_num_reserved_qpn, ctx->log_reserved_qpn_granularity);
 
     ctx->use_reserved_qpn = 1;
+    ctx->reuse_qpn        = cm->config.reuse_qpn;
 
     ucs_spinlock_init(&ctx->lock, 0);
     ucs_list_head_init(&ctx->blk_list);
@@ -177,12 +178,14 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 dummy_qp_ctx_init:
 #endif
 
-    if (cm->config.reserved_qpn == UCS_YES) {
+    if ((cm->config.reserved_qpn == UCS_YES) ||
+        (cm->config.reuse_qpn == UCS_CONFIG_ON)) {
         ucs_error("%s: reserved qpn is not supported, failed to use it", dev_name);
         return UCS_ERR_UNSUPPORTED;
     }
 
     ctx->use_reserved_qpn = 0;
+    ctx->reuse_qpn        = 0;
 
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
@@ -975,6 +978,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     self->config.timeout      = rdmacm_config->timeout;
     self->config.reserved_qpn = rdmacm_config->reserved_qpn;
+    self->config.reuse_qpn    = rdmacm_config->reuse_qpn;
 
     ucs_debug("created rdmacm_cm %p with event_channel %p (fd=%d)",
               self, self->ev_ch, self->ev_ch->fd);

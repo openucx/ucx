@@ -46,6 +46,7 @@ typedef struct uct_rdmacm_cm {
         struct sockaddr                    *src_addr;
         double                             timeout;
         ucs_ternary_auto_value_t           reserved_qpn;
+        int                                reuse_qpn;
     } config;
 } uct_rdmacm_cm_t;
 
@@ -55,6 +56,7 @@ typedef struct uct_rdmacm_cm_config {
     char                     *src_addr;
     double                   timeout;
     ucs_ternary_auto_value_t reserved_qpn;
+    int                      reuse_qpn;
 } uct_rdmacm_cm_config_t;
 
 
@@ -72,6 +74,7 @@ typedef struct uct_rdmacm_cm_reserved_qpn_blk {
 
 typedef struct uct_rdmacm_cm_device_context {
     int             use_reserved_qpn;
+    int             reuse_qpn;
     ucs_spinlock_t  lock;                         /** Avoid competed condition on the qpn resource for multi-threads */
     ucs_list_link_t blk_list;
     uint32_t        log_reserved_qpn_granularity;

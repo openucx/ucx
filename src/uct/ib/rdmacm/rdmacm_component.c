@@ -31,6 +31,12 @@ static ucs_config_field_t uct_rdmacm_cm_config_table[] = {
      ucs_offsetof(uct_rdmacm_cm_config_t, reserved_qpn),
                   UCS_CONFIG_TYPE_TERNARY},
 
+    {"REUSE_QPN", "no",
+     "Reuse reserved QPN for connection management:\n"
+     "  no  - Do not reuse qpn for connection management\n"
+     "  yes - Reuse qpn for connection management",
+     ucs_offsetof(uct_rdmacm_cm_config_t, reuse_qpn), UCS_CONFIG_TYPE_ON_OFF},
+
     {NULL}
 };
 
