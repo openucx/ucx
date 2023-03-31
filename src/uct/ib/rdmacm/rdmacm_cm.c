@@ -44,15 +44,15 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event)
 
 ucs_status_t uct_rdmacm_cm_reject(uct_rdmacm_cm_t *cm, struct rdma_cm_id *id)
 {
-    uct_rdmacm_priv_data_hdr_t hdr;
+    uct_rdmacm_priv_data_hdr_old_t old_hdr;
     char remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char local_ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    uct_rdmacm_hdr_set_reject(&hdr);
+    uct_rdmacm_hdr_set_reject(&old_hdr);
 
     ucs_trace("reject on cm_id %p", id);
 
-    if (rdma_reject(id, &hdr, sizeof(hdr))) {
+    if (rdma_reject(id, &old_hdr, uct_rdmacm_hdr_get_hdr_size(&old_hdr.hdr))) {
         uct_cm_peer_error(&cm->super,
                           "rdma_reject (id=%p local addr=%s remote addr=%s) "
                           "failed with error: %m", id,
@@ -542,7 +542,7 @@ uct_rdmacm_cm_handle_event_connect_request(uct_rdmacm_cm_t *cm,
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
     remote_data.dev_addr              = dev_addr;
     remote_data.dev_addr_length       = addr_length;
-    remote_data.conn_priv_data        = hdr + 1;
+    remote_data.conn_priv_data        = uct_rdmacm_hdr_get_data(hdr);
     remote_data.conn_priv_data_length = uct_rdmacm_hdr_get_length(hdr);
 
     client_saddr.addr = rdma_get_peer_addr(event->id);
@@ -599,7 +599,7 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
 
     remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
-    remote_data.conn_priv_data        = hdr + 1;
+    remote_data.conn_priv_data        = uct_rdmacm_hdr_get_data(hdr);
     remote_data.conn_priv_data_length = uct_rdmacm_hdr_get_length(hdr);
 
     status = uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_ep_get_cm(cep),
@@ -673,6 +673,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
     const uct_rdmacm_priv_data_hdr_t *hdr;
     ucs_log_level_t log_level;
     ucs_status_t status;
+    size_t hdr_size;
 
     switch (event->event) {
     case RDMA_CM_EVENT_REJECTED:
@@ -690,7 +691,8 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
                 ucs_assert(uct_rdmacm_hdr_get_length(hdr) == 0);
                 /* the actual amount of data transferred to the remote side is
                  * transport dependent and may be larger than that requested.*/
-                ucs_assert(event->param.conn.private_data_len >= sizeof(*hdr));
+                hdr_size = uct_rdmacm_hdr_get_hdr_size(hdr);
+                ucs_assert(event->param.conn.private_data_len >= hdr_size);
                 status = UCS_ERR_REJECTED;
             } else {
                 status = UCS_ERR_CONNECTION_RESET;

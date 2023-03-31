@@ -30,8 +30,12 @@ KHASH_MAP_INIT_INT64(uct_rdmacm_cm_device_contexts, struct uct_rdmacm_cm_device_
 
 typedef struct uct_rdmacm_priv_data_hdr {
     uint8_t length;     /* length of the private data */
-} uct_rdmacm_priv_data_hdr_t;
+} UCS_S_PACKED uct_rdmacm_priv_data_hdr_t;
 
+typedef struct uct_rdmacm_priv_data_hdr_old {
+    uct_rdmacm_priv_data_hdr_t hdr;
+    uint8_t status;
+} UCS_S_PACKED uct_rdmacm_priv_data_hdr_old_t;
 
 /**
  * An rdmacm connection manager
@@ -122,32 +126,65 @@ uct_rdmacm_cm_reserved_qpn_blk_alloc(uct_rdmacm_cm_device_context_t *ctx,
 void uct_rdmacm_cm_reserved_qpn_blk_release(
         uct_rdmacm_cm_reserved_qpn_blk_t *blk);
 
-#define RDMACM_HDR_REJECT_BIT 7
+#define RDMACM_HDR_FIRST_BIT 6
+#define RDMACM_HDR_REJECT_BIT RDMACM_HDR_FIRST_BIT
+#define RDMACM_HDR_SHORT_BIT (RDMACM_HDR_FIRST_BIT + 1)
 
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_rdmacm_hdr_get_length(const uct_rdmacm_priv_data_hdr_t *hdr)
 {
-    return hdr->length & UCS_MASK(RDMACM_HDR_REJECT_BIT);
+    return hdr->length & UCS_MASK(RDMACM_HDR_FIRST_BIT);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rdmacm_hdr_get_status(const uct_rdmacm_priv_data_hdr_t *hdr)
 {
-    if (hdr->length & UCS_BIT(RDMACM_HDR_REJECT_BIT)) {
-        return UCS_ERR_REJECTED;
+    ucs_status_t status = UCS_OK;
+
+    if (hdr->length & UCS_BIT(RDMACM_HDR_SHORT_BIT)) {
+        if (hdr->length & UCS_BIT(RDMACM_HDR_REJECT_BIT)) {
+            status = UCS_ERR_REJECTED;
+        }
+    } else {
+        status = *(uint8_t *)(hdr + 1);
     }
-    return UCS_OK;
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
 uct_rdmacm_hdr_set_length(uct_rdmacm_priv_data_hdr_t *hdr, uint8_t length)
 {
+    uint8_t *status;
+
     hdr->length = length;
+    if (length >= (UCT_RDMACM_TCP_PRIV_DATA_LEN - sizeof(*hdr))) {
+        hdr->length |= UCS_BIT(RDMACM_HDR_SHORT_BIT);
+    } else {
+        status = (uint8_t *)(hdr + 1);
+        *status = UCS_OK;
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rdmacm_hdr_set_reject(uct_rdmacm_priv_data_hdr_t *hdr)
+uct_rdmacm_hdr_set_reject(uct_rdmacm_priv_data_hdr_old_t *old_hdr)
 {
-    hdr->length = UCS_BIT(RDMACM_HDR_REJECT_BIT);
+    old_hdr->hdr.length = 0;
+    old_hdr->status = UCS_ERR_REJECTED;
+}
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_rdmacm_hdr_get_hdr_size(const uct_rdmacm_priv_data_hdr_t *hdr)
+{
+    uint8_t size = sizeof(*hdr);
+    if ((hdr->length & UCS_BIT(RDMACM_HDR_SHORT_BIT)) == 0) {
+        size++;
+    }
+    return size;
+}
+
+static UCS_F_ALWAYS_INLINE void *
+uct_rdmacm_hdr_get_data(const uct_rdmacm_priv_data_hdr_t *hdr)
+{
+    return UCS_PTR_BYTE_OFFSET(hdr, uct_rdmacm_hdr_get_hdr_size(hdr));
 }
 #endif

@@ -650,16 +650,18 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
     }
 
     conn_param.private_data     = ucs_alloca(UCT_RDMACM_TCP_PRIV_DATA_LEN);
-    conn_param.private_data_len = sizeof(*hdr) + priv_data_length;
 
     hdr         = (uct_rdmacm_priv_data_hdr_t*)conn_param.private_data;
     uct_rdmacm_hdr_set_length(hdr, priv_data_length);
+
+    conn_param.private_data_len = uct_rdmacm_hdr_get_hdr_size(hdr) +
+        priv_data_length;
 
     ucs_assertv(uct_rdmacm_hdr_get_status(hdr) == UCS_OK, "hdr status: %s",
                 ucs_status_string(uct_rdmacm_hdr_get_status(hdr)));
 
     if (priv_data != NULL) {
-        memcpy(hdr + 1, priv_data, priv_data_length);
+        memcpy(uct_rdmacm_hdr_get_data(hdr), priv_data, priv_data_length);
     }
 
     if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
