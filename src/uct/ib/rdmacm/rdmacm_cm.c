@@ -300,6 +300,55 @@ out:
     return status;
 }
 
+static uint64_t
+uct_rdmacm_cm_route_get_peer_interface_id(const struct rdma_route *route)
+{
+    return be64toh(route->addr.addr.ibaddr.dgid.global.interface_id);
+}
+
+ucs_status_t
+uct_rdmacm_cm_get_peer_dev_ctx(uct_rdmacm_cm_device_context_t *ctx,
+                               const struct rdma_route *route,
+                               uct_rdmacm_cm_peer_dev_ctx_t **peer_dev_ctx_p)
+{
+    uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx;
+    ucs_status_t status;
+    khiter_t iter;
+    int ret;
+
+    iter = kh_put(uct_rdmacm_cm_peer_dev_ctxs, &ctx->peer_dev_ctxs,
+                  uct_rdmacm_cm_route_get_peer_interface_id(route), &ret);
+    if (ret == -1) {
+        ucs_error("ctx %p: cannot allocate hash entry for peer device context",
+                  ctx);
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    if (ret == 0) {
+        /* already exists so use it */
+        peer_dev_ctx = kh_value(&ctx->peer_dev_ctxs, iter);
+    } else {
+        /* Create peer device context */
+        peer_dev_ctx = ucs_calloc(1, sizeof(*ctx), "rdmacm_peer_dev_ctx");
+        if (peer_dev_ctx == NULL) {
+            ucs_error("ctx %p: failed to allocate peer device context", ctx);
+            status = UCS_ERR_NO_MEMORY;
+            goto err_kh_del;
+        }
+
+        kh_value(&ctx->peer_dev_ctxs, iter) = peer_dev_ctx;
+    }
+
+    *peer_dev_ctx_p = peer_dev_ctx;
+    return UCS_OK;
+
+err_kh_del:
+    kh_del(uct_rdmacm_cm_peer_dev_ctxs, &ctx->peer_dev_ctxs, iter);
+out:
+    return status;
+}
+
 ucs_status_t
 uct_rdmacm_cm_reserved_qpn_blk_alloc(uct_rdmacm_cm_device_context_t *ctx,
                                      struct ibv_context *verbs,

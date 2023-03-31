@@ -126,6 +126,11 @@ ucs_status_t uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_t *cm,
                                               uct_rdmacm_cm_device_context_t **ctx_p);
 
 ucs_status_t
+uct_rdmacm_cm_get_peer_dev_ctx(uct_rdmacm_cm_device_context_t *ctx,
+                               const struct rdma_route *route,
+                               uct_rdmacm_cm_peer_dev_ctx_t **peer_dev_ctx_p);
+
+ucs_status_t
 uct_rdmacm_cm_reserved_qpn_blk_alloc(uct_rdmacm_cm_device_context_t *ctx,
                                      struct ibv_context *verbs,
                                      ucs_log_level_t err_level,

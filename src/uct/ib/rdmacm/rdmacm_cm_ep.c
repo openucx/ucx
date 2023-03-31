@@ -242,9 +242,18 @@ uct_rdmacm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
 {
     uint32_t qpns_per_obj = UCS_BIT(ctx->log_reserved_qpn_granularity);
     uct_rdmacm_cm_reserved_qpn_blk_t *blk;
+    uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx;
     ucs_status_t status;
 
     ucs_spin_lock(&ctx->lock);
+
+    if (ctx->reuse_qpn) {
+        status = uct_rdmacm_cm_get_peer_dev_ctx(ctx, &cep->id->route,
+                                                &peer_dev_ctx);
+        if (status != UCS_OK) {
+            goto out;
+        }
+    }
 
     blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t, entry);
     if (ucs_list_is_empty(&ctx->blk_list) ||
