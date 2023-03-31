@@ -16,6 +16,28 @@
 #include <ucs/profile/profile.h>
 
 
+/**
+ * @brief Allocate reserved qpn blk and link it into list.
+ *
+ * @param [in] _ctx           rdmacm CM device context.
+ * @param [in] _cep           UCT rdmacm CM Endpoint.
+ * @param [in] _failed_action Action to do if it failed to allocate
+ *                            reserved qpn blk.
+ * @param [out] _rst          allocate reserved qpn blk result.
+ * @param [out] _blk          the allocated reserved qpn blk.
+ */
+#define RDMACM_CM_RESERVE_QPN_BLK(_ctx, _cep, _rst, _blk, _failed_action) \
+    do { \
+        _rst = uct_rdmacm_cm_reserved_qpn_blk_alloc(_ctx, _cep->id->verbs, \
+                                                    UCS_LOG_LEVEL_ERROR, \
+                                                    &_blk); \
+        if (_rst != UCS_OK) { \
+            _failed_action; \
+        } \
+        ucs_list_add_tail(&_ctx->blk_list, &_blk->entry); \
+    } while (0)
+
+
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
                                  size_t max_len)
 {
@@ -247,33 +269,54 @@ uct_rdmacm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
 
     ucs_spin_lock(&ctx->lock);
 
+    if (ucs_unlikely(ucs_list_is_empty(&ctx->blk_list))) {
+        RDMACM_CM_RESERVE_QPN_BLK(ctx, cep, status, blk, { goto out; });
+    }
+
     if (ctx->reuse_qpn) {
         status = uct_rdmacm_cm_get_peer_dev_ctx(ctx, &cep->id->route,
                                                 &peer_dev_ctx);
         if (status != UCS_OK) {
             goto out;
         }
-    }
 
-    blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t, entry);
-    if (ucs_list_is_empty(&ctx->blk_list) ||
-        (blk->next_avail_qpn_offset >= qpns_per_obj)) {
-        status = uct_rdmacm_cm_reserved_qpn_blk_alloc(ctx, cep->id->verbs,
-                                                      UCS_LOG_LEVEL_ERROR,
-                                                      &blk);
-        if (status != UCS_OK) {
-            goto out;
+        if (peer_dev_ctx->ref_qpn_blk == NULL) {
+            blk                                 = ucs_list_next(&ctx->blk_list,
+                                                                uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+            peer_dev_ctx->ref_qpn_blk           = blk;
+            peer_dev_ctx->next_avail_qpn_offset = 0;
+        } else if (peer_dev_ctx->next_avail_qpn_offset >= qpns_per_obj) {
+            if (peer_dev_ctx->ref_qpn_blk->entry.next == &ctx->blk_list) {
+                RDMACM_CM_RESERVE_QPN_BLK(ctx, cep, status, blk, { goto out; });
+            }
+            blk                                 = ucs_list_next(&peer_dev_ctx->ref_qpn_blk->entry,
+                                                                uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+            peer_dev_ctx->ref_qpn_blk           = blk;
+            peer_dev_ctx->next_avail_qpn_offset = 0;
+        } else {
+            blk = peer_dev_ctx->ref_qpn_blk;
         }
-
-        ucs_list_add_tail(&ctx->blk_list, &blk->entry);
+    } else {
+        blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t,
+                            entry);
+        if (blk->next_avail_qpn_offset >= qpns_per_obj) {
+            RDMACM_CM_RESERVE_QPN_BLK(ctx, cep, status, blk, { goto out; });
+        }
     }
 
-    cep->qpn = blk->first_qpn + blk->next_avail_qpn_offset;
+    if (ctx->reuse_qpn) {
+        cep->qpn                   = blk->first_qpn +
+                                     peer_dev_ctx->next_avail_qpn_offset++;
+        blk->next_avail_qpn_offset = ucs_max(blk->next_avail_qpn_offset,
+                                             peer_dev_ctx->next_avail_qpn_offset);
+    } else {
+        cep->qpn                   = blk->first_qpn +
+                                     blk->next_avail_qpn_offset++;
+    }
     ucs_debug("created reserved qpn 0x%x on rdmacm_id %p",
               cep->qpn, cep->id);
     cep->blk = blk;
     blk->refcount++;
-    blk->next_avail_qpn_offset++;
     status = UCS_OK;
 
 out:
