@@ -160,7 +160,8 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
 {
     const ucp_proto_t *proto = req->send.proto_config->proto;
 
-    ucs_assert(proto_stage < UCP_PROTO_STAGE_LAST);
+    ucs_assertv(proto_stage < UCP_PROTO_STAGE_LAST, "stage=%"PRIu8,
+                proto_stage);
     ucs_assert(proto->progress[proto_stage] != NULL);
 
     ucp_trace_req(req, "set to stage %u, progress function '%s'", proto_stage,
@@ -180,7 +181,8 @@ static void ucp_proto_request_set_proto(ucp_request_t *req,
                                         const ucp_proto_config_t *proto_config,
                                         size_t msg_length)
 {
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_SEND);
+    ucs_assertv(req->flags & UCP_REQUEST_FLAG_PROTO_SEND, "flags=0x%"PRIx32,
+                req->flags);
 
     req->send.proto_config = proto_config;
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
@@ -355,8 +357,11 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
     /* For contiguous buffer, pack one rkey
      * TODO to support IOV datatype write N [address+length] records,
      */
-    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
-    ucs_assert(ucs_test_all_flags(dt_iter->type.contig.memh->md_map, md_map));
+    ucs_assertv(dt_iter->dt_class == UCP_DATATYPE_CONTIG, "dt_class=%s",
+                ucp_datatype_class_names[dt_iter->dt_class]);
+    ucs_assertv(ucs_test_all_flags(dt_iter->type.contig.memh->md_map, md_map),
+                "dt_iter_md_map=0x%"PRIx64" md_map=0x%"PRIx64,
+                dt_iter->type.contig.memh->md_map, md_map);
 
     packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
                                           dt_iter->type.contig.memh,

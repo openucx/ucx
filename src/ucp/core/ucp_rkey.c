@@ -143,7 +143,7 @@ ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
     /* Check that md_map is valid */
     ucs_assert(ucs_test_all_flags(UCS_MASK(context->num_mds), md_map));
 
-    ucs_trace("packing rkey type %s md_map 0x%" PRIx64 "dev_map 0x%" PRIx64,
+    ucs_trace("packing rkey type %s md_map 0x%" PRIx64 " dev_map 0x%" PRIx64,
               ucs_memory_type_names[mem_info->type], md_map, sys_dev_map);
     ucs_log_indent_level(UCS_LOG_LEVEL_TRACE, 1);
 
