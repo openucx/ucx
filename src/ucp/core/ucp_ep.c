@@ -1276,9 +1276,13 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
                                ep->refcounts.create;
     uint8_t num_failed_tl_ep = 0;
     ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        num_failed_tl_ep += ucp_is_uct_ep_failed(ucp_ep_get_lane(ep, lane));
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        if ((uct_ep != NULL) && ucp_is_uct_ep_failed(uct_ep)) {
+            num_failed_tl_ep++;
+        }
     }
 
     ucs_assert((num_failed_tl_ep == 0) ||
