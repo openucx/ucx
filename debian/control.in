@@ -24,6 +24,18 @@ Description: Unified Communication X
  .
  This is the main package that includes the library as well as build headers.
 
+Package: ucx-xpmem
+Section: libs
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Architecture: any
+Build-Profiles: <xpmem>
+Description: Unified Communication X - XPMEM support
+ UCX is a communication library implementing high-performance messaging.
+ .
+ Provide xpmem support. XPMEM is a Linux kernel module that enables a
+ process to map the memory of another process into its virtual address
+ space.
+
 Package: ucx-cuda
 Section: libs
 Depends: ${misc:Depends}, ${shlibs:Depends}
