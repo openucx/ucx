@@ -258,20 +258,25 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     return UCS_OK;
 }
 
-void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                         unsigned qp_num)
+ucs_status_t
+uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep, unsigned qp_num)
 {
     uct_rc_ep_t ***ptr, **memb;
 
     ptr = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER];
     if (*ptr == NULL) {
         *ptr = ucs_calloc(UCS_BIT(UCT_RC_QP_TABLE_MEMB_ORDER), sizeof(**ptr),
-                           "rc qp table");
+                          "rc qp table");
+        if (*ptr == NULL) {
+            ucs_error("failed to allocate memory for rc qp table");
+            return UCS_ERR_NO_MEMORY;
+        }
     }
 
-    memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
+    memb = &(*ptr)[qp_num & UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb == NULL);
     *memb = ep;
+    return UCS_OK;
 }
 
 void uct_rc_iface_remove_qp(uct_rc_iface_t *iface, unsigned qp_num)
