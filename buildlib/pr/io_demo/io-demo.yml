@@ -100,3 +100,9 @@ jobs:
           tls: "rc_x"
           test_name: am_cx6_num_path
           extra_run_args: "--env client UCX_IB_NUM_PATHS=1 --env server UCX_IB_NUM_PATHS=2"
+        "Reuse reserved qpn in rdmacm CM":
+          interface: $(roce_iface_cx6)
+          active_disconnect: 'Yes'
+          tls: "rc_x"
+          test_name: rdmacm_reuse_qpn
+          extra_run_args: "--tasks-per-node 2 --num-clients 2 --env server UCX_RDMA_CM_REUSE_QPN=ON --client_exit_times 10s,20s"
