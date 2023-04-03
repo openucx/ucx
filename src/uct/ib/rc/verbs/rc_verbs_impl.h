@@ -21,8 +21,8 @@ uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
     uct_rc_txqp_posted(txqp, iface, 1, signaled);
 }
 
-ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface,
-                                                     unsigned max);
+ucs_status_t
+uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags);
 

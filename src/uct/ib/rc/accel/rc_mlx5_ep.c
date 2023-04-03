@@ -1027,7 +1027,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super, self->tx.wq.super.verbs.qp);
         if (status != UCS_OK) {
-            goto err;
+            goto err_destroy_txwq_qp;
         }
     }
 
@@ -1035,10 +1035,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
                                                 IBV_EVENT_QP_LAST_WQE_REACHED,
                                                 self->tx.wq.super.qp_num);
     if (status != UCS_OK) {
-        goto err;
+        goto err_destroy_txwq_qp;
     }
 
-    uct_rc_iface_add_qp(&iface->super, &self->super, self->tx.wq.super.qp_num);
+    status = uct_rc_iface_add_qp(&iface->super, &self->super,
+                                 self->tx.wq.super.qp_num);
+    if (status != UCS_OK) {
+        goto err_event_unreg;
+    }
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
@@ -1047,24 +1051,31 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         uct_rc_mlx5_iface_fill_attr(iface, &attr, 0, &iface->rx.srq);
         status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
         if (status != UCS_OK) {
-            goto err_unreg;
+            goto err_remove_txwq_qp;
         }
 
-        uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.qp_num);
+        status = uct_rc_iface_add_qp(&iface->super, &self->super,
+                                     self->tm_qp.qp_num);
+        if (status != UCS_OK) {
+            goto err_destroy_tm_qp;
+        }
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
     self->mp.free      = 1;
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
+    uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
 
-err_unreg:
+err_destroy_tm_qp:
+    uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
+err_remove_txwq_qp:
+    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
+err_event_unreg:
     uct_ib_device_async_event_unregister(&md->super.dev,
                                          IBV_EVENT_QP_LAST_WQE_REACHED,
                                          self->tx.wq.super.qp_num);
-    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
-
-err:
+err_destroy_txwq_qp:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;
 }
