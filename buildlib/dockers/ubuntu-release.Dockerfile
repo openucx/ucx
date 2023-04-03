@@ -16,15 +16,14 @@ RUN apt-get update && \
         libcap2 \
         libnuma-dev \
         libtool \
-        # Provide the dependencies required by libnvidia-compute* instead the cuda-compat*
+        # Provide CUDA dependencies by libnvidia-compute*
         libnvidia-compute-${NV_DRIVER_VERSION} \
         make \
         maven \
         udev \
         wget \
         environment-modules \
-        pkg-config \
-        sudo \
+    # Remove cuda-compat* from nvidia/cuda:x86_64 images, provide CUDA dependencies by libnvidia-compute* instead
     && apt-get remove -y openjdk-11-* cuda-compat* || apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -32,7 +31,8 @@ RUN apt-get update && \
 ARG MOFED_VERSION=5.0-1.0.0.0
 ARG UBUNTU_VERSION
 ARG MOFED_OS=ubuntu${UBUNTU_VERSION}
-ENV MOFED_DIR MLNX_OFED_LINUX-${MOFED_VERSION}-${MOFED_OS}-x86_64
+ARG ARCH
+ENV MOFED_DIR MLNX_OFED_LINUX-${MOFED_VERSION}-${MOFED_OS}-${ARCH}
 ENV MOFED_SITE_PLACE MLNX_OFED-${MOFED_VERSION}
 ENV MOFED_IMAGE ${MOFED_DIR}.tgz
 RUN wget --no-verbose http://content.mellanox.com/ofed/${MOFED_SITE_PLACE}/${MOFED_IMAGE} && \

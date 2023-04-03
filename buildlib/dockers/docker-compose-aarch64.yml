@@ -1,0 +1,59 @@
+version: "3.4"
+# To build images, run:
+# docker compose -f docker-compose-aarch64.yml build
+
+# Find MOFED_VERSION per OS and arch:
+# https://network.nvidia.com/products/infiniband-drivers/linux/mlnx_ofed/
+
+# Find NV_DRIVER_VERSION per CUDA version, OS and arch:
+# https://developer.nvidia.com/cuda-11-7-0-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=22.04&target_type=runfile_local
+
+services:
+  centos8-mofed5-cuda11:
+    image: centos8-mofed5-cuda11:5
+    build:
+      context: .
+      network: host
+      dockerfile: centos-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        MOFED_OS: rhel8.2
+        CUDA_VERSION: 11.4.0
+        OS_VERSION: 8
+        ARCH: aarch64
+  ubuntu18.04-mofed5-cuda11:
+    image: ubuntu18.04-mofed5-cuda11:5
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        UBUNTU_VERSION: 18.04
+        CUDA_VERSION: 11.4.0
+        CUDA_COMPAT: 11-4
+        ARCH: aarch64
+  ubuntu20.04-mofed5-cuda11:
+    image: ubuntu20.04-mofed5-cuda11:5
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        UBUNTU_VERSION: 20.04
+        CUDA_VERSION: 11.4.0
+        CUDA_COMPAT: 11-4
+        ARCH: aarch64
+  ubuntu22.04-mofed5-cuda11:
+    image: ubuntu22.04-mofed5-cuda11:5
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        UBUNTU_VERSION: 22.04
+        CUDA_VERSION: 11.7.0
+        CUDA_COMPAT: 11-7
+        ARCH: aarch64
