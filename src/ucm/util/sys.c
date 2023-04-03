@@ -322,7 +322,7 @@ void ucm_prevent_dl_unload()
         (void)dlerror();
         dl = dlopen(info.dli_fname, flags);
         if (dl == NULL) {
-            ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
+            ucm_diag("failed to load '%s': %s", info.dli_fname, dlerror());
             continue;
         }
 
