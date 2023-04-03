@@ -2,8 +2,8 @@
 
 # shellcheck disable=SC2086
 basedir=$(cd "$(dirname $0)" && pwd)
-
-registry=harbor.mellanox.com/ucx
+ARCH=$(uname -m)
+registry=harbor.mellanox.com/ucx/${ARCH}
 
 images=$(awk '!/#/ && /image:/ {print $2}' "${basedir}/docker-compose.yml")
 for img in $images; do
