@@ -218,10 +218,10 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
     uct_rc_iface_t *rc_iface   = &iface->super;
-    uct_ib_md_t *md            = uct_ib_iface_md(&rc_iface->super);
     size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(0);
     size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(0);
     ucs_status_t status;
+    size_t ep_addr_len;
 
 #if HAVE_IBV_DM
     if (iface->dm.dm != NULL) {
@@ -241,14 +241,17 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
+    if (uct_rc_mlx5_iface_flush_rkey_enabled(iface)) {
+        ep_addr_len = sizeof(uct_rc_mlx5_ep_ext_address_t) + sizeof(uint16_t);
+    } else {
+        ep_addr_len = sizeof(uct_rc_mlx5_ep_address_t);
+    }
+
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline,
                                    UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m     += 1e-9; /* 1 ns per each extra QP */
-    iface_attr->ep_addr_len    = uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
-                                 (sizeof(uct_rc_mlx5_ep_ext_address_t) +
-                                  sizeof(uint16_t)) :
-                                 sizeof(uct_rc_mlx5_ep_address_t);
+    iface_attr->ep_addr_len    = ep_addr_len;
     iface_attr->iface_addr_len = sizeof(uint8_t);
     return UCS_OK;
 }
