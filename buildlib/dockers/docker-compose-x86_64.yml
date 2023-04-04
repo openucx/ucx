@@ -10,7 +10,7 @@ version: "3.4"
 
 services:
   centos7-mofed5-cuda11:
-    image: centos7-mofed5-cuda11:5
+    image: centos7-mofed5-cuda11:3
     build:
       context: .
       network: host
@@ -21,20 +21,8 @@ services:
         CUDA_VERSION: 11.4.0
         OS_VERSION: 7
         ARCH: x86_64
-  centos7-mofed5.4-cuda11:
-    image: centos7-mofed5.4-cuda11:5
-    build:
-      context: .
-      network: host
-      dockerfile: centos-release.Dockerfile
-      args:
-        MOFED_VERSION: 5.4-1.0.3.0
-        MOFED_OS: rhel7.6
-        CUDA_VERSION: 11.2.0
-        OS_VERSION: 7
-        ARCH: x86_64
   centos8-mofed5-cuda11:
-    image: centos8-mofed5-cuda11:5
+    image: centos8-mofed5-cuda11:3
     build:
       context: .
       network: host
@@ -45,19 +33,8 @@ services:
         CUDA_VERSION: 11.4.0
         OS_VERSION: 8
         ARCH: x86_64
-  ubuntu16.04-mofed5-cuda11:
-    image: ubuntu16.04-mofed5-cuda11:5
-    build:
-      context: .
-      network: host
-      dockerfile: ubuntu-release.Dockerfile
-      args:
-        MOFED_VERSION: 5.0-1.0.0.0
-        UBUNTU_VERSION: 16.04
-        CUDA_VERSION: 11.2.0
-        ARCH: x86_64
   ubuntu18.04-mofed5-cuda11:
-    image: ubuntu18.04-mofed5-cuda11:5
+    image: ubuntu18.04-mofed5-cuda11:3
     build:
       context: .
       network: host
@@ -66,9 +43,10 @@ services:
         MOFED_VERSION: 5.0-1.0.0.0
         UBUNTU_VERSION: 18.04
         CUDA_VERSION: 11.4.0
+        NV_DRIVER_VERSION: 470
         ARCH: x86_64
   ubuntu20.04-mofed5-cuda11:
-    image: ubuntu20.04-mofed5-cuda11:5
+    image: ubuntu20.04-mofed5-cuda11:3
     build:
       context: .
       network: host
@@ -77,9 +55,10 @@ services:
         MOFED_VERSION: 5.0-1.0.0.0
         UBUNTU_VERSION: 20.04
         CUDA_VERSION: 11.4.0
+        NV_DRIVER_VERSION: 470
         ARCH: x86_64
   ubuntu22.04-mofed5-cuda11:
-    image: ubuntu22.04-mofed5-cuda11:5
+    image: ubuntu22.04-mofed5-cuda11:3
     build:
       context: .
       network: host
@@ -88,4 +67,53 @@ services:
         MOFED_VERSION: 5.4-3.6.8.1
         UBUNTU_VERSION: 22.04
         CUDA_VERSION: 11.7.0
+        NV_DRIVER_VERSION: 515
+        ARCH: x86_64
+  centos7-mofed5-cuda12:
+    image: centos7-mofed5-cuda12:3
+    build:
+      context: .
+      network: host
+      dockerfile: centos-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.0-1.0.0.0
+        MOFED_OS: rhel7.6
+        CUDA_VERSION: 12.0.0
+        OS_VERSION: 7
+        ARCH: x86_64
+  ubuntu18.04-mofed5-cuda12:
+    image: ubuntu18.04-mofed5-cuda12:3
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.0-1.0.0.0
+        UBUNTU_VERSION: 18.04
+        CUDA_VERSION: 12.0.0
+        NV_DRIVER_VERSION: 525
+        ARCH: x86_64
+  ubuntu20.04-mofed5-cuda12:
+    image: ubuntu20.04-mofed5-cuda12:3
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.0-1.0.0.0
+        UBUNTU_VERSION: 20.04
+        CUDA_VERSION: 12.0.0
+        NV_DRIVER_VERSION: 525
+        ARCH: x86_64
+  ubuntu22.04-mofed5-cuda12:
+    image: ubuntu22.04-mofed5-cuda12:3
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.4-3.6.8.1
+        UBUNTU_VERSION: 22.04
+        CUDA_VERSION: 12.0.0
+        NV_DRIVER_VERSION: 525
         ARCH: x86_64

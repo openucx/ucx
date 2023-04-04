@@ -20,6 +20,7 @@ RUN apt-get update && \
         libnvidia-compute-${NV_DRIVER_VERSION} \
         make \
         maven \
+        pkg-config \
         udev \
         wget \
         environment-modules \
