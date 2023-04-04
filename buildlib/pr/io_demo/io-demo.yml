@@ -20,7 +20,7 @@ jobs:
       - bash: |
           set -eEx
           ./autogen.sh
-          ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install
+          ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install --without-go --without-java --disable-gtest --disable-examples
           make -j`nproc`
           make install
         displayName: Build
