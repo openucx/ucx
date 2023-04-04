@@ -54,7 +54,8 @@ typedef struct ucp_mem {
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
     uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
-    ucp_md_map_t        inv_md_map;     /* Which memory handles should be invalidated */
+    ucp_md_map_t        inv_md_map;     /* Which memory handles should be invalidated
+                                           when this handle is released */
     ucp_mem_h           parent;         /* - NULL if entry should be returned to rcache
                                            - pointer to self if rcache disabled
                                            - pointer to rcache memh if entry is a user memh */

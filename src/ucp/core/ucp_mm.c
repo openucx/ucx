@@ -345,7 +345,6 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         }
 
         status = uct_md_mem_dereg_v2(context->tl_mds[md_index].md, &params);
-
         if (status != UCS_OK) {
             ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
                      context->tl_mds[md_index].rsc.md_name,
@@ -395,6 +394,8 @@ ucs_status_t ucp_memh_register_slow(ucp_context_h context, ucp_mem_h memh,
                                     ucp_md_map_t md_map, unsigned uct_flags)
 {
     ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[memh->mem_type];
+    void *address                       = ucp_memh_address(memh);
+    size_t length                       = ucp_memh_length(memh);
     ucp_md_map_t md_map_registered      = 0;
     ucp_md_map_t dmabuf_md_map          = 0;
     uct_md_mem_reg_params_t reg_params;
@@ -402,11 +403,6 @@ ucs_status_t ucp_memh_register_slow(ucp_context_h context, ucp_mem_h memh,
     ucs_log_level_t err_level;
     ucp_md_index_t md_index;
     ucs_status_t status;
-    void *address;
-    size_t length;
-
-    address = ucp_memh_address(memh);
-    length  = ucp_memh_length(memh);
 
     err_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
                                                             UCS_LOG_LEVEL_ERROR;
@@ -497,13 +493,13 @@ static void ucp_memh_set(ucp_mem_h memh, ucp_context_h context, void* address,
     ucp_memory_detect(context, address, length, &info);
     memh->super.super.start = (uintptr_t)address;
     memh->super.super.end   = (uintptr_t)address + length;
+    memh->super.refcount    = 1;
     memh->flags             = memh_flags;
     memh->context           = context;
     memh->mem_type          = mem_type;
     memh->sys_dev           = info.sys_dev;
     memh->alloc_method      = method;
     memh->alloc_md_index    = UCP_NULL_RESOURCE;
-    memh->super.refcount    = 1;
 }
 
 static ucs_status_t
@@ -883,9 +879,7 @@ out_zero_mem:
 
 ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
 {
-    ucp_memh_invalidate(context, memh,
-                        (ucs_rcache_invalidate_comp_func_t)ucs_empty_function,
-                        NULL, 0);
+    ucp_memh_put(context, memh);
     return UCS_OK;
 }
 
@@ -1571,8 +1565,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
 
     status = ucp_memh_create(context, unpacked_memh.address,
                              unpacked_memh.length, unpacked_memh.mem_type,
-                             UCT_ALLOC_METHOD_LAST, UCP_MEMH_FLAG_IMPORTED,
-                             &memh);
+                             UCT_ALLOC_METHOD_LAST, 0, &memh);
     if (status != UCS_OK) {
         goto out;
     }

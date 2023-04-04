@@ -86,27 +86,32 @@ ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
         return;
     }
 
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
     memh->inv_md_map |= inv_md_map;
 
     /* User memory handle, or rcache was disabled */
     if (ucs_unlikely(memh->parent != NULL)) {
-        if (!--memh->super.refcount) {
-            ucp_memh_cleanup(context, memh);
-            ucs_free(memh);
-
-            if (cb != NULL) {
-                cb(arg);
-            }
+        if (--memh->super.refcount) {
+            goto out;
         }
+
+        UCP_THREAD_CS_EXIT(&context->mt_lock);
+        ucp_memh_cleanup(context, memh);
+        ucs_free(memh);
+
+        if (cb != NULL) {
+            cb(arg);
+        }
+
         return;
     }
 
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
     if (cb != NULL) {
         ucs_rcache_region_invalidate(context->rcache, &memh->super, cb, arg);
     }
 
     ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
+out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 }
 
@@ -117,13 +122,13 @@ ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
     khiter_t iter;
 
     if (memh->flags & UCP_MEMH_FLAG_IMPORTED) {
+        UCP_THREAD_CS_ENTER(&context->mt_lock);
         iter = kh_get(ucp_context_imported_mem_hash,
                       context->imported_mem_hash, memh->remote_uuid);
         ucs_assert(iter != kh_end(context->imported_mem_hash));
 
         rcache = kh_value(context->imported_mem_hash, iter);
         ucs_assert(rcache != NULL);
-        UCP_THREAD_CS_ENTER(&context->mt_lock);
         ucs_rcache_region_put_unsafe(rcache, &memh->super);
         UCP_THREAD_CS_EXIT(&context->mt_lock);
     } else {
@@ -202,6 +207,9 @@ ucp_memh_update(ucp_context_h context, void *address, size_t length,
         return UCS_OK;
     }
 
+    ucs_assert((*memh_p)->parent == NULL);
+    ucs_assert(ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
+
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     status = ucp_memh_register(context, *memh_p, md_map, uct_flags);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
@@ -212,9 +220,10 @@ ucp_memh_update(ucp_context_h context, void *address, size_t length,
 static UCS_F_ALWAYS_INLINE ucp_mem_h ucp_memh_hold(ucp_context_h context,
                                                    ucp_mem_h memh)
 {
-    ucs_assert((memh->parent != NULL) || (context->rcache == NULL) ||
-               ucp_memh_is_zero_length(memh));
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+    ucs_assert((memh->parent != NULL) || ucp_memh_is_zero_length(memh));
     memh->super.refcount++;
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
     return memh;
 }
 

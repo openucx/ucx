@@ -641,12 +641,14 @@ ucp_recv_request_set_user_memh(ucp_request_t *req,
 static UCS_F_ALWAYS_INLINE void
 ucp_request_use_user_memh(ucp_dt_state_t *state, ucp_request_t *rreq)
 {
-    if (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-        state->dt.contig.memh = ucp_memh_hold(rreq->recv.worker->context,
-                                              rreq->recv.user_memh);
-        ucs_assert(!rreq->recv.worker->context->config.ext.proto_enable);
-        ucs_assert(UCP_DT_IS_CONTIG(rreq->recv.datatype));
+    if (!(rreq->flags & UCP_REQUEST_FLAG_USER_MEMH)) {
+        return;
     }
+
+    state->dt.contig.memh = ucp_memh_hold(rreq->recv.worker->context,
+                                          rreq->recv.user_memh);
+    ucs_assert(!rreq->recv.worker->context->config.ext.proto_enable);
+    ucs_assert(UCP_DT_IS_CONTIG(rreq->recv.datatype));
 }
 
 static UCS_F_ALWAYS_INLINE void
