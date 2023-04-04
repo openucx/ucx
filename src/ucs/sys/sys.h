@@ -63,6 +63,9 @@ typedef cpuset_t ucs_sys_cpuset_t;
 #error "Port me"
 #endif
 
+#define UCS_SYS_FS_SYSTEM_PATH "/sys/devices/system"
+#define UCS_SYS_FS_CPUS_PATH   UCS_SYS_FS_SYSTEM_PATH "/cpu"
+
 
 BEGIN_C_DECLS
 
@@ -108,13 +111,14 @@ typedef void (*ucs_sys_vma_cb_t)(ucs_sys_vma_info_t *info, void *ctx);
 /**
  * Callback function type used in ucs_sys_readdir.
  */
-typedef ucs_status_t (*ucs_sys_readdir_cb_t)(struct dirent *entry, void *ctx);
+typedef ucs_status_t (*ucs_sys_readdir_cb_t)(const struct dirent *entry,
+                                             void *arg);
 
 
 /**
  * Callback function type used in ucs_sys_enum_threads.
  */
-typedef ucs_status_t (*ucs_sys_enum_threads_cb_t)(pid_t pid, void *ctx);
+typedef ucs_status_t (*ucs_sys_enum_threads_cb_t)(pid_t pid, void *arg);
 
 
 /**
@@ -545,6 +549,15 @@ int ucs_sys_setaffinity(ucs_sys_cpuset_t *cpuset);
 int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset);
 
 /**
+ * Queries affinity for the current thread.
+ *
+ * @param [out] cpuset      Pointer to the cpuset to return result
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucs_sys_pthread_getaffinity(ucs_sys_cpuset_t *cpuset);
+
+/**
  * Copies ucs_sys_cpuset_t to ucs_cpu_set_t.
  *
  * @param [in]  src         Source
@@ -614,7 +627,7 @@ ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ct
  *       returns value different from UCS_OK then function breaks
  *       immediately and this value is returned from ucs_sys_enum_threads.
  */
-ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
+ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *arg);
 
 
 /**
