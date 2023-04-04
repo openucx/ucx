@@ -379,8 +379,8 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 size_t am_max_hdr, size_t am_max_iov,
                                 size_t am_min_hdr, size_t rma_max_iov);
 
-void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                         unsigned qp_num);
+ucs_status_t
+uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep, unsigned qp_num);
 
 void uct_rc_iface_remove_qp(uct_rc_iface_t *iface, unsigned qp_num);
 
