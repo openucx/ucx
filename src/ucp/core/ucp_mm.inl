@@ -202,6 +202,8 @@ ucp_memh_update(ucp_context_h context, void *address, size_t length,
         return UCS_OK;
     }
 
+    ucs_fatal(0);
+
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     status = ucp_memh_register(context, *memh_p, md_map, uct_flags);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
