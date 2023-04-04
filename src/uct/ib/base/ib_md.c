@@ -365,11 +365,9 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     char UCS_V_UNUSED affinity_str[64];
     int ret;
 
-    ret = pthread_getaffinity_np(pthread_self(), sizeof(ucs_sys_cpuset_t),
-                                 &parent_set);
-    if (ret != 0) {
-        ucs_error("pthread_getaffinity_np() failed: %m");
-        return UCS_ERR_INVALID_PARAM;
+    status = ucs_sys_pthread_getaffinity(&parent_set);
+    if (status != UCS_OK) {
+        return status;
     }
 
     thread_num = ucs_min(CPU_COUNT(&parent_set), mr_num);

@@ -67,23 +67,8 @@ typedef ucs_status_t
                                 ucs_sys_dev_distance_t *distance);
 
 
-/*
- * Structure needed to define a topology module implementation
- */
-typedef struct {
-
-    /* Name of the topology module */
-    const char                   *name;
-
-    /* Points to the module's ucs_topo_get_distance implementation */
-    ucs_topo_get_distance_func_t get_distance;
-
-    ucs_list_link_t              list;
-} ucs_sys_topo_method_t;
-
-
 /* Global list of topology detection methods */
-extern ucs_list_link_t ucs_sys_topo_methods_list;
+extern ucs_list_link_t ucs_sys_topo_providers_list;
 
 
 /**
@@ -117,13 +102,25 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
  * @param [in]  device1   System device index of the first device.
  * @param [in]  device2   System device index of the second device.
  * @param [out] distance  Result populated with distance details between the two
-*                         devices.
+ *                        devices.
  *
  * @return UCS_OK or error in case distance cannot be determined.
  */
 ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
                                    ucs_sys_device_t device2,
                                    ucs_sys_dev_distance_t *distance);
+
+
+/**
+ * Find the memory distance of the device according to process affinity.
+ *
+ * @param [in]  device   System device index.
+ * @param [out] distance Result populated with the device memory distance.
+ *
+ * @return UCS_OK or error in case distance cannot be determined.
+ */
+ucs_status_t ucs_topo_get_memory_distance(ucs_sys_device_t device,
+                                          ucs_sys_dev_distance_t *distance);
 
 
 /**
@@ -192,6 +189,7 @@ ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev);
 ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
                                           const char *name, unsigned priority);
 
+
 /**
  * Calculates and returns a specific PCIe device BW.
  *
@@ -202,11 +200,12 @@ ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
  */
 double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path);
 
+
 /**
  * Get the name of a given system device. If the name was never set, it defaults
  * to the BDF representation of the system device bus id.
  *
- * @param [in]  sys_dev  System device to set the name for.
+ * @param [in]  sys_dev System device's name to get.
  *
  * @return The name of the system device, or NULL if the system device is
  *         invalid.
