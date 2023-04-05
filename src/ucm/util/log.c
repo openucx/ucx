@@ -25,7 +25,7 @@
 #include <limits.h>
 #include <syscall.h>
 
-#define UCM_LOG_BUG_SIZE   512
+#define UCM_LOG_BUF_SIZE   512
 
 static int  ucm_log_fileno                  = 1; /* stdout */
 static char ucm_log_hostname[HOST_NAME_MAX] = {0};
@@ -259,7 +259,7 @@ static void ucm_log_snprintf(char *buf, size_t max, const char *fmt, ...)
 void __ucm_log(const char *file, unsigned line, const char *function,
                ucs_log_level_t level, const char *message, ...)
 {
-    char buf[UCM_LOG_BUG_SIZE];
+    char buf[UCM_LOG_BUF_SIZE];
     size_t length;
     va_list ap;
     struct timeval tv;
@@ -268,18 +268,18 @@ void __ucm_log(const char *file, unsigned line, const char *function,
 
     gettimeofday(&tv, NULL);
     pid = getpid();
-    ucm_log_snprintf(buf, UCM_LOG_BUG_SIZE - 1,
+    ucm_log_snprintf(buf, UCM_LOG_BUF_SIZE - 1,
                      "[%lu.%06lu] [%s:%d:%d] %18s:%-4d UCX  %s ",
                      tv.tv_sec, tv.tv_usec, ucm_log_hostname, pid,
                      ucm_get_tid() - pid, ucs_basename(file), line,
                      ucm_log_level_names[level]);
-    buf[UCM_LOG_BUG_SIZE - 1] = '\0';
+    buf[UCM_LOG_BUF_SIZE - 1] = '\0';
 
     length = strlen(buf);
     va_start(ap, message);
-    ucm_log_vsnprintf(buf + length, UCM_LOG_BUG_SIZE - length, message, ap);
+    ucm_log_vsnprintf(buf + length, UCM_LOG_BUF_SIZE - length, message, ap);
     va_end(ap);
-    strncat(buf, "\n", UCM_LOG_BUG_SIZE - 1);
+    strncat(buf, "\n", UCM_LOG_BUF_SIZE - 1);
 
     /* Use write to avoid potential calls to malloc() in buffered IO functions */
     nwrite = write(ucm_log_fileno, buf, strlen(buf));
