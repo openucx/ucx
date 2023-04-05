@@ -16,7 +16,7 @@
 #include <ucs/sys/stubs.h>
 #include <ucs/type/init_once.h>
 
-#define UCS_CPU_CACHE_FILE_FMT   "/sys/devices/system/cpu/cpu%d/cache/index%d/%s"
+#define UCS_CPU_CACHE_FILE_FMT   UCS_SYS_FS_CPUS_PATH "/cpu%d/cache/index%d/%s"
 #define UCS_CPU_CACHE_LEVEL_FILE "level"
 #define UCS_CPU_CACHE_TYPE_FILE  "type"
 #define UCS_CPU_CACHE_SIZE_FILE  "size"

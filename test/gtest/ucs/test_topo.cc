@@ -6,6 +6,8 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/memory/numa.h>
+#include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
 }
 
@@ -127,4 +129,25 @@ UCS_TEST_F(test_topo, bdf_name_invalid) {
 
     status = ucs_topo_find_device_by_bdf_name("1:2:3", &sys_dev);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
+UCS_TEST_F(test_topo, numa_distance) {
+    ucs_numa_node_t num_of_nodes;
+
+    num_of_nodes = ucs_numa_num_configured_nodes();
+    for (auto node1 = 0; node1 < num_of_nodes; ++node1) {
+        for (auto node2 = 0; node2 < num_of_nodes; ++node2) {
+            UCS_TEST_MESSAGE << "Test distance: node" << node1 << " to node"
+                             << node2;
+            if (node1 == node2) {
+                EXPECT_EQ(ucs_numa_distance(node1, node2), 10);
+            } else {
+                EXPECT_EQ(ucs_numa_distance(node1, node2),
+                          ucs_numa_distance(node2, node1));
+            }
+            
+            EXPECT_LE(ucs_numa_distance(node1, node1),
+                      ucs_numa_distance(node1, node2));
+        }
+    }
 }
