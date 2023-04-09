@@ -255,13 +255,20 @@ typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
         const uct_ep_connect_to_ep_params_t *params);
 
 
+/* Check if remote iface address is reachable */
+typedef int (*uct_iface_is_reachable_v2_func_t)(
+        const uct_iface_h iface,
+        const uct_iface_is_reachable_params_t *params);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
-    uct_iface_estimate_perf_func_t iface_estimate_perf;
-    uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
-    uct_ep_query_func_t            ep_query;
-    uct_ep_invalidate_func_t       ep_invalidate;
-    uct_ep_connect_to_ep_v2_func_t ep_connect_to_ep_v2;
+    uct_iface_estimate_perf_func_t   iface_estimate_perf;
+    uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
+    uct_ep_query_func_t              ep_query;
+    uct_ep_invalidate_func_t         ep_invalidate;
+    uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
+    uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
 } uct_iface_internal_ops_t;
 
 
@@ -853,6 +860,10 @@ void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
+
+int
+uct_base_iface_is_reachable_v2(const uct_iface_h iface,
+                               const uct_iface_is_reachable_params_t *params);
 
 ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                uct_completion_t *comp);

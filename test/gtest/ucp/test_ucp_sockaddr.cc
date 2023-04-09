@@ -1498,10 +1498,10 @@ protected:
                             fail_injection);
         } else if (fail_wireup_type == FAIL_WIREUP_MSG_ADDR_PACK) {
             /* Emulate failure of preparation of WIREUP MSG sending by setting
-             * the device address getter to the function that always returns
+             * the iface address getter to the function that always returns
              * error */
-            iface->ops.iface_get_device_address =
-                    reinterpret_cast<uct_iface_get_device_address_func_t>(
+            iface->ops.iface_get_address =
+                    reinterpret_cast<uct_iface_get_address_func_t>(
                             fail_injection);
         }
     }
