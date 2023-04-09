@@ -254,7 +254,8 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR        = UCS_BIT(0), /**< device_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR         = UCS_BIT(1), /**< iface_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING        = UCS_BIT(2), /**< info_string field */
-    UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3)  /**< info_string_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4) /**<  scope field */
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -517,6 +518,20 @@ extern const char *uct_ep_operation_names[];
 
 
 /**
+ * @ingroup UCS_RESOURCE
+ * @brief Reachability scope
+ *
+ * Reachability scope. Can be one of the following values:
+ * Device scope: Checks if addresses describe the same device.
+ * Network scope: Checks reachability between different devices.
+ */
+typedef enum {
+    UCT_IFACE_REACHABILITY_SCOPE_DEVICE, /**< Local device scope */
+    UCT_IFACE_REACHABILITY_SCOPE_NETWORK /**< Network scope */
+} uct_iface_reachability_scope_t;
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Operation parameters passed to @ref uct_iface_is_reachable_v2.
  */
@@ -527,19 +542,19 @@ typedef struct uct_iface_is_reachable_params {
      * mask will be ignored. Provides ABI compatibility with respect to adding
      * new fields.
      */
-    uint64_t                     field_mask;
+    uint64_t                       field_mask;
 
     /**
      * Device address to check for reachability.
      * This field must not be passed if iface_attr.dev_addr_len == 0.
      */
-    const uct_device_addr_t      *device_addr;
+    const uct_device_addr_t       *device_addr;
 
     /**
      * Interface address to check for reachability.
      * This field must not be passed if iface_attr.iface_addr_len == 0.
      */
-    const uct_iface_addr_t       *iface_addr;
+    const uct_iface_addr_t        *iface_addr;
 
     /**
      * User-provided pointer to a string buffer.
@@ -547,13 +562,18 @@ typedef struct uct_iface_is_reachable_params {
      * null-terminated information string explaining why the remote address is
      * not reachable if the return value is 0.
      */
-    char                         *info_string;
+    char                          *info_string;
 
     /**
      * The length of the @a info_string is provided in bytes.
      * This value must be specified in conjunction with @a info_string.
      */
-    size_t                        info_string_length;
+    size_t                         info_string_length;
+
+    /**
+     * Reachability scope.
+     */
+    uct_iface_reachability_scope_t scope;
 } uct_iface_is_reachable_params_t;
 
 

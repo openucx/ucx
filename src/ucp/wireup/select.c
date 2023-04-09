@@ -2108,8 +2108,7 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
     ucp_rsc_index_t rsc_index;
     ucp_address_entry_t *ae;
     ucp_lane_index_t lane;
-    ucs_status_t status;
-    void *dev_addr;
+    uct_iface_is_reachable_params_t params;
 
     if (select_params->address->uuid == worker->uuid) {
         key->flags |= UCP_EP_CONFIG_KEY_FLAG_SELF;
@@ -2140,29 +2139,25 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
             continue;
         }
 
-        dev_addr = ucs_malloc(wiface->attr.device_addr_len, "ucp_tmp_dev_addr");
-        if (dev_addr == NULL) {
-            ucs_error("failed to allocated device address of size %zu",
-                      wiface->attr.device_addr_len);
-            return UCS_ERR_NO_MEMORY;
-        }
-
-        status = uct_iface_get_device_address(wiface->iface, dev_addr);
-        if (status != UCS_OK) {
-            ucs_free(dev_addr);
-            return status;
-        }
-
         ucp_unpacked_address_for_each(ae, select_params->address) {
-            if ((wiface->attr.device_addr_len == ae->dev_addr_len) &&
-                !memcmp(ae->dev_addr, dev_addr, ae->dev_addr_len)) {
+            if ((wiface->attr.device_addr_len != ae->dev_addr_len) ||
+                (worker->context->tl_rscs[rsc_index].tl_name_csum !=
+                 ae->tl_name_csum)) {
+                continue;
+            }
+
+            params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                 UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
+                                 UCT_IFACE_IS_REACHABLE_FIELD_SCOPE;
+            params.device_addr = ae->dev_addr;
+            params.iface_addr  = ae->iface_addr;
+            params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
+
+            if (uct_iface_is_reachable_v2(wiface->iface, &params)) {
                 key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
-                ucs_free(dev_addr);
                 return UCS_OK;
             }
         }
-
-        ucs_free(dev_addr);
     }
 
     return UCS_OK;
