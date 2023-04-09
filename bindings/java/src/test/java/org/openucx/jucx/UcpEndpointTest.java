@@ -735,7 +735,8 @@ public class UcpEndpointTest extends UcxTest {
             sendData.getMemory().getAddress(), 2L, UcpConstants.UCP_AM_FLAG_PERSISTENT_DATA, null,
             new UcpRequestParams().setMemoryType(memType).setMemoryHandle(sendData.getMemory()));
 
-        while (!Arrays.stream(requests).allMatch(r -> (r != null) && r.isCompleted())) {
+        while (!Arrays.stream(requests).allMatch(r -> (r != null) && r.isCompleted()) ||
+             (persistantAmData.get() == null)) {
             worker1.progress();
             worker2.progress();
         }
