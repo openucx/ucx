@@ -1962,8 +1962,10 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
             md_map |= UCS_BIT(md_index);
             md_attr = &context->tl_mds[md_index].attr;
             if (md_attr->flags & UCT_MD_FLAG_REG) {
-                params->reg_growth   += md_attr->reg_cost.m;
-                params->reg_overhead += md_attr->reg_cost.c;
+                if (context->rcache == NULL) {
+                    params->reg_growth   += md_attr->reg_cost.m;
+                    params->reg_overhead += md_attr->reg_cost.c;
+                }
                 params->overhead     += iface_attr->overhead;
                 params->latency      += ucp_tl_iface_latency(context,
                                                              &iface_attr->latency);
@@ -1992,6 +1994,10 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
         } else {
             params->bw += bw;
         }
+    }
+
+    if (context->rcache != NULL) {
+        params->reg_overhead += 50.0e-9;
     }
 
     return UCS_OK;
