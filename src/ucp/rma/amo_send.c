@@ -172,7 +172,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
     int op_id;
 
     UCP_REQUEST_CHECK_PARAM(param);
-    if (ucs_unlikely(!(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE))) {
+    if (ENABLE_PARAMS_CHECK &&
+        ucs_unlikely(!(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE))) {
         ucs_error("missing atomic operation datatype");
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
