@@ -257,7 +257,7 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 }
 
 static ucs_status_t
-ucs_topo_get_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
+ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
 {
     const size_t prefix_length = strlen(UCS_TOPO_SYSFS_PCI_PREFIX);
     char link_path[PATH_MAX];
@@ -349,12 +349,12 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
         return UCS_OK;
     }
 
-    status = ucs_topo_get_sysfs_path(device1, path1, sizeof(path1));
+    status = ucs_topo_sys_dev_to_sysfs_path(device1, path1, sizeof(path1));
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucs_topo_get_sysfs_path(device2, path2, sizeof(path2));
+    status = ucs_topo_sys_dev_to_sysfs_path(device2, path2, sizeof(path2));
     if (status != UCS_OK) {
         return status;
     }
@@ -388,7 +388,7 @@ ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
         return ucs_topo_get_memory_distance_default(device, distance);
     }
 
-    status = ucs_topo_get_sysfs_path(device, path, sizeof(path));
+    status = ucs_topo_sys_dev_to_sysfs_path(device, path, sizeof(path));
     if (status != UCS_OK) {
         return ucs_topo_get_memory_distance_default(device, distance);
     }
@@ -741,4 +741,52 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
 out_max_bw:
     ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
     return DBL_MAX;
+}
+
+const char *ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer)
+{
+    const char *detected_type = NULL;
+    char device_file_path[PATH_MAX];
+    char *sysfs_realpath;
+    struct stat st_buf;
+    char *sysfs_path;
+
+    /* realpath name is expected to be like below:
+     * PF: /sys/devices/.../0000:03:00.0/<interface_type>/<dev_name>
+     * SF: /sys/devices/.../0000:03:00.0/<UUID>/<interface_type>/<dev_name>
+     */
+
+    sysfs_realpath = realpath(dev_path, path_buffer);
+    if (sysfs_realpath == NULL) {
+        goto out_undetected;
+    }
+
+    /* Try PF: strip 2 components */
+    sysfs_path = ucs_dirname(sysfs_realpath, 2);
+    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
+                      sysfs_path);
+
+    if (!stat(device_file_path, &st_buf)) {
+        detected_type = "PF";
+        goto out_detected;
+    }
+
+    /* Try SF: strip 3 components (one more) */
+    sysfs_path = ucs_dirname(sysfs_path, 1);
+    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
+                      sysfs_path);
+
+    if (!stat(device_file_path, &st_buf)) {
+        detected_type = "SF";
+        goto out_detected;
+    }
+
+out_undetected:
+    ucs_debug("%s: sysfs path undetected", dev_path);
+    return NULL;
+
+out_detected:
+    ucs_debug("%s: %s sysfs path is '%s'\n", dev_path, detected_type,
+              sysfs_path);
+    return sysfs_path;
 }
