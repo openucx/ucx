@@ -90,6 +90,31 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE size_t 
+ucp_proto_rndv_max_rts_size(const ucp_request_t *req) {
+    const ucp_proto_rndv_ctrl_priv_t *rpriv = req->send.proto_config->priv;
+    size_t max_bcopy_size, max_rts_size, iov_packed_size, iov_count;
+    ucp_lane_index_t lane_idx;
+
+    if (req->send.state.dt_iter.dt_class != UCP_DATATYPE_IOV) {
+        return sizeof(ucp_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
+    }
+
+    lane_idx        = ucp_ep_get_am_lane(req->send.ep);
+    max_bcopy_size  = ucp_ep_get_max_bcopy(req->send.ep, lane_idx);
+    iov_packed_size = sizeof(uint64_t) + sizeof(size_t) + sizeof(size_t) +
+                      rpriv->packed_rkey_size;
+    iov_count       = ucp_datatype_iter_iov_count(&req->send.state.dt_iter);
+    max_rts_size    = sizeof(ucp_rndv_rts_hdr_t) + sizeof(size_t) +
+                      iov_packed_size * iov_count;
+
+    /* if RTS header is too big for bcopy, fall back to RTS/RTR/BCOPY */
+    if (max_rts_size > max_bcopy_size) {
+        return sizeof(ucp_rndv_rts_hdr_t);
+    }
+    return max_rts_size;
+}
+
 static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
         ucp_request_t *req, ucp_rndv_rts_hdr_t *rts, size_t hdr_len)
 {
@@ -100,20 +125,28 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     rts->sreq.req_id = ucp_send_request_get_id(req);
     rts->sreq.ep_id  = ucp_send_request_get_ep_remote_id(req);
     rts->size        = req->send.state.dt_iter.length;
+    rts->address     = 0;
     rpriv            = req->send.proto_config->priv;
 
-    if ((rts->size == 0) ||
-        (req->send.state.dt_iter.dt_class != UCP_DATATYPE_CONTIG)) {
-        rts->address = 0;
-        rkey_size    = 0;
-    } else {
+    if (ucp_proto_rndv_max_rts_size(req) == sizeof(ucp_rndv_rts_hdr_t) ||
+        rts->size == 0) {
+        return hdr_len;
+    }
+    if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
         rts->address = (uintptr_t)req->send.state.dt_iter.type.contig.buffer;
-        rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey, req,
+        rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_contig_rkey, req,
                                         rpriv->md_map, rpriv->sys_dev_map,
                                         rpriv->sys_dev_distance, rkey_buffer);
+        return hdr_len + rkey_size;
+    }
+    if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_IOV) {
+        rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_iov_rkeys, req,
+                                        rpriv->md_map, rpriv->sys_dev_map,
+                                        rpriv->sys_dev_distance, rkey_buffer);
+        return hdr_len + rkey_size;
     }
 
-    return hdr_len + rkey_size;
+    return hdr_len;
 }
 
 static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_pack_ack(ucp_request_t *req,
@@ -145,7 +178,30 @@ static size_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
+ucp_proto_rndv_iov_rkeys_reset(ucp_request_t *req)
+{
+    req->send.rndv.rdata       = NULL;
+    req->send.rndv.rdata_count = 0;
+    req->send.rndv.rdata_idx   = 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_iov_rkeys_destroy(ucp_request_t *req)
+{
+    size_t count = req->send.rndv.rdata_count;
+    size_t index;
+
+    ucs_assert(req->send.rndv.rdata != NULL);
+    for (index = 0; index != count; ++index) {
+        ucs_assert(req->send.rndv.rdata[index].rkey != NULL);
+        ucp_rkey_destroy(req->send.rndv.rdata[index].rkey);
+    }
+    ucs_free(req->send.rndv.rdata);
+    ucp_proto_rndv_iov_rkeys_reset(req);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_contig_rkey_destroy(ucp_request_t *req)
 {
     ucs_assert(req->send.rndv.rkey != NULL);
     ucp_rkey_destroy(req->send.rndv.rkey);
@@ -155,9 +211,21 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_common_rkeys_destroy(ucp_request_t *req)
+{
+    size_t count = req->send.rndv.rdata_count;
+    if (count == 0) {
+        ucp_proto_rndv_contig_rkey_destroy(req);
+        return;
+    }
+    ucp_proto_rndv_iov_rkeys_destroy(req);
+    return;
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_recv_complete_with_ats(ucp_request_t *req, uint8_t ats_stage)
 {
-    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_rndv_common_rkeys_destroy(req);
     ucp_proto_request_set_stage(req, ats_stage);
     ucp_request_send(req);
 }
@@ -177,6 +245,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
 
     ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
+    ucp_proto_rndv_iov_rkeys_reset(freq);
 
     *freq_p = freq;
     return UCS_OK;
@@ -214,6 +283,48 @@ ucp_proto_rndv_request_total_offset(ucp_request_t *req)
     return req->send.rndv.offset + req->send.state.dt_iter.offset;
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_request_rdata_length(ucp_request_t *req)
+{
+    ucs_assert(req->send.rndv.rdata_count != 0);
+    return req->send.rndv.rdata[req->send.rndv.rdata_idx].size;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_request_rdata_offset(ucp_request_t *req)
+{
+    size_t iov_index  = req->send.rndv.rdata_idx;
+    size_t iov_offset = 0;
+
+    ucs_assert(req->send.rndv.rdata_count != 0);
+    if (iov_index != 0) {
+        iov_offset = req->send.rndv.rdata[iov_index - 1].accumulate_size;
+    }
+    return req->send.rndv.offset + req->send.state.dt_iter.offset - iov_offset;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_request_next_rdata(ucp_request_t *req)
+{
+    size_t iov_index, accmulate_size, total_offset;
+
+    if (req->send.rndv.rdata_count == 0) {
+        return 0;
+    }
+
+    iov_index      = req->send.rndv.rdata_idx;
+    accmulate_size = req->send.rndv.rdata[iov_index].accumulate_size;
+    total_offset   = ucp_proto_rndv_request_total_offset(req);
+
+    ucs_assertv(total_offset <= accmulate_size,
+                "req=%p total_offset=%zu rdata[%lu].accumulate_size=%zu",
+                req, total_offset, iov_index, accmulate_size);
+    if (total_offset == accmulate_size) {
+        iov_index = ++req->send.rndv.rdata_idx;
+    }
+    return iov_index;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_bulk_request_init(ucp_request_t *req,
                                  const ucp_proto_rndv_bulk_priv_t *rpriv)
@@ -233,10 +344,9 @@ ucp_proto_rndv_bulk_request_init(ucp_request_t *req,
 static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
                                 const ucp_proto_rndv_bulk_priv_t *rpriv,
-                                const ucp_proto_multi_lane_priv_t *lpriv)
+                                const ucp_proto_multi_lane_priv_t *lpriv,
+                                size_t total_length, size_t total_offset)
 {
-    size_t total_offset = ucp_proto_rndv_request_total_offset(req);
-    size_t total_length = ucp_proto_rndv_request_total_length(req);
     size_t max_frag_sum = rpriv->mpriv.max_frag_sum;
     size_t lane_offset, max_payload, scaled_length;
 
@@ -285,9 +395,9 @@ static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_rndv_bulk_max_payload_align(ucp_request_t *req,
                                       const ucp_proto_rndv_bulk_priv_t *rpriv,
                                       const ucp_proto_multi_lane_priv_t *lpriv,
-                                      ucp_lane_index_t *lane_shift)
+                                      ucp_lane_index_t *lane_shift,
+                                      size_t total_length, size_t total_offset)
 {
-    size_t total_offset = ucp_proto_rndv_request_total_offset(req);
     size_t align_thresh = rpriv->mpriv.align_thresh;
     size_t align        = lpriv->opt_align;
     size_t max_payload, align_size;
@@ -299,7 +409,8 @@ ucp_proto_rndv_bulk_max_payload_align(ucp_request_t *req,
                 "dt_class=%d (%s)", req->send.state.dt_iter.dt_class,
                 ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
 
-    max_payload = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv);
+    max_payload = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv,
+                                                  total_length, total_offset);
     if (max_payload < align_thresh) {
         return max_payload;
     }
@@ -315,6 +426,34 @@ ucp_proto_rndv_bulk_max_payload_align(ucp_request_t *req,
     *lane_shift = 0;
 
     return align_size;
+}
+
+static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_bulk_max_payload_total_align(
+        ucp_request_t *req, const ucp_proto_rndv_bulk_priv_t *rpriv,
+        const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_lane_index_t *lane_shift) {
+    size_t total_offset = ucp_proto_rndv_request_total_offset(req);
+    size_t total_length = ucp_proto_rndv_request_total_length(req);
+    return ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv, total_length,
+                                           total_offset);
+}
+
+static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_bulk_max_payload_rdata_align(
+        ucp_request_t *req, const ucp_proto_rndv_bulk_priv_t *rpriv,
+        const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_lane_index_t *lane_shift) {
+    size_t max_payload, rdata_offset, rdata_length;
+
+    if (req->send.rndv.rdata_count == 0) {
+        return ucp_proto_rndv_bulk_max_payload_total_align(req, rpriv, lpriv,
+                                                           lane_shift);
+    }
+
+    rdata_offset = ucp_proto_rndv_request_rdata_offset(req);
+    rdata_length = ucp_proto_rndv_request_rdata_length(req);
+    max_payload  = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv,
+                                                   rdata_length, rdata_offset);
+    return ucs_min(max_payload, rdata_length - rdata_offset);
 }
 
 static UCS_F_ALWAYS_INLINE int

@@ -45,7 +45,7 @@ ucp_rndv_am_fill_header(ucp_request_data_hdr_t *hdr, ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE void ucp_rndv_am_destroy_rkey(ucp_request_t *req)
 {
     if (req->send.rndv.rkey != NULL) {
-        ucp_proto_rndv_rkey_destroy(req);
+        ucp_proto_rndv_contig_rkey_destroy(req);
     }
 }
 

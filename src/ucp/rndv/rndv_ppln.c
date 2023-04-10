@@ -165,7 +165,7 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
     }
 
     if (req->send.rndv.rkey != NULL) {
-        ucp_proto_rndv_rkey_destroy(req);
+        ucp_proto_rndv_contig_rkey_destroy(req);
     }
 
     if ((req->send.rndv.ppln.ack_data_size > 0) && !abort) {

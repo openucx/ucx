@@ -188,7 +188,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_put_common_complete(ucp_request_t *req)
 {
     ucp_trace_req(req, "rndv_put_common_complete");
-    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_rndv_contig_rkey_destroy(req);
     ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
 
@@ -352,8 +352,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_zcopy_send_func(
     size_t max_payload;
     uct_iov_t iov;
 
-    max_payload = ucp_proto_rndv_bulk_max_payload_align(req, &rpriv->bulk,
-                                                        lpriv, lane_shift);
+    max_payload = ucp_proto_rndv_bulk_max_payload_total_align(req, &rpriv->bulk,
+                                                              lpriv,
+                                                              lane_shift);
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter, max_payload,
                                lpriv->super.md_index,
                                UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,

@@ -79,13 +79,64 @@ ucp_proto_rndv_get_common_request_init(ucp_request_t *req)
     ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
 }
 
+static UCS_F_ALWAYS_INLINE uct_rkey_t ucp_proto_rndv_get_rkey_index(
+        ucp_request_t *req, ucp_rkey_h rkey, ucp_lane_index_t lane)
+{
+    ucp_ep_h ep                 = req->send.ep;
+    ucp_ep_config_t *ep_config  = ucp_ep_config(ep);
+    ucp_md_index_t dst_md_index = ep_config->key.lanes[lane].dst_md_index;
+
+    ucs_assert(rkey != NULL);
+    if (!(rkey->md_map & UCS_BIT(dst_md_index))) {
+        return UCP_NULL_RESOURCE;
+    }
+    return ucs_bitmap2idx(rkey->md_map, dst_md_index);
+}
+
+static UCS_F_ALWAYS_INLINE uct_rkey_t ucp_proto_rndv_get_tl_rkey(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv)
+{
+    size_t iov_index;
+    ucp_rkey_h rkey;
+    ucp_md_index_t rkey_index;
+
+    if (req->send.rndv.rdata_count != 0) {
+        iov_index  = req->send.rndv.rdata_idx;
+        rkey       = req->send.rndv.rdata[iov_index].rkey;
+        rkey_index = ucp_proto_rndv_get_rkey_index(req, rkey,
+                                                   lpriv->super.lane);
+    } else {
+        rkey       = req->send.rndv.rkey;
+        rkey_index = lpriv->super.rkey_index;
+    }
+    return ucp_rkey_get_tl_rkey(rkey, rkey_index);
+}
+
+static UCS_F_ALWAYS_INLINE uint64_t
+ucp_proto_rndv_get_remote_address(ucp_request_t *req, size_t offset)
+{
+    size_t iov_index, iov_offset;
+    uint64_t remote_address;
+
+    if (req->send.rndv.rdata_count != 0) {
+        iov_index  = req->send.rndv.rdata_idx;
+        iov_offset = 0;
+        if (iov_index != 0) {
+            iov_offset = req->send.rndv.rdata[iov_index - 1].accumulate_size;
+        }
+        remote_address = req->send.rndv.rdata[iov_index].address;
+        return remote_address + offset - iov_offset;
+    }
+    remote_address = req->send.rndv.remote_address;
+    return remote_address + offset;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         const uct_iov_t *iov, size_t offset, uct_completion_t *comp)
 {
-    uct_rkey_t tl_rkey      = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
-                                                   lpriv->super.rkey_index);
-    uint64_t remote_address = req->send.rndv.remote_address + offset;
+    uct_rkey_t tl_rkey      = ucp_proto_rndv_get_tl_rkey(req, lpriv);
+    uint64_t remote_address = ucp_proto_rndv_get_remote_address(req, offset);
 
     return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
                             iov, 1, remote_address, tl_rkey, comp);
@@ -101,7 +152,7 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
     if (ucs_unlikely(uct_comp->status != UCS_OK)) {
-        ucp_proto_rndv_rkey_destroy(req);
+        ucp_proto_rndv_common_rkeys_destroy(req);
         ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
         return;
     }
@@ -141,8 +192,9 @@ ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
     size_t max_payload;
     uct_iov_t iov;
 
-    max_payload = ucp_proto_rndv_bulk_max_payload_align(req, rpriv, lpriv,
-                                                        lane_shift);
+    ucp_proto_rndv_request_next_rdata(req);
+    max_payload = ucp_proto_rndv_bulk_max_payload_rdata_align(req, rpriv, lpriv,
+                                                              lane_shift);
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter, max_payload,
                                lpriv->super.md_index,
                                UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
@@ -181,7 +233,7 @@ ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_rndv_common_rkeys_destroy(req);
     ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
 }
 

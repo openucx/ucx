@@ -1770,6 +1770,12 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, dts, "RNDV_THRESH=256")
     test_datatypes([&]() { test_am_send_recv(64 * UCS_KBYTE); });
 }
 
+UCS_TEST_P(test_ucp_am_nbx_rndv, dts_rndv_get, "ZCOPY_THRESH=0",
+           "RNDV_SCHEME=get_zcopy")
+{
+    test_datatypes([&]() { test_am_send_recv(64 * UCS_KBYTE); });
+}
+
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_am_zcopy, "ZCOPY_THRESH=256",
            "RNDV_SCHEME=am")
 {

@@ -91,11 +91,15 @@ ucp_proto_rndv_mtype_next_iov(ucp_request_t *req,
                               const ucp_proto_multi_lane_priv_t *lpriv,
                               ucp_datatype_iter_t *next_iter, uct_iov_t *iov)
 {
-    size_t max_payload = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv);
-    size_t length      = ucp_datatype_iter_next(&req->send.state.dt_iter,
-                                                max_payload, next_iter);
-    uct_mem_h memh     = ucp_proto_rndv_mtype_get_memh(req,
-                                                       lpriv->super.md_index);
+    size_t total_offset = ucp_proto_rndv_request_total_offset(req);
+    size_t total_length = ucp_proto_rndv_request_total_length(req);
+    size_t max_payload  = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv,
+                                                          total_length,
+                                                          total_offset);
+    size_t length       = ucp_datatype_iter_next(&req->send.state.dt_iter,
+                                                 max_payload, next_iter);
+    uct_mem_h memh      = ucp_proto_rndv_mtype_get_memh(req,
+                                                        lpriv->super.md_index);
 
     ucp_proto_rndv_mtype_iov_init(req, req->send.rndv.mdesc->ptr, length,
                                   req->send.state.dt_iter.offset, memh, iov);
