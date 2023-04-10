@@ -291,7 +291,6 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
         *perf_node_p = NULL;
         return UCS_OK;
     }
-
     ucp_proto_common_get_frag_size(params, &wiface->attr, lane, &tl_min_frag,
                                    &tl_max_frag);
 
@@ -306,6 +305,18 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                            UCT_PERF_ATTR_FIELD_BANDWIDTH |
                            UCT_PERF_ATTR_FIELD_LATENCY;
     perf_attr.operation  = params->send_op;
+
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
+        perf_attr.field_mask      |= UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE;
+        perf_attr.field_mask      |= UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE;
+        perf_attr.field_mask      |= UCT_PERF_ATTR_FIELD_REMOTE_GUID;
+
+        rkey_config                = &worker->rkey_config[params->super.rkey_cfg_index];
+        perf_attr.local_sys_device = params->super.select_param->sys_dev;
+        perf_attr.remote_guid      = rkey_config->key.guid;
+        ucs_topo_find_device_by_bus_id(&rkey_config->key.guid.bus_id,
+                                       &perf_attr.remote_sys_device);
+    }
 
     status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
     if (status != UCS_OK) {

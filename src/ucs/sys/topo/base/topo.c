@@ -13,6 +13,7 @@
 #include <ucs/sys/topo/base/topo.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/uid.h>
 
 #include <ucs/config/global_opts.h>
 #include <ucs/datastruct/khash.h>
@@ -254,6 +255,48 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 
     *bus_id = ucs_topo_global_ctx.devices[sys_dev].bus_id;
     return UCS_OK;
+}
+
+ucs_status_t ucs_topo_get_device_guid(ucs_sys_device_t sys_dev,
+                                      ucs_sys_device_guid_t *guid)
+{
+    ucs_status_t status;
+
+    status = ucs_topo_get_device_bus_id(sys_dev, &guid->bus_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    guid->machine_guid = ucs_get_system_id();
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_topo_get_unknown_device_guid(ucs_sys_device_guid_t *guid)
+{
+    guid->bus_id.domain   = UINT16_MAX;
+    guid->bus_id.bus      = UINT8_MAX;
+    guid->bus_id.slot     = UINT8_MAX;
+    guid->bus_id.function = UINT8_MAX;
+    guid->machine_guid    = ucs_get_system_id();
+
+    return UCS_OK;
+}
+
+unsigned ucs_topo_sys_bus_id_is_equal(ucs_sys_bus_id_t bus_id1,
+                                      ucs_sys_bus_id_t bus_id2)
+{
+    return (bus_id1.domain == bus_id2.domain) &&
+           (bus_id1.bus == bus_id2.bus) &&
+           (bus_id1.slot == bus_id2.slot) &&
+           (bus_id1.function == bus_id2.function);
+}
+
+unsigned ucs_topo_sys_device_guid_is_equal(ucs_sys_device_guid_t guid1,
+                                           ucs_sys_device_guid_t guid2)
+{
+    return (guid1.machine_guid == guid2.machine_guid) &&
+           ucs_topo_sys_bus_id_is_equal(guid1.bus_id, guid2.bus_id);
 }
 
 static ucs_status_t

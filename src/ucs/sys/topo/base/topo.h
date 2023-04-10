@@ -44,6 +44,16 @@ typedef struct ucs_sys_bus_id {
 typedef uint8_t ucs_sys_device_t;
 
 
+/**
+ * @ingroup UCS_RESOURCE
+ * Globally Unique System Device Identifier
+ */
+typedef struct ucs_sys_device_guid {
+    ucs_sys_bus_id_t bus_id;
+    uint64_t         machine_guid;
+} ucs_sys_device_guid_t;
+
+
 /*
  * Captures the estimated latency and bandwidth between two system devices
  * referred by ucs_sys_device_t handle.
@@ -94,6 +104,28 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
                                         ucs_sys_bus_id_t *bus_id);
 
+
+/**
+ * Find guid of the given system device.
+ *
+ * @param [in]  sys_dev system device index.
+ * @param [out] pointer to guid to be populated.
+ *
+ * @return UCS_OK or error in case system device or its guid cannot be found.
+ */
+ucs_status_t ucs_topo_get_device_guid(ucs_sys_device_t sys_dev,
+                                      ucs_sys_device_guid_t *guid);
+
+
+/**
+ * Find guid for system device set to UCS_SYS_DEVICE_ID_UNKNOWN .
+ *
+ * @param [out] pointer to guid to be populated.
+ *
+ * @return UCS_OK with machine_guid field populated with local machine
+ * information.
+ */
+ucs_status_t ucs_topo_get_unknown_device_guid(ucs_sys_device_guid_t *guid);
 
 /**
  * Find the distance between two system devices (in terms of latency,
@@ -220,6 +252,29 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
  */
 unsigned ucs_topo_num_devices();
 
+
+/**
+ * Check if bus_id of two system devices are identical.
+ *
+ * @param [in] bus_id1 bus_id of the first device.
+ * @param [in] bus_id2 bus_id of the second device.
+ *
+ * @return 1 if the bus_id of the two devices match.
+ */
+unsigned ucs_topo_sys_bus_id_is_equal(ucs_sys_bus_id_t bus_id1,
+                                      ucs_sys_bus_id_t bus_id2);
+
+
+/**
+ * Check if guid of two system devices are identical.
+ *
+ * @param [in] guid1 System device guid of the first device.
+ * @param [in] guid2 System device guid of the second device.
+ *
+ * @return 1 if the guid of the two devices match.
+ */
+unsigned ucs_topo_sys_device_guid_is_equal(ucs_sys_device_guid_t guid1,
+                                           ucs_sys_device_guid_t guid2);
 
 /**
  * Print a map indicating the topology information between system devices

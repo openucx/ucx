@@ -29,6 +29,7 @@ UCS_TEST_P(test_uct_query, query_perf)
     perf_attr.field_mask         = UCT_PERF_ATTR_FIELD_OPERATION |
                                    UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
                                    UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
+                                   UCT_PERF_ATTR_FIELD_REMOTE_GUID |
                                    UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
                                    UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE |
                                    UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
@@ -40,6 +41,9 @@ UCS_TEST_P(test_uct_query, query_perf)
     perf_attr.remote_memory_type = UCS_MEMORY_TYPE_HOST;
     perf_attr.local_sys_device   = UCS_SYS_DEVICE_ID_UNKNOWN;
     perf_attr.remote_sys_device  = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+    ucs_topo_get_unknown_device_guid(&perf_attr.remote_guid);
+
     status                       = uct_iface_estimate_perf(sender().iface(),
                                                            &perf_attr);
     EXPECT_EQ(status, UCS_OK);

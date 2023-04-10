@@ -73,6 +73,9 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
         /* System device id */
         size += sizeof(uint8_t);
 
+        /* System device guid */
+        size += sizeof(ucs_sys_device_guid_t);
+
         /* Distance of each device */
         size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
     }
@@ -181,6 +184,10 @@ ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
 
     /* Pack system device id */
     *ucs_serialize_next(&p, uint8_t) = mem_info->sys_dev;
+
+    /* Pack system device guid, assumes that sys_dev=UNKNOWN is not provided */
+    ucs_topo_get_device_guid(mem_info->sys_dev,
+                             ucs_serialize_next(&p, ucs_sys_device_guid_t));
 
     /* Pack distance from sys_dev to each device in distance_dev_map */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
@@ -792,8 +799,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 
     if (buffer < buffer_end) {
         rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
+        rkey_config_key.guid    = *ucs_serialize_next(&p, const ucs_sys_device_guid_t);
     } else {
         rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        ucs_topo_get_unknown_device_guid(&rkey_config_key.guid);
     }
 
     khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
