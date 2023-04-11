@@ -753,8 +753,11 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
     ucs_assertv(req->status == UCS_OK, "status: %s",
                 ucs_status_string(req->status));
 
-    ucp_trace_req(req, "unpack recv_data req_len %zu data_len %zu offset %zu last: %s",
-                  req->recv.length, length, offset, last ? "yes" : "no");
+    ucp_trace_req(req,
+                  "unpack recv_data req_len %zu data_len %zu offset %zu "
+                  "memtype %s last: %s", req->recv.length, length, offset,
+                  ucs_memory_type_names[req->recv.mem_type],
+                  last ? "yes" : "no");
 
     if (ucs_unlikely((length + offset) > req->recv.length)) {
         return ucp_request_recv_msg_truncated(req, length, offset);
@@ -1003,19 +1006,30 @@ ucp_request_param_user_data(const ucp_request_param_t *param)
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucp_request_get_memory_type(ucp_context_h context, const void *address,
-                            size_t length, const ucp_request_param_t *param)
+                            size_t count, ucp_datatype_t datatype,
+                            size_t contig_length,
+                            const ucp_request_param_t *param)
 {
     ucp_memory_info_t mem_info;
+    uint8_t UCS_V_UNUSED dummy_sg_count;
 
-    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ||
-        (param->memory_type == UCS_MEMORY_TYPE_UNKNOWN)) {
-        ucp_memory_detect(context, address, length, &mem_info);
-        ucs_assert(mem_info.type < UCS_MEMORY_TYPE_UNKNOWN);
-        return (ucs_memory_type_t)mem_info.type;
+    if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) &&
+        (param->memory_type != UCS_MEMORY_TYPE_UNKNOWN)) {
+        return param->memory_type;
     }
 
-    ucs_assert(param->memory_type < UCS_MEMORY_TYPE_UNKNOWN);
-    return param->memory_type;
+    if (UCP_DT_IS_CONTIG(datatype)) {
+        ucp_memory_detect_param(context, address, contig_length, param,
+                                &mem_info);
+    } else if (UCP_DT_IS_IOV(datatype)) {
+        ucp_dt_iov_memtype_detect(context, (ucp_dt_iov_t*)address, count,
+                                  param, &dummy_sg_count, &mem_info);
+    } else {
+        ucp_memory_info_set_host(&mem_info);
+    }
+
+    ucs_assert((ucs_memory_type_t)mem_info.type < UCS_MEMORY_TYPE_UNKNOWN);
+    return (ucs_memory_type_t)mem_info.type;
 }
 
 static UCS_F_ALWAYS_INLINE void
