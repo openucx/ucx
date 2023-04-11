@@ -768,10 +768,14 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
         ucp_proto_rndv_check_rkey_length(rts->address, rkey_length, "rts");
         op_id            = UCP_OP_ID_RNDV_RECV;
         recv_req->status = UCS_OK;
-        UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init_from_dt_state,
+        status           = UCS_PROFILE_CALL(
+                              ucp_datatype_iter_init_from_dt_state,
                               worker->context, recv_req->recv.buffer, rts->size,
                               recv_req->recv.datatype, &recv_req->recv.state,
                               &req->send.state.dt_iter, &sg_count);
+        if (status != UCS_OK) {
+            goto err;
+        }
     } else {
         /* Short receive: complete with error, and send reply to sender */
         rkey_length      = 0; /* Override rkey length to disable data fetch */
@@ -787,8 +791,7 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                        rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
         ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
-        ucs_mpool_put(req);
-        return;
+        goto err;
     }
 
 #if ENABLE_DEBUG_DATA
@@ -796,6 +799,11 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
 #endif
 
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
+
+    return;
+
+err:
+    ucs_mpool_put(req);
 }
 
 static ucs_status_t

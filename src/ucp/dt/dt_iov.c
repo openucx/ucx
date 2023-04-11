@@ -14,6 +14,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
 #include <ucs/profile/profile.h>
+#include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucp/dt/dt.h>
 
@@ -124,4 +125,55 @@ size_t ucp_dt_iov_count_nonempty(const ucp_dt_iov_t *iov, size_t iovcnt)
         count += iov[iov_it].length != 0;
     }
     return count;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_dt_iov_memtype_check(ucp_context_h context, const ucp_dt_iov_t *iov,
+                         size_t iovcnt, const ucp_request_param_t *param,
+                         ucp_memory_info_t *mem_info)
+{
+    ucp_memory_info_t UCS_V_UNUSED mem_info_iter;
+    int UCS_V_UNUSED i;
+
+    if (!ENABLE_PARAMS_CHECK) {
+        goto out;
+    }
+
+    for (i = 0; i < iovcnt; ++i) {
+        ucp_memory_detect_param(context, iov[i].buffer, iov[i].length, param,
+                                &mem_info_iter);
+        if ((mem_info_iter.type != mem_info->type) ||
+            (mem_info_iter.sys_dev != mem_info->sys_dev)) {
+            ucs_error("inconsistent iov memtypes: iov[%d]=%s-%s iov[0]=%s-%s"
+                      " iovcnt=%zu", i,
+                      ucs_memory_type_names[mem_info_iter.type],
+                      ucs_topo_sys_device_get_name(mem_info_iter.sys_dev),
+                      ucs_memory_type_names[mem_info->type],
+                      ucs_topo_sys_device_get_name(mem_info->sys_dev), iovcnt);
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+out:
+    return UCS_OK;
+}
+
+ucs_status_t ucp_dt_iov_memtype_detect(ucp_context_h context,
+                                       const ucp_dt_iov_t *iov, size_t iovcnt,
+                                       const ucp_request_param_t *param,
+                                       uint8_t *sg_count,
+                                       ucp_memory_info_t *mem_info)
+{
+    if (ucs_unlikely(iovcnt == 0)) {
+        ucp_memory_info_set_host(mem_info);
+        *sg_count = 1;
+        return UCS_OK;
+    }
+
+    ucp_memory_detect_param(context, iov->buffer, iov->length, param, mem_info);
+
+    *sg_count = ucs_min(iovcnt, (size_t)UINT8_MAX);
+
+    return ucp_dt_iov_memtype_check(context, iov + 1, iovcnt - 1, param,
+                                    mem_info);
 }

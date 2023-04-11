@@ -94,8 +94,9 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
         req->recv.tag.info.length     = recv_len;
 
-        memory_type = ucp_request_get_memory_type(worker->context, buffer,
-                                                  recv_len, param);
+        memory_type = ucp_request_get_memory_type(
+                          worker->context, buffer, count, datatype, recv_len,
+                          param);
         status      = ucp_dt_unpack_only(worker, buffer, count, datatype,
                                          memory_type,
                                          UCS_PTR_BYTE_OFFSET(rdesc + 1, hdr_len),
@@ -130,8 +131,9 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
     req->recv.length        = ucp_dt_length(datatype, count, buffer,
                                             &req->recv.state);
-    req->recv.mem_type      = ucp_request_get_memory_type(worker->context, buffer,
-                                                         req->recv.length, param);
+    req->recv.mem_type      = ucp_request_get_memory_type(
+                                  worker->context, buffer, count, datatype,
+                                  req->recv.length, param);
     req->recv.op_attr       = param->op_attr_mask;
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;

@@ -205,8 +205,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_stream_process_rdesc_inplace(
     ucs_status_t status;
     ssize_t unpacked;
 
-    mem_type = ucp_request_get_memory_type(worker->context, buffer, length,
-                                           param);
+    mem_type = ucp_request_get_memory_type(worker->context, buffer, count, dt,
+                                           length, param);
     status   = ucp_dt_unpack_only(worker, buffer, count, dt, mem_type,
                                   ucp_stream_rdesc_payload(rdesc), length, 0);
 
@@ -253,8 +253,9 @@ ucp_stream_recv_request_init(ucp_request_t *req, ucp_ep_h ep, void *buffer,
     req->recv.length   = ucs_likely(!UCP_DT_IS_GENERIC(datatype)) ? length :
                          ucp_dt_length(datatype, count, NULL, &req->recv.state);
     req->recv.mem_type = ucp_request_get_memory_type(ep->worker->context,
-                                                     (void*)buffer,
-                                                     req->recv.length, param);
+                                                     (void*)buffer, count,
+                                                     datatype, req->recv.length,
+                                                     param);
 
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
         req->flags         |= UCP_REQUEST_FLAG_CALLBACK;
