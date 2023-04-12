@@ -260,7 +260,8 @@ void test_md::free_memory(void *address, ucs_memory_type_t mem_type)
 bool test_md::is_device_detected(ucs_memory_type_t mem_type)
 {
     return (mem_type != UCS_MEMORY_TYPE_ROCM) &&
-           (mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED);
+           (mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED) &&
+           (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED);
 }
 
 void test_md::dereg_cb(uct_completion_t *comp)
