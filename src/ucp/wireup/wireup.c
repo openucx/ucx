@@ -1803,5 +1803,39 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
     return flags;
 }
 
+double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface)
+{
+    return wiface->worker->context->config.ext.proto_enable ?
+        (wiface->attr.latency.c + wiface->distance.latency) :
+        wiface->attr.latency.c;
+}
+
+double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface)
+{
+    ucp_context_h context = wiface->worker->context;
+    ucs_linear_func_t lat = wiface->attr.latency;
+
+    if (context->config.ext.proto_enable) {
+        lat.c += wiface->distance.latency;
+    }
+    return ucp_tl_iface_latency(context, &lat);
+}
+
+double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface)
+{
+    ucp_context_h context                  = wiface->worker->context;
+    const uct_ppn_bandwidth_t *bandwidth   = &wiface->attr.bandwidth;
+    const ucs_sys_dev_distance_t *distance = &wiface->distance;
+    uct_ppn_bandwidth_t bw;
+
+    if (context->config.ext.proto_enable) {
+        bw.shared    = ucs_min(bandwidth->shared, distance->bandwidth);
+        bw.dedicated = ucs_min(bandwidth->dedicated, distance->bandwidth);
+        return ucp_tl_iface_bandwidth(context, &bw);
+    } else {
+        return ucp_tl_iface_bandwidth(context, bandwidth);
+    }
+}
+
 UCP_DEFINE_AM(UINT64_MAX, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,
               ucp_wireup_msg_dump, UCT_CB_FLAG_ASYNC);
