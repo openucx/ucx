@@ -2717,14 +2717,56 @@ static int add_servers(const char *server, std::vector<std::string> &servers)
     return 0;
 }
 
-static int parse_args(int argc, char **argv, options_t *test_opts)
+static void usage(void)
 {
-    static const char *optstring =
-            "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADC:HP:m:L:I:zV";
-    char *str;
-    bool found;
-    int c;
+    std::cout << "Usage: io_demo [options] [server_address[:port:[repeat_count]]]" << std::endl;
+    std::cout << "Server repeat_count should be in the range "
+              << "[1.. " << MAX_SERVER_REPEAT_COUNT << "]" << std::endl;
+    std::cout << "" << std::endl;
+    std::cout << "Supported options are:" << std::endl;
+    std::cout << "  -p <port>                   TCP port number to use" << std::endl;
+    std::cout << "  -n <connect timeout>        Timeout for connecting to the peer (or \"inf\")" << std::endl;
+    std::cout << "  -o <op1,op2,...,opN>        Comma-separated string of IO operations [read|write]" << std::endl;
+    std::cout << "                              NOTE: if using several IO operations, performance" << std::endl;
+    std::cout << "                                    measurements may be inaccurate" << std::endl;
+    std::cout << "  -d <min>:<max>              Range that should be used to get data" << std::endl;
+    std::cout << "                              size of IO payload" << std::endl;
+    std::cout << "  -b <number of buffers>      Number of offcache IO buffers" << std::endl;
+    std::cout << "  -i <iterations-count>       Number of iterations to run communication" << std::endl;
+    std::cout << "  -w <window-size>            Number of outstanding requests" << std::endl;
+    std::cout << "  -a <conn-window-size>       Number of outstanding requests per connection" << std::endl;
+    std::cout << "  -k <chunk-size>             Split the data transfer to chunks of this size" << std::endl;
+    std::cout << "  -r <io-request-size>        Size of IO request packet" << std::endl;
+    std::cout << "  -t <client timeout>         Client timeout (or \"inf\")" << std::endl;
+    std::cout << "  -c <retries>                Number of connection retries on client or " << std::endl;
+    std::cout << "                              listen retries on server" << std::endl;
+    std::cout << "                              (or \"inf\") for failure" << std::endl;
+    std::cout << "  -y <retry interval>         Retry interval" << std::endl;
+    std::cout << "  -l <client run-time limit>  Time limit to run the IO client (or \"inf\")" << std::endl;
+    std::cout << "                              Examples: -l 17.5s; -l 10m; 15.5h" << std::endl;
+    std::cout << "  -s <random seed>            Random seed to use for randomizing" << std::endl;
+    std::cout << "  -v                          Set verbose mode" << std::endl;
+    std::cout << "  -q                          Enable data integrity and transaction check" << std::endl;
+    std::cout << "  -A                          Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
+    std::cout << "  -C <client-id>              Send client id during connection establishment, "
+              << "must be != " << UcxContext::CLIENT_ID_UNDEFINED << std::endl;
+    std::cout << "  -D                          Enable debugging mode for IO operation timeouts" << std::endl;
+    std::cout << "  -H                          Use human-readable timestamps" << std::endl;
+    std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
+    std::cout << "" << std::endl;
+    std::cout << "  -m <memory_type>            Memory type to use. Possible values: host"
+#ifdef HAVE_CUDA
+              << ", cuda, cuda-managed"
+#endif
+              << std::endl;
+    std::cout << "  -L <progress_count>         Maximal number of consecutive ucp_worker_progress invocations" << std::endl;
+    std::cout << "  -I <src_addr>               Set source IP address to select network interface on client side" << std::endl;
+    std::cout << "  -z                          Enable pre-register buffers for zero-copy" << std::endl;
+    std::cout << "  -V                          Print per-connection info" << std::endl;
+}
 
+static void init_opts(options_t *test_opts)
+{
     test_opts->port_num              = 1337;
     test_opts->connect_timeout       = 20.0;
     test_opts->client_timeout        = 50.0;
@@ -2751,6 +2793,15 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->progress_count        = 1;
     test_opts->prereg                = false;
     test_opts->per_conn_info         = false;
+}
+
+static int parse_args(int argc, char **argv, options_t *test_opts)
+{
+    static const char *optstring =
+            "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADC:HP:m:L:I:zV";
+    char *str;
+    bool found;
+    int c;
 
     while ((c = getopt(argc, argv, optstring)) != -1) {
         switch (c) {
@@ -2916,50 +2967,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             break;
         case 'h':
         default:
-            std::cout << "Usage: io_demo [options] [server_address[:port:[repeat_count]]]" << std::endl;
-            std::cout << "Server repeat_count should be in the range "
-                      << "[1.. " << MAX_SERVER_REPEAT_COUNT << "]" << std::endl;
-            std::cout << "" << std::endl;
-            std::cout << "Supported options are:" << std::endl;
-            std::cout << "  -p <port>                   TCP port number to use" << std::endl;
-            std::cout << "  -n <connect timeout>        Timeout for connecting to the peer (or \"inf\")" << std::endl;
-            std::cout << "  -o <op1,op2,...,opN>        Comma-separated string of IO operations [read|write]" << std::endl;
-            std::cout << "                              NOTE: if using several IO operations, performance" << std::endl;
-            std::cout << "                                    measurements may be inaccurate" << std::endl;
-            std::cout << "  -d <min>:<max>              Range that should be used to get data" << std::endl;
-            std::cout << "                              size of IO payload" << std::endl;
-            std::cout << "  -b <number of buffers>      Number of offcache IO buffers" << std::endl;
-            std::cout << "  -i <iterations-count>       Number of iterations to run communication" << std::endl;
-            std::cout << "  -w <window-size>            Number of outstanding requests" << std::endl;
-            std::cout << "  -a <conn-window-size>       Number of outstanding requests per connection" << std::endl;
-            std::cout << "  -k <chunk-size>             Split the data transfer to chunks of this size" << std::endl;
-            std::cout << "  -r <io-request-size>        Size of IO request packet" << std::endl;
-            std::cout << "  -t <client timeout>         Client timeout (or \"inf\")" << std::endl;
-            std::cout << "  -c <retries>                Number of connection retries on client or " << std::endl;
-            std::cout << "                              listen retries on server" << std::endl;
-            std::cout << "                              (or \"inf\") for failure" << std::endl;
-            std::cout << "  -y <retry interval>         Retry interval" << std::endl;
-            std::cout << "  -l <client run-time limit>  Time limit to run the IO client (or \"inf\")" << std::endl;
-            std::cout << "                              Examples: -l 17.5s; -l 10m; 15.5h" << std::endl;
-            std::cout << "  -s <random seed>            Random seed to use for randomizing" << std::endl;
-            std::cout << "  -v                          Set verbose mode" << std::endl;
-            std::cout << "  -q                          Enable data integrity and transaction check" << std::endl;
-            std::cout << "  -A                          Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
-            std::cout << "  -C <client-id>              Send client id during connection establishment, "
-                      << "must be != " << UcxContext::CLIENT_ID_UNDEFINED << std::endl;
-            std::cout << "  -D                          Enable debugging mode for IO operation timeouts" << std::endl;
-            std::cout << "  -H                          Use human-readable timestamps" << std::endl;
-            std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
-            std::cout << "" << std::endl;
-            std::cout << "  -m <memory_type>            Memory type to use. Possible values: host"
-#ifdef HAVE_CUDA
-                      << ", cuda, cuda-managed"
-#endif
-                      << std::endl;
-            std::cout << "  -L <progress_count>         Maximal number of consecutive ucp_worker_progress invocations" << std::endl;
-            std::cout << "  -I <src_addr>               Set source IP address to select network interface on client side" << std::endl;
-            std::cout << "  -z                          Enable pre-register buffers for zero-copy" << std::endl;
-            std::cout << "  -V                          Print per-connection info" << std::endl;
+            usage();
             return -1;
         }
     }
@@ -3040,6 +3048,8 @@ int main(int argc, char **argv)
     int ret;
 
     print_info(argc, argv);
+
+    init_opts(&test_opts);
 
     ret = parse_args(argc, argv, &test_opts);
     if (ret < 0) {
