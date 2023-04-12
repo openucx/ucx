@@ -867,6 +867,7 @@ run_mpi_tests() {
 			$MAKEP installcheck
 
 			MPIRUN="mpirun \
+					--allow-run-as-root \
 					--bind-to none \
 					-x UCX_ERROR_SIGNALS \
 					-x UCX_HANDLE_ERRORS \
