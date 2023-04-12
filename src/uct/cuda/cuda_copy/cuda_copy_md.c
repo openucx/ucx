@@ -31,6 +31,12 @@
 #define UCT_CUDA_MAX_DEVICES      32
 
 
+static const char *uct_cuda_pref_loc[] = {
+    [UCT_CUDA_PREF_LOC_CPU]  = "cpu",
+    [UCT_CUDA_PREF_LOC_GPU]  = "gpu",
+    [UCT_CUDA_PREF_LOC_LAST] = NULL,
+};
+
 static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
     {"", "", NULL,
         ucs_offsetof(uct_cuda_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -54,6 +60,14 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      "Enable using cross-device dmabuf file descriptor",
      ucs_offsetof(uct_cuda_copy_md_config_t, enable_dmabuf),
                   UCS_CONFIG_TYPE_TERNARY},
+
+    {"PREF_LOC", "cpu",
+     "System device designation of a CUDA managed memory buffer"
+     " whose preferred location attribute is not set.\n"
+     " cpu - Assume buffer is on the CPU.\n"
+     " gpu - Assume buffer is on the GPU corresponding to buffer's GPU context.",
+     ucs_offsetof(uct_cuda_copy_md_config_t, pref_loc),
+     UCS_CONFIG_TYPE_ENUM(uct_cuda_pref_loc)},
 
     {NULL}
 };
@@ -290,8 +304,8 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     const char *cu_err_str;
     CUdeviceptr base_address;
     size_t alloc_length;
-    ucs_status_t status;
     size_t total_bytes;
+    int32_t pref_loc;
     CUresult cu_err;
 
     attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
@@ -310,11 +324,6 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    status = uct_cuda_base_get_sys_dev(cuda_device, &mem_info->sys_dev);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     if (is_managed || (cuda_mem_ctx == NULL)) {
         /* is_managed: cuMemGetAddress range does not support managed memory so
          * use provided address and length as base address and alloc length
@@ -329,7 +338,33 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
          * allocated in a context should also allows us to identify
          * virtual/stream-ordered CUDA allocations. */
         mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+
+        cu_err =
+            cuMemRangeGetAttribute((void*)&pref_loc, sizeof(pref_loc),
+                                   CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION,
+                                   (CUdeviceptr)address, length);
+        if ((cu_err != CUDA_SUCCESS) || (pref_loc == CU_DEVICE_INVALID)) {
+            pref_loc = (md->config.pref_loc == UCT_CUDA_PREF_LOC_CPU) ?
+                CU_DEVICE_CPU : cuda_device;
+        }
+
+        if (pref_loc == CU_DEVICE_CPU) {
+            mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        } else {
+            uct_cuda_base_get_sys_dev(pref_loc, &mem_info->sys_dev);
+            if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+                ucs_diag("cuda device %d (for address %p...%p) unrecognized",
+                         pref_loc, address,
+                         UCS_PTR_BYTE_OFFSET(address, length));
+            }
+        }
+
         goto out_default_range;
+    }
+
+    uct_cuda_base_get_sys_dev(cuda_device, &mem_info->sys_dev);
+    if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_ERR_NO_DEVICE;
     }
 
     mem_info->type = UCS_MEMORY_TYPE_CUDA;
@@ -555,6 +590,7 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     md->super.component         = &uct_cuda_copy_component;
     md->config.alloc_whole_reg  = config->alloc_whole_reg;
     md->config.max_reg_ratio    = config->max_reg_ratio;
+    md->config.pref_loc         = config->pref_loc;
     md->config.dmabuf_supported = 0;
 
     dmabuf_supported = uct_cuda_copy_md_is_dmabuf_supported();
