@@ -909,56 +909,6 @@ void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
     }
 }
 
-const char *uct_iface_get_sysfs_path(const char *dev_path, const char *dev_name,
-                                     char *path_buffer)
-{
-    const char *detected_type = NULL;
-    char device_file_path[PATH_MAX];
-    char *sysfs_realpath;
-    struct stat st_buf;
-    char *sysfs_path;
-    int ret;
-
-    /* realpath name is expected to be like below:
-     * PF: /sys/devices/.../0000:03:00.0/<interface_type>/<dev_name>
-     * SF: /sys/devices/.../0000:03:00.0/<UUID>/<interface_type>/<dev_name>
-     */
-
-    sysfs_realpath = realpath(dev_path, path_buffer);
-    if (sysfs_realpath == NULL) {
-        goto out_undetected;
-    }
-
-    /* Try PF: strip 2 components */
-    sysfs_path = ucs_dirname(sysfs_realpath, 2);
-    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
-                      sysfs_path);
-    ret = stat(device_file_path, &st_buf);
-    if (ret == 0) {
-        detected_type = "PF";
-        goto out_detected;
-    }
-
-    /* Try SF: strip 3 components (one more) */
-    sysfs_path = ucs_dirname(sysfs_path, 1);
-    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
-                      sysfs_path);
-    ret = stat(device_file_path, &st_buf);
-    if (ret == 0) {
-        detected_type = "SF";
-        goto out_detected;
-    }
-
-out_undetected:
-    ucs_debug("%s: sysfs path undetected", dev_name);
-    return NULL;
-
-out_detected:
-    ucs_debug("%s: %s sysfs path is '%s'\n", dev_name, detected_type,
-              sysfs_path);
-    return sysfs_path;
-}
-
 int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                                  ucs_sys_namespace_type_t sys_ns_type)
 {

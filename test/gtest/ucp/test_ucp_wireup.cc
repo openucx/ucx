@@ -8,6 +8,7 @@
 
 #include "ucp_test.h"
 #include "common/test.h"
+#include "common/test_helpers.h"
 #include "ucp/ucp_test.h"
 
 #include <algorithm>
@@ -83,16 +84,20 @@ protected:
     bool ep_iface_has_caps(const entity& e, const std::string& tl,
                            uint64_t caps);
 
-    bool
-    has_resource(const ucp_test_base::entity *e, const std::string &tl_name)
+    size_t count_resources(const ucp_test_base::entity &e,
+                           const std::string &tl_name) const
     {
-        for (int i = 0; i < e->ucph()->num_tls; ++i) {
-            if (tl_name == e->ucph()->tl_rscs[i].tl_rsc.tl_name) {
-                return true;
-            }
-        }
+        return std::count_if(e.ucph()->tl_rscs,
+                             e.ucph()->tl_rscs + e.ucph()->num_tls,
+                             [&](const ucp_tl_resource_desc_t &rsc) {
+                                 return tl_name == rsc.tl_rsc.tl_name;
+                             });
+    }
 
-        return false;
+    bool has_resource(const ucp_test_base::entity &e,
+                      const std::string &tl_name) const
+    {
+        return count_resources(e, tl_name) != 0;
     }
 
 protected:
@@ -1322,7 +1327,7 @@ UCS_TEST_P(select_transport_rndv, select_dc, "NUM_EPS=300")
     ucs::scoped_setenv max_num_eps("UCX_RC_MAX_NUM_EPS", "1024");
     ucp_test_base::entity *e1 = create_entity();
 
-    if (!has_resource(e1, "dc_mlx5")) {
+    if (!has_resource(*e1, "dc_mlx5")) {
         UCS_TEST_SKIP_R("dc_mlx5 transport is not present");
     }
 
@@ -1346,23 +1351,27 @@ public:
 
 UCS_TEST_P(select_transport_rma_bw, select_rc, "NUM_EPS=56", "NUM_PPN=28")
 {
-    UCS_TEST_SKIP_R("FIXME: Disabled due to unresolved failure");
+    const auto rc_count = count_resources(sender(), "rc_mlx5");
 
-    /* coverity[unreachable] */
-    if (!has_resource(&sender(), "rc_mlx5")) {
-        UCS_TEST_SKIP_R("no rc resources");
+    if (rc_count == 0) {
+        UCS_TEST_SKIP_R("no RC resources");
     }
 
     sender().connect(&receiver(), get_ep_params());
+    const auto config = ucp_ep_config(sender().ep());
 
-    const ucp_ep_config_t *config = ucp_ep_config(sender().ep());
-    for (int i = 0; (i < config->key.num_lanes) &&
-                    (config->key.rma_bw_lanes[i] != UCP_NULL_LANE);
-         ++i) {
-        /* Verify RC is selected for rma_bw lanes */
-        ucp_lane_index_t lane = config->key.rma_bw_lanes[i];
-        ASSERT_STREQ("rc_mlx5",
-                     ucp_ep_get_tl_rsc(sender().ep(), lane)->tl_name);
+    for (int i = 0; i < config->key.num_lanes; ++i) {
+        const auto lane = config->key.rma_bw_lanes[i];
+        /* Only the first rc_count lanes are relevant, because
+         * no more RC resources exist. */
+        if ((lane == UCP_NULL_LANE) || (i >= rc_count)) {
+            break;
+        }
+
+        /* Verify TCP is not selected for rma_bw lanes */
+        const std::string tl_name =
+                ucp_ep_get_tl_rsc(sender().ep(), lane)->tl_name;
+        ASSERT_TRUE((tl_name == "rc_mlx5") || (tl_name == "dc_mlx5"));
     }
 }
 

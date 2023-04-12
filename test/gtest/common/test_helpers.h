@@ -322,6 +322,11 @@ bool is_interface_usable(struct ifaddrs *ifa);
 ssize_t get_proc_self_status_field(const std::string &parameter);
 
 /**
+ * Read directory contents and return a vector of file names.
+ */
+std::vector<std::string> read_dir(const std::string &path);
+
+/**
  * Return the name of the given network device if it is supported by rdmacm.
  */
 std::string get_rdmacm_netdev(const char *ifa_name);

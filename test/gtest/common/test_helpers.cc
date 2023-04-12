@@ -490,7 +490,7 @@ ssize_t get_proc_self_status_field(const std::string &parameter)
     return -1;
 }
 
-static std::vector<std::string> read_dir(const std::string& path)
+std::vector<std::string> read_dir(const std::string &path)
 {
     std::vector<std::string> result;
     struct dirent *entry;

@@ -202,6 +202,19 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path);
 
 
 /**
+ * Returns sysfs path of a given device. for example:
+ * input:  '/sys/class/infiniband/mlx5_1'
+ * output: '/sys/devices/pci0000:80/0000:80:01.1/0000:83:00.0'
+ *
+ * @param [in]  dev_path    Device file path.
+ * @param [out] path_buffer Filled with the result path.
+ *
+ * @return Pointer to sysfs path or NULL on error.
+ */
+const char *
+ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer);
+
+/**
  * Get the name of a given system device. If the name was never set, it defaults
  * to the BDF representation of the system device bus id.
  *
