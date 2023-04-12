@@ -206,24 +206,20 @@ void ucp_test::flush_workers()
     }
 }
 
-void ucp_test::disconnect(entity& e) {
-    bool has_failed_entity = false;
-    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
-         !has_failed_entity && (iter != entities().end()); ++iter) {
-        has_failed_entity = ((*iter)->get_err_num() > 0);
-    }
+void ucp_test::disconnect(entity &e)
+{
+    bool has_failed_entity = std::any_of(entities().begin(), entities().end(),
+                                         [](const entity *en) {
+                                             return en->get_err_num() > 0;
+                                         });
 
     for (int i = 0; i < e.get_num_workers(); i++) {
-        enum ucp_ep_close_mode close_mode;
-
-        if (has_failed_entity) {
-            close_mode = UCP_EP_CLOSE_MODE_FORCE;
-        } else {
+        if (!has_failed_entity) {
             flush_worker(e, i);
-            close_mode = UCP_EP_CLOSE_MODE_FLUSH;
         }
 
-        e.close_all_eps(*this, i, close_mode);
+        e.close_all_eps(*this, i,
+                        has_failed_entity ? UCP_EP_CLOSE_FLAG_FORCE : 0);
     }
 }
 
@@ -857,13 +853,17 @@ void ucp_test_base::entity::fence(int worker_index) const {
 }
 
 void *ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
-                                           enum ucp_ep_close_mode mode) {
+                                           uint32_t close_flags)
+{
     ucp_ep_h ep = revoke_ep(worker_index, ep_index);
     if (ep == NULL) {
         return NULL;
     }
 
-    void *req = ucp_ep_close_nb(ep, mode);
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
+    param.flags        = close_flags;
+    void *req          = ucp_ep_close_nbx(ep, &param);
     if (UCS_PTR_IS_PTR(req)) {
         m_close_ep_reqs.push_back(req);
         return req;
@@ -883,7 +883,7 @@ void ucp_test_base::entity::close_ep_req_free(void *close_req) {
     ASSERT_NE(UCS_INPROGRESS, status) << "free not completed EP close request: "
                                       << close_req;
     if (status != UCS_OK) {
-        UCS_TEST_MESSAGE << "ucp_ep_close_nb completed with status "
+        UCS_TEST_MESSAGE << "ucp_ep_close_nbx completed with status "
                          << ucs_status_string(status);
     }
 
@@ -893,9 +893,10 @@ void ucp_test_base::entity::close_ep_req_free(void *close_req) {
 }
 
 void ucp_test_base::entity::close_all_eps(const ucp_test &test, int worker_idx,
-                                          enum ucp_ep_close_mode mode) {
+                                          uint32_t close_flags)
+{
     for (int j = 0; j < get_num_eps(worker_idx); j++) {
-        disconnect_nb(worker_idx, j, mode);
+        disconnect_nb(worker_idx, j, close_flags);
     }
 
     ucs_time_t deadline = ucs::get_deadline();
