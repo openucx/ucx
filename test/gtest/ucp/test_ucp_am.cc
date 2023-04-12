@@ -1798,6 +1798,17 @@ public:
         modify_config("RNDV_THRESH", "128");
         test_ucp_am_nbx::init();
     }
+
+private:
+    virtual ucs_memory_type_t tx_memtype() const
+    {
+        return static_cast<ucs_memory_type_t>(get_variant_value(2));
+    }
+
+    virtual ucs_memory_type_t rx_memtype() const
+    {
+        return static_cast<ucs_memory_type_t>(get_variant_value(3));
+    }
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
