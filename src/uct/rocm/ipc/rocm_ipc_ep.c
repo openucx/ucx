@@ -20,16 +20,27 @@
 static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_ep_t, const uct_ep_params_t *params)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(params->iface, uct_rocm_ipc_iface_t);
+    char target_name[64];
+    ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
     self->remote_pid = *(const pid_t*)params->iface_addr;
+
+    snprintf(target_name, sizeof(target_name), "dest:%d", *(pid_t*)params->iface_addr);
+    status = uct_rocm_ipc_create_cache(&self->remote_memh_cache, target_name);
+    if (status != UCS_OK) {
+        ucs_error("could not create create rocm ipc cache: %s",
+                  ucs_status_string(status));
+        return status;
+    }
 
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rocm_ipc_ep_t)
 {
+    uct_rocm_ipc_destroy_cache(self->remote_memh_cache);
 }
 
 UCS_CLASS_DEFINE(uct_rocm_ipc_ep_t, uct_base_ep_t);
@@ -47,14 +58,14 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
                                    uct_completion_t *comp,
                                    int is_put)
 {
-    uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                                 uct_rocm_ipc_iface_t);
+    uct_rocm_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_rocm_ipc_ep_t);
     hsa_status_t status;
     hsa_agent_t local_agent, remote_agent;
     hsa_agent_t dst_agent, src_agent;
     size_t size = uct_iov_get_length(iov);
     ucs_status_t ret = UCS_OK;
     void *base_addr, *local_addr = iov->buffer;
+    uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_ipc_iface_t);
     void *remote_base_addr, *remote_copy_addr;
     void *dst_addr, *src_addr;
     uct_rocm_base_signal_desc_t *rocm_ipc_signal;
@@ -83,7 +94,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    ret = uct_rocm_ipc_cache_map_memhandle((void*)iface->remote_memh_cache, key,
+    ret = uct_rocm_ipc_cache_map_memhandle((void *)ep->remote_memh_cache, key,
                                            &remote_base_addr);
     if (ret != UCS_OK) {
         ucs_error("fail to attach ipc mem %p %d\n", (void *)key->address, ret);
