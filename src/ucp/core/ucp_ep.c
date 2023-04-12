@@ -561,11 +561,21 @@ void ucp_ep_release_id(ucp_ep_h ep)
     ep->ext->local_ep_id = UCS_PTR_MAP_KEY_INVALID;
 }
 
+/* TODO: err_mode field could be part of flags */
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags)
 {
     key->err_mode = (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ?
                     UCP_ERR_HANDLING_MODE_PEER : UCP_ERR_HANDLING_MODE_NONE;
+}
+
+void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
+                                  unsigned ep_init_flags)
+{
+    if (ucs_test_all_flags(ep_init_flags,
+                           UCP_EP_INIT_CREATE_AM_LANE | UCP_EP_INIT_CM_PHASE)) {
+        key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE;
+    }
 }
 
 ucs_status_t
@@ -761,6 +771,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
 
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
+    ucp_ep_config_key_init_flags(&key, ep_init_flags);
 
     key.num_lanes = 1;
     /* all operations will use the first lane, which is a stub endpoint before
@@ -2470,6 +2481,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     size_t min_rndv_thresh, min_am_rndv_thresh;
     size_t rma_zcopy_thresh;
     size_t am_max_eager_short;
+    uint64_t short_am_cap_flag, short_tag_cap_flag;
     double get_zcopy_max_bw[UCS_MEMORY_TYPE_LAST];
     double put_zcopy_max_bw[UCS_MEMORY_TYPE_LAST];
     ucs_status_t status;
@@ -2481,6 +2493,14 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     status = ucp_ep_config_key_copy(&config->key, key);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    if (config->key.flags & UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE) {
+        short_am_cap_flag  = 0;
+        short_tag_cap_flag = 0;
+    } else {
+        short_am_cap_flag  = UCT_IFACE_FLAG_AM_SHORT;
+        short_tag_cap_flag = UCT_IFACE_FLAG_TAG_EAGER_SHORT;
     }
 
     /* Default settings */
@@ -2697,7 +2717,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             }
 
             config->tag.eager.max_short = ucp_ep_config_max_short(
-                    worker->context, iface_attr, UCT_IFACE_FLAG_TAG_EAGER_SHORT,
+                    worker->context, iface_attr, short_tag_cap_flag,
                     iface_attr->cap.tag.eager.max_short, 0,
                     config->tag.eager.zcopy_thresh[0],
                     &config->tag.rndv.am_thresh);
@@ -2729,7 +2749,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
              * STREAM protocol implementations, do not adjust max_short value by
              * zcopy and rndv thresholds. */
             config->am.max_short = ucp_ep_config_max_short(
-                    worker->context, iface_attr, UCT_IFACE_FLAG_AM_SHORT,
+                    worker->context, iface_attr, short_am_cap_flag,
                     iface_attr->cap.am.max_short, sizeof(ucp_eager_hdr_t),
                     SIZE_MAX, NULL);
 
@@ -2757,7 +2777,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             }
 
             am_max_eager_short = ucp_ep_config_max_short(
-                    worker->context, iface_attr, UCT_IFACE_FLAG_AM_SHORT,
+                    worker->context, iface_attr, short_am_cap_flag,
                     iface_attr->cap.am.max_short, sizeof(ucp_am_hdr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
@@ -2791,7 +2811,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
             /* Calculate max short threshold for UCP AM short reply protocol */
             am_max_eager_short = ucp_ep_config_max_short(
-                    worker->context, iface_attr, UCT_IFACE_FLAG_AM_SHORT,
+                    worker->context, iface_attr, short_am_cap_flag,
                     iface_attr->cap.am.max_short,
                     sizeof(ucp_am_hdr_t) + sizeof(ucp_am_reply_ftr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);

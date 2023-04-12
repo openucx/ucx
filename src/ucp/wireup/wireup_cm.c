@@ -170,12 +170,13 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
                                     const ucp_tl_bitmap_t *tl_bitmap,
                                     ucp_ep_config_key_t *key)
 {
-    ucp_worker_h worker        = ucp_ep->worker;
-    ucp_context_h context      = worker->context;
-    unsigned addr_pack_flags   = ucp_worker_common_address_pack_flags(worker) |
-                                 UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
-                                 UCP_ADDRESS_PACK_FLAG_IFACE_ADDR;
-    ucp_wireup_ep_t *wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
+    ucp_worker_h worker           = ucp_ep->worker;
+    ucp_context_h context         = worker->context;
+    unsigned addr_pack_flags      = ucp_worker_common_address_pack_flags(worker) |
+                                    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
+                                    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR;
+    ucp_wireup_ep_t *wireup_ep    = ucp_ep_get_cm_wireup_ep(ucp_ep);
+    unsigned wireup_ep_init_flags = wireup_ep->ep_init_flags | ep_init_flags;
     void *ucp_addr;
     size_t ucp_addr_size;
     ucp_unpacked_address_t unpacked_addr;
@@ -183,7 +184,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
 
-    ucs_assert_always(wireup_ep != NULL);
+    ucs_debug("ep %p: init_flags 0x%x", ucp_ep, wireup_ep_init_flags);
 
     /* Construct local dummy address for lanes selection taking an assumption
      * that server has the transports which are the best from client's
@@ -209,11 +210,10 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
 
     ucs_assert(unpacked_addr.address_count <= UCP_MAX_RESOURCES);
     ucp_ep_config_key_reset(key);
-    ucp_ep_config_key_set_err_mode(key, wireup_ep->ep_init_flags);
-    status = ucp_wireup_select_lanes(ucp_ep,
-                                     wireup_ep->ep_init_flags | ep_init_flags,
-                                     *tl_bitmap, &unpacked_addr, addr_indices,
-                                     key, 0);
+    ucp_ep_config_key_set_err_mode(key, wireup_ep_init_flags);
+    ucp_ep_config_key_init_flags(key, wireup_ep_init_flags);
+    status = ucp_wireup_select_lanes(ucp_ep, wireup_ep_init_flags, *tl_bitmap,
+                                     &unpacked_addr, addr_indices, key, 0);
 
     ucs_free(unpacked_addr.address_list);
 free_ucp_addr:

@@ -173,8 +173,21 @@ enum {
  * Endpoint configuration key flags
  */
 enum {
-    UCP_EP_CONFIG_KEY_FLAG_SELF       = UCS_BIT(0), /** Endpoint is connected to own worker */
-    UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE = UCS_BIT(1)  /** Endpoint is within same node */
+    /**
+     * Endpoint is connected to own worker.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_SELF         = UCS_BIT(0),
+
+    /**
+     * Endpoint is within same node.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE   = UCS_BIT(1),
+
+    /**
+     * Endpoint is in an intermediate connection establishment phase,
+     * some capabilities may be limited or disabled.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE = UCS_BIT(2)
 };
 
 
@@ -686,6 +699,9 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
+
+void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
+                                  unsigned ep_init_flags);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 
