@@ -402,11 +402,7 @@ void test_ucp_wireup::send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker,
 }
 
 void test_ucp_wireup::disconnect(ucp_ep_h ep, bool force) {
-    ucp_request_param_t param;
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-    param.flags        = (force) ? UCP_EP_CLOSE_FLAG_FORCE : 0;
-
-    void *req = ucp_ep_close_nbx(ep, &param);
+    void *req = ep_close_nbx(ep, force ? UCP_EP_CLOSE_FLAG_FORCE : 0);
     if (!UCS_PTR_IS_PTR(req)) {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }

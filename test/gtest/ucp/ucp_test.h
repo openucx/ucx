@@ -183,6 +183,8 @@ public:
     };
 
     static bool is_request_completed(void *req);
+
+    static void *ep_close_nbx(ucp_ep_h ep, uint32_t flags);
 };
 
 /**
