@@ -957,10 +957,7 @@ protected:
             ucp_ep_set_failed(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
             UCS_ASYNC_UNBLOCK(&ep->worker->async);
         }
-        ucp_request_param_t param;
-        param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-        param.flags        = UCP_EP_CLOSE_FLAG_FORCE;
-        void *close_req    = ucp_ep_close_nbx(ep, &param);
+        void *close_req = ep_close_nbx(ep, UCP_EP_CLOSE_FLAG_FORCE);
 
         // Do some progress of sender's worker to check that it doesn't
         // complete UCP requests prior closing UCT endpoint from discarding

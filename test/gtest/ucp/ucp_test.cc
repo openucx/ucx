@@ -860,10 +860,7 @@ void *ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
         return NULL;
     }
 
-    ucp_request_param_t param;
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-    param.flags        = close_flags;
-    void *req          = ucp_ep_close_nbx(ep, &param);
+    void *req = ep_close_nbx(ep, close_flags);
     if (UCS_PTR_IS_PTR(req)) {
         m_close_ep_reqs.push_back(req);
         return req;
@@ -1177,6 +1174,14 @@ bool ucp_test_base::entity::is_conn_reqs_queue_empty() const
 bool ucp_test_base::is_request_completed(void *request) {
     return (request == NULL) ||
            (ucp_request_check_status(request) != UCS_INPROGRESS);
+}
+
+void *ucp_test_base::ep_close_nbx(ucp_ep_h ep, uint32_t flags)
+{
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
+    param.flags        = flags;
+    return ucp_ep_close_nbx(ep, &param);
 }
 
 ucp_test::mapped_buffer::mapped_buffer(size_t size, const entity& entity,
