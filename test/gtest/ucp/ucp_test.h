@@ -99,13 +99,13 @@ public:
 
         void fence(int worker_index = 0) const;
 
-        void* disconnect_nb(int worker_index = 0, int ep_index = 0,
-                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
+        void *disconnect_nb(int worker_index = 0, int ep_index = 0,
+                            uint32_t close_flags = 0);
 
         void close_ep_req_free(void *close_req);
 
         void close_all_eps(const ucp_test &test, int worker_idx,
-                           enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
+                           uint32_t close_flags = 0);
 
         void destroy_worker(int worker_index = 0);
 
@@ -183,6 +183,8 @@ public:
     };
 
     static bool is_request_completed(void *req);
+
+    static void *ep_close_nbx(ucp_ep_h ep, uint32_t flags);
 };
 
 /**

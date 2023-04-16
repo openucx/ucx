@@ -1202,8 +1202,7 @@ protected:
             }
         }
 
-        void *close_req = receiver().disconnect_nb(0, 0,
-                                                   UCP_EP_CLOSE_MODE_FLUSH);
+        void *close_req     = receiver().disconnect_nb();
         ucs_time_t deadline = ucs::get_deadline(10);
         while (!is_request_completed(close_req) &&
                (ucs_get_time() < deadline)) {
