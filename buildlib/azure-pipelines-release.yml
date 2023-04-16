@@ -78,13 +78,13 @@ stages:
     condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
     dependsOn: Prepare
     jobs:
-    - template: az-GitHubDraft.yml
+    - template: az-github-draft.yml
       parameters:
         name: x86_64
         container: centos7_cuda11_x86_64
         demands: ucx_docker
 
-    - template: az-GitHubDraft.yml
+    - template: az-github-draft.yml
       parameters:
         name: aarch64
         container: centos8_cuda11_aarch64
