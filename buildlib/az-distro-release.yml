@@ -1,6 +1,10 @@
+parameters:
+  arch:
+  demands: []
+
 jobs:
-  - job: distro_release
-    displayName: distro
+  - job: Build_${{ parameters.arch }}
+    displayName: Build
     variables:
       ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:
         POSTFIX: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/heads/', '') }}
@@ -9,43 +13,47 @@ jobs:
       ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
         POSTFIX: ucx-pr$(System.PullRequest.PullRequestNumber)
 
-    pool:
-      name: MLNX
-      demands:
-        - harbor_registry -equals yes
-
     strategy:
       matrix:
-        centos7_cuda11:
-          build_container: centos7_cuda11
-          artifact_name: $(POSTFIX)-centos7-mofed5-cuda11.tar.bz2
-        centos8_cuda11:
-          build_container: centos8_cuda11
-          artifact_name: $(POSTFIX)-centos8-mofed5-cuda11.tar.bz2
-        ubuntu18_cuda11:
-          build_container: ubuntu18_cuda11
-          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda11.tar.bz2
-        ubuntu20_cuda11:
-          build_container: ubuntu20_cuda11
-          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda11.tar.bz2
-        ubuntu22_cuda11:
-          build_container: ubuntu22_cuda11
-          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda11.tar.bz2
-        centos7_cuda12:
-          build_container: centos7_cuda12
-          artifact_name: $(POSTFIX)-centos7-mofed5-cuda12.tar.bz2
-        ubuntu18_cuda12:
-          build_container: ubuntu18_cuda12
-          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda12.tar.bz2
-        ubuntu20_cuda12:
-          build_container: ubuntu20_cuda12
-          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda12.tar.bz2
-        ubuntu22_cuda12:
-          build_container: ubuntu22_cuda12
-          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda12.tar.bz2
-
+        # common for both x86 and ARM
+        centos8_cuda11_${{ parameters.arch }}:
+          build_container: centos8_cuda11_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-centos8-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+        ubuntu18_cuda11_${{ parameters.arch }}:
+          build_container: ubuntu18_cuda11_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+        ubuntu20_cuda11_${{ parameters.arch }}:
+          build_container: ubuntu20_cuda11_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+        ubuntu22_cuda11_${{ parameters.arch }}:
+          build_container: ubuntu22_cuda11_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+        ubuntu20_cuda12_${{ parameters.arch }}:
+          build_container: ubuntu20_cuda12_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+        ubuntu22_cuda12_${{ parameters.arch }}:
+          build_container: ubuntu22_cuda12_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+        # x86 only
+        ${{ if eq(parameters.arch, 'x86_64') }}:
+          centos7_cuda11_${{ parameters.arch }}:
+            build_container: centos7_cuda11_${{ parameters.arch }}
+            artifact_name: $(POSTFIX)-centos7-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+          centos7_cuda12_${{ parameters.arch }}:
+            build_container: centos7_cuda12_${{ parameters.arch }}
+            artifact_name: $(POSTFIX)-centos7-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+          ubuntu16_cuda11_${{ parameters.arch }}:
+            build_container: ubuntu16_cuda11_${{ parameters.arch }}
+            artifact_name: $(POSTFIX)-ubuntu16.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+          ubuntu18_cuda12_${{ parameters.arch }}:
+            build_container: ubuntu18_cuda12_${{ parameters.arch }}
+            artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
 
     container: $[ variables['build_container'] ]
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
 
     steps:
       - checkout: self
@@ -61,7 +69,7 @@ jobs:
           cd pkg-build
           ../contrib/configure-release --with-cuda --with-java=no
           ../contrib/buildrpm.sh -s -t -b --noclean
-          cd rpm-dist/`uname -m`
+          cd rpm-dist/$(uname -m)
           tar -cjf "../../../${AZ_ARTIFACT_NAME}" *.rpm
           cd ../../..
           tar -tjf "${AZ_ARTIFACT_NAME}"
