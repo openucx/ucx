@@ -442,7 +442,7 @@ ucp_proto_init_buffer_copy_time(ucp_worker_h worker, const char *title,
 
     rsc_index = ep_config->key.lanes[lane].rsc_index;
     wiface    = ucp_worker_iface(worker, rsc_index);
-    status    = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    status    = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
         return status;
     }

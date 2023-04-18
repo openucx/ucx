@@ -116,11 +116,10 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
  *
  * @param [in]  device   System device index.
  * @param [out] distance Result populated with the device memory distance.
- *
- * @return UCS_OK or error in case distance cannot be determined.
+
  */
-ucs_status_t ucs_topo_get_memory_distance(ucs_sys_device_t device,
-                                          ucs_sys_dev_distance_t *distance);
+void ucs_topo_get_memory_distance(ucs_sys_device_t device,
+                                  ucs_sys_dev_distance_t *distance);
 
 
 /**

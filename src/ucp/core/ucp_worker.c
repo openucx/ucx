@@ -1181,13 +1181,21 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-static void
-ucp_worker_get_sys_device_distance(ucp_context_h context,
-                                   ucp_rsc_index_t rsc_index,
-                                   ucs_sys_dev_distance_t *distance)
+static ucs_sys_device_t
+ucp_worker_iface_get_sys_device(const ucp_worker_iface_t *wiface)
 {
-    ucs_sys_device_t device     = UCS_SYS_DEVICE_ID_UNKNOWN;
-    ucs_sys_device_t cmp_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    const ucp_context_h context     = wiface->worker->context;
+    const ucp_rsc_index_t rsc_index = wiface->rsc_index;
+
+    return context->tl_rscs[rsc_index].tl_rsc.sys_device;
+}
+
+static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
+{
+    const ucp_context_h context      = wiface->worker->context;
+    ucs_sys_dev_distance_t *distance = &wiface->distance;
+    ucs_sys_device_t device          = UCS_SYS_DEVICE_ID_UNKNOWN;
+    ucs_sys_device_t cmp_device      = UCS_SYS_DEVICE_ID_UNKNOWN;
     ucp_rsc_index_t md_index, i;
 
     *distance = ucs_topo_default_distance;
@@ -1199,11 +1207,62 @@ ucp_worker_get_sys_device_distance(ucp_context_h context,
             continue;
         }
 
-        device     = context->tl_rscs[rsc_index].tl_rsc.sys_device;
+        device     = ucp_worker_iface_get_sys_device(wiface);
         cmp_device = context->tl_rscs[i].tl_rsc.sys_device;
 
         ucs_topo_get_distance(device, cmp_device, distance);
     }
+}
+
+static void
+ucp_worker_iface_get_memory_distance(const ucp_worker_iface_t *wiface,
+                                     ucs_sys_dev_distance_t *distance)
+{
+    const ucs_sys_device_t sys_dev = ucp_worker_iface_get_sys_device(wiface);
+
+    ucs_topo_get_memory_distance(sys_dev, distance);
+}
+
+void ucp_worker_iface_add_bandwidth(uct_ppn_bandwidth_t *ppn_bandwidth,
+                                    double bandwidth)
+{
+    ppn_bandwidth->shared    = ucs_min(ppn_bandwidth->shared, bandwidth);
+    ppn_bandwidth->dedicated = ucs_min(ppn_bandwidth->dedicated, bandwidth);
+}
+
+static void
+ucp_worker_iface_add_distance(uct_iface_attr_t *attr,
+                              const ucs_sys_dev_distance_t *distance)
+{
+    attr->latency.c += distance->latency;
+    ucp_worker_iface_add_bandwidth(&attr->bandwidth, distance->bandwidth);
+}
+
+ucs_status_t ucp_worker_iface_estimate_perf(const ucp_worker_iface_t *wiface,
+                                            uct_perf_attr_t *perf_attr)
+{
+    ucs_sys_dev_distance_t distance;
+    ucs_status_t status;
+
+    status = uct_iface_estimate_perf(wiface->iface, perf_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((perf_attr->field_mask &
+         (UCT_PERF_ATTR_FIELD_LATENCY | UCT_PERF_ATTR_FIELD_BANDWIDTH)) != 0) {
+        ucp_worker_iface_get_memory_distance(wiface, &distance);
+        if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+            perf_attr->latency.c += distance.latency;
+        }
+
+        if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+            ucp_worker_iface_add_bandwidth(&perf_attr->bandwidth,
+                                           distance.bandwidth);
+        }
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
@@ -1215,6 +1274,7 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     uct_md_h md                      = context->tl_mds[resource->md_index].md;
     uct_iface_config_t *iface_config;
     ucp_worker_iface_t *wiface;
+    ucs_sys_dev_distance_t distance;
     ucs_status_t status;
 
     wiface = ucs_calloc(1, sizeof(*wiface), "ucp_iface");
@@ -1309,15 +1369,13 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto err_close_iface;
     }
 
-    ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
-                                       &wiface->distance);
+    ucp_worker_iface_set_sys_device_distance(wiface);
     if (!context->config.ext.proto_enable) {
-        wiface->attr.latency.c          += wiface->distance.latency;
-        wiface->attr.bandwidth.shared    = ucs_min(wiface->attr.bandwidth.shared,
-                                                   wiface->distance.bandwidth);
-        wiface->attr.bandwidth.dedicated = ucs_min(
-                wiface->attr.bandwidth.dedicated, wiface->distance.bandwidth);
+        ucp_worker_iface_add_distance(&wiface->attr, &wiface->distance);
     }
+
+    ucp_worker_iface_get_memory_distance(wiface, &distance);
+    ucp_worker_iface_add_distance(&wiface->attr, &distance);
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
               tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),

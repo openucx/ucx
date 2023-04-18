@@ -1823,18 +1823,15 @@ double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface)
 
 double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface)
 {
-    ucp_context_h context                  = wiface->worker->context;
-    const uct_ppn_bandwidth_t *bandwidth   = &wiface->attr.bandwidth;
     const ucs_sys_dev_distance_t *distance = &wiface->distance;
-    uct_ppn_bandwidth_t bw;
+    const ucp_context_h context            = wiface->worker->context;
+    uct_ppn_bandwidth_t bandwidth          = wiface->attr.bandwidth;
 
     if (context->config.ext.proto_enable) {
-        bw.shared    = ucs_min(bandwidth->shared, distance->bandwidth);
-        bw.dedicated = ucs_min(bandwidth->dedicated, distance->bandwidth);
-        return ucp_tl_iface_bandwidth(context, &bw);
-    } else {
-        return ucp_tl_iface_bandwidth(context, bandwidth);
+        ucp_worker_iface_add_bandwidth(&bandwidth, distance->bandwidth);
     }
+
+    return ucp_tl_iface_bandwidth(context, &bandwidth);
 }
 
 UCP_DEFINE_AM(UINT64_MAX, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,

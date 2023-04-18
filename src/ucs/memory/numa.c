@@ -20,19 +20,13 @@
 #include <sched.h>
 #include <dirent.h>
 
+#define UCS_NUMA_MIN_DISTANCE       10
 #define UCS_NUMA_NODE_DEFAULT       0
 #define UCS_NUMA_NODE_MAX           UINT16_MAX
 #define UCS_NUMA_CORE_DIR_PATH      UCS_SYS_FS_CPUS_PATH "/cpu%d"
 #define UCS_NUMA_NODES_DIR_PATH     UCS_SYS_FS_SYSTEM_PATH "/node"
 #define UCS_NUMA_NODE_DISTANCE_PATH UCS_NUMA_NODES_DIR_PATH "/node%d/distance"
 
-
-const char *ucs_numa_policy_names[] = {
-    [UCS_NUMA_POLICY_DEFAULT]   = "default",
-    [UCS_NUMA_POLICY_PREFERRED] = "preferred",
-    [UCS_NUMA_POLICY_BIND]      = "bind",
-    [UCS_NUMA_POLICY_LAST]      = NULL,
-};
 
 KHASH_MAP_INIT_INT(numa_distance, ucs_numa_distance_t);
 
@@ -48,56 +42,6 @@ typedef struct {
 } ucs_numa_global_ctx_t;
 
 static ucs_numa_global_ctx_t ucs_numa_global_ctx;
-
-#if HAVE_NUMA
-
-
-static void ucs_numa_populate_cpumap(int16_t cpu_numa_nodes[])
-{
-    struct bitmask *cpumask;
-    int numa_node, cpu;
-    int ret;
-
-    cpumask = numa_allocate_cpumask();
-
-    for (numa_node = 0; numa_node <= numa_max_node(); ++numa_node) {
-        if (!numa_bitmask_isbitset(numa_all_nodes_ptr, numa_node)) {
-            continue;
-        }
-
-        ret = numa_node_to_cpus(numa_node, cpumask);
-        if (ret == -1) {
-            ucs_warn("failed to get CPUs for NUMA node %d: %m", numa_node);
-            continue;
-        }
-
-        for (cpu = 0; cpu < numa_num_configured_cpus(); ++cpu) {
-            if (numa_bitmask_isbitset(cpumask, cpu)) {
-                cpu_numa_nodes[cpu] = numa_node + 1;
-            }
-        }
-    }
-
-    numa_free_cpumask(cpumask);
-}
-
-
-int ucs_numa_node_of_cpu(int cpu)
-{
-    /* we can initialize statically only to the value 0, so the NUMA node
-     * numbers will be stored as 1..N instead of 0..N-1 */
-    static int16_t cpu_numa_nodes[__CPU_SETSIZE] = {0};
-
-    UCS_STATIC_ASSERT(NUMA_NUM_NODES <= INT16_MAX);
-    ucs_assert(cpu < __CPU_SETSIZE);
-
-    if (cpu_numa_nodes[cpu] == 0) {
-        ucs_numa_populate_cpumap(cpu_numa_nodes);
-    }
-    return cpu_numa_nodes[cpu] - 1;
-}
-
-#endif
 
 static inline uint32_t ucs_numa_distance_hash_key(const ucs_numa_node_t node1,
                                                   const ucs_numa_node_t node2)
@@ -178,7 +122,7 @@ unsigned ucs_numa_num_configured_cpus()
     return num_cpus;
 }
 
-ucs_numa_node_t ucs_numa_node_of_cpu_v2(int cpu)
+ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
 {
     /* Used for caching to improve perfromance */
     static ucs_numa_node_t cpu_numa_node[__CPU_SETSIZE] = {0};

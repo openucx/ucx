@@ -51,17 +51,6 @@ build_no_verbs() {
 }
 
 #
-# Build without numa support check
-#
-build_disable_numa() {
-	echo "==== Check --disable-numa compilation option ===="
-	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --disable-numa
-	$MAKEP
-	# Make sure config.h file undefines HAVE_NUMA proceprocessor macro
-	grep 'undef HAVE_NUMA' config.h || exit 1
-}
-
-#
 # Build a package in release mode
 #
 build_release_pkg() {
@@ -430,7 +419,6 @@ do_task "${prog}" build_docs
 do_task "${prog}" build_debug
 do_task "${prog}" build_prof
 do_task "${prog}" build_ugni
-do_task "${prog}" build_disable_numa
 do_task "${prog}" build_cuda
 do_task "${prog}" build_rocm
 do_task "${prog}" build_no_verbs

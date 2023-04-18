@@ -1985,7 +1985,7 @@ static ucs_status_t ucp_ep_config_calc_params(ucp_worker_h worker,
             perf_attr.operation  = UCT_EP_OP_AM_ZCOPY;
 
             wiface = ucp_worker_iface(worker, rsc_index);
-            status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+            status = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
             if (status != UCS_OK) {
                 return status;
             }
