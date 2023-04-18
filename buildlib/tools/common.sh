@@ -11,7 +11,7 @@ MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"
 PGI_MODULE="hpc-sdk/nvhpc/21.2"
 GCC_MODULE="dev/gcc-10.1.0"
-ARM_MODULE="arm-compiler/armcc-19.0"
+ARM_MODULE="arm-compiler/armcc-22.1"
 INTEL_MODULE="intel/ics-19.1.1"
 FUSE3_MODULE="dev/fuse-3.10.5"
 
