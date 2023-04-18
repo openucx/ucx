@@ -35,8 +35,9 @@
  * ucs_topo_get_memory_distance function by topology modules.
  * This function estimates the distance between the device and the system
  * memory used by the current thread according to its CPU affinity.
+ * The function must have a fallback behavior.
  */
-typedef ucs_status_t (*ucs_topo_get_memory_distance_func_t)(
+typedef void (*ucs_topo_get_memory_distance_func_t)(
         ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
 
 /*
@@ -136,13 +137,11 @@ ucs_topo_get_distance_default(ucs_sys_device_t device1,
     return UCS_OK;
 }
 
-static ucs_status_t
+static void
 ucs_topo_get_memory_distance_default(ucs_sys_device_t device,
                                      ucs_sys_dev_distance_t *distance)
 {
     *distance = ucs_topo_default_distance;
-
-    return UCS_OK;
 }
 
 static ucs_sys_topo_provider_t ucs_sys_topo_provider_default = {
@@ -162,12 +161,12 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
     return provider->ops.get_distance(device1, device2, distance);
 }
 
-ucs_status_t ucs_topo_get_memory_distance(ucs_sys_device_t device,
-                                          ucs_sys_dev_distance_t *distance)
+void ucs_topo_get_memory_distance(ucs_sys_device_t device,
+                                  ucs_sys_dev_distance_t *distance)
 {
     const ucs_sys_topo_provider_t *provider = ucs_sys_topo_get_provider();
 
-    return provider->ops.get_memory_distance(device, distance);
+    provider->ops.get_memory_distance(device, distance);
 }
 
 static ucs_bus_id_bit_rep_t
@@ -371,9 +370,8 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     return UCS_OK;
 }
 
-static ucs_status_t
-ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
-                                   ucs_sys_dev_distance_t *distance)
+static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
+                                               ucs_sys_dev_distance_t *distance)
 {
     double total_distance = 0;
     int full_affinity     = 0;
@@ -382,15 +380,18 @@ ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
     char path[PATH_MAX];
     ucs_numa_node_t dev_node;
     ucs_status_t status;
+    const char *dev_name;
 
     /* If the device is unknown, we assume min distance */
     if (device == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return ucs_topo_get_memory_distance_default(device, distance);
+        ucs_topo_get_memory_distance_default(device, distance);
+        return;
     }
 
     status = ucs_topo_sys_dev_to_sysfs_path(device, path, sizeof(path));
     if (status != UCS_OK) {
-        return ucs_topo_get_memory_distance_default(device, distance);
+        ucs_topo_get_memory_distance_default(device, distance);
+        return;
     }
 
     status = ucs_sys_pthread_getaffinity(&thread_cpuset);
@@ -408,16 +409,14 @@ ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
         }
 
         total_distance += ucs_numa_distance(dev_node,
-                                            ucs_numa_node_of_cpu_v2(cpu));
+                                            ucs_numa_node_of_cpu(cpu));
     }
 
-    /* Calculate root distance to get the correct BW value */
-    ucs_topo_sys_root_distance(distance);
-    cpuset_size       = full_affinity ? num_cpus : CPU_COUNT(&thread_cpuset);
+    dev_name            = ucs_topo_sys_device_get_name(device);
+    distance->bandwidth = ucs_topo_get_pci_bw(dev_name, path);
+    cpuset_size         = full_affinity ? num_cpus : CPU_COUNT(&thread_cpuset);
     distance->latency = ucs_topo_sysfs_numa_distance_to_latency(total_distance /
                                                                 cpuset_size);
-
-    return UCS_OK;
 }
 
 const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,

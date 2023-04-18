@@ -1942,7 +1942,7 @@ ucp_wireup_keepalive_score_func(const ucp_worker_iface_t *wiface,
     ucs_status_t status;
 
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS;
-    status               = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    status               = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
         ucs_warn(UCT_TL_RESOURCE_DESC_FMT
                  ": getting perf estimations failed: %s",

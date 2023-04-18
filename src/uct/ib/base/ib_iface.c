@@ -23,7 +23,6 @@
 #include <ucs/type/serialize.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
-#include <ucs/memory/numa.h>
 #include <ucs/sys/sock.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1450,62 +1449,6 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
     return count;
 }
 
-static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
-                                                  double *latency)
-{
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uct_ib_md_t *md      = uct_ib_iface_md(iface);
-    ucs_sys_cpuset_t temp_cpu_mask, process_affinity;
-#if HAVE_NUMA
-    int distance, min_cpu_distance;
-    int cpu, num_cpus;
-#endif
-    int ret;
-
-    if (!md->config.prefer_nearest_device) {
-        *latency = 0;
-        return UCS_OK;
-    }
-
-    ret = ucs_sys_getaffinity(&process_affinity);
-    if (ret) {
-        ucs_error("sched_getaffinity() failed: %m");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-#if HAVE_NUMA
-    /* Try to estimate the extra device latency according to NUMA distance */
-    if (dev->numa_node != -1) {
-        min_cpu_distance = INT_MAX;
-        num_cpus         = ucs_min(CPU_SETSIZE, numa_num_configured_cpus());
-        for (cpu = 0; cpu < num_cpus; ++cpu) {
-            if (!CPU_ISSET(cpu, &process_affinity)) {
-                continue;
-            }
-            distance = numa_distance(ucs_numa_node_of_cpu(cpu), dev->numa_node);
-            if (distance >= UCS_NUMA_MIN_DISTANCE) {
-                min_cpu_distance = ucs_min(min_cpu_distance, distance);
-            }
-        }
-
-        if (min_cpu_distance != INT_MAX) {
-            /* set the extra latency to (numa_distance - 10) * 20nsec */
-            *latency = (min_cpu_distance - UCS_NUMA_MIN_DISTANCE) * 20e-9;
-            return UCS_OK;
-        }
-    }
-#endif
-
-    /* Estimate the extra device latency according to its local CPUs mask */
-    CPU_AND(&temp_cpu_mask, &dev->local_cpus, &process_affinity);
-    if (CPU_EQUAL(&process_affinity, &temp_cpu_mask)) {
-        *latency = 0;
-    } else {
-        *latency = 200e-9;
-    }
-    return UCS_OK;
-}
-
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr)
 {
@@ -1516,8 +1459,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     uint8_t active_width, active_speed, active_mtu, width;
     double encoding, signal_rate, wire_speed;
     size_t mtu, extra_pkt_len;
-    ucs_status_t status;
-    double numa_latency;
     unsigned num_path;
 
     uct_base_iface_query(&iface->super, iface_attr);
@@ -1597,12 +1538,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         break;
     }
 
-    status = uct_ib_iface_get_numa_latency(iface, &numa_latency);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    iface_attr->latency.c += numa_latency;
     iface_attr->latency.m  = 0;
 
     /* Wire speed calculation: Width * SignalRate * Encoding * Num_paths */

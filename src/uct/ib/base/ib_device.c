@@ -152,16 +152,13 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {NULL}
 };
 
-static void uct_ib_device_get_locality(const char *dev_name,
-                                       ucs_sys_cpuset_t *cpu_mask,
-                                       int *numa_node)
+static void
+uct_ib_device_get_locality(const char *dev_name, ucs_sys_cpuset_t *cpu_mask)
 {
     char *p, buf[ucs_max(CPU_SETSIZE, 10)];
-    ucs_status_t status;
     ssize_t nread;
     uint32_t word;
     int base, k;
-    long n;
 
     /* Read list of CPUs close to the device */
     CPU_ZERO(cpu_mask);
@@ -192,12 +189,6 @@ static void uct_ib_device_get_locality(const char *dev_name,
             CPU_SET(k, cpu_mask);
         }
     }
-
-    /* Read NUMA node number */
-    status = ucs_read_file_number(&n, 1,
-                                  "/sys/class/infiniband/%s/device/numa_node",
-                                  dev_name);
-    *numa_node = (status == UCS_OK) ? n : -1;
 }
 
 static void
@@ -560,7 +551,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     dev->async_events = async_events;
 
     uct_ib_device_get_locality(ibv_get_device_name(ibv_device),
-                               &dev->local_cpus, &dev->numa_node);
+                               &dev->local_cpus);
 
     status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
                                   stats_parent, "device");

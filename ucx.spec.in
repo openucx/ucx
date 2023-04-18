@@ -31,11 +31,6 @@ Requires: %{?extra_deps}
 %endif
 
 BuildRequires: automake autoconf libtool gcc-c++
-%if "%{_vendor}" == "suse"
-BuildRequires: libnuma-devel
-%else
-BuildRequires: numactl-devel
-%endif
 %if %{with cma}
 BuildRequires: glibc-devel >= 2.15
 %endif
