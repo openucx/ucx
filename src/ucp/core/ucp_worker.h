@@ -411,6 +411,15 @@ ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 
 unsigned ucp_worker_discard_uct_ep_progress(void *arg);
 
+
+ucs_status_t ucp_worker_iface_estimate_perf(const ucp_worker_iface_t *wiface,
+                                            uct_perf_attr_t *perf_attr);
+
+
+void ucp_worker_iface_add_bandwidth(uct_ppn_bandwidth_t *ppn_bandwidth,
+                                    double bandwidth);
+
+
 /* must be called with async lock held */
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_add(ucp_worker_h worker, int count)

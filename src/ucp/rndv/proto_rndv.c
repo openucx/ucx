@@ -210,7 +210,7 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_init_params_t *params,
 
     rsc_index = params->ep_config_key->lanes[lane].rsc_index;
     wiface    = ucp_worker_iface(params->worker, rsc_index);
-    status    = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    status    = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
         return status;
     }

@@ -212,7 +212,6 @@ typedef struct uct_ib_device {
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     ucs_sys_cpuset_t            local_cpus;      /* CPUs local to device */
-    int                         numa_node;       /* NUMA node of the device */
     int                         async_events;    /* Whether async events are handled */
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
     UCS_STATS_NODE_DECLARE(stats)

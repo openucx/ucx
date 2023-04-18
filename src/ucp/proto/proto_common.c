@@ -307,7 +307,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                            UCT_PERF_ATTR_FIELD_LATENCY;
     perf_attr.operation  = params->send_op;
 
-    status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    status = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
         goto err_deref_perf_node;
     }
