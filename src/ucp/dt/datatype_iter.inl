@@ -141,6 +141,17 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_set_memh(
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_unset_memh(ucp_datatype_iter_t *dt_iter)
+{
+    if (ucs_likely(dt_iter->dt_class == UCP_DATATYPE_CONTIG)) {
+        dt_iter->type.contig.memh = NULL;
+    } else if (dt_iter->dt_class == UCP_DATATYPE_IOV) {
+        ucs_free(dt_iter->type.iov.memh);
+        dt_iter->type.iov.memh = NULL;
+    }
+}
+
 /*
  * Initialize a datatype iterator, also returns number of scatter-gather entries
  * for protocol selection.
@@ -563,19 +574,17 @@ ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_datatype_memh_dereg(ucp_context_h context, ucp_mem_h *memh_p)
+ucp_datatype_memh_dereg(ucp_context_h context, ucp_mem_h *memh_p, int reuse)
 {
     if (*memh_p == NULL) {
         return;
     }
 
-    /* Do no release user memory handle */
-    if (ucp_memh_is_user_memh(*memh_p)) {
-        return;
-    }
-
     ucp_memh_put(context, *memh_p);
-    *memh_p = NULL;
+
+    if (!reuse) {
+        *memh_p = NULL;
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -599,6 +608,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_contig_mem_reg(
     ucp_mem_h memh = dt_iter->type.contig.memh;
 
     if (memh != NULL) {
+        ucp_memh_hold(memh);
         ucp_datatype_iter_contig_check_memh_mds(memh, md_map);
         return UCS_OK;
     }
@@ -645,12 +655,12 @@ ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
  */
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_mem_dereg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
-                            unsigned dt_mask)
+                            unsigned dt_mask, int reuse)
 {
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
-        ucp_datatype_memh_dereg(context, &dt_iter->type.contig.memh);
+        ucp_datatype_memh_dereg(context, &dt_iter->type.contig.memh, reuse);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
-        ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
+        ucp_datatype_iter_iov_mem_dereg(context, dt_iter, reuse);
     }
 }
 

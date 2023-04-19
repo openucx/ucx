@@ -36,6 +36,11 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
+    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        ucp_datatype_iter_unset_memh(&req->send.state.dt_iter);
+        req->flags &= ~UCP_REQUEST_FLAG_USER_MEMH;
+    }
+
     req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
                                               UCS_SYS_DEVICE_ID_UNKNOWN);
     if (req->send.rndv.mdesc == NULL) {

@@ -425,6 +425,7 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
     ucp_memh_invalidate(context, req->send.state.dt.dt.contig.memh,
                         ucp_request_mem_invalidate_completion, req,
                         invalidate_map);
+    ucp_memh_put(context, req->send.state.dt.dt.contig.memh);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,

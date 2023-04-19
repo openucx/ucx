@@ -55,30 +55,23 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
                              unsigned uct_reg_flags, unsigned dt_mask)
 {
     ucp_ep_h ep = req->send.ep;
-    ucs_status_t status;
 
     ucp_trace_req(req, "ucp_proto_request_zcopy_init for %s",
                   req->send.proto_config->proto->name);
 
     ucp_proto_completion_init(&req->send.state.uct_comp, comp_func);
 
-    status = ucp_datatype_iter_mem_reg(ep->worker->context,
-                                       &req->send.state.dt_iter,
-                                       md_map, uct_reg_flags, dt_mask);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucp_trace_req(req, "registered md_map 0x%"PRIx64"/0x%"PRIx64,
-                  req->send.state.dt_iter.type.contig.memh->md_map, md_map);
-    return UCS_OK;
+    return ucp_datatype_iter_mem_reg(ep->worker->context,
+                                     &req->send.state.dt_iter,
+                                     md_map, uct_reg_flags, dt_mask);
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_zcopy_clean(ucp_request_t *req, unsigned dt_mask)
 {
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter, dt_mask);
+                                &req->send.state.dt_iter, dt_mask,
+                                req->flags & UCP_REQUEST_FLAG_USER_MEMH);
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 }
 
@@ -241,6 +234,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_proto_request_send_op_common(
 {
     ucs_string_buffer_t strb;
     ucs_status_t status;
+
+    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) {
+        req->flags |= UCP_REQUEST_FLAG_USER_MEMH;
+    }
 
     status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
                               proto_select, rkey_cfg_index, select_param,

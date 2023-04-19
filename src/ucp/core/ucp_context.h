@@ -317,6 +317,8 @@ typedef struct ucp_context {
     /* Hash of rcaches which contain imported memory handles got from peers */
     ucp_context_imported_mem_hash_t *imported_mem_hash;
 
+    ucp_mem_h                     zero_mem;
+
     struct {
 
         /* Bitmap of features supported by the context */

@@ -929,9 +929,6 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
                                      rndv_req->send.length,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
 
-    /* Copy user registration from receive request to rndv send request */
-    ucp_request_use_user_memh(&rndv_req->send.state.dt, rreq);
-
     rndv_req->send.lane =
         ucp_rndv_zcopy_get_lane(rndv_req, &uct_rkey,
                                 UCP_REQUEST_SEND_PROTO_RNDV_GET);
@@ -939,6 +936,8 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
         goto err;
     }
 
+    /* Copy user registration from receive request to rndv send request */
+    ucp_request_use_user_memh(&rndv_req->send.state.dt, rreq);
     UCP_WORKER_STAT_RNDV(ep->worker, GET_ZCOPY, 1);
     ucp_request_send(rndv_req);
 
@@ -1029,8 +1028,7 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
 
         freq->send.lane                    = mem_type_rma_lane;
         freq->send.ep                      = mem_type_ep;
-        freq->send.state.dt.dt.contig.memh =
-            ucp_memh_hold(mem_type_ep->worker->context, mdesc->memh);
+        freq->send.state.dt.dt.contig.memh = ucp_memh_hold(mdesc->memh);
     }
 }
 

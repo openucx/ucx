@@ -15,7 +15,7 @@
 static UCS_F_ALWAYS_INLINE int
 ucp_memh_is_zero_length(const ucp_mem_h memh)
 {
-    return memh == &ucp_mem_dummy_handle.memh;
+    return memh == memh->context->zero_mem;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -30,6 +30,36 @@ ucp_memh_rcache_print(ucp_mem_h memh, void *address, size_t length)
               memh->md_map);
 }
 
+static UCS_F_ALWAYS_INLINE ucp_mem_h ucp_memh_hold(ucp_mem_h memh)
+{
+    if (UCS_ENABLE_ASSERT) {
+        UCP_THREAD_CS_ENTER(&memh->context->mt_lock);
+        ucs_assert(memh->parent != NULL);
+        memh->super.refcount++;
+        ucs_trace("memh %p: ref %d", memh, memh->super.refcount);
+        UCP_THREAD_CS_EXIT(&memh->context->mt_lock);
+    }
+
+    return memh;
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_memh_release(ucp_mem_h memh)
+{
+    if (UCS_ENABLE_ASSERT) {
+        UCP_THREAD_CS_ENTER(&memh->context->mt_lock);
+        ucs_trace("memh %p: deref %d", memh, memh->super.refcount);
+        /* coverity[assert_side_effect] */
+        ucs_assert(--memh->super.refcount);
+        UCP_THREAD_CS_EXIT(&memh->context->mt_lock);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE ucp_mem_h
+ucp_memh_get_zero_mem(ucp_context_h context)
+{
+    return ucp_memh_hold(context->zero_mem);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_memh_get(ucp_context_h context, void *address, size_t length,
              ucs_memory_type_t mem_type, ucp_md_map_t reg_md_map,
@@ -39,10 +69,7 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
     ucp_mem_h memh;
 
     if (length == 0) {
-        ucs_assert(ucp_memh_address(&ucp_mem_dummy_handle.memh) == NULL);
-        ucs_assert(ucp_memh_length(&ucp_mem_dummy_handle.memh) == 0);
-
-        *memh_p = &ucp_mem_dummy_handle.memh;
+        *memh_p = ucp_memh_get_zero_mem(context);
         ucs_trace("memh %p: address %p, obtained dummy", *memh_p, address);
         return UCS_OK;
     }
@@ -73,72 +100,25 @@ not_found:
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
-                    ucs_rcache_invalidate_comp_func_t cb, void *arg,
-                    ucp_md_map_t inv_md_map)
-{
-    ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64
-              " inv_md_map %" PRIx64,
-              memh, ucp_memh_address(memh), ucp_memh_length(memh),
-              memh->md_map, inv_md_map);
-
-    if (ucs_unlikely(ucp_memh_is_zero_length(memh))) {
-        return;
-    }
-
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-    memh->inv_md_map |= inv_md_map;
-
-    /* User memory handle, or rcache was disabled */
-    if (ucs_unlikely(memh->parent != NULL)) {
-        if (--memh->super.refcount) {
-            goto out;
-        }
-
-        UCP_THREAD_CS_EXIT(&context->mt_lock);
-        ucp_memh_cleanup(context, memh);
-        ucs_free(memh);
-
-        if (cb != NULL) {
-            cb(arg);
-        }
-
-        return;
-    }
-
-    if (cb != NULL) {
-        ucs_rcache_region_invalidate(context->rcache, &memh->super, cb, arg);
-    }
-
-    ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
-out:
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
-}
-
-static UCS_F_ALWAYS_INLINE void
 ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
 {
-    ucs_rcache_t *rcache;
-    khiter_t iter;
+    ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64,
+              memh, ucp_memh_address(memh), ucp_memh_length(memh),
+              memh->md_map);
 
-    if (memh->flags & UCP_MEMH_FLAG_IMPORTED) {
-        UCP_THREAD_CS_ENTER(&context->mt_lock);
-        iter = kh_get(ucp_context_imported_mem_hash,
-                      context->imported_mem_hash, memh->remote_uuid);
-        ucs_assert(iter != kh_end(context->imported_mem_hash));
-
-        rcache = kh_value(context->imported_mem_hash, iter);
-        ucs_assert(rcache != NULL);
-        ucs_rcache_region_put_unsafe(rcache, &memh->super);
-        UCP_THREAD_CS_EXIT(&context->mt_lock);
-    } else {
-        ucp_memh_invalidate(context, memh, NULL, NULL, 0);
+    if (memh->parent != NULL) {
+        ucp_memh_release(memh);
+        return;
     }
-}
 
-static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)
-{
-    return (memh->parent != NULL) && (memh->parent != memh);
+    if (context->rcache != NULL) {
+        UCP_THREAD_CS_ENTER(&context->mt_lock);
+        ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
+        UCP_THREAD_CS_EXIT(&context->mt_lock);
+        return;
+    }
+
+    ucp_memh_put_slow(context, memh);
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_buffer_in_range(const ucp_mem_h memh,
@@ -214,17 +194,6 @@ ucp_memh_update(ucp_context_h context, void *address, size_t length,
     status = ucp_memh_register(context, *memh_p, md_map, uct_flags);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
-}
-
-
-static UCS_F_ALWAYS_INLINE ucp_mem_h ucp_memh_hold(ucp_context_h context,
-                                                   ucp_mem_h memh)
-{
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-    ucs_assert((memh->parent != NULL) || ucp_memh_is_zero_length(memh));
-    memh->super.refcount++;
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
-    return memh;
 }
 
 #endif

@@ -538,7 +538,7 @@ void test_ucp_mmap::test_rereg_local_mem(ucp_mem_h memh, void *ptr,
 
         if (size == 0) {
             EXPECT_EQ(memh, test_memh);
-            EXPECT_EQ(&ucp_mem_dummy_handle.memh, test_memh);
+            EXPECT_EQ(memh->parent, test_memh);
         } else if (get_variant_value() == VARIANT_NO_RCACHE) {
             EXPECT_NE(test_memh->reg_id, memh->reg_id);
             compare_uct_memhs(test_memh, memh, false);
@@ -626,7 +626,7 @@ void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
 
     if (size == 0) {
         EXPECT_EQ(memh, test_imp_memh);
-        EXPECT_EQ(&ucp_mem_dummy_handle.memh, test_imp_memh);
+        EXPECT_EQ(memh->parent, test_imp_memh);
     } else if (get_variant_value() == VARIANT_NO_RCACHE) {
         EXPECT_EQ(test_imp_memh->reg_id, memh->reg_id);
         compare_uct_memhs(test_imp_memh, imp_memh, false);

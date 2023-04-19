@@ -41,6 +41,7 @@ ucp_datatype_iter_iov_check_memh_mds(const ucp_context_h context,
     size_t iov_index, length;
 
     ucp_datatype_iter_iov_for_each(iov_index, length, dt_iter) {
+        ucp_memh_hold(dt_iter->type.iov.memh[iov_index]);
         ucs_assertv(ucs_test_all_flags(
                             dt_iter->type.iov.memh[iov_index]->md_map, md_map),
                     "md_map mismatch: memh: %lu, required: %lu",
@@ -78,7 +79,7 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
     ucs_status_t status;
     size_t iov_index;
 
-    if (md_map == 0) {
+    if (UCS_ENABLE_ASSERT ? (iov_count == 0) : (md_map == 0)) {
         return UCS_OK;
     }
 
@@ -102,7 +103,7 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
                               dt_iter->mem_info.type, md_map, uct_flags,
                               &dt_iter->type.iov.memh[iov_index]);
         if (status != UCS_OK) {
-            ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
+            ucp_datatype_iter_iov_mem_dereg(context, dt_iter, 0);
             return status;
         }
     }
@@ -111,17 +112,22 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
 }
 
 void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
-                                     ucp_datatype_iter_t *dt_iter)
+                                     ucp_datatype_iter_t *dt_iter,
+                                     int reuse)
 {
     ucp_mem_h *memh = dt_iter->type.iov.memh;
     size_t iov_index, length;
 
-    if ((memh == NULL) || ucp_memh_is_user_memh(*memh)) {
+    if (memh == NULL) {
         return;
     }
 
     ucp_datatype_iter_iov_for_each(iov_index, length, dt_iter) {
-        ucp_datatype_memh_dereg(context, memh + iov_index);
+        ucp_memh_put(context, memh[iov_index]);
+    }
+
+    if (reuse) {
+        return;
     }
 
     ucs_free(memh);

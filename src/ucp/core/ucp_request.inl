@@ -602,7 +602,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_send_request_set_user_memh(ucp_request_t *req, ucp_md_map_t md_map,
                                const ucp_request_param_t *param)
 {
-    ucp_context_h context = req->send.ep->worker->context;
     ucs_status_t status;
 
     if (!ucp_request_is_user_memh_valid(req, param, req->send.buffer,
@@ -613,9 +612,10 @@ ucp_send_request_set_user_memh(ucp_request_t *req, ucp_md_map_t md_map,
     }
 
     /* req->send.state.dt should not be used with protov2 */
-    ucs_assert(!context->config.ext.proto_enable);
+    ucs_assert(!req->send.ep->worker->context->config.ext.proto_enable);
 
-    req->send.state.dt.dt.contig.memh = ucp_memh_hold(context, param->memh);
+    req->flags                       |= UCP_REQUEST_FLAG_USER_MEMH;
+    req->send.state.dt.dt.contig.memh = ucp_memh_hold(param->memh);
     return UCS_OK;
 }
 
@@ -645,8 +645,7 @@ ucp_request_use_user_memh(ucp_dt_state_t *state, ucp_request_t *rreq)
         return;
     }
 
-    state->dt.contig.memh = ucp_memh_hold(rreq->recv.worker->context,
-                                          rreq->recv.user_memh);
+    state->dt.contig.memh = ucp_memh_hold(rreq->recv.user_memh);
     ucs_assert(!rreq->recv.worker->context->config.ext.proto_enable);
     ucs_assert(UCP_DT_IS_CONTIG(rreq->recv.datatype));
 }

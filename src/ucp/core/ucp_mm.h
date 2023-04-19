@@ -56,9 +56,7 @@ typedef struct ucp_mem {
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
     ucp_md_map_t        inv_md_map;     /* Which memory handles should be invalidated
                                            when this handle is released */
-    ucp_mem_h           parent;         /* - NULL if entry should be returned to rcache
-                                           - pointer to self if rcache disabled
-                                           - pointer to rcache memh if entry is a user memh */
+    ucp_mem_h           parent;         /* pointer to rcache memh if entry is a user memh */
     uint64_t            reg_id;         /* Registration ID */
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
@@ -90,15 +88,6 @@ typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h        worker;
     ucs_memory_type_t   mem_type;
 } ucp_rndv_mpool_priv_t;
-
-
-typedef struct {
-    ucp_mem_t memh;
-    uct_mem_h uct[UCP_MAX_MDS];
-} ucp_mem_dummy_handle_t;
-
-
-extern ucp_mem_dummy_handle_t ucp_mem_dummy_handle;
 
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
@@ -155,6 +144,11 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
                                 ucp_md_map_t *md_map,
                                 uct_rkey_bundle_t *rkey_bundle);
 
+ucs_status_t
+ucp_memh_create(ucp_context_h context, void *address, size_t length,
+                ucs_memory_type_t mem_type, uct_alloc_method_t method,
+                ucp_mem_h *memh_p);
+
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                size_t length, ucs_memory_type_t mem_type,
                                ucp_md_map_t reg_md_map, unsigned uct_flags,
@@ -163,9 +157,11 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
 ucs_status_t ucp_memh_register_slow(ucp_context_h context, ucp_mem_h memh,
                                     ucp_md_map_t md_map, unsigned uct_flags);
 
-void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh);
+void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
+                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
+                         ucp_md_map_t inv_md_map);
 
-void ucp_memh_unmap(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map);
+void ucp_memh_put_slow(ucp_context_h context, ucp_mem_h memh);
 
 ucs_status_t ucp_mem_rcache_init(ucp_context_h context);
 
@@ -178,7 +174,7 @@ void ucp_mem_rcache_cleanup(ucp_context_h context);
  *                      the memory allocation.
  * @param [out] md_idx  Index of the memory domain that is used to allocate host
  *                      memory.
- * 
+ *
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t

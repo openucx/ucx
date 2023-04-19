@@ -2182,6 +2182,16 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         context->rcache = NULL;
     }
 
+    status = ucp_memh_create(context, NULL, 0, UCS_MEMORY_TYPE_HOST,
+                             UCT_ALLOC_METHOD_LAST, &context->zero_mem);
+    if (status != UCS_OK) {
+        goto err_free_rcache;
+    }
+
+    /* A zero-length memory handle is singleton user memh, so it must have
+     * a non-zero parent */
+    context->zero_mem->parent = context->zero_mem;
+
     if (dfl_config != NULL) {
         ucp_config_release(dfl_config);
     }
@@ -2196,6 +2206,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     *context_p = context;
     return UCS_OK;
 
+err_free_rcache:
+    ucp_mem_rcache_cleanup(context);
 err_free_res:
     ucp_free_resources(context);
 err_thread_lock_finalize:
@@ -2214,6 +2226,8 @@ err:
 void ucp_cleanup(ucp_context_h context)
 {
     ucs_vfs_obj_remove(context);
+    ucs_assert(context->zero_mem->super.refcount == 1);
+    ucs_free(context->zero_mem);
     ucp_mem_rcache_cleanup(context);
     ucp_free_resources(context);
     ucp_free_config(context);

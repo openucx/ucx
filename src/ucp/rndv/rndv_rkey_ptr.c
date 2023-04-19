@@ -300,6 +300,11 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     req->send.rndv.rkey_buffer = NULL;
 
+    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        ucp_datatype_iter_unset_memh(&req->send.state.dt_iter);
+        req->flags &= ~UCP_REQUEST_FLAG_USER_MEMH;
+    }
+
     ppln_data = ucp_ep_peer_mem_get(context, req->send.ep, remote_address,
                                     req->send.state.dt_iter.length,
                                     rkey_buffer, local_mem_type,
