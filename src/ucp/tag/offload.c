@@ -28,7 +28,6 @@ void ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     if (worker->tm.offload.iface == NULL) {
         ucs_assert(worker->tm.offload.thresh       == SIZE_MAX);
         ucs_assert(worker->tm.offload.zcopy_thresh == SIZE_MAX);
-        ucs_assert(worker->tm.offload.iface        == NULL);
 
         worker->tm.offload.thresh       = ucs_max(context->config.ext.tm_thresh,
                                                   iface->attr.cap.tag.recv.min_recv);
