@@ -100,7 +100,7 @@ function az_init_modules() {
     . /etc/profile.d/modules.sh
     export MODULEPATH="/hpc/local/etc/modulefiles:$MODULEPATH"
     # Read module files (W/A if there're some network instabilities lead to autofs issues)
-    find /hpc/local/etc/modulefiles > /dev/null || true
+    find /hpc/local/etc/modulefiles || true
 }
 
 #
@@ -122,6 +122,8 @@ function az_module_load() {
             # Give up trying
             echo "MODULEPATH='${MODULEPATH}'"
             module avail || true
+            ls -l /hpc/local/etc/modulefiles/
+            ls -l /hpc/local/etc/modulefiles/"$module"
             azure_log_warning "Module $module cannot be loaded"
             return 1
         fi
