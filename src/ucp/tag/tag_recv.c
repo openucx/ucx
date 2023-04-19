@@ -150,8 +150,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     }
 
     if (ucs_unlikely(rdesc == NULL)) {
-        /* If not found on unexpected, wait until it arrives.
-         * If was found but need this receive request for later completion, save it */
+        /* Not found on unexpected, wait until it arrives. */
         req_queue = ucp_tag_exp_get_queue(&worker->tm, tag, tag_mask);
 
         /* If offload supported, post this tag to transport as well.
