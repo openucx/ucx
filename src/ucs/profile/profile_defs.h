@@ -183,11 +183,11 @@ void ucs_profile_record(ucs_profile_context_t *ctx, ucs_profile_type_t type,
  * @param _param32  Custom 32-bit parameter.
  * @param _param64  Custom 64-bit parameter.
  */
-#define UCS_PROFILE_CTX_RECORD_ALWAYS(_ctx, _type, _name, _param64, _param32) \
+#define UCS_PROFILE_CTX_RECORD_ALWAYS(_ctx, _type, _name, _param32, _param64) \
     { \
         static ucs_profile_loc_id_t loc_id = UCS_PROFILE_LOC_ID_UNKNOWN; \
         if (loc_id != UCS_PROFILE_LOC_ID_DISABLED) { \
-            ucs_profile_record(_ctx, _type, _name, _param64, _param32, \
+            ucs_profile_record(_ctx, _type, _name, _param32, _param64, \
                                __FILE__, __LINE__, __FUNCTION__, &loc_id); \
         } \
     }
