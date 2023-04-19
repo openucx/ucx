@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -38,5 +38,6 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                      const size_t length,
                                      uct_md_mem_attr_t *mem_attr_p);
 ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *type);
+int uct_rocm_base_is_dmabuf_supported();
 
 #endif
