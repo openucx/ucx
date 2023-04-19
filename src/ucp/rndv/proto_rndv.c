@@ -402,7 +402,7 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
+        .super.overhead      = 350e-9,
         .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
         .super.cfg_priority  = 60,
         .super.min_length    = 0,
@@ -589,7 +589,8 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
 
     /* Add ack latency */
     status = ucp_proto_rndv_ack_init(&init_params->super.super, ack_name,
-                                     &multi_caps, UCS_LINEAR_FUNC_ZERO,
+                                     &multi_caps,
+                                     ucs_linear_func_make(150e-9, 0),
                                      &rpriv->super);
 
     ucp_proto_select_caps_cleanup(&multi_caps);
