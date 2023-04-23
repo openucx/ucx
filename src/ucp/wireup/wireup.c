@@ -307,7 +307,7 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
 {
     const ucp_address_entry_t *address;
     unsigned address_index;
-    ucp_lane_index_t lane, remote_lane;
+    ucp_lane_index_t lane, remote_lane, num_lanes;
     unsigned *ep_addr_indexes;
     unsigned ep_addr_index;
     uint64_t used_remote_lanes;
@@ -326,7 +326,8 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
     }
 
     used_remote_lanes = 0;
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+    num_lanes         = ucp_ep_num_lanes(ep);
+    for (lane = 0; lane < num_lanes; ++lane) {
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
             continue;
         }
@@ -338,7 +339,9 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         address            = &remote_address->address_list[address_index];
         ep_addr_index      = ep_addr_indexes[address_index]++;
         ucs_assertv(ep_addr_index < address->num_ep_addrs,
+                    "lane=%d/%d tl_name_csum=0x%02x address_index=%u "
                     "ep_addr_index=%u num_ep_addrs=%u",
+                    lane, num_lanes, address->tl_name_csum, address_index,
                     ep_addr_index, address->num_ep_addrs);
         remote_lane        = address->ep_addrs[ep_addr_index].lane;
         lanes2remote[lane] = remote_lane;
