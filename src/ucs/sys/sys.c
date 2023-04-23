@@ -255,7 +255,9 @@ static long ucs_sysconf(int name)
     errno = 0;
 
     rc = sysconf(name);
-    ucs_assert_always(errno == 0);
+    if (rc == -1) {
+        ucs_assert_always(errno == 0);
+    }
 
     return rc;
 }
