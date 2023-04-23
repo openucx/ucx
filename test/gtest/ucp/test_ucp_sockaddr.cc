@@ -177,6 +177,7 @@ public:
     }
 
     void get_sockaddr() {
+        std::set<std::pair<sa_family_t, std::string>> added;
         std::vector<ucs::sock_addr_storage> saddrs;
         struct ifaddrs* ifaddrs;
         ucs_status_t status;
@@ -187,6 +188,12 @@ public:
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
             if (!ucs::is_interface_usable(ifa) || is_skip_interface(ifa)) {
                 continue;
+            }
+
+            sa_family_t family = ifa->ifa_addr->sa_family;
+            const char *name   = ifa->ifa_name;
+            if (!added.insert({family, name}).second) {
+                continue; // we already have an address for that interface
             }
 
             saddrs.push_back(ucs::sock_addr_storage());
