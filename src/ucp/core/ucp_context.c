@@ -1247,8 +1247,6 @@ static void ucp_free_resources(ucp_context_t *context)
 
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 {
-     /* if we got here then num_resources > 0.
-      * if the user's device list is empty, there is no match */
      if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
          (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
          (0 == config->devices[UCT_DEVICE_TYPE_ACC].count) &&
@@ -1258,8 +1256,6 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
          return UCS_ERR_NO_ELEM;
      }
 
-     /* if we got here then num_resources > 0.
-      * if the user's tls list is empty, there is no match */
      if ((0 == config->tls.array.count) &&
          (config->tls.mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL)) {
          ucs_error("The TLs list is empty. Please specify the transports you "
