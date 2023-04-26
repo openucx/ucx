@@ -33,11 +33,6 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of CUDA streams to make concurrent progress on",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, max_streams), UCS_CONFIG_TYPE_UINT},
 
-    {"CACHE", "y",
-     "Enable remote endpoint IPC memhandle mapping cache",
-     ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_cache),
-     UCS_CONFIG_TYPE_BOOL},
-
     {"ENABLE_GET_ZCOPY", "auto",
      "Enable get operations except for platforms known to have slower performance",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_get_zcopy),
@@ -252,6 +247,7 @@ uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
+                              uct_cuda_ipc_md_t *md,
                               ucs_queue_head_t *event_q)
 {
     unsigned count = 0;
@@ -273,10 +269,9 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
             uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
 
-        status = uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid,
-                                              cuda_ipc_event->d_bptr,
+        status = uct_cuda_ipc_unmap_memhandle(md, &cuda_ipc_event->key,
                                               cuda_ipc_event->mapped_addr,
-                                              iface->config.enable_cache);
+                                              cuda_ipc_event->cuda_ipc_region);
         if (status != UCS_OK) {
             ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
         }
@@ -296,19 +291,23 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
 
 static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
 {
-    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_iface_t *iface  = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_base_iface_t *base_iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_cuda_ipc_md_t *md        = ucs_derived_of(base_iface->md, uct_cuda_ipc_md_t);
 
-    return uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q);
+    return uct_cuda_ipc_progress_event_q(iface, md, &iface->outstanding_d2d_event_q);
 }
 
 static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
                                                     unsigned events)
 {
-    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_iface_t *iface  = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_base_iface_t *base_iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_cuda_ipc_md_t *md        = ucs_derived_of(base_iface->md, uct_cuda_ipc_md_t);
     int i;
     ucs_status_t status;
 
-    if (uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q)) {
+    if (uct_cuda_ipc_progress_event_q(iface, md, &iface->outstanding_d2d_event_q)) {
         return UCS_ERR_BUSY;
     }
 
@@ -497,7 +496,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 
     self->config.max_poll            = config->max_poll;
     self->config.max_streams         = config->max_streams;
-    self->config.enable_cache        = config->enable_cache;
     self->config.enable_get_zcopy    = config->enable_get_zcopy;
     self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
     self->config.bandwidth           = UCS_CONFIG_DBL_IS_AUTO(config->bandwidth) ?
