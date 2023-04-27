@@ -19,7 +19,8 @@
 static void print_memory_type_usage(void)
 {
     ucs_memory_type_t it;
-    for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
+
+    ucs_memory_type_for_each(it) {
         if (ucx_perf_mem_type_allocators[it] != NULL) {
             printf("                        %s - %s\n",
                    ucs_memory_type_names[it],
@@ -152,7 +153,7 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
+    ucs_memory_type_for_each(it) {
         if(!strcmp(opt_arg, ucs_memory_type_names[it]) &&
            (ucx_perf_mem_type_allocators[it] != NULL)) {
             *mem_type = it;
