@@ -1031,7 +1031,7 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
 }
 
 static void ucp_add_tl_resource_if_enabled(
-        ucp_context_h context, ucp_tl_md_t *md, ucp_md_index_t md_index,
+        ucp_context_h context, ucp_md_index_t md_index,
         const ucp_config_t *config, const ucs_string_set_t *aux_tls,
         const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
         uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
@@ -1122,7 +1122,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                             "'%s'(%s)", tl_resources[i].dev_name,
                             context->tl_cmpts[md->cmpt_index].attr.name);
         ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
-        ucp_add_tl_resource_if_enabled(context, md, md_index, config, aux_tls,
+        ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
                                        &tl_resources[i], num_resources_p,
                                        dev_cfg_masks, tl_cfg_mask);
     }
