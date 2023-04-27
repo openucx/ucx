@@ -1127,7 +1127,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     tl_bitmap = ucp_tl_bitmap_max;
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+    ucs_memory_type_for_each(mem_type) {
         status = ucp_wireup_add_memaccess_lanes(select_params, &criteria,
                                                 mem_type, tl_bitmap,
                                                 UCP_LANE_TYPE_RMA, select_ctx);
@@ -1778,7 +1778,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         added_lanes = 0;
         UCS_BITMAP_CLEAR(&tl_bitmap);
 
-        for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+        ucs_memory_type_for_each(mem_type) {
             UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, reg_mem_types,
                                     mem_type_tl_bitmap);
 
