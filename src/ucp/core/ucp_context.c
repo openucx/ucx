@@ -1092,12 +1092,12 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     status = uct_md_query_tl_resources(md->md, &tl_resources, &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
-        goto err;
+        goto out;
     }
 
     if (num_tl_resources == 0) {
         ucs_debug("No tl resources found for md %s", md->rsc.md_name);
-        goto out_free_resources;
+        goto free_resources;
     }
 
     tmp = ucs_realloc(context->tl_rscs,
@@ -1107,7 +1107,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     if (tmp == NULL) {
         ucs_error("Failed to allocate resources");
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_resources;
+        goto free_resources;
     }
 
     /* print configuration */
@@ -1127,13 +1127,10 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                                        dev_cfg_masks, tl_cfg_mask);
     }
 
-out_free_resources:
+    status = UCS_OK;
+free_resources:
     uct_release_tl_resource_list(tl_resources);
-    return UCS_OK;
-
-err_free_resources:
-    uct_release_tl_resource_list(tl_resources);
-err:
+out:
     return status;
 }
 
