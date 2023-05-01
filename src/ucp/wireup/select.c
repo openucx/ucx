@@ -2144,9 +2144,8 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
         }
 
         ucp_unpacked_address_for_each(ae, select_params->address) {
-            if ((wiface->attr.device_addr_len != ae->dev_addr_len) ||
-                (worker->context->tl_rscs[rsc_index].tl_name_csum !=
-                 ae->tl_name_csum)) {
+            if (worker->context->tl_rscs[rsc_index].tl_name_csum !=
+                ae->tl_name_csum) {
                 continue;
             }
 

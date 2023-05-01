@@ -607,7 +607,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
             .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate         = uct_ud_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_ud_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,
