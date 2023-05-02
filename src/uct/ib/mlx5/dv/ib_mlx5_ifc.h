@@ -519,7 +519,7 @@ struct uct_ib_mlx5_odp_per_transport_service_cap_bits {
     uint8_t         reserved_at_6[0x1a];
 };
 
-struct uct_ib_mlx5_odp_cap_bits {
+struct uct_ib_mlx5_odp_scheme_cap_bits {
     uint8_t         reserved_at_0[0x40];
 
     uint8_t         sig[0x1];
@@ -537,7 +537,20 @@ struct uct_ib_mlx5_odp_cap_bits {
 
     struct uct_ib_mlx5_odp_per_transport_service_cap_bits dc_odp_caps;
 
-    uint8_t         reserved_at_120[0x700];
+    uint8_t         reserved_at_120[0xe0];
+};
+
+struct uct_ib_mlx5_odp_cap_bits {
+    struct uct_ib_mlx5_odp_scheme_cap_bits transport_page_fault_scheme_cap;
+
+    struct uct_ib_mlx5_odp_scheme_cap_bits memory_page_fault_scheme_cap;
+
+    uint8_t         reserved_at_400[0x200];
+
+    uint8_t         mem_page_fault[0x1];
+    uint8_t         reserved_at_601[0x1f];
+
+    uint8_t         reserved_at_620[0x1e0];
 };
 
 union uct_ib_mlx5_hca_cap_union_bits {
