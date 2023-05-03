@@ -314,18 +314,18 @@ uct_rdmacm_cm_get_peer_dev_ctx(uct_rdmacm_cm_device_context_t *ctx,
     uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx;
     ucs_status_t status;
     khiter_t iter;
-    int ret;
+    ucs_kh_put_t ret;
 
     iter = kh_put(uct_rdmacm_cm_peer_dev_ctxs, &ctx->peer_dev_ctxs,
                   uct_rdmacm_cm_route_get_peer_interface_id(route), &ret);
-    if (ret == -1) {
+    if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("ctx %p: cannot allocate hash entry for peer device context",
                   ctx);
         status = UCS_ERR_NO_MEMORY;
         goto out;
     }
 
-    if (ret == 0) {
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
         /* already exists so use it */
         peer_dev_ctx = kh_value(&ctx->peer_dev_ctxs, iter);
     } else {
