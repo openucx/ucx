@@ -263,7 +263,7 @@ uct_rdmacm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
                                      uct_rdmacm_cm_device_context_t *ctx)
 {
     uint32_t qpns_per_obj                      =
-        UCS_BIT(ctx->log_reserved_qpn_granularity);
+            UCS_BIT(ctx->log_reserved_qpn_granularity);
     uct_rdmacm_cm_peer_dev_ctx_t *peer_dev_ctx = NULL;
     uct_rdmacm_cm_reserved_qpn_blk_t *blk;
     ucs_status_t status;
@@ -290,6 +290,7 @@ uct_rdmacm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
             if (peer_dev_ctx->ref_qpn_blk->entry.next == &ctx->blk_list) {
                 RDMACM_CM_RESERVE_QPN_BLK(ctx, cep, status, blk, { goto out; });
             }
+
             blk                                 = ucs_list_next(&peer_dev_ctx->ref_qpn_blk->entry,
                                                                 uct_rdmacm_cm_reserved_qpn_blk_t, entry);
             peer_dev_ctx->ref_qpn_blk           = blk;
