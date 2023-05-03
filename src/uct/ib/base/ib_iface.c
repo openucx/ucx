@@ -486,9 +486,7 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
     } else {
         /* Default prefix */
         params.gid.global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX;
-        params.gid.global.interface_id  = 0;
-        params.flags                   |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
-                                          UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
+        params.flags                   |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
 
         /* If the link layer is not ETHERNET, then it is IB and a lid
          * must be present */
@@ -497,6 +495,7 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
         if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
             params.gid.global.interface_id =
                     *ucs_serialize_next(&ptr, const uint64_t);
+            params.flags |= UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
         }
 
         if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
@@ -665,6 +664,49 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
               inet_ntop(remote_ib_addr_af, remote_addr, remote_str, 128));
 
     return ret;
+}
+
+static int uct_ib_iface_is_same_device(uct_ib_iface_t *iface,
+                                       const uct_ib_address_t *ib_addr)
+{
+    const union ibv_gid *gid = &iface->gid_info.gid;
+    uct_ib_address_pack_params_t params;
+
+    uct_ib_address_unpack(ib_addr, &params);
+
+    if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
+        return !memcmp(gid->raw, params.gid.raw, sizeof(params.gid.raw));
+    }
+
+    if (uct_ib_iface_port_attr(iface)->lid != params.lid) {
+        return 0;
+    }
+
+    if ((params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) &&
+        (params.gid.global.interface_id != gid->global.interface_id)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                 const uct_iface_is_reachable_params_t *params)
+{
+    uct_ib_iface_t *iface           = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    const uct_ib_address_t *ib_addr = (const void*)params->device_addr;
+    uct_iface_reachability_scope_t scope;
+
+    if (!uct_ib_iface_is_reachable(tl_iface, params->device_addr,
+                                   params->iface_addr)) {
+        return 0;
+    }
+
+    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
+                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
+
+    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
+           uct_ib_iface_is_same_device(iface, ib_addr);
 }
 
 int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
