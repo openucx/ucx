@@ -12,7 +12,7 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     displayName: ${{ parameters.name }} on worker
-    timeoutInMinutes: 360
+    timeoutInMinutes: 480
     strategy:
       matrix:
         ${{ each wid in parameters.worker_ids }}:
