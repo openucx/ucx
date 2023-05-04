@@ -131,6 +131,7 @@ void ucp_proto_default_query(const ucp_proto_query_params_t *params,
 
     attr->max_msg_length = SIZE_MAX;
     attr->is_estimation  = 0;
+    attr->lane_map       = 0;
     ucs_strncpy_safe(attr->desc, params->proto->desc, sizeof(attr->desc));
     ucs_strncpy_safe(attr->config, "", sizeof(attr->config));
 }

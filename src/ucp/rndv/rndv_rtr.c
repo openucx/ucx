@@ -236,6 +236,7 @@ static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
     ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
                                 params->msg_length, attr);
     attr->is_estimation = 1;
+    attr->lane_map      = UCS_BIT(rpriv->lane);
 }
 
 static void ucp_proto_rndv_rtr_abort(ucp_request_t *req, ucs_status_t status)
@@ -432,6 +433,7 @@ ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
 
     attr->is_estimation  = 1;
     attr->max_msg_length = remote_attr.max_msg_length;
+    attr->lane_map       = UCS_BIT(rpriv->lane);
     ucp_proto_rndv_mtype_query_desc(params, attr, remote_attr.desc);
     ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
 }

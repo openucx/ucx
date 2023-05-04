@@ -95,13 +95,24 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
 }
 
 static void
+ucp_rndv_rkey_ptr_query_common(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_rkey_ptr_priv_t *rpriv = params->priv;
+
+    ucp_proto_default_query(params, attr);
+    attr->lane_map = UCS_BIT(rpriv->spriv.super.lane) |
+                     UCS_BIT(rpriv->ack.lane);
+}
+
+static void
 ucp_proto_rndv_rkey_ptr_query(const ucp_proto_query_params_t *params,
                               ucp_proto_query_attr_t *attr)
 {
     UCS_STRING_BUFFER_FIXED(config_strb, attr->config, sizeof(attr->config));
     const ucp_proto_rndv_rkey_ptr_priv_t *rpriv = params->priv;
 
-    ucp_proto_default_query(params, attr);
+    ucp_rndv_rkey_ptr_query_common(params, attr);
     ucp_proto_common_lane_priv_str(params, &rpriv->spriv.super, 1, 0,
                                    &config_strb);
 }
@@ -340,7 +351,7 @@ ucp_proto_rndv_rkey_ptr_mtype_query(const ucp_proto_query_params_t *params,
 {
     const char *desc = UCP_PROTO_RNDV_RKEY_PTR_DESC;
 
-    ucp_proto_default_query(params, attr);
+    ucp_rndv_rkey_ptr_query_common(params, attr);
     ucp_proto_rndv_mtype_query_desc(params, attr, desc);
 }
 
