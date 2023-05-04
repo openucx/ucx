@@ -413,7 +413,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_context_config_t, rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
 
-  {"SA_DATA_VERSION", "v1",
+  {"SA_DATA_VERSION", "v2",
    "Defines the minimal header version the client will use for establishing\n"
    "client/server connection",
    ucs_offsetof(ucp_context_config_t, sa_client_min_hdr_version),
@@ -425,7 +425,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "dynamically allocated memory.",
    ucs_offsetof(ucp_context_config_t, rkey_mpool_max_md), UCS_CONFIG_TYPE_INT},
 
-  {"ADDRESS_VERSION", "v1",
+  {"ADDRESS_VERSION", "v2",
    "Defines UCP worker address format obtained with ucp_worker_get_address() or\n"
    "ucp_worker_query() routines.",
    ucs_offsetof(ucp_context_config_t, worker_addr_version),
