@@ -17,6 +17,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <ucs/memory/rcache.h>
+#include <ucs/memory/rcache_int.h>
 #include <ucs/datastruct/khash.h>
 
 
@@ -39,7 +40,7 @@ uct_cuda_ipc_cache_hash_func(uct_cuda_ipc_cache_hash_key_t key)
 }
 
 KHASH_INIT(cuda_ipc_rem_cache, uct_cuda_ipc_cache_hash_key_t,
-           uct_cuda_ipc_cache_t*, 1, uct_cuda_ipc_cache_hash_func,
+           ucs_rcache_t*, 1, uct_cuda_ipc_cache_hash_func,
            uct_cuda_ipc_cache_hash_equal);
 
 typedef struct uct_cuda_ipc_remote_cache {
@@ -48,10 +49,6 @@ typedef struct uct_cuda_ipc_remote_cache {
 } uct_cuda_ipc_remote_cache_t;
 
 uct_cuda_ipc_remote_cache_t uct_cuda_ipc_remote_cache;
-
-static void uct_cuda_ipc_rcache_region_invalidate_cb(void *arg)
-{
-}
 
 ucs_status_t uct_cuda_ipc_check_rcache(ucs_rcache_t *rcache,
                                        uct_cuda_ipc_key_t *key,
@@ -73,35 +70,36 @@ ucs_status_t uct_cuda_ipc_check_rcache(ucs_rcache_t *rcache,
 
     *region_p = ucs_derived_of(rcache_region, uct_cuda_ipc_rcache_region_t);
 
-    if (memcmp((const void *)&key->ph, (const void *)&((*region_p)->ipc_handle),
+    if (!memcmp((const void *)&key->ph, (const void *)&((*region_p)->ipc_handle),
                 sizeof(key->ph))) {
-        /* VA recycling */
-        ucs_trace("VA recycling ocurred, removing region %p...%p",
-                  (void*)start, (void*)end);
-
-        /* first decrease previous refcount on stale region */
-        ucs_rcache_region_put(rcache, rcache_region);
-
-        ucs_rcache_region_invalidate(rcache, rcache_region,
-                                     uct_cuda_ipc_rcache_region_invalidate_cb,
-                                     NULL);
-
-        status = ucs_rcache_get(rcache, (void*)start, end - start,
-                                PROT_READ|PROT_WRITE, (void*)key,
-                                &rcache_region);
-        if (status != UCS_OK) {
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        *region_p = ucs_derived_of(rcache_region, uct_cuda_ipc_rcache_region_t);
+        return UCS_OK;
     }
+
+    /* VA recycling */
+    ucs_trace("VA recycling ocurred, removing region %p...%p", (void*)start,
+              (void*)end);
+
+    /* first decrease previous refcount on stale region */
+    ucs_rcache_region_put(rcache, rcache_region);
+
+    ucs_rcache_region_invalidate(rcache, rcache_region, ucs_empty_function,
+                                 NULL);
+
+    status = ucs_rcache_get(rcache, (void*)start, end - start,
+                            PROT_READ|PROT_WRITE, (void*)key,
+                            &rcache_region);
+    if (status != UCS_OK) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *region_p = ucs_derived_of(rcache_region, uct_cuda_ipc_rcache_region_t);
 
     return UCS_OK;
 }
 
 static ucs_status_t
 uct_cuda_ipc_get_remote_cache(uct_cuda_ipc_md_t *md,
-                              pid_t pid, uct_cuda_ipc_cache_t **cache)
+                              pid_t pid, ucs_rcache_t **cache)
 {
     ucs_status_t status = UCS_OK;
     char target_name[64];
@@ -143,16 +141,7 @@ err_unlock:
 void uct_cuda_ipc_close_memhandle(void *mapped_addr,
                                   uct_cuda_ipc_rcache_region_t *cuda_ipc_region)
 {
-    CUresult cuerr;
-
-    cuerr = cuIpcCloseMemHandle((CUdeviceptr)mapped_addr);
-    if (cuerr == CUDA_SUCCESS) {
-        if (cuda_ipc_region != NULL) {
-            cuda_ipc_region->rcache           = NULL;
-            cuda_ipc_region->rem_base_address = NULL;
-            cuda_ipc_region->rem_alloc_length = 0;
-        }
-    }
+    cuIpcCloseMemHandle((CUdeviceptr)mapped_addr);
 }
 
 ucs_status_t
@@ -162,7 +151,7 @@ uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
                              uct_cuda_ipc_rcache_region_t *cuda_ipc_region)
 {
     ucs_status_t status;
-    uct_cuda_ipc_cache_t *cache;
+    ucs_rcache_t *cache;
 
     if (md->rcache_enable != UCS_NO) {
         status = uct_cuda_ipc_get_remote_cache(md, key->pid, &cache);
@@ -170,7 +159,7 @@ uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
             return status;
         }
 
-        ucs_rcache_region_put(cache->rcache, &cuda_ipc_region->super);
+        ucs_rcache_region_put(cache, &cuda_ipc_region->super);
     } else {
         uct_cuda_ipc_close_memhandle(mapped_addr, NULL);
     }
@@ -190,10 +179,7 @@ ucs_status_t uct_cuda_ipc_open_memhandle(void **mapped_addr,
                                key->ph, CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
     if ((cuerr == CUDA_SUCCESS) || (cuerr == CUDA_ERROR_ALREADY_MAPPED)) {
         if (cuda_ipc_region != NULL) {
-            cuda_ipc_region->ipc_handle       = key->ph;
-            cuda_ipc_region->rcache           = rcache;
-            cuda_ipc_region->rem_base_address = (void*)key->d_bptr;
-            cuda_ipc_region->rem_alloc_length = key->b_len;
+            cuda_ipc_region->ipc_handle = key->ph;
         }
         return UCS_OK;
     } else {
@@ -209,7 +195,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                  const uct_cuda_ipc_key_t *key, void **mapped_addr,
                  uct_cuda_ipc_rcache_region_t **region_p)
 {
-    uct_cuda_ipc_cache_t *cache;
+    ucs_rcache_t *cache;
     ucs_status_t status;
 
     if (md->rcache_enable != UCS_NO) {
@@ -218,7 +204,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
             return status;
         }
 
-        status = uct_cuda_ipc_check_rcache(cache->rcache, (uct_cuda_ipc_key_t *)key, region_p);
+        status = uct_cuda_ipc_check_rcache(cache, (uct_cuda_ipc_key_t *)key, region_p);
         if (status != UCS_OK) {
             return status;
         }
@@ -271,17 +257,17 @@ static ucs_rcache_ops_t uct_cuda_ipc_rcache_ops = {
 };
 
 
-ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md,
-                                       uct_cuda_ipc_cache_t **cache,
-                                       const char *name)
+ucs_status_t
+uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md, ucs_rcache_t **cache,
+                          const char *name)
 {
     ucs_status_t status;
-    uct_cuda_ipc_cache_t *cache_desc;
+    ucs_rcache_t *cache_desc;
     ucs_rcache_params_t rcache_params;
 
-    cache_desc = ucs_malloc(sizeof(uct_cuda_ipc_cache_t), "uct_cuda_ipc_cache_t");
+    cache_desc = ucs_malloc(sizeof(struct ucs_rcache), "ucs_rcache");
     if (cache_desc == NULL) {
-        ucs_error("failed to allocate memory for cuda_ipc cache");
+        ucs_error("failed to allocate memory for cuda_ipc rcache");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -292,24 +278,18 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md,
     rcache_params.ucm_event_priority = 0;
     rcache_params.ops                = &uct_cuda_ipc_rcache_ops;
     rcache_params.context            = NULL;
-    rcache_params.flags              = 0;//UCS_RCACHE_FLAG_NO_PFN_CHECK;
+    rcache_params.flags              = 0;
                                          /* TODO: when should PFN_CHECK be
                                           * added? Not adding this flag for now
                                           * as this results in no LRU eviction */
     rcache_params.max_regions        = md->rcache_max_regions;
     rcache_params.max_size           = md->rcache_max_size;
 
-    status = ucs_rcache_create(&rcache_params, "cuda_ipc_remote_rcache",
-                               ucs_stats_get_root(), &cache_desc->rcache);
+    status = ucs_rcache_create(&rcache_params, name,
+                               ucs_stats_get_root(), &cache_desc);
     if (status != UCS_OK) {
         ucs_error("failed to create cuda_ipc remote cache: %s",
                   ucs_status_string(status));
-        goto err;
-    }
-
-    cache_desc->name = strdup(name);
-    if (cache_desc->name == NULL) {
-        status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
@@ -321,11 +301,9 @@ err:
     return status;
 }
 
-void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache)
+void uct_cuda_ipc_destroy_cache(ucs_rcache_t *cache)
 {
-    ucs_rcache_destroy(cache->rcache);
-    free(cache->name);
-    ucs_free(cache);
+    ucs_rcache_destroy(cache);
 }
 
 UCS_STATIC_INIT {
@@ -334,7 +312,7 @@ UCS_STATIC_INIT {
 }
 
 UCS_STATIC_CLEANUP {
-    uct_cuda_ipc_cache_t *rem_cache;
+    ucs_rcache_t *rem_cache;
 
     kh_foreach_value(&uct_cuda_ipc_remote_cache.hash, rem_cache, {
         uct_cuda_ipc_destroy_cache(rem_cache);

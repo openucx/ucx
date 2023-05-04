@@ -334,14 +334,11 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     uct_cuda_ipc_md_config_t *md_cfg = ucs_derived_of(config,
                                                       uct_cuda_ipc_md_config_t);
-    ucs_rcache_params_t rcache_params;
     int num_devices;
     uct_cuda_ipc_md_t* md;
     uct_cuda_ipc_component_t* com;
 
     UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
-
-    uct_md_set_rcache_params(&rcache_params, &md_cfg->rcache);
 
     md = ucs_calloc(1, sizeof(uct_cuda_ipc_md_t), "uct_cuda_ipc_md");
     if (md == NULL) {
@@ -358,8 +355,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->peer_accessible_cache = NULL;
     md->rcache_enable         = md_cfg->rcache_enable;
     md->rcache_max_ratio      = md_cfg->rcache_max_ratio;
-    md->rcache_max_size       = rcache_params.max_size;
-    md->rcache_max_regions    = rcache_params.max_regions;
+    md->rcache_max_size       = md_cfg->rcache.max_size;
+    md->rcache_max_regions    = md_cfg->rcache.max_regions;
 
     com     = ucs_derived_of(md->super.component, uct_cuda_ipc_component_t);
     com->md = md;

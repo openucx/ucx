@@ -16,7 +16,6 @@
 #include <cuda_runtime.h>
 
 
-typedef struct uct_cuda_ipc_cache        uct_cuda_ipc_cache_t;
 typedef struct uct_cuda_ipc_rem_memh     uct_cuda_ipc_rem_memh_t;
 
 
@@ -27,25 +26,16 @@ typedef struct uct_cuda_ipc_rem_memh     uct_cuda_ipc_rem_memh_t;
 typedef struct uct_cuda_ipc_rcache_region {
     ucs_rcache_region_t     super;
     CUipcMemHandle          ipc_handle;
-    ucs_rcache_t            *rcache;
-    void                    *rem_base_address;
-    size_t                  rem_alloc_length;
     void                    *mapping_start;
 } uct_cuda_ipc_rcache_region_t;
 
 
-struct uct_cuda_ipc_cache {
-    ucs_rcache_t          *rcache;    /**< rcache to hold local mappings of remote memory */
-    char                  *name;      /**< Name */
-};
+ucs_status_t
+uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md, ucs_rcache_t **cache,
+                          const char *name);
 
 
-ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md,
-                                       uct_cuda_ipc_cache_t **cache,
-                                       const char *name);
-
-
-void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
+void uct_cuda_ipc_destroy_cache(ucs_rcache_t *cache);
 
 
 ucs_status_t

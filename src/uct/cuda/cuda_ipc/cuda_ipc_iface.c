@@ -291,9 +291,8 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
 
 static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
 {
-    uct_cuda_ipc_iface_t *iface  = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    uct_base_iface_t *base_iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-    uct_cuda_ipc_md_t *md        = ucs_derived_of(base_iface->md, uct_cuda_ipc_md_t);
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md, uct_cuda_ipc_md_t);
 
     return uct_cuda_ipc_progress_event_q(iface, md, &iface->outstanding_d2d_event_q);
 }
