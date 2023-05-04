@@ -170,6 +170,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->dst_md_cmpts     = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->flags            = 0;
+    key->dst_version      = UCP_API_MINOR;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -1893,7 +1894,8 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->keepalive_lane != key2->keepalive_lane) ||
         (key1->rkey_ptr_lane != key2->rkey_ptr_lane) ||
         (key1->err_mode != key2->err_mode) ||
-        (key1->flags != key2->flags)) {
+        (key1->flags != key2->flags) ||
+        (key1->dst_version != key2->dst_version)) {
         return 0;
     }
 

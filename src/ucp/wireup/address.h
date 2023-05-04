@@ -58,31 +58,34 @@ enum {
 
 enum {
     /* Add worker UUID */
-    UCP_ADDRESS_PACK_FLAG_WORKER_UUID = UCS_BIT(0),
+    UCP_ADDRESS_PACK_FLAG_WORKER_UUID   = UCS_BIT(0),
 
     /* Pack worker name */
-    UCP_ADDRESS_PACK_FLAG_WORKER_NAME = UCS_BIT(1),
+    UCP_ADDRESS_PACK_FLAG_WORKER_NAME   = UCS_BIT(1),
 
     /* Pack device addresses */
-    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR = UCS_BIT(2),
+    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR   = UCS_BIT(2),
 
     /* Pack interface addresses */
-    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  = UCS_BIT(3),
+    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR    = UCS_BIT(3),
 
     /* Pack endpoint addresses */
-    UCP_ADDRESS_PACK_FLAG_EP_ADDR     = UCS_BIT(4),
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR       = UCS_BIT(4),
 
     /* Pack TL resource index */
-    UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX  = UCS_BIT(5),
+    UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX    = UCS_BIT(5),
 
     /* Pack system device id */
-    UCP_ADDRESS_PACK_FLAG_SYS_DEVICE  = UCS_BIT(6),
+    UCP_ADDRESS_PACK_FLAG_SYS_DEVICE    = UCS_BIT(6),
 
     /* Pack client id */
-    UCP_ADDRESS_PACK_FLAG_CLIENT_ID   = UCS_BIT(7),
+    UCP_ADDRESS_PACK_FLAG_CLIENT_ID     = UCS_BIT(7),
 
-     /* Address has only AM lane information */
-    UCP_ADDRESS_PACK_FLAG_AM_ONLY     = UCS_BIT(8),
+    /* Address has only AM lane information */
+    UCP_ADDRESS_PACK_FLAG_AM_ONLY       = UCS_BIT(8),
+
+    /* Pack release version for address v1 */
+    UCP_ADDRESS_PACK_FLAG_RELEASE_VER_V1 = UCS_BIT(9),
 
     UCP_ADDRESS_PACK_FLAG_LAST,
 
@@ -125,7 +128,6 @@ struct ucp_address_iface_attr {
     size_t                      seg_size;     /* Maximal fragment size which can
                                                  be received on the particular
                                                  interface */
-    ucp_object_version_t        addr_version; /* Peer address version */
 };
 
 
@@ -163,6 +165,8 @@ struct ucp_unpacked_address {
     char                        name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned                    address_count;  /* Length of address list */
     ucp_address_entry_t         *address_list;  /* Pointer to address list */
+    ucp_object_version_t        addr_version;   /* Peer address version */
+    unsigned                    dst_version;    /* Peer release version */
 };
 
 

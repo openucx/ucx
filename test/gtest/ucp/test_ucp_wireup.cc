@@ -1786,6 +1786,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         ASSERT_UCS_OK(status);
     }
 
+    EXPECT_EQ(UCP_OBJECT_VERSION_V2, unpacked_address.addr_version);
+
     const ucp_address_entry_t *ae;
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
         ucp_rsc_index_t rsc_idx = ae->iface_attr.dst_rsc_index;
@@ -1796,7 +1798,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         // smaller than the original value by up to 64 bytes.
         EXPECT_LT(ucp_address_iface_seg_size(attr) - ae->iface_attr.seg_size,
                   UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR);
-        EXPECT_EQ(UCP_OBJECT_VERSION_V2, ae->iface_attr.addr_version);
         check_fp_values(ae->iface_attr.overhead, attr->overhead);
         check_fp_values(ae->iface_attr.lat_ovh,
                         ucp_tl_iface_latency(worker->context, &attr->latency));
