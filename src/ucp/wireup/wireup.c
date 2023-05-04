@@ -1004,6 +1004,21 @@ ucp_wireup_ep_lane_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
                               ucp_ep_get_rsc_index(ep, lane));
 }
 
+static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
+                                             ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_context_h context = wiface->worker->context;
+
+    /* Activate worker iface if: a) new protocol selection logic is disabled; or
+     * b) stream support is requested, because stream API does not support new
+     * protocol selection logic; or c) lane is used for checking a connection
+     * state; or d) the endpoint is a mem-type ep. */
+    return !context->config.ext.proto_enable ||
+           (context->config.features & UCP_FEATURE_STREAM) ||
+           (ucp_ep_config(ep)->key.keepalive_lane == lane) ||
+           (ep->flags & UCP_EP_FLAG_INTERNAL);
+}
+
 static ucs_status_t
 ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
                                  unsigned path_index,
@@ -1073,7 +1088,10 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
         ucp_wireup_ep_lane_set_next_ep(ep, lane, uct_ep);
     }
 
-    ucp_worker_iface_progress_ep(wiface);
+    if (ucp_wireup_should_activate_wiface(wiface, ep, lane)) {
+        ucp_worker_iface_progress_ep(wiface);
+    }
+
     return UCS_OK;
 }
 
@@ -1113,7 +1131,10 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
         return status;
     }
 
-    ucp_worker_iface_progress_ep(wiface);
+    if (ucp_wireup_should_activate_wiface(wiface, ep, lane)) {
+        ucp_worker_iface_progress_ep(wiface);
+    }
+
     return UCS_OK;
 }
 

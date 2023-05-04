@@ -235,12 +235,12 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
 
         proto_valid = ucp_proto_select_elem_query(worker, select_elem,
                                                   range_start, &proto_attr);
-        range_end   = proto_attr.max_msg_length;
         if (!proto_valid) {
-            continue;
+            break;
         }
 
-        row_elem = ucs_array_append(ucp_proto_info_table, &table, break);
+        range_end = proto_attr.max_msg_length;
+        row_elem  = ucs_array_append(ucp_proto_info_table, &table, break);
 
         ucs_snprintf_safe(row_elem->desc, sizeof(row_elem->desc), "%s%s",
                           proto_attr.is_estimation ? "(?) " : "",

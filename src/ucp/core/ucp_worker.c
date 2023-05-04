@@ -43,6 +43,13 @@
 
 #define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
 
+
+#define UCP_WIFACE_FMT "iface %p (" UCT_TL_RESOURCE_DESC_FMT ")"
+#define UCP_WIFACE_ARG(_wiface) \
+    (_wiface)->iface, UCT_TL_RESOURCE_DESC_ARG( \
+            &(_wiface)->worker->context->tl_rscs[(_wiface)->rsc_index].tl_rsc)
+
+
 typedef enum ucp_worker_event_fd_op {
     UCP_WORKER_EPFD_OP_ADD,
     UCP_WORKER_EPFD_OP_DEL
@@ -562,8 +569,9 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("activate iface %p acount=%u aifaces=%u", wiface->iface,
-              wiface->activate_count, worker->num_active_ifaces);
+    ucs_trace("activate " UCP_WIFACE_FMT " acount=%u aifaces=%u",
+              UCP_WIFACE_ARG(wiface), wiface->activate_count,
+              worker->num_active_ifaces);
 
     if (wiface->activate_count++ > 0) {
         return; /* was already activated */
@@ -708,16 +716,28 @@ static void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
 
 static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
 {
-    ucs_trace("deactivate iface %p force=%d acount=%u aifaces=%u",
-              wiface->iface, force, wiface->activate_count,
-              wiface->worker->num_active_ifaces);
+    ucp_worker_h worker = wiface->worker;
+
+    ucs_trace("deactivate " UCP_WIFACE_FMT " force=%d acount=%u aifaces=%u",
+              UCP_WIFACE_ARG(wiface), force, wiface->activate_count,
+              worker->num_active_ifaces);
 
     if (!force) {
-        ucs_assert(wiface->activate_count > 0);
-        if (--wiface->activate_count > 0) {
-            return; /* not completely deactivated yet */
+        ucs_assertv(worker->context->config.ext.proto_enable ||
+                    (wiface->activate_count > 0), UCP_WIFACE_FMT " acount=%u",
+                    UCP_WIFACE_ARG(wiface), wiface->activate_count);
+
+        if (wiface->activate_count == 0) {
+            /* The interface has not been activated. */
+            return;
         }
-        --wiface->worker->num_active_ifaces;
+
+        if (--wiface->activate_count > 0) {
+            /* The interface is not completely deactivated yet. */
+            return;
+        }
+
+        --worker->num_active_ifaces;
     }
 
     /* Avoid progress on the interface to reduce overhead */
