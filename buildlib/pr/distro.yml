@@ -27,18 +27,38 @@ jobs:
           gcc -v
           make -s -j `nproc`
           make install
-
-          mkdir -p $(Build.Repository.LocalPath)/install/examples
-          cd ${WORKSPACE}/examples
-          gcc -lm -lucs -lucp -I$(Build.Repository.LocalPath)/install/include -L$(Build.Repository.LocalPath)/install/lib -o $(Build.Repository.LocalPath)/install/examples/hworld ucp_hello_world.c
-
         displayName: Build ucx artifact
+
+      - bash: |
+          set -eE
+          git clone --depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
+          cd $(System.DefaultWorkingDirectory)/ucx-1.11
+          ./autogen.sh
+          ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.11/install
+          make -s -j `nproc`
+          make install -s -j `nproc`
+
+          mkdir -p $(System.DefaultWorkingDirectory)/ucx-1.11/install/examples
+          cd $(System.DefaultWorkingDirectory)/ucx-1.11/examples
+          gcc -lm -lucs -lucp -I$(System.DefaultWorkingDirectory)/ucx-1.11/install/include -L$(System.DefaultWorkingDirectory)/ucx-1.11/install/lib -o $(System.DefaultWorkingDirectory)/ucx-1.11/install/examples/hworld ucp_hello_world.c
+          gcc -lm -lucs -lucp -I$(System.DefaultWorkingDirectory)/ucx-1.11/install/include -L$(System.DefaultWorkingDirectory)/ucx-1.11/install/lib -o $(System.DefaultWorkingDirectory)/ucx-1.11/install/examples/client_server ucp_client_server.c
+        displayName: Build ucx v1.11.0 artifact
+
       - task: CopyFiles@2
+        displayName: 'Copy current UCX version'
         inputs:
-          sourceFolder: '$(Build.Repository.LocalPath)'
+          sourceFolder: '$(Build.Repository.LocalPath)/install'
           contents: |
-            install/**
-          targetFolder: '$(Build.ArtifactStagingDirectory)'
+            **
+          targetFolder: '$(Build.ArtifactStagingDirectory)/current'
+      - task: CopyFiles@2
+        displayName: 'Copy UCX v1.11.0'
+        inputs:
+          sourceFolder: '$(System.DefaultWorkingDirectory)/ucx-1.11/install'
+          contents: |
+            **
+          targetFolder: '$(Build.ArtifactStagingDirectory)/v1.11.0'
+
       - task: PublishBuildArtifacts@1
         inputs:
           pathToPublish: '$(Build.ArtifactStagingDirectory)'
@@ -69,55 +89,44 @@ jobs:
       - bash: |
           set -Eex
           port=$((10000 + (1000 * ${AZP_AGENT_ID})))
-          ./bin/ucx_perftest -t tag_bw -p $port &
+          perftest=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/bin/ucx_perftest
+          ${perftest} -t tag_bw -p $port &
           server_pid=$!
           sleep 1;
-          ./bin/ucx_perftest -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
+          ${perftest} -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
           wait $server_pid
           grep "Final:" perf.txt
         displayName: Test ucx_perftest
-        workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
-        env:
-          LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib:$LD_LIBRARY_PATH
-      - bash: |
-          set -Eex
-          git clone --depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
-          cd $(System.DefaultWorkingDirectory)/ucx-1.11
-          ./autogen.sh
-          ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.11/install --enable-examples
-          make -s -j `nproc`
-          make install -s -j `nproc`
-        displayName: Build ucx-1.11 version
-      - bash: |
-          set -Eex
-          $(System.DefaultWorkingDirectory)/ucx-1.11/install/bin/ucx_info -v
-        env:
-          LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
-        displayName: Test ucx-1.11 version
       - bash: |
           set -Eex
           port=$((10000 + (1000 * ${AZP_AGENT_ID})))
-          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port &
+          export UCX_LOG_LEVEL=info
+          client_server=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/examples/client_server
+          ldd $client_server
+          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH ${client_server} -c tag -p $port &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a 127.0.0.1
+          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH ${client_server} -c tag -p $port -a 127.0.0.1
           kill -9 $server_pid
-        displayName: Test wire compatibility server v1.11 client master
         env:
-          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
-          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
+          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/lib
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/lib
+        displayName: Test server is v1.11 client is master
       - bash: |
           set -Eex
           port=$((10000 + (1000 * ${AZP_AGENT_ID})))
-          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port &
+          export UCX_LOG_LEVEL=info
+          client_server=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/examples/client_server
+          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH ${client_server} -c tag -p $port &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a 127.0.0.1
+          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH ${client_server} -c tag -p $port -a 127.0.0.1
           kill -9 $server_pid
         env:
-          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
-          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
-        displayName: Test wire compatibility server on master client v1.11
+          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/lib
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/lib
+        displayName: Test server is master client is v1.11
+        timeoutInMinutes: 5
 
   - job: Test_compatibility
     dependsOn: Distros
@@ -142,19 +151,11 @@ jobs:
           artifactName: ucx_bin_$(Build.BuildId)
           downloadPath: $(System.DefaultWorkingDirectory)
       - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId) -R
-      - bash: |
-          set -Eex
-          git clone --depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
-          cd $(System.DefaultWorkingDirectory)/ucx-1.11
-          ./autogen.sh
-          ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.11/install --enable-examples
-          make -s -j `nproc`
-          make install -s -j `nproc`
-        displayName: Build ucx-1.11 version
 
       - bash: |
           set -Eex
-          ldd $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/hworld
+          hworld=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/examples/hworld
+          ldd $hworld
 
           cmd_prefix="stdbuf -e0 -o0 timeout -s 9 120s"
           export UCX_LOG_LEVEL=info # Print version and used transports
@@ -164,17 +165,12 @@ jobs:
           export UCX_IB_ROCE_LOCAL_SUBNET=y
           export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
-          env LD_LIBRARY_PATH=$UCX_PR_LIB_PATH \
-            ${cmd_prefix} \
-            $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/hworld &
-          server_pid=$!
+          env LD_LIBRARY_PATH=$UCX_PR_LIB_PATH ${cmd_prefix} ${hworld} &
 
           sleep 5
-          env LD_LIBRARY_PATH=$UCX_V11_LIB_PATH \
-            ${cmd_prefix} \
-            $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/hworld -n localhost
+          env LD_LIBRARY_PATH=$UCX_V11_LIB_PATH ${cmd_prefix} ${hworld} -n localhost
         env:
-          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
-          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
+          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/lib
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/lib
         displayName: Test UCP_HELLO_WORLD wire compatibility server on master client v1.11
         timeoutInMinutes: 5
