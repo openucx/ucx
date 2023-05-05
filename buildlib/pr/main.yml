@@ -184,7 +184,7 @@ stages:
     - template: codestyle.yml
 
   - stage: Static_check
-    dependsOn: [Codestyle]
+    dependsOn: [Distro]
     jobs:
     - template: static_checks.yml
 
@@ -249,7 +249,7 @@ stages:
               test_static: $(test_static)
 
   - stage: Distro
-    dependsOn: [Static_check]
+    dependsOn: [Codestyle]
     jobs:
     - template: distro.yml
 
