@@ -591,9 +591,11 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
         goto err_close_sock;
     }
 
-    ucs_debug("tcp_iface %p: listening for connections (fd=%d) on %s",
-              iface, iface->listen_fd, ucs_sockaddr_str((struct sockaddr *)&bind_addr,
-                                                       ip_port_str, sizeof(ip_port_str)));
+    ucs_debug("tcp_iface %p: listening for connections (fd=%d) on %s netif %s",
+              iface, iface->listen_fd,
+              ucs_sockaddr_str((struct sockaddr *)&iface->config.ifaddr,
+                              ip_port_str, sizeof(ip_port_str)),
+              iface->if_name);
     return UCS_OK;
 
 err_close_sock:
