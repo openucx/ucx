@@ -1592,6 +1592,12 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
             context->reg_md_map[mem_type] |= context->dmabuf_reg_md_map;
         }
 
+        if (context->reg_md_map[mem_type] == 0) {
+            ucs_debug("no memory domain supports registering %s memory",
+                      ucs_memory_type_names[mem_type]);
+            continue;
+        }
+
         ucs_string_buffer_reset(&strb);
         ucs_for_each_bit(md_index, context->reg_md_map[mem_type]) {
             ucs_string_buffer_appendf(&strb, "%s, ",
