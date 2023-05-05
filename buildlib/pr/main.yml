@@ -184,7 +184,6 @@ stages:
     - template: codestyle.yml
 
   - stage: Static_check
-    dependsOn: [WireCompat]
     jobs:
     - template: static_checks.yml
 
