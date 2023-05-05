@@ -143,10 +143,13 @@ static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
 
         attr->max_msg_length = SIZE_MAX;
         attr->is_estimation  = 0;
+        attr->lane_map       = frag_attr.lane_map;
         ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "pipeline %s",
                           frag_attr.desc);
         ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
     }
+
+    attr->lane_map |= UCS_BIT(rpriv->ack.lane);
 }
 
 static void

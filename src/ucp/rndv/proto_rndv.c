@@ -440,6 +440,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
     attr->is_estimation  = 1;
     attr->max_msg_length = SIZE_MAX;
+    attr->lane_map       = UCS_BIT(rpriv->lane);
 
     ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "rendezvous %s",
                       remote_attr.desc);
@@ -637,6 +638,7 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
     attr->max_msg_length = SIZE_MAX;
     attr->is_estimation  = 0;
     ucp_proto_multi_query_config(&multi_query_params, attr);
+    attr->lane_map |= UCS_BIT(rpriv->super.lane);
 }
 
 static ucs_status_t
