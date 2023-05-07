@@ -240,6 +240,38 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
 
 
 /**
+ * Iterate over detached-head list and allow removing the current element
+ * during the iteration.
+ *
+ * @param _elem     Variable to hold the current list element.
+ * @param _telem    Helper variable to hold a temporary element.
+ * @param _head     Pointer to list head.
+ * @param _thead    Helper variable to hold a temporary pointer to the list head.
+ * @param _member   List element inside the containing structure.
+ *
+ * @note The iteration is implemented by saving the head pointer and next
+ * element pointer before each iteration. If the current element is removed, the
+ * next pointer is no longer accessible, and the head pointer may change if it's
+ * the first one.
+ */
+#define ucs_hlist_for_each_safe(_elem, _telem, _head, _thead, _member) \
+    for ((_thead)->ptr = NULL, \
+         _elem = ucs_hlist_head_elem(_head, ucs_typeof(*(_elem)), _member); \
+         \
+         /* List must not be empty */ \
+         !ucs_hlist_is_empty(_head) && \
+         /* Must not be the first elem */ \
+         (_elem != ucs_hlist_head_elem(_thead, ucs_typeof(*(_elem)), \
+                                       _member)) && \
+         /* Save the next element */ \
+         ((_telem = ucs_hlist_next_elem(_elem, _member)) != NULL) && \
+         /* Save pointer to the head in case it's changed by removal */ \
+         (((_thead)->ptr = (_head)->ptr) != NULL); \
+         \
+         _elem = _telem)
+
+
+/**
  * Remove the first element from a detached-head list, and return its containing
  * type. The function is intended for internal use only in hlist. It has to be
  * used for non-empty hlist, otherwise, the result of the function is undefined.
