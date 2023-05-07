@@ -22,6 +22,7 @@ typedef struct uct_cuda_copy_md {
                                                     range even for small bar
                                                     GPUs*/
         double                  max_reg_ratio;
+        int                     dmabuf_supported;
     } config;
 } uct_cuda_copy_md_t;
 
@@ -32,6 +33,7 @@ typedef struct uct_cuda_copy_md_config {
     uct_md_config_t             super;
     ucs_on_off_auto_value_t     alloc_whole_reg;
     double                      max_reg_ratio;
+    ucs_ternary_auto_value_t    enable_dmabuf;
 } uct_cuda_copy_md_config_t;
 
 

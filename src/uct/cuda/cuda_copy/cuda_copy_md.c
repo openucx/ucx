@@ -50,6 +50,11 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      " is registered. Otherwise only the user specified region is registered.",
      ucs_offsetof(uct_cuda_copy_md_config_t, max_reg_ratio), UCS_CONFIG_TYPE_DOUBLE},
 
+    {"DMABUF", "try",
+     "Enable using cross-device dmabuf file descriptor",
+     ucs_offsetof(uct_cuda_copy_md_config_t, enable_dmabuf),
+                  UCS_CONFIG_TYPE_TERNARY},
+
     {NULL}
 };
 
@@ -78,8 +83,10 @@ static int uct_cuda_copy_md_is_dmabuf_supported()
 }
 
 static ucs_status_t
-uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
+uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
+    uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
+
     md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
     md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
@@ -93,10 +100,8 @@ uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->detect_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->dmabuf_mem_types       = 0;
-    if (uct_cuda_copy_md_is_dmabuf_supported()) {
-        md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    }
+    md_attr->dmabuf_mem_types       = md->config.dmabuf_supported ?
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA) : 0;
     md_attr->max_alloc        = SIZE_MAX;
     md_attr->max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size = 0;
@@ -536,20 +541,41 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     uct_cuda_copy_md_config_t *config = ucs_derived_of(md_config,
                                                        uct_cuda_copy_md_config_t);
     uct_cuda_copy_md_t *md;
+    int dmabuf_supported;
+    ucs_status_t status;
 
     md = ucs_malloc(sizeof(uct_cuda_copy_md_t), "uct_cuda_copy_md_t");
     if (NULL == md) {
         ucs_error("failed to allocate memory for uct_cuda_copy_md_t");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
-    md->super.ops              = &md_ops;
-    md->super.component        = &uct_cuda_copy_component;
-    md->config.alloc_whole_reg = config->alloc_whole_reg;
-    md->config.max_reg_ratio   = config->max_reg_ratio;
-    *md_p                      = (uct_md_h)md;
+    md->super.ops               = &md_ops;
+    md->super.component         = &uct_cuda_copy_component;
+    md->config.alloc_whole_reg  = config->alloc_whole_reg;
+    md->config.max_reg_ratio    = config->max_reg_ratio;
+    md->config.dmabuf_supported = 0;
+
+    dmabuf_supported = uct_cuda_copy_md_is_dmabuf_supported();
+    if ((config->enable_dmabuf == UCS_YES) && !dmabuf_supported) {
+        ucs_error("dmabuf support requested but not found");
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free_md;
+    }
+
+    if (config->enable_dmabuf != UCS_NO) {
+        md->config.dmabuf_supported = dmabuf_supported;
+    }
+
+    *md_p = (uct_md_h)md;
 
     return UCS_OK;
+
+err_free_md:
+    ucs_free(md);
+err:
+    return status;
 }
 
 uct_component_t uct_cuda_copy_component = {
