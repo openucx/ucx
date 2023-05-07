@@ -232,7 +232,7 @@
       <resource>
         <directory>resources</directory>
         <includes>
-          <include>libjucx.so</include>
+          <include>libjucx_*.so</include>
         </includes>
       </resource>
     </resources>
