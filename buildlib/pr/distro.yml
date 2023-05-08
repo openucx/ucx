@@ -31,18 +31,19 @@ jobs:
 
       - bash: |
           set -eE
-          git clone --depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
-          cd $(System.DefaultWorkingDirectory)/ucx-1.11
+          git clone --depth 1 -b v1.12.0 https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.12
+          cd $(System.DefaultWorkingDirectory)/ucx-1.12
+          ucx_1_12_dir=${PWD}/install
           ./autogen.sh
-          ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.11/install
+          ./contrib/configure-release --enable-debug-data --prefix=${ucx_1_12_dir}
           make -s -j `nproc`
           make install -s -j `nproc`
 
-          mkdir -p $(System.DefaultWorkingDirectory)/ucx-1.11/install/examples
-          cd $(System.DefaultWorkingDirectory)/ucx-1.11/examples
-          gcc -lm -lucs -lucp -I$(System.DefaultWorkingDirectory)/ucx-1.11/install/include -L$(System.DefaultWorkingDirectory)/ucx-1.11/install/lib -o $(System.DefaultWorkingDirectory)/ucx-1.11/install/examples/hworld ucp_hello_world.c
-          gcc -lm -lucs -lucp -I$(System.DefaultWorkingDirectory)/ucx-1.11/install/include -L$(System.DefaultWorkingDirectory)/ucx-1.11/install/lib -o $(System.DefaultWorkingDirectory)/ucx-1.11/install/examples/client_server ucp_client_server.c
-        displayName: Build ucx v1.11.0 artifact
+          mkdir -p ${ucx_1_12_dir}/examples
+          cd $(System.DefaultWorkingDirectory)/ucx-1.12/examples
+          gcc -lm -lucs -lucp -I${ucx_1_12_dir}/include -L${ucx_1_12_dir}/lib -o ${ucx_1_12_dir}/examples/hworld ucp_hello_world.c
+          gcc -lm -lucs -lucp -I${ucx_1_12_dir}/include -L${ucx_1_12_dir}/lib -o ${ucx_1_12_dir}/examples/client_server ucp_client_server.c
+        displayName: Build ucx v1.12.0 artifact
 
       - task: CopyFiles@2
         displayName: 'Copy current UCX version'
@@ -52,12 +53,12 @@ jobs:
             **
           targetFolder: '$(Build.ArtifactStagingDirectory)/current'
       - task: CopyFiles@2
-        displayName: 'Copy UCX v1.11.0'
+        displayName: 'Copy UCX v1.12.0'
         inputs:
-          sourceFolder: '$(System.DefaultWorkingDirectory)/ucx-1.11/install'
+          sourceFolder: '$(System.DefaultWorkingDirectory)/ucx-1.12/install'
           contents: |
             **
-          targetFolder: '$(Build.ArtifactStagingDirectory)/v1.11.0'
+          targetFolder: '$(Build.ArtifactStagingDirectory)/v1.12.0'
 
       - task: PublishBuildArtifacts@1
         inputs:
@@ -101,31 +102,31 @@ jobs:
           set -Eex
           port=$((10000 + (1000 * ${AZP_AGENT_ID})))
           export UCX_LOG_LEVEL=info
-          client_server=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/examples/client_server
+          client_server=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.12.0/examples/client_server
           ldd $client_server
-          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH ${client_server} -c tag -p $port &
+          LD_LIBRARY_PATH=$UCX_V1_12_LIB_PATH ${client_server} -c tag -p $port &
           server_pid=$!
           sleep 5
           LD_LIBRARY_PATH=$UCX_PR_LIB_PATH ${client_server} -c tag -p $port -a 127.0.0.1
           kill -9 $server_pid
         env:
-          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/lib
+          UCX_V1_12_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.12.0/lib
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/lib
-        displayName: Test server is v1.11 client is master
+        displayName: Test server is v1.12 client is master
       - bash: |
           set -Eex
           port=$((10000 + (1000 * ${AZP_AGENT_ID})))
           export UCX_LOG_LEVEL=info
-          client_server=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/examples/client_server
+          client_server=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.12.0/examples/client_server
           LD_LIBRARY_PATH=$UCX_PR_LIB_PATH ${client_server} -c tag -p $port &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH ${client_server} -c tag -p $port -a 127.0.0.1
+          LD_LIBRARY_PATH=$UCX_V1_12_LIB_PATH ${client_server} -c tag -p $port -a 127.0.0.1
           kill -9 $server_pid
         env:
-          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/lib
+          UCX_V1_12_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.12.0/lib
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/lib
-        displayName: Test server is master client is v1.11
+        displayName: Test server is master client is v1.12
         timeoutInMinutes: 5
 
   - job: Test_compatibility
@@ -154,7 +155,7 @@ jobs:
 
       - bash: |
           set -Eex
-          hworld=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/examples/hworld
+          hworld=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.12.0/examples/hworld
           ldd $hworld
 
           cmd_prefix="stdbuf -e0 -o0 timeout -s 9 120s"
@@ -168,9 +169,9 @@ jobs:
           env LD_LIBRARY_PATH=$UCX_PR_LIB_PATH ${cmd_prefix} ${hworld} &
 
           sleep 5
-          env LD_LIBRARY_PATH=$UCX_V11_LIB_PATH ${cmd_prefix} ${hworld} -n localhost
+          env LD_LIBRARY_PATH=$UCX_V1_12_LIB_PATH ${cmd_prefix} ${hworld} -n localhost
         env:
-          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.11.0/lib
+          UCX_V1_12_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/v1.12.0/lib
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/lib
-        displayName: Test UCP_HELLO_WORLD wire compatibility server on master client v1.11
+        displayName: Test UCP_HELLO_WORLD wire compatibility server on master client v1.12
         timeoutInMinutes: 5
