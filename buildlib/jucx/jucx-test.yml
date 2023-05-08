@@ -36,6 +36,7 @@ jobs:
           make -j`nproc`
           make install
         displayName: Build UCX
+
       - bash: |
           set -xeE
           source buildlib/az-helpers.sh
