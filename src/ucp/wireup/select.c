@@ -1011,7 +1011,8 @@ static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
 }
 
 static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
-                                         unsigned ep_init_flags)
+                                         unsigned ep_init_flags,
+                                         unsigned mandatory_flags)
 {
     criteria->title          = "auxiliary";
     criteria->local_md_flags = 0;
@@ -1026,8 +1027,7 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
         criteria->local_iface_flags.mandatory  |=
                 UCT_IFACE_FLAG_CONNECT_TO_IFACE;
         criteria->remote_iface_flags.mandatory |=
-                UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE |
-                UCP_ADDR_IFACE_FLAG_CB_ASYNC;
+                UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE | mandatory_flags;
     }
     criteria->local_cmpt_flags   = 0;
     criteria->local_event_flags  = 0;
@@ -1913,7 +1913,8 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     ucp_lane_index_t lane;
     unsigned addr_index;
 
-    ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags);
+    ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
+                                 UCP_ADDR_IFACE_FLAG_CB_ASYNC);
     for (lane = 0; lane < num_lanes; ++lane) {
         if (lane_descs[lane].rsc_index == UCP_NULL_RESOURCE) {
             continue;
@@ -2394,10 +2395,25 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_select_context_t select_ctx = {};
     ucp_wireup_criteria_t criteria         = {};
     ucp_wireup_select_params_t select_params;
+    ucs_status_t status;
 
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
                                   remote_address, tl_bitmap, 1);
-    ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags);
+
+    /* Select auxiliary transport that supports async active message callback */
+    ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
+                                 UCP_ADDR_IFACE_FLAG_CB_ASYNC);
+    status = ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
+                                         ucp_tl_bitmap_max, UINT64_MAX,
+                                         UINT64_MAX, UINT64_MAX, 0,
+                                         select_info);
+    if (status == UCS_OK) {
+        return UCS_OK;
+    }
+
+    /* Fallback to an auxiliary transport without async active message callback
+     * requirement */
+    ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
     return ucp_wireup_select_transport(&select_ctx, &select_params, &criteria,
                                        ucp_tl_bitmap_max, UINT64_MAX,
                                        UINT64_MAX, UINT64_MAX, 1, select_info);
