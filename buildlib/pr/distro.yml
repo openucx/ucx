@@ -26,7 +26,7 @@ jobs:
           cd $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)
           ucx_dir=${PWD}/install
           ./autogen.sh
-          ./contrib/configure-release --enable-debug-data --prefix=${ucx_dir}
+          ./contrib/configure-release --enable-assertions --prefix=${ucx_dir}
           make -s -j `nproc`
           make install -s -j `nproc`
 
@@ -41,9 +41,9 @@ jobs:
           pathToPublish: '$(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)/install'
           artifactName: ucx_$(ucx_tag)_$(Build.BuildId)
 
-  - job: Test_wire_compatibility_cs
+  - job: Test_wire_compatibility
     dependsOn: Distros
-    displayName: Test wire compatibility (client-server)
+    displayName: Test wire compatibility
     workspace:
       clean: all
     pool:
@@ -56,33 +56,33 @@ jobs:
             ucx_tag: v1.12.0
             client_cmd: client_server -c tag -a
             server_cmd: client_server -c tag
-            ucx_env: UCX_TLS=^sm UCX_LOG_LEVEL=info
+            ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n UCX_CM_USE_ALL_DEVICES=n
         ucx1_12_wa:
             ucx_tag: v1.12.0
             client_cmd: ucp_hworld -n
             server_cmd: ucp_hworld
-            ucx_env: UCX_TLS=^sm UCX_LOG_LEVEL=info
+            ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n UCX_TLS=^sm UCX_IB_ROCE_LOCAL_SUBNET=y
         ucx1_14_cs:
             ucx_tag: v1.14.0
             client_cmd: client_server -c tag -a
             server_cmd: client_server -c tag
-            ucx_env: UCX_TLS=^sm UCX_LOG_LEVEL=info
+            ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n
         ucx1_14_wa:
             ucx_tag: v1.14.0
             client_cmd: ucp_hworld -n
             server_cmd: ucp_hworld
-            ucx_env: UCX_TLS=^sm UCX_LOG_LEVEL=info
+            ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n
     container: centos7_ib
     steps:
       - checkout: none
         clean: true
       - task: DownloadBuildArtifacts@0
-        displayName: 'Download Build Artifacts'
+        displayName: Download UCX master
         inputs:
           artifactName: ucx_master_$(Build.BuildId)
           downloadPath: $(System.DefaultWorkingDirectory)
       - task: DownloadBuildArtifacts@0
-        displayName: 'Download Build Artifacts'
+        displayName: Download UCX $(ucx_tag)
         inputs:
           artifactName: ucx_$(ucx_tag)_$(Build.BuildId)
           downloadPath: $(System.DefaultWorkingDirectory)
@@ -91,31 +91,29 @@ jobs:
           chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId) -R
       - bash: |
           set -Eex
-          export UCX_LOG_LEVEL=info
+          export $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/examples
-          echo $(ucx_env)
           LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(server_cmd) &
           server_pid=$!
           sleep 5
           LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1
-          kill -9 $server_pid
+          if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_master_$(Build.BuildId)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/lib
         displayName: Test server is legacy client is master
-        timeoutInMinutes: 5
+        timeoutInMinutes: 2
       - bash: |
           set -Eex
-          export UCX_LOG_LEVEL=info
+          export $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/examples
-          echo $(ucx_env)
           LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(server_cmd) &
           server_pid=$!
           sleep 5
           LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1
-          kill -9 $server_pid
+          if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_master_$(Build.BuildId)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/lib
         displayName: Test server is master client is legacy
-        timeoutInMinutes: 5
+        timeoutInMinutes: 2
