@@ -2489,7 +2489,6 @@ static unsigned ucp_worker_discard_uct_ep_destroy_once(ucp_request_t *req)
     req->send.discard_uct_ep.cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_ep_unprogress_uct_ep(ucp_ep, uct_ep, rsc_index);
     uct_ep_destroy(uct_ep);
-
     ucp_worker_discard_uct_ep_complete(req);
 
     return 1;
@@ -2541,6 +2540,7 @@ static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 
     ucp_trace_req(req, "discard_uct_ep flush completion status %s",
                   ucs_status_string(self->status));
+
     /* don't destroy UCT EP from the flush completion callback, schedule
      * a progress callback on the main thread to destroy UCT EP */
 
@@ -2625,7 +2625,7 @@ ucp_worker_discard_uct_ep_purge(uct_pending_req_t *self, void *arg)
 
     /* If there is a pending request during UCT EP discarding, it means
      * UCS_ERR_NO_RESOURCE was returned from the flush operation, the operation
-     * was added to a pending queue. complete the discarding operation */
+     * was added to a pending queue, complete the discarding operation */
     ucs_assert_always(req->send.discard_uct_ep.cb_id == UCS_CALLBACKQ_ID_NULL);
 }
 
