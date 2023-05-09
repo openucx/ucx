@@ -1,7 +1,7 @@
 jobs:
     # Perform test builds on relevant distributions.
   - job: Distros
-    displayName: Build for distros
+    displayName: Build
     workspace:
       clean: all
     pool:
@@ -10,37 +10,36 @@ jobs:
       - ucx_docker -equals yes
     strategy:
       matrix:
-        centos7:
-          CONTAINER: centos7
-          CONFIGURE_OPTS:
-    container: $[ variables['CONTAINER'] ]
+        ucx_master:
+            ucx_tag: master
+        ucx_1_12:
+            ucx_tag: v1.12.0
+        ucx_1_14:
+            ucx_tag: v1.14.0
+    container: centos7_ib
     steps:
-      - checkout: self
-        clean: true
-        fetchDepth: 100
+      - checkout: none
 
       - bash: |
-          set -eE
-          . buildlib/tools/common.sh
-          prepare_build
-          ${WORKSPACE}/configure $(CONFIGURE_OPTS) --prefix=$(Build.Repository.LocalPath)/install
-          gcc -v
+          set -eEx
+          git clone --depth 1 -b $(ucx_tag) https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)
+          cd $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)
+          ucx_dir=${PWD}/install
+          ./autogen.sh
+          ./contrib/configure-release --enable-debug-data --prefix=${ucx_dir}
           make -s -j `nproc`
-          make install
-        displayName: Build ucx artifact
+          make install -s -j `nproc`
 
-      - task: CopyFiles@2
-        displayName: 'Copy current UCX version'
-        inputs:
-          sourceFolder: '$(Build.Repository.LocalPath)/install'
-          contents: |
-            **
-          targetFolder: '$(Build.ArtifactStagingDirectory)/current'
+          mkdir -p ${ucx_dir}/examples
+          cd $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)/examples
+          gcc -lm -lucs -lucp -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/client_server ucp_client_server.c
+          gcc -lm -lucs -lucp -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/ucp_hworld ucp_hello_world.c
+        displayName: Build ucx artifact
 
       - task: PublishBuildArtifacts@1
         inputs:
-          pathToPublish: '$(Build.ArtifactStagingDirectory)'
-          artifactName: ucx_bin_$(Build.BuildId)
+          pathToPublish: '$(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)/install'
+          artifactName: ucx_$(ucx_tag)_$(Build.BuildId)
 
   - job: Test_wire_compatibility_cs
     dependsOn: Distros
@@ -53,10 +52,26 @@ jobs:
       - ucx_docker -equals yes
     strategy:
       matrix:
-        ucx1_12:
+        ucx1_12_cs:
             ucx_tag: v1.12.0
-        ucx1_14:
+            client_cmd: client_server -c tag -a
+            server_cmd: client_server -c tag
+            ucx_env: UCX_TLS=^sm UCX_LOG_LEVEL=info
+        ucx1_12_wa:
+            ucx_tag: v1.12.0
+            client_cmd: ucp_hworld -n
+            server_cmd: ucp_hworld
+            ucx_env: UCX_TLS=^sm UCX_LOG_LEVEL=info
+        ucx1_14_cs:
             ucx_tag: v1.14.0
+            client_cmd: client_server -c tag -a
+            server_cmd: client_server -c tag
+            ucx_env: UCX_TLS=^sm UCX_LOG_LEVEL=info
+        ucx1_14_wa:
+            ucx_tag: v1.14.0
+            client_cmd: ucp_hworld -n
+            server_cmd: ucp_hworld
+            ucx_env: UCX_TLS=^sm UCX_LOG_LEVEL=info
     container: centos7_ib
     steps:
       - checkout: none
@@ -64,52 +79,43 @@ jobs:
       - task: DownloadBuildArtifacts@0
         displayName: 'Download Build Artifacts'
         inputs:
-          artifactName: ucx_bin_$(Build.BuildId)
+          artifactName: ucx_master_$(Build.BuildId)
           downloadPath: $(System.DefaultWorkingDirectory)
-      - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId) -R
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: ucx_$(ucx_tag)_$(Build.BuildId)
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: |
+          chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_master_$(Build.BuildId) -R
+          chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId) -R
       - bash: |
           set -Eex
-          git clone --depth 1 -b ${UCX_TAG} https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-${UCX_TAG}
-          cd $(System.DefaultWorkingDirectory)/ucx-${UCX_TAG}
-          ucx_dir=${PWD}/install
-          ./autogen.sh
-          ./contrib/configure-release --enable-debug-data --prefix=${ucx_dir}
-          make -s -j `nproc`
-          make install -s -j `nproc`
-
-          mkdir -p ${ucx_dir}/examples
-          cd $(System.DefaultWorkingDirectory)/ucx-${UCX_TAG}/examples
-          gcc -lm -lucs -lucp -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/client_server ucp_client_server.c
-        env:
-            UCX_TAG: $(ucx_tag)
-      - bash: |
-          set -Eex
-          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
           export UCX_LOG_LEVEL=info
-          client_server=$(System.DefaultWorkingDirectory)/ucx-${UCX_TAG}/install/examples/client_server
-          ldd $client_server
-          LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-${UCX_TAG}/install/lib ${client_server} -c tag -p $port &
+          client_server_dir=$(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/examples
+          echo $(ucx_env)
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(server_cmd) &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH ${client_server} -c tag -p $port -a 127.0.0.1
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1
           kill -9 $server_pid
         env:
-          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/lib
-          UCX_TAG: $(ucx_tag)
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_master_$(Build.BuildId)/lib
+          UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/lib
         displayName: Test server is legacy client is master
+        timeoutInMinutes: 5
       - bash: |
           set -Eex
-          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
           export UCX_LOG_LEVEL=info
-          client_server=$(System.DefaultWorkingDirectory)/ucx-${UCX_TAG}/install/examples/client_server
-          ldd $client_server
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server} -c tag -p $port &
+          client_server_dir=$(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/examples
+          echo $(ucx_env)
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(server_cmd) &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-${UCX_TAG}/install/lib ${client_server} -c tag -p $port -a 127.0.0.1
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1
           kill -9 $server_pid
         env:
-          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/current/lib
-          UCX_TAG: $(ucx_tag)
-        displayName: Test server is master client is ${UCX_TAG}
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_master_$(Build.BuildId)/lib
+          UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/lib
+        displayName: Test server is master client is legacy
         timeoutInMinutes: 5
