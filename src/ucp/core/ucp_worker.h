@@ -173,15 +173,6 @@ enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_LAST
 };
 
-/**
- * UCP worker dicard uct ep state
- */
-enum {
-    UCP_WORKER_DISCARD_UCT_EP_INIT,
-    UCP_WORKER_DISCARD_UCT_EP_FLUSHED,
-    UCP_WORKER_DISCARD_UCT_EP_DESTROYED,
-};
-
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
                              ((_flags) & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \
@@ -333,6 +324,7 @@ typedef struct ucp_worker {
     ucp_worker_rkey_config_hash_t    rkey_config_hash;    /* RKEY config key -> index */
     ucp_worker_discard_uct_ep_hash_t discard_uct_ep_hash; /* Hash of discarded UCT EPs */
     uint32_t                         uct_ep_flush_comp;   /* Counts of flush-completed discard uct ep */
+    uint32_t                         uct_ep_destroying;   /* Uct eps destroy is in progress */
     UCS_PTR_MAP_T(ep)                ep_map;              /* UCP ep key to ptr
                                                              mapping */
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
