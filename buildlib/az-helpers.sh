@@ -188,3 +188,16 @@ check_release_build() {
 
     echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
 }
+
+
+#
+# Return arch in the same format as Java System.getProperty("os.arch")
+#
+get_arch() {
+    arch=$(uname -m)
+    if [ "$arch" == "x86_64" ]; then
+        echo "amd64"
+    else
+        echo "$arch"
+    fi
+}
