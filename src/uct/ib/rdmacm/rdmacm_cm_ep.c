@@ -261,27 +261,27 @@ uct_rdmacm_cm_device_ctx_get_shared_qpn(uct_rdmacm_cm_ep_t *cep,
         return status;
     }
 
-    if (peer_dev_ctx->ref_qpn_blk == NULL) {
-        blk = ucs_list_next(&ctx->blk_list,
-                            uct_rdmacm_cm_reserved_qpn_blk_t, entry);
-
-        peer_dev_ctx->ref_qpn_blk           = blk;
-        peer_dev_ctx->next_avail_qpn_offset = 0;
-    } else if (peer_dev_ctx->next_avail_qpn_offset >= qpns_per_obj) {
-        if (peer_dev_ctx->ref_qpn_blk->entry.next == &ctx->blk_list) {
-            status = uct_rdmacm_cm_alloc_reserved_qpn_blk(cep, ctx);
-            if (status != UCS_OK) {
-                return status;
+    if ((peer_dev_ctx->ref_qpn_blk != NULL) &&
+        (peer_dev_ctx->next_avail_qpn_offset < qpns_per_obj)) {
+        blk = peer_dev_ctx->ref_qpn_blk;
+    } else {
+        if (peer_dev_ctx->ref_qpn_blk == NULL) {
+            blk = ucs_list_next(&ctx->blk_list,
+                                uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+        } else {
+            if (peer_dev_ctx->ref_qpn_blk->entry.next == &ctx->blk_list) {
+                status = uct_rdmacm_cm_alloc_reserved_qpn_blk(cep, ctx);
+                if (status != UCS_OK) {
+                    return status;
+                }
             }
+
+            blk = ucs_list_next(&peer_dev_ctx->ref_qpn_blk->entry,
+                                uct_rdmacm_cm_reserved_qpn_blk_t, entry);
         }
 
-        blk = ucs_list_next(&peer_dev_ctx->ref_qpn_blk->entry,
-                            uct_rdmacm_cm_reserved_qpn_blk_t, entry);
-
         peer_dev_ctx->ref_qpn_blk           = blk;
         peer_dev_ctx->next_avail_qpn_offset = 0;
-    } else {
-        blk = peer_dev_ctx->ref_qpn_blk;
     }
 
     cep->qpn                   = blk->first_qpn +
