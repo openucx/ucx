@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -20,6 +21,8 @@ typedef struct ucm_bistro_restore_point ucm_bistro_restore_point_t;
 #  include "bistro_aarch64.h"
 #elif defined(__x86_64__)
 #  include "bistro_x86_64.h"
+#elif defined(__riscv)
+#  include "bistro_rv64.h"
 #else
 #  error "Unsupported architecture"
 #endif
