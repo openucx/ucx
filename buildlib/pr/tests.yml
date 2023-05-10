@@ -43,6 +43,6 @@ jobs:
           EXECUTOR_NUMBER: $(AZP_AGENT_ID)
           RUN_TESTS: yes
           JENKINS_TEST_PERF: ${{ parameters.test_perf }}
-          PROTO_ENABLE: ${{ parameters.proto_enable }}
+          PROTO_DISABLE: ${{ parameters.proto_disable }}
           JENKINS_NO_VALGRIND: ${{ parameters.valgrind_disable }}
           RUNNING_IN_AZURE: yes

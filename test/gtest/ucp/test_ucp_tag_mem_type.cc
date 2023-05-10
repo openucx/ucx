@@ -49,7 +49,7 @@ public:
             enable_tag_mp_offload();
 
             if (RUNNING_ON_VALGRIND) {
-                if (variant_flags & VARIANT_PROTO) {
+                if (!(variant_flags & VARIANT_PROTO)) {
                     skip_protov2();
                 }
 
@@ -65,7 +65,8 @@ public:
         }
 
         if (variant_flags & VARIANT_PROTO) {
-            modify_config("PROTO_ENABLE", "y");
+            modify_config("PROTO_ENABLE", "n");
+        } else {
             modify_config("PROTO_REQUEST_RESET", "y");
         }
 
@@ -108,7 +109,7 @@ public:
         }
 
         if (variant_flags & VARIANT_PROTO) {
-            name += ",proto";
+            name += ",proto_v1";
         }
 
         add_variant_with_value(variants, get_ctx_params(), variant_value, name);

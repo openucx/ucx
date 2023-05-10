@@ -501,8 +501,8 @@ public:
 
     test_ucp_tag_nbx()
     {
-        if (enable_proto()) {
-            modify_config("PROTO_ENABLE", "y");
+        if (disable_proto()) {
+            modify_config("PROTO_ENABLE", "n");
         }
     }
 
@@ -527,7 +527,7 @@ public:
     static void get_test_variants_proto(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, get_test_variants_prereg, 0);
-        add_variant_values(variants, get_test_variants_prereg, 1, "proto");
+        add_variant_values(variants, get_test_variants_prereg, 1, "proto_v1");
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -547,9 +547,9 @@ protected:
         return get_variant_value(0);
     }
 
-    bool enable_proto() const
+    bool disable_proto() const
     {
-        return m_ucp_config->ctx.proto_enable || get_variant_value(1);
+        return get_variant_value(1);
     }
 
     bool is_iov() const
@@ -705,7 +705,7 @@ UCS_TEST_P(test_ucp_tag_nbx, rndv_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=0")
 
 UCS_TEST_P(test_ucp_tag_nbx, fallback, "ZCOPY_THRESH=inf")
 {
-    if (enable_proto() || prereg()) {
+    if (!disable_proto() || prereg()) {
         UCS_TEST_SKIP_R(
                 "protoV2/prereg are not supported for partial md reg failure");
     }

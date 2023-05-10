@@ -26,7 +26,7 @@ public:
     enum {
         VARIANT_DEFAULT,
         VARIANT_MAP_NONBLOCK,
-        VARIANT_PROTO_ENABLE,
+        VARIANT_PROTO_DISABLE,
         VARIANT_NO_RCACHE
     };
 
@@ -38,7 +38,7 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA |extra_features,
                                VARIANT_MAP_NONBLOCK, "map_nb");
         add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
-                               VARIANT_PROTO_ENABLE, "proto");
+                               VARIANT_PROTO_DISABLE, "proto_v1");
         add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
                                VARIANT_NO_RCACHE, "no_rcache");
     }
@@ -86,8 +86,8 @@ public:
 
     virtual void init() {
         ucs::skip_on_address_sanitizer();
-        if (enable_proto()) {
-            modify_config("PROTO_ENABLE", "y");
+        if (disable_proto()) {
+            modify_config("PROTO_ENABLE", "n");
         }
 
         if (get_variant_value() == VARIANT_NO_RCACHE) {
@@ -165,7 +165,7 @@ protected:
                     bool import_mem = false);
     void test_rkey_management(ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
-    bool enable_proto() const;
+    bool disable_proto() const;
 
 private:
     void expect_same_distance(const ucs_sys_dev_distance_t &dist1,
@@ -351,9 +351,9 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     ucp_rkey_buffer_release(rkey_buffer);
 }
 
-bool test_ucp_mmap::enable_proto() const
+bool test_ucp_mmap::disable_proto() const
 {
-    return get_variant_value() == VARIANT_PROTO_ENABLE;
+    return get_variant_value() == VARIANT_PROTO_DISABLE;
 }
 
 void test_ucp_mmap::expect_same_distance(const ucs_sys_dev_distance_t &dist1,
@@ -407,7 +407,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ASSERT_UCS_OK(status);
 
     /* Check rkey configuration */
-    if (enable_proto()) {
+    if (!disable_proto()) {
         ucp_rkey_config_t *rkey_config = ucp_rkey_config(receiver().worker(),
                                                          rkey);
         ucp_ep_config_t *ep_config     = ucp_ep_config(receiver().ep());

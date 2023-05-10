@@ -51,7 +51,7 @@ public:
         } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
             modify_config("RNDV_SCHEME", "get_zcopy");
         } else if (get_variant_value() == VARIANT_PROTO) {
-            modify_config("PROTO_ENABLE", "y");
+            modify_config("PROTO_ENABLE", "n");
         }
 
         /* Init number of lanes according to test requirement
@@ -82,7 +82,7 @@ public:
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_SEND_NBR, "send_nbr");
         add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO,
-                               "proto");
+                               "proto_v1");
     }
 
     virtual ucp_ep_params_t get_ep_params() {
