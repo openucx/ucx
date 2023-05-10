@@ -262,8 +262,9 @@ uct_rdmacm_cm_device_ctx_get_shared_qpn(uct_rdmacm_cm_ep_t *cep,
     }
 
     if (peer_dev_ctx->ref_qpn_blk == NULL) {
-        blk                                 = ucs_list_next(&ctx->blk_list,
-                                                            uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+        blk = ucs_list_next(&ctx->blk_list,
+                            uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+
         peer_dev_ctx->ref_qpn_blk           = blk;
         peer_dev_ctx->next_avail_qpn_offset = 0;
     } else if (peer_dev_ctx->next_avail_qpn_offset >= qpns_per_obj) {
@@ -274,8 +275,9 @@ uct_rdmacm_cm_device_ctx_get_shared_qpn(uct_rdmacm_cm_ep_t *cep,
             }
         }
 
-        blk                                 = ucs_list_next(&peer_dev_ctx->ref_qpn_blk->entry,
-                                                            uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+        blk = ucs_list_next(&peer_dev_ctx->ref_qpn_blk->entry,
+                            uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+
         peer_dev_ctx->ref_qpn_blk           = blk;
         peer_dev_ctx->next_avail_qpn_offset = 0;
     } else {
