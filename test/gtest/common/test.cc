@@ -445,6 +445,10 @@ void test_base::cleanup() {
 }
 
 bool test_base::barrier() {
+    if (num_threads() <= 1) {
+        return true;
+    }
+
     int ret = pthread_barrier_wait(&m_barrier);
     if (ret == 0) {
         return false;

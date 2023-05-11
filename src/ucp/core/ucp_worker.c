@@ -3403,8 +3403,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
     ucs_trace("ep %p flags 0x%x: set keepalive lane to %u", ep,
               ep->flags, ucp_ep_config(ep)->key.keepalive_lane);
     uct_worker_progress_register_safe(worker->uct,
-                                      ucp_worker_keepalive_progress, worker,
-                                      UCS_CALLBACKQ_FLAG_FAST,
+                                      ucp_worker_keepalive_progress, worker, 0,
                                       &worker->keepalive.cb_id);
 }
 
