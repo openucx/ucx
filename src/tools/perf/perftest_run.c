@@ -144,6 +144,8 @@ static void print_header(struct perftest_context *ctx)
         printf("| Send memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.send_mem_type]);
         printf("| Recv memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.recv_mem_type]);
         printf("| Message size: %-60zu                               |\n", ucx_perf_get_message_size(&ctx->params.super));
+        printf("| Window size:  %-60u                               |\n", ctx->params.super.max_outstanding);
+
         if ((test->api == UCX_PERF_API_UCP) &&
             (test->command == UCX_PERF_CMD_AM)) {
             printf("| AM header size: %-60zu             |\n",
