@@ -67,6 +67,20 @@ ucs_hlist_is_empty(const ucs_hlist_head_t *head)
 
 
 /**
+ * Get the length of the list.
+ *
+ * @param [in] head   List head to get length of.
+ *
+ * @return Number of elements in the list.
+ */
+static UCS_F_ALWAYS_INLINE unsigned long
+ucs_hlist_length(ucs_hlist_head_t *head)
+{
+    return ucs_hlist_is_empty(head) ? 0 : ucs_list_length(&head->ptr->list) + 1;
+}
+
+
+/**
  * Common function to add elements to the list head or tail.
  *
  * @param [in] head              List head to add to.
