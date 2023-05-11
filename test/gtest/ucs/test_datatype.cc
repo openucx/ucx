@@ -108,10 +108,12 @@ UCS_TEST_F(test_datatype, hlist_basic) {
     /* initialize list, should be empty */
     ucs_hlist_head_init(&head);
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
+    EXPECT_EQ(0l, ucs_hlist_length(&head));
 
     /* add one element to head */
     ucs_hlist_add_head(&head, &elem1.hlist);
     EXPECT_FALSE(ucs_hlist_is_empty(&head));
+    EXPECT_EQ(1l, ucs_hlist_length(&head));
 
     EXPECT_EQ(&elem1, ucs_hlist_head_elem(&head, elem_t, hlist));
 
@@ -146,6 +148,7 @@ UCS_TEST_F(test_datatype, hlist_basic) {
     ucs_hlist_add_tail(&head, &elem2.hlist);
     ucs_hlist_add_head(&head, &elem1.hlist);
     ucs_hlist_add_tail(&head, &elem3.hlist);
+    EXPECT_EQ(3l, ucs_hlist_length(&head));
 
     /* iterate without extract */
     v.clear();
@@ -281,6 +284,7 @@ UCS_TEST_F(test_datatype, hlist_foreach_safe) {
         for (elem_t &e : v_elems) {
             ucs_hlist_add_tail(&head, &e.hlist);
         }
+        EXPECT_EQ(length, ucs_hlist_length(&head));
 
         /* Randomly remove elements from the list */
         elem_t *elem, *tmp;
