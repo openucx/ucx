@@ -246,6 +246,11 @@ void test_md::alloc_memory(void **address, size_t size, char *fill_buffer,
     }
 }
 
+bool test_md::has_enough_memory(size_t required_memory_size)
+{
+    return md_attr().max_alloc >= required_memory_size;
+}
+
 void test_md::check_memory(void *address, void *expect, size_t size,
                            ucs_memory_type_t mem_type)
 {
@@ -378,13 +383,14 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     ucs_for_each_bit(mem_type, md_attr().alloc_mem_types) {
         for (unsigned i = 0; i < 300; ++i) {
             size = orig_size = ucs::rand() % 65536;
-            if (size == 0) {
+            if (size == 0 || size > md_attr().max_alloc) {
                 continue;
             }
 
             address         = NULL;
             params.address  = address;
             params.mem_type = (ucs_memory_type_t)mem_type;
+
 
             status = uct_mem_alloc(size, &method, 1, &params, &mem);
 
@@ -670,13 +676,12 @@ UCS_TEST_SKIP_COND_P(test_md, reg_advise,
     test_reg_advise(128 * UCS_MBYTE, 32 * UCS_KBYTE, 7);
 }
 
-UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
-                     !check_caps(UCT_MD_FLAG_ALLOC |
-                                 UCT_MD_FLAG_ADVISE)) {
+void test_md::test_md_alloc_advise(size_t size, size_t advise_size)
+{
     uct_md_h md_ref           = md();
     uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
     void *address             = NULL;
-    size_t size, orig_size;
+    size_t orig_size;
     ucs_status_t status;
     uct_allocated_memory_t mem;
     uct_mem_alloc_params_t params;
@@ -693,7 +698,6 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
     params.mds.mds         = &md_ref;
     params.mds.count       = 1;
 
-    size          = 128 * UCS_MBYTE;
     orig_size     = size;
 
     status  = uct_mem_alloc(size, &method, 1, &params, &mem);
@@ -704,12 +708,30 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
     EXPECT_TRUE(address != NULL);
     EXPECT_TRUE(mem.memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(md(), mem.memh, (char *)address + 7,
-                               32 * UCS_KBYTE, UCT_MADV_WILLNEED);
+    status = uct_md_mem_advise(md(), mem.memh, (char*)address + 7, advise_size,
+                               UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
     memset(address, 0xBB, size);
     uct_mem_free(&mem);
+}
+
+UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
+                     !check_caps(UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_ADVISE) ||
+                             !has_enough_memory(128 * UCS_MBYTE))
+{
+    test_md_alloc_advise(128 * UCS_MBYTE, 32 * UCS_KBYTE);
+}
+
+UCS_TEST_SKIP_COND_P(test_md, alloc_advise_limited_memory_size,
+                     !check_caps(UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_ADVISE) ||
+                             !has_enough_memory(4 * UCS_KBYTE))
+{
+    size_t max_size    = md_attr().max_alloc;
+    size_t alloc_size  = max_size / 2;
+    size_t advise_size = alloc_size / (4 * UCS_KBYTE);
+
+    test_md_alloc_advise(alloc_size, advise_size);
 }
 
 /*

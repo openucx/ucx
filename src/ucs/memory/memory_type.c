@@ -33,4 +33,3 @@ const char *ucs_memory_type_descs[] = {
     [UCS_MEMORY_TYPE_RDMA]         = "RDMA device memory",
     [UCS_MEMORY_TYPE_LAST]         = "unknown"
 };
-

@@ -87,4 +87,9 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
 void *uct_dv_get_info_uar0(void *uar);
 
+void uct_ib_mlx5dv_create_mkey(struct ibv_pd *pd, uint16_t max_entries,
+                               struct mlx5dv_mkey **mkey);
+
+void uct_ib_mlx5dv_destroy_mkey(struct mlx5dv_mkey *mkey);
+
 #endif

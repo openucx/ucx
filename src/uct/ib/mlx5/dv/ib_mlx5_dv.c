@@ -718,4 +718,20 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     *compact_av = !!(uct_ib_iface_device(iface)->flags & UCT_IB_DEVICE_FLAG_AV);
     return UCS_OK;
 }
+
+void uct_ib_mlx5dv_create_mkey(struct ibv_pd *pd, uint16_t max_entries,
+                               struct mlx5dv_mkey **mkey)
+{
+    struct mlx5dv_mkey_init_attr mkey_init_attr = {
+        .pd           = pd,
+        .create_flags = MLX5DV_MKEY_INIT_ATTR_FLAGS_INDIRECT,
+        .max_entries  = max_entries
+    };
+    *mkey = mlx5dv_create_mkey(&mkey_init_attr);
+}
+
+void uct_ib_mlx5dv_destroy_mkey(struct mlx5dv_mkey *mkey)
+{
+    mlx5dv_destroy_mkey(mkey);
+}
 #endif

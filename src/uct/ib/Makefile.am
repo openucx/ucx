@@ -20,7 +20,8 @@ noinst_HEADERS = \
 	base/ib_iface.h \
 	base/ib_log.h \
 	base/ib_md.h \
-	base/ib_verbs.h
+	base/ib_verbs.h \
+	base/ib_alloc.h
 
 libuct_ib_la_SOURCES = \
 	base/ib_device.c \

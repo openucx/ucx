@@ -7,6 +7,7 @@
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
+#include <uct/ib/base/ib_alloc.h>
 #ifdef HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif
@@ -148,5 +149,37 @@ UCS_TEST_P(test_ib_md, aligned) {
     size_t size = RUNNING_ON_VALGRIND ? 8192 : UCT_IB_MD_MAX_MR_SIZE;
     ib_md_umr_check(&rkey_buffer[0], true, size, true);
 }
+
+#if HAVE_IBV_DM
+UCS_TEST_P(test_ib_md, alloc_dm)
+{
+    ucs_status_t status;
+
+    for (unsigned i = 1; i < 300; ++i) {
+        const size_t orig_size               = i * 100;
+        ucs_alloc_device_mem_params_t params = {
+            .length     = orig_size,
+            .flags      = UCT_IB_MEM_ACCESS_FLAGS,
+            .alloc_name = "test DM"
+        };
+
+        status = uct_ib_md_alloc_device_mem(md(), &params);
+        if ((status == UCS_ERR_NO_RESOURCE) ||
+            (status == UCS_ERR_UNSUPPORTED)) {
+            continue;
+        }
+
+        ASSERT_UCS_OK(status);
+        EXPECT_GT(params.length, 0ul);
+        EXPECT_GE(params.length, orig_size);
+        EXPECT_TRUE(params.address != NULL);
+
+        memset(params.address, 0xBB, params.length);
+
+        uct_ib_md_release_device_mem(md(), params.memh);
+    }
+}
+#endif
+
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)

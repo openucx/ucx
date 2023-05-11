@@ -159,6 +159,8 @@ AS_IF([test "x$with_ib" = "xyes"],
                            mlx5dv_devx_subscribe_devx_event], [],
                           [with_mlx5_dv=no],
                           [[#include <infiniband/mlx5dv.h>]])
+                       AC_CHECK_DECL(mlx5dv_dm_map_op_addr, [], [], 
+                                     [[#include <infiniband/mlx5dv.h]])
 
               AS_IF([test "x$with_mlx5_dv" = "xyes" -a "x$have_cq_io" = "xyes" ], [
                        AC_CHECK_DECLS([

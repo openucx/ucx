@@ -28,7 +28,8 @@ static uint32_t uct_ib_mlx5_flush_rkey_make()
 #if HAVE_DEVX
 static ucs_status_t
 uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address, size_t length,
-                    uint64_t access_flags, int dmabuf_fd, size_t dmabuf_offset,
+                    uint64_t access_flags,
+                    const uct_ib_mem_reg_internal_params_t *params,
                     uct_ib_mem_t *ib_memh, uct_ib_mr_type_t mr_type, int silent)
 {
     uct_ib_mlx5_devx_mem_t *memh = ucs_derived_of(ib_memh,
@@ -36,9 +37,9 @@ uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address, size_t length,
 
     memh->address = address;
 
-    return uct_ib_reg_key_impl(md, address, length, access_flags, dmabuf_fd,
-                               dmabuf_offset, ib_memh,
-                               &memh->mrs[mr_type].super, mr_type, silent);
+    return uct_ib_reg_key_impl(md, address, length, access_flags, params,
+                               ib_memh, &memh->mrs[mr_type].super, mr_type,
+                               silent);
 }
 
 static ucs_status_t uct_ib_mlx5_dereg_key(uct_ib_md_t *md,
@@ -47,8 +48,13 @@ static ucs_status_t uct_ib_mlx5_dereg_key(uct_ib_md_t *md,
 {
     uct_ib_mlx5_devx_mem_t *memh = ucs_derived_of(ib_memh,
                                                   uct_ib_mlx5_devx_mem_t);
+    ucs_status_t status = uct_ib_dereg_mr(memh->mrs[mr_type].super.ib);
 
-    return uct_ib_dereg_mr(memh->mrs[mr_type].super.ib);
+    if (status == UCS_OK) {
+        memh->mrs[mr_type].super.ib = NULL;
+    }
+
+    return status;
 }
 
 static const char uct_ib_mkey_token[] = "uct_ib_mkey_token";
@@ -1651,6 +1657,16 @@ err:
     return status;
 }
 
+static void *uct_ib_mlx5_devx_get_dev_addr(uct_ib_md_t *ib_md,
+                                           uct_ib_mem_get_addr_params_t *params)
+{
+#if HAVE_DECL_MLX5DV_DM_MAP_OP_ADDR
+    return mlx5dv_dm_map_op_addr(params->dm, 0);
+#else
+    return uct_ib_get_dev_addr_impl(ib_md, params);
+#endif
+}
+
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .super = {
         .close              = uct_ib_mlx5_devx_md_close,
@@ -1672,6 +1688,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .dereg_multithreaded = uct_ib_mlx5_devx_dereg_mt,
     .get_atomic_mr_id    = uct_ib_mlx5_md_get_atomic_mr_id,
     .reg_exported_key    = uct_ib_mlx5_devx_reg_exported_key,
+    .get_dev_addr        = uct_ib_mlx5_devx_get_dev_addr
 };
 
 UCT_IB_MD_DEFINE_ENTRY(devx, uct_ib_mlx5_devx_md_ops);
@@ -1855,6 +1872,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .get_atomic_mr_id = (uct_ib_md_get_atomic_mr_id_func_t)
             ucs_empty_function_return_unsupported,
     .open             = uct_ib_mlx5dv_md_open,
+    .get_dev_addr        = uct_ib_get_dev_addr_impl
 };
 
 UCT_IB_MD_DEFINE_ENTRY(dv, uct_ib_mlx5_md_ops);

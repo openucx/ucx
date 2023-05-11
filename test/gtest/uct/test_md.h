@@ -40,6 +40,7 @@ protected:
     virtual void modify_config(const std::string& name, const std::string& value,
                                modify_config_mode_t mode);
     bool check_caps(uint64_t flags) const;
+    bool has_enough_memory(size_t required_memory_size);
     bool check_reg_mem_type(ucs_memory_type_t mem_type);
     void alloc_memory(void **address, size_t size, char *fill,
                       ucs_memory_type_t mem_type);
@@ -54,6 +55,9 @@ protected:
 
     void test_reg_advise(size_t size, size_t advise_size,
                          size_t advice_offset, bool check_non_blocking = false);
+
+    void test_md_alloc_advise(size_t size, size_t advise_size);
+
 
     uct_md_h md() const {
         return m_md;
