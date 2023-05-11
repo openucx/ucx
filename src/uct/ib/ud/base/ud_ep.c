@@ -312,9 +312,8 @@ static void uct_ud_ep_handle_timeout(uct_ud_ep_t *ep)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
 
-    ucs_callbackq_add_safe(&iface->super.super.worker->super.progress_q,
-                           uct_ud_ep_deferred_timeout_handler, ep,
-                           UCS_CALLBACKQ_FLAG_ONESHOT);
+    ucs_callbackq_add_oneshot(&iface->super.super.worker->super.progress_q, ep,
+                              uct_ud_ep_deferred_timeout_handler, ep);
     if (iface->async.event_cb != NULL) {
         /* notify user */
         iface->async.event_cb(iface->async.event_arg, 0);
@@ -420,7 +419,6 @@ uct_ud_ep_is_last_pending_elem(uct_ud_ep_t *ep, ucs_arbiter_elem_t *elem)
              /* only two elements are in the group (the 1st element is the
               * current one, the 2nd (or the last) element is the control one) */
              (ucs_arbiter_group_tail(&ep->tx.pending.group) == &ep->tx.pending.elem)));
-            
 }
 
 static ucs_arbiter_cb_result_t
@@ -462,8 +460,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
     uct_ud_enter(iface);
 
-    ucs_callbackq_remove_if(&iface->super.super.worker->super.progress_q,
-                            uct_ud_ep_remove_timeout_filter, self);
+    ucs_callbackq_remove_oneshot(&iface->super.super.worker->super.progress_q,
+                                 self, uct_ud_ep_remove_timeout_filter, self);
     uct_ud_ep_purge(self, UCS_ERR_CANCELED);
 
     ucs_wtimer_remove(&iface->tx.timer, &self->timer);

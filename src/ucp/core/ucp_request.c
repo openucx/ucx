@@ -354,13 +354,11 @@ static unsigned ucp_request_dt_invalidate_progress(void *arg)
 
 static void ucp_request_mem_invalidate_completion(void *arg)
 {
-    ucp_request_t *req         = arg;
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_request_t *req  = arg;
+    ucp_worker_h worker = req->send.invalidate.worker;
 
-    uct_worker_progress_register_safe(req->send.invalidate.worker->uct,
-                                      ucp_request_dt_invalidate_progress,
-                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &prog_id);
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
+                              ucp_request_dt_invalidate_progress, req);
 }
 
 static void ucp_request_dt_dereg(ucp_context_t *context, ucp_mem_h *memhs,
