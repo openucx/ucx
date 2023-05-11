@@ -485,7 +485,9 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 
 void ucp_ep_destroy_base(ucp_ep_h ep)
 {
+    ucp_worker_h worker = ep->worker;
     ucp_ep_peer_mem_data_t data;
+
     ucp_ep_refcount_field_assert(ep, refcount, ==, 0);
     ucp_ep_refcount_assert(ep, create, ==, 0);
     ucp_ep_refcount_assert(ep, flush, ==, 0);
@@ -493,8 +495,8 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucs_assert(ucs_hlist_is_empty(&ep->ext->proto_reqs));
 
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
-        ucs_assert(ep->worker->num_all_eps > 0);
-        --ep->worker->num_all_eps;
+        ucs_assert(worker->num_all_eps > 0);
+        --worker->num_all_eps;
     }
 
     ucp_worker_keepalive_remove_ep(ep);
@@ -502,12 +504,12 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucs_list_del(&ep->ext->ep_list);
 
     ucs_vfs_obj_remove(ep);
-    ucs_callbackq_remove_if(&ep->worker->uct->progress_q, ucp_ep_remove_filter,
-                            ep);
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
+                                 ucp_ep_remove_filter, ep);
     UCS_STATS_NODE_FREE(ep->stats);
     if (ep->ext->peer_mem != NULL) {
         kh_foreach_value(ep->ext->peer_mem, data, {
-            ucp_ep_peer_mem_destroy(ep->worker->context, &data);
+            ucp_ep_peer_mem_destroy(worker->context, &data);
         });
 
         kh_destroy(ucp_ep_peer_mem_hash, ep->ext->peer_mem);
@@ -1529,8 +1531,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                 ucs_status_t status)
 {
-    ucp_worker_h worker        = ucp_ep->worker;
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_worker_h worker = ucp_ep->worker;
     ucp_ep_set_failed_arg_t *set_ep_failed_arg;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
@@ -1546,9 +1547,8 @@ void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     set_ep_failed_arg->lane   = lane;
     set_ep_failed_arg->status = status;
 
-    uct_worker_progress_register_safe(worker->uct, ucp_ep_set_failed_progress,
-                                      set_ep_failed_arg,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, ucp_ep,
+                              ucp_ep_set_failed_progress, set_ep_failed_arg);
 
     /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
      * that he can wake-up on this event */
@@ -1638,17 +1638,15 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req)
 {
-    ucp_ep_h ep                = req->send.ep;
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_ep_h ep = req->send.ep;
 
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
      * endpoint cannot be released from pending/completion callback context.
      */
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
-    uct_worker_progress_register_safe(ep->worker->uct,
-                                      ucp_ep_local_disconnect_progress, req,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                              ucp_ep_local_disconnect_progress, req);
 }
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)

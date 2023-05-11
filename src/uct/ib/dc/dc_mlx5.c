@@ -1509,7 +1509,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.fc_hard_req_timeout           = config->fc_hard_req_timeout;
     self->tx.fc_hard_req_resend_time       = ucs_get_time();
     self->tx.fc_hard_req_progress_cb_id    = UCS_CALLBACKQ_ID_NULL;
-    self->tx.dci_release_prog_id           = UCS_CALLBACKQ_ID_NULL;
     self->keepalive_dci                    = -1;
     self->tx.num_dci_pools                 = 1;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
@@ -1617,8 +1616,18 @@ err:
     return status;
 }
 
+static int
+uct_dc_mlx5_ep_dci_release_remove_filter(const ucs_callbackq_elem_t *elem,
+                                         void *arg)
+{
+    return (elem->cb == uct_dc_mlx5_ep_dci_release_progress) &&
+           (elem->arg == arg);
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 {
+    uct_worker_h worker = &self->super.super.super.super.worker->super;
+
     ucs_trace_func("");
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
@@ -1626,9 +1635,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     uct_dc_mlx5_destroy_dct(self);
     kh_destroy_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
     uct_dc_mlx5_iface_cleanup_fc_ep(self);
-    uct_worker_progress_unregister_safe(
-            &self->super.super.super.super.worker->super,
-            &self->tx.dci_release_prog_id);
+    ucs_callbackq_remove_oneshot(&worker->progress_q, self,
+                                 uct_dc_mlx5_ep_dci_release_remove_filter,
+                                 self);
     uct_dc_mlx5_iface_dcis_destroy(self, self->tx.num_dci_pools,
                                    uct_dc_mlx5_iface_total_ndci(self));
 }

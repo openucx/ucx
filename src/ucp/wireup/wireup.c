@@ -439,12 +439,9 @@ static int ucp_ep_has_wireup_msg_pending(ucp_ep_h ucp_ep)
 
 static void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep)
 {
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
-
     /* Use one-shot mode to avoid the need to save prog_id */
-    uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                      ucp_wireup_eps_progress, ucp_ep,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+    ucs_callbackq_add_oneshot(&ucp_ep->worker->uct->progress_q, ucp_ep,
+                              ucp_wireup_eps_progress, ucp_ep);
     ucp_worker_signal_internal(ucp_ep->worker);
 }
 
@@ -755,7 +752,6 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
                          const ucp_wireup_msg_t *msg,
                          const ucp_unpacked_address_t *remote_address)
 {
-    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucs_status_t status;
     int ack;
 
@@ -793,9 +789,8 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     if (ack) {
         /* Send `UCP_WIREUP_MSG_ACK` from progress function
          * to avoid calling UCT routines from an async thread */
-        uct_worker_progress_register_safe(worker->uct,
-                                          ucp_wireup_send_msg_ack, ep,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, ep,
+                                  ucp_wireup_send_msg_ack, ep);
     }
 }
 

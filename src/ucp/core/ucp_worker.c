@@ -2581,8 +2581,6 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
 
     ucp_trace_req(req, "destroy uct_ep=%p", uct_ep);
 
-    req->send.discard_uct_ep.cb_id = UCS_CALLBACKQ_ID_NULL;
-
     UCS_ASYNC_BLOCK(&worker->async);
     iter = kh_get(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                   uct_ep);
@@ -2605,12 +2603,8 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
 static void ucp_worker_discard_uct_ep_progress_register(ucp_request_t *req,
                                                         ucs_callback_t func)
 {
-    ucp_worker_h worker = req->send.ep->worker;
-
-    ucs_assert_always(req->send.discard_uct_ep.cb_id == UCS_CALLBACKQ_ID_NULL);
-    uct_worker_progress_register_safe(worker->uct, func, req,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &req->send.discard_uct_ep.cb_id);
+    ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q, req, func,
+                              req);
 }
 
 static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
@@ -2658,8 +2652,6 @@ unsigned ucp_worker_discard_uct_ep_progress(void *arg)
     uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
     ucs_status_t status;
 
-    req->send.discard_uct_ep.cb_id = UCS_CALLBACKQ_ID_NULL;
-
     status = ucp_worker_discard_uct_ep_pending_cb(&req->send.uct);
     if (status == UCS_ERR_NO_RESOURCE) {
         status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
@@ -2699,7 +2691,6 @@ ucp_worker_discard_uct_ep_purge(uct_pending_req_t *self, void *arg)
     /* If there is a pending request during UCT EP discarding, it means
      * UCS_ERR_NO_RESOURCE was returned from the flush operation, the operation
      * was added to a pending queue, complete the discarding operation */
-    ucs_assert_always(req->send.discard_uct_ep.cb_id == UCS_CALLBACKQ_ID_NULL);
     ucp_worker_discard_uct_ep_complete(req);
 }
 
@@ -2729,8 +2720,8 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
 
         /* We must do this operation as a last step, because uct_ep_destroy()
          * could move a discard operation to the progress queue */
-        ucs_callbackq_remove_if(&worker->uct->progress_q,
-                                ucp_worker_discard_remove_filter, req);
+        ucs_callbackq_remove_oneshot(&worker->uct->progress_q, req,
+                                     ucp_worker_discard_remove_filter, req);
     })
 
     worker->flags |= UCP_WORKER_FLAG_DISCARD_DISABLED;
@@ -3490,7 +3481,6 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.state.uct_comp.status         = UCS_OK;
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
-    req->send.discard_uct_ep.cb_id          = UCS_CALLBACKQ_ID_NULL;
     req->send.discard_uct_ep.rsc_index      = rsc_index;
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
