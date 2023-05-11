@@ -1288,7 +1288,8 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
      * false-positive warning about potential leak of memory
      * pointed to by 'key' variable */
     iter = kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
-    if ((ret <= 0) || (iter == kh_end(&ucs_config_parser_env_vars))) {
+    if ((ret == UCS_KH_PUT_FAILED) || (ret == UCS_KH_PUT_KEY_PRESENT) ||
+        (iter == kh_end(&ucs_config_parser_env_vars))) {
         ucs_warn("kh_put(key=%s) failed", key);
         ucs_free(key);
         goto out;

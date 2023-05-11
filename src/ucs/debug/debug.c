@@ -691,12 +691,12 @@ const char *ucs_debug_get_symbol_name(void *address)
     pthread_mutex_lock(&lock);
     hash_it = kh_put(ucs_debug_symbol, &ucs_debug_symbols_cache,
                      (uintptr_t)address, &hash_extra_status);
-    if (hash_extra_status == 0) {
+    if (hash_extra_status == UCS_KH_PUT_KEY_PRESENT) {
          sym = kh_value(&ucs_debug_symbols_cache, hash_it);
     } else {
         status = ucs_debug_lookup_address(address, &info);
         if (status == UCS_OK) {
-            if (hash_extra_status == -1) {
+            if (hash_extra_status == UCS_KH_PUT_FAILED) {
                 /* could not add to hash, return pointer to the static buffer */
                 sym = info.function;
                 goto out;

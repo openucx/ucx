@@ -383,7 +383,7 @@ static ucs_status_t uct_ud_iface_gid_hash_init(uct_ud_iface_t *iface,
                   uct_ib_device_name(dev), port, gid_idx);
         kh_put(uct_ud_iface_gid, &iface->gid_table.hash, gid_info.gid,
                &kh_ret);
-        if (kh_ret < 0) {
+        if (kh_ret == UCS_KH_PUT_FAILED) {
             ucs_error("failed to add gid to hash on device %s port %d index %d",
                       uct_ib_device_name(dev), port, gid_idx);
             status = UCS_ERR_NO_MEMORY;

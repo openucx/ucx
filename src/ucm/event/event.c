@@ -343,7 +343,7 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
     if (event.shmat.result != MAP_FAILED) {
         pthread_spin_lock(&ucm_kh_lock);
         iter = kh_put(ucm_ptr_size, &ucm_shmat_ptrs, event.mmap.result, &result);
-        if (result != -1) {
+        if (result != UCS_KH_PUT_FAILED) {
             kh_value(&ucm_shmat_ptrs, iter) = size;
         }
         pthread_spin_unlock(&ucm_kh_lock);

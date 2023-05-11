@@ -268,7 +268,8 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
 
     khiter = kh_put(xpmem_remote_mem, &uct_xpmem_remote_mem_hash, xsegid,
                     &khret);
-    ucs_assertv_always((khret == 1) || (khret == 2), "khret=%d", khret);
+    ucs_assertv_always((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
+                       (khret == UCS_KH_PUT_BUCKET_CLEAR), "khret=%d", khret);
     ucs_assert_always (khiter != kh_end(&uct_xpmem_remote_mem_hash));
     kh_val(&uct_xpmem_remote_mem_hash, khiter) = rmem;
 
