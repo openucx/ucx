@@ -34,6 +34,7 @@ BEGIN_C_DECLS
  */
 typedef struct ucs_callbackq       ucs_callbackq_t;
 typedef struct ucs_callbackq_elem  ucs_callbackq_elem_t;
+typedef void *                     ucs_callbackq_key_t;
 
 
 /**
@@ -96,7 +97,7 @@ struct ucs_callbackq {
      * Private data, which we don't want to expose in API to avoid pulling
      * more header files
      */
-    char                           priv[72];
+    char                           priv[112];
 };
 
 
@@ -190,6 +191,37 @@ void ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, int id);
  */
 void ucs_callbackq_remove_if(ucs_callbackq_t *cbq, ucs_callbackq_predicate_t pred,
                              void *arg);
+
+
+/**
+ * Add a slowpath oneshot callback to the queue.
+ * This can be used from any context and any thread.
+ *
+ * @note Callbacks with the same key will be called in the same order they were
+ * added. On the other hand, callbacks with different keys can be called in any
+ * order.
+ *
+ * @param  [in] cbq      Callback queue to add the callback to.
+ * @param  [in] key      User-defind key, used to remove the callback later.
+ * @param  [in] cb       Callback to add.
+ * @param  [in] arg      User-defined argument for the callback.
+ */
+void ucs_callbackq_add_oneshot(ucs_callbackq_t *cbq, ucs_callbackq_key_t key,
+                               ucs_callback_t cb, void *arg);
+
+
+/**
+ * Remove all slowpath callbacks from the queue with the given key and for which
+ * the given predicate returns "true" (nonzero) value.
+ * This can be used from any context and any thread.
+ *
+ * @param  [in] cbq       Callback queue.
+ * @param  [in] key       Callback key to remove.
+ * @param  [in] pred      Predicate to check candidates for removal.
+ * @param  [in] arg       User-defined argument for the predicate.
+ */
+void ucs_callbackq_remove_oneshot(ucs_callbackq_t *cbq, ucs_callbackq_key_t key,
+                                  ucs_callbackq_predicate_t pred, void *arg);
 
 
 /**
