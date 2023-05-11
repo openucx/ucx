@@ -98,7 +98,8 @@ static ucs_memtrack_entry_t* ucs_memtrack_entry_get(const char* name)
 
     iter = kh_put(ucs_memtrack_entry_hash, &ucs_memtrack_context.entries,
                   entry->name, &ret);
-    ucs_assertv(ret == 1 || ret == 2, "ret=%d", ret);
+    ucs_assertv((ret == UCS_KH_PUT_BUCKET_EMPTY) ||
+                (ret == UCS_KH_PUT_BUCKET_CLEAR), "ret=%d", ret);
     kh_val(&ucs_memtrack_context.entries, iter) = entry;
 
     return entry;
