@@ -100,7 +100,7 @@ size_t ucp_am_max_header_size(ucp_worker_h worker)
     uct_iface_attr_t *if_attr;
     ucp_rsc_index_t iface_id;
     size_t max_am_header, max_uct_fragment;
-    size_t max_rts_size, max_ucp_header;
+    size_t max_rts_size, max_ucp_header, seg_size_packing_loss;
 
     if (!(context->config.features & UCP_FEATURE_AM)) {
         return 0ul;
@@ -129,9 +129,12 @@ size_t ucp_am_max_header_size(ucp_worker_h worker)
          * trick is not needed.
          */
         if (if_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
-            max_uct_fragment = ucs_max(if_attr->cap.am.max_bcopy,
-                                       max_ucp_header - 1) - max_ucp_header - 1;
-            max_am_header    = ucs_min(max_am_header, max_uct_fragment);
+            seg_size_packing_loss = if_attr->cap.am.max_bcopy %
+                                    UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR;
+            max_uct_fragment      = ucs_max(
+                              if_attr->cap.am.max_bcopy - seg_size_packing_loss,
+                              max_ucp_header - 1) - max_ucp_header - 1;
+            max_am_header         = ucs_min(max_am_header, max_uct_fragment);
         }
     }
 
