@@ -1692,8 +1692,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
 
     uct_worker_progress_register_safe(
             &iface->super.super.super.super.worker->super,
-            uct_dc_mlx5_ep_fc_hard_req_progress, iface,
-            UCS_CALLBACKQ_FLAG_FAST,
+            uct_dc_mlx5_ep_fc_hard_req_progress, iface, 0,
             &iface->tx.fc_hard_req_progress_cb_id);
 
 out_set_status:

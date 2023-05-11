@@ -198,7 +198,7 @@ uct_ib_device_async_event_schedule_callback(uct_ib_device_t *dev,
     ucs_assert(ucs_spinlock_is_held(&dev->async_event_lock));
     ucs_assert(wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
     wait_ctx->cb_id = ucs_callbackq_add_safe(wait_ctx->cbq, wait_ctx->cb,
-                                             wait_ctx, 0);
+                                             wait_ctx);
 }
 
 static void
