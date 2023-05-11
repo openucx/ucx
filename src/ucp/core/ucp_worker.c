@@ -2508,7 +2508,7 @@ static unsigned ucp_worker_discard_uct_eps_destroy_progress(void *arg)
 
     kh_foreach_value(&worker->discard_uct_ep_hash, req, {
         kh_del(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
-                   __i);
+                __i);
         ucp_worker_discard_uct_ep_destroy_once(req);
         --worker->uct_ep_flush_comp;
     });
@@ -2548,8 +2548,8 @@ static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
     ++worker->uct_ep_flush_comp;
     if ((worker->uct_ep_destroying == 0) &&
         (worker->uct_ep_flush_comp == discard_size)) {
-        ucp_worker_discard_uct_ep_progress_register(req,
-            ucp_worker_discard_uct_eps_destroy_progress);
+        ucp_worker_discard_uct_ep_progress_register(
+                req, ucp_worker_discard_uct_eps_destroy_progress);
         worker->uct_ep_destroying = 1;
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
