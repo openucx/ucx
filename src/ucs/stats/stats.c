@@ -208,7 +208,8 @@ static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
     }
 
     iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, class_dup->name, &r);
-    ucs_assert_always(r != 0); /* initialize a previously empty hash entry */
+    ucs_assert_always(r != UCS_KH_PUT_KEY_PRESENT);
+    /* initialize a previously empty hash entry */
     kh_val(&ucs_stats_context.cls, iter) = class_dup;
     return class_dup;
 }

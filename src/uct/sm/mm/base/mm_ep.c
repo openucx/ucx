@@ -46,13 +46,15 @@ uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
     int khret;
 
     khiter = kh_put(uct_mm_remote_seg, &ep->remote_segs, seg_id, &khret);
-    if (khret == -1) {
+    if (khret == UCS_KH_PUT_FAILED) {
         ucs_error("failed to add remote segment to mm ep hash");
         return UCS_ERR_NO_MEMORY;
     }
 
-    /* we expect the key would either be never used (=1) or deleted (=2) */
-    ucs_assert_always((khret == 1) || (khret == 2));
+    /* we expect the key would either be
+     * never used (BUCKET_EMPTY) or deleted (BUCKET_CLEAR) */
+    ucs_assert_always((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
+                      (khret == UCS_KH_PUT_BUCKET_CLEAR));
 
     remote_seg = &kh_val(&ep->remote_segs, khiter);
 

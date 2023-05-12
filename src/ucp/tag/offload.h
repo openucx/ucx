@@ -169,7 +169,8 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
 
         hash_it = kh_put(ucp_tag_offload_hash, &worker->tm.offload.tag_hash,
                          tag_key, &ret);
-        ucs_assertv((ret == 1) || (ret == 2), "ret=%d", ret);
+        ucs_assertv((ret == UCS_KH_PUT_BUCKET_EMPTY) ||
+                    (ret == UCS_KH_PUT_BUCKET_CLEAR), "ret=%d", ret);
         kh_value(&worker->tm.offload.tag_hash, hash_it) = wiface;
     }
 }

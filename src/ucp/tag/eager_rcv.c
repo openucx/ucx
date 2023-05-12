@@ -171,9 +171,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
     int ret;
 
     iter   = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, hdr->msg_id, &ret);
-    ucs_assert(ret >= 0);
+    ucs_assert(ret != UCS_KH_PUT_FAILED);
     matchq = &kh_value(&worker->tm.frag_hash, iter);
-    if (ret != 0) {
+    if (ret != UCS_KH_PUT_KEY_PRESENT) {
         /* initialize a previously empty hash entry */
         ucp_tag_frag_match_init_unexp(matchq);
     }
@@ -197,7 +197,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
     } else {
         /* If fragment is expected, the corresponding element must be present
          * in the hash (added in ucp_tag_frag_list_process_queue). */
-        ucs_assert(ret == 0);
+        ucs_assert(ret == UCS_KH_PUT_KEY_PRESENT);
 
         /* hash entry contains a request, copy data to user buffer */
         req      = matchq->exp_req;

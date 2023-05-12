@@ -545,7 +545,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
                 hash_it = kh_put(request_ids, &reqids, rec->param64,
                                  &hash_extra_status);
                 if (hash_it == kh_end(&reqids)) {
-                    if (hash_extra_status == 0) {
+                    if (hash_extra_status == UCS_KH_PUT_KEY_PRESENT) {
                         /* old request was not released, replace it */
                         hash_it = kh_get(request_ids, &reqids, rec->param64);
                         reqid = reqid_ctr++;
