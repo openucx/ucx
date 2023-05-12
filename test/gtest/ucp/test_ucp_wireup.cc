@@ -1749,9 +1749,9 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_TAG,
-                               TEST_TAG | WORKER_ADDR_V1, "tag");
+                               TEST_TAG, "tag");
         add_variant_with_value(variants, UCP_FEATURE_TAG,
-                               TEST_TAG | WORKER_ADDR_V1 | UNIFIED_MODE,
+                               TEST_TAG | UNIFIED_MODE,
                                "tag,unified");
     }
 
