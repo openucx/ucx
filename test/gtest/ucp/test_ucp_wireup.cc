@@ -1748,11 +1748,9 @@ class test_ucp_address_v2 : public test_ucp_wireup {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, TEST_TAG, "tag");
         add_variant_with_value(variants, UCP_FEATURE_TAG,
-                               TEST_TAG | WORKER_ADDR_V2, "tag");
-        add_variant_with_value(variants, UCP_FEATURE_TAG,
-                               TEST_TAG | WORKER_ADDR_V2 | UNIFIED_MODE,
-                               "tag,unified");
+                               TEST_TAG | UNIFIED_MODE, "tag,unified");
     }
 
     void check_fp_values(double unpacked, double original)
