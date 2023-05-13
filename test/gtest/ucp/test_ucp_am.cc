@@ -296,6 +296,11 @@ UCS_TEST_P(test_ucp_am, send_process_am_release)
     do_send_process_data_test(UCP_RELEASE, 0, 0);
 }
 
+UCS_TEST_P(test_ucp_am, send_process_iov_am_64k_size)
+{
+    do_send_process_data_iov_test(65536);
+}
+
 UCS_TEST_P(test_ucp_am, send_process_iov_am)
 {
     ucs::detail::message_stream ms("INFO");
