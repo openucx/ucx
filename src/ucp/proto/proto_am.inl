@@ -428,7 +428,8 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     }
 
     max_zcopy = ucp_ep_get_max_zcopy(ep, req->send.lane) - user_hdr_size;
-    max_iov   = ucp_ep_get_max_iov(ep, req->send.lane) - !!user_hdr_size;
+    max_iov   = ucs_min(ucp_ep_get_max_iov(ep, req->send.lane) - !!user_hdr_size,
+                        (UCS_ALLOCA_MAX_SIZE / sizeof(*iov)) - 1);
     iov       = ucs_alloca((max_iov + 1) * sizeof(uct_iov_t));
 
     for (;;) {
