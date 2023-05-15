@@ -605,6 +605,7 @@ ucp_proto_select_wiface_activate(ucp_worker_h worker,
         rsc_index = ep_config_key->lanes[lane].rsc_index;
         wiface    = ucp_worker_iface(worker, rsc_index);
         ucp_worker_iface_progress_ep(wiface);
+        wiface->flags |= UCP_WORKER_IFACE_FLAG_WAS_USED;
     }
 }
 
