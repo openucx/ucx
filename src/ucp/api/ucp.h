@@ -392,7 +392,10 @@ enum ucp_mem_map_params_field {
     UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE          = UCS_BIT(4),
 
     /** Exported memory handle buffer. */
-    UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER = UCS_BIT(5)
+    UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER = UCS_BIT(5),
+
+    /** Mkey index to use when doing memory registration. */
+    UCP_MEM_MAP_PARAM_FIELD_MKEY_INDEX           = UCS_BIT(6)
 };
 
 /**
@@ -1667,6 +1670,17 @@ typedef struct ucp_mem_map_params {
       * set to NULL by default.
       */
     const void              *exported_memh_buffer;
+
+    /**
+     * Mkey index to use when doing memory registration.
+     * This field is optional.
+     *
+     * This parameter is application defined and it is used to produce memory
+     * handles that will pack into predictable rkeys. With that capability, it
+     * becomes possible to avoid exchanging rkeys, as the remote endpoint can
+     * directly build them, provided that it uses the same mkey index.
+     */
+    uint32_t                mkey_index;
 } ucp_mem_map_params_t;
 
 
