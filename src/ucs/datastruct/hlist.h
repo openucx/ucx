@@ -67,6 +67,20 @@ ucs_hlist_is_empty(const ucs_hlist_head_t *head)
 
 
 /**
+ * Get the length of the list.
+ *
+ * @param [in] head   List head to get length of.
+ *
+ * @return Number of elements in the list.
+ */
+static UCS_F_ALWAYS_INLINE unsigned long
+ucs_hlist_length(ucs_hlist_head_t *head)
+{
+    return ucs_hlist_is_empty(head) ? 0 : ucs_list_length(&head->ptr->list) + 1;
+}
+
+
+/**
  * Common function to add elements to the list head or tail.
  *
  * @param [in] head              List head to add to.
@@ -237,6 +251,38 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
              ((_elem = ucs_hlist_next_elem(_elem, _member)) != \
                      ucs_hlist_head_elem(_head, ucs_typeof(*(_elem)), _member)); \
          )
+
+
+/**
+ * Iterate over detached-head list and allow removing the current element
+ * during the iteration.
+ *
+ * @param _elem     Variable to hold the current list element.
+ * @param _telem    Helper variable to hold a temporary element.
+ * @param _head     Pointer to list head.
+ * @param _thead    Helper variable to hold a temporary pointer to the list head.
+ * @param _member   List element inside the containing structure.
+ *
+ * @note The iteration is implemented by saving the head pointer and next
+ * element pointer before each iteration. If the current element is removed, the
+ * next pointer is no longer accessible, and the head pointer may change if it's
+ * the first one.
+ */
+#define ucs_hlist_for_each_safe(_elem, _telem, _head, _thead, _member) \
+    for ((_thead)->ptr = NULL, \
+         _elem = ucs_hlist_head_elem(_head, ucs_typeof(*(_elem)), _member); \
+         \
+         /* List must not be empty */ \
+         !ucs_hlist_is_empty(_head) && \
+         /* Must not be the first elem */ \
+         (_elem != ucs_hlist_head_elem(_thead, ucs_typeof(*(_elem)), \
+                                       _member)) && \
+         /* Save the next element */ \
+         ((_telem = ucs_hlist_next_elem(_elem, _member)) != NULL) && \
+         /* Save pointer to the head in case it's changed by removal */ \
+         (((_thead)->ptr = (_head)->ptr) != NULL); \
+         \
+         _elem = _telem)
 
 
 /**
