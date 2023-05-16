@@ -410,6 +410,22 @@ enum ucp_mem_advise_params_field {
 
 
 /**
+ * @ingroup UCP_MEM
+ * @brief UCP rkey build parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_rkey_build_params_t
+ * are present. It enables backward compatibility support when adding fields.
+ */
+enum ucp_rkey_build_params_field {
+    /** Memory handle already registered locally as reference */
+    UCP_RKEY_BUILD_PARAM_FIELD_MEMH       = UCS_BIT(0),
+
+    /** Application defined mkey index used to build a given rkey */
+    UCP_RKEY_BUILD_PARAM_FIELD_MKEY_INDEX = UCS_BIT(1)
+};
+
+
+/**
  * @ingroup UCP_CONTEXT
  * @brief UCP library attributes field mask.
  *
@@ -1652,6 +1668,42 @@ typedef struct ucp_mem_map_params {
       */
     const void              *exported_memh_buffer;
 } ucp_mem_map_params_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Parameters used by the UCP rkey build routine to construct an rkey
+ *
+ * This lists the parameters that can be used by @ref ucp_rkey_build to locally
+ * build an rkey.
+ */
+typedef struct ucp_rkey_build_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_rkey_build_params_field.
+     * Fields not specified in this mask will be ignored. This provides ABI
+     * compatibility with respect to adding new fields.
+     */
+    uint64_t        field_mask;
+
+    /**
+     * Memory handle for memory already registered locally with same mkey index.
+     * This field is mandatory and ucp_rkey_build routine will return an error
+     * if it is missing.
+     * It is used to identify the memory domain where we need to perform rkey
+     * build.
+     */
+    const ucp_mem_h memh;
+
+    /**
+     * Mkey index to use when locally building an rkey.
+     * This field is mandatory and @ref ucp_rkey_build routine will return an
+     * error if it is missing.
+     * The remote doing the corresponding memory registration must use the same
+     * mkey_index.
+     */
+    uint32_t        mkey_index;
+} ucp_rkey_build_params_t;
 
 
 /**
@@ -3104,6 +3156,29 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
  *         cannot be accessed directly or the remote memory address is not valid.
  */
 ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p);
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Locally build a remote key using known applicative pre-shared
+ * parameters.
+ *
+ * This routine builds an rkey to access remote memory regions on endpoints that
+ * have registered them using the same pre-shared parameters.
+ *
+ * When some nodes are implementing such symmetric scheme where they
+ * are using common pre-shared parameters, they don't need to exchange or store
+ * rkeys for each endpoint.
+ *
+ * @param [in]  context    Handle to @ref ucp_context_h
+ * @param [in]  params     Filled by the user with the build parameters
+ * @param [out] rkey_p     Created remote key with symmetric parameter
+ *
+ * @return Error code as defined by @ref ucs_status_t in case of failure
+ */
+ucs_status_t ucp_rkey_build(ucp_context_h context,
+                            const ucp_rkey_build_params_t *params,
+                            ucp_rkey_h *rkey_p);
 
 
 /**
