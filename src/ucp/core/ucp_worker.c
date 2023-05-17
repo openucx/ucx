@@ -1201,13 +1201,16 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
+static const ucp_tl_resource_desc_t *
+ucp_worker_iface_get_tl_resource(const ucp_worker_iface_t *wiface)
+{
+    return &wiface->worker->context->tl_rscs[wiface->rsc_index];
+}
+
 static ucs_sys_device_t
 ucp_worker_iface_get_sys_device(const ucp_worker_iface_t *wiface)
 {
-    const ucp_context_h context     = wiface->worker->context;
-    const ucp_rsc_index_t rsc_index = wiface->rsc_index;
-
-    return context->tl_rscs[rsc_index].tl_rsc.sys_device;
+    return ucp_worker_iface_get_tl_resource(wiface)->tl_rsc.sys_device;
 }
 
 static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
@@ -1234,13 +1237,28 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
     }
 }
 
+static const ucp_tl_md_t *
+ucp_worker_iface_get_md(const ucp_worker_iface_t *wiface)
+{
+    const ucp_tl_resource_desc_t *rsc;
+
+    rsc = ucp_worker_iface_get_tl_resource(wiface);
+    return &wiface->worker->context->tl_mds[rsc->md_index];
+}
+
 static void
 ucp_worker_iface_get_memory_distance(const ucp_worker_iface_t *wiface,
                                      ucs_sys_dev_distance_t *distance)
 {
-    const ucs_sys_device_t sys_dev = ucp_worker_iface_get_sys_device(wiface);
+    const ucs_sys_device_t sys_dev  = ucp_worker_iface_get_sys_device(wiface);
+    const uct_md_attr_v2_t *md_attr = &ucp_worker_iface_get_md(wiface)->attr;
 
-    ucs_topo_get_memory_distance(sys_dev, distance);
+    if ((md_attr->access_mem_types | md_attr->reg_mem_types) &
+        UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
+        ucs_topo_get_memory_distance(sys_dev, distance);
+    } else {
+        *distance = ucs_topo_default_distance;
+    }
 }
 
 void ucp_worker_iface_add_bandwidth(uct_ppn_bandwidth_t *ppn_bandwidth,
