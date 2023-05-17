@@ -30,13 +30,13 @@ public:
     {
         add_variant_values(variants, test_ucp_tag::get_test_variants, 0);
         add_variant_values(variants, test_ucp_tag::get_test_variants, 1,
-                           "proto");
+                           "proto_v1");
     }
 
     void init()
     {
-        if (enable_proto()) {
-            modify_config("PROTO_ENABLE", "y");
+        if (disable_proto()) {
+            modify_config("PROTO_ENABLE", "n");
         }
         test_ucp_tag::init();
         check_offload_support(true);
@@ -102,7 +102,7 @@ public:
     }
 
 private:
-    bool enable_proto() const
+    bool disable_proto() const
     {
         return get_variant_value(0);
     }
@@ -468,8 +468,6 @@ public:
 
     void init()
     {
-        skip_external_protov2();
-
         // The test checks that increase of active ifaces is handled
         // correctly. It needs to start with a single active iface, therefore
         // disable multi-rail.
@@ -765,11 +763,17 @@ public:
         return e.worker()->tm_offload_stats;
     }
 
-    void validate_offload_counter(uint64_t rx_cntr, uint64_t val)
+    void validate_offload_counter(const std::vector<uint64_t> &rx_counters,
+                                  uint64_t val)
     {
-        uint64_t cnt;
-        cnt = UCS_STATS_GET_COUNTER(worker_offload_stats(receiver()), rx_cntr);
-        EXPECT_EQ(val, cnt) << "RX counter";
+        size_t total_counter = 0;
+
+        for (auto &cntr : rx_counters) {
+            total_counter += UCS_STATS_GET_COUNTER(
+                                 worker_offload_stats(receiver()), cntr);
+        }
+
+        EXPECT_EQ(val, total_counter);
     }
 
     void wait_counter(ucs_stats_node_t *stats, uint64_t cntr,
@@ -786,7 +790,8 @@ public:
         EXPECT_EQ(1ul, v);
     }
 
-    void test_send_recv(size_t count, bool send_iov, uint64_t cntr)
+    void test_send_recv(size_t count, bool send_iov,
+                        const std::vector<uint64_t> &counters)
     {
         ucp_tag_t tag = 0x11;
 
@@ -805,7 +810,7 @@ public:
         wait(req);
         request_free(req);
 
-        validate_offload_counter(cntr, 1ul);
+        validate_offload_counter(counters, 1ul);
     }
 };
 
@@ -865,7 +870,8 @@ UCS_TEST_P(test_ucp_tag_offload_stats, block, "TM_THRESH=1")
         reqs.push_back(rreq);
     } while (!cnt && (--limit > 0));
 
-    validate_offload_counter(UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_TAG_EXCEED , 1ul);
+    validate_offload_counter({UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_TAG_EXCEED},
+                             1ul);
 
     for (std::vector<request*>::const_iterator iter = reqs.begin();
          iter != reqs.end(); ++iter) {
@@ -878,8 +884,8 @@ UCS_TEST_P(test_ucp_tag_offload_stats, eager, "RNDV_THRESH=1000", "TM_THRESH=64"
     size_t size = 512; // Size smaller than RNDV, but bigger than TM thresh
 
     // Offload is not activated, so the first message should arrive unexpectedly
-    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR);
-    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED);
+    test_send_recv(size, false, {UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR});
+    test_send_recv(size, false, {UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED});
 }
 
 UCS_TEST_P(test_ucp_tag_offload_stats, rndv, "RNDV_THRESH=1000")
@@ -887,8 +893,9 @@ UCS_TEST_P(test_ucp_tag_offload_stats, rndv, "RNDV_THRESH=1000")
     size_t size = 2048; // Size bigger than RNDV thresh
 
     // Offload is not activated, so the first message should arrive unexpectedly
-    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV);
-    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED);
+    test_send_recv(size, false, {UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV});
+    test_send_recv(size, false, {UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED,
+                                 UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV});
 }
 
 UCS_TEST_P(test_ucp_tag_offload_stats, sw_rndv, "RNDV_THRESH=1000")
@@ -896,18 +903,19 @@ UCS_TEST_P(test_ucp_tag_offload_stats, sw_rndv, "RNDV_THRESH=1000")
     size_t size = 2048; // Size bigger than RNDV thresh
 
     // Offload is not activated, so the first message should arrive unexpectedly
-    test_send_recv(size, true, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV);
-    test_send_recv(size, true, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV);
+    test_send_recv(size, true, {UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV});
+    test_send_recv(size, true, {UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV});
 }
 
 UCS_TEST_P(test_ucp_tag_offload_stats, force_sw_rndv, "TM_SW_RNDV=y",
-                                                      "RNDV_THRESH=1000")
+                                                      "RNDV_THRESH=1000",
+                                                      "PROTO_ENABLE=n")
 {
     size_t size = 2048; // Size bigger than RNDV thresh
 
     // Offload is not activated, so the first message should arrive unexpectedly
-    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV);
-    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV);
+    test_send_recv(size, false, {UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV});
+    test_send_recv(size, false, {UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV});
 }
 
 
@@ -947,7 +955,7 @@ UCS_TEST_P(test_ucp_tag_offload_stats_gpu, block_gpu_no_gpu_direct,
     wait_counter(worker_offload_stats(receiver()),
                  UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_MEM_REG);
 
-    validate_offload_counter(UCP_WORKER_STAT_TAG_OFFLOAD_POSTED, 0ul);
+    validate_offload_counter({UCP_WORKER_STAT_TAG_OFFLOAD_POSTED}, 0ul);
 
     req_cancel(receiver(), rreq);
 }

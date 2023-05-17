@@ -370,7 +370,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "would be cut to that maximal value.",
    ucs_offsetof(ucp_context_config_t, listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"PROTO_ENABLE", "n",
+  {"PROTO_ENABLE", "y",
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_context_config_t, proto_enable), UCS_CONFIG_TYPE_BOOL},
 

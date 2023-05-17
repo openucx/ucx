@@ -7,9 +7,10 @@
 
 #include "test_ucp_memheap.h"
 
-#include <ucs/sys/sys.h>
 extern "C" {
+#include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
+#include <ucs/sys/sys.h>
 }
 
 
@@ -24,14 +25,15 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "flush_worker");
         add_variant_with_value(variants, UCP_FEATURE_RMA, FLUSH_EP, "flush_ep");
         add_variant_with_value(variants, UCP_FEATURE_RMA,
-                               FLUSH_EP | ENABLE_PROTO, "flush_ep_proto");
+                               FLUSH_EP | DISABLE_PROTO, "flush_ep_proto_v1");
         add_variant_with_value(variants, UCP_FEATURE_RMA, USER_MEMH,
                                "user_memh");
     }
 
     virtual void init() {
-        if (enable_proto()) {
-            modify_config("PROTO_ENABLE", "y");
+        if (disable_proto()) {
+            modify_config("PROTO_ENABLE", "n");
+        } else {
             modify_config("MAX_RMA_LANES", "2");
         }
         test_ucp_memheap::init();
@@ -116,7 +118,7 @@ protected:
         for (size_t i = 0; i < pairs.size(); ++i) {
 
             /* Memory type put/get is fully supported only with new protocols */
-            if (!enable_proto() &&
+            if (!m_ucp_config->ctx.proto_enable &&
                 (!UCP_MEM_IS_HOST(pairs[i][0]) ||
                  !UCP_MEM_IS_HOST(pairs[i][1]))) {
                 continue;
@@ -131,8 +133,8 @@ protected:
                            UCS_MEMORY_TYPE_HOST, UCP_MEM_MAP_NONBLOCK);
     }
 
-    bool enable_proto() {
-        return get_variant_value() & ENABLE_PROTO;
+    bool disable_proto() {
+        return !m_ucp_config->ctx.proto_enable;
     }
 
     bool user_memh()
@@ -143,9 +145,9 @@ protected:
 private:
     /* Test variants */
     enum {
-        FLUSH_EP     = UCS_BIT(0), /* If not set, flush worker */
-        ENABLE_PROTO = UCS_BIT(1),
-        USER_MEMH    = UCS_BIT(2)
+        FLUSH_EP      = UCS_BIT(0), /* If not set, flush worker */
+        DISABLE_PROTO = UCS_BIT(1),
+        USER_MEMH     = UCS_BIT(2)
     };
 
     void init_iov(size_t size, ucp_dt_iov_t *iov, size_t iov_count,
@@ -280,7 +282,7 @@ UCS_TEST_P(test_ucp_rma, put_nonblocking) {
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma, put_nonblocking_iov_zcopy, !enable_proto(),
+UCS_TEST_SKIP_COND_P(test_ucp_rma, put_nonblocking_iov_zcopy, disable_proto(),
                      "ZCOPY_THRESH=0") {
     if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
         UCS_TEST_SKIP_R("put_zcopy is not supported");
@@ -299,7 +301,7 @@ UCS_TEST_P(test_ucp_rma, get_nonblocking) {
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma, get_nonblocking_iov_zcopy, !enable_proto(),
+UCS_TEST_SKIP_COND_P(test_ucp_rma, get_nonblocking_iov_zcopy, disable_proto(),
                      "ZCOPY_THRESH=0") {
     if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
         UCS_TEST_SKIP_R("get_zcopy is not supported");

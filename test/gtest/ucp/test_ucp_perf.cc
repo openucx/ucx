@@ -330,10 +330,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
     size_t max_iter = std::numeric_limits<size_t>::max();
     test_spec test  = tests[get_variant_value(VARIANT_TEST_TYPE)];
 
-    if (test.is_amo() && m_ucp_config->ctx.proto_enable) {
-        UCS_TEST_SKIP_R("FIXME: proto_v2 selects SW AMO when HW device is present");
-    }
-
     if (has_transport("tcp")) {
         check_perf = false;
         max_iter   = 1000lu;
@@ -377,10 +373,6 @@ class test_ucp_loopback : public test_ucp_perf {};
 UCS_TEST_P(test_ucp_loopback, envelope)
 {
     test_spec test = tests[get_variant_value(VARIANT_TEST_TYPE)];
-
-    if (test.is_amo() && m_ucp_config->ctx.proto_enable) {
-        UCS_TEST_SKIP_R("FIXME: proto_v2 selects SW AMO when HW device is present");
-    }
 
     test.send_mem_type = UCS_MEMORY_TYPE_HOST;
     test.recv_mem_type = UCS_MEMORY_TYPE_HOST;
