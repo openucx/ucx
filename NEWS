@@ -11,6 +11,10 @@
 ### Features:
 ### Bugfixes:
 
+## 1.14.1 RC2 (May 18, 2023)
+### Bugfixes
+* Added CUDA 12 based UCX builds to the release flow
+
 ## 1.14.1 RC1 (May 17, 2023)
 ### Bugfixes
 * Increased the maximal number of endpoint configurations
