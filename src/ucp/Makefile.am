@@ -162,6 +162,7 @@ libucp_la_SOURCES = \
 	tag/tag_send.c \
 	tag/offload.c \
 	tag/offload/eager.c \
+	tag/offload/rndv.c \
 	wireup/address.c \
 	wireup/ep_match.c \
 	wireup/select.c \

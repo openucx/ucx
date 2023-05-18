@@ -106,11 +106,22 @@ typedef struct {
 
     /* Map of mandatory mds which keys should be packed to the rkey */
     ucp_md_map_t                   md_map;
+
 } ucp_proto_rndv_ctrl_init_params_t;
 
 
+/* Initializes protocol which sends rendezvous control message using AM lane
+ * (e.g. RTS and ATS). */
 ucs_status_t
-ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params);
+ucp_proto_rndv_ctrl_am_init(const ucp_proto_rndv_ctrl_init_params_t *params);
+
+
+/* Initializes protocol which sends rendezvous control message using specified
+ * lane. Can be used by tag matching offload rendezvous protocols, which use
+ * tag lane for sending control messages. */
+ucs_status_t
+ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
+                         ucp_lane_index_t lane);
 
 
 ucs_status_t

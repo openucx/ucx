@@ -69,7 +69,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_SHORT
     };
 
-    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 1) ||
+    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 1) ||
         !ucp_proto_is_short_supported(select_param)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -134,7 +134,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_t),
         .super.send_op       = UCT_EP_OP_EAGER_BCOPY,
-        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
@@ -144,7 +144,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
     };
 
     /* offload proto can not be used if no tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, op_id, 1)) {
+    if (!ucp_tag_eager_check_op_id(init_params, op_id, 1)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -255,7 +255,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
     };
 
     /* offload proto can not be used if no tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, op_id, 1) ||
+    if (!ucp_tag_eager_check_op_id(init_params, op_id, 1) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }

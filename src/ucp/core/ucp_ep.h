@@ -772,7 +772,8 @@ int ucp_ep_is_local_connected(ucp_ep_h ep);
 
 unsigned ucp_ep_local_disconnect_progress(void *arg);
 
-size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
+size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_context_h context,
+                                          const ucp_ep_config_key_t *key);
 
 void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
                                      ucp_ep_rndv_zcopy_config_t *rndv_zcopy);

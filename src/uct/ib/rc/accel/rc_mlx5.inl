@@ -1218,7 +1218,8 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
     uct_rc_mlx5_iface_tag_del_from_hash(iface, priv->buffer);
 
     if (is_inline) {
-        ucs_assert(byte_len <= priv->length);
+        ucs_assertv(byte_len <= priv->length, "byte_len=%u length=%u",
+                    byte_len, priv->length);
     } else {
         VALGRIND_MAKE_MEM_DEFINED(priv->buffer, byte_len);
     }

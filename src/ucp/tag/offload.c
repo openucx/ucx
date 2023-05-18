@@ -632,7 +632,10 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
         ucs_error("Failed to cancel tag rndv op %s", ucs_status_string(status));
     }
 
-    req->flags &= ~UCP_REQUEST_FLAG_OFFLOADED;
+    /* Rndv will be completed by SW, reinitialize the completed size needed for
+     * RTR, rkey_ptr, etc. This field is relevant for proto v2 only. */
+    req->send.state.completed_size = 0;
+    req->flags                    &= ~UCP_REQUEST_FLAG_OFFLOADED;
 }
 
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq,

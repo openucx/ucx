@@ -164,7 +164,8 @@ struct ucp_request {
                     ucp_dt_state_t       dt;       /* Position in the send buffer */
                 };
                 union {
-                    /* UCT completion, used by flush and zero-copy operations */
+                    /* UCT completion, used by tag offload rndv, flush and
+                     * zero-copy operations */
                     uct_completion_t uct_comp;
 
                     /* Used by rndv/rtr to track received data size
