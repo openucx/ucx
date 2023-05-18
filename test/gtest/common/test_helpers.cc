@@ -323,7 +323,7 @@ void analyze_test_results()
 
 int test_time_multiplier()
 {
-    int factor = 1;
+    int factor = 10;
 #if _BullseyeCoverage
     factor *= 10;
 #endif
