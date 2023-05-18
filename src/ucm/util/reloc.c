@@ -91,6 +91,23 @@ ucm_reloc_get_entry(ElfW(Addr) base, const ElfW(Phdr) *dphdr, ElfW(Sxword) tag)
     return 0;
 }
 
+static void *
+ucm_reloc_get_pointer(ElfW(Addr) base, const ElfW(Phdr) *dphdr, ElfW(Sxword) tag)
+{
+    uintptr_t entry;
+    entry = ucm_reloc_get_entry(base, dphdr, tag);
+    /*
+     * On some combinations of C library and architecture the entries in the
+     * dynamic table are not relocated. As a heuristic check if the value from
+     * the table looks like a pointer or an offset by checking if it is below
+     * the loaded address of the library.
+    */
+    if ((entry > 0) && (entry < base)) {
+        return UCS_PTR_BYTE_OFFSET(base, entry);
+    }
+    return (void *)entry;
+}
+
 static void ucm_reloc_file_lock(int fd, int l_type)
 {
     struct flock fl = { l_type, SEEK_SET, 0, 0};
@@ -358,8 +375,8 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     }
 
     /* Get ELF tables pointers */
-    symtab = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_SYMTAB);
-    strtab = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_STRTAB);
+    symtab = ucm_reloc_get_pointer(dlpi_addr, dphdr, DT_SYMTAB);
+    strtab = ucm_reloc_get_pointer(dlpi_addr, dphdr, DT_STRTAB);
     if ((symtab == NULL) || (strtab == NULL)) {
         /* no DT_SYMTAB or DT_STRTAB sections are defined */
         ucm_debug("%s has no dynamic symbols - skipping", dl_name)
@@ -369,7 +386,7 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     num_symbols = 0;
 
     /* populate .got.plt */
-    jmprel = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_JMPREL);
+    jmprel = ucm_reloc_get_pointer(dlpi_addr, dphdr, DT_JMPREL);
     if (jmprel != NULL) {
         pltrelsz     = ucm_reloc_get_entry(dlpi_addr, dphdr, DT_PLTRELSZ);
         num_symbols += ucm_dl_populate_symbols(dl_info, dlpi_addr, jmprel,
@@ -377,7 +394,7 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     }
 
     /* populate .got */
-    rela = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_RELA);
+    rela = ucm_reloc_get_pointer(dlpi_addr, dphdr, DT_RELA);
     if (rela != NULL) {
         relasz       = ucm_reloc_get_entry(dlpi_addr, dphdr, DT_RELASZ);
         num_symbols += ucm_dl_populate_symbols(dl_info, dlpi_addr, rela, relasz,
