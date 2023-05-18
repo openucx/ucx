@@ -1079,8 +1079,6 @@ ucp_worker_select_best_ifaces(ucp_worker_h worker, ucp_tl_bitmap_t *tl_bitmap_p)
 static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
-    ucp_tl_resource_desc_t *resource;
-    uct_iface_params_t iface_params;
     ucp_rsc_index_t tl_id, iface_id;
     ucp_worker_iface_t *wiface;
     ucp_tl_bitmap_t ctx_tl_bitmap, tl_bitmap;
@@ -1110,15 +1108,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     iface_id           = 0;
 
     UCS_BITMAP_FOR_EACH_BIT(tl_bitmap, tl_id) {
-        iface_params.field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE;
-        resource = &context->tl_rscs[tl_id];
-
-        iface_params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
-        iface_params.field_mask          |= UCT_IFACE_PARAM_FIELD_DEVICE;
-        iface_params.mode.device.tl_name  = resource->tl_rsc.tl_name;
-        iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
-
-        status = ucp_worker_iface_open(worker, tl_id, &iface_params,
+        status = ucp_worker_iface_open(worker, tl_id,
                                        &worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
             goto err_close_ifaces;
@@ -1286,12 +1276,12 @@ ucs_status_t ucp_worker_iface_estimate_perf(const ucp_worker_iface_t *wiface,
 }
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
-                                   uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t **wiface_p)
 {
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
     uct_md_h md                      = context->tl_mds[resource->md_index].md;
+    uct_iface_params_t iface_params;
     uct_iface_config_t *iface_config;
     ucp_worker_iface_t *wiface;
     ucs_sys_dev_distance_t distance;
@@ -1328,53 +1318,59 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >=
                       sizeof(ucp_offload_first_desc_t));
 
-    /* Fill rest of uct_iface params (caller should fill specific mode fields) */
-    iface_params->field_mask       |= UCT_IFACE_PARAM_FIELD_STATS_ROOT        |
-                                      UCT_IFACE_PARAM_FIELD_RX_HEADROOM       |
-                                      UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
-                                      UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
-                                      UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
-                                      UCT_IFACE_PARAM_FIELD_CPU_MASK;
-    iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
-    iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
-    iface_params->err_handler_arg   = worker;
-    iface_params->err_handler       = ucp_worker_iface_error_handler;
-    iface_params->err_handler_flags = UCT_CB_FLAG_ASYNC;
-    iface_params->cpu_mask          = worker->cpu_mask;
+    iface_params.field_mask        = UCT_IFACE_PARAM_FIELD_OPEN_MODE         |
+                                     UCT_IFACE_PARAM_FIELD_DEVICE            |
+                                     UCT_IFACE_PARAM_FIELD_STATS_ROOT        |
+                                     UCT_IFACE_PARAM_FIELD_RX_HEADROOM       |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
+                                     UCT_IFACE_PARAM_FIELD_CPU_MASK;
+    iface_params.open_mode         = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.stats_root        = UCS_STATS_RVAL(worker->stats);
+    iface_params.rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
+    iface_params.err_handler_arg   = worker;
+    iface_params.err_handler       = ucp_worker_iface_error_handler;
+    iface_params.err_handler_flags = UCT_CB_FLAG_ASYNC;
+    iface_params.cpu_mask          = worker->cpu_mask;
+
+    iface_params.mode.device.tl_name  = resource->tl_rsc.tl_name;
+    iface_params.mode.device.dev_name = resource->tl_rsc.dev_name;
+
 
     if (context->config.features & UCP_FEATURE_TAG) {
-        iface_params->eager_arg     = iface_params->rndv_arg = wiface;
-        iface_params->eager_cb      = ucp_tag_offload_unexp_eager;
-        iface_params->rndv_cb       = ucp_tag_offload_unexp_rndv;
-        iface_params->field_mask   |= UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG |
-                                      UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG  |
-                                      UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB   |
-                                      UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB;
+        iface_params.eager_arg     = iface_params.rndv_arg = wiface;
+        iface_params.eager_cb      = ucp_tag_offload_unexp_eager;
+        iface_params.rndv_cb       = ucp_tag_offload_unexp_rndv;
+        iface_params.field_mask   |= UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG  |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB   |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB;
     }
 
-    iface_params->async_event_arg   = wiface;
-    iface_params->async_event_cb    = ucp_worker_iface_async_cb_event;
-    iface_params->field_mask       |= UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG |
-                                      UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB;
+    iface_params.async_event_arg   = wiface;
+    iface_params.async_event_cb    = ucp_worker_iface_async_cb_event;
+    iface_params.field_mask       |= UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG |
+                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB;
 
     if (ucp_worker_keepalive_is_enabled(worker)) {
-        iface_params->field_mask        |= UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL;
-        iface_params->keepalive_interval =
+        iface_params.field_mask        |= UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL;
+        iface_params.keepalive_interval =
                 context->config.ext.keepalive_interval;
     }
 
     if (worker->am.alignment > 1) {
-        iface_params->field_mask     |= UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT |
-                                        UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET;
-        iface_params->am_align_offset = sizeof(ucp_am_hdr_t);
-        iface_params->am_alignment    = worker->am.alignment;
+        iface_params.field_mask     |= UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT |
+                                       UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET;
+        iface_params.am_align_offset = sizeof(ucp_am_hdr_t);
+        iface_params.am_alignment    = worker->am.alignment;
     }
 
-    iface_params->field_mask |= UCT_IFACE_PARAM_FIELD_FEATURES;
-    iface_params->features    = ucp_worker_get_uct_features(worker->context);
+    iface_params.field_mask |= UCT_IFACE_PARAM_FIELD_FEATURES;
+    iface_params.features    = ucp_worker_get_uct_features(context);
 
     /* Open UCT interface */
-    status = uct_iface_open(md, worker->uct, iface_params, iface_config,
+    status = uct_iface_open(md, worker->uct, &iface_params, iface_config,
                             &wiface->iface);
     uct_config_release(iface_config);
 
