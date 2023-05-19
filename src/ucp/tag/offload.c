@@ -298,15 +298,20 @@ ucp_tag_offload_do_post(ucp_request_t *req)
                                         req->recv.length, req->recv.datatype,
                                         &req->recv.state, req->recv.mem_type,
                                         req, UCT_MD_MEM_FLAG_HIDE_ERRORS);
-        if ((status != UCS_OK) || !req->recv.state.dt.contig.md_map) {
+        if ((status != UCS_OK) ||
+            !(req->recv.state.dt.contig.memh->md_map & UCS_BIT(mdi))) {
             /* Can't register this buffer on the offload iface */
+            if (status == UCS_OK) {
+                ucp_request_memory_dereg(context, req->recv.datatype,
+                                         &req->recv.state, req);
+            }
             UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_MEM_REG);
             return status;
         }
 
         req->recv.tag.rdesc = NULL;
         iov.buffer          = (void*)req->recv.buffer;
-        iov.memh            = req->recv.state.dt.contig.memh[0];
+        iov.memh            = req->recv.state.dt.contig.memh->uct[mdi];
     } else {
         rdesc = ucp_worker_mpool_get(&worker->reg_mp);
         if (rdesc == NULL) {
@@ -659,7 +664,7 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq,
 
         /* Register send buffer with tag lane, because tag offload rndv
          * protocol will perform RDMA_READ on it (if it arrives expectedly) */
-        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane, 0);
+        status = ucp_request_send_reg_lane(sreq, sreq->send.lane);
         if (status != UCS_OK) {
             return status;
         }

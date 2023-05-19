@@ -653,9 +653,10 @@ protected:
 
         do_send_recv(send_dt, recv_dt, send_param, recv_param);
 
-        if (prereg() && !is_self()) {
+        if (prereg() && !is_self() && (!is_iov() || enable_proto())) {
             /* Not relevant for 'self' because both sender and receiver are the same entity.
                Must be called before request is freed by free_callback (wait_for_value). */
+            /* User-provided memh on iov supported only with proto_v2 */
             test_prereg_rcache_stats(send_dt, recv_dt, send_param, recv_param);
         }
 

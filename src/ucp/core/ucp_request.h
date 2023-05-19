@@ -256,11 +256,23 @@ struct ucp_request {
                     union {
                         /* Used by "old" rendezvous protocols, in rndv.c */
                         struct {
-                            /* Actual lanes map */
-                            ucp_lane_map_t lanes_map_all;
+                            union {
+                                struct {
+                                    /* Actual lanes map */
+                                    ucp_lane_map_t lanes_map_all;
 
-                            /* Actual lanes count */
-                            uint8_t        lanes_count;
+                                    /* Actual lanes count */
+                                    uint8_t        lanes_count;
+                                } zcopy;
+
+                                struct {
+                                    /* Data start offset of this request */
+                                    size_t offset;
+                                } rtr;
+                            };
+
+                            /* Memory domains to send remote keys */
+                            ucp_md_map_t md_map;
                         };
 
                         /* Used by "new" rendezvous protocols, in proto_rndv.c */
@@ -444,7 +456,7 @@ struct ucp_request {
 
                  struct {
                     ucp_am_recv_data_nbx_callback_t cb;    /* Completion callback */
-                    ucp_recv_desc_t                 *desc; /* RTS desc */
+                    ucp_recv_desc_t                 *desc; /* Receive desc */
                 } am;
             };
         } recv;
