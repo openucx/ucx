@@ -516,6 +516,16 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_key(uct_ib_md_t *ibmd,
     return ret_status;
 }
 
+static int
+uct_ib_mlx5_devx_use_atomic_ksm(uct_ib_mlx5_md_t *md, uct_ib_mlx5_mem_t *memh)
+{
+    /* User needs atomic access and MD supports atomic KSM */
+    return (memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
+           ucs_test_all_flags(md->flags,
+                              UCT_IB_MLX5_MD_FLAG_KSM |
+                              UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS);
+}
+
 static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
                                                     uct_ib_mem_t *ib_memh)
 {
@@ -526,8 +536,7 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
     ucs_status_t status;
     uint8_t mr_id;
 
-    if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_KSM |
-                                       UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS)) {
+    if (!uct_ib_mlx5_devx_use_atomic_ksm(md, memh)) {
         return uct_ib_mlx5_reg_atomic_key(ibmd, ib_memh);
     }
 
@@ -564,8 +573,7 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_atomic_key(uct_ib_md_t *ibmd,
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t *md    = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
-    if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_KSM |
-                                       UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS)) {
+    if (!uct_ib_mlx5_devx_use_atomic_ksm(md, memh)) {
         return UCS_OK;
     }
 
