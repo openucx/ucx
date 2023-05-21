@@ -33,6 +33,16 @@ ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
     return ucp_proto_request_complete_success(req);
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_bcopy_send_func_status(ssize_t packed_size)
+{
+    if (ucs_unlikely(packed_size < 0)) {
+        return (ucs_status_t)packed_size;
+    }
+
+    return UCS_OK;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_msg_multi_request_init(ucp_request_t *req)
 {

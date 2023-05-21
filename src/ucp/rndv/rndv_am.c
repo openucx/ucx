@@ -76,12 +76,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_am_bcopy_send_func(
     packed_size = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lpriv->super.lane),
                                   UCP_AM_ID_RNDV_DATA,
                                   ucp_proto_rndv_am_bcopy_pack, &pack_ctx, 0);
-    if (ucs_unlikely(packed_size < 0)) {
-        return (ucs_status_t)packed_size;
-    }
 
-    ucs_assert(packed_size >= hdr_size);
-    return UCS_OK;
+    return ucp_proto_bcopy_send_func_status(packed_size);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
