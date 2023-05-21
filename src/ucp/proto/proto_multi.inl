@@ -288,6 +288,7 @@ ucp_proto_eager_bcopy_multi_common_send_func(
     ssize_t packed_size;
     ucp_am_id_t am_id;
     size_t hdr_size;
+    uct_ep_h uct_ep;
 
     if (req->send.state.dt_iter.offset == 0) {
         am_id    = am_id_first;
@@ -300,14 +301,10 @@ ucp_proto_eager_bcopy_multi_common_send_func(
     }
     pack_ctx.max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
 
-    packed_size = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lpriv->super.lane), am_id,
-                                  pack_cb, &pack_ctx, 0);
-    if (ucs_likely(packed_size >= 0)) {
-        ucs_assert(packed_size >= hdr_size);
-        return UCS_OK;
-    } else {
-        return (ucs_status_t)packed_size;
-    }
+    uct_ep      = ucp_ep_get_lane(ep, lpriv->super.lane);
+    packed_size = uct_ep_am_bcopy(uct_ep, am_id, pack_cb, &pack_ctx, 0);
+
+    return ucp_proto_bcopy_send_func_status(packed_size);
 }
 
 #endif
