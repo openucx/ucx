@@ -11,15 +11,10 @@
 ### Features:
 ### Bugfixes:
 
-## 1.14.1 RC3 (May 19, 2023)
+## 1.14.1 (May 22, 2023)
+### Bugfixes:
 * Fixed ROCm to prevent the locking of host pinned memory
-
-## 1.14.1 RC2 (May 18, 2023)
-### Bugfixes
 * Added CUDA 12 based UCX builds to the release flow
-
-## 1.14.1 RC1 (May 17, 2023)
-### Bugfixes
 * Increased the maximal number of endpoint configurations
 * Fixed filter for a slow-lanes in selection logic
 * Fixed TCP transport bandwidth calculation
