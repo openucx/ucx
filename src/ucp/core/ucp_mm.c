@@ -1233,6 +1233,8 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
     char *mem_size_str;
     char *mem_type_str;
     unsigned md_index;
+    void *rkey_buffer;
+    size_t rkey_size;
     ucp_mem_h memh;
 
     ucs_string_buffer_appendf(&strb, "%s", mem_spec);
@@ -1310,6 +1312,14 @@ void ucp_mem_print_info(const char *mem_spec, ucp_context_h context,
     }
     fprintf(stream, "\n");
     fprintf(stream, "#\n");
+
+    status = ucp_rkey_pack(context, memh, &rkey_buffer, &rkey_size);
+    if (status != UCS_OK) {
+        printf("<Failed to pack rkey: %s>\n", ucs_status_string(status));
+    } else {
+        fprintf(stream, "#  rkey size: %zu\n", rkey_size);
+        ucp_rkey_buffer_release(rkey_buffer);
+    }
 
     status = ucp_mem_unmap(context, memh);
     if (status != UCS_OK) {
