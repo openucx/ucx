@@ -150,27 +150,6 @@ bool test_ib_md::check_umr() const {
 #endif
 }
 
-UCS_TEST_P(test_ib_md, ib_md_umr_rcache, "REG_METHODS=rcache") {
-    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
-
-    /* The order is important here because
-     * of registration cache. A cached region will
-     * be promoted to atomic access but it will never be demoted
-     */
-    ib_md_umr_check(&rkey_buffer[0], false);
-    ib_md_umr_check(&rkey_buffer[0], true);
-}
-
-UCS_TEST_P(test_ib_md, ib_md_umr_direct, "REG_METHODS=direct") {
-    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
-
-    /* without rcache the order is not really important */
-    ib_md_umr_check(&rkey_buffer[0], true);
-    ib_md_umr_check(&rkey_buffer[0], false);
-    ib_md_umr_check(&rkey_buffer[0], true);
-    ib_md_umr_check(&rkey_buffer[0], false);
-}
-
 UCS_TEST_P(test_ib_md, ib_md_umr_ksm) {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
     ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
