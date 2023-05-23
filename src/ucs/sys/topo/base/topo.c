@@ -310,6 +310,7 @@ static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
     switch (ucs_arch_get_cpu_model()) {
     case UCS_CPU_MODEL_AMD_ROME:
     case UCS_CPU_MODEL_AMD_MILAN:
+    case UCS_CPU_MODEL_AMD_GENOA:
         distance->bandwidth = 5100 * UCS_MBYTE;
         break;
     default:
