@@ -13,6 +13,8 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
+#include <ucs/datastruct/hlist.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/sys.h>
@@ -24,6 +26,20 @@
 #define UCS_CALLBACKQ_IDX_MASK       0x7fffffffu
 #define UCS_CALLBACKQ_FAST_MAX       (UCS_CALLBACKQ_FAST_COUNT - 1)
 
+/*
+ * One-shot element in the hash table
+ */
+typedef struct ucs_callbackq_oneshot_elem {
+    ucs_callbackq_elem_t super;
+    ucs_hlist_link_t     hlist;
+} ucs_callbackq_oneshot_elem_t;
+
+#define ucs_callbackq_oneshot_key_hash(_key) \
+    kh_int64_hash_func((int64_t)(_key))
+
+/* Hash map of progress callbacks */
+KHASH_INIT(ucs_callbackq_oneshot_elems, ucs_callbackq_key_t, ucs_hlist_head_t,
+           1, ucs_callbackq_oneshot_key_hash, kh_int64_hash_equal);
 
 typedef struct ucs_callbackq_priv {
     ucs_recursive_spinlock_t lock;           /**< Protects adding / removing */
@@ -37,6 +53,9 @@ typedef struct ucs_callbackq_priv {
     uint64_t                 fast_remove_mask; /**< Mask of which fast-path elements
                                                     should be removed */
     unsigned                 num_fast_elems; /**< Number of fast-path elements */
+
+    /** Hash map of oneshot path elements, by key */
+    khash_t(ucs_callbackq_oneshot_elems) oneshot_elems;
 
     /* Lookup table for callback IDs. This allows moving callbacks around in
      * the arrays, while the user can always use a single ID to remove the
@@ -247,7 +266,12 @@ static void ucs_callbackq_enable_proxy(ucs_callbackq_t *cbq)
         return;
     }
 
-    ucs_assert((priv->num_slow_elems > 0) || priv->fast_remove_mask);
+    ucs_assertv((priv->num_slow_elems > 0) || priv->fast_remove_mask ||
+                (kh_size(&priv->oneshot_elems) > 0),
+                "cbq=%p num_slow_elems=%u fast_remove_mask=0x%" PRIx64
+                " oneshot_elems=%u",
+                cbq, priv->num_slow_elems, priv->fast_remove_mask,
+                kh_size(&priv->oneshot_elems));
 
     idx = ucs_callbackq_get_fast_idx(cbq);
     id  = ucs_callbackq_get_id(cbq, idx);
@@ -361,6 +385,85 @@ static void ucs_callbackq_purge_slow(ucs_callbackq_t *cbq)
     priv->num_slow_elems = dst_idx;
 }
 
+/* Lock must be held */
+static unsigned ucs_callbackq_oneshot_elems_dispatch(ucs_callbackq_t *cbq)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned count             = 0;
+    ucs_callbackq_oneshot_elem_t *oneshot_elem;
+    unsigned key_idx, num_keys;
+    struct {
+        void   *key;
+        size_t count; /* How many callbacks should be called, at most */
+    } * keys;
+    ucs_hlist_head_t *hlist;
+    khiter_t khiter;
+    void *key;
+
+    num_keys = kh_size(&priv->oneshot_elems);
+    if (num_keys == 0) {
+        return 0;
+    }
+
+    keys = ucs_malloc(sizeof(*keys) * num_keys, "ucs_callbackq_keys");
+    if (keys == NULL) {
+        ucs_fatal("callbackq %p: failed to allocate oneshot key array", cbq);
+    }
+
+    key_idx = 0;
+    kh_foreach_key(&priv->oneshot_elems, key, {
+        khiter = kh_get(ucs_callbackq_oneshot_elems, &priv->oneshot_elems, key);
+        hlist  = &kh_value(&priv->oneshot_elems, khiter);
+        keys[key_idx].key   = key;
+        keys[key_idx].count = ucs_hlist_length(hlist);
+        ++key_idx;
+    })
+    ucs_assertv(key_idx == num_keys, "key_idx=%u num_keys=%u", key_idx,
+                num_keys);
+
+    key_idx = 0;
+    while (key_idx < num_keys) {
+        khiter = kh_get(ucs_callbackq_oneshot_elems, &priv->oneshot_elems,
+                        keys[key_idx].key);
+        if (khiter == kh_end(&priv->oneshot_elems)) {
+            ++key_idx; /* Not found, move to next key */
+            continue;
+        }
+
+        hlist = &kh_value(&priv->oneshot_elems, khiter);
+        if (ucs_hlist_is_empty(hlist)) {
+            kh_del(ucs_callbackq_oneshot_elems, &priv->oneshot_elems, khiter);
+            ++key_idx; /* Empty list, remove and move to next key */
+            continue;
+        }
+
+        if (keys[key_idx].count == 0) {
+            /* Should not call any more callbacks from this key. This avoids
+               an infinite loop in case a callback adds more callbacks. */
+            ++key_idx;
+            continue;
+        }
+
+        /* Extract a single oneshot element from the list and dispatch it.
+         * Dispatching the elements one-by-one allows callbacks to remove other
+         * callbacks from the list.
+         */
+        --keys[key_idx].count;
+        oneshot_elem = ucs_hlist_extract_head_elem(hlist,
+                                                   ucs_callbackq_oneshot_elem_t,
+                                                   hlist);
+        ucs_callbackq_leave(cbq);
+
+        count += oneshot_elem->super.cb(oneshot_elem->super.arg);
+        ucs_free(oneshot_elem);
+
+        ucs_callbackq_enter(cbq);
+    }
+
+    ucs_free(keys);
+    return count;
+}
+
 static unsigned ucs_callbackq_slow_proxy(void *arg)
 {
     ucs_callbackq_t      *cbq  = arg;
@@ -406,11 +509,14 @@ static unsigned ucs_callbackq_slow_proxy(void *arg)
         ucs_callbackq_enter(cbq);
     }
 
+    count += ucs_callbackq_oneshot_elems_dispatch(cbq);
+
     ucs_callbackq_purge_fast(cbq);
     ucs_callbackq_purge_slow(cbq);
 
     /* Disable this proxy if no more work to do */
-    if (!priv->fast_remove_mask && (priv->num_slow_elems == 0)) {
+    if (!priv->fast_remove_mask && (priv->num_slow_elems == 0) &&
+        (kh_size(&priv->oneshot_elems) == 0)) {
         ucs_callbackq_disable_proxy(cbq);
     }
 
@@ -419,16 +525,54 @@ static unsigned ucs_callbackq_slow_proxy(void *arg)
     return count;
 }
 
-static void ucs_callbackq_array_show(const ucs_callbackq_elem_t *elems,
-                                     unsigned count, const char *title)
+static void
+ucs_callbackq_elem_show(const char *title, const ucs_callbackq_elem_t *elem)
 {
-    unsigned i;
+    ucs_diag("%s: cb %s (%p) arg %p", title,
+             ucs_debug_get_symbol_name(elem->cb), elem->cb, elem->arg);
+}
 
-    for (i = 0; i < count; ++i) {
-        ucs_diag("%s[%u]: cb %s (%p) arg %p id %d flags 0x%x", title, i,
-                 ucs_debug_get_symbol_name(elems[i].cb), elems[i].cb,
-                 elems[i].arg, elems[i].id, elems[i].flags);
+static void ucs_callbackq_show_remaining_elems(ucs_callbackq_t *cbq)
+{
+    const char *diag_log_str   = ", increase log level to diag for details";
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    ucs_callbackq_oneshot_elem_t *oneshot_elem;
+    ucs_callbackq_elem_t *elem;
+    ucs_hlist_head_t hlist;
+    unsigned total_elems;
+
+    total_elems = priv->num_fast_elems + priv->num_slow_elems;
+    kh_foreach_value(&priv->oneshot_elems, hlist, {
+        ucs_hlist_for_each(oneshot_elem, &hlist, hlist) {
+            ++total_elems;
+        }
+    })
+    if (total_elems == 0) {
+        return;
     }
+
+    ucs_warn("callbackq %p: %d callback%s not removed%s", cbq, total_elems,
+             (total_elems > 1) ? "s were" : " was",
+             ucs_log_is_enabled(UCS_LOG_LEVEL_DIAG) ? "" : diag_log_str);
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_DIAG)) {
+        return;
+    }
+
+    ucs_log_indent(1);
+
+    ucs_carray_for_each(elem, cbq->fast_elems, priv->num_fast_elems) {
+        ucs_callbackq_elem_show("fast-path", elem);
+    }
+    ucs_carray_for_each(elem, priv->slow_elems, priv->num_slow_elems) {
+        ucs_callbackq_elem_show("slow", elem);
+    }
+    kh_foreach_value(&priv->oneshot_elems, hlist, {
+        ucs_hlist_for_each(oneshot_elem, &hlist, hlist) {
+            ucs_callbackq_elem_show("one-shot", &oneshot_elem->super);
+        }
+    })
+
+    ucs_log_indent(-1);
 }
 
 ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
@@ -441,6 +585,7 @@ ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
     }
 
     ucs_recursive_spinlock_init(&priv->lock, 0);
+    kh_init_inplace(ucs_callbackq_oneshot_elems, &priv->oneshot_elems);
     priv->slow_elems        = NULL;
     priv->num_slow_elems    = 0;
     priv->max_slow_elems    = 0;
@@ -460,18 +605,9 @@ void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
     ucs_callbackq_purge_fast(cbq);
     ucs_callbackq_disable_proxy(cbq);
     ucs_callbackq_purge_slow(cbq);
+    ucs_callbackq_show_remaining_elems(cbq);
 
-    if ((priv->num_fast_elems) > 0 || (priv->num_slow_elems > 0)) {
-        ucs_warn("%d fast-path and %d slow-path callbacks remain in the queue",
-                 priv->num_fast_elems, priv->num_slow_elems);
-
-        ucs_log_indent(1);
-        ucs_callbackq_array_show(cbq->fast_elems, priv->num_fast_elems, "fast");
-        ucs_callbackq_array_show(priv->slow_elems, priv->num_slow_elems,
-                                 "slow");
-        ucs_log_indent(-1);
-    }
-
+    kh_destroy_inplace(ucs_callbackq_oneshot_elems, &priv->oneshot_elems);
     ucs_callbackq_array_free(priv->slow_elems, sizeof(*priv->slow_elems),
                              priv->max_slow_elems);
     ucs_callbackq_array_free(priv->idxs, sizeof(*priv->idxs), priv->num_idxs);
@@ -594,7 +730,7 @@ void ucs_callbackq_remove_if(ucs_callbackq_t *cbq, ucs_callbackq_predicate_t pre
      * harmful */
     ucs_callbackq_purge_fast(cbq);
 
-    /* Remove slow-path elements */ 
+    /* Remove slow-path elements */
     for (elem = priv->slow_elems;
          elem < (priv->slow_elems + priv->num_slow_elems); ++elem) {
         if (pred(elem, arg)) {
@@ -604,5 +740,80 @@ void ucs_callbackq_remove_if(ucs_callbackq_t *cbq, ucs_callbackq_predicate_t pre
         }
     }
 
+    ucs_callbackq_leave(cbq);
+}
+
+void ucs_callbackq_add_oneshot(ucs_callbackq_t *cbq, ucs_callbackq_key_t key,
+                               ucs_callback_t cb, void *arg)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    ucs_callbackq_oneshot_elem_t *elem;
+    ucs_hlist_head_t *hlist;
+    khiter_t khiter;
+    int khret;
+
+    ucs_trace_func("cbq=%p key=%p cb=%s arg=%p", cbq, key,
+                   ucs_debug_get_symbol_name(cb), arg);
+
+    ucs_callbackq_enter(cbq);
+
+    elem = ucs_malloc(sizeof(*elem), "ucs_callbackq_oneshot_elem");
+    if (elem == NULL) {
+        ucs_fatal("callbackq %p: failed to allocate oneshot element", cbq);
+    }
+
+    elem->super.cb  = cb;
+    elem->super.arg = arg;
+
+    khiter = kh_put(ucs_callbackq_oneshot_elems, &priv->oneshot_elems, key,
+                    &khret);
+    if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
+        (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
+        hlist = &kh_value(&priv->oneshot_elems, khiter);
+        ucs_hlist_head_init(hlist);
+    } else if (khret == UCS_KH_PUT_KEY_PRESENT) {
+        hlist = &kh_value(&priv->oneshot_elems, khiter);
+    } else {
+        ucs_fatal("callbackq %p: failed to insert oneshot element (khret=%d)",
+                  cbq, khret);
+    }
+
+    ucs_hlist_add_tail(hlist, &elem->hlist);
+    ucs_callbackq_enable_proxy(cbq);
+
+    ucs_callbackq_leave(cbq);
+}
+
+void ucs_callbackq_remove_oneshot(ucs_callbackq_t *cbq, ucs_callbackq_key_t key,
+                                  ucs_callbackq_predicate_t pred, void *arg)
+{
+    ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    ucs_callbackq_oneshot_elem_t *elem, *telem;
+    ucs_hlist_head_t *hlist, thead;
+    khiter_t khiter;
+
+    ucs_trace_func("cbq=%p key=%p pred=%s arg=%p", cbq, key,
+                   ucs_debug_get_symbol_name(pred), arg);
+
+    ucs_callbackq_enter(cbq);
+
+    khiter = kh_get(ucs_callbackq_oneshot_elems, &priv->oneshot_elems, key);
+    if (khiter == kh_end(&priv->oneshot_elems)) {
+        goto out;
+    }
+
+    hlist = &kh_value(&priv->oneshot_elems, khiter);
+    ucs_hlist_for_each_safe(elem, telem, hlist, &thead, hlist) {
+        if (pred(&elem->super, arg)) {
+            ucs_hlist_del(hlist, &elem->hlist);
+            ucs_free(elem);
+        }
+    }
+
+    if (ucs_hlist_is_empty(hlist)) {
+        kh_del(ucs_callbackq_oneshot_elems, &priv->oneshot_elems, khiter);
+    }
+
+out:
     ucs_callbackq_leave(cbq);
 }
