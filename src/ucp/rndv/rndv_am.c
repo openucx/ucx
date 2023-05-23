@@ -144,24 +144,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rndv_am_zcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
-    const size_t hdr_size    = sizeof(ucp_request_data_hdr_t);
-    const size_t max_payload = ucp_proto_multi_max_payload(req, lpriv,
-                                                           hdr_size);
     ucp_request_data_hdr_t hdr;
-    uct_iov_t iov[UCP_MAX_IOV];
-    size_t iov_count;
 
     ucp_rndv_am_fill_header(&hdr, req);
-
-    ucs_assert(lpriv->super.max_iov > 0);
-    iov_count = ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                                           max_payload, lpriv->super.md_index,
-                                           UCP_DT_MASK_CONTIG_IOV, next_iter,
-                                           iov, lpriv->super.max_iov);
-
-    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                           UCP_AM_ID_RNDV_DATA, &hdr, hdr_size, iov, iov_count,
-                           0, &req->send.state.uct_comp);
+    return ucp_proto_am_zcopy_multi_common_send_func(req, lpriv, next_iter,
+                                                     UCP_AM_ID_RNDV_DATA, &hdr,
+                                                     sizeof(hdr),
+                                                     UCP_AM_ID_RNDV_DATA, &hdr,
+                                                     sizeof(hdr));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

@@ -272,7 +272,7 @@ ucp_proto_multi_lane_map_progress(ucp_request_t *req, ucp_lane_map_t *lane_map,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_eager_bcopy_multi_common_send_func(
+ucp_proto_am_bcopy_multi_common_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_am_id_t am_id_first,
         uct_pack_callback_t pack_cb_first, size_t hdr_size_first,
@@ -305,6 +305,40 @@ ucp_proto_eager_bcopy_multi_common_send_func(
     packed_size = uct_ep_am_bcopy(uct_ep, am_id, pack_cb, &pack_ctx, 0);
 
     return ucp_proto_bcopy_send_func_status(packed_size);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_am_zcopy_multi_common_send_func(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_datatype_iter_t *next_iter, ucp_am_id_t am_id_first,
+        const void *hdr_first, size_t hdr_size_first, ucp_am_id_t am_id_middle,
+        const void *hdr_middle, size_t hdr_size_middle)
+{
+    uct_iov_t iov[UCP_MAX_IOV];
+    size_t max_payload;
+    ucp_am_id_t am_id;
+    size_t hdr_size;
+    size_t iov_count;
+    const void *hdr;
+
+    if (req->send.state.dt_iter.offset == 0) {
+        am_id    = am_id_first;
+        hdr      = hdr_first;
+        hdr_size = hdr_size_first;
+    } else {
+        am_id    = am_id_middle;
+        hdr      = hdr_middle;
+        hdr_size = hdr_size_middle;
+    }
+
+    max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
+    iov_count   = ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
+                                             max_payload, lpriv->super.md_index,
+                                             UCP_DT_MASK_CONTIG_IOV, next_iter,
+                                             iov, lpriv->super.max_iov);
+    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                           am_id, hdr, hdr_size, iov, iov_count, 0,
+                           &req->send.state.uct_comp);
 }
 
 #endif
