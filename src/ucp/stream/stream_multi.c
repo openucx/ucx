@@ -93,6 +93,7 @@ ucp_stream_multi_bcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .max_lanes           = 1,
+        .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .first.lane_type     = UCP_LANE_TYPE_AM,
