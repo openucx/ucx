@@ -34,6 +34,7 @@ static const char *cpu_model_names[] = {
     [UCS_CPU_MODEL_AMD_NAPLES]         = "Naples",
     [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
     [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
+    [UCS_CPU_MODEL_AMD_GENOA]          = "Genoa",
     [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
     [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
     [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui"
