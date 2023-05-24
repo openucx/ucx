@@ -1213,6 +1213,9 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
         }
         ucs_log(log_level, "%s: %s", title, ucs_string_buffer_cstr(&strb));
     }
+
+    ucs_log(log_level, "%s: err mode %d, flags 0x%x", title, key->err_mode,
+            key->flags);
 }
 
 int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
