@@ -395,12 +395,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
         /* a failed EP callback can be still scheduled on the UCT worker,
          * remove it to prevent a callback is being invoked for the
          * destroyed EP */
-        ucs_callbackq_remove_if(&iface->super.worker->super.progress_q,
-                                uct_tcp_ep_failed_remove_filter, self);
+        ucs_callbackq_remove_oneshot(&iface->super.worker->super.progress_q,
+                                     self, uct_tcp_ep_failed_remove_filter,
+                                     self);
     }
 
-    ucs_callbackq_remove_if(&iface->super.worker->super.progress_q,
-                            uct_tcp_ep_progress_rx_remove_filter, self);
+    ucs_callbackq_remove_oneshot(&iface->super.worker->super.progress_q, self,
+                                 uct_tcp_ep_progress_rx_remove_filter, self);
 
     uct_tcp_ep_cleanup(self);
     uct_tcp_cm_change_conn_state(self, UCT_TCP_EP_CONN_STATE_CLOSED);
@@ -487,7 +488,6 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, ucs_status_t status)
 {
     uct_tcp_iface_t *iface   = ucs_derived_of(ep->super.super.iface,
                                               uct_tcp_iface_t);
-    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
 
     if (ep->flags & UCT_TCP_EP_FLAG_FAILED) {
         return;
@@ -508,9 +508,8 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, ucs_status_t status)
                                 status);
     } else {
         ep->flags |= UCT_TCP_EP_FLAG_FAILED;
-        uct_worker_progress_register_safe(&iface->super.worker->super,
-                                          uct_tcp_ep_destroy_progress, ep,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+        ucs_callbackq_add_oneshot(&iface->super.worker->super.progress_q, ep,
+                                  uct_tcp_ep_destroy_progress, ep);
     }
 }
 
@@ -635,10 +634,9 @@ err:
 
 void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep)
 {
-    uct_tcp_iface_t *iface   = ucs_derived_of(to_ep->super.super.iface,
-                                              uct_tcp_iface_t);
-    int events               = from_ep->events;
-    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
+    uct_tcp_iface_t *iface = ucs_derived_of(to_ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    int events             = from_ep->events;
 
     uct_tcp_ep_mod_events(from_ep, 0, from_ep->events);
     to_ep->fd   = from_ep->fd;
@@ -661,9 +659,8 @@ void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep)
 
     if (uct_tcp_ep_ctx_buf_need_progress(&to_ep->rx)) {
         /* If some data was already read, we have to process it */
-        uct_worker_progress_register_safe(&iface->super.worker->super,
-                                          uct_tcp_ep_progress_data_rx, to_ep,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+        ucs_callbackq_add_oneshot(&iface->super.worker->super.progress_q, to_ep,
+                                  uct_tcp_ep_progress_data_rx, to_ep);
     }
 
     /* The internal EP is not needed anymore, start failed flow for the

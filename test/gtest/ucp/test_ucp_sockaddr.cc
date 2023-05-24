@@ -1722,8 +1722,9 @@ private:
         UCS_ASYNC_BLOCK(&e.worker()->async);
         uct_priv_worker_t *worker = ucs_derived_of(e.worker()->uct,
                                                    uct_priv_worker_t);
-        ucs_callbackq_remove_if(&worker->super.progress_q,
-                                find_try_next_cm_cb, &find_try_next_cm_arg);
+        ucs_callbackq_remove_oneshot(&worker->super.progress_q, e.ep(),
+                                     find_try_next_cm_cb,
+                                     &find_try_next_cm_arg);
         UCS_ASYNC_UNBLOCK(&e.worker()->async);
 
         return find_try_next_cm_arg.found;

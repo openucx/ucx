@@ -250,7 +250,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
 
 /* DCI pool
  * same array is used to store DCI's to allocate and DCI's to release:
- * 
+ *
  * +--------------+-----+-------------+
  * | to release   |     | to allocate |
  * +--------------+-----+-------------+
@@ -258,7 +258,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
  * |              |     |             |
  * 0        release     stack      ndci
  *              top     top
- * 
+ *
  * Overall count of DCI's to release and allocated DCI's could not be more than
  * ndci and these stacks are not intersected
  */
@@ -314,8 +314,6 @@ struct uct_dc_mlx5_iface {
         unsigned                  rand_seed;
 
         ucs_arbiter_callback_t    pend_cb;
-
-        uct_worker_cb_id_t        dci_release_prog_id;
 
         uint8_t                   dci_pool_release_bitmap;
 

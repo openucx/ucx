@@ -38,7 +38,6 @@ typedef struct ucp_listener {
                                                  requests */
     void                           *arg;      /* User's arg for the accept
                                                  callback */
-    uct_worker_cb_id_t             prog_id;   /* Slow-path callback */
 } ucp_listener_t;
 
 
