@@ -32,6 +32,7 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_AMD_NAPLES,
     UCS_CPU_MODEL_AMD_ROME,
     UCS_CPU_MODEL_AMD_MILAN,
+    UCS_CPU_MODEL_AMD_GENOA,
     UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG,
     UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU,
     UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI,
@@ -160,7 +161,8 @@ static inline int ucs_cpu_prefer_relaxed_order()
            ((cpu_vendor == UCS_CPU_VENDOR_AMD) &&
             ((cpu_model == UCS_CPU_MODEL_AMD_NAPLES) ||
              (cpu_model == UCS_CPU_MODEL_AMD_ROME) ||
-             (cpu_model == UCS_CPU_MODEL_AMD_MILAN)));
+             (cpu_model == UCS_CPU_MODEL_AMD_MILAN) ||
+             (cpu_model == UCS_CPU_MODEL_AMD_GENOA)));
 }
 
 
