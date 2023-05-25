@@ -66,6 +66,7 @@
     _macro(ucp_am_eager_single_zcopy_reply_proto) \
     _macro(ucp_am_rndv_proto) \
     _macro(ucp_stream_multi_bcopy_proto) \
+    _macro(ucp_stream_multi_zcopy_proto) \
     UCP_PROTO_AMO_FOR_EACH(_macro, post) \
     UCP_PROTO_AMO_FOR_EACH(_macro, fetch) \
     UCP_PROTO_AMO_FOR_EACH(_macro, cswap)
