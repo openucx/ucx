@@ -53,7 +53,7 @@ public:
         receiver().connect(&sender(), get_ep_params());
     }
 
-private:
+protected:
     bool is_proto_enabled() const
     {
         return get_variant_value();
@@ -338,7 +338,11 @@ public:
         m_rx_memh = NULL;
     }
 
-    void test_datatypes(std::function<void()> test_f);
+    void test_datatypes(std::function<void()> test_f,
+                        const std::vector<ucp_dt_type> &datatypes =
+                        {UCP_DATATYPE_CONTIG,
+                         UCP_DATATYPE_IOV,
+                         UCP_DATATYPE_GENERIC});
 
 protected:
     virtual ucs_memory_type_t tx_memtype() const
@@ -500,6 +504,17 @@ protected:
         }
 
         EXPECT_EQ(m_recv_counter, m_send_counter);
+    }
+
+    void test_am_send_recv_memtype(size_t size, size_t header_size = 8)
+    {
+        std::vector<ucp_dt_type> dts = {UCP_DATATYPE_CONTIG};
+
+        if (is_proto_enabled()) {
+            dts.push_back(UCP_DATATYPE_IOV);
+        }
+
+        test_datatypes([&]() { test_am_send_recv(size, header_size); }, dts);
     }
 
     void test_am(size_t size, unsigned flags = 0)
@@ -667,12 +682,9 @@ protected:
     ucp_mem_h                       m_rx_memh;
 };
 
-void test_ucp_am_nbx::test_datatypes(std::function<void()> test_f)
+void test_ucp_am_nbx::test_datatypes(std::function<void()> test_f,
+                                     const std::vector<ucp_dt_type> &datatypes)
 {
-    static const std::vector<int> datatypes{UCP_DATATYPE_CONTIG,
-                                            UCP_DATATYPE_IOV,
-                                            UCP_DATATYPE_GENERIC};
-
     for (const auto &dt_it : datatypes) {
         m_dt = make_dt(dt_it);
 
@@ -971,7 +983,7 @@ protected:
         /**
          * For RNDV we use 8 byte length to fill the SQ
          * so we will not get IN_PROGRESS status from fill_sq.
-         * 
+         *
          * For non-RNDV, we cannot use 8 byte length,
          * because we actually want to test two cases:
          * - Get a pending request that did not yet send the first fragment.
@@ -1283,8 +1295,7 @@ private:
         }
 
         add_variant_memtypes(variants,
-                             test_ucp_am_nbx_prereg::get_test_variants,
-                             std::numeric_limits<uint64_t>::max());
+                             test_ucp_am_nbx_prereg::get_test_variants);
     }
 
     virtual ucs_memory_type_t tx_memtype() const
@@ -1300,7 +1311,7 @@ private:
 
 UCS_TEST_P(test_ucp_am_nbx_eager_memtype, basic)
 {
-    test_am_send_recv(16 * UCS_KBYTE, 8, 0);
+    test_am_send_recv_memtype(16 * UCS_KBYTE);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_eager_memtype)
@@ -1817,7 +1828,7 @@ private:
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    test_am_send_recv(64 * UCS_KBYTE, 8, 0);
+    test_am_send_recv_memtype(64 * UCS_KBYTE);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);
