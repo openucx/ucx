@@ -170,7 +170,7 @@ $ make -C test/gtest test
 * [CUDA](https://developer.nvidia.com/cuda-zone)
 * [ROCm](https://rocm.github.io/)
 * Shared Memory
-    * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](http://knem.gforge.inria.fr/), and [xpmem](https://github.com/hjelmn/xpmem)
+    * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](https://knem.gitlabpages.inria.fr), and [xpmem](https://github.com/hjelmn/xpmem)
 * TCP/IP
 
   **NOTE:** UCX >= 1.12.0 requires rdma-core >= 28.0 or MLNX_OFED >= 5.0 for [Infiniband](https://www.infinibandta.org/) and [RoCE](http://www.roceinitiative.org/) transports support.
