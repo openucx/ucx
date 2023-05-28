@@ -141,7 +141,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "DEVX support\n",
      ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
 
-    {"MLX5_DEVX_OBJECTS", "rcqp,rcsrq,dct,dcsrq,dci,cq",
+    {"MLX5_DEVX_OBJECTS", "",
      "Objects to be created by DEVX\n",
      ucs_offsetof(uct_ib_md_config_t, devx_objs),
      UCS_CONFIG_TYPE_BITMAP(uct_ib_devx_objs)},

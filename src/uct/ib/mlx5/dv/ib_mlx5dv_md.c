@@ -730,7 +730,7 @@ uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     void *odp;
     ucs_status_t status;
 
-    if (uct_ib_mlx5_has_roce_port(&md->super.dev)) {
+    if (0 && uct_ib_mlx5_has_roce_port(&md->super.dev)) {
         ucs_debug("%s: disable ODP on RoCE", uct_ib_device_name(&md->super.dev));
         goto no_odp;
     }
