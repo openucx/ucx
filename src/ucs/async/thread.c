@@ -427,17 +427,17 @@ static ucs_status_t ucs_async_thread_remove_timer(ucs_async_context_t *async,
     return UCS_OK;
 }
 
-static void ucs_async_signal_global_cleanup()
+static void ucs_async_thread_global_cleanup()
 {
     if (ucs_async_thread_global_context.thread != NULL) {
-        ucs_debug("async thread still running (use count %u)",
-                  ucs_async_thread_global_context.use_count);
+        ucs_diag("async thread still running (use count %u)",
+                 ucs_async_thread_global_context.use_count);
     }
 }
 
 ucs_async_ops_t ucs_async_thread_spinlock_ops = {
     .init               = ucs_empty_function,
-    .cleanup            = ucs_async_signal_global_cleanup,
+    .cleanup            = ucs_async_thread_global_cleanup,
     .is_from_async      = ucs_async_thread_is_from_async,
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
@@ -454,7 +454,7 @@ ucs_async_ops_t ucs_async_thread_spinlock_ops = {
 
 ucs_async_ops_t ucs_async_thread_mutex_ops = {
     .init               = ucs_empty_function,
-    .cleanup            = ucs_async_signal_global_cleanup,
+    .cleanup            = ucs_async_thread_global_cleanup,
     .is_from_async      = ucs_async_thread_is_from_async,
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
