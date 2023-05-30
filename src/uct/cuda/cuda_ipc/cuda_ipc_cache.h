@@ -45,7 +45,8 @@ uct_cuda_ipc_map_memhandle(uct_cuda_ipc_md_t *md,
                            uct_cuda_ipc_rcache_region_t **cuda_ipc_region);
 ucs_status_t
 uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
-                             const uct_cuda_ipc_key_t *key,
+                             pid_t pid,
                              void *mapped_addr,
                              uct_cuda_ipc_rcache_region_t *cuda_ipc_region);
+
 #endif

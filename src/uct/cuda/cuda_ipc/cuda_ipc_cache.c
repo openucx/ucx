@@ -70,8 +70,7 @@ ucs_status_t uct_cuda_ipc_check_rcache(ucs_rcache_t *rcache,
 
     *region_p = ucs_derived_of(rcache_region, uct_cuda_ipc_rcache_region_t);
 
-    if (!memcmp((const void *)&key->ph, (const void *)&((*region_p)->ipc_handle),
-                sizeof(key->ph))) {
+    if (!memcmp(&key->ph, &((*region_p)->ipc_handle), sizeof(key->ph))) {
         return UCS_OK;
     }
 
@@ -93,6 +92,7 @@ ucs_status_t uct_cuda_ipc_check_rcache(ucs_rcache_t *rcache,
     }
 
     *region_p = ucs_derived_of(rcache_region, uct_cuda_ipc_rcache_region_t);
+    ucs_assert(!memcmp(&key->ph, &((*region_p)->ipc_handle), sizeof(key->ph)));
 
     return UCS_OK;
 }
@@ -138,15 +138,14 @@ err_unlock:
     return status;
 }
 
-void uct_cuda_ipc_close_memhandle(void *mapped_addr,
-                                  uct_cuda_ipc_rcache_region_t *cuda_ipc_region)
+static void uct_cuda_ipc_close_memhandle(void *mapped_addr)
 {
     cuIpcCloseMemHandle((CUdeviceptr)mapped_addr);
 }
 
 ucs_status_t
 uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
-                             const uct_cuda_ipc_key_t *key,
+                             pid_t pid,
                              void *mapped_addr,
                              uct_cuda_ipc_rcache_region_t *cuda_ipc_region)
 {
@@ -154,14 +153,14 @@ uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
     ucs_rcache_t *cache;
 
     if (md->rcache_enable != UCS_NO) {
-        status = uct_cuda_ipc_get_remote_cache(md, key->pid, &cache);
+        status = uct_cuda_ipc_get_remote_cache(md, pid, &cache);
         if (status != UCS_OK) {
             return status;
         }
 
         ucs_rcache_region_put(cache, &cuda_ipc_region->super);
     } else {
-        uct_cuda_ipc_close_memhandle(mapped_addr, NULL);
+        uct_cuda_ipc_close_memhandle(mapped_addr);
     }
 
     return UCS_OK;
@@ -177,16 +176,17 @@ ucs_status_t uct_cuda_ipc_open_memhandle(void **mapped_addr,
 
     cuerr = cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr,
                                key->ph, CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
-    if ((cuerr == CUDA_SUCCESS) || (cuerr == CUDA_ERROR_ALREADY_MAPPED)) {
-        if (cuda_ipc_region != NULL) {
-            cuda_ipc_region->ipc_handle = key->ph;
-        }
-        return UCS_OK;
-    } else {
+    if ((cuerr != CUDA_SUCCESS) && (cuerr != CUDA_ERROR_ALREADY_MAPPED)) {
         cuGetErrorString(cuerr, &cu_err_str);
         ucs_debug("cuIpcOpenMemHandle() failed: %s", cu_err_str);
         return UCS_ERR_INVALID_PARAM;
     }
+
+    if (cuda_ipc_region != NULL) {
+        cuda_ipc_region->ipc_handle = key->ph;
+    }
+
+    return UCS_OK;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
@@ -204,7 +204,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
             return status;
         }
 
-        status = uct_cuda_ipc_check_rcache(cache, (uct_cuda_ipc_key_t *)key, region_p);
+        status = uct_cuda_ipc_check_rcache(cache, (uct_cuda_ipc_key_t*)key, region_p);
         if (status != UCS_OK) {
             return status;
         }
@@ -236,7 +236,7 @@ static void uct_cuda_ipc_rcache_mem_dereg(void *context, ucs_rcache_t *rcache,
     uct_cuda_ipc_rcache_region_t *cuda_ipc_region =
                     ucs_derived_of(region, uct_cuda_ipc_rcache_region_t);
 
-    uct_cuda_ipc_close_memhandle(cuda_ipc_region->mapping_start, cuda_ipc_region);
+    uct_cuda_ipc_close_memhandle(cuda_ipc_region->mapping_start);
 
 }
 
@@ -279,9 +279,6 @@ uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md, ucs_rcache_t **cache,
     rcache_params.ops                = &uct_cuda_ipc_rcache_ops;
     rcache_params.context            = NULL;
     rcache_params.flags              = 0;
-                                         /* TODO: when should PFN_CHECK be
-                                          * added? Not adding this flag for now
-                                          * as this results in no LRU eviction */
     rcache_params.max_regions        = md->rcache_max_regions;
     rcache_params.max_size           = md->rcache_max_size;
 

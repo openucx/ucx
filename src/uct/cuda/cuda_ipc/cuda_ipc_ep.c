@@ -119,7 +119,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     iface->stream_refcount[key->dev_num]++;
     cuda_ipc_event->stream_id       = key->dev_num;
-    cuda_ipc_event->key             = *key;
+    cuda_ipc_event->pid             = key->pid;
     cuda_ipc_event->mapped_addr     = mapped_addr;
     cuda_ipc_event->cuda_ipc_region = cuda_ipc_region;
 

@@ -52,13 +52,13 @@ typedef struct uct_cuda_ipc_iface_config {
 
 
 typedef struct uct_cuda_ipc_event_desc {
-    CUevent           event;
-    void              *mapped_addr;
-    unsigned          stream_id;
-    uct_completion_t  *comp;
-    ucs_queue_elem_t  queue;
-    uct_cuda_ipc_ep_t *ep;
-    uct_cuda_ipc_key_t key;
+    CUevent                      event;
+    void                         *mapped_addr;
+    unsigned                     stream_id;
+    uct_completion_t             *comp;
+    ucs_queue_elem_t             queue;
+    uct_cuda_ipc_ep_t            *ep;
+    pid_t                        pid;
     uct_cuda_ipc_rcache_region_t *cuda_ipc_region;
 } uct_cuda_ipc_event_desc_t;
 

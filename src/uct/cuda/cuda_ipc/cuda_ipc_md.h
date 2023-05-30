@@ -23,7 +23,6 @@ typedef struct uct_cuda_ipc_md {
     int                      uuid_map_size;
     int                      uuid_map_capacity;
     ucs_ternary_auto_value_t rcache_enable;
-    double                   rcache_max_ratio;
     size_t                   rcache_max_size;
     unsigned long            rcache_max_regions;
 } uct_cuda_ipc_md_t;

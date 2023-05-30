@@ -269,7 +269,7 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
             uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
 
-        status = uct_cuda_ipc_unmap_memhandle(md, &cuda_ipc_event->key,
+        status = uct_cuda_ipc_unmap_memhandle(md, cuda_ipc_event->pid,
                                               cuda_ipc_event->mapped_addr,
                                               cuda_ipc_event->cuda_ipc_region);
         if (status != UCS_OK) {
