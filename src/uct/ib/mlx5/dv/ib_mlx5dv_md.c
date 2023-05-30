@@ -720,28 +720,34 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_str       = NULL
 };
 
-static ucs_status_t
-uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
-                           const uct_ib_md_config_t *md_config, void *cap)
+static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
+                                       const uct_ib_md_config_t *md_config,
+                                       void *cap)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
-    const char *scheme;
-    void *odp;
     ucs_status_t status;
+    const void *odp_cap;
+    const char *reason;
+    uint8_t version;
 
     if (uct_ib_mlx5_has_roce_port(&md->super.dev)) {
-        ucs_debug("%s: disable ODP on RoCE", uct_ib_device_name(&md->super.dev));
+        reason = "the port is ROCE";
         goto no_odp;
     }
 
     if (IBV_ACCESS_ON_DEMAND == 0) {
-        ucs_debug("%s: disable ODP because IBV_ACCESS_ON_DEMAND is not supported",
-                  uct_ib_device_name(&md->super.dev));
+        reason = "IBV_ACCESS_ON_DEMAND is not supported";
         goto no_odp;
     }
 
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, pg)) {
+        reason = "cap.pg is not supported";
+        goto no_odp;
+    }
+
+    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_extended_translation_offset)) {
+        reason = "cap.umr_extended_translation_offset is not supported";
         goto no_odp;
     }
 
@@ -752,49 +758,52 @@ uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                           sizeof(in), out, sizeof(out),
                                           "QUERY_HCA_CAP, ODP", 0);
     if (status != UCS_OK) {
-        return status;
+        reason = "faied to query HCA capabilities";
+        goto no_odp;
     }
 
     if (UCT_IB_MLX5DV_GET(query_hca_cap_out, out,
                           capability.odp_cap.mem_page_fault)) {
-        odp = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out,
+        odp_cap = UCT_IB_MLX5DV_ADDR_OF(
+                query_hca_cap_out, out,
                 capability.odp_cap.memory_page_fault_scheme_cap);
-        scheme = "memory";
+        version = 2;
     } else {
         if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_RCQP)) {
-            ucs_debug("%s: disable ODP because it's not supported for DEVX QP",
-                    uct_ib_device_name(&md->super.dev));
+            reason = "version 1 is not supported for DevX QP";
             goto no_odp;
         }
 
-        odp = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out,
+        odp_cap = UCT_IB_MLX5DV_ADDR_OF(
+                query_hca_cap_out, out,
                 capability.odp_cap.transport_page_fault_scheme_cap);
-
-        scheme = "transport";
+        version = 1;
     }
 
-    if (!UCT_IB_MLX5DV_GET(odp_scheme_cap, odp, ud_odp_caps.send) ||
-        !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp, rc_odp_caps.send) ||
-        !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp, rc_odp_caps.write) ||
-        !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp, rc_odp_caps.read)) {
+    if (!UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, ud_odp_caps.send) ||
+        !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.send) ||
+        !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.write) ||
+        !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.read)) {
+        reason = "it's not suported for UD/RC transports";
         goto no_odp;
     }
 
     if ((md->super.dev.flags & UCT_IB_DEVICE_FLAG_DC) &&
-        (!UCT_IB_MLX5DV_GET(odp_scheme_cap, odp, dc_odp_caps.send) ||
-         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp, dc_odp_caps.write) ||
-         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp, dc_odp_caps.read))) {
+        (!UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.send) ||
+         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.write) ||
+         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.read))) {
+        reason = "it's not suported for DC transport";
         goto no_odp;
     }
 
-    if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_extended_translation_offset)) {
-        goto no_odp;
-    }
-
-    ucs_debug("%s: ODP %s enabled", uct_ib_device_name(&md->super.dev), scheme);
+    ucs_debug("%s: ODP is supported, version %d",
+              uct_ib_device_name(&md->super.dev), version);
     md->super.reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    return;
+
 no_odp:
-    return UCS_OK;
+    ucs_debug("%s: ODP is disabled because %s",
+              uct_ib_device_name(&md->super.dev), reason);
 }
 
 static uct_ib_port_select_mode_t
@@ -1181,10 +1190,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                   uct_ib_device_name(dev));
     }
 
-    status = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
-    if (status != UCS_OK) {
-        goto err_lru_cleanup;
-    }
+    uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, atomic)) {
         int ops = UCT_IB_MLX5_ATOMIC_OPS_CMP_SWAP |
