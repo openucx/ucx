@@ -10,6 +10,7 @@
 #include "types.h"
 
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/stubs.h>
 
@@ -555,6 +556,14 @@ size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
  */
 int ucs_config_names_search(const ucs_config_names_array_t *config_names,
                             const char *str);
+
+/**
+ * @param   strb      An initiated ucs_string_buffer_t which will contain the env variables 
+ * @param   delimiter String that will seperate between each 2 env variables
+*/
+void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
+                                    const char *delimiter);
+
 
 END_C_DECLS
 
