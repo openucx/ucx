@@ -122,7 +122,15 @@ function az_module_load() {
             # Give up trying
             echo "MODULEPATH='${MODULEPATH}'"
             module avail || true
+            df -h | grep /hpc/local
             ls -l /hpc/local/etc/modulefiles/"$module" || true
+            ls -l /hpc/local/etc/modulefiles/ || true
+            file /hpc/local/etc/modulefiles/"$module" || true
+            stat /hpc/local/etc/modulefiles/"$module" || true
+            test -e /hpc/local/etc/modulefiles/"$module"
+            echo $?
+            test -r /hpc/local/etc/modulefiles/"$module"
+            echo $?
             azure_log_warning "Module $module cannot be loaded"
             return 1
         fi
