@@ -975,6 +975,7 @@ static void ucp_perf_test_err_handler(void *arg, ucp_ep_h ep,
 {
     ucs_error("error handler called with status %d (%s)\n", status,
               ucs_status_string(status));
+    exit(EXIT_FAILURE);
 }
 
 static ucs_status_t ucp_perf_test_rkey_pack(ucx_perf_context_t *perf,
