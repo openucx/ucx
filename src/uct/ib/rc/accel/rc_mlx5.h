@@ -201,4 +201,6 @@ unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 
 ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
 
+ucs_status_t uct_rc_mlx5_iface_arm(uct_iface_h tl_iface, unsigned events);
+
 #endif
