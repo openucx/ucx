@@ -49,7 +49,13 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("  Note: test can be also launched as an MPI application\n");
     printf("\n");
 #endif
-    printf("  Usage: %s [ server-hostname ] [ options ]\n", program);
+    printf("  Usage: %s [ server-address ] [ options ]\n", program);
+    printf("\n");
+    printf("  Supported server-address:\n");
+    printf("     <hostname>         with default socket-based test setup\n");
+    printf("     <ip-address>       with default socket-based test setup\n");
+    printf("     lid:<dec|hex>      with MAD-based test setup (-K)\n");
+    printf("     guid:<hex>         with MAD-based test setup (-K)\n");
     printf("\n");
     printf("  Common options:\n");
     printf("     -t <test>      test to run:\n");
@@ -87,6 +93,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
 #ifdef HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
+    printf("     -K <ca:port>   use MAD for test setup and synchronization\n");
     printf("     -h             show this help message\n");
     printf("\n");
     printf("  Output format:\n");
@@ -550,9 +557,11 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     ctx->af              = AF_INET;
     ctx->flags           = 0;
     ctx->mpi             = mpi_initialized;
+    ctx->mad_port        = NULL;
 
     optind = 1;
-    while ((c = getopt(argc, argv, "p:b:6NfvIc:P:h" TEST_PARAMS_ARGS)) != -1) {
+    while ((c = getopt(argc, argv, "p:b:6NfvIc:P:hK:" TEST_PARAMS_ARGS)) !=
+           -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
@@ -581,8 +590,11 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
             ctx->flags |= TEST_FLAG_SET_AFFINITY;
             status = parse_cpus(optarg, ctx);
             if (status != UCS_OK) {
-                return status;
+                goto err;
             }
+            break;
+        case 'K':
+            ctx->mad_port = optarg;
             break;
         case 'P':
 #ifdef HAVE_MPI
@@ -591,15 +603,23 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
 #endif
         case 'h':
             usage(ctx, ucs_basename(argv[0]));
-            return UCS_ERR_CANCELED;
+            status = UCS_ERR_CANCELED;
+            goto err;
         default:
             status = parse_test_params(&ctx->params, c, optarg);
             if (status != UCS_OK) {
                 usage(ctx, ucs_basename(argv[0]));
-                return status;
+                goto err;
             }
             break;
         }
+    }
+
+    if ((ctx->mpi != 0) && (ctx->mad_port != NULL)) {
+        ucs_error("conflicting arguments: cannot use MPI and IB RTE at the "
+                  "same time (mpirun and -K)");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
     }
 
     if (optind < argc) {
@@ -608,9 +628,14 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
         if (ctx->params.super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
             ucs_error("conflicting arguments: server hostname argument is not "
                       "allowed in loopback (-l) mode");
-            return UCS_ERR_INVALID_PARAM;
+            status = UCS_ERR_INVALID_PARAM;
+            goto err;
         }
     }
 
     return UCS_OK;
+
+err:
+    release_msg_size_list(&ctx->params);
+    return status;
 }
