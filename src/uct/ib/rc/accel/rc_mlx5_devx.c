@@ -101,19 +101,12 @@ ucs_status_t uct_rc_mlx5_iface_devx_pre_arm(uct_rc_mlx5_iface_common_t *iface)
     return status;
 }
 
-ucs_status_t uct_rc_mlx5_iface_devx_arm(uct_iface_h tl_iface, unsigned events)
+ucs_status_t
+uct_rc_mlx5_iface_devx_arm(uct_rc_mlx5_iface_common_t *iface, unsigned events)
 {
-    uct_rc_mlx5_iface_common_t *iface =
-        ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md              =
-        uct_ib_mlx5_iface_md(&iface->super.super);
     int solicited[UCT_IB_DIR_LAST], dir;
     ucs_status_t status;
     uint64_t dirs;
-
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ)) {
-        return uct_rc_iface_event_arm(tl_iface, events);
-    }
 
     status = uct_rc_mlx5_iface_devx_pre_arm(iface);
     if (status != UCS_OK) {
@@ -169,10 +162,6 @@ uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface)
 
     iface->event_channel    = NULL;
     iface->cq_event_channel = NULL;
-
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-        return UCS_OK;
-    }
 
     if (md->super.dev.async_events) {
         status = uct_rc_mlx5_devx_create_event_channel(iface,
