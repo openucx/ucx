@@ -109,22 +109,6 @@ uct_ib_mlx5_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh, void *addr,
     return UCS_OK;
 }
 
-static int uct_ib_mlx5_has_roce_port(uct_ib_device_t *dev)
-{
-    int port_num;
-
-    for (port_num = dev->first_port;
-         port_num < dev->first_port + dev->num_ports;
-         port_num++)
-    {
-        if (uct_ib_device_is_port_roce(dev, port_num)) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 static uint32_t uct_ib_mlx5_flush_rkey_make()
 {
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
@@ -719,6 +703,20 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_cleanup   = NULL,
     .obj_str       = NULL
 };
+
+static int uct_ib_mlx5_has_roce_port(uct_ib_device_t *dev)
+{
+    int port_num;
+
+    for (port_num = dev->first_port;
+         port_num < dev->first_port + dev->num_ports; port_num++) {
+        if (uct_ib_device_is_port_roce(dev, port_num)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
 
 static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                        const uct_ib_md_config_t *md_config,

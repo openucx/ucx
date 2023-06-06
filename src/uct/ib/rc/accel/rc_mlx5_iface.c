@@ -730,6 +730,20 @@ ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
     return uct_ib_iface_event_fd_get(tl_iface, fd_p);
 }
 
+ucs_status_t uct_rc_mlx5_iface_arm(uct_iface_h tl_iface, unsigned events)
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md              =
+            uct_ib_mlx5_iface_md(&iface->super.super);
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
+        return uct_rc_mlx5_iface_devx_arm(iface, events);
+    }
+
+    return uct_rc_iface_event_arm(tl_iface, events);
+}
+
 static ucs_status_t
 uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
 {
@@ -871,9 +885,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         goto cleanup_dm;
     }
 
-    status = uct_rc_mlx5_devx_iface_init_events(self);
-    if (status != UCS_OK) {
-        goto cleanup_mpool;
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        status = uct_rc_mlx5_devx_iface_init_events(self);
+        if (status != UCS_OK) {
+            goto cleanup_mpool;
+        }
+    } else {
+        self->event_channel    = NULL;
+        self->cq_event_channel = NULL;
     }
 
     status = uct_rc_mlx5_iface_subscribe_cqs(self);
@@ -1045,7 +1064,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_rc_iface_do_progress,
     .iface_event_fd_get       = uct_rc_mlx5_iface_event_fd_get,
-    .iface_event_arm          = uct_rc_mlx5_iface_devx_arm,
+    .iface_event_arm          = uct_rc_mlx5_iface_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_query              = uct_rc_mlx5_iface_query,
     .iface_get_address        = uct_rc_mlx5_iface_get_address,
