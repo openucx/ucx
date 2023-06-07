@@ -77,8 +77,7 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
                                            unsigned uct_flags);
 
 
-void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
-                                     ucp_datatype_iter_t *dt_iter);
+void ucp_datatype_iter_iov_mem_dereg(ucp_datatype_iter_t *dt_iter);
 
 
 size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
