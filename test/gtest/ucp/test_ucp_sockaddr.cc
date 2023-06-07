@@ -1722,8 +1722,9 @@ private:
         UCS_ASYNC_BLOCK(&e.worker()->async);
         uct_priv_worker_t *worker = ucs_derived_of(e.worker()->uct,
                                                    uct_priv_worker_t);
-        ucs_callbackq_remove_if(&worker->super.progress_q,
-                                find_try_next_cm_cb, &find_try_next_cm_arg);
+        ucs_callbackq_remove_oneshot(&worker->super.progress_q, e.ep(),
+                                     find_try_next_cm_cb,
+                                     &find_try_next_cm_arg);
         UCS_ASYNC_UNBLOCK(&e.worker()->async);
 
         return find_try_next_cm_arg.found;
@@ -2738,32 +2739,32 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols,
-           am_rndv_64k_prereg_proto_v2_single_rndv_put_zcopy_lane,
+           am_rndv_64k_prereg_proto_v1_single_rndv_put_zcopy_lane,
            "RNDV_THRESH=0", "MAX_RNDV_LANES=1", "RNDV_SCHEME=put_zcopy",
-           "PROTO_ENABLE=y")
+           "PROTO_ENABLE=n")
 {
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=y",
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=n",
            "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=y",
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=n",
            "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=y")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=n")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=y",
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=n",
            "RNDV_THRESH=0")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,

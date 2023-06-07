@@ -1282,6 +1282,8 @@ run_tests() {
 	export UCX_IB_ROCE_LOCAL_SUBNET=y
 	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
+	export UCX_PROTO_REQUEST_RESET=y
+
 	# load cuda env only if GPU available for remaining tests
 	try_load_cuda_env
 
@@ -1318,7 +1320,7 @@ run_tests() {
 	do_distributed_task 0 4 run_release_mode_tests
 }
 
-run_test_proto_enable() {
+run_test_proto_disable() {
 	export UCX_HANDLE_ERRORS=bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
@@ -1331,8 +1333,7 @@ run_test_proto_enable() {
 	# build for devel tests and gtest
 	build devel --enable-gtest
 
-	export UCX_PROTO_ENABLE=y
-	export UCX_PROTO_REQUEST_RESET=y
+	export UCX_PROTO_ENABLE=n
 
 	# all are running gtest
 	run_gtest "default"
@@ -1344,8 +1345,8 @@ try_load_cuda_env
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
     check_machine
-    if [[ "$PROTO_ENABLE" == "yes" ]]; then
-        run_test_proto_enable
+    if [[ "$PROTO_ENABLE" == "no" ]]; then
+        run_test_proto_disable
     else
         run_tests
     fi

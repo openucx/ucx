@@ -11,7 +11,7 @@
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/module.h>
-
+#include <sys/utsname.h>
 #include <pthread.h>
 
 #define MAX_AGENTS 63
@@ -292,9 +292,44 @@ int uct_rocm_base_is_dmabuf_supported()
     int dmabuf_supported = 0;
 
 #if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
-    dmabuf_supported = 1;
-#endif
+    const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
+    const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
+    int found_opt1           = 0;
+    int found_opt2           = 0;
+    FILE *fp;
+    struct utsname utsname;
+    char kernel_conf_file[128];
+    char buf[256];
 
+    if (uname(&utsname) == -1) {
+        ucs_trace("could not get kernel name");
+        goto out;
+    }
+
+    ucs_snprintf_safe(kernel_conf_file, sizeof(kernel_conf_file),
+                      "/boot/config-%s", utsname.release);
+    fp = fopen(kernel_conf_file, "r");
+    if (fp == NULL) {
+        ucs_trace("could not open kernel conf file %s error: %m",
+                  kernel_conf_file);
+        goto out;
+    }
+
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+        if (strstr(buf, kernel_opt1) != NULL) {
+            found_opt1 = 1;
+        }
+        if (strstr(buf, kernel_opt2) != NULL) {
+            found_opt2 = 1;
+        }
+        if (found_opt1 && found_opt2) {
+            dmabuf_supported = 1;
+            break;
+        }
+    }
+    fclose(fp);
+#endif
+out:
     return dmabuf_supported;
 }
 

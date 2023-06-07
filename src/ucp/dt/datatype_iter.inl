@@ -36,16 +36,14 @@ ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer,
                               size_t length, ucp_datatype_iter_t *dt_iter,
                               const ucp_request_param_t *param)
 {
-    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
-        ucp_memory_detect(context, buffer, length, &dt_iter->mem_info);
-    }
+    ucp_memory_detect_param(context, buffer, length, param, &dt_iter->mem_info);
 
-    dt_iter->length                 = length;
-    dt_iter->type.contig.buffer     = buffer;
-    dt_iter->type.contig.memh       = NULL;
+    dt_iter->length             = length;
+    dt_iter->type.contig.buffer = buffer;
+    dt_iter->type.contig.memh   = NULL;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
                            size_t length, ucp_datatype_iter_t *dt_iter,
                            uint8_t *sg_count, const ucp_request_param_t *param)
@@ -61,16 +59,8 @@ ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
     dt_iter->type.iov.iov_offset = 0;
     dt_iter->type.iov.memh       = NULL;
 
-    if (ucs_likely(count > 0)) {
-        *sg_count = ucs_min(count, (size_t)UINT8_MAX);
-        if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
-            ucp_memory_detect(context, iov->buffer, iov->length,
-                              &dt_iter->mem_info);
-        }
-    } else {
-        *sg_count = 1;
-        ucp_memory_info_set_host(&dt_iter->mem_info);
-    }
+    return ucp_dt_iov_memtype_detect(context, iov, count, param, sg_count,
+                                     &dt_iter->mem_info);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -135,9 +125,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_set_memh(
         return UCS_ERR_UNSUPPORTED;
     }
 
-    dt_iter->mem_info.sys_dev = param->memh->sys_dev;
-    dt_iter->mem_info.type    = param->memh->mem_type;
-
     return UCS_OK;
 }
 
@@ -152,6 +139,7 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
                        uint8_t *sg_count, const ucp_request_param_t *param)
 {
     size_t iov_length;
+    ucs_status_t status;
 
     dt_iter->offset   = 0;
     dt_iter->dt_class = ucp_datatype_class(datatype);
@@ -162,8 +150,12 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
         *sg_count = 1;
     } else if (dt_iter->dt_class == UCP_DATATYPE_IOV) {
         iov_length = ucp_dt_iov_length((const ucp_dt_iov_t*)buffer, count);
-        ucp_datatype_iov_iter_init(context, buffer, count, iov_length, dt_iter,
-                                   sg_count, param);
+        status     = ucp_datatype_iov_iter_init(context, buffer, count,
+                                                iov_length, dt_iter, sg_count,
+                                                param);
+        if (status != UCS_OK) {
+            return status;
+        }
     } else {
         ucs_assert(dt_iter->dt_class == UCP_DATATYPE_GENERIC);
         ucp_datatype_generic_iter_init(context, buffer, count, datatype,
@@ -187,7 +179,7 @@ ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
     ucp_memory_info_set_host(&dt_iter->mem_info);
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_iter_init_from_dt_state(ucp_context_h context, void *buffer,
                                      size_t length, ucp_datatype_t datatype,
                                      const ucp_dt_state_t *dt_state,
@@ -195,6 +187,7 @@ ucp_datatype_iter_init_from_dt_state(ucp_context_h context, void *buffer,
                                      uint8_t *sg_count)
 {
     static const ucp_request_param_t dummy_param = {0};
+    ucs_status_t status;
 
     dt_iter->offset   = 0;
     dt_iter->dt_class = ucp_datatype_class(datatype);
@@ -204,8 +197,12 @@ ucp_datatype_iter_init_from_dt_state(ucp_context_h context, void *buffer,
                                       &dummy_param);
         *sg_count = 1;
     } else if (dt_iter->dt_class == UCP_DATATYPE_IOV) {
-        ucp_datatype_iov_iter_init(context, buffer, dt_state->dt.iov.iovcnt,
-                                   length, dt_iter, sg_count, &dummy_param);
+        status = ucp_datatype_iov_iter_init(context, buffer,
+                                            dt_state->dt.iov.iovcnt, length,
+                                            dt_iter, sg_count, &dummy_param);
+        if (status != UCS_OK) {
+            return status;
+        }
     } else {
         ucs_assert(dt_iter->dt_class == UCP_DATATYPE_GENERIC);
         /* Transfer ownership from dt_state to dt_iter */
@@ -215,6 +212,8 @@ ucp_datatype_iter_init_from_dt_state(ucp_context_h context, void *buffer,
         ucp_memory_info_set_host(&dt_iter->mem_info);
         *sg_count = 0;
     }
+
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void

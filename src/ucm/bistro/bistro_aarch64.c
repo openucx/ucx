@@ -243,7 +243,7 @@ ucm_bistro_relocate_func(const void *func_ptr, size_t patch_len,
     max_code_len = (patch_len *
                     (sizeof(ucm_bistro_load64_t) / sizeof(ucm_bistro_inst_t))) +
                    sizeof(ucm_bistro_jmp_indirect_t);
-    orig_func    = ucm_bistro_allocate_code(sizeof(*orig_func) + max_code_len +
+    orig_func    = ucm_bistro_allocate_code(max_code_len +
                                             sizeof(ucm_bistro_jmp_indirect_t));
     if (orig_func == NULL) {
         return UCS_ERR_NO_MEMORY;

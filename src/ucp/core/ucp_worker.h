@@ -121,9 +121,10 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
+    UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE       = UCS_BIT(3)  /**< Progress should be activated */
 };
 
 
@@ -372,7 +373,6 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                            ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
-                                   uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t **wiface);
 
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,

@@ -133,8 +133,9 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.ep              = ep;
     req->send.buffer          = (void*)buffer;
     req->send.datatype        = ucp_dt_make_contig(1);
-    req->send.mem_type        = ucp_request_get_memory_type(context, buffer,
-                                                            length, param);
+    req->send.mem_type        = ucp_request_get_memory_type(
+                                    context, buffer, length,
+                                    ucp_dt_make_contig(1), length, param);
     req->send.length          = length;
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;
@@ -160,7 +161,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
         return status;
     }
 
-    return ucp_request_send_buffer_reg_lane(req, req->send.lane, 0);
+    return ucp_request_send_reg_lane(req, req->send.lane);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t

@@ -4,6 +4,7 @@ parameters:
   demands: []
   name: subtest
   container:
+  proto_enable: yes
 
 jobs:
   - job: tests_${{ parameters.name }}

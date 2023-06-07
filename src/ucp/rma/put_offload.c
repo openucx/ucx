@@ -122,11 +122,8 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
                                    req->send.rma.remote_addr +
                                    req->send.state.dt_iter.offset,
                                    tl_rkey);
-    if (ucs_likely(packed_size >= 0)) {
-        return UCS_OK;
-    } else {
-        return (ucs_status_t)packed_size;
-    }
+
+    return ucp_proto_bcopy_send_func_status(packed_size);
 }
 
 static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)

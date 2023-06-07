@@ -1238,8 +1238,8 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
                     const uct_dc_mlx5_iface_addr_t *if_addr,
                     uct_ib_mlx5_base_av_t *av, uint8_t path_index)
 {
-    const uct_dc_mlx5_iface_flush_addr_t *flush_addr = 
-        ucs_derived_of(if_addr, uct_dc_mlx5_iface_flush_addr_t);
+    const uct_dc_mlx5_iface_flush_addr_t *flush_addr =
+            ucs_derived_of(if_addr, uct_dc_mlx5_iface_flush_addr_t);
     uint32_t remote_dctn;
 
     ucs_trace_func("");
@@ -1440,7 +1440,6 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
     uint8_t dci;
     uct_dc_mlx5_dci_pool_t *dci_pool;
 
-    ucs_assert(iface->tx.dci_release_prog_id != UCS_CALLBACKQ_ID_NULL);
     ucs_assert(!uct_dc_mlx5_iface_is_dci_shared(iface));
     UCS_STATIC_ASSERT((sizeof(iface->tx.dci_pool_release_bitmap) * 8) <=
                        UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
@@ -1473,7 +1472,6 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
 
     ucs_assert(iface->tx.dci_pool_release_bitmap == 0);
     uct_dc_mlx5_iface_check_tx(iface);
-    iface->tx.dci_release_prog_id = UCS_CALLBACKQ_ID_NULL;
     return 1;
 }
 

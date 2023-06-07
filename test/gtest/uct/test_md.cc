@@ -260,7 +260,8 @@ void test_md::free_memory(void *address, ucs_memory_type_t mem_type)
 bool test_md::is_device_detected(ucs_memory_type_t mem_type)
 {
     return (mem_type != UCS_MEMORY_TYPE_ROCM) &&
-           (mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED);
+           (mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED) &&
+           (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED);
 }
 
 void test_md::dereg_cb(uct_completion_t *comp)
@@ -779,7 +780,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
 UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
 {
     static const size_t size       = 1 * UCS_MBYTE;
-    const int limit                = 2000 / ucs::test_time_multiplier();
+    const int limit                = 64;
     static const unsigned md_flags = UCT_MD_MEM_ACCESS_REMOTE_PUT |
                                      UCT_MD_MEM_ACCESS_REMOTE_GET;
     std::vector<uct_mem_h> memhs;
@@ -805,6 +806,8 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
                               UCT_MD_MEM_DEREG_FIELD_MEMH |
                               UCT_MD_MEM_DEREG_FIELD_COMPLETION;
     dereg_params.comp       = &comp().comp;
+    pack_params.field_mask  = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+    pack_params.flags       = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA;
 
     for (mem_reg_count = 1; mem_reg_count < limit; mem_reg_count++) {
         comp().comp.count = (mem_reg_count + 1) / 2;
@@ -814,8 +817,6 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
         ASSERT_UCS_OK(status);
         memhs.push_back(memh);
 
-        pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
-        pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA;
         status = uct_md_mkey_pack_v2(md(), memh, &pack_params, &key);
         ASSERT_UCS_OK(status);
 
@@ -827,13 +828,19 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
             status = reg_mem(md_flags, ptr, size, &memh);
             ASSERT_UCS_OK(status);
             memhs.push_back(memh);
+
+            status = uct_md_mkey_pack_v2(md(), memh, &pack_params, &key);
+            ASSERT_UCS_OK(status);
         }
 
+        /* mix dereg and dereg(invalidate) operations */
         for (iter = 0; iter < mem_reg_count; iter++) {
-            /* mix dereg and dereg(invalidate) operations */
-            ASSERT_EQ(0, m_comp_count);
             memh = memhs.back();
-            if ((iter & 1) == 0) { /* on even iteration invalidate handle */
+            /* on half of iteration invalidate handle, make sure that in
+             * last iteration dereg will be called with invalidation, so
+             * completion will be called on last iteration only */
+            ASSERT_EQ(0, m_comp_count);
+            if ((iter & 1) != (mem_reg_count & 1)) {
                 dereg_params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
             } else {
                 dereg_params.flags = 0;

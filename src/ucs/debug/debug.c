@@ -691,12 +691,12 @@ const char *ucs_debug_get_symbol_name(void *address)
     pthread_mutex_lock(&lock);
     hash_it = kh_put(ucs_debug_symbol, &ucs_debug_symbols_cache,
                      (uintptr_t)address, &hash_extra_status);
-    if (hash_extra_status == 0) {
+    if (hash_extra_status == UCS_KH_PUT_KEY_PRESENT) {
          sym = kh_value(&ucs_debug_symbols_cache, hash_it);
     } else {
         status = ucs_debug_lookup_address(address, &info);
         if (status == UCS_OK) {
-            if (hash_extra_status == -1) {
+            if (hash_extra_status == UCS_KH_PUT_FAILED) {
                 /* could not add to hash, return pointer to the static buffer */
                 sym = info.function;
                 goto out;
@@ -724,7 +724,7 @@ out:
 static void ucs_debugger_attach()
 {
     static const char *vg_cmds_fmt = "file %s\n"
-                                     "target remote | vgdb\n";
+                                     "target remote | vgdb --pid=%d\n";
     static const char *bt_cmds     = "bt\n"
                                      "list\n";
     static char pid_str[16];
@@ -782,7 +782,7 @@ static void ucs_debugger_attach()
         if (fd >= 0) {
             if (RUNNING_ON_VALGRIND) {
                 vg_cmds = ucs_sys_realloc(NULL, 0, strlen(vg_cmds_fmt) + strlen(self_exe));
-                sprintf(vg_cmds, vg_cmds_fmt, self_exe);
+                sprintf(vg_cmds, vg_cmds_fmt, self_exe, debug_pid);
                 if (write(fd, vg_cmds, strlen(vg_cmds)) != strlen(vg_cmds)) {
                     ucs_log_fatal_error("Unable to write to command file: %m");
                 }

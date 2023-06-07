@@ -231,6 +231,9 @@ typedef struct {
 
     /* Protocol configuration in the range, such as devices and transports */
     char   config[UCP_PROTO_CONFIG_STR_MAX];
+
+    /* Map of used lanes */
+    ucp_lane_map_t lane_map;
 } ucp_proto_query_attr_t;
 
 

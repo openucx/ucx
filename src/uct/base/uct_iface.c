@@ -248,6 +248,23 @@ uct_base_iface_is_reachable_v2(const uct_iface_h iface,
 {
     uct_iface_reachability_scope_t scope;
 
+    if (!uct_iface_is_reachable(iface, params->device_addr,
+                                params->iface_addr)) {
+        return 0;
+    }
+
+    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
+                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
+
+    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
+           uct_iface_is_same_device(iface, params->device_addr);
+}
+
+int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                              const uct_iface_is_reachable_params_t *params)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
     if (!ucs_test_all_flags(params->field_mask,
                             UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
                             UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
@@ -260,19 +277,6 @@ uct_base_iface_is_reachable_v2(const uct_iface_h iface,
         params->info_string[0] = '\0';
     }
 
-    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
-                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
-
-    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ?
-                   uct_iface_is_reachable(iface, params->device_addr,
-                                          params->iface_addr) :
-                   uct_iface_is_same_device(iface, params->device_addr);
-}
-
-int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                              const uct_iface_is_reachable_params_t *params)
-{
-    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
 }
 
@@ -757,9 +761,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
     uct_base_iface_t *iface = ucs_derived_of(self->super.iface,
                                              uct_base_iface_t);
 
-    ucs_callbackq_remove_if(&iface->worker->super.progress_q,
-                            uct_iface_ep_conn_reset_handle_progress_remove,
-                            self);
+    ucs_callbackq_remove_oneshot(&iface->worker->super.progress_q, self,
+                                 uct_iface_ep_conn_reset_handle_progress_remove,
+                                 self);
     UCS_STATS_NODE_FREE(self->stats);
 }
 
@@ -866,9 +870,8 @@ static void uct_iface_schedule_ep_err(uct_ep_h ep)
         return;
     }
 
-    ucs_callbackq_add_safe(&iface->worker->super.progress_q,
-                           uct_iface_ep_conn_reset_handle_progress, ep,
-                           UCS_CALLBACKQ_FLAG_ONESHOT);
+    ucs_callbackq_add_oneshot(&iface->worker->super.progress_q, ep,
+                              uct_iface_ep_conn_reset_handle_progress, ep);
 }
 
 ucs_status_t uct_ep_keepalive_init(uct_keepalive_info_t *ka, pid_t pid)

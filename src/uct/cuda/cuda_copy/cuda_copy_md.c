@@ -31,6 +31,12 @@
 #define UCT_CUDA_MAX_DEVICES      32
 
 
+static const char *uct_cuda_pref_loc[] = {
+    [UCT_CUDA_PREF_LOC_CPU]  = "cpu",
+    [UCT_CUDA_PREF_LOC_GPU]  = "gpu",
+    [UCT_CUDA_PREF_LOC_LAST] = NULL,
+};
+
 static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
     {"", "", NULL,
         ucs_offsetof(uct_cuda_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -49,6 +55,19 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      " to the total GPU memory capacity is below this ratio, then the whole allocation"
      " is registered. Otherwise only the user specified region is registered.",
      ucs_offsetof(uct_cuda_copy_md_config_t, max_reg_ratio), UCS_CONFIG_TYPE_DOUBLE},
+
+    {"DMABUF", "try",
+     "Enable using cross-device dmabuf file descriptor",
+     ucs_offsetof(uct_cuda_copy_md_config_t, enable_dmabuf),
+                  UCS_CONFIG_TYPE_TERNARY},
+
+    {"PREF_LOC", "cpu",
+     "System device designation of a CUDA managed memory buffer"
+     " whose preferred location attribute is not set.\n"
+     " cpu - Assume buffer is on the CPU.\n"
+     " gpu - Assume buffer is on the GPU corresponding to buffer's GPU context.",
+     ucs_offsetof(uct_cuda_copy_md_config_t, pref_loc),
+     UCS_CONFIG_TYPE_ENUM(uct_cuda_pref_loc)},
 
     {NULL}
 };
@@ -78,8 +97,10 @@ static int uct_cuda_copy_md_is_dmabuf_supported()
 }
 
 static ucs_status_t
-uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
+uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
+    uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
+
     md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
     md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
@@ -93,10 +114,8 @@ uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->detect_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->dmabuf_mem_types       = 0;
-    if (uct_cuda_copy_md_is_dmabuf_supported()) {
-        md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    }
+    md_attr->dmabuf_mem_types       = md->config.dmabuf_supported ?
+                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA) : 0;
     md_attr->max_alloc        = SIZE_MAX;
     md_attr->max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size = 0;
@@ -285,8 +304,8 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     const char *cu_err_str;
     CUdeviceptr base_address;
     size_t alloc_length;
-    ucs_status_t status;
     size_t total_bytes;
+    int32_t pref_loc;
     CUresult cu_err;
 
     attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
@@ -305,11 +324,6 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    status = uct_cuda_base_get_sys_dev(cuda_device, &mem_info->sys_dev);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     if (is_managed || (cuda_mem_ctx == NULL)) {
         /* is_managed: cuMemGetAddress range does not support managed memory so
          * use provided address and length as base address and alloc length
@@ -324,7 +338,33 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
          * allocated in a context should also allows us to identify
          * virtual/stream-ordered CUDA allocations. */
         mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+
+        cu_err =
+            cuMemRangeGetAttribute((void*)&pref_loc, sizeof(pref_loc),
+                                   CU_MEM_RANGE_ATTRIBUTE_PREFERRED_LOCATION,
+                                   (CUdeviceptr)address, length);
+        if ((cu_err != CUDA_SUCCESS) || (pref_loc == CU_DEVICE_INVALID)) {
+            pref_loc = (md->config.pref_loc == UCT_CUDA_PREF_LOC_CPU) ?
+                CU_DEVICE_CPU : cuda_device;
+        }
+
+        if (pref_loc == CU_DEVICE_CPU) {
+            mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        } else {
+            uct_cuda_base_get_sys_dev(pref_loc, &mem_info->sys_dev);
+            if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+                ucs_diag("cuda device %d (for address %p...%p) unrecognized",
+                         pref_loc, address,
+                         UCS_PTR_BYTE_OFFSET(address, length));
+            }
+        }
+
         goto out_default_range;
+    }
+
+    uct_cuda_base_get_sys_dev(cuda_device, &mem_info->sys_dev);
+    if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_ERR_NO_DEVICE;
     }
 
     mem_info->type = UCS_MEMORY_TYPE_CUDA;
@@ -536,20 +576,42 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     uct_cuda_copy_md_config_t *config = ucs_derived_of(md_config,
                                                        uct_cuda_copy_md_config_t);
     uct_cuda_copy_md_t *md;
+    int dmabuf_supported;
+    ucs_status_t status;
 
     md = ucs_malloc(sizeof(uct_cuda_copy_md_t), "uct_cuda_copy_md_t");
     if (NULL == md) {
         ucs_error("failed to allocate memory for uct_cuda_copy_md_t");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
-    md->super.ops              = &md_ops;
-    md->super.component        = &uct_cuda_copy_component;
-    md->config.alloc_whole_reg = config->alloc_whole_reg;
-    md->config.max_reg_ratio   = config->max_reg_ratio;
-    *md_p                      = (uct_md_h)md;
+    md->super.ops               = &md_ops;
+    md->super.component         = &uct_cuda_copy_component;
+    md->config.alloc_whole_reg  = config->alloc_whole_reg;
+    md->config.max_reg_ratio    = config->max_reg_ratio;
+    md->config.pref_loc         = config->pref_loc;
+    md->config.dmabuf_supported = 0;
+
+    dmabuf_supported = uct_cuda_copy_md_is_dmabuf_supported();
+    if ((config->enable_dmabuf == UCS_YES) && !dmabuf_supported) {
+        ucs_error("dmabuf support requested but not found");
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free_md;
+    }
+
+    if (config->enable_dmabuf != UCS_NO) {
+        md->config.dmabuf_supported = dmabuf_supported;
+    }
+
+    *md_p = (uct_md_h)md;
 
     return UCS_OK;
+
+err_free_md:
+    ucs_free(md);
+err:
+    return status;
 }
 
 uct_component_t uct_cuda_copy_component = {

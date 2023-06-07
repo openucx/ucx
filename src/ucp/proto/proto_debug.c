@@ -232,10 +232,10 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     range_end    = -1;
     do {
         range_start = range_end + 1;
-
         proto_valid = ucp_proto_select_elem_query(worker, select_elem,
                                                   range_start, &proto_attr);
         range_end   = proto_attr.max_msg_length;
+
         if (!proto_valid) {
             continue;
         }

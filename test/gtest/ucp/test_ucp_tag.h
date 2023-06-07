@@ -125,10 +125,6 @@ protected:
 
     virtual bool is_external_request();
 
-    void skip_external_protov2() const;
-
-    void skip_protov2() const;
-
     static ucp_context_attr_t ctx_attr;
     ucs::ptr_vector<ucs::scoped_setenv> m_env;
 

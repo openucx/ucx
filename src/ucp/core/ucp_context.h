@@ -92,7 +92,7 @@ typedef struct ucp_context_config {
      *  preregistered bounce buffers. */
     size_t                                 tm_max_bb_size;
     /** Enabling SW rndv protocol with tag offload mode */
-    int                                    tm_sw_rndv;
+    ucs_ternary_auto_value_t               tm_sw_rndv;
     /** Pack debug information in worker address */
     int                                    address_debug_info;
     /** Maximal size of worker address name for debugging */
@@ -655,6 +655,20 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_memory_detect_param(ucp_context_h context, const void *address,
+                        size_t length, const ucp_request_param_t *param,
+                        ucp_memory_info_t *mem_info)
+{
+    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) {
+        ucs_assert(param->memh != NULL);
+        mem_info->sys_dev = param->memh->sys_dev;
+        mem_info->type    = param->memh->mem_type;
+    } else {
+        ucp_memory_detect(context, address, length, mem_info);
+    }
 }
 
 

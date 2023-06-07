@@ -49,6 +49,16 @@ AS_IF([test "x$enable_debug" = xyes],
 
 
 #
+# Enable GCOV build
+#
+AC_ARG_ENABLE([gcov],
+        AS_HELP_STRING([--enable-gcov], [Enable code coverage instrumentation]),
+        [],
+        [enable_gcov=no])
+AM_CONDITIONAL([HAVE_GCOV],[test "x$enable_gcov" = xyes])
+
+
+#
 # Optimization level
 #
 AC_ARG_ENABLE(compiler-opt,
@@ -57,7 +67,7 @@ AC_ARG_ENABLE(compiler-opt,
         [enable_compiler_opt="none"])
 AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
       [test "x$enable_compiler_opt" = "xnone"],
-          [AS_IF([test "x$enable_debug" = xyes],
+          [AS_IF([test "x$enable_debug" = xyes -o "x$enable_gcov" = xyes],
                  [BASE_CFLAGS="-O0 $BASE_CFLAGS"
                   BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"],
                  [BASE_CFLAGS="-O3 $BASE_CFLAGS"
@@ -386,7 +396,7 @@ AC_ARG_ENABLE([frame-pointer],
                    [Compile with frame pointer, useful for profiling, default: NO]),
     [],
     [enable_frame_pointer=no])
-AS_IF([test "x$enable_frame_pointer" = xyes],
+AS_IF([test "x$enable_frame_pointer" = xyes -o "x$enable_gcov" = xyes],
       [ADD_COMPILER_FLAG_IF_SUPPORTED([-fno-omit-frame-pointer],
                                       [-fno-omit-frame-pointer],
                                       [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
@@ -399,6 +409,13 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-funwind-tables],
                                [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                                [AS_MESSAGE([compiling with unwind tables])],
                                [AS_MESSAGE([compiling without unwind tables])])
+
+
+AS_IF([test "x$enable_gcov" = xyes],
+      [ADD_COMPILER_FLAGS_IF_SUPPORTED([[-ftest-coverage],
+                                        [-fprofile-arcs]],
+                                       [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])])],
+      [:])
 
 
 #

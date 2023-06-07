@@ -107,3 +107,17 @@ stages:
         parameters:
           arch: aarch64
           demands: ucx-arm64
+
+      - template: jucx/jucx-build.yml
+        parameters:
+          arch: amd64
+          container: centos7_cuda11_x86_64
+          demands: ucx_docker
+
+      - template: jucx/jucx-build.yml
+        parameters:
+          arch: aarch64
+          container: centos8_cuda11_aarch64
+          demands: ucx-arm64
+
+      - template: jucx/jucx-publish.yml

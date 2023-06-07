@@ -173,8 +173,21 @@ enum {
  * Endpoint configuration key flags
  */
 enum {
-    UCP_EP_CONFIG_KEY_FLAG_SELF       = UCS_BIT(0), /** Endpoint is connected to own worker */
-    UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE = UCS_BIT(1)  /** Endpoint is within same node */
+    /**
+     * Endpoint is connected to own worker.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_SELF         = UCS_BIT(0),
+
+    /**
+     * Endpoint is within same node.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE   = UCS_BIT(1),
+
+    /**
+     * Endpoint is in an intermediate connection establishment phase,
+     * some capabilities may be limited or disabled.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE = UCS_BIT(2)
 };
 
 
@@ -687,6 +700,9 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
+void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
+                                  unsigned ep_init_flags);
+
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 
 void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg);
@@ -756,7 +772,8 @@ int ucp_ep_is_local_connected(ucp_ep_h ep);
 
 unsigned ucp_ep_local_disconnect_progress(void *arg);
 
-size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
+size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_context_h context,
+                                          const ucp_ep_config_key_t *key);
 
 void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
                                      ucp_ep_rndv_zcopy_config_t *rndv_zcopy);

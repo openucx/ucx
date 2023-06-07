@@ -818,8 +818,9 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.length   = ucp_dt_length(req->send.datatype, count,
                                        req->send.buffer, &req->send.state.dt);
     req->send.mem_type = ucp_request_get_memory_type(ep->worker->context,
-                                                     req->send.buffer,
-                                                     req->send.length, param);
+                                                     req->send.buffer, count,
+                                                     datatype, req->send.length,
+                                                     param);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
@@ -1138,8 +1139,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
 
     desc->flags |= UCP_RECV_DESC_FLAG_RECV_STARTED;
     datatype     = ucp_request_param_datatype(param);
-    mem_type     = ucp_request_get_memory_type(context, buffer, desc->length,
-                                               param);
+    mem_type     = ucp_request_get_memory_type(context, buffer, count, datatype,
+                                               desc->length, param);
 
     ucs_trace("AM recv %s buffer %p dt 0x%lx count %zu memtype %s",
               (desc->flags & UCP_RECV_DESC_FLAG_RNDV) ? "rndv" : "eager",

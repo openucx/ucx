@@ -1127,7 +1127,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     tl_bitmap = ucp_tl_bitmap_max;
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+    ucs_memory_type_for_each(mem_type) {
         status = ucp_wireup_add_memaccess_lanes(select_params, &criteria,
                                                 mem_type, tl_bitmap,
                                                 UCP_LANE_TYPE_RMA, select_ctx);
@@ -1778,7 +1778,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         added_lanes = 0;
         UCS_BITMAP_CLEAR(&tl_bitmap);
 
-        for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+        ucs_memory_type_for_each(mem_type) {
             UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, reg_mem_types,
                                     mem_type_tl_bitmap);
 
@@ -2105,13 +2105,14 @@ static unsigned ucp_wireup_default_path_index(unsigned path_index)
 
 static ucs_status_t ucp_wireup_select_set_locality_flags(
         const ucp_wireup_select_params_t *select_params,
-        ucp_ep_config_key_t *key)
+        unsigned *addr_indices, ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker = select_params->ep->worker;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
     ucp_address_entry_t *ae;
     ucp_lane_index_t lane;
+    unsigned addr_index;
     uct_iface_is_reachable_params_t params;
 
     if (select_params->address->uuid == worker->uuid) {
@@ -2130,37 +2131,37 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
         }
     }
 
-    /* If the local context matching at least one remote device address, it's
-       intra-node. Only selected lanes are compared to verify reachability. */
+    /* If the local context matching the corresponding remote device address,
+     * it's intra-node. Only selected lanes are compared to verify reachability.
+     */
     for (lane = 0; lane < key->num_lanes; ++lane) {
         rsc_index = key->lanes[lane].rsc_index;
         if (rsc_index == UCP_NULL_RESOURCE) {
             continue;
         }
 
+        if (key->cm_lane == lane) {
+            continue;
+        }
+
+        addr_index = addr_indices[lane];
+        ae         = &select_params->address->address_list[addr_index];
+
         wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->attr.device_addr_len == 0) {
             continue;
         }
 
-        ucp_unpacked_address_for_each(ae, select_params->address) {
-            if ((wiface->attr.device_addr_len != ae->dev_addr_len) ||
-                (worker->context->tl_rscs[rsc_index].tl_name_csum !=
-                 ae->tl_name_csum)) {
-                continue;
-            }
+        params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                             UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
+                             UCT_IFACE_IS_REACHABLE_FIELD_SCOPE;
+        params.device_addr = ae->dev_addr;
+        params.iface_addr  = ae->iface_addr;
+        params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
 
-            params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                                 UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
-                                 UCT_IFACE_IS_REACHABLE_FIELD_SCOPE;
-            params.device_addr = ae->dev_addr;
-            params.iface_addr  = ae->iface_addr;
-            params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
-
-            if (uct_iface_is_reachable_v2(wiface->iface, &params)) {
-                key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
-                return UCS_OK;
-            }
+        if (uct_iface_is_reachable_v2(wiface->iface, &params)) {
+            key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
+            return UCS_OK;
         }
     }
 
@@ -2299,7 +2300,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
      * msg packets */
     key->am_bw_lanes[0] = key->am_lane;
 
-    return ucp_wireup_select_set_locality_flags(select_params, key);
+    return ucp_wireup_select_set_locality_flags(select_params, addr_indices,
+                                                key);
 }
 
 ucs_status_t

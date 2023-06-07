@@ -1664,7 +1664,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric_ib, different_pci_bw_connect,
 {
     /* Enable cross-dev connection */
     /* coverity[tainted_string_argument] */
-    ucs::scoped_setenv path_mtu_env("UCX_IB_PATH_MTU", "1024");
+    ucs::scoped_setenv path_mtu_env("UCX_RC_PATH_MTU", "1024");
 
     {
         std::string config_str = pci_bw_config(20, 20);

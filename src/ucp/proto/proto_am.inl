@@ -205,7 +205,6 @@ size_t ucp_dt_iov_copy_iov_uct(uct_iov_t *iov, size_t *iovcnt,
 {
     size_t length_it = 0;
     size_t iov_offset, max_src_iov, src_it, dst_it;
-    ucp_md_index_t memh_index;
 
     iov_offset               = state->dt.iov.iov_offset;
     max_src_iov              = state->dt.iov.iovcnt;
@@ -219,12 +218,10 @@ size_t ucp_dt_iov_copy_iov_uct(uct_iov_t *iov, size_t *iovcnt,
                                                        iov_offset);
             iov[dst_it].length   = src_iov[src_it].length - iov_offset;
             if (md_flags & UCT_MD_FLAG_NEED_MEMH) {
-                ucs_assert(state->dt.iov.dt_reg != NULL);
-                memh_index       = ucs_bitmap2idx(state->dt.iov.dt_reg[src_it].md_map,
-                                                  md_index);
-                iov[dst_it].memh = state->dt.iov.dt_reg[src_it].memh[memh_index];
+                ucs_assert(state->dt.iov.memhs != NULL);
+                iov[dst_it].memh = state->dt.iov.memhs[src_it]->uct[md_index];
             } else {
-                ucs_assert(state->dt.iov.dt_reg == NULL);
+                ucs_assert(state->dt.iov.memhs == NULL);
                 iov[dst_it].memh = UCT_MEM_HANDLE_NULL;
             }
             iov[dst_it].stride   = 0;
@@ -258,7 +255,6 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
 {
     uint64_t md_flags = context->tl_mds[md_index].attr.flags;
     size_t length_it  = 0;
-    ucp_md_index_t memh_index;
 
     ucs_assert((context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG) ||
                !(md_flags & UCT_MD_FLAG_NEED_MEMH));
@@ -269,8 +265,7 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
             if (mdesc) {
                 iov[0].memh = mdesc->memh->uct[md_index];
             } else {
-                memh_index  = ucs_bitmap2idx(state->dt.contig.md_map, md_index);
-                iov[0].memh = state->dt.contig.memh[memh_index];
+                iov[0].memh = state->dt.contig.memh->uct[md_index];
             }
         } else {
             iov[0].memh = UCT_MEM_HANDLE_NULL;
@@ -366,7 +361,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     ucs_status_t status;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    ucp_send_request_add_reg_lane(req, req->send.lane);
+    ucp_request_send_reg_lane(req, req->send.lane);
 
     /* Cache datatype state only after registering the lane, since registering
        the lane can change the state */
@@ -429,11 +424,12 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     }
 
     if (enable_am_bw || (req->send.state.dt.offset == 0)) {
-        ucp_send_request_add_reg_lane(req, req->send.lane);
+        ucp_request_send_reg_lane(req, req->send.lane);
     }
 
     max_zcopy = ucp_ep_get_max_zcopy(ep, req->send.lane) - user_hdr_size;
-    max_iov   = ucp_ep_get_max_iov(ep, req->send.lane) - !!user_hdr_size;
+    max_iov   = ucs_min(ucp_ep_get_max_iov(ep, req->send.lane) - !!user_hdr_size,
+                        (UCS_ALLOCA_MAX_SIZE / sizeof(*iov)) - 1);
     iov       = ucs_alloca((max_iov + 1) * sizeof(uct_iov_t));
 
     for (;;) {

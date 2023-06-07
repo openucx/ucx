@@ -25,9 +25,9 @@ ucp_proto_am_bcopy_single_send(ucp_request_t *req, ucp_am_id_t am_id,
     ssize_t packed_size;
     uint64_t *buffer;
 
-    uct_ep = fast_path ? ucp_ep_get_fast_lane(ep, lane) : 
+    uct_ep = fast_path ? ucp_ep_get_fast_lane(ep, lane) :
                          ucp_ep_get_lane(ep, lane);
-    
+
     if ((max_packed_size <= UCS_ALLOCA_MAX_SIZE) &&
         (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) &&
         (max_packed_size <= iface_attr->cap.am.max_short)) {
@@ -44,7 +44,7 @@ ucp_proto_am_bcopy_single_send(ucp_request_t *req, ucp_am_id_t am_id,
         /* Send as bcopy */
         packed_size = uct_ep_am_bcopy(uct_ep, am_id, pack_func,
                                       pack_arg, 0);
-        return ucs_likely(packed_size >= 0) ? UCS_OK : packed_size;
+        return ucp_proto_bcopy_send_func_status(packed_size);
     }
 }
 

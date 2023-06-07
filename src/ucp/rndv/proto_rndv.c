@@ -223,7 +223,8 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_init_params_t *params,
 }
 
 static ucs_status_t
-ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params)
+ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
+                              ucp_lane_index_t lane)
 {
     ucp_context_h context             = params->super.super.worker->context;
     ucp_proto_rndv_ctrl_priv_t *rpriv = params->super.super.priv;
@@ -234,12 +235,7 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params)
 
     select_param                   = params->super.super.select_param;
     *params->super.super.priv_size = sizeof(ucp_proto_rndv_ctrl_priv_t);
-
-    /* Find lane to send the initial message */
-    rpriv->lane = ucp_proto_common_find_am_bcopy_hdr_lane(&params->super.super);
-    if (rpriv->lane == UCP_NULL_LANE) {
-        return UCS_ERR_NO_ELEM;
-    }
+    rpriv->lane                    = lane;
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
                    UCP_OP_ATTR_FLAG_MULTI_SEND;
@@ -276,7 +272,8 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params)
 }
 
 ucs_status_t
-ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
+ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
+                         ucp_lane_index_t lane)
 {
     ucp_proto_rndv_ctrl_priv_t *rpriv = params->super.super.priv;
     const char *rndv_op_name          = ucp_operation_names[params->remote_op_id];
@@ -298,7 +295,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     }
 
     /* Initialize 'rpriv' structure */
-    status = ucp_proto_rndv_ctrl_init_priv(params);
+    status = ucp_proto_rndv_ctrl_init_priv(params, lane);
     if (status != UCS_OK) {
         goto out;
     }
@@ -312,7 +309,6 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     max_length     = ucs_min(params->super.max_length, max_length);
     ctrl_perf.node = ucp_proto_perf_node_new_data(params->ctrl_msg_name, "");
 
-    ucs_assert(params->super.send_op == UCT_EP_OP_AM_BCOPY);
     /* Set send_overheads to the time to send and receive RTS message */
     status = ucp_proto_rndv_ctrl_perf(&params->super.super, rpriv->lane,
                                       &send_time, &receive_time);
@@ -396,6 +392,22 @@ static size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
     return cfg->rndv_thresh;
 }
 
+ucs_status_t
+ucp_proto_rndv_ctrl_am_init(const ucp_proto_rndv_ctrl_init_params_t *params)
+{
+    ucp_lane_index_t lane;
+
+    /* Find lane to send the initial message */
+    lane = ucp_proto_common_find_am_bcopy_hdr_lane(&params->super.super);
+    if (lane == UCP_NULL_LANE) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    ucs_assert(params->super.send_op == UCT_EP_OP_AM_BCOPY);
+
+    return ucp_proto_rndv_ctrl_init(params, lane);
+}
+
 ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                    = init_params->worker->context;
@@ -426,7 +438,7 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
         .md_map              = 0
     };
 
-    return ucp_proto_rndv_ctrl_init(&params);
+    return ucp_proto_rndv_ctrl_am_init(&params);
 }
 
 void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
@@ -440,6 +452,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
     attr->is_estimation  = 1;
     attr->max_msg_length = SIZE_MAX;
+    attr->lane_map       = UCS_BIT(rpriv->lane);
 
     ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "rendezvous %s",
                       remote_attr.desc);
@@ -637,6 +650,7 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
     attr->max_msg_length = SIZE_MAX;
     attr->is_estimation  = 0;
     ucp_proto_multi_query_config(&multi_query_params, attr);
+    attr->lane_map |= UCS_BIT(rpriv->super.lane);
 }
 
 static ucs_status_t
@@ -754,10 +768,14 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
         ucp_proto_rndv_check_rkey_length(rts->address, rkey_length, "rts");
         op_id            = UCP_OP_ID_RNDV_RECV;
         recv_req->status = UCS_OK;
-        UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init_from_dt_state,
+        status           = UCS_PROFILE_CALL(
+                              ucp_datatype_iter_init_from_dt_state,
                               worker->context, recv_req->recv.buffer, rts->size,
                               recv_req->recv.datatype, &recv_req->recv.state,
                               &req->send.state.dt_iter, &sg_count);
+        if (status != UCS_OK) {
+            goto err;
+        }
     } else {
         /* Short receive: complete with error, and send reply to sender */
         rkey_length      = 0; /* Override rkey length to disable data fetch */
@@ -773,8 +791,7 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                        rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
         ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
-        ucs_mpool_put(req);
-        return;
+        goto err;
     }
 
 #if ENABLE_DEBUG_DATA
@@ -782,6 +799,11 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
 #endif
 
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
+
+    return;
+
+err:
+    ucs_mpool_put(req);
 }
 
 static ucs_status_t
@@ -844,6 +866,11 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
 
     ucp_trace_req(req, "RTR offset %zu length %zu/%zu req %p", rtr->offset,
                   rtr->size, req->send.state.dt_iter.length, req);
+
+    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+        ucp_tag_offload_cancel_rndv(req);
+        ucs_assert(!ucp_ep_use_indirect_id(req->send.ep));
+    }
 
     /* RTR covers the whole send request - use the send request directly */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED);

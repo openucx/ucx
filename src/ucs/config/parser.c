@@ -1266,10 +1266,6 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
 
     *added = 0;
 
-    if (!ucs_config_parser_env_vars_track()) {
-        return;
-    }
-
     pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
     iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, name);
@@ -1288,7 +1284,8 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
      * false-positive warning about potential leak of memory
      * pointed to by 'key' variable */
     iter = kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
-    if ((ret <= 0) || (iter == kh_end(&ucs_config_parser_env_vars))) {
+    if ((ret == UCS_KH_PUT_FAILED) || (ret == UCS_KH_PUT_KEY_PRESENT) ||
+        (iter == kh_end(&ucs_config_parser_env_vars))) {
         ucs_warn("kh_put(key=%s) failed", key);
         ucs_free(key);
         goto out;
@@ -2012,7 +2009,7 @@ static void ucs_config_parser_print_env_vars(const char *prefix)
 
         iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, var_name);
         if (iter == kh_end(&ucs_config_parser_env_vars)) {
-            if (ucs_global_opts.warn_unused_env_vars) {
+            if (ucs_config_parser_env_vars_track()) {
                 ucs_string_buffer_appendf(&unused_vars_strb, "%s", var_name);
                 ucs_config_parser_append_similar_vars_message(
                         prefix, var_name, &unused_vars_strb);
@@ -2104,6 +2101,20 @@ int ucs_config_names_search(const ucs_config_names_array_t *config_names,
     }
 
     return -1;
+}
+
+void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
+                                    const char *delimiter)
+{
+    const char *key, *env_val;
+
+    kh_foreach_key(&ucs_config_parser_env_vars, key, {
+        env_val = getenv(key);
+        if (env_val != NULL) {
+            ucs_string_buffer_appendf(env_strb, "%s=%s%s", key, env_val,
+                                      delimiter);
+        }
+    });
 }
 
 UCS_STATIC_CLEANUP {

@@ -246,13 +246,13 @@ ucs_status_t uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_t *cm,
 
     iter = kh_put(uct_rdmacm_cm_device_contexts, &cm->ctxs,
                   ibv_get_device_guid(verbs->device), &ret);
-    if (ret == -1) {
+    if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("cm %p: cannot allocate hash entry for device context", cm);
         status = UCS_ERR_NO_MEMORY;
         goto out;
     }
 
-    if (ret == 0) {
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
         /* already exists so use it */
         ctx = kh_value(&cm->ctxs, iter);
     } else {

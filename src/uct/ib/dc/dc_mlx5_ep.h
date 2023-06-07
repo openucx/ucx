@@ -427,9 +427,9 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     uint8_t pool_index           = uct_dc_mlx5_iface_dci_pool_index(iface,
                                                                     dci_index);
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
-    uct_dc_mlx5_ep_t *ep         = uct_dc_mlx5_ep_from_dci(iface, dci_index);
 
-    ucs_debug("iface %p: release dci %d from ep %p", iface, dci_index, ep);
+    ucs_trace_data("iface %p: release dci %d from ep %p", iface, dci_index,
+                   uct_dc_mlx5_ep_from_dci(iface, dci_index));
 
     pool->stack_top--;
     ucs_assertv(pool->stack_top >= 0, "dci pool underflow, stack_top=%d",
@@ -521,12 +521,13 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
 
     ucs_assertv(pool->stack_top > 0, "dci pool overflow, stack_top=%d",
                 (int)pool->stack_top);
-    ucs_debug("iface %p: allocate dci %d for ep %p", iface, ep->dci, ep);
+    ucs_trace_data("iface %p: allocate dci %d for ep %p", iface, ep->dci, ep);
 }
 
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
+    uct_worker_h worker = &iface->super.super.super.super.worker->super;
     uint8_t pool_index = uct_dc_mlx5_iface_dci_pool_index(iface, dci);
     uint8_t stack_top;
 
@@ -540,10 +541,8 @@ uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
     iface->tx.dci_pool_release_bitmap              |= UCS_BIT(pool_index);
     iface->tx.dci_pool[pool_index].stack[stack_top] = dci;
 
-    uct_worker_progress_register_safe(
-            &iface->super.super.super.super.worker->super,
-            uct_dc_mlx5_ep_dci_release_progress, iface,
-            UCS_CALLBACKQ_FLAG_ONESHOT, &iface->tx.dci_release_prog_id);
+    ucs_callbackq_add_oneshot(&worker->progress_q, iface,
+                              uct_dc_mlx5_ep_dci_release_progress, iface);
 }
 
 static UCS_F_ALWAYS_INLINE int

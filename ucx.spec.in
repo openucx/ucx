@@ -343,6 +343,8 @@ library internals, protocol objects, transports status, and more.
 %endif
 
 %changelog
+* Fri Apr 28 2023 Yossi Itigin <yosefe@nvidia.com> 1.16.0-1
+- Bump version to 1.16.0
 * Mon Oct 24 2022 Yossi Itigin <yosefe@mellanox.com> 1.15.0-1
 - Bump version to 1.15.0
 * Sat Apr 16 2022 Yossi Itigin <yosefe@mellanox.com> 1.14.0-1

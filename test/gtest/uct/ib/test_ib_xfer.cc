@@ -23,6 +23,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_xfer, fence,
 
     blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::put_bcopy),
                   sender_ep(), sendbuf, recvbuf, true);
+
+    flush();
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_xfer)
@@ -96,19 +98,9 @@ protected:
     }
 };
 
-UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_rcache,
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
-                                 UCT_IFACE_FLAG_GET_ZCOPY),
-                     "REG_METHODS=rcache,direct")
-{
-    test_put_zcopy();
-    test_get_zcopy();
-}
-
-UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_direct,
-                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
-                                 UCT_IFACE_FLAG_GET_ZCOPY),
-                     "REG_METHODS=direct")
+                                 UCT_IFACE_FLAG_GET_ZCOPY))
 {
     test_put_zcopy();
     test_get_zcopy();
@@ -128,8 +120,7 @@ UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_alloc_methods)
 
 class uct_p2p_mix_test_alloc_methods : public uct_p2p_mix_test {};
 
-UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000_rcache,
-           "REG_METHODS=rcache,direct")
+UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000)
 {
     run(1000);
 }

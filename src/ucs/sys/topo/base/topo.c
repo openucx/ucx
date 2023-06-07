@@ -310,6 +310,7 @@ static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
     switch (ucs_arch_get_cpu_model()) {
     case UCS_CPU_MODEL_AMD_ROME:
     case UCS_CPU_MODEL_AMD_MILAN:
+    case UCS_CPU_MODEL_AMD_GENOA:
         distance->bandwidth = 5100 * UCS_MBYTE;
         break;
     default:
@@ -380,7 +381,6 @@ static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
     char path[PATH_MAX];
     ucs_numa_node_t dev_node;
     ucs_status_t status;
-    const char *dev_name;
 
     /* If the device is unknown, we assume min distance */
     if (device == UCS_SYS_DEVICE_ID_UNKNOWN) {
@@ -412,8 +412,7 @@ static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
                                             ucs_numa_node_of_cpu(cpu));
     }
 
-    dev_name            = ucs_topo_sys_device_get_name(device);
-    distance->bandwidth = ucs_topo_get_pci_bw(dev_name, path);
+    distance->bandwidth = ucs_topo_default_distance.bandwidth;
     cpuset_size         = full_affinity ? num_cpus : CPU_COUNT(&thread_cpuset);
     distance->latency = ucs_topo_sysfs_numa_distance_to_latency(total_distance /
                                                                 cpuset_size);

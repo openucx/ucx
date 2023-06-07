@@ -108,11 +108,14 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if ((remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
-        (dev_type == HSA_DEVICE_TYPE_GPU)) {
-        /* UCS_MEMORY_TYPE_ROCM */
+    if (remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
         remote_addr_mod = (void*)remote_addr;
-        agent           = tmp_agent;
+        if (dev_type == HSA_DEVICE_TYPE_GPU) {
+            /* UCS_MEMORY_TYPE_ROCM */
+            agent = tmp_agent;
+        } else {
+            remote_addr_is_host = 1;
+        }
     } else if ((remote_addr_mem_type == HSA_EXT_POINTER_TYPE_LOCKED) &&
                (size == dev_size)) {
         /* locked host memory, e.g. hipHostRegister, OR previously registered */
@@ -141,11 +144,14 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if ((iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
-        (dev_type == HSA_DEVICE_TYPE_GPU)) {
-        /* UCS_MEMORY_TYPE_ROCM */
+    if (iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
         iov_buffer_mod = iov->buffer;
-        agent          = tmp_agent;
+        if (dev_type == HSA_DEVICE_TYPE_GPU) {
+            /* UCS_MEMORY_TYPE_ROCM */
+            agent = tmp_agent;
+        } else {
+            iov_buffer_is_host = 1;
+        }
     } else if ((iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_LOCKED) &&
                (size == dev_size)) {
         /* locked host memory (e.g. hipHostRegister) OR previously registered */
