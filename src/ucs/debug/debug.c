@@ -12,6 +12,7 @@
 #include "log.h"
 
 #include <ucs/datastruct/khash.h>
+#include <ucs/memory/rcache_int.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
@@ -735,6 +736,8 @@ static void ucs_debugger_attach()
     pid_t pid, debug_pid;
     int fd, ret, narg;
     char UCS_V_UNUSED *self_exe;
+
+    ucs_rcache_atfork_disable();
 
     /* Fork a process which will execute gdb and attach to the current process.
      * We must avoid trigerring calls to malloc/free, since the heap may be corrupted.

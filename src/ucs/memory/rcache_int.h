@@ -118,6 +118,10 @@ struct ucs_rcache {
 void ucs_rcache_vfs_init(ucs_rcache_t *rcache);
 
 
+/* Disable any atfork hooks created by registration caches in the program */
+void ucs_rcache_atfork_disable();
+
+
 /**
  * @brief Get number of bins in the distribution of registration cache region
  *        sizes.
