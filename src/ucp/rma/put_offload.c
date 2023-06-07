@@ -40,7 +40,7 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     /* UCS_INPROGRESS is not expected */
     ucs_assert((status == UCS_OK) || UCS_STATUS_IS_ERR(status));
 
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_request_complete_send(req, status);
     return UCS_OK;

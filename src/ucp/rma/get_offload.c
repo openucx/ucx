@@ -48,7 +48,7 @@ static void ucp_proto_get_offload_bcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_request_complete_send(req, req->send.state.uct_comp.status);
 }

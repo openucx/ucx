@@ -620,7 +620,7 @@ size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg)
 
 ucs_status_t ucp_proto_rndv_ats_complete(ucp_request_t *req)
 {
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
     return ucp_proto_rndv_recv_complete(req);
 }
 
@@ -790,7 +790,7 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                        recv_req->recv.op_attr, rts->size,
                                        rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
-        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
         goto err;
     }
 

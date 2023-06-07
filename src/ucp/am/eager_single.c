@@ -79,7 +79,7 @@ ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
     }
 
     ucp_am_release_user_header(req);
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
 
     ucs_assert(status != UCS_INPROGRESS);

@@ -64,7 +64,6 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     uint32_t req_flags = (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
                          UCP_REQUEST_FLAG_CALLBACK : 0;
     ucp_request_queue_t *req_queue;
-    ucs_memory_type_t memory_type;
     size_t hdr_len, recv_len;
     ucs_status_t status;
 
@@ -94,13 +93,10 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
         req->recv.tag.info.length     = recv_len;
 
-        memory_type = ucp_request_get_memory_type(
-                          worker->context, buffer, count, datatype, recv_len,
-                          param);
-        status      = ucp_dt_unpack_only(worker, buffer, count, datatype,
-                                         memory_type,
-                                         UCS_PTR_BYTE_OFFSET(rdesc + 1, hdr_len),
-                                         recv_len, 1);
+        status = ucp_datatype_iter_unpack_single(worker, buffer, count,
+                                                 UCS_PTR_BYTE_OFFSET(rdesc + 1,
+                                                                     hdr_len),
+                                                 recv_len, 1, param);
         ucp_recv_desc_release(rdesc);
 
         req->status = status;
