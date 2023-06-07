@@ -261,6 +261,10 @@ struct ucp_ep_config_key {
 
     /* Additional flags */
     unsigned                 flags;
+
+    /* Indicates wire compatibility version, which is minimum between the local
+     * and remote values */
+    ucp_object_version_t     wire_version;
 };
 
 
@@ -702,6 +706,9 @@ void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
 
 void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
                                   unsigned ep_init_flags);
+
+void ucp_ep_config_key_set_wire_version(ucp_ep_config_key_t *key,
+                                        ucp_object_version_t wire_version);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 

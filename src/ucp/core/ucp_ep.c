@@ -170,6 +170,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->dst_md_cmpts     = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->flags            = 0;
+    key->wire_version     = UCP_OBJECT_VERSION_V1;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -578,6 +579,12 @@ void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
                            UCP_EP_INIT_CREATE_AM_LANE | UCP_EP_INIT_CM_PHASE)) {
         key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE;
     }
+}
+
+void ucp_ep_config_key_set_wire_version(ucp_ep_config_key_t *key,
+                                        ucp_object_version_t wire_version)
+{
+    key->wire_version = ucs_min(key->wire_version, wire_version);
 }
 
 ucs_status_t
@@ -1893,7 +1900,8 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->keepalive_lane != key2->keepalive_lane) ||
         (key1->rkey_ptr_lane != key2->rkey_ptr_lane) ||
         (key1->err_mode != key2->err_mode) ||
-        (key1->flags != key2->flags)) {
+        (key1->flags != key2->flags) ||
+        (key1->wire_version != key2->wire_version)) {
         return 0;
     }
 
