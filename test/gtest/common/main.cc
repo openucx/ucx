@@ -55,6 +55,14 @@ static void modify_config_for_valgrind(const char *name, const char *value)
     }
 }
 
+static void set_log_level()
+{
+    const char *log_level = getenv("GTEST_LOG_LEVEL");
+    if (log_level != NULL) {
+        ucs_global_opts_set_value("LOG_LEVEL", log_level);
+    }
+}
+
 int main(int argc, char **argv) {
     // coverity[fun_call_w_exception]: uncaught exceptions cause nonzero exit anyway, so don't warn.
     ::testing::InitGoogleTest(&argc, argv);
@@ -100,6 +108,9 @@ int main(int argc, char **argv) {
         ADD_FAILURE() << "Unable to start watchdog - abort";
         return ret;
     }
+
+    /* Set log level for tests run */
+    set_log_level();
 
     /* coverity[fun_call_w_exception] */
     ret = RUN_ALL_TESTS();
