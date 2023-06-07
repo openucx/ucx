@@ -16,38 +16,46 @@
 #include <ucs/profile/profile.h>
 
 
-/**
- * Context for memcpy pack callback.
- */
-typedef struct {
-    const void                    *src;
-    size_t                        length;
-} ucp_memcpy_pack_context_t;
+#define UCP_DT_IS_CONTIG(_datatype) \
+    (((_datatype)&UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG)
 
 
-size_t ucp_memcpy_pack_cb(void *dest, void *arg);
-
-
-static inline size_t ucp_contig_dt_elem_size(ucp_datatype_t datatype)
+static UCS_F_ALWAYS_INLINE size_t
+ucp_contig_dt_elem_size(ucp_datatype_t datatype)
 {
     return datatype >> UCP_DATATYPE_SHIFT;
 }
 
-#define UCP_DT_IS_CONTIG(_datatype) \
-          (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG)
 
-static inline size_t ucp_contig_dt_length(ucp_datatype_t datatype, size_t count)
+static UCS_F_ALWAYS_INLINE size_t ucp_contig_dt_length(ucp_datatype_t datatype,
+                                                       size_t count)
 {
     ucs_assert(UCP_DT_IS_CONTIG(datatype));
     return count * ucp_contig_dt_elem_size(datatype);
 }
 
 
-void ucp_dt_contig_pack(ucp_worker_h worker, void *dest, const void *src,
-                        size_t length, ucs_memory_type_t mem_type);
+static UCS_F_ALWAYS_INLINE void
+ucp_dt_contig_pack(ucp_worker_h worker, void *dest, const void *src,
+                   size_t length, ucs_memory_type_t mem_type)
+{
+    if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type))) {
+        ucp_memcpy_pack_unpack(dest, src, length, "memcpy_pack");
+    } else {
+        ucp_mem_type_pack(worker, dest, src, length, mem_type);
+    }
+}
 
 
-void ucp_dt_contig_unpack(ucp_worker_h worker, void *dest, const void *src,
-                          size_t length, ucs_memory_type_t mem_type);
+static UCS_F_ALWAYS_INLINE void
+ucp_dt_contig_unpack(ucp_worker_h worker, void *dest, const void *src,
+                     size_t length, ucs_memory_type_t mem_type)
+{
+    if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type))) {
+        ucp_memcpy_pack_unpack(dest, src, length, "memcpy_unpack");
+    } else {
+        ucp_mem_type_unpack(worker, dest, src, length, mem_type);
+    }
+}
 
 #endif

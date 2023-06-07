@@ -114,7 +114,6 @@ libucp_la_SOURCES = \
 	core/ucp_vfs.c \
 	core/ucp_worker.c \
 	dt/datatype_iter.c \
-	dt/dt_contig.c \
 	dt/dt_iov.c \
 	dt/dt_generic.c \
 	dt/dt.c \

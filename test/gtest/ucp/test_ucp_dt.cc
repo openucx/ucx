@@ -74,10 +74,16 @@ protected:
         m_packed_buffer.resize(size, 0);
         ucs::fill_random(m_packed_buffer);
 
-        size_t iovcnt = 1;
+        size_t iovcnt;
         if (GetParam() == UCP_DATATYPE_IOV) {
-            iovcnt = std::min(static_cast<size_t>((ucs::rand() % 20) + 1),
-                              m_dt_buffer.size());
+            if (size == 0) {
+                iovcnt = 0;
+            } else {
+                iovcnt = std::min(static_cast<size_t>((ucs::rand() % 20) + 1),
+                                  m_dt_buffer.size());
+            }
+        } else {
+            iovcnt = 1;
         }
 
         m_dt_desc.make(GetParam(), &m_dt_buffer[0], m_dt_buffer.size(), iovcnt);
@@ -87,12 +93,20 @@ protected:
         ucp_request_param_t param;
         param.op_attr_mask = 0;
 
-        ucp_datatype_iter_init(m_ucph.get(), m_dt_desc.buf(), m_dt_desc.count(),
-                               m_dt_desc.dt(), m_dt_buffer.size(), is_pack,
-                               &m_dt_iter, &sg_count, &param);
+        ucs_status_t status = ucp_datatype_iter_init(
+                m_ucph.get(), m_dt_desc.buf(), m_dt_desc.count(),
+                m_dt_desc.dt(), m_dt_buffer.size(), is_pack, &m_dt_iter,
+                &sg_count, &param);
+        ASSERT_UCS_OK(status);
         if (!UCP_DT_IS_GENERIC(GetParam())) {
             EXPECT_EQ(iovcnt, sg_count);
         }
+
+        ucp_md_map_t md_map = m_ucph->reg_md_map[UCS_MEMORY_TYPE_HOST] &
+                              m_ucph->cache_md_map[UCS_MEMORY_TYPE_HOST];
+        status = ucp_datatype_iter_mem_reg(m_ucph, &m_dt_iter, md_map, 0,
+                                           UINT_MAX);
+        ASSERT_UCS_OK(status);
 
         UCS_STRING_BUFFER_ONSTACK(strb, 64);
         ucp_datatype_iter_str(&m_dt_iter, &strb);
@@ -102,7 +116,7 @@ protected:
     void finalize_dt_iter()
     {
         EXPECT_EQ(m_dt_buffer, m_packed_buffer);
-        ucp_datatype_iter_cleanup(&m_dt_iter, UINT_MAX);
+        ucp_datatype_iter_cleanup(&m_dt_iter, 1, UINT_MAX);
     }
 
     size_t random_seg_size() const
@@ -114,17 +128,17 @@ protected:
     {
         init_dt_iter(size, true);
 
-        ucp_datatype_iter_t next_iter;
-        do {
+        while (!ucp_datatype_iter_is_end(&m_dt_iter)) {
             EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
             size_t seg_size  = random_seg_size();
             void *packed_ptr = UCS_PTR_BYTE_OFFSET(&m_packed_buffer[0],
                                                    m_dt_iter.offset);
             /* TODO create non-NULL worker when using memtype */
+            ucp_datatype_iter_t next_iter;
             ucp_datatype_iter_next_pack(&m_dt_iter, NULL, seg_size, &next_iter,
                                         packed_ptr);
             ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
-        } while (!ucp_datatype_iter_is_end(&m_dt_iter));
+        }
 
         finalize_dt_iter();
     }
@@ -236,12 +250,20 @@ UCS_TEST_P(test_ucp_dt_iter, pack_100b) {
     test_pack(100);
 }
 
+UCS_TEST_P(test_ucp_dt_iter, pack_0) {
+    test_pack(0);
+}
+
 UCS_TEST_P(test_ucp_dt_iter, pack_1MB) {
     test_pack(UCS_MBYTE + (ucs::rand() % UCS_KBYTE));
 }
 
 UCS_TEST_P(test_ucp_dt_iter, unpack_100b) {
     test_unpack(100);
+}
+
+UCS_TEST_P(test_ucp_dt_iter, unpack_0) {
+    test_unpack(0);
 }
 
 UCS_TEST_P(test_ucp_dt_iter, unpack_1MB) {

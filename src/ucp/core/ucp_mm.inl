@@ -73,8 +73,11 @@ not_found:
                              uct_flags, memh_p);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_memh_put(ucp_mem_h memh)
+/*
+ * If the memory handle @a memh is zero-length or created by @ref ucp_mem_map(),
+ * do nothing and return 0. Otherwise, release the memory handle and return 1.
+ */
+static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
 {
     ucp_context_h context = memh->context;
 
@@ -84,17 +87,17 @@ ucp_memh_put(ucp_mem_h memh)
 
     /* user memh or zero length memh */
     if (memh->parent != NULL) {
-        return;
+        return 0;
     }
 
     if (ucs_likely(context->rcache != NULL)) {
         UCP_THREAD_CS_ENTER(&context->mt_lock);
         ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
         UCP_THREAD_CS_EXIT(&context->mt_lock);
-        return;
+    } else {
+        ucp_memh_put_slow(context, memh);
     }
-
-    ucp_memh_put_slow(context, memh);
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)

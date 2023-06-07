@@ -14,6 +14,20 @@
 
 #include <ucp/proto/proto_am.inl>
 
+/* Context for ucp_rma_basic_memcpy_pack */
+typedef struct {
+    const void *src;
+    size_t     length;
+} ucp_memcpy_pack_context_t;
+
+static size_t ucp_rma_basic_memcpy_pack(void *dest, void *arg)
+{
+    ucp_memcpy_pack_context_t *ctx = arg;
+    size_t length                  = ctx->length;
+
+    UCS_PROFILE_NAMED_CALL("memcpy_pack", memcpy, dest, ctx->src, length);
+    return length;
+}
 
 static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
 {
@@ -44,7 +58,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         pack_ctx.length = ucs_min(req->send.length, rma_config->max_put_bcopy);
         packed_len      = UCS_PROFILE_CALL(uct_ep_put_bcopy,
                                            ucp_ep_get_fast_lane(ep, lane),
-                                           ucp_memcpy_pack_cb, &pack_ctx,
+                                           ucp_rma_basic_memcpy_pack, &pack_ctx,
                                            req->send.rma.remote_addr,
                                            rkey->cache.rma_rkey);
         status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
