@@ -563,14 +563,12 @@ ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map,
 
 static UCS_F_ALWAYS_INLINE void ucp_request_send_buffer_dereg(ucp_request_t *req)
 {
-    ucp_request_memory_dereg(req->send.ep->worker->context, req->send.datatype,
-                             &req->send.state.dt, req);
+    ucp_request_memory_dereg(req->send.datatype, &req->send.state.dt, req);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_request_recv_buffer_dereg(ucp_request_t *req)
 {
-    ucp_request_memory_dereg(req->recv.worker->context, req->recv.datatype,
-                             &req->recv.state, req);
+    ucp_request_memory_dereg(req->recv.datatype, &req->recv.state, req);
 }
 
 /* Returns whether user-provided memory handle can be used. If the result is 0,

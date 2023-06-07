@@ -102,7 +102,7 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
                               dt_iter->mem_info.type, md_map, uct_flags,
                               &dt_iter->type.iov.memh[iov_index]);
         if (status != UCS_OK) {
-            ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
+            ucp_datatype_iter_iov_mem_dereg(dt_iter);
             return status;
         }
     }
@@ -110,8 +110,7 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
     return UCS_OK;
 }
 
-void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
-                                     ucp_datatype_iter_t *dt_iter)
+void ucp_datatype_iter_iov_mem_dereg(ucp_datatype_iter_t *dt_iter)
 {
     ucp_mem_h *memh = dt_iter->type.iov.memh;
     size_t iov_index, length;
@@ -121,7 +120,7 @@ void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
     }
 
     ucp_datatype_iter_iov_for_each(iov_index, length, dt_iter) {
-        ucp_datatype_memh_dereg(context, memh + iov_index);
+        ucp_datatype_memh_dereg(memh + iov_index);
     }
 
     ucs_free(memh);

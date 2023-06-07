@@ -302,8 +302,8 @@ ucp_tag_offload_do_post(ucp_request_t *req)
             !(req->recv.state.dt.contig.memh->md_map & UCS_BIT(mdi))) {
             /* Can't register this buffer on the offload iface */
             if (status == UCS_OK) {
-                ucp_request_memory_dereg(context, req->recv.datatype,
-                                         &req->recv.state, req);
+                ucp_request_memory_dereg(req->recv.datatype, &req->recv.state,
+                                         req);
             }
             UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_MEM_REG);
             return status;
