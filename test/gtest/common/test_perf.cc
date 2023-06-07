@@ -12,6 +12,7 @@
 extern "C" {
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/iovec.inl>
 }
 #include <pthread.h>
 #include <string>
@@ -90,13 +91,8 @@ void test_perf::rte::post_vec(void *rte_group, const struct iovec *iovec,
                               int iovcnt, void **req)
 {
     rte *self = reinterpret_cast<rte*>(rte_group);
-    size_t size;
+    size_t size = ucs_iovec_total_length(iovec, iovcnt);
     int i;
-
-    size = 0;
-    for (i = 0; i < iovcnt; ++i) {
-        size += iovec[i].iov_len;
-    }
 
     self->m_send.push(&size, sizeof(size));
     for (i = 0; i < iovcnt; ++i) {
