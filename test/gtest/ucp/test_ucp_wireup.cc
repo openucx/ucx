@@ -33,7 +33,7 @@ protected:
         UNIFIED_MODE   = UCS_BIT(3),
         TEST_AMO       = UCS_BIT(4),
         NO_EP_MATCH    = UCS_BIT(5),
-        WORKER_ADDR_V2 = UCS_BIT(6)
+        WORKER_ADDR_V1 = UCS_BIT(6)
     };
 
     typedef uint64_t               elem_type;
@@ -140,10 +140,10 @@ void test_ucp_wireup::get_test_variants(std::vector<ucp_test_variant>& variants,
                                TEST_TAG | UNIFIED_MODE | NO_EP_MATCH,
                                "tag,unified,no_ep_match");
         add_variant_with_value(variants, UCP_FEATURE_TAG,
-                               TEST_TAG | WORKER_ADDR_V2, "tag,addr_v2");
+                               TEST_TAG | WORKER_ADDR_V1, "tag,addr_v1");
         add_variant_with_value(variants, UCP_FEATURE_TAG,
-                               TEST_TAG | WORKER_ADDR_V2 | UNIFIED_MODE,
-                               "tag,unified,addr_v2");
+                               TEST_TAG | WORKER_ADDR_V1 | UNIFIED_MODE,
+                               "tag,unified,addr_v1");
     }
 
     if (features & UCP_FEATURE_STREAM) {
@@ -181,8 +181,8 @@ void test_ucp_wireup::init()
         modify_config("UNIFIED_MODE", "y");
     }
 
-    if (get_variant_value() & WORKER_ADDR_V2) {
-        modify_config("ADDRESS_VERSION", "v2");
+    if (get_variant_value() & WORKER_ADDR_V1) {
+        modify_config("ADDRESS_VERSION", "v1");
     }
 
     ucp_test::init();
@@ -452,8 +452,8 @@ public:
     }
 
     ucp_object_version_t address_version() const {
-        return (get_variant_value() & WORKER_ADDR_V2) ?
-               UCP_OBJECT_VERSION_V2 : UCP_OBJECT_VERSION_V1;
+        return (get_variant_value() & WORKER_ADDR_V1) ?
+               UCP_OBJECT_VERSION_V1 : UCP_OBJECT_VERSION_V2;
     }
 
     ucp_lane_index_t m_lanes2remote[UCP_MAX_LANES];

@@ -48,7 +48,7 @@ public:
         TEST_MODIFIER_MASK               = UCS_MASK(16),
         TEST_MODIFIER_MT                 = UCS_BIT(16),
         TEST_MODIFIER_CM_USE_ALL_DEVICES = UCS_BIT(17),
-        TEST_MODIFIER_SA_DATA_V2         = UCS_BIT(18)
+        TEST_MODIFIER_SA_DATA_V1         = UCS_BIT(18)
     };
 
     enum {
@@ -69,7 +69,7 @@ public:
         m_err_count = 0;
         modify_config("KEEPALIVE_INTERVAL", "5s");
         modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
-        modify_config("SA_DATA_VERSION", sa_data_version_v2() ? "v2" : "v1");
+        modify_config("SA_DATA_VERSION", sa_data_version_v1() ? "v1" : "v2");
         modify_config("RC_TIMEOUT", "100us", IGNORE_IF_NOT_EXIST);
         modify_config("RC_RETRY_COUNT", "3", IGNORE_IF_NOT_EXIST);
         modify_config("UD_TIMEOUT", "5s", IGNORE_IF_NOT_EXIST);
@@ -95,7 +95,7 @@ public:
                              modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES, name);
         get_test_variants_mt(variants, features,
                              modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES |
-                             TEST_MODIFIER_SA_DATA_V2, name + ",sa_data_v2");
+                             TEST_MODIFIER_SA_DATA_V1, name + ",sa_data_v1");
         get_test_variants_mt(variants, features, modifier, name + ",not_all_devs");
     }
 
@@ -881,8 +881,8 @@ protected:
         return get_variant_value() & TEST_MODIFIER_CM_USE_ALL_DEVICES;
     }
 
-    bool sa_data_version_v2() const {
-        return get_variant_value() & TEST_MODIFIER_SA_DATA_V2;
+    bool sa_data_version_v1() const {
+        return get_variant_value() & TEST_MODIFIER_SA_DATA_V1;
     }
 
     bool has_rndv_lanes(ucp_ep_h ep)
@@ -2745,27 +2745,24 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
 {
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=n",
-           "ZCOPY_THRESH=inf")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=n",
-           "ZCOPY_THRESH=inf")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=n")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset)
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=n",
-           "RNDV_THRESH=0")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "RNDV_THRESH=0")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
