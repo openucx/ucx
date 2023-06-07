@@ -1153,6 +1153,11 @@ static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache)
     ucs_async_pipe_destroy(&pipe);
 }
 
+void ucs_rcache_atfork_disable()
+{
+    ucs_list_head_init(&ucs_rcache_global_context.list);
+}
+
 size_t ucs_rcache_distribution_get_num_bins()
 {
     return ucs_ilog2(ucs_rcache_stat_max_pow2() / UCS_RCACHE_STAT_MIN_POW2) + 2;
