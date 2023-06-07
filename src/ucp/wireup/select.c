@@ -1748,6 +1748,13 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                         context->config.ext.max_rndv_lanes;
     bw_info.criteria.local_cmpt_flags = 0;
 
+    if (context->config.ext.proto_enable &&
+        (ucp_ep_config(ep)->key.wire_version) > UCP_OBJECT_VERSION_V1) {
+        bw_info.max_lanes = UCP_PROTO_MAX_LANES;
+    } else {
+        bw_info.max_lanes = context->config.ext.max_rndv_lanes;
+    }
+
     /* If error handling is requested we require memory invalidation
      * support to provide correct data integrity in case of error */
     if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {

@@ -224,7 +224,6 @@ ucp_worker_common_address_pack_flags(ucp_worker_h worker)
     unsigned pack_flags = 0;
 
     if ((worker->context->num_mem_type_detect_mds > 0) ||
-        /* TODO: This code breaks wire compatability - fix it */
         worker->context->config.ext.proto_enable) {
         pack_flags |= UCP_ADDRESS_PACK_FLAG_SYS_DEVICE;
     }
