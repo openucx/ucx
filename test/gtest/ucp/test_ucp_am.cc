@@ -33,15 +33,15 @@ class test_ucp_am_base : public ucp_test {
 public:
     test_ucp_am_base()
     {
-        if (is_proto_enabled()) {
-            modify_config("PROTO_ENABLE", "y");
+        if (is_proto_disabled()) {
+            modify_config("PROTO_ENABLE", "n");
         }
     }
 
     static void get_test_variants(variant_vec_t &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_AM, 1, "proto");
+        add_variant_with_value(variants, UCP_FEATURE_AM, 1, "proto_v1");
     }
 
     virtual void init()
@@ -54,7 +54,7 @@ public:
     }
 
 protected:
-    bool is_proto_enabled() const
+    bool is_proto_disabled() const
     {
         return get_variant_value();
     }
@@ -510,7 +510,7 @@ protected:
     {
         std::vector<ucp_dt_type> dts = {UCP_DATATYPE_CONTIG};
 
-        if (is_proto_enabled()) {
+        if (!is_proto_disabled()) {
             dts.push_back(UCP_DATATYPE_IOV);
         }
 

@@ -185,19 +185,6 @@ void test_ucp_tag::check_offload_support(bool offload_required)
     }
 }
 
-void test_ucp_tag::skip_external_protov2() const
-{
-    if (m_ucp_config->ctx.proto_enable) {
-        skip_protov2();
-    }
-}
-
-void test_ucp_tag::skip_protov2() const
-{
-    UCS_TEST_SKIP_R("FIXME: skip forced UCX_PROTO_ENABLE=y because it does not "
-                    "completely support HWTM");
-}
-
 int test_ucp_tag::get_worker_index(int buf_index)
 {
     int worker_index = 0;
@@ -502,8 +489,8 @@ public:
 
     test_ucp_tag_nbx()
     {
-        if (enable_proto()) {
-            modify_config("PROTO_ENABLE", "y");
+        if (disable_proto()) {
+            modify_config("PROTO_ENABLE", "n");
         }
     }
 
@@ -528,7 +515,7 @@ public:
     static void get_test_variants_proto(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, get_test_variants_prereg, 0);
-        add_variant_values(variants, get_test_variants_prereg, 1, "proto");
+        add_variant_values(variants, get_test_variants_prereg, 1, "proto_v1");
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -548,9 +535,9 @@ protected:
         return get_variant_value(0);
     }
 
-    bool enable_proto() const
+    bool disable_proto() const
     {
-        return m_ucp_config->ctx.proto_enable || get_variant_value(1);
+        return get_variant_value(1);
     }
 
     bool is_iov() const
@@ -653,7 +640,7 @@ protected:
 
         do_send_recv(send_dt, recv_dt, send_param, recv_param);
 
-        if (prereg() && !is_self() && (!is_iov() || enable_proto())) {
+        if (prereg() && !is_self() && (!is_iov() || m_ucp_config->ctx.proto_enable)) {
             /* Not relevant for 'self' because both sender and receiver are the same entity.
                Must be called before request is freed by free_callback (wait_for_value). */
             /* User-provided memh on iov supported only with proto_v2 */
@@ -705,9 +692,9 @@ UCS_TEST_P(test_ucp_tag_nbx, rndv_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=0")
     test_recv_send(64 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_tag_nbx, fallback, "ZCOPY_THRESH=inf")
+UCS_TEST_P(test_ucp_tag_nbx, fallback, "ZCOPY_THRESH=inf", "PROTO_ENABLE=n")
 {
-    if (enable_proto() || prereg()) {
+    if (!disable_proto() || prereg()) {
         UCS_TEST_SKIP_R(
                 "protoV2/prereg are not supported for partial md reg failure");
     }

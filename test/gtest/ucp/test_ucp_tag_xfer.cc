@@ -28,7 +28,7 @@ public:
         VARIANT_RNDV_PUT_ZCOPY,
         VARIANT_RNDV_GET_ZCOPY,
         VARIANT_SEND_NBR,
-        VARIANT_PROTO
+        VARIANT_PROTO_V1
     };
 
     test_ucp_tag_xfer() {
@@ -50,8 +50,8 @@ public:
             modify_config("RNDV_SCHEME", "put_zcopy");
         } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
             modify_config("RNDV_SCHEME", "get_zcopy");
-        } else if (get_variant_value() == VARIANT_PROTO) {
-            modify_config("PROTO_ENABLE", "y");
+        } else if (get_variant_value() == VARIANT_PROTO_V1) {
+            modify_config("PROTO_ENABLE", "n");
         }
 
         /* Init number of lanes according to test requirement
@@ -81,8 +81,8 @@ public:
                                VARIANT_RNDV_GET_ZCOPY, "rndv_get_zcopy");
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_SEND_NBR, "send_nbr");
-        add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO,
-                               "proto");
+        add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO_V1,
+                               "proto_v1");
     }
 
     virtual ucp_ep_params_t get_ep_params() {
@@ -1210,6 +1210,10 @@ public:
 UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
+    if (m_ucp_config->ctx.proto_enable) {
+        UCS_TEST_SKIP_R("TM_SW_RNDV has no effect with proto v2");
+    }
+
     receiver().connect(&sender(), get_ep_params());
     test_run_xfer(true, true, true, true, false);
 
