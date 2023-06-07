@@ -50,6 +50,17 @@ enum {
 };
 
 
+/* Defines wire compatibility version. Whenever some change breaking wire
+ * compatibility is introduced, it has to be applied for the relevant versions
+ * only.
+ */
+enum {
+    UCP_RELEASE_LEGACY,
+    UCP_RELEASE_1_16,
+    UCP_RELEASE_CURRENT = UCP_RELEASE_1_16
+};
+
+
 /**
  * Criteria for transport selection.
  */
@@ -87,15 +98,17 @@ typedef struct {
     /**
      * Calculates score of a potential transport.
      *
-     * @param [in]  wiface       UCP worker iface.
-     * @param [in]  md_attr      Local MD attributes.
-     * @param [in]  remote_addr  Remote address info and attributes.
-     * @param [in]  arg          Custom argument.
+     * @param [in]  wiface        UCP worker iface.
+     * @param [in]  md_attr       Local MD attributes.
+     * @param [in]  unpacked_addr The whole remote address unpacked.
+     * @param [in]  remote_addr   Remote transport address info and attributes.
+     * @param [in]  arg           Custom argument.
      *
      * @return Transport score, the higher the better.
      */
     double                      (*calc_score)(const ucp_worker_iface_t *wiface,
                                               const uct_md_attr_v2_t *md_attr,
+                                              const ucp_unpacked_address_t *unpacked_addr,
                                               const ucp_address_entry_t *remote_addr,
                                               void *arg);
 
@@ -150,6 +163,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
 
 double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  const uct_md_attr_v2_t *md_attr,
+                                 const ucp_unpacked_address_t *unpacked_address,
                                  const ucp_address_entry_t *remote_addr,
                                  void *arg);
 

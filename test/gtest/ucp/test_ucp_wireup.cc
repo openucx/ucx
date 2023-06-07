@@ -1784,6 +1784,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         ASSERT_UCS_OK(status);
     }
 
+    EXPECT_EQ(UCP_OBJECT_VERSION_V2, unpacked_address.addr_version);
+
     const ucp_address_entry_t *ae;
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
         ucp_rsc_index_t rsc_idx = ae->iface_attr.dst_rsc_index;

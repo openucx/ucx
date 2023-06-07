@@ -125,7 +125,6 @@ struct ucp_address_iface_attr {
     size_t                      seg_size;     /* Maximal fragment size which can
                                                  be received on the particular
                                                  interface */
-    ucp_object_version_t        addr_version; /* Peer address version */
 };
 
 
@@ -163,6 +162,8 @@ struct ucp_unpacked_address {
     char                        name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned                    address_count;  /* Length of address list */
     ucp_address_entry_t         *address_list;  /* Pointer to address list */
+    ucp_object_version_t        addr_version; /* Peer address version */
+    unsigned                    wire_version; /* Peer wire-compat version */
 };
 
 
