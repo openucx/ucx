@@ -40,12 +40,11 @@ void uct_cuda_ipc_destroy_cache(ucs_rcache_t *cache);
 
 ucs_status_t
 uct_cuda_ipc_map_memhandle(uct_cuda_ipc_md_t *md,
-                           const uct_cuda_ipc_key_t *key,
+                           uct_cuda_ipc_key_t *key,
                            void **mapped_addr,
                            uct_cuda_ipc_rcache_region_t **cuda_ipc_region);
 ucs_status_t
-uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
-                             pid_t pid,
+uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md, pid_t pid,
                              void *mapped_addr,
                              uct_cuda_ipc_rcache_region_t *cuda_ipc_region);
 

@@ -58,9 +58,8 @@ ucs_status_t uct_cuda_ipc_check_rcache(ucs_rcache_t *rcache,
     ucs_rcache_region_t *rcache_region;
     ucs_status_t status;
 
-    start = ucs_align_down_pow2((uintptr_t)key->d_bptr, ucs_get_page_size());
-    end   = ucs_align_up_pow2  ((uintptr_t)key->d_bptr + key->b_len,
-                                ucs_get_page_size());
+    start = (uintptr_t)key->d_bptr;
+    end   = (uintptr_t)key->d_bptr + key->b_len;
 
     status = ucs_rcache_get(rcache, (void*)start, end - start,
                             PROT_READ|PROT_WRITE, (void*)key, &rcache_region);
@@ -166,10 +165,8 @@ uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
     return UCS_OK;
 }
 
-ucs_status_t uct_cuda_ipc_open_memhandle(void **mapped_addr,
-                                         const uct_cuda_ipc_key_t *key,
-                                         uct_cuda_ipc_rcache_region_t *cuda_ipc_region,
-                                         ucs_rcache_t *rcache)
+static ucs_status_t
+uct_cuda_ipc_open_memhandle(void **mapped_addr, const uct_cuda_ipc_key_t *key)
 {
     CUresult cuerr;
     const char *cu_err_str;
@@ -182,17 +179,13 @@ ucs_status_t uct_cuda_ipc_open_memhandle(void **mapped_addr,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (cuda_ipc_region != NULL) {
-        cuda_ipc_region->ipc_handle = key->ph;
-    }
-
     return UCS_OK;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                  (md, key, mapped_addr, region_p),
-                 uct_cuda_ipc_md_t *md,
-                 const uct_cuda_ipc_key_t *key, void **mapped_addr,
+                 uct_cuda_ipc_md_t *md, uct_cuda_ipc_key_t *key,
+                 void **mapped_addr,
                  uct_cuda_ipc_rcache_region_t **region_p)
 {
     ucs_rcache_t *cache;
@@ -204,14 +197,14 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
             return status;
         }
 
-        status = uct_cuda_ipc_check_rcache(cache, (uct_cuda_ipc_key_t*)key, region_p);
+        status = uct_cuda_ipc_check_rcache(cache, key, region_p);
         if (status != UCS_OK) {
             return status;
         }
 
         *mapped_addr = (*region_p)->mapping_start;
     } else {
-        status = uct_cuda_ipc_open_memhandle(mapped_addr, key, NULL, NULL);
+        status = uct_cuda_ipc_open_memhandle(mapped_addr, key);
     }
 
     return status;
@@ -225,8 +218,9 @@ uct_cuda_ipc_rcache_mem_reg(void *context, ucs_rcache_t *rcache, void *arg,
     uct_cuda_ipc_rcache_region_t *cuda_ipc_region =
                     ucs_derived_of(region, uct_cuda_ipc_rcache_region_t);
 
-    return uct_cuda_ipc_open_memhandle(&cuda_ipc_region->mapping_start, key,
-                                       cuda_ipc_region, rcache);
+    cuda_ipc_region->ipc_handle = key->ph;
+
+    return uct_cuda_ipc_open_memhandle(&cuda_ipc_region->mapping_start, key);
 
 }
 

@@ -33,9 +33,6 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      ucs_offsetof(uct_cuda_ipc_md_config_t, rcache),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
 
-    {"RCACHE_MAX_RATIO", "1", "Limit the fraction of GPU memory that can be used for caching mappings",
-     ucs_offsetof(uct_cuda_ipc_md_config_t, rcache_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
-
     {NULL}
 };
 
@@ -191,15 +188,16 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
         status = uct_cuda_ipc_map_memhandle(mdc->md, rkey, &d_mapped,
                                             &cuda_ipc_region);
 
-        *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
-                      ? UCS_YES : UCS_NO;
-
-        if (*accessible == UCS_YES) {
+        if (status == UCS_OK) {
             uct_cuda_ipc_unmap_memhandle(mdc->md, rkey->pid, d_mapped, cuda_ipc_region);
+        } else if (status != UCS_ERR_ALREADY_EXISTS) {
+            *accessible = UCS_NO;
+            return UCS_ERR_UNREACHABLE;
         }
     }
 
-    return (*accessible == UCS_YES) ? UCS_OK : UCS_ERR_UNREACHABLE;
+    *accessible = UCS_YES;
+    return UCS_OK;
 
 err:
     return status;
@@ -335,7 +333,6 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     uct_cuda_ipc_md_config_t *md_cfg = ucs_derived_of(config,
                                                       uct_cuda_ipc_md_config_t);
     size_t total_bytes;
-    size_t max_ratio_size;
     uct_cuda_ipc_md_t* md;
     uct_cuda_ipc_component_t* com;
 
@@ -351,7 +348,6 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops       = &md_ops;
     md->super.component = &uct_cuda_ipc_component.super;
-    max_ratio_size      = total_bytes / md_cfg->rcache_max_ratio;
 
     /* allocate uuid map and peer accessible cache */
     md->uuid_map_size         = 0;
@@ -359,8 +355,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->uuid_map              = NULL;
     md->peer_accessible_cache = NULL;
     md->rcache_enable         = md_cfg->rcache_enable;
-    md->rcache_max_size       = max_ratio_size < md_cfg->rcache.max_size ?
-                                max_ratio_size : md_cfg->rcache.max_size;
+    md->rcache_max_size       = md_cfg->rcache.max_size;
     md->rcache_max_regions    = md_cfg->rcache.max_regions;
 
     com     = ucs_derived_of(md->super.component, uct_cuda_ipc_component_t);
