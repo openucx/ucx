@@ -97,8 +97,7 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter,
+    ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
     if (ucs_unlikely(uct_comp->status != UCS_OK)) {
         ucp_proto_rndv_rkey_destroy(req);
@@ -178,8 +177,7 @@ ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
     ucp_request_t *req  = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter,
+    ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_proto_rndv_rkey_destroy(req);
     ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
@@ -224,8 +222,7 @@ static ucs_status_t ucp_rndv_get_zcopy_proto_reset(ucp_request_t *req)
 
     switch (req->send.proto_stage) {
     case UCP_PROTO_RNDV_GET_STAGE_FETCH:
-        ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                    &req->send.state.dt_iter, UCP_DT_MASK_ALL);
+        ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
         /* Fall through */
     case UCP_PROTO_RNDV_GET_STAGE_ATS:
         break;
