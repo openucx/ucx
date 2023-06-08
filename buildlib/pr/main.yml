@@ -176,7 +176,7 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu2004_rocm_5_4_0
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu2004:rocm_5_4_0
-      options: $(DOCKER_OPT_ARGS)
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
   - stage: Codestyle
