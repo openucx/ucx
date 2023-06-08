@@ -201,6 +201,11 @@ build_ugni() {
 # Build CUDA
 #
 build_cuda() {
+	if [[ $CONTAINER == *"rocm"* ]]; then
+		echo "==== Not building with cuda flags ===="
+		return
+	fi
+
 	if az_module_load $CUDA_MODULE
 	then
 		if az_module_load $GDRCOPY_MODULE
