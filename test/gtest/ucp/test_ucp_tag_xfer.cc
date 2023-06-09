@@ -46,6 +46,10 @@ public:
     }
 
     virtual void init() {
+        if (RUNNING_ON_VALGRIND && (get_variant_value() == VARIANT_PROTO_V1)) {
+            UCS_TEST_SKIP_R("Skip proto v1 with valgrind");
+        }
+
         if (get_variant_value() == VARIANT_RNDV_PUT_ZCOPY) {
             modify_config("RNDV_SCHEME", "put_zcopy");
         } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {

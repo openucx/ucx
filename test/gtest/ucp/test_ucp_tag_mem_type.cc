@@ -49,6 +49,9 @@ public:
             enable_tag_mp_offload();
 
             if (RUNNING_ON_VALGRIND) {
+                if (variant_flags & VARIANT_PROTO_V1) {
+                    UCS_TEST_SKIP_R("Skip proto v1 with valgrind");
+                }
                 m_env.push_back(
                         new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
                 m_env.push_back(
