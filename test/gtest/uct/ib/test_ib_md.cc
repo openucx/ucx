@@ -1,4 +1,3 @@
-
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
@@ -128,9 +127,6 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
 bool test_ib_md::has_ksm() const {
 #if HAVE_DEVX
     return m_mlx5_flags & UCT_IB_MLX5_MD_FLAG_KSM;
-#elif defined(HAVE_EXP_UMR_KSM)
-    return ib_md().dev.dev_attr.exp_device_cap_flags &
-           IBV_EXP_DEVICE_UMR_FIXED_SIZE;
 #else
     return false;
 #endif
@@ -139,12 +135,6 @@ bool test_ib_md::has_ksm() const {
 bool test_ib_md::check_umr() const {
 #if HAVE_DEVX
     return has_ksm();
-#elif HAVE_EXP_UMR
-    if (ib_md().dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
-        uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(&ib_md(), uct_ib_mlx5_md_t);
-        return mlx5_md->umr_qp != NULL;
-    }
-    return false;
 #else
     return false;
 #endif
@@ -161,17 +151,6 @@ UCS_TEST_P(test_ib_md, relaxed_order, "PCI_RELAXED_ORDERING=on") {
     ib_md_umr_check(&rkey_buffer[0], false);
     ib_md_umr_check(&rkey_buffer[0], true);
 }
-
-#if HAVE_UMR_KSM
-UCS_TEST_P(test_ib_md, umr_noninline_klm, "MAX_INLINE_KLM_LIST=1") {
-
-    /* KLM list size would be 2, and setting MAX_INLINE_KLM_LIST=1 would force
-     * using non-inline UMR post_send.
-     */
-    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
-    ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
-}
-#endif
 
 UCS_TEST_P(test_ib_md, aligned) {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
