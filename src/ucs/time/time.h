@@ -72,7 +72,6 @@ static inline double ucs_time_sec_value()
     return ucs_get_cpu_clocks_per_sec();
 }
 
-
 /**
  * Convert seconds to UCS time units.
  */
