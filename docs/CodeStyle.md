@@ -22,11 +22,12 @@
   * Pointer to structs, which are used as API handles, have _h suffix
   * Macro arguments begin with _ (e.g _value) to avoid confusion with variables
   * No leading underscores in function names
-  * ### Header file name suffixes:
-     * _fwd.h   for a files with a types/function forward declarations
-     * _types.h if contains a type declarations
-     * .inl     for inline functions
-     * _def.h   with a preprocessor macros
+
+### Header file name suffixes:
+  * _fwd.h   for a files with a types/function forward declarations
+  * _types.h if contains a type declarations
+  * .inl     for inline functions
+  * _def.h   with a preprocessor macros
 
 
 ## C++
@@ -54,11 +55,12 @@
  
 
 ## Error handling
-  * All internal error codes must be ucs_status_t
-  * A function which returns error should print a log message
+  * All internal error codes must be `ucs_status_t`.
+  * Using `status` for `ucs_status_t` and `ret` for `int` is preferred.
+  * A function which returns error should print a log message.
   * The function which prints the log message is the first one which decides which
     error it is. If a functions returns an error because it's callee returned 
-    erroneous ucs_status_t, it does not have to print a log message.
+    erroneous `ucs_status_t`, it does not have to print a log message.
   * Destructors are not able to propagate error code to the caller because they
     return void. also, users are not ready to handle errors during cleanup flow.
     therefore a destructor should handle an error by printing a warning or an
@@ -70,9 +72,84 @@
     of a fix, the test should fail without the fix.
 
 
-## Examples
+## Miscellaneous examples
+
+### Boolean expression
+
+Use explicit checks with added parenthesis like below.
+
+Good
+```C
+    if (ptr == NULL) {
+
+    if (a == 0) {
+
+    if ((ret == UCS_KH_PUT_BUCKET_EMPTY) ||
+        (ret == UCS_KH_PUT_BUCKET_CLEAR)) {
+```
+
+### Variable definition
+
+Variables defined with a value should be first. Add a blank line after
+definitions.
+
+```C
+void function(int value)
+{
+    int a     = 1;
+    void *ptr = &value;
+    int b;
+    ucs_status_t status;
+
+    a += value;
+```
 
 ### if style
+
+Use blank line after if/else blocks
+```C
+    if (value > 0) {
+        value = 23;
+    } else {
+        value = 12;
+    }
+
+    value *= 2;
+```
+
+Check return values close to functions
+
+Good
+```C
+    if (val != XXX) {
+        ret = f1();
+        if (ret < 0) {
+        }
+        ...
+    } else {
+        ret = f2();
+        if (ret < 0) {
+        }
+        ...
+    }
+```
+
+Bad
+```C
+    if (val != XXX) {
+        ret = f1();
+        ...
+    } else {
+        ret = f2();
+        ...
+    }
+
+    if (ret < 0) {
+
+    }
+```
+
+General formatting rules
 
 Good
 ```C
@@ -94,8 +171,12 @@ Bad
 
 ### goto style
 
+Labels should be named preferably `out`, `err` or with prefix `err_`/`out_`.
+
 Good
 ```C
+    return;
+
 err_free:
     ucs_free(thread);
 err:
@@ -107,6 +188,8 @@ out_unlock:
 
 Bad
 ```C
+    return;
+/*    !!!Add blank line!!!      */
 err_free:
     ucs_free(thread);
 /*    !!!Remove this line!!!    */
