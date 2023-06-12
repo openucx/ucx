@@ -16,38 +16,45 @@ jobs:
     strategy:
       matrix:
         # common for both x86 and ARM
-        centos8_cuda11_${{ parameters.arch }}:
-          build_container: centos8_cuda11_${{ parameters.arch }}
-          artifact_name: $(POSTFIX)-centos8-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
-        ubuntu18_cuda11_${{ parameters.arch }}:
-          build_container: ubuntu18_cuda11_${{ parameters.arch }}
-          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
-        ubuntu20_cuda11_${{ parameters.arch }}:
-          build_container: ubuntu20_cuda11_${{ parameters.arch }}
-          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
-        ubuntu22_cuda11_${{ parameters.arch }}:
-          build_container: ubuntu22_cuda11_${{ parameters.arch }}
-          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
-        ubuntu20_cuda12_${{ parameters.arch }}:
-          build_container: ubuntu20_cuda12_${{ parameters.arch }}
-          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
-        ubuntu22_cuda12_${{ parameters.arch }}:
-          build_container: ubuntu22_cuda12_${{ parameters.arch }}
-          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+        # centos8_cuda11_${{ parameters.arch }}:
+        #   build_container: centos8_cuda11_${{ parameters.arch }}
+        #   artifact_name: $(POSTFIX)-centos8-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+        # ubuntu18_cuda11_${{ parameters.arch }}:
+        #   build_container: ubuntu18_cuda11_${{ parameters.arch }}
+        #   artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+        # ubuntu20_cuda11_${{ parameters.arch }}:
+        #   build_container: ubuntu20_cuda11_${{ parameters.arch }}
+        #   artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+        # ubuntu22_cuda11_${{ parameters.arch }}:
+        #   build_container: ubuntu22_cuda11_${{ parameters.arch }}
+        #   artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+        # ubuntu20_cuda12_${{ parameters.arch }}:
+        #   build_container: ubuntu20_cuda12_${{ parameters.arch }}
+        #   artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+        # ubuntu22_cuda12_${{ parameters.arch }}:
+        #   build_container: ubuntu22_cuda12_${{ parameters.arch }}
+        #   artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+        ubuntu22_inbox_${{ parameters.arch }}:
+          build_container: ubuntu22_inbox_${{ parameters.arch }}
+          artifact_name: $(POSTFIX)-ubuntu22.04-mofed5-inbox-${{ parameters.arch }}.tar.bz2
+
         # x86 only
         ${{ if eq(parameters.arch, 'x86_64') }}:
-          centos7_cuda11_${{ parameters.arch }}:
-            build_container: centos7_cuda11_${{ parameters.arch }}
-            artifact_name: $(POSTFIX)-centos7-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
-          centos7_cuda12_${{ parameters.arch }}:
-            build_container: centos7_cuda12_${{ parameters.arch }}
-            artifact_name: $(POSTFIX)-centos7-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
-          ubuntu16_cuda11_${{ parameters.arch }}:
-            build_container: ubuntu16_cuda11_${{ parameters.arch }}
-            artifact_name: $(POSTFIX)-ubuntu16.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
-          ubuntu18_cuda12_${{ parameters.arch }}:
-            build_container: ubuntu18_cuda12_${{ parameters.arch }}
-            artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+          # centos7_cuda11_${{ parameters.arch }}:
+          #   build_container: centos7_cuda11_${{ parameters.arch }}
+          #   artifact_name: $(POSTFIX)-centos7-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+          # centos7_cuda12_${{ parameters.arch }}:
+          #   build_container: centos7_cuda12_${{ parameters.arch }}
+          #   artifact_name: $(POSTFIX)-centos7-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+          # ubuntu16_cuda11_${{ parameters.arch }}:
+          #   build_container: ubuntu16_cuda11_${{ parameters.arch }}
+          #   artifact_name: $(POSTFIX)-ubuntu16.04-mofed5-cuda11-${{ parameters.arch }}.tar.bz2
+          # ubuntu18_cuda12_${{ parameters.arch }}:
+          #   build_container: ubuntu18_cuda12_${{ parameters.arch }}
+          #   artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda12-${{ parameters.arch }}.tar.bz2
+          rhel7.9_inbox_${{ parameters.arch }}:
+            build_container: rhel7.9_inbox_${{ parameters.arch }}
+            artifact_name: $(POSTFIX)-rhel7.9_inbox-${{ parameters.arch }}.tar.bz2
 
     container: $[ variables['build_container'] ]
     pool:
@@ -74,7 +81,16 @@ jobs:
           cd ../../..
           tar -tjf "${AZ_ARTIFACT_NAME}"
         displayName: Build RPM package
-        condition: and(succeeded(), contains(variables['artifact_name'], 'centos'))
+        # condition: and(succeeded(), contains(variables['artifact_name'], 'centos'))
+        # condition: and(succeeded(), or(contains(variables['artifact_name'], 'centos'), contains(variables['artifact_name'], 'rhel')))
+
+        condition: |
+          and(succeeded(),
+            or(
+              contains(variables['artifact_name'], 'centos'),
+              contains(variables['artifact_name'], 'rhel')
+            )
+          )
         env:
           AZ_ARTIFACT_NAME: $(artifact_name)
 
