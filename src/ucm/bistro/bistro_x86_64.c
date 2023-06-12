@@ -303,6 +303,26 @@ ucm_bistro_construct_orig_func(const void *func_ptr, size_t patch_len,
     return UCS_OK;
 }
 
+void ucm_bistro_patch_lock(void *dst)
+{
+    static const ucm_bistro_lock_t self_jmp = {
+        .jmp = {0xeb, 0xfe} /* jmp %rip-2 */
+    };
+
+    /*
+     * Most instructions are not shorter than two bytes.
+     *
+     * Hence assuming that we will only truncate the current instruction which
+     * is assumed to be already fetched in case of race.
+     *
+     * In case of truncation of the next instruction, if the function starts by
+     * a one byte instruction like some of the 'push', the race length is much
+     * smaller than in the original case, where the instruction truncation is
+     * happening ~12 bytes after the start of the copy.
+     */
+    ucm_bistro_modify_code(dst, &self_jmp);
+}
+
 ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
                               void **orig_func_p,
                               ucm_bistro_restore_point_t **rp)
@@ -347,7 +367,7 @@ ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
         return status;
     }
 
-    return ucm_bistro_apply_patch(func_ptr, patch, patch_len);
+    return ucm_bistro_apply_patch_atomic(func_ptr, patch, patch_len);
 }
 
 #endif

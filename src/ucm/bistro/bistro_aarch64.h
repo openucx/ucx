@@ -35,4 +35,17 @@ ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
                               void **orig_func_p,
                               ucm_bistro_restore_point_t **rp);
 
+/* Instruction type */
+typedef uint32_t ucm_bistro_inst_t;
+
+/* Lock implementation */
+typedef struct {
+    ucm_bistro_inst_t b; /* either self branch, or no-op branch */
+} UCS_S_PACKED ucm_bistro_lock_t;
+
+/**
+ * Helper functions to improve atomicity of function patching
+ */
+void ucm_bistro_patch_lock(void *dst);
+
 #endif

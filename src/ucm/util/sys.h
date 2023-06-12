@@ -10,6 +10,7 @@
 
 #include <ucm/api/ucm.h>
 #include <ucs/sys/checker.h>
+#include <ucs/time/time.h>
 #include <sys/types.h>
 #include <stddef.h>
 
@@ -129,6 +130,20 @@ ucm_get_hook_mode(ucm_mmap_hook_mode_t config_mode)
 
     return config_mode;
 #endif
+}
+
+
+/**
+ * Get current time without depending on UCS library code
+ *
+ * @return The current time value in seconds
+ */
+static UCS_F_ALWAYS_INLINE double ucm_get_time()
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + ((double)tv.tv_usec / UCS_USEC_PER_SEC);
 }
 
 #endif
