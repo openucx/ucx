@@ -22,7 +22,6 @@ protected:
     void ib_md_umr_check(void *rkey_buffer, bool amo_access,
                          size_t size = 8192, bool aligned = false);
     bool has_ksm() const;
-    bool check_umr() const;
 
 private:
 #ifdef HAVE_MLX5_DV
@@ -105,7 +104,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
     EXPECT_UCS_OK(status);
 
 #ifdef HAVE_MLX5_DV
-    if ((amo_access && check_umr()) || ib_md().relaxed_order) {
+    if ((amo_access && has_ksm()) || ib_md().relaxed_order) {
         EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
         EXPECT_NE(UCT_IB_INVALID_MKEY, ib_memh->atomic_rkey);
     } else {
@@ -127,14 +126,6 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
 bool test_ib_md::has_ksm() const {
 #if HAVE_DEVX
     return m_mlx5_flags & UCT_IB_MLX5_MD_FLAG_KSM;
-#else
-    return false;
-#endif
-}
-
-bool test_ib_md::check_umr() const {
-#if HAVE_DEVX
-    return has_ksm();
 #else
     return false;
 #endif
