@@ -58,22 +58,32 @@ jobs:
             ucx_tag: v1.12.0
             client_cmd: client_server -c tag -a
             server_cmd: client_server -c tag
-            ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n UCX_CM_USE_ALL_DEVICES=n
+            ucx_env: UCX_CM_USE_ALL_DEVICES=n
         ucx1_12_wa:
             ucx_tag: v1.12.0
             client_cmd: ucp_hworld -n
             server_cmd: ucp_hworld
-            ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n UCX_TLS=^sm UCX_IB_ROCE_LOCAL_SUBNET=y
+            ucx_env: UCX_TLS=^sm UCX_IB_ROCE_LOCAL_SUBNET=y
         ucx1_14_cs:
             ucx_tag: v1.14.0
             client_cmd: client_server -c tag -a
             server_cmd: client_server -c tag
-            ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n
+            ucx_env: ""
         ucx1_14_wa:
             ucx_tag: v1.14.0
             client_cmd: ucp_hworld -n
             server_cmd: ucp_hworld
-            ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n
+            ucx_env: ""
+        ucx1_14_cs_no_sm:
+            ucx_tag: v1.14.0
+            client_cmd: client_server -c tag -a
+            server_cmd: client_server -c tag
+            ucx_env: UCX_TLS=^sm
+        ucx1_14_wa_no_sm:
+            ucx_tag: v1.14.0
+            client_cmd: ucp_hworld -n
+            server_cmd: ucp_hworld
+            ucx_env: UCX_TLS=^sm
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     steps:
@@ -94,7 +104,7 @@ jobs:
           chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId) -R
       - bash: |
           set -Eex
-          export $(ucx_env)
+          export UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/examples
           port=$((10000 + 1000 * $(AZP_AGENT_ID)))
           LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(server_cmd) -p ${port} &
@@ -109,7 +119,7 @@ jobs:
         timeoutInMinutes: 2
       - bash: |
           set -Eex
-          export $(ucx_env)
+          export UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/examples
           port=$((10000 + 1000 * $(AZP_AGENT_ID)))
           LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(server_cmd)  -p ${port} &
