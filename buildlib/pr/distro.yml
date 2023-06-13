@@ -96,10 +96,11 @@ jobs:
           set -Eex
           export $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/examples
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(server_cmd) &
+          port=$((10000 + 1000 * $(AZP_AGENT_ID)))
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(server_cmd) -p ${port} &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1 -p ${port}
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_master_$(Build.BuildId)/lib
@@ -110,10 +111,11 @@ jobs:
           set -Eex
           export $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/ucx_$(ucx_tag)_$(Build.BuildId)/examples
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(server_cmd) &
+          port=$((10000 + 1000 * $(AZP_AGENT_ID)))
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(server_cmd)  -p ${port} &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1 -p ${port}
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_master_$(Build.BuildId)/lib
