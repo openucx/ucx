@@ -184,7 +184,7 @@ stages:
     - template: codestyle.yml
 
   - stage: Static_check
-    dependsOn: [Distro]
+    dependsOn: [WireCompat]
     jobs:
     - template: static_checks.yml
 
@@ -248,10 +248,22 @@ stages:
               long_test: $(long_test)
               test_static: $(test_static)
 
-  - stage: Distro
+  - stage: WireCompat
     dependsOn: [Codestyle]
     jobs:
     - template: distro.yml
+      parameters:
+        name: althca
+        demands: ucx_althca -equals yes
+    - template: distro.yml
+      parameters:
+        name: gpu
+        demands: ucx_gpu -equals yes
+        container: centos7_cuda11
+    - template: distro.yml
+      parameters:
+        name: BlueField
+        demands: ucx_bf -equals yes
 
   - stage: Coverity
     dependsOn: [Static_check]

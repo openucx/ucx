@@ -1,13 +1,17 @@
+parameters:
+  demands: []
+  name: subtest
+  container:
+
 jobs:
     # Perform test builds on relevant distributions.
-  - job: Distros
-    displayName: Build
+  - job: build_${{ parameters.name }}
+    displayName: Build on ${{ parameters.name }}
     workspace:
       clean: all
     pool:
       name: MLNX
-      demands:
-      - ucx_docker -equals yes
+      demands: ${{ parameters.demands }}
     strategy:
       matrix:
         ucx_master:
@@ -16,10 +20,9 @@ jobs:
             ucx_tag: v1.12.0
         ucx_1_14:
             ucx_tag: v1.14.0
-    container: centos7_ib
+    ${{ if parameters.container }}:
+      container: ${{ parameters.container }}
     steps:
-      - checkout: none
-
       - bash: |
           set -eEx
           git clone --depth 1 -b $(ucx_tag) https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)
@@ -41,15 +44,14 @@ jobs:
           pathToPublish: '$(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)/install'
           artifactName: ucx_$(ucx_tag)_$(Build.BuildId)
 
-  - job: Test_wire_compatibility
-    dependsOn: Distros
-    displayName: Test wire compatibility
+  - job: test_wire_compat_${{ parameters.name }}
+    dependsOn: build_${{ parameters.name }}
+    displayName: Test wire compatibility ${{ parameters.name }}
     workspace:
       clean: all
     pool:
       name: MLNX
-      demands:
-      - ucx_docker -equals yes
+      demands: ${{ parameters.demands }}
     strategy:
       matrix:
         ucx1_12_cs:
@@ -72,7 +74,8 @@ jobs:
             client_cmd: ucp_hworld -n
             server_cmd: ucp_hworld
             ucx_env: UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n
-    container: centos7_ib
+    ${{ if parameters.container }}:
+      container: ${{ parameters.container }}
     steps:
       - checkout: none
         clean: true
