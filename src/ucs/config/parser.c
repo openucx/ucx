@@ -234,10 +234,12 @@ int ucs_config_sprintf_hex(char *buf, size_t max,
 
 int ucs_config_sscanf_bool(const char *buf, void *dest, const void *arg)
 {
-    if (!strcasecmp(buf, "y") || !strcasecmp(buf, "yes") || !strcmp(buf, "1")) {
+    if (!strcasecmp(buf, "y") || !strcasecmp(buf, "yes") ||
+        !strcmp(buf, "on") || !strcmp(buf, "1")) {
         *(int*)dest = 1;
         return 1;
-    } else if (!strcasecmp(buf, "n") || !strcasecmp(buf, "no") || !strcmp(buf, "0")) {
+    } else if (!strcasecmp(buf, "n") || !strcasecmp(buf, "no") ||
+               !strcmp(buf, "off") || !strcmp(buf, "0")) {
         *(int*)dest = 0;
         return 1;
     } else {
