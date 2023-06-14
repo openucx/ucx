@@ -23,6 +23,8 @@ jobs:
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     steps:
+      - checkout: none
+
       - bash: |
           set -eEx
           git clone --depth 1 -b $(ucx_tag) https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)
@@ -35,8 +37,8 @@ jobs:
 
           mkdir -p ${ucx_dir}/examples
           cd $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)/examples
-          gcc -lm -lucs -lucp -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/client_server ucp_client_server.c
-          gcc -lm -lucs -lucp -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/ucp_hworld ucp_hello_world.c
+          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/client_server ucp_client_server.c -lm -lucs -lucp
+          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/ucp_hworld ucp_hello_world.c -lm -lucs -lucp
         displayName: Build ucx artifact
 
       - task: PublishBuildArtifacts@1
