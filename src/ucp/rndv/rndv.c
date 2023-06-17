@@ -2253,7 +2253,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ep_config = ucp_ep_config(ep);
     put_zcopy = &ep_config->rndv.put_zcopy;
 
-    ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id"
+    ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id "
                   "0x%"PRIx64, rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_id);
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_rtr_recv", 0);
 
