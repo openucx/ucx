@@ -84,35 +84,14 @@ jobs:
       demands: ${{ parameters.demands }}
     strategy:
       matrix:
-        ucx1_12_cs:
+        ucx1_12:
             ucx_tag: v1.12.0
-            client_cmd: client_server -c tag -a
-            server_cmd: client_server -c tag
-            ucx_env: UCX_CM_USE_ALL_DEVICES=n
-        ucx1_12_wa:
-            ucx_tag: v1.12.0
-            client_cmd: ucp_hworld -n
-            server_cmd: ucp_hworld
-            ucx_env: UCX_TLS=^sm UCX_IB_ROCE_LOCAL_SUBNET=y
-        ucx1_14_cs:
+            ucx_env: UCX_CM_USE_ALL_DEVICES=n UCX_TLS=^sm UCX_IB_ROCE_LOCAL_SUBNET=y
+        ucx1_14:
             ucx_tag: v1.14.0
-            client_cmd: client_server -c tag -a
-            server_cmd: client_server -c tag
             ucx_env: ""
-        ucx1_14_wa:
+        ucx1_14_no_sm:
             ucx_tag: v1.14.0
-            client_cmd: ucp_hworld -n
-            server_cmd: ucp_hworld
-            ucx_env: ""
-        ucx1_14_cs_no_sm:
-            ucx_tag: v1.14.0
-            client_cmd: client_server -c tag -a
-            server_cmd: client_server -c tag
-            ucx_env: UCX_TLS=^sm
-        ucx1_14_wa_no_sm:
-            ucx_tag: v1.14.0
-            client_cmd: ucp_hworld -n
-            server_cmd: ucp_hworld
             ucx_env: UCX_TLS=^sm
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
@@ -140,28 +119,48 @@ jobs:
           export UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
           port=$((10000 + 1000 * $(AZP_AGENT_ID)))
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(server_cmd) -p ${port} &
+
+          # Test server is legacy, client is legacy
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/client_server -c tag -p ${port} &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1 -p ${port}
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/client_server -c tag -a 127.0.0.1 -p ${port}
+          if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
+          set -Eex
+
+          # Test server is master, client is legacy
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/client_server -c tag -p ${port} &
+          server_pid=$!
+          sleep 5
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/client_server -c tag -a 127.0.0.1 -p ${port}
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_master)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
-        displayName: Test server is legacy client is master
+        displayName: ucp_client_server with UCX $(ucx_tag)
         timeoutInMinutes: 2
       - bash: |
           set -Eex
           export UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
           port=$((10000 + 1000 * $(AZP_AGENT_ID)))
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/$(server_cmd)  -p ${port} &
+
+          # Test server is legacy, client is legacy
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/ucp_hworld -c tag -p ${port} &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/$(client_cmd) 127.0.0.1 -p ${port}
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/ucp_hworld -n 127.0.0.1 -p ${port}
+          if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
+          set -Eex
+
+          # Test server is master, client is legacy
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/ucp_hworld -p ${port} &
+          server_pid=$!
+          sleep 5
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/ucp_hworld -n 127.0.0.1 -p ${port}
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_master)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
-        displayName: Test server is master client is legacy
+        displayName: ucp_hello_world with UCX $(ucx_tag)
         timeoutInMinutes: 2
