@@ -14,6 +14,7 @@
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/sys/topo/base/topo.h>
+#include <ucs/type/spinlock.h>
 #include <pthread.h>
 
 
@@ -37,7 +38,7 @@ typedef struct ucs_memory_info {
 
 
 struct ucs_memtype_cache {
-    pthread_rwlock_t      lock;       /**< protests the page table */
+    ucs_spinlock_t        lock;       /**< protests the page table */
     ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
 };
 
