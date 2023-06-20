@@ -117,6 +117,7 @@ jobs:
       - bash: |
           set -xeE
           $(workspace)/buildlib/pr/cuda/test_malloc_hook.sh
+        displayName: Memory hooks test
         env:
           WORKSPACE: $(workspace)
       - bash: |
