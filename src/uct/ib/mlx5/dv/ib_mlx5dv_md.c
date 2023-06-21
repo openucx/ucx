@@ -44,6 +44,12 @@ typedef struct uct_ib_mlx5_mem {
 } uct_ib_mlx5_mem_t;
 
 
+static uint32_t uct_ib_mlx5_flush_rkey_make()
+{
+    return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
+}
+
+#if HAVE_DEVX
 static ucs_status_t
 uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address, size_t length,
                     uint64_t access_flags, int dmabuf_fd, size_t dmabuf_offset,
@@ -64,27 +70,6 @@ static ucs_status_t uct_ib_mlx5_dereg_key(uct_ib_md_t *md,
 
     return uct_ib_dereg_mr(memh->mrs[mr_type].super.ib);
 }
-
-static ucs_status_t uct_ib_mlx5_reg_atomic_key(uct_ib_md_t *ibmd,
-                                               uct_ib_mem_t *ib_memh)
-{
-    uct_ib_mr_type_t mr_type = uct_ib_memh_get_atomic_base_mr_type(ib_memh);
-    uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
-
-    if (mr_type != UCT_IB_MR_STRICT_ORDER) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    memh->super.atomic_rkey = memh->mrs[mr_type].super.ib->rkey;
-    return UCS_OK;
-}
-
-static uint32_t uct_ib_mlx5_flush_rkey_make()
-{
-    return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
-}
-
-#if HAVE_DEVX
 
 static const char uct_ib_mkey_token[] = "uct_ib_mkey_token";
 
@@ -228,30 +213,35 @@ uct_ib_mlx5_devx_reg_ksm_data_addr(uct_ib_mlx5_md_t *md, struct ibv_mr *mr,
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_reg_ksm_data_contig(uct_ib_mlx5_md_t *md,
-                                     uct_ib_mlx5_mr_t *mr, off_t off,
-                                     int atomic, struct mlx5dv_devx_obj **mr_p,
+uct_ib_mlx5_devx_reg_ksm_data_contig(uct_ib_mlx5_md_t *md, uct_ib_mlx5_mr_t *mr,
+                                     off_t offset, int atomic,
+                                     struct mlx5dv_devx_obj **mr_p,
                                      uint32_t *mkey)
 {
-    intptr_t addr = (intptr_t)mr->super.ib->addr & ~(UCT_IB_MD_MAX_MR_SIZE - 1);
-    /* FW requires indirect atomic MR addr and length to be aligned
-     * to max supported atomic argument size */
-    size_t length = ucs_align_up(mr->super.ib->length +
-                                 (intptr_t)mr->super.ib->addr - addr,
-                                 md->super.dev.atomic_align);
-    /* add off to workaround CREATE_MKEY range check issue */
-    int list_size = ucs_div_round_up(length + off, UCT_IB_MD_MAX_MR_SIZE);
+    uintptr_t mr_address = (uintptr_t)mr->super.ib->addr;
+    uintptr_t ksm_address;
+    size_t ksm_length;
+    int list_size;
 
-    return uct_ib_mlx5_devx_reg_ksm_data_addr(md, mr->super.ib, addr, length,
-                                              addr + off, atomic, list_size,
-                                              mr_p, mkey);
+    /* FW requires indirect atomic MR address and length to be aligned
+     * to max supported atomic argument size */
+    ksm_address = ucs_align_down_pow2(mr_address, UCT_IB_MD_MAX_MR_SIZE);
+    ksm_length  = ucs_align_up(mr->super.ib->length + mr_address - ksm_address,
+                               md->super.dev.atomic_align);
+
+    /* Add offset to workaround CREATE_MKEY range check issue */
+    list_size = ucs_div_round_up(ksm_length + offset, UCT_IB_MD_MAX_MR_SIZE);
+
+    return uct_ib_mlx5_devx_reg_ksm_data_addr(md, mr->super.ib, ksm_address,
+                                              ksm_length, ksm_address + offset,
+                                              atomic, list_size, mr_p, mkey);
 }
 
 /**
  * Pop MR LRU-entry from @a md cash
  */
-static void uct_ib_mlx5_devx_md_mr_lru_pop(uct_ib_mlx5_md_t *md,
-                                           const char *reason)
+static void
+uct_ib_mlx5_devx_md_mr_lru_pop(uct_ib_mlx5_md_t *md, const char *reason)
 {
     uct_ib_mlx5_mem_lru_entry_t *head;
     struct mlx5dv_devx_obj *mr;
@@ -481,7 +471,7 @@ uct_ib_mlx5_devx_use_atomic_ksm(uct_ib_mlx5_md_t *md, uct_ib_mlx5_mem_t *memh)
 static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
                                                     uct_ib_mem_t *ib_memh)
 {
-    uct_ib_mr_type_t mr_type = uct_ib_memh_get_atomic_base_mr_type(ib_memh);
+    uct_ib_mr_type_t mr_type = uct_ib_md_get_atomic_mr_type(ibmd);
     uct_ib_mlx5_mem_t *memh  = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t *md     = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
     uct_ib_mlx5_mr_t *mr     = &memh->mrs[mr_type];
@@ -1792,7 +1782,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     uct_ib_device_t *dev;
     uct_ib_mlx5_md_t *md;
 
-    if (!mlx5dv_is_supported(ibv_device)) {
+    if ((md_config->mlx5dv == UCS_NO) || !mlx5dv_is_supported(ibv_device)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -1863,29 +1853,16 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .super = {
         .close              = uct_ib_md_close,
         .query              = uct_ib_md_query,
-        .mem_reg            = uct_ib_mem_reg,
-        .mem_dereg          = uct_ib_mem_dereg,
+        .mem_reg            = uct_ib_verbs_mem_reg,
+        .mem_dereg          = uct_ib_verbs_mem_dereg,
         .mem_attach         = ucs_empty_function_return_unsupported,
         .mem_advise         = uct_ib_mem_advise,
-        .mkey_pack          = uct_ib_mkey_pack,
+        .mkey_pack          = uct_ib_verbs_mkey_pack,
         .detect_memory_type = ucs_empty_function_return_unsupported,
     },
-    .open                = uct_ib_mlx5dv_md_open,
-    .reg_key             = uct_ib_mlx5_reg_key,
-    .reg_indirect_key    = (uct_ib_md_reg_indirect_key_func_t)
+    .get_atomic_mr_id = (uct_ib_md_get_atomic_mr_id_func_t)
             ucs_empty_function_return_unsupported,
-    .dereg_key           = uct_ib_mlx5_dereg_key,
-    .reg_atomic_key      = uct_ib_mlx5_reg_atomic_key,
-    .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)
-            ucs_empty_function_return_success,
-    .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)
-            ucs_empty_function_return_unsupported,
-    .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)
-            ucs_empty_function_return_unsupported,
-    .get_atomic_mr_id    = (uct_ib_md_get_atomic_mr_id_func_t)
-            ucs_empty_function_return_unsupported,
-    .reg_exported_key    = (uct_ib_md_reg_exported_key_func_t)
-            ucs_empty_function_return_unsupported,
+    .open             = uct_ib_mlx5dv_md_open,
 };
 
 UCT_IB_MD_DEFINE_ENTRY(dv, uct_ib_mlx5_md_ops);

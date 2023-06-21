@@ -137,6 +137,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
      ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
 
+    {"MLX5_DV", "try",
+     "MLX5 support\n",
+     ucs_offsetof(uct_ib_md_config_t, mlx5dv), UCS_CONFIG_TYPE_TERNARY},
+
     {"MLX5_DEVX", "try",
      "DEVX support\n",
      ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
@@ -500,6 +504,32 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     return UCS_OK;
 }
 
+ucs_status_t uct_ib_reg_mr_params(uct_ib_md_t *md, void *address, size_t length,
+                                  const uct_md_mem_reg_params_t *params,
+                                  uint64_t access_flags, struct ibv_mr **mr_p)
+{
+    size_t dmabuf_offset;
+    ucs_status_t status;
+    uint64_t flags;
+    int dmabuf_fd;
+
+    flags         = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    dmabuf_fd     = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
+                                    DMABUF_FD, UCT_DMABUF_FD_INVALID);
+    dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
+                                    DMABUF_OFFSET, 0);
+
+    status = uct_ib_reg_mr(md->pd, address, length, access_flags, dmabuf_fd,
+                           dmabuf_offset, mr_p,
+                           flags & UCT_MD_MEM_FLAG_HIDE_ERRORS);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 {
     int ret;
@@ -772,19 +802,6 @@ uct_ib_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
     return status;
 }
 
-static ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
-                                         size_t length, uint64_t access_flags,
-                                         int dmabuf_fd, size_t dmabuf_offset,
-                                         uct_ib_mem_t *ib_memh,
-                                         uct_ib_mr_type_t mr_type, int silent)
-{
-    uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
-
-    return uct_ib_reg_key_impl(md, address, length, access_flags, dmabuf_fd,
-                               dmabuf_offset, ib_memh, &memh->mrs[mr_type],
-                               mr_type, silent);
-}
-
 ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address, size_t length,
                                  uint64_t access_flags, int dmabuf_fd,
                                  size_t dmabuf_offset, uct_ib_mem_t *memh,
@@ -803,29 +820,6 @@ ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address, size_t length,
         uct_ib_memh_init_keys(memh, mr->ib->lkey, mr->ib->rkey);
     }
 
-    return UCS_OK;
-}
-
-static ucs_status_t uct_ib_verbs_dereg_key(uct_ib_md_t *md,
-                                           uct_ib_mem_t *ib_memh,
-                                           uct_ib_mr_type_t mr_type)
-{
-    uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
-
-    return uct_ib_dereg_mr(memh->mrs[mr_type].ib);
-}
-
-static ucs_status_t uct_ib_verbs_reg_atomic_key(uct_ib_md_t *ibmd,
-                                                uct_ib_mem_t *ib_memh)
-{
-    uct_ib_mr_type_t mr_type = uct_ib_memh_get_atomic_base_mr_type(ib_memh);
-    uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
-
-    if (mr_type != UCT_IB_MR_STRICT_ORDER) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    memh->super.atomic_rkey = memh->mrs[mr_type].ib->rkey;
     return UCS_OK;
 }
 
@@ -884,7 +878,9 @@ ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     if (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
         atomic_rkey = memh->atomic_rkey;
     } else {
-        ucs_assert(!(memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING));
+        if (!(flags & UCT_MD_MKEY_PACK_FLAG_EXPORT)) {
+            ucs_assert(!(memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING));
+        }
         atomic_rkey = UCT_IB_INVALID_MKEY;
     }
 
@@ -928,6 +924,162 @@ ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     } else {
         uct_ib_md_pack_rkey(mkey, atomic_rkey, mkey_buffer);
     }
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_memh_new(uct_ib_md_t *md, size_t length, unsigned mem_flags,
+                             size_t memh_base_size, size_t mr_size,
+                             uct_ib_mem_t **memh_p)
+{
+    int num_mrs = md->relaxed_order ?
+                          2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
+                          1 /* UCT_IB_MR_DEFAULT */;
+    uct_ib_mem_t *memh;
+
+    memh = ucs_calloc(1, memh_base_size + (mr_size * num_mrs), "ib_memh");
+    if (memh == NULL) {
+        ucs_error("%s: failed to allocated memh struct",
+                  uct_ib_device_name(&md->dev));
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    uct_ib_mem_init(memh, 0);
+
+    if ((mem_flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
+        (md->reg_nonblock_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+        memh->flags |= UCT_IB_MEM_FLAG_ODP;
+    }
+
+    if (mem_flags & UCT_MD_MEM_ACCESS_REMOTE_ATOMIC) {
+        memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
+    }
+
+    if (mem_flags &
+        (UCT_MD_MEM_ACCESS_REMOTE_GET | UCT_MD_MEM_ACCESS_REMOTE_PUT)) {
+        memh->flags |= UCT_IB_MEM_ACCESS_REMOTE_RMA;
+    }
+
+    *memh_p = memh;
+    return UCS_OK;
+}
+
+uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh)
+{
+    uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+
+    if (memh->flags & UCT_IB_MEM_FLAG_ODP) {
+        access_flags |= IBV_ACCESS_ON_DEMAND;
+    }
+
+    if (md->relaxed_order) {
+        access_flags |= IBV_ACCESS_RELAXED_ORDERING;
+    }
+
+    return access_flags;
+}
+
+ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
+                                  const uct_md_mem_reg_params_t *params,
+                                  uct_mem_h *memh_p)
+{
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    struct ibv_mr *mr_default;
+    uct_ib_verbs_mem_t *memh;
+    uct_ib_mem_t *ib_memh;
+    uint64_t access_flags;
+    ucs_status_t status;
+
+    status = uct_ib_memh_new(md, length,
+                             UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
+                                                        FIELD_FLAGS, 0),
+                             sizeof(*memh), sizeof(memh->mrs[0]), &ib_memh);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    memh         = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
+    access_flags = uct_ib_memh_access_flags(md, &memh->super);
+
+    status = uct_ib_reg_mr_params(md, address, length, params, access_flags,
+                                  &mr_default);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
+
+    memh->super.lkey                = mr_default->lkey;
+    memh->super.rkey                = mr_default->rkey;
+    memh->mrs[UCT_IB_MR_DEFAULT].ib = mr_default;
+
+    if (md->relaxed_order) {
+        status = uct_ib_reg_mr_params(md, address, length, params,
+                                      access_flags &
+                                              ~IBV_ACCESS_RELAXED_ORDERING,
+                                      &memh->mrs[UCT_IB_MR_STRICT_ORDER].ib);
+        if (status != UCS_OK) {
+            goto err_dereg_default;
+        }
+    }
+
+    if (md->config.odp.prefetch) {
+        uct_ib_mem_prefetch(md, &memh->super, address, length);
+    }
+
+    *memh_p = memh;
+    return UCS_OK;
+
+err_dereg_default:
+    uct_ib_dereg_mr(mr_default);
+err_free:
+    ucs_free(memh);
+err:
+    return status;
+}
+
+ucs_status_t
+uct_ib_verbs_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
+{
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_verbs_mem_t *memh;
+    ucs_status_t status;
+
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    memh = params->memh;
+
+    if (md->relaxed_order) {
+        status = uct_ib_dereg_mr(memh->mrs[UCT_IB_MR_STRICT_ORDER].ib);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    status = uct_ib_dereg_mr(memh->mrs[UCT_IB_MR_DEFAULT].ib);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_free(memh);
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                                    const uct_md_mkey_pack_params_t *params,
+                                    void *mkey_buffer)
+{
+    uct_ib_md_t *md                 = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_verbs_mem_t *memh        = uct_memh;
+    uct_ib_mr_type_t atomic_mr_type = uct_ib_md_get_atomic_mr_type(md);
+    unsigned flags;
+
+    flags = UCS_PARAM_VALUE(UCT_MD_MKEY_PACK_FIELD, params, flags, FLAGS, 0);
+    if (flags &
+        (UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
+         UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO | UCT_MD_MKEY_PACK_FLAG_EXPORT)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    uct_ib_md_pack_rkey(memh->super.rkey, memh->mrs[atomic_mr_type].ib->rkey,
+                        mkey_buffer);
     return UCS_OK;
 }
 
@@ -1613,7 +1765,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
     md->super.ops = &uct_ib_verbs_md_ops.super;
 
-    status  = uct_ib_md_open_common(md, ibv_device, md_config);
+    status = uct_ib_md_open_common(md, ibv_device, md_config);
     if (status != UCS_OK) {
         goto err_md_free;
     }
@@ -1654,22 +1806,16 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .super = {
         .close              = uct_ib_md_close,
         .query              = uct_ib_md_query,
-        .mem_reg            = uct_ib_mem_reg,
-        .mem_dereg          = uct_ib_mem_dereg,
+        .mem_reg            = uct_ib_verbs_mem_reg,
+        .mem_dereg          = uct_ib_verbs_mem_dereg,
         .mem_attach         = ucs_empty_function_return_unsupported,
         .mem_advise         = uct_ib_mem_advise,
-        .mkey_pack          = uct_ib_mkey_pack,
+        .mkey_pack          = uct_ib_verbs_mkey_pack,
         .detect_memory_type = ucs_empty_function_return_unsupported,
     },
-    .open                = uct_ib_verbs_md_open,
-    .reg_key             = uct_ib_verbs_reg_key,
-    .reg_indirect_key    = (uct_ib_md_reg_indirect_key_func_t)ucs_empty_function_return_unsupported,
-    .dereg_key           = uct_ib_verbs_dereg_key,
-    .reg_atomic_key      = uct_ib_verbs_reg_atomic_key,
-    .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)ucs_empty_function_return_success,
-    .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
-    .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
-    .get_atomic_mr_id    = (uct_ib_md_get_atomic_mr_id_func_t)ucs_empty_function_return_unsupported,
+    .get_atomic_mr_id = (uct_ib_md_get_atomic_mr_id_func_t)
+            ucs_empty_function_return_unsupported,
+    .open             = uct_ib_verbs_md_open,
 };
 
 static UCT_IB_MD_DEFINE_ENTRY(verbs, uct_ib_verbs_md_ops);
