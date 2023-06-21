@@ -79,36 +79,6 @@ static ucs_status_t uct_ib_mlx5_reg_atomic_key(uct_ib_md_t *ibmd,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_ib_mlx5_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh, void *addr,
-                         size_t length)
-{
-#if HAVE_DECL_IBV_ADVISE_MR
-    struct ibv_sge sg_list;
-    int ret;
-
-    if (!(ib_memh->flags & UCT_IB_MEM_FLAG_ODP)) {
-        return UCS_OK;
-    }
-
-    ucs_debug("memh %p prefetch %p length %zu", ib_memh, addr, length);
-
-    sg_list.lkey   = ib_memh->lkey;
-    sg_list.addr   = (uintptr_t)addr;
-    sg_list.length = length;
-
-    ret = UCS_PROFILE_CALL(ibv_advise_mr, md->pd,
-                           IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
-                           IB_UVERBS_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
-    if (ret) {
-        ucs_error("ibv_advise_mr(addr=%p length=%zu) returned %d: %m",
-                  addr, length, ret);
-        return UCS_ERR_IO_ERROR;
-    }
-#endif
-    return UCS_OK;
-}
-
 static uint32_t uct_ib_mlx5_flush_rkey_make()
 {
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
@@ -1674,7 +1644,6 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .dereg_atomic_key    = uct_ib_mlx5_devx_dereg_atomic_key,
     .reg_multithreaded   = uct_ib_mlx5_devx_reg_multithreaded,
     .dereg_multithreaded = uct_ib_mlx5_devx_dereg_multithreaded,
-    .mem_prefetch        = uct_ib_mlx5_mem_prefetch,
     .get_atomic_mr_id    = uct_ib_mlx5_md_get_atomic_mr_id,
     .reg_exported_key    = uct_ib_mlx5_devx_reg_exported_key,
     .import_exported_key = uct_ib_mlx5_devx_import_exported_key
@@ -1862,7 +1831,6 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
             ucs_empty_function_return_unsupported,
     .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)
             ucs_empty_function_return_unsupported,
-    .mem_prefetch        = uct_ib_mlx5_mem_prefetch,
     .get_atomic_mr_id    = (uct_ib_md_get_atomic_mr_id_func_t)
             ucs_empty_function_return_unsupported,
     .reg_exported_key    = (uct_ib_md_reg_exported_key_func_t )

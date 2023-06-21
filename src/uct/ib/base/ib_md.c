@@ -618,6 +618,35 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     return access_flags;
 }
 
+static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
+                                        void *addr, size_t length)
+{
+#if HAVE_DECL_IBV_ADVISE_MR
+    struct ibv_sge sg_list;
+    int ret;
+
+    if (!(ib_memh->flags & UCT_IB_MEM_FLAG_ODP)) {
+        return UCS_OK;
+    }
+
+    ucs_debug("memh %p prefetch %p length %zu", ib_memh, addr, length);
+
+    sg_list.lkey   = ib_memh->lkey;
+    sg_list.addr   = (uintptr_t)addr;
+    sg_list.length = length;
+
+    ret = UCS_PROFILE_CALL(ibv_advise_mr, md->pd,
+                           IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
+                           IBV_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
+    if (ret) {
+        ucs_error("ibv_advise_mr(addr=%p length=%zu) returned %d: %m", addr,
+                  length, ret);
+        return UCS_ERR_IO_ERROR;
+    }
+#endif
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_ib_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
                         const uct_ib_mem_reg_internal_params_t *params,
@@ -669,7 +698,7 @@ uct_ib_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
               params->dmabuf_offset);
 
     if (md->config.odp.prefetch) {
-        md->ops->mem_prefetch(md, memh, address, length);
+        uct_ib_mem_prefetch(md, memh, address, length);
     }
 
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
@@ -712,7 +741,7 @@ uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_ib_mem_reg_internal(uct_md, address, length, &reg_params, 
+    status = uct_ib_mem_reg_internal(uct_md, address, length, &reg_params,
                                      memh);
     if (status != UCS_OK) {
         goto err_memh_free;
@@ -846,7 +875,7 @@ uct_ib_mem_advise(uct_md_h uct_md, uct_mem_h memh, void *addr,
 
     ucs_debug("memh %p advice %d", memh, advice);
     if ((advice == UCT_MADV_WILLNEED) && !md->config.odp.prefetch) {
-        return md->ops->mem_prefetch(md, memh, addr, length);
+        return uct_ib_mem_prefetch(md, memh, addr, length);
     }
 
     return UCS_OK;
@@ -1676,7 +1705,6 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)ucs_empty_function_return_success,
     .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
     .dereg_multithreaded = (uct_ib_md_dereg_multithreaded_func_t)ucs_empty_function_return_unsupported,
-    .mem_prefetch        = (uct_ib_md_mem_prefetch_func_t)ucs_empty_function_return_success,
     .get_atomic_mr_id    = (uct_ib_md_get_atomic_mr_id_func_t)ucs_empty_function_return_unsupported,
 };
 
