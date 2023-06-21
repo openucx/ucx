@@ -1208,10 +1208,11 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         dev->pci_cswap_arg_sizes = UCT_IB_MLX5DV_GET(atomic_caps, cap, compare_swap_pci_atomic) << 2;
     }
 
-    md->super.ops = &uct_ib_mlx5_devx_md_ops;
-    status        = uct_ib_md_open_common(&md->super, ibv_device, md_config,
-                                          sizeof(uct_ib_mlx5_mem_t),
-                                          sizeof(uct_ib_mlx5_mr_t));
+    md->super.super.ops = &uct_ib_mlx5_devx_md_ops.super;
+
+    status = uct_ib_md_open_common(&md->super, ibv_device, md_config,
+                                   sizeof(uct_ib_mlx5_mem_t),
+                                   sizeof(uct_ib_mlx5_mr_t));
     if (status != UCS_OK) {
         goto err_lru_cleanup;
     }
@@ -1305,10 +1306,10 @@ static void uct_ib_mlx5_devx_cleanup_flush_mr(uct_ib_mlx5_md_t *md)
     }
 }
 
-static void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
+static void uct_ib_mlx5_devx_md_close(uct_md_h tl_md)
 {
-    uct_ib_mlx5_md_t *md    = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
-    struct ibv_context *ctx = ibmd->dev.ibv_context;
+    uct_ib_mlx5_md_t *md    = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    struct ibv_context *ctx = md->super.dev.ibv_context;
 
     uct_ib_mlx5_devx_cleanup_flush_mr(md);
     uct_ib_mlx5_md_buf_free(md, md->zero_buf, &md->zero_mem);
@@ -1316,7 +1317,7 @@ static void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
     ucs_recursive_spinlock_destroy(&md->dbrec_lock);
     uct_ib_md_close_common(&md->super);
     uct_ib_mlx5_devx_mr_lru_cleanup(md);
-    uct_ib_md_free(ibmd);
+    uct_ib_md_free(&md->super);
     uct_ib_md_device_context_close(ctx);
 }
 
@@ -1580,22 +1581,37 @@ out:
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_ib_mlx5_devx_import_exported_key(uct_ib_md_t *ib_md, uint64_t flags,
-                                     const uct_ib_uint128_t *target_vhca_id,
-                                     uint32_t target_mkey,
-                                     uct_ib_mem_t *ib_memh)
+ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
+                                         const void *mkey_buffer,
+                                         uct_md_mem_attach_params_t *params,
+                                         uct_mem_h *memh_p)
 {
-    uct_ib_mlx5_md_t *md    = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
-    uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_alias_obj_in)]   = {0};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_alias_obj_out)] = {0};
-    void *hdr       = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, hdr);
-    void *alias_ctx = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in,
-                                            alias_ctx);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    const uint64_t flags = UCT_MD_MEM_ATTACH_FIELD_VALUE(params, flags,
+                                                         FIELD_FLAGS, 0);
+    const uct_ib_md_packed_mkey_t *packed_mkey = mkey_buffer;
+    uct_ib_mlx5_mem_t *memh;
+    uct_ib_mem_t *ib_memh;
+    void *hdr, *alias_ctx;
+    ucs_status_t status;
     void *access_key;
     void *target_vhca_id_p;
     int ret;
+
+    ib_memh = uct_ib_memh_alloc(&md->super, UCT_IB_MEM_FLAG_NO_RCACHE);
+    if (ib_memh == NULL) {
+        uct_md_log_mem_attach_error(flags,
+                                    "md %p: failed to allocate memory handle",
+                                    md);
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    memh      = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
+    hdr       = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, hdr);
+    alias_ctx = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, alias_ctx);
 
     /* create alias */
     UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr, hdr, opcode,
@@ -1606,10 +1622,11 @@ uct_ib_mlx5_devx_import_exported_key(uct_ib_md_t *ib_md, uint64_t flags,
 
     target_vhca_id_p = UCT_IB_MLX5DV_ADDR_OF(alias_context, alias_ctx,
                                              vhca_id_to_be_accessed);
-    memcpy(target_vhca_id_p, *target_vhca_id, sizeof(*target_vhca_id));
+    memcpy(target_vhca_id_p, packed_mkey->vhca_id,
+           sizeof(packed_mkey->vhca_id));
 
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, object_id_to_be_accessed,
-                      target_mkey >> 8);
+                      packed_mkey->lkey >> 8);
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, metadata_1,
                       uct_ib_mlx5_devx_md_get_pdn(md));
     access_key = UCT_IB_MLX5DV_ADDR_OF(alias_context, alias_ctx, access_key);
@@ -1621,13 +1638,15 @@ uct_ib_mlx5_devx_import_exported_key(uct_ib_md_t *ib_md, uint64_t flags,
                                                  "MKEY_ALIAS",
                                                  uct_md_attach_log_lvl(flags));
     if (memh->cross_mr == NULL) {
-        goto err_out;
+        status = UCS_ERR_IO_ERROR;
+        goto err_memh_free;
     }
 
     ret = UCT_IB_MLX5DV_GET(create_alias_obj_out, out, alias_ctx.status);
     if (ret) {
         uct_md_log_mem_attach_error(flags,
                                     "created MR alias object in a bad state");
+        status = UCS_ERR_IO_ERROR;
         goto err_cross_mr_destroy;
     }
 
@@ -1635,19 +1654,29 @@ uct_ib_mlx5_devx_import_exported_key(uct_ib_md_t *ib_md, uint64_t flags,
                                           hdr.obj_id) << 8) |
                         md->mkey_tag;
     memh->super.rkey = memh->super.lkey;
-
+    *memh_p          = ib_memh;
     return UCS_OK;
 
 err_cross_mr_destroy:
     mlx5dv_devx_obj_destroy(memh->cross_mr);
-    memh->cross_mr = NULL;
-err_out:
-    return UCS_ERR_IO_ERROR;
+err_memh_free:
+    ucs_free(ib_memh);
+err:
+    return status;
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
+    .super = {
+        .close              = uct_ib_mlx5_devx_md_close,
+        .query              = uct_ib_md_query,
+        .mem_reg            = uct_ib_mem_reg,
+        .mem_dereg          = uct_ib_mem_dereg,
+        .mem_attach         = uct_ib_mlx5_devx_mem_attach,
+        .mem_advise         = uct_ib_mem_advise,
+        .mkey_pack          = uct_ib_mkey_pack,
+        .detect_memory_type = ucs_empty_function_return_unsupported,
+    },
     .open                = uct_ib_mlx5_devx_md_open,
-    .cleanup             = uct_ib_mlx5_devx_md_cleanup,
     .reg_key             = uct_ib_mlx5_reg_key,
     .reg_indirect_key    = uct_ib_mlx5_devx_reg_indirect_key,
     .dereg_key           = uct_ib_mlx5_devx_dereg_key,
@@ -1657,7 +1686,6 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .dereg_multithreaded = uct_ib_mlx5_devx_dereg_multithreaded,
     .get_atomic_mr_id    = uct_ib_mlx5_md_get_atomic_mr_id,
     .reg_exported_key    = uct_ib_mlx5_devx_reg_exported_key,
-    .import_exported_key = uct_ib_mlx5_devx_import_exported_key
 };
 
 UCT_IB_MD_DEFINE_ENTRY(devx, uct_ib_mlx5_devx_md_ops);
@@ -1799,7 +1827,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     uct_ib_mlx5dv_check_dc(dev);
 
-    md->super.ops        = &uct_ib_mlx5_md_ops;
+    md->super.super.ops  = &uct_ib_mlx5_md_ops.super;
     md->max_rd_atomic_dc = IBV_DEV_ATTR(dev, max_qp_rd_atom);
     status               = uct_ib_md_open_common(&md->super, ibv_device,
                                                  md_config,
@@ -1830,8 +1858,17 @@ err:
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
+    .super = {
+        .close              = uct_ib_md_close,
+        .query              = uct_ib_md_query,
+        .mem_reg            = uct_ib_mem_reg,
+        .mem_dereg          = uct_ib_mem_dereg,
+        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_advise         = uct_ib_mem_advise,
+        .mkey_pack          = uct_ib_mkey_pack,
+        .detect_memory_type = ucs_empty_function_return_unsupported,
+    },
     .open                = uct_ib_mlx5dv_md_open,
-    .cleanup             = uct_ib_md_cleanup,
     .reg_key             = uct_ib_mlx5_reg_key,
     .reg_indirect_key    = (uct_ib_md_reg_indirect_key_func_t)
             ucs_empty_function_return_unsupported,
@@ -1845,10 +1882,8 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
             ucs_empty_function_return_unsupported,
     .get_atomic_mr_id    = (uct_ib_md_get_atomic_mr_id_func_t)
             ucs_empty_function_return_unsupported,
-    .reg_exported_key    = (uct_ib_md_reg_exported_key_func_t )
+    .reg_exported_key    = (uct_ib_md_reg_exported_key_func_t)
             ucs_empty_function_return_unsupported,
-    .import_exported_key = (uct_ib_md_import_key_func_t )
-            ucs_empty_function_return_unsupported
 };
 
 UCT_IB_MD_DEFINE_ENTRY(dv, uct_ib_mlx5_md_ops);

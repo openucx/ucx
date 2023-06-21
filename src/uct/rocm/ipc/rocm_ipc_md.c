@@ -129,15 +129,14 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
                      const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close                  = (uct_md_close_func_t)ucs_empty_function,
-        .query                  = uct_rocm_ipc_md_query,
-        .mkey_pack              = uct_rocm_ipc_mkey_pack,
-        .mem_reg                = uct_rocm_ipc_mem_reg,
-        .mem_dereg              = uct_rocm_ipc_mem_dereg,
-        .mem_attach             = ucs_empty_function_return_unsupported,
-        .mem_query              = ucs_empty_function_return_unsupported,
-        .detect_memory_type     = ucs_empty_function_return_unsupported,
-        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+        .close              = (uct_md_close_func_t)ucs_empty_function,
+        .query              = uct_rocm_ipc_md_query,
+        .mkey_pack          = uct_rocm_ipc_mkey_pack,
+        .mem_reg            = uct_rocm_ipc_mem_reg,
+        .mem_dereg          = uct_rocm_ipc_mem_dereg,
+        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_query          = ucs_empty_function_return_unsupported,
+        .detect_memory_type = ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {
         .ops       = &md_ops,
