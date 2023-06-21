@@ -1174,5 +1174,5 @@ void ucp_rkey_proto_select_dump(ucp_worker_h worker,
 
     ucp_proto_select_dump_short(&rkey_config->put_short, "put_short", strb);
     ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
-                          &rkey_config->proto_select, strb);
+                          &rkey_config->proto_select, 0, strb);
 }
