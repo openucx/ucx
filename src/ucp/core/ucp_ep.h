@@ -262,8 +262,8 @@ struct ucp_ep_config_key {
     /* Additional flags */
     unsigned                 flags;
 
-    /* Indicates wire compatibility version, which is minimum between the local
-     * and remote values */
+    /* Indicates wire compatibility version, which is a minimum between the
+     * local and remote values */
     unsigned                 wire_version;
 };
 

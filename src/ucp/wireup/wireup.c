@@ -187,12 +187,12 @@ ucs_status_t
 ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_tl_bitmap_t *tl_bitmap,
                        const ucp_lane_index_t *lanes2remote,
+                       ucp_object_version_t addr_version,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p)
 {
-    ucp_context_h context = ep->worker->context;
-    unsigned pack_flags   = ucp_worker_default_address_pack_flags(ep->worker) |
-                            UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX;
+    unsigned pack_flags = ucp_worker_default_address_pack_flags(ep->worker) |
+                          UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX;
     ucs_status_t status;
 
     msg_hdr->type      = type;
@@ -209,8 +209,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
 
     /* pack all addresses */
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, pack_flags,
-                              context->config.ext.worker_addr_version,
-                              lanes2remote, address_length_p, address_p);
+                              addr_version, lanes2remote, address_length_p,
+                              address_p);
     if (status != UCS_OK) {
         ucs_error("failed to pack address: %s", ucs_status_string(status));
     }
@@ -220,7 +220,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
 
 static ucs_status_t
 ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
-                    const ucp_lane_index_t *lanes2remote)
+                    const ucp_lane_index_t *lanes2remote,
+                    ucp_object_version_t addr_version)
 {
     ucp_request_t *req;
     ucs_status_t status;
@@ -250,8 +251,8 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
 
     status = ucp_wireup_msg_prepare(ep, type, tl_bitmap, lanes2remote,
-                                    &req->send.wireup, &req->send.buffer,
-                                    &req->send.length);
+                                    addr_version, &req->send.wireup,
+                                    &req->send.buffer, &req->send.length);
     if (status != UCS_OK) {
         ucp_request_mem_free(req);
         goto err;
@@ -589,7 +590,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
         goto err_ep_set_failed;
     }
 
-    ucp_wireup_send_request(ep);
+    ucp_wireup_send_request(ep, remote_address->addr_version);
     return;
 
 err_ep_set_failed:
@@ -720,7 +721,8 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
     if (send_reply) {
         ucs_trace("ep %p: sending wireup reply", ep);
-        ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, &tl_bitmap, lanes2remote);
+        ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, &tl_bitmap, lanes2remote,
+                            remote_address->addr_version);
     }
 
     return;
@@ -737,8 +739,10 @@ static unsigned ucp_wireup_send_msg_ack(void *arg)
     /* Send ACK without any address, we've already sent it as part of the request */
     ucs_trace("ep %p: sending wireup ack", ep);
 
-    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, &ucp_tl_bitmap_min,
-                                 NULL);
+    status = ucp_wireup_msg_send(
+                 ep, UCP_WIREUP_MSG_ACK, &ucp_tl_bitmap_min, NULL,
+                 ep->worker->context->config.ext.worker_addr_version);
+
     return (status == UCS_OK);
 }
 
@@ -847,7 +851,8 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
     status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED,
-                                 &ucp_tl_bitmap_min, NULL);
+                                 &ucp_tl_bitmap_min, NULL,
+                                 worker->context->config.ext.worker_addr_version);
     if (status != UCS_OK) {
         goto out_cleanup_lanes;
     }
@@ -1645,7 +1650,8 @@ out:
     return status;
 }
 
-ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
+ucs_status_t ucp_wireup_send_request(ucp_ep_h ep,
+                                     ucp_object_version_t addr_version)
 {
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
@@ -1661,7 +1667,8 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     }
 
     ucs_debug("ep %p: send wireup request (flags=0x%x)", ep, ep->flags);
-    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REQUEST, &tl_bitmap, NULL);
+    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REQUEST, &tl_bitmap, NULL,
+                                 addr_version);
 
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
 
@@ -1676,8 +1683,9 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
     ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED));
 
     ucs_debug("ep %p: send wireup pre-request (flags=0x%x)", ep, ep->flags);
-    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_PRE_REQUEST,
-                                 &ucp_tl_bitmap_max, NULL);
+    status = ucp_wireup_msg_send(
+                 ep, UCP_WIREUP_MSG_PRE_REQUEST, &ucp_tl_bitmap_max, NULL,
+                 ep->worker->context->config.ext.worker_addr_version);
 
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED, 0);
 
@@ -1686,7 +1694,8 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 
 ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep_h uct_ep     = ucp_ep_get_lane(ep, lane);
+    ucp_worker_h worker = ep->worker;
     ucs_queue_head_t tmp_q;
     ucs_status_t status;
     ucp_request_t *req;
@@ -1694,7 +1703,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 
     ucs_trace("ep %p: connect lane %d to remote peer", ep, lane);
 
-    UCS_ASYNC_BLOCK(&ep->worker->async);
+    UCS_ASYNC_BLOCK(&worker->async);
 
     /* Checking again, with lock held, if already connected, connection is in
      * progress, or the endpoint is in failed state.
@@ -1728,7 +1737,8 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
                               ucp_ep_get_rsc_index(ep, lane));
 
     if (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
-        status = ucp_wireup_send_request(ep);
+        status = ucp_wireup_send_request(
+                  ep, worker->context->config.ext.worker_addr_version);
         if (status != UCS_OK) {
             goto err_destroy_wireup_ep;
         }
@@ -1753,7 +1763,7 @@ err_destroy_wireup_ep:
 err:
     ucp_ep_set_lane(ep, lane, uct_ep); /* restore am lane */
 out_unlock:
-    UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
 }
 

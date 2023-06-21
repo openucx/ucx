@@ -98,15 +98,17 @@ typedef struct {
     /**
      * Calculates score of a potential transport.
      *
-     * @param [in]  wiface       UCP worker iface.
-     * @param [in]  md_attr      Local MD attributes.
-     * @param [in]  remote_addr  Remote address info and attributes.
-     * @param [in]  arg          Custom argument.
+     * @param [in]  wiface        UCP worker iface.
+     * @param [in]  md_attr       Local MD attributes.
+     * @param [in]  unpacked_addr The whole remote address unpacked.
+     * @param [in]  remote_addr   Remote transport address info and attributes.
+     * @param [in]  arg           Custom argument.
      *
      * @return Transport score, the higher the better.
      */
     double                      (*calc_score)(const ucp_worker_iface_t *wiface,
                                               const uct_md_attr_v2_t *md_attr,
+                                              const ucp_unpacked_address_t *unpacked_addr,
                                               const ucp_address_entry_t *remote_addr,
                                               void *arg);
 
@@ -147,7 +149,8 @@ typedef struct {
 } ucp_wireup_select_info_t;
 
 
-ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
+ucs_status_t
+ucp_wireup_send_request(ucp_ep_h ep, ucp_object_version_t addr_version);
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
 
@@ -161,6 +164,7 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
 
 double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  const uct_md_attr_v2_t *md_attr,
+                                 const ucp_unpacked_address_t *unpacked_address,
                                  const ucp_address_entry_t *remote_addr,
                                  void *arg);
 
@@ -174,6 +178,7 @@ ucs_status_t
 ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_tl_bitmap_t *tl_bitmap,
                        const ucp_lane_index_t *lanes2remote,
+                       ucp_object_version_t addr_version,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p);
 

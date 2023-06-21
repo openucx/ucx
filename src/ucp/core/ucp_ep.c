@@ -1127,7 +1127,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     /* if needed, send initial wireup message */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
         ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
-        status = ucp_wireup_send_request(ep);
+        status = ucp_wireup_send_request(ep, remote_address.addr_version);
         if (status != UCS_OK) {
             goto out_free_address;
         }
@@ -3452,10 +3452,10 @@ ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
     UCS_BITMAP_SET(tl_bitmap, rsc_idx);
 
-    status = ucp_wireup_msg_prepare(ucp_ep, UCP_WIREUP_MSG_EP_CHECK,
-                                    &tl_bitmap, NULL, &wireup_msg,
-                                    &wireup_msg_iov[1].iov_base,
-                                    &wireup_msg_iov[1].iov_len);
+    status = ucp_wireup_msg_prepare(
+           ucp_ep, UCP_WIREUP_MSG_EP_CHECK, &tl_bitmap, NULL,
+           ucp_ep->worker->context->config.ext.worker_addr_version, &wireup_msg,
+           &wireup_msg_iov[1].iov_base, &wireup_msg_iov[1].iov_len);
     if (status != UCS_OK) {
         return status;
     }
