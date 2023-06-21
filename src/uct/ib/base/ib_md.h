@@ -189,7 +189,8 @@ typedef struct uct_ib_md_config {
 
     UCS_CONFIG_ARRAY_FIELD(ucs_config_bw_spec_t, device) pci_bw; /**< List of PCI BW for devices */
 
-    unsigned                 devx;         /**< DEVX support */
+    int                      mlx5dv; /**< mlx5 support */
+    int                      devx; /**< DEVX support */
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
@@ -465,14 +466,10 @@ uct_ib_memh_init_keys(uct_ib_mem_t *memh, uint32_t lkey, uint32_t rkey)
     memh->rkey = rkey;
 }
 
-static inline uct_ib_mr_type_t
-uct_ib_memh_get_atomic_base_mr_type(uct_ib_mem_t *memh)
+static UCS_F_ALWAYS_INLINE uct_ib_mr_type_t
+uct_ib_md_get_atomic_mr_type(uct_ib_md_t *md)
 {
-    if (memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING) {
-        return UCT_IB_MR_STRICT_ORDER;
-    } else {
-        return UCT_IB_MR_DEFAULT;
-    }
+    return md->relaxed_order ? UCT_IB_MR_STRICT_ORDER : UCT_IB_MR_DEFAULT;
 }
 
 static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
@@ -596,6 +593,9 @@ void uct_ib_md_close(uct_md_h tl_md);
 ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access, int dmabuf_fd, size_t dmabuf_offset,
                            struct ibv_mr **mr_p, int silent);
+ucs_status_t uct_ib_reg_mr_params(uct_ib_md_t *md, void *address, size_t length,
+                                  const uct_md_mem_reg_params_t *params,
+                                  uint64_t access_flags, struct ibv_mr **mr_p);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
 
@@ -617,5 +617,22 @@ ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address, size_t length,
                                  size_t dmabuf_offset, uct_ib_mem_t *memh,
                                  uct_ib_mr_t *mr, uct_ib_mr_type_t mr_type,
                                  int silent);
+
+uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh);
+
+ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
+                                  const uct_md_mem_reg_params_t *params,
+                                  uct_mem_h *memh_p);
+
+ucs_status_t uct_ib_verbs_mem_dereg(uct_md_h uct_md,
+                                    const uct_md_mem_dereg_params_t *params);
+
+ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                                    const uct_md_mkey_pack_params_t *params,
+                                    void *mkey_buffer);
+
+ucs_status_t uct_ib_memh_new(uct_ib_md_t *md, size_t length, unsigned mem_flags,
+                             size_t memh_base_size, size_t mr_size,
+                             uct_ib_mem_t **memh_p);
 
 #endif
