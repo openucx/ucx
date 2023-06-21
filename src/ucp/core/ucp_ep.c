@@ -3141,6 +3141,11 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
         }
         fprintf(stream, "#                 %s\n", ucs_string_buffer_cstr(&strb));
     }
+
+    if (worker->context->config.ext.proto_enable) {
+        return;
+    }
+
     fprintf(stream, "#\n");
 
     if (context->config.features & UCP_FEATURE_TAG) {
@@ -3246,7 +3251,7 @@ static void ucp_ep_print_info_internal(ucp_ep_h ep, const char *name,
     if (worker->context->config.ext.proto_enable) {
         ucs_string_buffer_init(&strb);
         ucp_proto_select_info(worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
-                              &config->proto_select, &strb);
+                              &config->proto_select, 1, &strb);
         ucs_string_buffer_dump(&strb, "# ", stream);
         ucs_string_buffer_cleanup(&strb);
     }
