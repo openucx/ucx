@@ -104,22 +104,26 @@ static ucs_status_t
 uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        perf_attr->bandwidth.dedicated = 0;
         if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION) {
             switch (perf_attr->operation) {
             case UCT_EP_OP_GET_SHORT:
             case UCT_EP_OP_GET_ZCOPY:
-                perf_attr->bandwidth.shared = 250.0 * UCS_MBYTE;
+                perf_attr->bandwidth.dedicated = 250.0 * UCS_MBYTE;
+                perf_attr->bandwidth.shared    = 0;
                 break;
             case UCT_EP_OP_PUT_SHORT:
-                perf_attr->bandwidth.shared = 10200.0 * UCS_MBYTE;
+                perf_attr->bandwidth.dedicated = 0;
+                perf_attr->bandwidth.shared    = 10200.0 * UCS_MBYTE;
                 break;
             default:
-                perf_attr->bandwidth.shared =
+                perf_attr->bandwidth.dedicated = 0;
+                perf_attr->bandwidth.shared    =
                         UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
             }
         } else {
-            perf_attr->bandwidth.shared = UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
+            perf_attr->bandwidth.dedicated = 0;
+            perf_attr->bandwidth.shared    =
+                    UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
         }
     }
 
