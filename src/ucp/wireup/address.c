@@ -1065,8 +1065,7 @@ static void ucp_address_pack_header_flags(uint8_t *address_header,
 }
 
 static void *ucp_address_pack_header(uint8_t *ptr,
-                                     ucp_object_version_t addr_version,
-                                     ucp_object_version_t wire_version)
+                                     ucp_object_version_t addr_version)
 {
     uint8_t *addr_header = ptr;
 
@@ -1076,10 +1075,9 @@ static void *ucp_address_pack_header(uint8_t *ptr,
         return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
     }
 
-    ucs_assertv_always(wire_version < UCS_BIT(4), "wire_version %u",
-                       wire_version);
+    UCS_STATIC_ASSERT(UCP_RELEASE_CURRENT < UCS_BIT(4));
 
-    *addr_header |= (wire_version << UCP_ADDRESS_HEADER_SHIFT);
+    *addr_header |= (UCP_RELEASE_CURRENT << UCP_ADDRESS_HEADER_SHIFT);
 
     return UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
 }
@@ -1087,7 +1085,7 @@ static void *ucp_address_pack_header(uint8_t *ptr,
 static void *ucp_address_unpack_header(const void *ptr,
                                        ucp_object_version_t *addr_version,
                                        uint8_t *addr_flags,
-                                       ucp_object_version_t *wire_version)
+                                       unsigned *wire_version)
 {
     const uint8_t *addr_header = ptr;
 
@@ -1095,7 +1093,7 @@ static void *ucp_address_unpack_header(const void *ptr,
 
     if (*addr_version == UCP_OBJECT_VERSION_V1) {
         *addr_flags   = *addr_header >> UCP_ADDRESS_HEADER_SHIFT;
-        *wire_version = UCP_OBJECT_VERSION_V1;
+        *wire_version = UCP_RELEASE_LEGACY; /* others supported with addr v2 only */
         return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
     }
 
@@ -1111,7 +1109,8 @@ static void *ucp_address_unpack_header(const void *ptr,
 uint64_t ucp_address_get_uuid(const void *address)
 {
     uint64_t *uuid;
-    ucp_object_version_t address_version, wire_version;
+    ucp_object_version_t address_version;
+    unsigned wire_version;
     uint8_t flags;
 
     uuid = ucp_address_unpack_header(address, &address_version, &flags,
@@ -1124,7 +1123,8 @@ uint64_t ucp_address_get_uuid(const void *address)
 uint64_t ucp_address_get_client_id(const void *address)
 {
     const void *offset;
-    ucp_object_version_t address_version, wire_version;
+    ucp_object_version_t address_version;
+    unsigned wire_version;
     uint8_t flags;
 
     offset = ucp_address_unpack_header(address, &address_version, &flags,
@@ -1143,7 +1143,8 @@ uint64_t ucp_address_get_client_id(const void *address)
 uint8_t ucp_address_is_am_only(const void *address)
 {
     uint8_t addr_flags;
-    ucp_object_version_t addr_version, wire_version;
+    ucp_object_version_t addr_version;
+    unsigned wire_version;
 
     ucp_address_unpack_header(address, &addr_version, &addr_flags,
                               &wire_version);
@@ -1153,7 +1154,6 @@ uint8_t ucp_address_is_am_only(const void *address)
 static ucs_status_t
 ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     unsigned pack_flags, ucp_object_version_t addr_version,
-                    ucp_object_version_t wire_version,
                     const ucp_lane_index_t *lanes2remote,
                     const ucp_address_packed_device_t *devices,
                     ucp_rsc_index_t num_devices)
@@ -1185,8 +1185,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
     addr_index        = 0;
     addr_flags        = 0;
     address_header_p  = ptr;
-    ptr               = ucp_address_pack_header(address_header_p, addr_version,
-                                                wire_version);
+    ptr               = ucp_address_pack_header(address_header_p, addr_version);
 
     if (pack_flags & UCP_ADDRESS_PACK_FLAG_AM_ONLY) {
         addr_flags |= UCP_ADDRESS_HEADER_FLAG_AM_ONLY;
@@ -1521,8 +1520,8 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
 
     /* Pack the address */
     status = ucp_address_do_pack(worker, ep, buffer, size, pack_flags,
-                                 addr_version, UCP_OBJECT_VERSION_V2,
-                                 lanes2remote, devices, num_devices);
+                                 addr_version, lanes2remote, devices,
+                                 num_devices);
     if (status != UCS_OK) {
         ucs_free(buffer);
         goto out_free_devices;

@@ -163,7 +163,7 @@ struct ucp_unpacked_address {
     char                        name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned                    address_count;  /* Length of address list */
     ucp_address_entry_t         *address_list;  /* Pointer to address list */
-    ucp_object_version_t        wire_version;
+    unsigned                    wire_version;
 };
 
 

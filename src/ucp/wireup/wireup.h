@@ -50,6 +50,17 @@ enum {
 };
 
 
+/* Defines wire compatibility version. Whenever some change breaking wire
+ * compatibility is introduced, it has to be applied for the relevant versions
+ * only.
+ */
+enum {
+    UCP_RELEASE_LEGACY,
+    UCP_RELEASE_1_16,
+    UCP_RELEASE_CURRENT = UCP_RELEASE_1_16
+};
+
+
 /**
  * Criteria for transport selection.
  */

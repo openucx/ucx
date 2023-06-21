@@ -1436,8 +1436,8 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
     double max_bw              = 0;
     ucp_context_h context      = worker->context;
     const double max_ratio     = 1. / context->config.ext.multi_lane_max_ratio;
-    ucp_object_version_t wire_version;
     const ucp_address_entry_t *address_list;
+    unsigned wire_version;
     ucs_status_t status;
     double lane_bw;
     const ucp_wireup_select_info_t *sinfo;
@@ -1455,7 +1455,7 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
     ucs_array_for_each(sinfo, sinfo_array) {
         lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, address_list);
 
-        if ((wire_version > UCP_OBJECT_VERSION_V1) &&
+        if ((wire_version > UCP_RELEASE_LEGACY) &&
             (lane_bw < (max_bw * max_ratio))) {
             ucs_warn(UCT_TL_RESOURCE_DESC_FMT
                       " : bandwidth %.2f lower than %.2f x %.2f, dropping lane",
@@ -1752,7 +1752,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.local_cmpt_flags = 0;
 
     if (context->config.ext.proto_enable &&
-        select_params->address->wire_version > UCP_OBJECT_VERSION_V1) {
+        select_params->address->wire_version > UCP_RELEASE_LEGACY) {
         bw_info.max_lanes = UCP_PROTO_MAX_LANES;
     } else {
         bw_info.max_lanes = context->config.ext.max_rndv_lanes;

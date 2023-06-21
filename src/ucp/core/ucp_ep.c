@@ -170,7 +170,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->dst_md_cmpts     = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->flags            = 0;
-    key->wire_version     = UCP_OBJECT_VERSION_V1;
+    key->wire_version     = UCP_RELEASE_CURRENT;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -582,7 +582,7 @@ void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
 }
 
 void ucp_ep_config_key_set_wire_version(ucp_ep_config_key_t *key,
-                                        ucp_object_version_t wire_version)
+                                        unsigned wire_version)
 {
     key->wire_version = ucs_min(key->wire_version, wire_version);
 }
