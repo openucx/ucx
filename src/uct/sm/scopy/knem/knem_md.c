@@ -306,9 +306,9 @@ uct_knem_mem_rcache_dereg(uct_md_h uct_md,
 {
     uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
     uct_knem_rcache_region_t *region;
- 
+
     UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(params);
- 
+
     region = uct_knem_rcache_region_from_memh(params->memh);
 
     ucs_rcache_region_put(md->rcache, &region->super);
@@ -316,14 +316,13 @@ uct_knem_mem_rcache_dereg(uct_md_h uct_md,
 }
 
 static uct_md_ops_t uct_knem_md_rcache_ops = {
-    .close                  = uct_knem_md_close,
-    .query                  = uct_knem_md_query,
-    .mkey_pack              = uct_knem_mkey_pack,
-    .mem_reg                = uct_knem_mem_rcache_reg,
-    .mem_dereg              = uct_knem_mem_rcache_dereg,
-    .mem_attach             = ucs_empty_function_return_unsupported,
-    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-    .detect_memory_type     = ucs_empty_function_return_unsupported,
+    .close              = uct_knem_md_close,
+    .query              = uct_knem_md_query,
+    .mkey_pack          = uct_knem_mkey_pack,
+    .mem_reg            = uct_knem_mem_rcache_reg,
+    .mem_dereg          = uct_knem_mem_rcache_dereg,
+    .mem_attach         = ucs_empty_function_return_unsupported,
+    .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
 

@@ -589,7 +589,7 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     rc_addr->super.flags = 0;
     uct_ib_pack_uint24(rc_addr->super.qp_num, ep->qp->qp_num);
 
-    if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
+    if (uct_ib_md_ops(md)->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
         ucs_assertv(uct_ib_md_is_flush_rkey_valid(md->flush_rkey),
                     "invalid flush_rkey %x for device %s", md->flush_rkey,
                     uct_ib_device_name(&md->dev));

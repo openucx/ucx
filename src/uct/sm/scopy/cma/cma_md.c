@@ -184,16 +184,15 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
     const uct_cma_md_config_t *md_config = ucs_derived_of(uct_md_config,
                                                           uct_cma_md_config_t);
     static uct_md_ops_t md_ops = {
-        .close                  = uct_cma_md_close,
-        .query                  = uct_cma_md_query,
-        .mem_alloc              = (uct_md_mem_alloc_func_t)ucs_empty_function_return_success,
-        .mem_free               = (uct_md_mem_free_func_t)ucs_empty_function_return_success,
-        .mkey_pack              = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
-        .mem_reg                = uct_cma_mem_reg,
-        .mem_dereg              = uct_cma_mem_dereg,
-        .mem_attach             = ucs_empty_function_return_unsupported,
-        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-        .detect_memory_type     = ucs_empty_function_return_unsupported,
+        .close              = uct_cma_md_close,
+        .query              = uct_cma_md_query,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_success,
+        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_success,
+        .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
+        .mem_reg            = uct_cma_mem_reg,
+        .mem_dereg          = uct_cma_mem_dereg,
+        .mem_attach         = ucs_empty_function_return_unsupported,
+        .detect_memory_type = ucs_empty_function_return_unsupported,
     };
     uct_cma_md_t *cma_md;
 
