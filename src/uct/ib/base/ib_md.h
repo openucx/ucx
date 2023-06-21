@@ -342,23 +342,6 @@ typedef ucs_status_t (*uct_ib_md_dereg_multithreaded_func_t)(uct_ib_md_t *md,
                                                              uct_ib_mr_type_t mr_type);
 
 /**
- * Memory domain method to prefetch physical memory for virtual memory area.
- *
- * @param [in]  md      Memory domain.
- *
- * @param [in]  memh    Memory region handle.
- *
- * @param [in]  address Memory area start address.
- *
- * @param [in]  length  Memory area length.
- *
- * @return UCS_OK on success or error code in case of failure.
- */
-typedef ucs_status_t (*uct_ib_md_mem_prefetch_func_t)(uct_ib_md_t *md,
-                                                      uct_ib_mem_t *memh,
-                                                      void *addr, size_t length);
-
-/**
  * Memory domain method to get unique atomic mr id.
  *
  * @param [in]  md      Memory domain.
@@ -412,7 +395,6 @@ typedef struct uct_ib_md_ops {
     uct_ib_md_dereg_atomic_key_func_t    dereg_atomic_key;
     uct_ib_md_reg_multithreaded_func_t   reg_multithreaded;
     uct_ib_md_dereg_multithreaded_func_t dereg_multithreaded;
-    uct_ib_md_mem_prefetch_func_t        mem_prefetch;
     uct_ib_md_get_atomic_mr_id_func_t    get_atomic_mr_id;
     uct_ib_md_reg_exported_key_func_t    reg_exported_key;
     uct_ib_md_import_key_func_t          import_exported_key;
