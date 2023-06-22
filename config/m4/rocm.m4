@@ -109,13 +109,38 @@ AS_IF([test "x$with_rocm" != "xno"],
     LDFLAGS="$HIP_LDFLAGS $LDFLAGS"
     LIBS="$HIP_LIBS $LIBS"
 
+    #
+    # hip_runtime.h contains a C++17 features
+    # in some ROCm releases. Only releveant for
+    # compiling gtests with UCX.
+    #
+    AC_MSG_CHECKING([c++17 support])
+    AC_LANG_PUSH([C++])
+    SAVE_CXXFLAGS="$CXXFLAGS"
+    CXX17FLAGS="-std=c++17"
+    CXXFLAGS="$CXXFLAGS $CXX17FLAGS"
+    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
+					int main(int argc, char** argv) {
+						const int x=3;
+						if constexpr (x != 3) return 1;
+						return 0;
+					} ]])],
+                  [AC_MSG_RESULT([yes])
+                   cxx17_happy=yes],
+                  [AC_MSG_RESULT([no])
+                   cxx17_happy=no])
+    CXXFLAGS="$SAVE_CXXFLAGS"
+    AC_LANG_POP
+
     hip_happy=no
     AC_CHECK_LIB([hip_hcc], [hipFree], [AC_MSG_WARN([Please install ROCm-3.7.0 or above])], [hip_happy=yes])
     AS_IF([test "x$hip_happy" = xyes],
           [AC_CHECK_HEADERS([hip_runtime.h], [hip_happy=yes], [hip_happy=no])])
     AS_IF([test "x$hip_happy" = xyes],
           [AC_CHECK_LIB([amdhip64], [hipFree], [hip_happy=yes], [hip_happy=no])])
-    AS_IF([test "x$hip_happy" = xyes], [HIP_CXXFLAGS="--std=gnu++11"], [])
+    AS_IF([test "x$hip_happy" = xyes],
+          [AS_IF([test "x$cxx17_happy" = xyes], [HIP_CXXFLAGS="--std=c++17"], [HIP_CXXFLAGS=--std=gnu++11])],
+          [])
 
     CPPFLAGS="$SAVE_CPPFLAGS"
     LDFLAGS="$SAVE_LDFLAGS"

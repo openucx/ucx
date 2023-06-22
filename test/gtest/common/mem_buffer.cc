@@ -94,7 +94,11 @@ bool mem_buffer::is_rocm_managed_supported()
         return false;
     }
 
-    hipFree(dptr);
+    ret = hipFree(dptr);
+    if (ret != hipSuccess) {
+        return false;
+    }
+
     return attr.memoryType == hipMemoryTypeUnified;
 #else
     return false;
@@ -142,7 +146,7 @@ void mem_buffer::set_device_context()
 
 #if HAVE_ROCM
     if (is_rocm_supported()) {
-        hipSetDevice(0);
+        ROCM_CALL(hipSetDevice(0));
     }
 #endif
 
