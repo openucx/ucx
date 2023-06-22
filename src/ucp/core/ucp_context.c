@@ -223,7 +223,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Communication scheme in RNDV protocol.\n"
    " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
    " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
+   " get_ppln  - use pipelined get_zcopy scheme in RNDV protocol.\n"
+   " put_ppln  - use pipelined put_zcopy scheme in RNDV protocol.\n"
    " rkey_ptr  - use rkey_ptr in RNDV protocol.\n"
+   " am        - use active message scheme in RNDV protocol.\n"
    " auto      - runtime automatically chooses optimal scheme to use.",
    ucs_offsetof(ucp_context_config_t, rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 
