@@ -25,8 +25,8 @@ BEGIN_C_DECLS
  *  - add/remove operations are O(1)
  */
 
-#define UCS_CALLBACKQ_FAST_COUNT   7     /* Max. number of fast-path callbacks */
-#define UCS_CALLBACKQ_ID_NULL      (-1)  /* Invalid callback identifier */
+#define UCS_CALLBACKQ_FAST_COUNT 7    /* Max. number of fast-path callbacks */
+#define UCS_CALLBACKQ_ID_NULL    (-1) /* Invalid callback identifier */
 
 
 /*
@@ -34,6 +34,7 @@ BEGIN_C_DECLS
  */
 typedef struct ucs_callbackq       ucs_callbackq_t;
 typedef struct ucs_callbackq_elem  ucs_callbackq_elem_t;
+typedef struct ucs_callbackq_priv  ucs_callbackq_priv_t;
 typedef void *                     ucs_callbackq_key_t;
 
 
@@ -62,24 +63,11 @@ typedef int (*ucs_callbackq_predicate_t)(const ucs_callbackq_elem_t *elem,
 
 
 /**
- * @ingroup UCS_RESOURCE
- * Callback flags
- */
-enum ucs_callbackq_flags {
-    UCS_CALLBACKQ_FLAG_FAST        = UCS_BIT(0), /**< Fast-path (best effort) */
-    UCS_CALLBACKQ_FLAG_ONESHOT     = UCS_BIT(1)  /**< Call the callback only once
-                                                      (cannot be used with FAST) */
-};
-
-
-/**
  * Callback queue element.
  */
 struct ucs_callbackq_elem {
-    ucs_callback_t                 cb;       /**< Callback function */
-    void                           *arg;     /**< Function argument */
-    unsigned                       flags;    /**< Callback flags */
-    int                            id;       /**< Callback id */
+    ucs_callback_t cb;       /**< Callback function */
+    void           *arg;     /**< Function argument */
 };
 
 
@@ -91,13 +79,13 @@ struct ucs_callbackq {
      * Array of fast-path element, the last is reserved as a sentinel to mark
      * array end.
      */
-    ucs_callbackq_elem_t           fast_elems[UCS_CALLBACKQ_FAST_COUNT + 1];
+    ucs_callbackq_elem_t fast_elems[UCS_CALLBACKQ_FAST_COUNT + 1];
 
     /**
      * Private data, which we don't want to expose in API to avoid pulling
      * more header files
      */
-    char                           priv[112];
+    ucs_callbackq_priv_t *priv;
 };
 
 
@@ -126,12 +114,10 @@ void ucs_callbackq_cleanup(ucs_callbackq_t *cbq);
  * @param  [in] cbq      Callback queue to add the callback to.
  * @param  [in] cb       Callback to add.
  * @param  [in] arg      User-defined argument for the callback.
- * @param  [in] flags    Flags for the callback, from  @ref ucs_callbackq_flags.
  *
  * @return Unique identifier of the callback in the queue.
  */
-int ucs_callbackq_add(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg,
-                      unsigned flags);
+int ucs_callbackq_add(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg);
 
 
 /**
@@ -143,8 +129,10 @@ int ucs_callbackq_add(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg,
  *
  * @param  [in] cbq      Callback queue to remove the callback from.
  * @param  [in] id       Callback identifier to remove.
+ *
+ * @return The user-defined argument provided when the callback was added.
  */
-void ucs_callbackq_remove(ucs_callbackq_t *cbq, int id);
+void *ucs_callbackq_remove(ucs_callbackq_t *cbq, int id);
 
 
 /**
@@ -156,12 +144,10 @@ void ucs_callbackq_remove(ucs_callbackq_t *cbq, int id);
  * @param  [in] cbq      Callback queue to add the callback to.
  * @param  [in] cb       Callback to add.
  * @param  [in] arg      User-defined argument for the callback.
- * @param  [in] flags    Flags for the callback, from  @ref ucs_callbackq_flags.
  *
  * @return Unique identifier of the callback in the queue.
  */
-int ucs_callbackq_add_safe(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg,
-                           unsigned flags);
+int ucs_callbackq_add_safe(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg);
 
 
 /**
@@ -173,24 +159,10 @@ int ucs_callbackq_add_safe(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg,
  *
  * @param  [in] cbq      Callback queue to remove the callback from.
  * @param  [in] id       Callback identifier to remove.
- */
-void ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, int id);
-
-
-/**
- * Remove all callbacks from the queue for which the given predicate returns
- * "true" (nonzero) value.
- * This is *not* safe to call while another thread might be dispatching callbacks.
- * However, it can be used from the dispatch context (e.g a callback may use this
- * function to remove itself or another callback). In this case, the callback may
- * still be dispatched once after this function returned.
  *
- * @param  [in] cbq       Callback queue.
- * @param  [in] pred      Predicate to check candidates for removal.
- * @param  [in] arg       User-defined argument for the predicate.
+ * @return The user-defined argument provided when the callback was added.
  */
-void ucs_callbackq_remove_if(ucs_callbackq_t *cbq, ucs_callbackq_predicate_t pred,
-                             void *arg);
+void *ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, int id);
 
 
 /**
