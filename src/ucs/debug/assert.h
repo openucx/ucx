@@ -62,8 +62,8 @@ BEGIN_C_DECLS
     ucs_fatal_error_format(__FILE__, __LINE__, __FUNCTION__, \
                            "Bug: " _fmt, ## __VA_ARGS__)
 
-#define ucs_assert(...)       ucs_assert_always(__VA_ARGS__)
-#define ucs_assertv(...)      ucs_assertv_always(__VA_ARGS__)
+#define ucs_assert  ucs_assert_always
+#define ucs_assertv ucs_assertv_always
 
 #else
 
