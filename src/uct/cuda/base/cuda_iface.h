@@ -15,6 +15,8 @@
 #include <nvml.h>
 
 
+const char *uct_cuda_base_cu_get_error_string(CUresult result);
+
 #define UCT_CUDA_DEV_NAME       "cuda"
 
 #define UCT_CUDAR_CALL(_log_level, _func, ...) \
@@ -95,23 +97,21 @@
 #define UCT_NVML_FUNC_LOG_ERR(_func) \
     UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
-
-#define UCT_CUDADRV_FUNC(_func, _log_level)                     \
-    ({                                                          \
-        ucs_status_t _status = UCS_OK;                          \
-        do {                                                    \
-            CUresult _result = (_func);                         \
-            const char *cu_err_str;                             \
-            if (CUDA_ERROR_NOT_READY == _result) {              \
-                _status = UCS_INPROGRESS;                       \
-            } else if (CUDA_SUCCESS != _result) {               \
-                cuGetErrorString(_result, &cu_err_str);         \
-                ucs_log((_log_level), "%s() failed: %s",        \
-                        UCS_PP_MAKE_STRING(_func), cu_err_str); \
-                _status = UCS_ERR_IO_ERROR;                     \
-            }                                                   \
-        } while (0);                                            \
-        _status;                                                \
+#define UCT_CUDADRV_FUNC(_func, _log_level) \
+    ({ \
+        ucs_status_t _status = UCS_OK; \
+        do { \
+            CUresult _result = (_func); \
+            if (CUDA_ERROR_NOT_READY == _result) { \
+                _status = UCS_INPROGRESS; \
+            } else if (CUDA_SUCCESS != _result) { \
+                ucs_log((_log_level), "%s() failed: %s", \
+                        UCS_PP_MAKE_STRING(_func), \
+                        uct_cuda_base_cu_get_error_string(_result)); \
+                _status = UCS_ERR_IO_ERROR; \
+            } \
+        } while (0); \
+        _status; \
     })
 
 
