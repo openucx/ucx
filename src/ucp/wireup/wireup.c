@@ -1478,6 +1478,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                                           worker->context->tl_bitmap,
                                                           UCP_MAX_RESOURCES);
     ucp_rsc_index_t cm_idx               = UCP_NULL_RESOURCE;
+    ucp_tl_bitmap_t current_tl_bitmap;
+    ucp_rsc_index_t rsc_idx;
     ucp_lane_map_t connect_lane_bitmap;
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
@@ -1496,6 +1498,25 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
     ucp_ep_config_key_init_flags(&key, ep_init_flags);
     ucp_wireup_eps_pending_extract(ep, &replay_pending_queue);
+
+    /* Allow to choose only the lanes that were already chosen for case
+     * without CM to prevent reconfiguration error.
+     */
+    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+        !ucp_ep_has_cm_lane(ep)) {
+        UCS_BITMAP_CLEAR(&current_tl_bitmap);
+        for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
+            rsc_idx = ucp_ep_config(ep)->key.lanes[lane].rsc_index;
+            UCS_BITMAP_SET(current_tl_bitmap, rsc_idx);
+            ucs_assertv(
+                UCS_BITMAP_GET(tl_bitmap, rsc_idx),
+                "resource that was chosen previously is unavailable: tl_rscs[%d]="
+                UCT_TL_RESOURCE_DESC_FMT, rsc_idx,
+                UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_idx].tl_rsc)
+            );
+        }
+        UCS_BITMAP_AND_INPLACE(&tl_bitmap, current_tl_bitmap);
+    }
 
     status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
                                      remote_address, addr_indices, &key, 1);
