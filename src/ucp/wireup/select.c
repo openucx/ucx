@@ -1259,6 +1259,28 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     return ucs_min(local_bw, remote_bw) + (eps * (local_bw + remote_bw));
 }
 
+static ucs_linear_func_t
+ucp_wireup_mem_reg_cost(ucp_context_t *context,
+                        const ucp_unpacked_address_t *remote_addr,
+                        const uct_md_attr_v2_t *md_attr)
+{
+    if ((context->rcache != NULL) &&
+        (remote_addr->wire_version > UCP_RELEASE_LEGACY)) {
+        return UCP_RCACHE_LOOKUP_FUNC;
+    } else if (context->rcache != NULL) {
+        /* This is needed to preserve wire-compatibility support with
+         * pre UCX v1.16 versions, where rcache was used by UCT IB MD. The cost
+         * of rcache lookup was set to 180ns there (and reported as
+         * md_attr->reg_cost).
+         * TODO: remove when wire compatibility is not longer supported with
+         * those versions.
+         */
+        return ucs_linear_func_make(180e-9, 0);
+    } else {
+        return md_attr->reg_cost;
+    }
+}
+
 static double
 ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
                              const uct_md_attr_v2_t *md_attr,
@@ -1266,6 +1288,10 @@ ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
                              const ucp_address_entry_t *remote_addr, void *arg)
 {
     ucp_wireup_dev_usage_count *dev_count = arg;
+    ucp_context_t *context                = wiface->worker->context;
+    ucs_linear_func_t mem_reg_cost;
+
+    mem_reg_cost = ucp_wireup_mem_reg_cost(context, unpacked_addr, md_attr);
 
     /* highest bandwidth with lowest overhead - test a message size of 256KB,
      * a size which is likely to be used for high-bw memory access protocol, for
@@ -1277,7 +1303,7 @@ ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
                 ucp_wireup_tl_iface_latency(
                     wiface, unpacked_addr, &remote_addr->iface_attr) +
                 wiface->attr.overhead +
-                ucs_linear_func_apply(md_attr->reg_cost,
+                ucs_linear_func_apply(mem_reg_cost,
                                       UCP_WIREUP_RMA_BW_TEST_MSG_SIZE));
 }
 

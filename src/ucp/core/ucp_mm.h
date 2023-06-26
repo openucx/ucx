@@ -19,6 +19,9 @@
 #include <inttypes.h>
 
 
+#define UCP_RCACHE_LOOKUP_FUNC ucs_linear_func_make(50.0e-9, 0)
+
+
 /**
  * Memory handle flags.
  */
