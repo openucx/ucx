@@ -1796,8 +1796,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         // smaller than the original value by up to 64 bytes.
         EXPECT_LT(ucp_address_iface_seg_size(attr) - ae->iface_attr.seg_size,
                   UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR);
-        check_fp_values(ae->iface_attr.overhead, attr->overhead,
-                        UCS_NSEC_PER_SEC);
+        check_fp_values(ae->iface_attr.overhead, attr->overhead);
         check_fp_values(ae->iface_attr.lat_ovh,
                         ucp_tl_iface_latency(worker->context, &attr->latency));
         check_fp_values(
