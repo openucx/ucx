@@ -126,7 +126,6 @@ jobs:
           sleep 5
           LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/client_server -c tag -a 127.0.0.1 -p ${port}
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
-          set -Eex
 
           # Test server is master, client is legacy
           LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/client_server -c tag -p ${port} &
@@ -151,7 +150,6 @@ jobs:
           sleep 5
           LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/ucp_hworld -n 127.0.0.1 -p ${port}
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
-          set -Eex
 
           # Test server is master, client is legacy
           LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/ucp_hworld -p ${port} &
