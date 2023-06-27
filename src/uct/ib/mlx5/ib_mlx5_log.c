@@ -21,8 +21,8 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                                  uct_log_data_dump_func_t packet_dump_cb,
                                  char *buffer, size_t max, uct_ib_log_sge_t *log_sge);
 
-static void uct_ib_mlx5_resp_error_dump(uct_ib_iface_t *iface,
-                                        uct_ib_mlx5_err_cqe_t *ecqe, char *buf,
+static void uct_ib_mlx5_resp_error_dump(const uct_ib_mlx5_srq_seg_t *seg,
+                                        unsigned max_strides, char *buffer,
                                         size_t max);
 
 static const char *uct_ib_mlx5_cqe_err_opcode(uct_ib_mlx5_err_cqe_t *ecqe)
@@ -77,6 +77,8 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
                                              uct_ib_mlx5_txwq_t *txwq,
                                              ucs_log_level_t log_level)
 {
+    uct_rc_mlx5_iface_common_t *mlx5_iface =
+            ucs_derived_of(iface, uct_rc_mlx5_iface_common_t);
     ucs_status_t err_status = UCS_ERR_IO_ERROR;
     char err_info[256]      = {};
     char wqe_info[256]      = {};
@@ -84,6 +86,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     uint16_t pi             = ntohs(ecqe->wqe_counter);
     uint32_t qp_num         = ntohl(ecqe->s_wqe_opcode_qpn) &
                               UCS_MASK(UCT_IB_QPN_ORDER);
+    const char *qp_type_str;
     void *wqe;
     struct ibv_ah_attr ah_attr;
     unsigned dest_qpn;
@@ -91,13 +94,13 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
 
     switch (ecqe->syndrome) {
     case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
-        snprintf(err_info, sizeof(err_info), "Local length");
+        snprintf(err_info, sizeof(err_info), "Local length error");
         break;
     case MLX5_CQE_SYNDROME_LOCAL_QP_OP_ERR:
-        snprintf(err_info, sizeof(err_info), "Local QP operation");
+        snprintf(err_info, sizeof(err_info), "Local QP operation error");
         break;
     case MLX5_CQE_SYNDROME_LOCAL_PROT_ERR:
-        snprintf(err_info, sizeof(err_info), "Local protection");
+        snprintf(err_info, sizeof(err_info), "Local protection error");
         break;
     case MLX5_CQE_SYNDROME_WR_FLUSH_ERR:
         snprintf(err_info, sizeof(err_info),
@@ -106,23 +109,23 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
         err_status = UCS_ERR_CANCELED;
         break;
     case MLX5_CQE_SYNDROME_MW_BIND_ERR:
-        snprintf(err_info, sizeof(err_info), "Memory window bind");
+        snprintf(err_info, sizeof(err_info), "Memory window bind error");
         break;
     case MLX5_CQE_SYNDROME_BAD_RESP_ERR:
         snprintf(err_info, sizeof(err_info), "Bad response");
         break;
     case MLX5_CQE_SYNDROME_LOCAL_ACCESS_ERR:
-        snprintf(err_info, sizeof(err_info), "Local access");
+        snprintf(err_info, sizeof(err_info), "Local access error");
         break;
     case MLX5_CQE_SYNDROME_REMOTE_INVAL_REQ_ERR:
         snprintf(err_info, sizeof(err_info), "Invalid request");
         break;
     case MLX5_CQE_SYNDROME_REMOTE_ACCESS_ERR:
-        snprintf(err_info, sizeof(err_info), "Remote access");
+        snprintf(err_info, sizeof(err_info), "Remote access error");
         err_status = UCS_ERR_CONNECTION_RESET;
         break;
     case MLX5_CQE_SYNDROME_REMOTE_OP_ERR:
-        snprintf(err_info, sizeof(err_info), "Remote OP");
+        snprintf(err_info, sizeof(err_info), "Remote operation error");
         err_status = UCS_ERR_CONNECTION_RESET;
         break;
     case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
@@ -161,11 +164,16 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
                                              peer_info, sizeof(peer_info));
             }
         }
+        qp_type_str = uct_ib_qp_type_str(iface->config.qp_type);
     } else if ((ecqe->op_own >> 4) == MLX5_CQE_RESP_ERR) {
-        uct_ib_mlx5_resp_error_dump(iface, ecqe, err_info, sizeof(err_info));
+        wqe = uct_ib_mlx5_srq_get_wqe(&mlx5_iface->rx.srq, pi);
+        uct_ib_mlx5_resp_error_dump(wqe, mlx5_iface->tm.mp.num_strides,
+                                    wqe_info, sizeof(wqe_info));
+        qp_type_str = "SRQ";
     } else {
         snprintf(wqe_info, sizeof(wqe_info) - 1, "opcode %s",
                  uct_ib_mlx5_cqe_err_opcode(ecqe));
+        qp_type_str = uct_ib_qp_type_str(iface->config.qp_type);
     }
 
     ucs_log(log_level,
@@ -173,8 +181,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
             "%s QP 0x%x wqe[%d]: %s %s",
             err_info, UCT_IB_IFACE_ARG(iface), ecqe->syndrome,
             ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4, ecqe->hw_err_synd,
-            uct_ib_qp_type_str(iface->config.qp_type), qp_num, pi, wqe_info,
-            peer_info);
+            qp_type_str, qp_num, pi, wqe_info, peer_info);
 
 out:
     return err_status;
@@ -416,41 +423,31 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
     }
 }
 
-static void uct_ib_mlx5_resp_error_dump(uct_ib_iface_t *iface,
-                                        uct_ib_mlx5_err_cqe_t *ecqe,
-                                        char *buffer, size_t max)
+static void uct_ib_mlx5_resp_error_dump(const uct_ib_mlx5_srq_seg_t *seg,
+                                        unsigned max_strides, char *buffer,
+                                        size_t max)
 {
-    uct_rc_mlx5_iface_common_t *mlx5_iface = ucs_derived_of(iface,
-                                                            uct_rc_mlx5_iface_common_t);
-    char *ends                             = buffer + max;
-    uct_ib_mlx5_srq_t *srq                 = &mlx5_iface->rx.srq;
-    uct_ib_mlx5_srq_seg_t *seg             = uct_ib_mlx5_srq_get_wqe(srq,
-                                                                     ecqe->wqe_counter);
-    int i;
+    UCS_STRING_BUFFER_FIXED(strb, buffer, max);
+    unsigned i;
 
-    snprintf(buffer, ends - buffer, "strides %d%s next wqe %u desc %p",
-             seg->srq.strides, seg->srq.free ? " F" : "",
-             htons(seg->srq.next_wqe_index), seg->srq.desc);
-    buffer += strlen(buffer);
+    ucs_string_buffer_appendf(&strb, "next_wqe %u desc %p %c",
+                              htons(seg->srq.next_wqe_index), seg->srq.desc,
+                              seg->srq.free ? 'f' : '-');
 
     if (seg->srq.strides > 1) {
-        snprintf(buffer, ends - buffer, " ptr_mask %d", seg->srq.ptr_mask);
-        buffer += strlen(buffer);
+        ucs_string_buffer_appendf(&strb, " strides %u ptr_mask %d",
+                                  seg->srq.strides, seg->srq.ptr_mask);
     }
 
-    for (i = 0; i < mlx5_iface->tm.mp.num_strides; i++) {
-        snprintf(buffer, ends - buffer,
-                 " [seg %d bytes %d lkey 0x%x addr 0x%lx]", i,
-                 htobe32(seg->dptr[i].byte_count), htobe32(seg->dptr[i].lkey),
-                 htobe64(seg->dptr[i].addr));
-        buffer += strlen(buffer);
-
-        if (buffer == ends) {
-            break;
-        }
+    for (i = 0; i < max_strides; i++) {
+        ucs_string_buffer_appendf(&strb,
+                                  " [byte_count %u lkey 0x%x addr 0x%" PRIx64
+                                  "]",
+                                  htobe32(seg->dptr[i].byte_count),
+                                  htobe32(seg->dptr[i].lkey),
+                                  htobe64(seg->dptr[i].addr));
     }
 }
-
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
                           uct_ib_iface_t *iface, void *wqe, void *qstart,
