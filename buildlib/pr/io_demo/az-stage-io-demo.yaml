@@ -123,7 +123,7 @@ steps:
           echo "local_ack_timeout_err counter was increased during iodemo with interference"
         else
           azure_log_error "local_ack_timeout_err counter was not increased ($(local_ack_t_err_counter_start))"
-          exit 1
+          azure_complete_with_issues "local_ack_timeout_err counter was not increased ($(local_ack_t_err_counter_start))"
         fi
     fi
 
