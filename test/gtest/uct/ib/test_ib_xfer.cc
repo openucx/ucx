@@ -10,11 +10,15 @@
 
 class uct_p2p_rma_test_xfer : public uct_p2p_rma_test {};
 
-UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_xfer, fence,
-                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_xfer, fence_relaxed_order,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY),
+                     "PCI_RELAXED_ORDERING=try") {
+    size_t size = ucs_min(ucs_get_page_size(),
+                          sender().iface_attr().cap.put.max_bcopy);
 
-    mapped_buffer sendbuf(64, 0, sender());
-    mapped_buffer recvbuf(64, 0, receiver());
+    mapped_buffer sendbuf(size, 0, sender());
+    mapped_buffer recvbuf(size, 0, receiver(), 0, UCS_MEMORY_TYPE_HOST,
+                          UCT_MD_MEM_ACCESS_RMA);
 
     blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::put_bcopy),
                   sender_ep(), sendbuf, recvbuf, true);

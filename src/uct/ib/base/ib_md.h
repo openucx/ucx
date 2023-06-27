@@ -199,7 +199,7 @@ typedef struct uct_ib_md_config {
 
     unsigned                 devx;         /**< DEVX support */
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
-    ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
+    ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
 } uct_ib_md_config_t;
 
@@ -627,6 +627,10 @@ uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
 
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p);
+
+void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
+                                   const uct_ib_md_config_t *md_config,
+                                   int is_supported);
 
 int uct_ib_device_is_accessible(struct ibv_device *device);
 

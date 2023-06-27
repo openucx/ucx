@@ -519,9 +519,7 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_key(uct_ib_md_t *ibmd,
 static int
 uct_ib_mlx5_devx_use_atomic_ksm(uct_ib_mlx5_md_t *md, uct_ib_mlx5_mem_t *memh)
 {
-    /* User needs atomic access and MD supports atomic KSM */
-    return (memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
-           ucs_test_all_flags(md->flags,
+    return ucs_test_all_flags(md->flags,
                               UCT_IB_MLX5_MD_FLAG_KSM |
                               UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS);
 }
@@ -535,9 +533,12 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
     uct_ib_mlx5_mr_t *mr     = &memh->mrs[mr_type];
     ucs_status_t status;
     uint8_t mr_id;
+    int is_atomic;
 
     if (!uct_ib_mlx5_devx_use_atomic_ksm(md, memh)) {
-        return uct_ib_mlx5_reg_atomic_key(ibmd, ib_memh);
+        /* We cannot return a direct key, since the requestor may try to use it
+           with non-zero atomic offset */
+        return UCS_ERR_UNSUPPORTED;
     }
 
     status = uct_ib_mlx5_md_get_atomic_mr_id(ibmd, &mr_id);
@@ -545,8 +546,10 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
         return status;
     }
 
+    is_atomic = memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
+
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
-        return uct_ib_mlx5_devx_reg_ksm_data(md, 1, mr->ksm_data,
+        return uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, mr->ksm_data,
                                              mr->ksm_data->length,
                                              uct_ib_md_atomic_offset(mr_id),
                                              &memh->atomic_dvmr,
@@ -554,15 +557,16 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
     }
 
     status = uct_ib_mlx5_devx_reg_ksm_data_contig(
-            md, mr, uct_ib_md_atomic_offset(mr_id), 1, &memh->atomic_dvmr,
-            &memh->super.atomic_rkey);
+            md, mr, uct_ib_md_atomic_offset(mr_id), is_atomic,
+            &memh->atomic_dvmr, &memh->super.atomic_rkey);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucs_debug("KSM registered memory %p..%p offset 0x%x on %s rkey 0x%x",
-              mr->super.ib->addr, UCS_PTR_BYTE_OFFSET(mr->super.ib->addr,
-              mr->super.ib->length), uct_ib_md_atomic_offset(mr_id),
+    ucs_debug("KSM registered memory %p..%p offset 0x%x%s on %s rkey 0x%x",
+              mr->super.ib->addr,
+              UCS_PTR_BYTE_OFFSET(mr->super.ib->addr, mr->super.ib->length),
+              uct_ib_md_atomic_offset(mr_id), is_atomic ? " atomic" : "",
               uct_ib_device_name(&md->super.dev), memh->super.atomic_rkey);
     return status;
 }
@@ -1001,6 +1005,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     int ret;
     ucs_log_level_t log_level;
     ucs_mpool_params_t mp_params;
+    int ksm_atomic;
 
     if (!mlx5dv_is_supported(ibv_device)) {
         status = UCS_ERR_UNSUPPORTED;
@@ -1256,14 +1261,20 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     memcpy(md->super.vhca_id, vhca_id, sizeof(vhca_id));
 
+    ksm_atomic = 0;
     if (md->flags & UCT_IB_MLX5_MD_FLAG_KSM) {
         md->super.cap_flags |= UCT_MD_FLAG_INVALIDATE_RMA;
 
         if (md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS) {
             md->super.cap_flags |= UCT_MD_FLAG_INVALIDATE_AMO |
                                    UCT_MD_FLAG_INVALIDATE;
+            ksm_atomic           = 1;
         }
     }
+
+    /* Enable relaxed order only if we would be able to create an indirect key
+       (with offset) for strict order access */
+    uct_ib_md_parse_relaxed_order(&md->super, md_config, ksm_atomic);
 
     uct_ib_mlx5_devx_init_flush_mr(md);
 
@@ -1774,6 +1785,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->super.name = UCT_IB_MD_NAME(mlx5);
 
+    uct_ib_md_parse_relaxed_order(&md->super, md_config, 0);
     uct_ib_md_ece_check(&md->super);
 
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
