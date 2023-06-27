@@ -136,7 +136,7 @@ UCS_TEST_P(test_ib_md, ib_md_umr_ksm) {
     ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
 }
 
-UCS_TEST_P(test_ib_md, relaxed_order, "PCI_RELAXED_ORDERING=on") {
+UCS_TEST_P(test_ib_md, relaxed_order, "PCI_RELAXED_ORDERING=try") {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
 
     ib_md_umr_check(&rkey_buffer[0], false);
