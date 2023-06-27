@@ -29,6 +29,7 @@ jobs:
 
       - bash: |
           source ./buildlib/az-helpers.sh
+          check_gpu ${{ parameters.name }}
           az_init_modules
           ./contrib/test_jenkins.sh
           exit $?
