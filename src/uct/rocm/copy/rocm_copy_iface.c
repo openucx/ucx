@@ -22,7 +22,7 @@ static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
     {"", "", NULL, ucs_offsetof(uct_rocm_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    {"D2H_THRESH", "1k",
+    {"D2H_THRESH", "256",
      "Threshold for switching to hsa memcpy for device-to-host copies",
      ucs_offsetof(uct_rocm_copy_iface_config_t, d2h_thresh),
      UCS_CONFIG_TYPE_MEMUNITS},
@@ -36,6 +36,11 @@ static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
      "Enable asynchronous zcopy operations",
      ucs_offsetof(uct_rocm_copy_iface_config_t, enable_async_zcopy),
      UCS_CONFIG_TYPE_BOOL},
+
+    {"LAT", "2e-7",
+     "Latency",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, latency),
+     UCS_CONFIG_TYPE_TIME},
 
     {NULL}
 };
@@ -105,7 +110,7 @@ static ucs_status_t uct_rocm_copy_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_hdr          = 0;
     iface_attr->cap.am.max_iov          = 1;
 
-    iface_attr->latency                 = ucs_linear_func_make(10e-6, 0);
+    iface_attr->latency                 = ucs_linear_func_make(iface->config.latency, 0);
     iface_attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
     iface_attr->bandwidth.shared        = 0;
     iface_attr->overhead                = 0;
@@ -170,6 +175,8 @@ static uct_iface_ops_t uct_rocm_copy_iface_ops = {
 static ucs_status_t
 uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
+    uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_iface,
+                                                  uct_rocm_copy_iface_t);
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.dedicated = 0;
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
@@ -208,7 +215,7 @@ uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
-        perf_attr->latency = ucs_linear_func_make(10e-6, 0);
+        perf_attr->latency = ucs_linear_func_make(iface->config.latency, 0);
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
@@ -248,6 +255,7 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h work
     self->config.d2h_thresh         = config->d2h_thresh;
     self->config.h2d_thresh         = config->h2d_thresh;
     self->config.enable_async_zcopy = config->enable_async_zcopy;
+    self->config.latency            = config->latency;
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_rocm_base_signal_desc_t);
