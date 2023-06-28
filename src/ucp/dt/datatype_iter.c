@@ -55,6 +55,10 @@ ucp_datatype_iter_set_iov_memh(ucp_datatype_iter_t *dt_iter, ucp_mem_h memh)
     size_t iov_index;
     ucs_status_t status;
 
+    if (iov_count == 0) {
+        return UCS_OK;
+    }
+
     status = ucp_datatype_iter_iov_allocate_memh(dt_iter, iov_count);
     if (status != UCS_OK) {
         return status;
@@ -78,7 +82,7 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
     ucs_status_t status;
     size_t iov_index;
 
-    if (md_map == 0) {
+    if ((md_map == 0) || (iov_count == 0)) {
         return UCS_OK;
     }
 
