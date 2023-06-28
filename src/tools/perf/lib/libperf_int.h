@@ -81,10 +81,6 @@ struct ucx_perf_context {
 
     ucs_time_t                   timing_queue[TIMING_QUEUE_SIZE];
     unsigned                     timing_queue_head;
-
-    const ucx_perf_allocator_t   *send_allocator;
-    const ucx_perf_allocator_t   *recv_allocator;
-
     char                         extra_info[EXTRA_INFO_SIZE];
 
     union {
@@ -164,6 +160,11 @@ void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
                                    const ucx_perf_params_t *params);
 ucs_status_t
 ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params);
+
+ucs_status_t uct_perf_test_memcpy(ucx_perf_context_t *perf, void *dst,
+                                  ucs_memory_type_t dst_mem_type,
+                                  const void *src,
+                                  ucs_memory_type_t src_mem_type, size_t size);
 
 /**
  * Get the total length of the message size given by parameters

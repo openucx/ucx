@@ -208,7 +208,34 @@ static void uct_perf_test_free_host(const ucx_perf_context_t *perf,
 
 ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
 {
-    ucx_perf_params_t *params = &perf->params;
+    ucx_perf_params_t *params          = &perf->params;
+    uint64_t alloc_field_mask          = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS |
+                                         UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS |
+                                         UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                                         UCT_MEM_ALLOC_PARAM_FIELD_MDS |
+                                         UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    uct_mem_alloc_params_t send_params = {
+        .field_mask = alloc_field_mask,
+        .address    = NULL,
+        .mem_type   = params->send_mem_type,
+        .mds        = {.mds   = &perf->uct.md,
+                .count = 1},
+        .name       = "uct_perftest_send"
+    };
+
+    uct_mem_alloc_params_t recv_params = {
+        .field_mask = alloc_field_mask,
+        .address    = NULL,
+        .mem_type   = params->recv_mem_type,
+        .mds        = {.mds   = &perf->uct.md,
+                       .count = 1},
+        .name       = "uct_perftest_recv"
+    };
+    uct_alloc_method_t alloc_methods[5] = {UCT_ALLOC_METHOD_MD,
+                                           UCT_ALLOC_METHOD_HEAP,
+                                           UCT_ALLOC_METHOD_MMAP,
+                                           UCT_ALLOC_METHOD_THP,
+                                           UCT_ALLOC_METHOD_HUGE};
     ucs_status_t status;
     unsigned flags;
     size_t buffer_size;
@@ -219,6 +246,8 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
         buffer_size = ucx_perf_get_message_size(params);
     }
 
+    buffer_size *= params->thread_count;
+
     /* TODO use params->alignment  */
 
     flags = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
@@ -226,21 +255,50 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     flags |= UCT_MD_MEM_ACCESS_RMA;
 
     /* Allocate send buffer memory */
-    status = perf->send_allocator->uct_alloc(perf,
-                                             buffer_size * params->thread_count,
-                                             flags, &perf->uct.send_mem);
+    if (perf->uct.send_mem.mem_type == UCS_MEMORY_TYPE_HOST) {
+        status = uct_iface_mem_alloc(perf->uct.iface, buffer_size, flags,
+                                     "uct perftest sender",
+                                     &perf->uct.send_mem);
+    } else {
+        status = uct_mem_alloc(buffer_size, alloc_methods, 5, &send_params,
+                               &perf->uct.send_mem);
+
+        if (perf->uct.send_mem.method == UCT_ALLOC_METHOD_MD &&
+            perf->uct.send_mem.memh == UCT_MEM_HANDLE_NULL) {
+            uct_md_mem_reg(perf->uct.md, perf->uct.send_mem.address,
+                           buffer_size, flags, &perf->uct.send_mem.memh);
+        }
+    }
 
     if (status != UCS_OK) {
+        ucs_error("Failed allocate send buffer(%lu) buffer: %s", buffer_size,
+                  ucs_status_string(status));
         goto err;
     }
 
     perf->send_buffer = perf->uct.send_mem.address;
 
     /* Allocate receive buffer memory */
-    status = perf->recv_allocator->uct_alloc(perf,
-                                             buffer_size * params->thread_count,
-                                             flags, &perf->uct.recv_mem);
+
+    if (perf->uct.recv_mem.mem_type == UCS_MEMORY_TYPE_HOST) {
+        status = uct_iface_mem_alloc(perf->uct.iface, buffer_size, flags,
+                                    "uct perftest sender", &perf->uct.recv_mem);
+    }
+    else {
+        status = uct_mem_alloc(buffer_size, alloc_methods, 5, &recv_params,
+                               &perf->uct.recv_mem);
+
+
+        if (perf->uct.recv_mem.method == UCT_ALLOC_METHOD_MD &&
+            perf->uct.recv_mem.memh == UCT_MEM_HANDLE_NULL) {
+            uct_md_mem_reg(perf->uct.md, perf->uct.recv_mem.address,
+                           buffer_size, flags, &perf->uct.recv_mem.memh);
+        }
+    }
+
     if (status != UCS_OK) {
+        ucs_error("Failed allocate recv buffer(%lu) buffer: %s", buffer_size,
+                  ucs_status_string(status));
         goto err_free_send;
     }
 
@@ -263,18 +321,65 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     return UCS_OK;
 
 err_free_recv:
-    perf->recv_allocator->uct_free(perf, &perf->uct.recv_mem);
+    uct_mem_free(&perf->uct.recv_mem);
 err_free_send:
-    perf->send_allocator->uct_free(perf, &perf->uct.send_mem);
+    uct_mem_free(&perf->uct.send_mem);
 err:
     return status;
 }
 
 void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 {
-    perf->send_allocator->uct_free(perf, &perf->uct.send_mem);
-    perf->recv_allocator->uct_free(perf, &perf->uct.recv_mem);
+    uct_mem_free(&perf->uct.recv_mem);
+    uct_mem_free(&perf->uct.send_mem);
     free(perf->uct.iov);
+}
+
+
+ucs_status_t uct_perf_test_memcpy(ucx_perf_context_t *perf, void *dst,
+                                  ucs_memory_type_t dst_mem_type,
+                                  const void *src,
+                                  ucs_memory_type_t src_mem_type, size_t size)
+{
+    unsigned group_size             = rte_call(perf, group_size);
+    unsigned group_index            = rte_call(perf, group_index);
+    unsigned peer_index             = rte_peer_index(group_size, group_index);
+    uct_rkey_t rkey                 = perf->uct.peers[peer_index].rkey.rkey;
+    uct_ep_h ep                     = perf->uct.peers[peer_index].ep;
+    ucs_status_t status;
+    void *buffer;
+
+    if (src_mem_type == UCS_MEMORY_TYPE_HOST &&
+        dst_mem_type == UCS_MEMORY_TYPE_HOST) {
+        memcpy(dst, src, size);
+        return UCS_OK;
+    }
+
+    /* device to host */
+    if (dst_mem_type == UCS_MEMORY_TYPE_HOST) {
+        return uct_ep_get_short(ep, dst, size, (uint64_t)src, rkey);
+    }
+
+    /* host to device */
+    if (src_mem_type == UCS_MEMORY_TYPE_HOST) {
+        return uct_ep_put_short(ep, src, size, (uint64_t)dst, rkey);
+    }
+
+    /* device to device TODO: Maybe not necessary at all?*/
+    buffer = malloc(size);
+
+    if (buffer == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+    status = uct_ep_get_short(ep, buffer, size, (uint64_t)src, rkey);
+    if (status != UCS_OK) {
+        goto err_free_buffer;
+    }
+    return uct_ep_put_short(ep, buffer, size, (uint64_t)dst, rkey);
+
+err_free_buffer:
+    free(buffer);
+    return status;
 }
 
 void ucx_perf_global_init()
