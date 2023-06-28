@@ -145,7 +145,7 @@ jobs:
           port=$((10000 + 1000 * $(AZP_AGENT_ID)))
 
           # Test server is legacy, client is legacy
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/ucp_hworld -c tag -p ${port} &
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/ucp_hworld -p ${port} &
           server_pid=$!
           sleep 5
           LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/ucp_hworld -n 127.0.0.1 -p ${port}
