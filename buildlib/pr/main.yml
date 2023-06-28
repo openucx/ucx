@@ -262,8 +262,8 @@ stages:
         container: centos7_cuda11
     - template: distro.yml
       parameters:
-        name: BlueField
-        demands: ucx_bf -equals yes
+        name: new
+        demands: ucx_new -equals yes
 
   - stage: Coverity
     dependsOn: [Static_check]
