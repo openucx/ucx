@@ -264,6 +264,10 @@ stages:
       parameters:
         name: new
         demands: ucx_new -equals yes
+    - template: distro.yml
+      parameters:
+        name: bond
+        demands: ucx_iodemo -equals yes
 
   - stage: Coverity
     dependsOn: [Static_check]
