@@ -98,6 +98,7 @@ jobs:
     variables:
         ucx_master: ucx_master_$(Build.BuildId)_${{ parameters.name }}
         ucx_legacy: ucx_$(ucx_tag)_$(Build.BuildId)_${{ parameters.name }}
+        test_dir: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
     steps:
       - checkout: none
         clean: true
@@ -116,22 +117,22 @@ jobs:
           chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_legacy) -R
       - bash: |
           set -Eex
-          export UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
-          client_server_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
+          export UCX_CM_REUSEADDR=y UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
           port=$((10000 + 1000 * $(AZP_AGENT_ID)))
+          exe_cmd="stdbuf -oL $(test_dir)/client_server -c tag -p ${port}"
 
           # Test server is legacy, client is legacy
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/client_server -c tag -p ${port} &
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/client_server -c tag -a 127.0.0.1 -p ${port}
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${exe_cmd} -a 127.0.0.1
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
 
           # Test server is master, client is legacy
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/client_server -c tag -p ${port} &
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${exe_cmd} &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/client_server -c tag -a 127.0.0.1 -p ${port}
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} -a 127.0.0.1
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_master)/lib
@@ -140,22 +141,23 @@ jobs:
         timeoutInMinutes: 2
       - bash: |
           set -Eex
-          export UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
+          export UCX_CM_REUSEADDR=y UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
           client_server_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
           port=$((10000 + 1000 * $(AZP_AGENT_ID)))
+          exe_cmd="stdbuf -oL $(test_dir)/ucp_hworld -p ${port}"
 
           # Test server is legacy, client is legacy
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/ucp_hworld -p ${port} &
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/ucp_hworld -n 127.0.0.1 -p ${port}
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${exe_cmd} -n 127.0.0.1
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
 
           # Test server is master, client is legacy
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${client_server_dir}/ucp_hworld -p ${port} &
+          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${exe_cmd} &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${client_server_dir}/ucp_hworld -n 127.0.0.1 -p ${port}
+          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} -n 127.0.0.1
           if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_master)/lib
