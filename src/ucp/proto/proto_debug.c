@@ -203,7 +203,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
                            const ucp_proto_select_param_t *select_param,
-                           ucp_proto_select_elem_t *select_elem,
+                           ucp_proto_select_elem_t *select_elem, int show_all,
                            ucs_string_buffer_t *strb)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
@@ -219,7 +219,8 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
                                 select_param, ucp_operation_descs, &ep_cfg_strb,
                                 &sel_param_strb);
-    if (!ucp_proto_debug_is_info_enabled(
+    if (!show_all &&
+        !ucp_proto_debug_is_info_enabled(
                 worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
         return;
     }
@@ -286,7 +287,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
 void ucp_proto_select_info(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
-                           const ucp_proto_select_t *proto_select,
+                           const ucp_proto_select_t *proto_select, int show_all,
                            ucs_string_buffer_t *strb)
 {
     ucp_proto_select_elem_t select_elem;
@@ -294,7 +295,8 @@ void ucp_proto_select_info(ucp_worker_h worker,
 
     kh_foreach(&proto_select->hash, key.u64, select_elem,
                ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                                          &key.param, &select_elem, strb);
+                                          &key.param, &select_elem, show_all,
+                                          strb);
                ucs_string_buffer_appendf(strb, "\n"))
 }
 
@@ -1006,7 +1008,7 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
 
     /* Print human-readable protocol selection table to the log */
     ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                               select_param, select_elem, &strb);
+                               select_param, select_elem, 0, &strb);
     ucs_string_buffer_for_each_token(line, &strb, "\n") {
         ucs_log_print_compact(line);
     }
