@@ -301,7 +301,6 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     CUcontext cuda_mem_ctx     = NULL;
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
-    const char *cu_err_str;
     CUdeviceptr base_address;
     size_t alloc_length;
     size_t total_bytes;
@@ -377,8 +376,8 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     cu_err = cuMemGetAddressRange(&base_address, &alloc_length,
                                   (CUdeviceptr)address);
     if (cu_err != CUDA_SUCCESS) {
-        cuGetErrorString(cu_err, &cu_err_str);
-        ucs_error("cuMemGetAddressRange(%p) error: %s", address, cu_err_str);
+        ucs_error("cuMemGetAddressRange(%p) error: %s", address,
+                  uct_cuda_base_cu_get_error_string(cu_err));
         return UCS_ERR_INVALID_ADDR;
     }
 
@@ -408,7 +407,6 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
 {
 #if CUDA_VERSION >= 11070
     PFN_cuMemGetHandleForAddressRange get_handle_func;
-    const char *cu_err_str;
     CUresult cu_err;
     int fd;
 
@@ -443,10 +441,9 @@ static int uct_cuda_copy_md_get_dmabuf_fd(uintptr_t address, size_t length)
         return fd;
     }
 
-    cuGetErrorString(cu_err, &cu_err_str);
     ucs_debug("cuMemGetHandleForAddressRange(address=0x%lx length=%zu "
               "DMA_BUF_FD) failed: %s",
-              address, length, cu_err_str);
+              address, length, uct_cuda_base_cu_get_error_string(cu_err));
 #endif
     return UCT_DMABUF_FD_INVALID;
 }
@@ -465,7 +462,6 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
     unsigned value         = 1;
     uintptr_t base_address, aligned_start, aligned_end;
     ucs_memory_info_t addr_mem_info;
-    const char *cu_err_str;
     ucs_status_t status;
     CUresult cu_err;
 
@@ -489,9 +485,8 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         cu_err = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
                                        (CUdeviceptr)address);
         if (cu_err != CUDA_SUCCESS) {
-            cuGetErrorString(cu_err, &cu_err_str);
             ucs_warn("cuPointerSetAttribute(%p, SYNC_MEMOPS) error: %s",
-                     address, cu_err_str);
+                     address, uct_cuda_base_cu_get_error_string(cu_err));
         }
 
         ucs_memtype_cache_update(addr_mem_info.base_address,
