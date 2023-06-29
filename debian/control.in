@@ -19,6 +19,8 @@ Package: @PACKAGE@
 Section: libs
 Depends: libc6, libgomp1
 Architecture: any
+Conflicts: libucx0 (<< ${binary:Version}), libucx-dev (<< ${binary:Version}), ucx-utils (<< ${binary:Version})
+Replaces:  libucx0 (<< ${binary:Version}), libucx-dev (<< ${binary:Version}), ucx-utils (<< ${binary:Version})
 Description: Unified Communication X
  UCX is a communication library implementing high-performance messaging.
  .
