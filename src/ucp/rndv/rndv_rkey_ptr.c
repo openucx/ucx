@@ -184,8 +184,8 @@ ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
     UCP_WORKER_STAT_RNDV(worker, RKEY_PTR, 1);
     ucs_queue_push(&worker->rkey_ptr_reqs, &req->send.rndv.rkey_ptr.queue_elem);
     uct_worker_progress_register_safe(worker->uct,
-            ucp_proto_rndv_progress_rkey_ptr, worker,
-            UCS_CALLBACKQ_FLAG_FAST, &worker->rkey_ptr_cb_id);
+                                      ucp_proto_rndv_progress_rkey_ptr, worker,
+                                      0, &worker->rkey_ptr_cb_id);
 
     return UCS_OK;
 }

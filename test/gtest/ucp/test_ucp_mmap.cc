@@ -87,6 +87,9 @@ public:
     virtual void init() {
         ucs::skip_on_address_sanitizer();
         if (disable_proto()) {
+            if (RUNNING_ON_VALGRIND) {
+                UCS_TEST_SKIP_R("Skip proto v1 with valgrind");
+            }
             modify_config("PROTO_ENABLE", "n");
         }
 

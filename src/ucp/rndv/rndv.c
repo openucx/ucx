@@ -1514,10 +1514,8 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     UCP_WORKER_STAT_RNDV(ep->worker, RKEY_PTR, 1);
 
     ucs_queue_push(&worker->rkey_ptr_reqs, &rndv_req->send.rkey_ptr.queue_elem);
-    uct_worker_progress_register_safe(worker->uct,
-                                      ucp_rndv_progress_rkey_ptr,
-                                      rreq->recv.worker,
-                                      UCS_CALLBACKQ_FLAG_FAST,
+    uct_worker_progress_register_safe(worker->uct, ucp_rndv_progress_rkey_ptr,
+                                      rreq->recv.worker, 0,
                                       &worker->rkey_ptr_cb_id);
 }
 
@@ -2253,7 +2251,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ep_config = ucp_ep_config(ep);
     put_zcopy = &ep_config->rndv.put_zcopy;
 
-    ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id"
+    ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id "
                   "0x%"PRIx64, rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_id);
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_rtr_recv", 0);
 

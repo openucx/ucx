@@ -140,6 +140,16 @@ function az_module_unload() {
     module unload "${module}" || true
 }
 
+# Ensure that GPU is present
+check_gpu() {
+    name=$1
+    if [ "$name" == "gpu" ]; then
+        if ! nvidia-smi -L |& grep -q GPU; then
+            azure_log_error "No GPU device found on $(hostname -s)"
+            exit 1
+        fi
+    fi
+}
 
 #
 # try load cuda modules if nvidia driver is installed

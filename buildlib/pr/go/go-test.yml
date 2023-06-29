@@ -36,6 +36,7 @@ jobs:
     - bash: |
         set -xeE
         source buildlib/az-helpers.sh
+        check_gpu ${{ parameters.name }}
         az_init_modules
         az_module_load dev/go-latest
         try_load_cuda_env

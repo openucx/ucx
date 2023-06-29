@@ -11,6 +11,21 @@
 #include "proto_rndv.inl"
 
 
+static size_t
+ucp_rndv_am_cfg_thresh(ucp_context_t *context, size_t am_thresh)
+{
+    size_t cfg_thresh = ucp_proto_rndv_cfg_thresh(context,
+                                                  UCS_BIT(UCP_RNDV_MODE_AM));
+
+    if (cfg_thresh == UCS_MEMUNITS_AUTO) {
+        cfg_thresh = am_thresh;
+    } else if (cfg_thresh != UCS_MEMUNITS_INF) {
+        cfg_thresh = ucs_max(cfg_thresh, am_thresh);
+    }
+
+    return cfg_thresh;
+}
+
 static ucs_status_t
 ucp_proto_rndv_am_init_common(ucp_proto_multi_init_params_t *params)
 {
@@ -104,7 +119,8 @@ ucp_proto_rndv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = context->config.ext.bcopy_thresh,
+        .super.cfg_thresh    = ucp_rndv_am_cfg_thresh(context,
+                                                      context->config.ext.bcopy_thresh),
         .super.cfg_priority  = 20,
         .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -180,7 +196,8 @@ ucp_rndv_am_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = context->config.ext.zcopy_thresh,
+        .super.cfg_thresh    = ucp_rndv_am_cfg_thresh(context,
+                                                      context->config.ext.zcopy_thresh),
         .super.cfg_priority  = 30,
         .super.min_iov       = 1,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),

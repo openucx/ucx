@@ -27,6 +27,8 @@ public:
         VARIANT_ERR_HANDLING,
         VARIANT_RNDV_PUT_ZCOPY,
         VARIANT_RNDV_GET_ZCOPY,
+        VARIANT_RNDV_AM_BCOPY,
+        VARIANT_RNDV_AM_ZCOPY,
         VARIANT_SEND_NBR,
         VARIANT_PROTO_V1
     };
@@ -46,10 +48,20 @@ public:
     }
 
     virtual void init() {
+        if (RUNNING_ON_VALGRIND && (get_variant_value() == VARIANT_PROTO_V1)) {
+            UCS_TEST_SKIP_R("Skip proto v1 with valgrind");
+        }
+
         if (get_variant_value() == VARIANT_RNDV_PUT_ZCOPY) {
             modify_config("RNDV_SCHEME", "put_zcopy");
         } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
             modify_config("RNDV_SCHEME", "get_zcopy");
+        } else if (get_variant_value() == VARIANT_RNDV_AM_BCOPY) {
+            modify_config("RNDV_SCHEME", "am");
+            modify_config("ZCOPY_THRESH", "inf");
+        } else if (get_variant_value() == VARIANT_RNDV_AM_ZCOPY) {
+            modify_config("RNDV_SCHEME", "am");
+            modify_config("ZCOPY_THRESH", "0");
         } else if (get_variant_value() == VARIANT_PROTO_V1) {
             modify_config("PROTO_ENABLE", "n");
         }
@@ -79,6 +91,10 @@ public:
                                VARIANT_RNDV_PUT_ZCOPY, "rndv_put_zcopy");
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_RNDV_GET_ZCOPY, "rndv_get_zcopy");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_RNDV_AM_BCOPY, "rndv_am_bcopy");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_RNDV_AM_ZCOPY, "rndv_am_zcopy");
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_SEND_NBR, "send_nbr");
         add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO_V1,

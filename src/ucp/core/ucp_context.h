@@ -543,7 +543,7 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
 static UCS_F_ALWAYS_INLINE
 double ucp_calc_epsilon(double val1, double val2)
 {
-    return (val1 + val2) * (1e-5);
+    return (val1 + val2) * (1e-6);
 }
 
 /**
