@@ -178,7 +178,6 @@ ucs_status_t
 ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_tl_bitmap_t *tl_bitmap,
                        const ucp_lane_index_t *lanes2remote,
-                       ucp_object_version_t addr_version,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p);
 

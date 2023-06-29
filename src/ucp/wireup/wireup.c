@@ -187,7 +187,6 @@ ucs_status_t
 ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_tl_bitmap_t *tl_bitmap,
                        const ucp_lane_index_t *lanes2remote,
-                       ucp_object_version_t addr_version,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p)
 {
@@ -209,8 +208,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
 
     /* pack all addresses */
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, pack_flags,
-                              addr_version, lanes2remote, address_length_p,
-                              address_p);
+                              ep->worker->context->config.ext.worker_addr_version,
+                              lanes2remote, address_length_p, address_p);
     if (status != UCS_OK) {
         ucs_error("failed to pack address: %s", ucs_status_string(status));
     }
@@ -251,8 +250,8 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
 
     status = ucp_wireup_msg_prepare(ep, type, tl_bitmap, lanes2remote,
-                                    addr_version, &req->send.wireup,
-                                    &req->send.buffer, &req->send.length);
+                                    &req->send.wireup, &req->send.buffer,
+                                    &req->send.length);
     if (status != UCS_OK) {
         ucp_request_mem_free(req);
         goto err;

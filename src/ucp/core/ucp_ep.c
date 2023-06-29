@@ -3454,8 +3454,7 @@ ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
     status = ucp_wireup_msg_prepare(
            ucp_ep, UCP_WIREUP_MSG_EP_CHECK, &tl_bitmap, NULL,
-           ucp_ep->worker->context->config.ext.worker_addr_version, &wireup_msg,
-           &wireup_msg_iov[1].iov_base, &wireup_msg_iov[1].iov_len);
+           &wireup_msg, &wireup_msg_iov[1].iov_base, &wireup_msg_iov[1].iov_len);
     if (status != UCS_OK) {
         return status;
     }
