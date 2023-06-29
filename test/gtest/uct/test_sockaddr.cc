@@ -620,7 +620,7 @@ protected:
 
         while (((*server_cnt < val) || (*client_cnt < val)) &&
                (ucs_get_time() < deadline)) {
-            progress();
+            progress_mt();
         }
     }
 
@@ -1348,7 +1348,7 @@ UCS_TEST_P(test_uct_sockaddr_stress, many_clients_to_one_server)
                                 ucs::test_time_multiplier();
 
     while ((m_ep_init_disconnect_cnt != 0) && (ucs_get_time() < deadline)) {
-        progress();
+        progress_mt();
     }
     EXPECT_EQ(0, m_ep_init_disconnect_cnt);
 
