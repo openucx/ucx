@@ -331,7 +331,7 @@ protected:
                               ucs::test_time_multiplier();
         while ((ucs_get_time() < deadline) && (!ucs_test_all_flags(*flag, mask))) {
             /* Don't do short_progress_loop() to avoid extra timings */
-            progress();
+            progress_mt();
         }
     }
 
@@ -393,6 +393,7 @@ protected:
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
+    unsigned progress_mt() const;
     void flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS,
                                      entity *e = NULL) const;
