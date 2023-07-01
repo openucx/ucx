@@ -90,7 +90,6 @@ static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
 static ucs_spinlock_t ucs_log_global_filter_lock;
 static khash_t(ucs_log_filter) ucs_log_global_filter;
 
-
 static inline int ucs_log_get_pid()
 {
     if (ucs_unlikely(ucs_log_pid == 0)) {
@@ -284,6 +283,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     char match;
     int khret;
     char *buf;
+    const char *filename;
 
     if (!ucs_log_component_is_enabled(level, comp_conf) &&
         (level != UCS_LOG_LEVEL_PRINT)) {
@@ -296,7 +296,14 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
         /* Add source file name to the hash */
         match  = fnmatch(ucs_global_opts.log_component.file_filter, file, 0) !=
                  FNM_NOMATCH;
-        khiter = kh_put(ucs_log_filter, &ucs_log_global_filter, file, &khret);
+
+        filename = ucs_strdup(file, "log filter filename");
+        if (filename == NULL) {
+            ucs_fatal("cannot allocate log filtering entry for '%s'", file);
+        }
+
+        khiter = kh_put(ucs_log_filter, &ucs_log_global_filter, filename,
+                        &khret);
         ucs_assert((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
                    (khret == UCS_KH_PUT_BUCKET_CLEAR));
         kh_val(&ucs_log_global_filter, khiter) = match;
@@ -544,6 +551,8 @@ void ucs_log_init()
 
 void ucs_log_cleanup()
 {
+    const char *filename;
+
     ucs_assert(ucs_log_initialized);
 
     ucs_log_flush();
@@ -552,7 +561,13 @@ void ucs_log_cleanup()
     }
 
     ucs_spinlock_destroy(&ucs_log_global_filter_lock);
+
+    kh_foreach_key(&ucs_log_global_filter, filename,
+                   { ucs_free((void*)filename); })
+        ; /* code format script wants it there */
+
     kh_destroy_inplace(ucs_log_filter, &ucs_log_global_filter);
+
     ucs_free(ucs_log_file_base_name);
     ucs_log_file_base_name = NULL;
     ucs_log_file           = NULL;
