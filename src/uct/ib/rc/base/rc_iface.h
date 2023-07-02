@@ -585,6 +585,15 @@ uct_rc_iface_fence_relaxed_order(uct_iface_h tl_iface)
     return uct_rc_iface_fence(tl_iface, 0);
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_rc_iface_flush_rkey_enabled(uct_rc_iface_t *iface)
+{
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super);
+
+    return iface->config.flush_remote &&
+           uct_ib_md_is_flush_rkey_valid(md->flush_rkey);
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_check_pending(uct_rc_iface_t *iface, ucs_arbiter_group_t *arb_group)
 {

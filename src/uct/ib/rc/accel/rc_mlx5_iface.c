@@ -241,7 +241,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
-    if (uct_rc_mlx5_iface_flush_rkey_enabled(iface)) {
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
         ep_addr_len = sizeof(uct_rc_mlx5_ep_ext_address_t) + sizeof(uint16_t);
     } else {
         ep_addr_len = sizeof(uct_rc_mlx5_ep_address_t);
