@@ -225,7 +225,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
-    iface_attr->iface_addr_len = iface->super.super.config.flush_remote ?
+    iface_attr->iface_addr_len = uct_rc_iface_flush_rkey_enabled(&iface->super.super) ?
                                  sizeof(uct_dc_mlx5_iface_flush_addr_t) :
                                  sizeof(uct_dc_mlx5_iface_addr_t);
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
@@ -939,13 +939,13 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
                                                           uct_ib_md_t);
 
     uct_ib_pack_uint24(addr->super.qp_num, iface->rx.dct.qp_num);
-    uct_ib_mlx5_md_get_atomic_mr_id(md, &addr->super.atomic_mr_id);
     addr->super.flags = iface->version_flag;
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
         addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
     }
 
-    if (iface->super.super.config.flush_remote) {
+    uct_ib_md_ops(md)->get_atomic_mr_id(md, &addr->super.atomic_mr_id);
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super.super)) {
         addr->flush_rkey_hi = md->flush_rkey >> 16;
         addr->super.flags  |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;
     }
