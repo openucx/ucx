@@ -32,7 +32,7 @@ ucp_proto_eager_tag_offload_short_progress(uct_pending_req_t *self)
         return status;
     }
 
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
 
     ucs_assert(status != UCS_INPROGRESS);
@@ -329,8 +329,7 @@ ucp_proto_eager_sync_tag_offload_zcopy_send_completion(uct_completion_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_proto_request_zcopy_clean(req, UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_proto_eager_sync_send_completed_common(req);
 }

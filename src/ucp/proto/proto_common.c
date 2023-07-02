@@ -791,7 +791,7 @@ void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
 
 void ucp_proto_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, status);
 }
 

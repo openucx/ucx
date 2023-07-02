@@ -36,7 +36,7 @@ static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
         return status;
     }
 
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
 
     ucs_assert(status != UCS_INPROGRESS);

@@ -1199,8 +1199,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     } else {
         /* data_desc represents eager message and can be received in place
          * without initializing request */
-        status      = ucp_dt_unpack_only(worker, buffer, count, datatype,
-                                         mem_type, data_desc, desc->length, 1);
+        status      = ucp_datatype_iter_unpack_single(worker, buffer, count,
+                                                      data_desc, desc->length, 1,
+                                                      param);
         recv_length = desc->length;
     }
 
