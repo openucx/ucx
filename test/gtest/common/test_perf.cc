@@ -37,7 +37,8 @@ void test_perf::rte_comm::push(const void *data, size_t size) {
 void test_perf::rte_comm::pop(void *data, size_t size,
                               void (*progress)(void *arg), void *arg) {
     bool done = false;
-    do {
+
+    for (;;) {
         pthread_mutex_lock(&m_mutex);
         if (m_queue.length() >= size) {
             memcpy(data, &m_queue[0], size);
@@ -45,10 +46,18 @@ void test_perf::rte_comm::pop(void *data, size_t size,
             done = true;
         }
         pthread_mutex_unlock(&m_mutex);
-        if (!done) {
-            progress(arg);
+
+        if (done) {
+            break;
         }
-    } while (!done);
+
+        progress(arg);
+
+        /* Valgrind runs threads, but serializes them with one global lock */
+        if (RUNNING_ON_VALGRIND) {
+            sched_yield();
+        }
+    }
 }
 
 
