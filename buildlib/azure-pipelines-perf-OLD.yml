@@ -1,0 +1,108 @@
+# trigger: none
+trigger:
+- tmp_perf
+
+pr: # TMP
+  branches:
+    include:
+    - tmp_perf
+
+resources:
+  repositories:
+  - repository: PerfX
+    type: github
+    name: Mellanox-lab/PerfX
+    endpoint: Al3xR01
+    ref: ucx_rdmz
+
+variables:
+- group: Secrets
+- name: WorkDir
+  value: /hpc/scrap/azure/$(Build.DefinitionName)/$(Build.BuildId)-$(Build.BuildNumber)
+- name: threshold
+  value: 1
+
+stages:
+  - stage: Prepare
+    # condition: eq(variables['Build.Reason'], 'PullRequest')
+    jobs:
+      - job: Prepare
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - bash: |
+              set -x
+              mkdir -p $(WorkDir)
+            displayName: Prepare WorkDir
+
+          # - checkout: self
+          #   clean: true
+          #   fetchDepth: 100
+          #   path: $(WorkDir)/ucx
+
+          - checkout: PerfX
+            clean: true
+            fetchDepth: 100
+            path: perfx
+
+          - bash: |
+              set -x
+              mv $(Build.SourcesDirectory) $(WorkDir)
+            displayName: mv src to shared dir
+
+
+
+  - stage: Performance
+    dependsOn: Prepare
+    # condition: eq(variables['Build.Reason'], 'PullRequest')
+    jobs:
+      - job: Perf
+        displayName: Performance testing
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - bash: |
+              set -x
+              echo "Baseline commit: $(git rev-parse HEAD^)"
+              echo "Ths commit: $(Build.SourceVersion)"
+              echo "Author's mail: $(Build.RequestedForEmail)"
+
+              python3 -m venv VENV
+              source VENV/bin/activate
+              cd $(WorkDir)/perfx
+              pip3 install -r requirements.txt
+              # pip3 install -r /hpc/scrap/azure/perfx/req  # should take from source once fixed
+
+              python3 -u perfx.py \
+                --before master \
+                --after $(Build.SourceVersion) \
+                --config ucx-rdmz.yml \
+                --module hpcx-gcc \
+                --filter \
+                --extra-ompi-opts ' -H vulcan03,vulcan04'
+
+            displayName: Perf test
+            workingDirectory: $(WorkDir)
+
+
+  - stage: Cleanup
+    dependsOn: Performance
+    condition: always()
+    jobs:
+      - job: Cleanup
+        displayName: Cleanup WorkDir
+        pool:
+          name: MLNX
+        steps:
+          - checkout: none
+            clean: true
+          - bash: |
+              set -x
+              rm -rf $(WorkDir)
+            displayName: Cleanup WorkDir
