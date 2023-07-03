@@ -1,0 +1,125 @@
+# trigger:
+# - tmp_perf
+
+trigger: none
+pr:
+  branches:
+    include:
+    - master
+    - v*.*.x
+
+variables:
+- name: WorkDir
+  value: /hpc/scrap/azure/$(Build.DefinitionName)/$(Build.BuildId)-$(Build.BuildNumber)
+- name: perf_nodes
+  value: vulcan03,vulcan04
+- name: threshold
+  value: 1
+
+resources:
+  repositories:
+  - repository: PerfX
+    type: github
+    name: Mellanox-lab/PerfX
+    endpoint: Al3xR01
+    ref: ucx_rdmz
+
+stages:
+  - stage: Prepare
+    jobs:
+      - job: Prepare
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 10
+
+          - checkout: PerfX
+            clean: true
+            fetchDepth: 1
+
+          - bash: |
+              set -x
+              mkdir -p $(WorkDir)
+              mv $(Build.SourcesDirectory)/* $(WorkDir)    
+            displayName: Prepare WorkDir with code
+
+
+  - stage: Performance
+    dependsOn: Prepare
+    jobs:
+      - job: Perf
+        displayName: Performance testing
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: none
+            clean: true
+
+          - bash: |
+              set -x
+
+              # DEBUG
+              cd $(WorkDir)/ucx
+              git log -1 HEAD
+              git log -1 HEAD^
+              # git fetch
+              cd -
+
+              echo "Triggered by repo: $(Build.Repository.Name)"
+              echo "Triggering repo URL: $(Build.Repository.Uri)"
+              echo "The branch of the triggering repo the build was queued for: $(Build.SourceBranch)"
+              echo $(Build.SourceVersionMessage)
+
+              SHA_After=$(echo $(Build.SourceVersionMessage) | awk '{print $2}')
+              SHA_Before=$(echo $(Build.SourceVersionMessage) | awk '{print $4}') 
+              
+              # SHA_Before='master'
+              # SHA_After='v1.15.x'
+
+              # SHA_Before=$(cd $(WorkDir)/ucx && git rev-parse HEAD^)
+              # SHA_After=$(Build.SourceVersion)
+
+
+              cd $(WorkDir)/ucx &&git rev-parse HEAD^
+
+              python3 -m venv VENV
+              source VENV/bin/activate
+              cd $(WorkDir)/PerfX
+              # pip3 install -q -r requirements.txt
+              pip3 install -q -r /hpc/scrap/azure/perfx/req
+
+              python3 -u perfx.py \
+                --config ucx-rdmz.yml \
+                --before "$SHA_Before" \
+                --after "$SHA_After" \
+                --module hpcx-gcc \
+                --filter \
+                --extra-ompi-opts " -H $(perf_nodes)"
+
+            displayName: Perf test
+            workingDirectory: $(WorkDir)
+
+
+  # - stage: Cleanup
+  #   dependsOn: Performance
+  #   condition: always()
+  #   jobs:
+  #     - job: Cleanup
+  #       displayName: Cleanup WorkDir
+  #       pool:
+  #         name: MLNX
+  #       steps:
+  #         - checkout: none
+  #           clean: true
+  #         - bash: |
+  #             set -x
+  #             rm -rf $(WorkDir)
+  #           displayName: Cleanup WorkDir
