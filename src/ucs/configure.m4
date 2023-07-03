@@ -28,6 +28,22 @@ AS_IF([test "x$enable_profiling" = xyes],
 AM_CONDITIONAL([HAVE_PROFILING],[test "x$HAVE_PROFILING" = "xyes"])
 
 
+AC_DEFUN([CHECK_BFD_LIB],
+[
+   AS_IF([test "x$bfd_happy" = "xno"], [
+       unset ac_cv_lib_bfd_bfd_openr
+       LIBS="$LIBS $1"
+       BFD_CHECK_DEPLIBS="$BFD_CHECK_DEPLIBS $1"
+       BFD_CHECK_LIBS="$BFD_CHECK_LIBS $1"
+       AC_CHECK_LIB(bfd, bfd_openr,
+           [
+            bfd_happy="yes"
+           ],
+           [],
+           [$BFD_CHECK_DEPLIBS])
+   ])
+])
+
 #
 # Detailed backtrace with debug information.
 # This option requires binutils-devel package.
@@ -56,7 +72,7 @@ AS_IF([test "x$with_bfd" != xno],
        # Check BFD properties with all flags pointing to the custom location
        CPPFLAGS="$CPPFLAGS $BFD_CHECK_CPPFLAGS"
        LIBS="$LIBS $BFD_CHECK_LIBS"
-       BFD_CHECK_DEPLIBS="-liberty -lz -ldl"
+       BFD_CHECK_DEPLIBS="-lz -ldl"
 
        # Link the test applications as a shared library, to fail if libbfd is
        # not a PIC object.
@@ -65,18 +81,11 @@ AS_IF([test "x$with_bfd" != xno],
        CFLAGS="$CFLAGS $BFD_CHECK_CFLAGS -fPIC"
        LDFLAGS="$LDFLAGS $BFD_CHECK_LDFLAGS -shared -Wl,--no-undefined"
 
-       bfd_happy="yes"
-       AC_CHECK_LIB(bfd, bfd_openr, [],
-                    [
-                     # If cannot link with bfd, try adding known dependency libs
-                     # unset the cached check result to force re-check
-                     unset ac_cv_lib_bfd_bfd_openr
-                     AC_CHECK_LIB(bfd, bfd_openr,
-                                  [BFD_CHECK_LIBS="$BFD_CHECK_LIBS $BFD_CHECK_DEPLIBS"
-                                   LIBS="$LIBS $BFD_CHECK_DEPLIBS"],
-                                  [bfd_happy="no"],
-                                  [$BFD_CHECK_DEPLIBS])
-                    ])
+       bfd_happy="no"
+       CHECK_BFD_LIB([""])
+       CHECK_BFD_LIB([-liberty])
+       CHECK_BFD_LIB([-lsframe])
+
        AC_CHECK_HEADER([bfd.h], [], [bfd_happy="no"])
        AC_CHECK_TYPES([struct dl_phdr_info], [], [bfd_happy=no],
                       [[#define _GNU_SOURCE 1
