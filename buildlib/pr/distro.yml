@@ -2,6 +2,11 @@ parameters:
   demands: []
   name: subtest
   container:
+  ucx_targets:
+    ucx_1_12:
+      ucx_tag: v1.12.0
+    ucx_1_14:
+      ucx_tag: v1.14.0
 
 jobs:
   - job: build_pr_${{ parameters.name }}
@@ -43,11 +48,11 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     strategy:
-      matrix:
-       ucx_1_12:
-         ucx_tag: v1.12.0
-       ucx_1_14:
-         ucx_tag: v1.14.0
+      matrix: ${{ parameters.ucx_targets }}
+          #       ucx_1_12:
+          #ucx_tag: v1.12.0
+          # ucx_1_14:
+          # ucx_tag: v1.14.0
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     steps:
