@@ -728,6 +728,15 @@ const uct_test::entity& uct_test::ent(unsigned index) const {
     return m_entities.at(index);
 }
 
+unsigned uct_test::progress_mt() const
+{
+    if (RUNNING_ON_VALGRIND) {
+        sched_yield();
+    }
+
+    return progress();
+}
+
 unsigned uct_test::progress() const {
     unsigned count = 0;
     FOR_EACH_ENTITY(iter) {
