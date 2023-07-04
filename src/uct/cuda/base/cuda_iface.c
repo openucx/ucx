@@ -84,30 +84,28 @@ ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
     return UCS_OK;
 }
 
-unsigned
+int
 uct_cuda_base_nvml_nvlink_supported(nvmlDevice_t device1, nvmlDevice_t device2)
 {
     nvmlGpuP2PStatus_t p2p_status;
-    nvmlReturn_t nvml_err;
+    ucs_status_t status;
 
-    nvml_err = nvmlDeviceGetP2PStatus(device1, device2,
-                                      NVML_P2P_CAPS_INDEX_NVLINK, &p2p_status);
+    status = UCT_NVML_FUNC_LOG_DEBUG(
+            nvmlDeviceGetP2PStatus(device1, device2, NVML_P2P_CAPS_INDEX_NVLINK,
+                                   &p2p_status));
 
-    return ((nvml_err == NVML_SUCCESS) && (p2p_status == NVML_P2P_STATUS_OK)) ?
-                   1 :
-                   0;
+    return ((status == UCS_OK) && (p2p_status == NVML_P2P_STATUS_OK));
 }
 
-double uct_cuda_base_nvml_get_nvlink_common_bw(nvmlDevice_t device1)
+double uct_cuda_base_nvml_get_nvlink_common_bw(nvmlDevice_t device)
 {
     unsigned bw;
     nvmlFieldValue_t value;
-    nvmlReturn_t nvml_err;
 
     value.fieldId = NVML_FI_DEV_NVLINK_SPEED_MBPS_COMMON;
-    nvml_err      = nvmlDeviceGetFieldValues(device1, 1, &value);
-    if (nvml_err != NVML_SUCCESS) {
-        return 0.0;
+    if (UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetFieldValues(device, 1, &value)) !=
+        UCS_OK) {
+        return 0.;
     }
 
     bw = ((value.nvmlReturn == NVML_SUCCESS) &&
@@ -115,21 +113,19 @@ double uct_cuda_base_nvml_get_nvlink_common_bw(nvmlDevice_t device1)
                  value.value.uiVal :
                  0;
 
-
     return (bw * UCS_MBYTE);
 }
 
-unsigned uct_cuda_base_nvml_get_nvswitch_num_nvlinks(nvmlDevice_t device1)
+unsigned uct_cuda_base_nvml_get_nvswitch_num_nvlinks(nvmlDevice_t device)
 {
     unsigned num_links = 0;
 
 #if defined(NVML_FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT)
     nvmlFieldValue_t value;
-    nvmlReturn_t nvml_err;
 
     value.fieldId = NVML_FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT;
-    nvml_err      = nvmlDeviceGetFieldValues(device1, 1, &value);
-    if (nvml_err != NVML_SUCCESS) {
+    if (UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetFieldValues(device, 1, &value)) !=
+        UCS_OK) {
         return 0;
     }
 
@@ -142,8 +138,8 @@ unsigned uct_cuda_base_nvml_get_nvswitch_num_nvlinks(nvmlDevice_t device1)
     return num_links;
 }
 
-int uct_cuda_base_nvml_get_num_nvlinks(nvmlDevice_t device1,
-                                       nvmlDevice_t device2)
+unsigned uct_cuda_base_nvml_get_num_nvlinks(nvmlDevice_t device1,
+                                            nvmlDevice_t device2)
 {
     unsigned nvswitch_links = uct_cuda_base_nvml_get_nvswitch_num_nvlinks(
             device1);
@@ -151,17 +147,15 @@ int uct_cuda_base_nvml_get_num_nvlinks(nvmlDevice_t device1,
     unsigned num_links, link;
     nvmlFieldValue_t value;
     nvmlPciInfo_t pci1, pci2;
-    nvmlReturn_t nvml_err;
 
     if (nvswitch_links) {
         return nvswitch_links;
     }
 
     value.fieldId = NVML_FI_DEV_NVLINK_LINK_COUNT;
-
-    nvml_err = nvmlDeviceGetFieldValues(device1, 1, &value);
-    if (nvml_err != NVML_SUCCESS) {
-        goto err;
+    if (UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetFieldValues(device1, 1, &value)) !=
+        UCS_OK) {
+        return 0;
     }
 
     num_links = ((value.nvmlReturn == NVML_SUCCESS) &&
@@ -169,16 +163,16 @@ int uct_cuda_base_nvml_get_num_nvlinks(nvmlDevice_t device1,
                         value.value.uiVal :
                         0;
 
-
-    nvml_err = nvmlDeviceGetPciInfo(device2, &pci2);
-    if (nvml_err != NVML_SUCCESS) {
-        goto err;
+    if (UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetPciInfo_v3(device2, &pci2)) !=
+        UCS_OK) {
+        return 0;
     }
 
     for (link = 0; link < num_links; ++link) {
-        nvml_err = nvmlDeviceGetNvLinkRemotePciInfo(device1, link, &pci1);
-        if (nvml_err != NVML_SUCCESS) {
-            goto err;
+        if (UCT_NVML_FUNC_LOG_DEBUG(
+                nvmlDeviceGetNvLinkRemotePciInfo_v2(device1, link, &pci1)) !=
+            UCS_OK) {
+            return 0;
         }
 
         if (!strcmp(pci2.busId, pci1.busId)) {
@@ -187,8 +181,6 @@ int uct_cuda_base_nvml_get_num_nvlinks(nvmlDevice_t device1,
     }
 
     return total_links;
-err:
-    return 0;
 }
 
 double
@@ -206,58 +198,49 @@ double
 uct_cuda_base_nvml_get_pcie_bw(nvmlDevice_t device1, nvmlDevice_t device2)
 {
     unsigned max_link_gen, max_link_width;
-    double bw;
-    nvmlReturn_t nvml_err;
     nvmlGpuP2PStatus_t write_status;
     nvmlGpuP2PStatus_t read_status;
 
-    nvml_err = nvmlDeviceGetP2PStatus(device1, device2,
-                                      NVML_P2P_CAPS_INDEX_WRITE, &write_status);
-    if (NVML_SUCCESS != nvml_err) {
-        goto err;
+    if (UCT_NVML_FUNC_LOG_DEBUG(
+            nvmlDeviceGetP2PStatus(device1, device2, NVML_P2P_CAPS_INDEX_WRITE,
+                                   &write_status)) != UCS_OK) {
+        return 0.;
     }
 
-    nvml_err = nvmlDeviceGetP2PStatus(device1, device2,
-                                      NVML_P2P_CAPS_INDEX_READ, &read_status);
-    if (NVML_SUCCESS != nvml_err) {
-        goto err;
+    if (UCT_NVML_FUNC_LOG_DEBUG(
+            nvmlDeviceGetP2PStatus(device1, device2, NVML_P2P_CAPS_INDEX_READ,
+                                   &read_status)) != UCS_OK) {
+        return 0.;
     }
 
     if ((write_status != NVML_P2P_STATUS_OK) ||
         (read_status != NVML_P2P_STATUS_OK)) {
-        goto err;
+        return 0.;
     }
 
-    nvml_err = nvmlDeviceGetMaxPcieLinkGeneration(device1, &max_link_gen);
-    if (NVML_SUCCESS != nvml_err) {
-        goto err;
+    if (UCT_NVML_FUNC_LOG_DEBUG(
+            nvmlDeviceGetMaxPcieLinkGeneration(device1, &max_link_gen)) !=
+        UCS_OK) {
+        return 0.;
     }
 
-    nvml_err = nvmlDeviceGetMaxPcieLinkWidth(device1, &max_link_width);
-    if (NVML_SUCCESS != nvml_err) {
-        goto err;
+    if (UCT_NVML_FUNC_LOG_DEBUG(
+            nvmlDeviceGetMaxPcieLinkWidth(device1, &max_link_width)) !=
+        UCS_OK) {
+        return 0.;
     }
 
     switch (max_link_gen) {
     case 4:
-        bw = 1.97 * UCS_GBYTE * max_link_width;
-        break;
+        return 1.97 * UCS_GBYTE * max_link_width;
     case 5:
-        bw = 3.94 * UCS_GBYTE * max_link_width;
-        break;
+        return 3.94 * UCS_GBYTE * max_link_width;
     case 6:
-        bw = 7.56 * UCS_GBYTE * max_link_width;
-        break;
+        return 7.56 * UCS_GBYTE * max_link_width;
     default:
     case 3:
-        bw = 985 * UCS_MBYTE * max_link_width;
-        break;
+        return 985 * UCS_MBYTE * max_link_width;
     }
-
-    return bw;
-
-err:
-    return 0.0;
 }
 
 double uct_cuda_base_nvml_get_p2p_bw(nvmlDevice_t device1, nvmlDevice_t device2)
@@ -270,11 +253,10 @@ double uct_cuda_base_nvml_get_p2p_bw(nvmlDevice_t device1, nvmlDevice_t device2)
 double uct_cuda_base_nvml_get_local_bw(nvmlDevice_t device)
 {
     nvmlDeviceArchitecture_t arch;
-    nvmlReturn_t nvml_err;
     double bw;
 
-    nvml_err = nvmlDeviceGetArchitecture(device, &arch);
-    if (nvml_err != NVML_SUCCESS) {
+    if (UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetArchitecture(device, &arch)) !=
+        UCS_OK) {
         return 720 * UCS_GBYTE;
     }
 
@@ -305,16 +287,17 @@ ucs_status_t
 uct_cuda_base_nvml_get_device_index(const char *bus_str, unsigned *index)
 {
     nvmlDevice_t device;
-    nvmlReturn_t nvml_err;
+    ucs_status_t status;
 
-    nvml_err = nvmlDeviceGetHandleByPciBusId(bus_str, &device);
-    if (nvml_err != NVML_SUCCESS) {
-        return UCS_ERR_NO_ELEM;
+    status = UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetHandleByPciBusId_v2(bus_str,
+                                                                      &device));
+    if (status != UCS_OK) {
+        return status;
     }
 
-    nvml_err = nvmlDeviceGetIndex(device, index);
-    if (nvml_err != NVML_SUCCESS) {
-        return UCS_ERR_NO_ELEM;
+    status = UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetIndex(device, index));
+    if (status != UCS_OK) {
+        return status;
     }
 
     return UCS_OK;
@@ -340,7 +323,10 @@ ucs_status_t uct_cuda_base_nvml_get_estimate_perf(const char *bus_str1,
         return status;
     }
 
-    UCT_NVML_FUNC(nvmlDeviceGetCount(&device_count), UCS_LOG_LEVEL_DEBUG);
+    status = UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetCount_v2(&device_count));
+    if (status != UCS_OK) {
+        return status;
+    }
 
     offset = (sizeof(double) * device_count * index1) +
              (sizeof(double) * index2);
@@ -358,7 +344,10 @@ void uct_cuda_base_nvml_init()
     double *bw_ptr;
     nvmlDevice_t device_i, device_j;
 
-    UCT_NVML_FUNC(nvmlDeviceGetCount(&device_count), UCS_LOG_LEVEL_DEBUG);
+    if (UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetCount_v2(&device_count)) !=
+        UCS_OK) {
+        return;
+    }
 
     /* Assumes that nvml detects all devices on the system */
     /* TODO: for multi-node nvlink systems nvml may not show reachable devices
@@ -366,21 +355,23 @@ void uct_cuda_base_nvml_init()
     uct_cuda_base_nvml_bw = (double*)ucs_malloc(sizeof(double) * device_count *
                                                         device_count,
                                                 "nvml_bw");
-
     if (uct_cuda_base_nvml_bw == NULL) {
         ucs_error("failed to allocate nvml_bw matrix");
-        goto out;
+        return;
     }
 
-    for (i = 0; i < device_count; i++) {
-        for (j = 0; j < device_count; j++) {
+    for (i = 0; i < device_count; ++i) {
+        for (j = 0; j < device_count; ++j) {
             offset = (sizeof(double) * device_count * i) + (sizeof(double) * j);
             bw_ptr = UCS_PTR_BYTE_OFFSET(uct_cuda_base_nvml_bw, offset);
 
-            UCT_NVML_FUNC(nvmlDeviceGetHandleByIndex(i, &device_i),
-                          UCS_LOG_LEVEL_DEBUG);
-            UCT_NVML_FUNC(nvmlDeviceGetHandleByIndex(j, &device_j),
-                          UCS_LOG_LEVEL_DEBUG);
+            if ((UCT_NVML_FUNC_LOG_DEBUG(
+                    nvmlDeviceGetHandleByIndex_v2(i, &device_i)) != UCS_OK) ||
+                (UCT_NVML_FUNC_LOG_DEBUG(
+                    nvmlDeviceGetHandleByIndex_v2(j, &device_j)) != UCS_OK)) {
+                *bw_ptr = 0.;
+                continue;
+            }
 
             if (i != j) {
                 *bw_ptr = uct_cuda_base_nvml_get_p2p_bw(device_i, device_j);
@@ -390,9 +381,6 @@ void uct_cuda_base_nvml_init()
             ucs_debug("nvml_bw (%u, %u) : %.3lf", i, j, (*bw_ptr / UCS_GBYTE));
         }
     }
-
-out:
-    return;
 }
 
 void uct_cuda_base_nvml_cleanup()
@@ -424,12 +412,13 @@ UCS_CLASS_DEFINE(uct_cuda_iface_t, uct_base_iface_t);
 
 UCS_STATIC_INIT
 {
-    UCT_NVML_FUNC(nvmlInit(), UCS_LOG_LEVEL_DEBUG);
-    uct_cuda_base_nvml_init();
+    if (UCT_NVML_FUNC_LOG_ERR(nvmlInit_v2()) == UCS_OK) {
+        uct_cuda_base_nvml_init();
+    }
 }
 
 UCS_STATIC_CLEANUP
 {
     uct_cuda_base_nvml_cleanup();
-    UCT_NVML_FUNC(nvmlShutdown(), UCS_LOG_LEVEL_DEBUG);
+    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 }
