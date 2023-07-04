@@ -2,11 +2,7 @@ parameters:
   demands: []
   name: subtest
   container:
-  ucx_targets:
-    ucx_1_12:
-      ucx_tag: v1.12.0
-    ucx_1_14:
-      ucx_tag: v1.14.0
+  test_v12: yes
 
 jobs:
   - job: build_pr_${{ parameters.name }}
@@ -41,6 +37,7 @@ jobs:
     # Perform test builds on relevant distributions.
   - job: build_${{ parameters.name }}
     dependsOn: build_pr_${{ parameters.name }}
+    condition: or(ne(variables.ucx_tag, 'v1.12.0'), eq('${{ parameters.test_v12 }}', 'yes'))
     displayName: Build on ${{ parameters.name }}
     workspace:
       clean: all
@@ -48,11 +45,11 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     strategy:
-      matrix: ${{ parameters.ucx_targets }}
-          #       ucx_1_12:
-          #ucx_tag: v1.12.0
-          # ucx_1_14:
-          # ucx_tag: v1.14.0
+      matrix:
+        ucx_1_12:
+            ucx_tag: v1.12.0
+        ucx_1_14:
+            ucx_tag: v1.14.0
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     steps:
@@ -81,6 +78,7 @@ jobs:
 
   - job: test_wire_compat_${{ parameters.name }}
     dependsOn: build_${{ parameters.name }}
+    condition: or(ne(variables.ucx_tag, 'v1.12.0'), eq('${{ parameters.test_v12 }}', 'yes'))
     displayName: Test wire compatibility ${{ parameters.name }}
     workspace:
       clean: all
@@ -147,7 +145,6 @@ jobs:
       - bash: |
           set -Eex
           export UCX_CM_REUSEADDR=y UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
-          client_server_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
           port=$((10000 + 1000 * $(AZP_AGENT_ID)))
           exe_cmd="stdbuf -oL $(test_dir)/ucp_hworld -p ${port}"
 
