@@ -31,7 +31,7 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
      ucs_offsetof(uct_mm_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
 
-    {"FIFO_SIZE", "64",
+    {"FIFO_SIZE", "256",
      "Size of the receive FIFO in the memory-map UCTs.",
      ucs_offsetof(uct_mm_iface_config_t, fifo_size), UCS_CONFIG_TYPE_UINT},
 
