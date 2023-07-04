@@ -84,8 +84,8 @@ ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
     return UCS_OK;
 }
 
-int
-uct_cuda_base_nvml_nvlink_supported(nvmlDevice_t device1, nvmlDevice_t device2)
+int uct_cuda_base_nvml_nvlink_supported(nvmlDevice_t device1,
+                                        nvmlDevice_t device2)
 {
     nvmlGpuP2PStatus_t p2p_status;
     ucs_status_t status;
@@ -138,8 +138,8 @@ unsigned uct_cuda_base_nvml_get_nvswitch_num_nvlinks(nvmlDevice_t device)
     return num_links;
 }
 
-unsigned uct_cuda_base_nvml_get_num_nvlinks(nvmlDevice_t device1,
-                                            nvmlDevice_t device2)
+unsigned
+uct_cuda_base_nvml_get_num_nvlinks(nvmlDevice_t device1, nvmlDevice_t device2)
 {
     unsigned nvswitch_links = uct_cuda_base_nvml_get_nvswitch_num_nvlinks(
             device1);
@@ -170,8 +170,8 @@ unsigned uct_cuda_base_nvml_get_num_nvlinks(nvmlDevice_t device1,
 
     for (link = 0; link < num_links; ++link) {
         if (UCT_NVML_FUNC_LOG_DEBUG(
-                nvmlDeviceGetNvLinkRemotePciInfo_v2(device1, link, &pci1)) !=
-            UCS_OK) {
+                    nvmlDeviceGetNvLinkRemotePciInfo_v2(device1, link,
+                                                        &pci1)) != UCS_OK) {
             return 0;
         }
 
@@ -201,15 +201,16 @@ uct_cuda_base_nvml_get_pcie_bw(nvmlDevice_t device1, nvmlDevice_t device2)
     nvmlGpuP2PStatus_t write_status;
     nvmlGpuP2PStatus_t read_status;
 
-    if (UCT_NVML_FUNC_LOG_DEBUG(
-            nvmlDeviceGetP2PStatus(device1, device2, NVML_P2P_CAPS_INDEX_WRITE,
-                                   &write_status)) != UCS_OK) {
+    if (UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetP2PStatus(
+                device1, device2, NVML_P2P_CAPS_INDEX_WRITE, &write_status)) !=
+        UCS_OK) {
         return 0.;
     }
 
-    if (UCT_NVML_FUNC_LOG_DEBUG(
-            nvmlDeviceGetP2PStatus(device1, device2, NVML_P2P_CAPS_INDEX_READ,
-                                   &read_status)) != UCS_OK) {
+    if (UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetP2PStatus(device1, device2,
+                                                       NVML_P2P_CAPS_INDEX_READ,
+                                                       &read_status)) !=
+        UCS_OK) {
         return 0.;
     }
 
@@ -219,13 +220,13 @@ uct_cuda_base_nvml_get_pcie_bw(nvmlDevice_t device1, nvmlDevice_t device2)
     }
 
     if (UCT_NVML_FUNC_LOG_DEBUG(
-            nvmlDeviceGetMaxPcieLinkGeneration(device1, &max_link_gen)) !=
+                nvmlDeviceGetMaxPcieLinkGeneration(device1, &max_link_gen)) !=
         UCS_OK) {
         return 0.;
     }
 
     if (UCT_NVML_FUNC_LOG_DEBUG(
-            nvmlDeviceGetMaxPcieLinkWidth(device1, &max_link_width)) !=
+                nvmlDeviceGetMaxPcieLinkWidth(device1, &max_link_width)) !=
         UCS_OK) {
         return 0.;
     }
@@ -289,8 +290,8 @@ uct_cuda_base_nvml_get_device_index(const char *bus_str, unsigned *index)
     nvmlDevice_t device;
     ucs_status_t status;
 
-    status = UCT_NVML_FUNC_LOG_DEBUG(nvmlDeviceGetHandleByPciBusId_v2(bus_str,
-                                                                      &device));
+    status = UCT_NVML_FUNC_LOG_DEBUG(
+            nvmlDeviceGetHandleByPciBusId_v2(bus_str, &device));
     if (status != UCS_OK) {
         return status;
     }
@@ -366,9 +367,11 @@ void uct_cuda_base_nvml_init()
             bw_ptr = UCS_PTR_BYTE_OFFSET(uct_cuda_base_nvml_bw, offset);
 
             if ((UCT_NVML_FUNC_LOG_DEBUG(
-                    nvmlDeviceGetHandleByIndex_v2(i, &device_i)) != UCS_OK) ||
+                         nvmlDeviceGetHandleByIndex_v2(i, &device_i)) !=
+                 UCS_OK) ||
                 (UCT_NVML_FUNC_LOG_DEBUG(
-                    nvmlDeviceGetHandleByIndex_v2(j, &device_j)) != UCS_OK)) {
+                         nvmlDeviceGetHandleByIndex_v2(j, &device_j)) !=
+                 UCS_OK)) {
                 *bw_ptr = 0.;
                 continue;
             }
