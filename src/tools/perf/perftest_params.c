@@ -101,6 +101,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -f             print only final numbers\n");
     printf("     -v             print CSV-formatted output\n");
     printf("     -I             print extra information about the operation\n");
+    printf("     -q             do not print error messages\n");
     printf("\n");
     printf("  UCT only:\n");
     printf("     -d <device>    device to use for testing\n");
