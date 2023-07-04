@@ -150,11 +150,28 @@ typedef struct uct_dc_mlx5_iface_flush_addr {
  *
  */
 typedef enum {
+    /* Policies with dedicated DCI per active connection */
     UCT_DC_TX_POLICY_DCS,
     UCT_DC_TX_POLICY_DCS_QUOTA,
-    UCT_DC_TX_POLICY_RAND,
+    /* Policies with shared DCI */
+    UCT_DC_TX_POLICY_SHARED_FIRST,
+    UCT_DC_TX_POLICY_RAND = UCT_DC_TX_POLICY_SHARED_FIRST,
+    UCT_DC_TX_POLICY_HW_DCS,
     UCT_DC_TX_POLICY_LAST
 } uct_dc_tx_policy_t;
+
+
+/**
+ * dct port affinity policies for RoCE LAG device
+ * - default: use the first physical port number for affinity
+ * - random : use random slave port number for affinity
+ * - [1, lag_level]: use given value as the slave port number for affinity
+ */
+typedef enum {
+    UCT_DC_MLX5_DCT_AFFINITY_DEFAULT,
+    UCT_DC_MLX5_DCT_AFFINITY_RANDOM,
+    UCT_DC_MLX5_DCT_AFFINITY_LAST
+} uct_dc_mlx5_dct_affinity_t;
 
 
 typedef struct uct_dc_mlx5_iface_config {
@@ -167,6 +184,7 @@ typedef struct uct_dc_mlx5_iface_config {
     ucs_ternary_auto_value_t            dci_full_handshake;
     ucs_ternary_auto_value_t            dci_ka_full_handshake;
     ucs_ternary_auto_value_t            dct_full_handshake;
+    unsigned                            dct_affinity;
     unsigned                            quota;
     unsigned                            rand_seed;
     ucs_time_t                          fc_hard_req_timeout;
@@ -232,7 +250,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
 
 /* DCI pool
  * same array is used to store DCI's to allocate and DCI's to release:
- * 
+ *
  * +--------------+-----+-------------+
  * | to release   |     | to allocate |
  * +--------------+-----+-------------+
@@ -240,7 +258,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
  * |              |     |             |
  * 0        release     stack      ndci
  *              top     top
- * 
+ *
  * Overall count of DCI's to release and allocated DCI's could not be more than
  * ndci and these stacks are not intersected
  */
@@ -297,8 +315,6 @@ struct uct_dc_mlx5_iface {
 
         ucs_arbiter_callback_t    pend_cb;
 
-        uct_worker_cb_id_t        dci_release_prog_id;
-
         uint8_t                   dci_pool_release_bitmap;
 
         uint8_t                   av_fl_mlid;
@@ -308,6 +324,8 @@ struct uct_dc_mlx5_iface {
 
     struct {
         uct_ib_mlx5_qp_t          dct;
+
+        uint8_t                   port_affinity;
     } rx;
 
     uint8_t                       version_flag;

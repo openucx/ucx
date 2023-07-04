@@ -258,20 +258,25 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     return UCS_OK;
 }
 
-void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                         unsigned qp_num)
+ucs_status_t
+uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep, unsigned qp_num)
 {
     uct_rc_ep_t ***ptr, **memb;
 
     ptr = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER];
     if (*ptr == NULL) {
         *ptr = ucs_calloc(UCS_BIT(UCT_RC_QP_TABLE_MEMB_ORDER), sizeof(**ptr),
-                           "rc qp table");
+                          "rc qp table");
+        if (*ptr == NULL) {
+            ucs_error("failed to allocate memory for rc qp table");
+            return UCS_ERR_NO_MEMORY;
+        }
     }
 
-    memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
+    memb = &(*ptr)[qp_num & UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb == NULL);
     *memb = ep;
+    return UCS_OK;
 }
 
 void uct_rc_iface_remove_qp(uct_rc_iface_t *iface, unsigned qp_num)
@@ -592,7 +597,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                                      "RETRY_COUNT",
                                                      config->tx.retry_count,
                                                      UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.ooo_rw         = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
     self->tx.in_pending         = 0;
 #endif
@@ -830,7 +834,6 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_srq *srq)
 {
     uct_rc_iface_fill_attr(iface, attr, max_send_wr, srq);
-    uct_ib_iface_fill_attr(&iface->super, attr);
 
     return uct_ib_iface_create_qp(&iface->super, attr, qp_p);
 }

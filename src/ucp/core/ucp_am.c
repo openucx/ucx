@@ -67,7 +67,7 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     ucp_ep_ext_t *ep_ext = ep->ext;
     ucp_recv_desc_t *rdesc, *tmp_rdesc;
     ucs_queue_iter_t iter;
-    size_t UCS_V_UNUSED count;
+    size_t count;
 
     if (!(ep->worker->context->config.features & UCP_FEATURE_AM)) {
         return;
@@ -818,8 +818,9 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.length   = ucp_dt_length(req->send.datatype, count,
                                        req->send.buffer, &req->send.state.dt);
     req->send.mem_type = ucp_request_get_memory_type(ep->worker->context,
-                                                     req->send.buffer,
-                                                     req->send.length, param);
+                                                     req->send.buffer, count,
+                                                     datatype, req->send.length,
+                                                     param);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
@@ -1138,8 +1139,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
 
     desc->flags |= UCP_RECV_DESC_FLAG_RECV_STARTED;
     datatype     = ucp_request_param_datatype(param);
-    mem_type     = ucp_request_get_memory_type(context, buffer, desc->length,
-                                               param);
+    mem_type     = ucp_request_get_memory_type(context, buffer, count, datatype,
+                                               desc->length, param);
 
     ucs_trace("AM recv %s buffer %p dt 0x%lx count %zu memtype %s",
               (desc->flags & UCP_RECV_DESC_FLAG_RNDV) ? "rndv" : "eager",
@@ -1198,8 +1199,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     } else {
         /* data_desc represents eager message and can be received in place
          * without initializing request */
-        status      = ucp_dt_unpack_only(worker, buffer, count, datatype,
-                                         mem_type, data_desc, desc->length, 1);
+        status      = ucp_datatype_iter_unpack_single(worker, buffer, count,
+                                                      data_desc, desc->length, 1,
+                                                      param);
         recv_length = desc->length;
     }
 
@@ -1752,14 +1754,14 @@ out:
     return UCS_OK;
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE,
-              ucp_am_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_FIRST,
-              ucp_am_long_first_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE,
-              ucp_am_long_middle_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_REPLY,
-              ucp_am_handler_reply, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE, ucp_am_handler,
+                         NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_FIRST,
+                         ucp_am_long_first_handler, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE,
+                         ucp_am_long_middle_handler, NULL, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_REPLY,
+                         ucp_am_handler_reply, NULL, 0);
 
 const ucp_request_send_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,

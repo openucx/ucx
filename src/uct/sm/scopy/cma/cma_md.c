@@ -206,7 +206,9 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
     cma_md->super.ops       = &md_ops;
     cma_md->super.component = &uct_cma_component;
     cma_md->extra_caps      = (md_config->mem_invalidate == UCS_YES) ?
-                              UCT_MD_FLAG_INVALIDATE : 0ul;
+                              (UCT_MD_FLAG_INVALIDATE     |
+                               UCT_MD_FLAG_INVALIDATE_RMA |
+                               UCT_MD_FLAG_INVALIDATE_AMO) : 0ul;
     *md_p                   = &cma_md->super;
 
     return UCS_OK;
@@ -216,17 +218,18 @@ ucs_status_t uct_cma_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_cma_md_t *md = ucs_derived_of(uct_md, uct_cma_md_t);
 
-    md_attr->rkey_packed_size = 0;
-    md_attr->flags            = UCT_MD_FLAG_REG | md->extra_caps;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->alloc_mem_types  = 0;
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->detect_mem_types = 0;
-    md_attr->dmabuf_mem_types = 0;
-    md_attr->max_alloc        = 0;
-    md_attr->max_reg          = ULONG_MAX;
-    md_attr->reg_cost         = ucs_linear_func_make(9e-9, 0);
+    md_attr->rkey_packed_size       = 0;
+    md_attr->flags                  = UCT_MD_FLAG_REG | md->extra_caps;
+    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->alloc_mem_types        = 0;
+    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->detect_mem_types       = 0;
+    md_attr->dmabuf_mem_types       = 0;
+    md_attr->max_alloc              = 0;
+    md_attr->max_reg                = ULONG_MAX;
+    md_attr->reg_cost               = ucs_linear_func_make(9e-9, 0);
 
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;

@@ -164,7 +164,8 @@ struct ucp_request {
                     ucp_dt_state_t       dt;       /* Position in the send buffer */
                 };
                 union {
-                    /* UCT completion, used by flush and zero-copy operations */
+                    /* UCT completion, used by tag offload rndv, flush and
+                     * zero-copy operations */
                     uct_completion_t uct_comp;
 
                     /* Used by rndv/rtr to track received data size
@@ -255,11 +256,23 @@ struct ucp_request {
                     union {
                         /* Used by "old" rendezvous protocols, in rndv.c */
                         struct {
-                            /* Actual lanes map */
-                            ucp_lane_map_t lanes_map_all;
+                            union {
+                                struct {
+                                    /* Actual lanes map */
+                                    ucp_lane_map_t lanes_map_all;
 
-                            /* Actual lanes count */
-                            uint8_t        lanes_count;
+                                    /* Actual lanes count */
+                                    uint8_t        lanes_count;
+                                } zcopy;
+
+                                struct {
+                                    /* Data start offset of this request */
+                                    size_t offset;
+                                } rtr;
+                            };
+
+                            /* Memory domains to send remote keys */
+                            ucp_md_map_t md_map;
                         };
 
                         /* Used by "new" rendezvous protocols, in proto_rndv.c */
@@ -309,9 +322,8 @@ struct ucp_request {
 
                 struct {
                     unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
-                    uct_worker_cb_id_t prog_id; /* Progress callback ID */
-                    uint32_t           cmpl_sn; /* Sequence number of the remote completion
-                                                   this request is waiting for */
+                    uint32_t           cmpl_sn;   /* Sequence number of the remote completion
+                                                     this request is waiting for */
                     uint8_t            sw_started;
                     uint8_t            sw_done;
                     uint8_t            num_lanes; /* How many lanes are being flushed */
@@ -327,9 +339,6 @@ struct ucp_request {
                     uct_ep_h           uct_ep;
                     /* Flags that should be passed into @ref uct_ep_flush */
                     unsigned           ep_flush_flags;
-                    /* Progress ID, if it's UCS_CALLBACKQ_ID_NULL, no operations
-                     * are in-progress */
-                    uct_worker_cb_id_t cb_id;
                     /* Index of UCT EP to be flushed and destroyed */
                     ucp_rsc_index_t    rsc_index;
                 } discard_uct_ep;
@@ -443,7 +452,7 @@ struct ucp_request {
 
                  struct {
                     ucp_am_recv_data_nbx_callback_t cb;    /* Completion callback */
-                    ucp_recv_desc_t                 *desc; /* RTS desc */
+                    ucp_recv_desc_t                 *desc; /* Receive desc */
                 } am;
             };
         } recv;
@@ -528,8 +537,8 @@ ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                        ucp_dt_state_t *state, ucs_memory_type_t mem_type,
                        ucp_request_t *req, unsigned uct_flags);
 
-void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
-                              ucp_dt_state_t *state, ucp_request_t *req);
+void ucp_request_memory_dereg(ucp_datatype_t datatype, ucp_dt_state_t *state,
+                              ucp_request_t *req);
 
 void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status);
 

@@ -109,4 +109,27 @@ void ucp_dt_iov_seek(ucp_dt_iov_t *iov, size_t iovcnt, ptrdiff_t distance,
  */
 size_t ucp_dt_iov_count_nonempty(const ucp_dt_iov_t *iov, size_t iovcnt);
 
+
+/**
+ * Check that all iov entries match the given memory info
+ *
+ * @param [in]     context        Context for memory detection
+ * @param [in]     iov            @ref ucp_dt_iov_t buffer to check
+ * @param [in]     iovcnt         Number of entries in the @a iov buffer
+ * @param [in]     mem_info       Compare the iov entries to this memory info
+ *
+ * @return UCS_OK if all iov entries match the given memory info, otherwise
+ *         return UCS_ERR_INVALID_PARAM
+ */
+ucs_status_t ucp_dt_iov_memtype_check(ucp_context_h context,
+                                      const ucp_dt_iov_t *iov, size_t iovcnt,
+                                      const ucp_memory_info_t *mem_info);
+
+
+ucs_status_t ucp_dt_iov_memtype_detect(ucp_context_h context,
+                                       const ucp_dt_iov_t *iov, size_t iovcnt,
+                                       const ucp_request_param_t *param,
+                                       uint8_t *sg_count,
+                                       ucp_memory_info_t *mem_info);
+
 #endif

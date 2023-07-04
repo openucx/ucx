@@ -9,6 +9,7 @@
 #include <uct/base/uct_iface.h>
 
 #include <hsa.h>
+#include "rocm_copy_cache.h"
 
 #define UCT_ROCM_COPY_TL_NAME    "rocm_cpy"
 
@@ -19,10 +20,12 @@ typedef struct uct_rocm_copy_iface {
     uct_rocm_copy_iface_addr_t  id;
     ucs_mpool_t                 signal_pool;
     ucs_queue_head_t            signal_queue;
+    uct_rocm_copy_cache_t       *local_memh_cache;
     struct {
         size_t                  d2h_thresh;
         size_t                  h2d_thresh;
         int                     enable_async_zcopy;
+        double                  latency;
     } config;
 } uct_rocm_copy_iface_t;
 
@@ -31,6 +34,7 @@ typedef struct uct_rocm_copy_iface_config {
     size_t              d2h_thresh;
     size_t              h2d_thresh;
     int                 enable_async_zcopy;
+    double              latency;
 } uct_rocm_copy_iface_config_t;
 
 #endif

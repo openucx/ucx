@@ -388,11 +388,12 @@ static ucs_mpool_ops_t uct_cuda_copy_event_desc_mpool_ops = {
 };
 
 static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
-    .iface_estimate_perf = uct_cuda_copy_estimate_perf,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
+    .iface_estimate_perf   = uct_cuda_copy_estimate_perf,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h worker,
@@ -434,8 +435,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 
     ucs_queue_head_init(&self->active_queue);
 
-    for (src = 0; src < UCS_MEMORY_TYPE_LAST; ++src) {
-        for (dst = 0; dst < UCS_MEMORY_TYPE_LAST; ++dst) {
+    ucs_memory_type_for_each(src) {
+        ucs_memory_type_for_each(dst) {
             self->queue_desc[src][dst].stream = 0;
             ucs_queue_head_init(&self->queue_desc[src][dst].event_queue);
         }
@@ -460,8 +461,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
     UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
     if (uct_cuda_base_context_match(cuda_context, self->cuda_context)) {
 
-        for (src = 0; src < UCS_MEMORY_TYPE_LAST; ++src) {
-            for (dst = 0; dst < UCS_MEMORY_TYPE_LAST; ++dst) {
+        ucs_memory_type_for_each(src) {
+            ucs_memory_type_for_each(dst) {
                 stream  = &self->queue_desc[src][dst].stream;
                 event_q = &self->queue_desc[src][dst].event_queue;
 

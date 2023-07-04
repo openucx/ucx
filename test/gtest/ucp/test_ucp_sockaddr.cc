@@ -177,6 +177,7 @@ public:
     }
 
     void get_sockaddr() {
+        std::set<std::pair<sa_family_t, std::string>> added;
         std::vector<ucs::sock_addr_storage> saddrs;
         struct ifaddrs* ifaddrs;
         ucs_status_t status;
@@ -187,6 +188,12 @@ public:
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
             if (!ucs::is_interface_usable(ifa) || is_skip_interface(ifa)) {
                 continue;
+            }
+
+            sa_family_t family = ifa->ifa_addr->sa_family;
+            const char *name   = ifa->ifa_name;
+            if (!added.insert({family, name}).second) {
+                continue; // we already have an address for that interface
             }
 
             saddrs.push_back(ucs::sock_addr_storage());
@@ -570,7 +577,7 @@ public:
         {
             // Suppress possible reject/unreachable errors
             scoped_log_handler slh(wrap_errors_logger);
-            send_status = request_wait(send_req, 0, wakeup);
+            send_status = request_wait(send_req, {}, 0, wakeup);
             if (!check_send_status(send_status, to, recv_req, cb_type)) {
                 return;
             }
@@ -581,7 +588,7 @@ public:
             wait_for_flag(&am_rx_arg.received);
             set_am_data_handler(to, 0, NULL, NULL);
         } else {
-            request_wait(recv_req, 0, wakeup);
+            request_wait(recv_req, {}, 0, wakeup);
         }
         EXPECT_EQ(send_data, recv_data);
     }
@@ -742,8 +749,9 @@ public:
         EXPECT_EQ(m_test_addr, attr.local_sockaddr);
     }
 
-    void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
-        void *req           = e.disconnect_nb(0, 0, mode);
+    void one_sided_disconnect(entity &e, uint32_t flags = 0)
+    {
+        void *req           = e.disconnect_nb(0, 0, flags);
         ucs_time_t deadline = ucs::get_deadline();
         scoped_log_handler slh(detect_error_logger);
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
@@ -755,15 +763,16 @@ public:
         e.close_ep_req_free(req);
     }
 
-    void concurrent_disconnect(enum ucp_ep_close_mode mode) {
+    void concurrent_disconnect(uint32_t flags = 0)
+    {
         ASSERT_EQ(2ul, entities().size());
         ASSERT_EQ(1, sender().get_num_workers());
         ASSERT_EQ(1, sender().get_num_eps());
         ASSERT_EQ(1, receiver().get_num_workers());
         ASSERT_EQ(1, receiver().get_num_eps());
 
-        void *sender_ep_close_req   = sender().disconnect_nb(0, 0, mode);
-        void *receiver_ep_close_req = receiver().disconnect_nb(0, 0, mode);
+        void *sender_ep_close_req   = sender().disconnect_nb(0, 0, flags);
+        void *receiver_ep_close_req = receiver().disconnect_nb(0, 0, flags);
 
         ucs_time_t deadline = ucs::get_deadline();
         scoped_log_handler slh(detect_error_logger);
@@ -955,7 +964,7 @@ protected:
             ucp_ep_set_failed(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
             UCS_ASYNC_UNBLOCK(&ep->worker->async);
         }
-        void *close_req = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
+        void *close_req = ep_close_nbx(ep, UCP_EP_CLOSE_FLAG_FORCE);
 
         // Do some progress of sender's worker to check that it doesn't
         // complete UCP requests prior closing UCT endpoint from discarding
@@ -1030,22 +1039,22 @@ UCS_TEST_P(test_ucp_sockaddr, set_local_sockaddr)
 
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect) {
     listen_and_communicate(false, 0);
-    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_c2s) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_s2c) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
-    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr, close_callback) {
@@ -1077,49 +1086,49 @@ UCS_TEST_P(test_ucp_sockaddr, close_callback) {
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_bidi_wait_err_cb) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
-    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender());
     wait_for_flag(&m_err_count);
     EXPECT_EQ(1u, m_err_count);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect) {
     listen_and_communicate(false, 0);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+    concurrent_disconnect();
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_c2s) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+    concurrent_disconnect();
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_s2c) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+    concurrent_disconnect();
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+    concurrent_disconnect();
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_force) {
     listen_and_communicate(false, 0);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+    concurrent_disconnect(UCP_EP_CLOSE_FLAG_FORCE);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_force_c2s) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+    concurrent_disconnect(UCP_EP_CLOSE_FLAG_FORCE);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_force_s2c) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+    concurrent_disconnect(UCP_EP_CLOSE_FLAG_FORCE);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_force_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+    concurrent_disconnect(UCP_EP_CLOSE_FLAG_FORCE);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
@@ -1498,10 +1507,10 @@ protected:
                             fail_injection);
         } else if (fail_wireup_type == FAIL_WIREUP_MSG_ADDR_PACK) {
             /* Emulate failure of preparation of WIREUP MSG sending by setting
-             * the device address getter to the function that always returns
+             * the iface address getter to the function that always returns
              * error */
-            iface->ops.iface_get_device_address =
-                    reinterpret_cast<uct_iface_get_device_address_func_t>(
+            iface->ops.iface_get_address =
+                    reinterpret_cast<uct_iface_get_address_func_t>(
                             fail_injection);
         }
     }
@@ -1573,9 +1582,9 @@ protected:
         wait_ep_err_or_wireup_msg_done(e);
 
         if (wait_cm_failure) {
-            one_sided_disconnect(e, UCP_EP_CLOSE_MODE_FORCE);
+            one_sided_disconnect(e, UCP_EP_CLOSE_FLAG_FORCE);
         } else {
-            concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+            concurrent_disconnect(UCP_EP_CLOSE_FLAG_FORCE);
         }
     }
 
@@ -1713,8 +1722,9 @@ private:
         UCS_ASYNC_BLOCK(&e.worker()->async);
         uct_priv_worker_t *worker = ucs_derived_of(e.worker()->uct,
                                                    uct_priv_worker_t);
-        ucs_callbackq_remove_if(&worker->super.progress_q,
-                                find_try_next_cm_cb, &find_try_next_cm_arg);
+        ucs_callbackq_remove_oneshot(&worker->super.progress_q, e.ep(),
+                                     find_try_next_cm_cb,
+                                     &find_try_next_cm_arg);
         UCS_ASYNC_UNBLOCK(&e.worker()->async);
 
         return find_try_next_cm_arg.found;
@@ -1908,7 +1918,7 @@ UCS_TEST_P(test_ucp_sockaddr_cm_private_data,
 {
     check_cm_fallback();
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+    concurrent_disconnect();
 }
 
 UCS_TEST_P(test_ucp_sockaddr_cm_private_data,
@@ -1917,7 +1927,7 @@ UCS_TEST_P(test_ucp_sockaddr_cm_private_data,
 {
     check_rdmacm();
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+    concurrent_disconnect();
 }
 
 UCS_TEST_P(test_ucp_sockaddr_cm_private_data,
@@ -1926,7 +1936,7 @@ UCS_TEST_P(test_ucp_sockaddr_cm_private_data,
 {
     check_cm_fallback();
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+    concurrent_disconnect();
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_cm_private_data, all, "all")
@@ -1944,7 +1954,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes,
     EXPECT_EQ(has_rndv_lanes(sender().ep()),
               has_rndv_lanes(receiver().ep()));
 
-    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+    concurrent_disconnect();
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_check_lanes)
@@ -1972,7 +1982,7 @@ public:
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         test_ucp_sockaddr::err_handler_cb(arg, ep, status);
         entity *e = reinterpret_cast<entity *>(arg);
-        e->disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
+        e->disconnect_nb(0, 0, UCP_EP_CLOSE_FLAG_FORCE);
     }
 };
 
@@ -1995,57 +2005,57 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, bidi) {
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_client_cforce) {
     listen_and_communicate(false, 0);
     scoped_log_handler slh(wrap_errors_logger);
-    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FORCE);
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
+    one_sided_disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_c2s_cforce) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
     scoped_log_handler slh(wrap_errors_logger);
-    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FORCE);
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
+    one_sided_disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_s2c_cforce) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
     scoped_log_handler slh(wrap_errors_logger);
-    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FORCE);
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
+    one_sided_disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_cforce) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
     scoped_log_handler slh(wrap_errors_logger);
-    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FORCE);
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
+    one_sided_disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_client_sforce) {
     listen_and_communicate(false, 0);
     scoped_log_handler slh(wrap_errors_logger);
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
-    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
+    one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_c2s_sforce) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
     scoped_log_handler slh(wrap_errors_logger);
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
-    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
+    one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_s2c_sforce) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
     scoped_log_handler slh(wrap_errors_logger);
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
-    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
+    one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
     scoped_log_handler slh(wrap_errors_logger);
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
-    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
+    one_sided_disconnect(sender());
 }
 
 /* The test check that a client disconnection works fine when a server received
@@ -2079,7 +2089,7 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
 
         /* Disconnect from a peer while conenction is not fully established with
          * a peer */
-        one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FORCE);
+        one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
 
         /* Wait until either accepting a connection fails on a server side or
          * disconnection is detected by a server in case of a connection was
@@ -2095,7 +2105,7 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
     }
 
     /* Disconnect from a client if a connection was established */
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)
@@ -2283,7 +2293,7 @@ protected:
                                       &send_param);
         request_wait(sreq);
 
-        e.disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
+        e.disconnect_nb(0, 0, UCP_EP_CLOSE_FLAG_FORCE);
     }
 
     void test_tag_send_recv(size_t size, bool is_exp, bool is_sync = false,
@@ -2522,7 +2532,7 @@ protected:
     };
 
     static void disconnect(test_ucp_sockaddr_protocols &test, entity &e) {
-        test.one_sided_disconnect(e, UCP_EP_CLOSE_MODE_FORCE);
+        test.one_sided_disconnect(e, UCP_EP_CLOSE_FLAG_FORCE);
         while (m_err_count == 0) {
             test.short_progress_loop();
         }
@@ -2729,32 +2739,32 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols,
-           am_rndv_64k_prereg_proto_v2_single_rndv_put_zcopy_lane,
+           am_rndv_64k_prereg_proto_v1_single_rndv_put_zcopy_lane,
            "RNDV_THRESH=0", "MAX_RNDV_LANES=1", "RNDV_SCHEME=put_zcopy",
-           "PROTO_ENABLE=y")
+           "PROTO_ENABLE=n")
 {
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=y",
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=n",
            "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=y",
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=n",
            "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=y")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=n")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=y",
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=n",
            "RNDV_THRESH=0")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
@@ -3061,13 +3071,11 @@ protected:
 
     test_ucp_sockaddr_protocols_err_sender() {
         configure_peer_failure_settings();
-        m_env.push_back(new ucs::scoped_setenv("UCX_IB_REG_METHODS",
-                                               "rcache,odp,direct"));
     }
 
     void entity_disconnect(entity &e)
     {
-        void *close_req = e.disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
+        void *close_req = e.disconnect_nb(0, 0, UCP_EP_CLOSE_FLAG_FORCE);
         if (UCS_PTR_IS_PTR(close_req)) {
             ucs_status_t status = request_progress(close_req, { &e });
             ASSERT_EQ(UCS_ERR_CANCELED, status);

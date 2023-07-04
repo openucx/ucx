@@ -9,7 +9,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 15) # Minor version. Increased for each release.
+define([ucx_ver_minor], 16) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -219,7 +219,10 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
      AM_CONDITIONAL([HAVE_FUSE3], [false])
+     AM_CONDITIONAL([HAVE_MAD], [false])
      AM_CONDITIONAL([IODEMO_CUDA], [false])
+     AM_CONDITIONAL([HAVE_GCOV], [false])
+     AM_CONDITIONAL([HAVE_LCOV], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -233,6 +236,8 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/cuda.m4])
      m4_include([config/m4/rocm.m4])
      m4_include([config/m4/gdrcopy.m4])
+     m4_include([config/m4/mad.m4])
+     m4_include([config/m4/lcov.m4])
      m4_include([src/ucm/configure.m4])
      m4_include([src/ucs/configure.m4])
      m4_include([src/uct/configure.m4])
@@ -398,7 +403,6 @@ AC_MSG_NOTICE([  Preprocessor flags:   ${BASE_CPPFLAGS}])
 AC_MSG_NOTICE([          C compiler:   ${CC} ${BASE_CFLAGS}])
 AC_MSG_NOTICE([        C++ compiler:   ${CXX} ${BASE_CXXFLAGS}])
 AC_MSG_NOTICE([        Multi-thread:   ${mt_enable}])
-AC_MSG_NOTICE([        NUMA support:   ${numa_enable}])
 AC_MSG_NOTICE([           MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([         VFS support:   ${vfs_enable}])
 AC_MSG_NOTICE([       Devel headers:   ${enable_devel_headers}])

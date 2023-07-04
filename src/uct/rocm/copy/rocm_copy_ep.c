@@ -30,25 +30,14 @@
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_ep_t, const uct_ep_params_t *params)
 {
     uct_rocm_copy_iface_t *iface = ucs_derived_of(params->iface, uct_rocm_copy_iface_t);
-    char target_name[64];
-    ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
-    snprintf(target_name, sizeof(target_name), "dest:%d",
-             *(pid_t*)params->iface_addr);
-    status = uct_rocm_copy_create_cache(&self->local_memh_cache, target_name);
-    if (status != UCS_OK) {
-        ucs_error("could not create create rocm copy cache: %s",
-                  ucs_status_string(status));
-    }
-
-    return status;
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rocm_copy_ep_t)
 {
-    uct_rocm_copy_destroy_cache(self->local_memh_cache);
 }
 
 UCS_CLASS_DEFINE(uct_rocm_copy_ep_t, uct_base_ep_t)
@@ -60,11 +49,11 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_copy_ep_t, uct_ep_t);
                     (_rkey))
 
 static void *
-uct_rocm_copy_get_mapped_host_ptr(uct_ep_h tl_ep, void *ptr, size_t size,
+uct_rocm_copy_get_mapped_host_ptr(uct_rocm_copy_iface_t *iface, void *ptr,
+                                  size_t size,
                                   uct_rocm_copy_key_t *rocm_copy_key)
 {
-    uct_rocm_copy_ep_t *ep = ucs_derived_of(tl_ep, uct_rocm_copy_ep_t);
-    size_t offset          = 0;
+    size_t offset = 0;
     void *mapped_ptr;
     ucs_status_t status;
 
@@ -72,7 +61,7 @@ uct_rocm_copy_get_mapped_host_ptr(uct_ep_h tl_ep, void *ptr, size_t size,
         (((void*)rocm_copy_key->vaddr == rocm_copy_key->dev_ptr) &&
          ((void*)rocm_copy_key->vaddr != ptr))) {
         /* key contains rocm address information. Need to lock host address first */
-        status = uct_rocm_copy_cache_map_memhandle(ep->local_memh_cache,
+        status = uct_rocm_copy_cache_map_memhandle(iface->local_memh_cache,
                                                    (uint64_t)ptr, size,
                                                    &mapped_ptr);
         if ((status != UCS_OK) || (mapped_ptr == NULL)) {
@@ -119,11 +108,14 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if ((remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
-        (dev_type == HSA_DEVICE_TYPE_GPU)) {
-        /* UCS_MEMORY_TYPE_ROCM */
+    if (remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
         remote_addr_mod = (void*)remote_addr;
-        agent           = tmp_agent;
+        if (dev_type == HSA_DEVICE_TYPE_GPU) {
+            /* UCS_MEMORY_TYPE_ROCM */
+            agent = tmp_agent;
+        } else {
+            remote_addr_is_host = 1;
+        }
     } else if ((remote_addr_mem_type == HSA_EXT_POINTER_TYPE_LOCKED) &&
                (size == dev_size)) {
         /* locked host memory, e.g. hipHostRegister, OR previously registered */
@@ -131,7 +123,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         remote_addr_mod     = dev_address;
     } else {
         remote_addr_is_host = 1;
-        remote_addr_mod     = uct_rocm_copy_get_mapped_host_ptr(tl_ep,
+        remote_addr_mod     = uct_rocm_copy_get_mapped_host_ptr(iface,
                                                                 (void*)remote_addr,
                                                                 size,
                                                                 rocm_copy_key);
@@ -152,11 +144,14 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if ((iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
-        (dev_type == HSA_DEVICE_TYPE_GPU)) {
-        /* UCS_MEMORY_TYPE_ROCM */
+    if (iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
         iov_buffer_mod = iov->buffer;
-        agent          = tmp_agent;
+        if (dev_type == HSA_DEVICE_TYPE_GPU) {
+            /* UCS_MEMORY_TYPE_ROCM */
+            agent = tmp_agent;
+        } else {
+            iov_buffer_is_host = 1;
+        }
     } else if ((iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_LOCKED) &&
                (size == dev_size)) {
         /* locked host memory (e.g. hipHostRegister) OR previously registered */
@@ -164,7 +159,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         iov_buffer_mod     = dev_address;
     } else {
         iov_buffer_is_host = 1;
-        iov_buffer_mod = uct_rocm_copy_get_mapped_host_ptr(tl_ep, iov->buffer,
+        iov_buffer_mod = uct_rocm_copy_get_mapped_host_ptr(iface, iov->buffer,
                                                            size, NULL);
         if (iov_buffer_mod == NULL) {
             ucs_error("failed to map host pointer %p to device address",

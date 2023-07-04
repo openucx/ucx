@@ -36,7 +36,7 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
                                        unsigned *num_resources_p)
 {
     ucs_status_t status;
-    int UCS_V_UNUSED attach_shm_file;
+    int attach_shm_file;
 
     status = uct_mm_mdc_mapper_ops(component)->query(&attach_shm_file);
     switch (status) {

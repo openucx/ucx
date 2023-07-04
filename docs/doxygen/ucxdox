@@ -794,18 +794,19 @@ INPUT_ENCODING         = UTF-8
 # *.md, *.mm, *.dox, *.py, *.f90, *.f, *.for, *.tcl, *.vhd, *.vhdl, *.ucf,
 # *.qsf, *.as and *.js.
 
-FILE_PATTERNS          = ucp.h          \
-                         ucp_compat.h   \
-                         ucp_def.h      \
-                         uct.h          \
-                         uct_def.h      \
-                         status.h       \
-                         async_fwd.h    \
-                         compiler_def.h \
-                         time_def.h     \
-                         thread_mode.h  \
-                         memory_type.h  \
-                         callbackq.h    \
+FILE_PATTERNS          = ucp.h              \
+                         ucp_compat.h       \
+                         ucp_def.h          \
+                         uct.h              \
+                         uct_def.h          \
+                         status.h           \
+                         async_fwd.h        \
+                         compiler_def.h     \
+                         time_def.h         \
+                         thread_mode.h      \
+                         memory_type.h      \
+                         callbackq.h        \
+                         callbackq_compat.h \
                          types.h
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should

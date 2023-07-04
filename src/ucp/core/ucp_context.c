@@ -223,7 +223,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Communication scheme in RNDV protocol.\n"
    " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
    " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
+   " get_ppln  - use pipelined get_zcopy scheme in RNDV protocol.\n"
+   " put_ppln  - use pipelined put_zcopy scheme in RNDV protocol.\n"
    " rkey_ptr  - use rkey_ptr in RNDV protocol.\n"
+   " am        - use active message scheme in RNDV protocol.\n"
    " auto      - runtime automatically chooses optimal scheme to use.",
    ucs_offsetof(ucp_context_config_t, rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 
@@ -304,9 +307,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, tm_force_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TM_SW_RNDV", "n",
-   "Use software rendezvous protocol with tag offload. If enabled, tag offload\n"
-   "mode will be used for messages sent with eager protocol only.",
-   ucs_offsetof(ucp_context_config_t, tm_sw_rndv), UCS_CONFIG_TYPE_BOOL},
+   "Use software rendezvous protocol even when tag matching offload is enabled.\n"
+   "In this case tag matching offload will be used for messages sent with eager\n"
+   "protocol only. If the value is set to \"try\", the rendezvous protocol is\n"
+   "selected automatically according to the performance characteristics.",
+   ucs_offsetof(ucp_context_config_t, tm_sw_rndv), UCS_CONFIG_TYPE_TERNARY},
 
   {"NUM_EPS", "auto",
    "An optimization hint of how many endpoints would be created on this context.\n"
@@ -368,7 +373,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "would be cut to that maximal value.",
    ucs_offsetof(ucp_context_config_t, listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"PROTO_ENABLE", "n",
+  {"PROTO_ENABLE", "y",
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_context_config_t, proto_enable), UCS_CONFIG_TYPE_BOOL},
 
@@ -443,6 +448,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "If non-empty, protocol selection information files will be written to this\n"
    "directory.",
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
+
+  {"REG_NONBLOCK_MEM_TYPES", "",
+   "Perform only non-blocking memory registration for these memory types:\n"
+   "page registration may be deferred until it is accessed by the CPU or a transport.",
+   ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
   {NULL}
 };
@@ -1025,7 +1036,7 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
 }
 
 static void ucp_add_tl_resource_if_enabled(
-        ucp_context_h context, ucp_tl_md_t *md, ucp_md_index_t md_index,
+        ucp_context_h context, ucp_md_index_t md_index,
         const ucp_config_t *config, const ucs_string_set_t *aux_tls,
         const uct_tl_resource_desc_t *resource, unsigned *num_resources_p,
         uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask)
@@ -1086,12 +1097,12 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     status = uct_md_query_tl_resources(md->md, &tl_resources, &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
-        goto err;
+        goto out;
     }
 
     if (num_tl_resources == 0) {
         ucs_debug("No tl resources found for md %s", md->rsc.md_name);
-        goto out_free_resources;
+        goto free_resources;
     }
 
     tmp = ucs_realloc(context->tl_rscs,
@@ -1101,7 +1112,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     if (tmp == NULL) {
         ucs_error("Failed to allocate resources");
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_resources;
+        goto free_resources;
     }
 
     /* print configuration */
@@ -1116,18 +1127,15 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                             "'%s'(%s)", tl_resources[i].dev_name,
                             context->tl_cmpts[md->cmpt_index].attr.name);
         ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
-        ucp_add_tl_resource_if_enabled(context, md, md_index, config, aux_tls,
+        ucp_add_tl_resource_if_enabled(context, md_index, config, aux_tls,
                                        &tl_resources[i], num_resources_p,
                                        dev_cfg_masks, tl_cfg_mask);
     }
 
-out_free_resources:
+    status = UCS_OK;
+free_resources:
     uct_release_tl_resource_list(tl_resources);
-    return UCS_OK;
-
-err_free_resources:
-    uct_release_tl_resource_list(tl_resources);
-err:
+out:
     return status;
 }
 
@@ -1241,8 +1249,6 @@ static void ucp_free_resources(ucp_context_t *context)
 
 static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 {
-     /* if we got here then num_resources > 0.
-      * if the user's device list is empty, there is no match */
      if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
          (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
          (0 == config->devices[UCT_DEVICE_TYPE_ACC].count) &&
@@ -1252,8 +1258,6 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
          return UCS_ERR_NO_ELEM;
      }
 
-     /* if we got here then num_resources > 0.
-      * if the user's tls list is empty, there is no match */
      if ((0 == config->tls.array.count) &&
          (config->tls.mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL)) {
          ucs_error("The TLs list is empty. Please specify the transports you "
@@ -1507,6 +1511,11 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             }
 
             ucs_memory_type_for_each(mem_type) {
+                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
+                    continue;
+                }
+
                 if (md_attr->flags & UCT_MD_FLAG_REG) {
                     if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
@@ -1588,6 +1597,12 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
             context->reg_md_map[mem_type] |= context->dmabuf_reg_md_map;
         }
 
+        if (context->reg_md_map[mem_type] == 0) {
+            ucs_debug("no memory domain supports registering %s memory",
+                      ucs_memory_type_names[mem_type]);
+            continue;
+        }
+
         ucs_string_buffer_reset(&strb);
         ucs_for_each_bit(md_index, context->reg_md_map[mem_type]) {
             ucs_string_buffer_appendf(&strb, "%s, ",
@@ -1625,7 +1640,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_mem_type_detect_mds  = 0;
     context->export_md_map            = 0;
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+    ucs_memory_type_for_each(mem_type) {
         context->reg_md_map[mem_type]     = 0;
         context->cache_md_map[mem_type]   = 0;
         context->dmabuf_mds[mem_type]     = UCP_NULL_RESOURCE;
@@ -1817,7 +1832,7 @@ ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
     ssize_t mem_type;
     unsigned i;
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+    ucs_memory_type_for_each(mem_type) {
         sizes[mem_type] = default_sizes[mem_type];
     }
 

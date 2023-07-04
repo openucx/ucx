@@ -337,32 +337,6 @@ typedef enum {
 
 /**
  * @ingroup UCP_ENDPOINT
- * @brief Close UCP endpoint modes.
- *
- * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
- */
-enum ucp_ep_close_mode {
-    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
-                                              the endpoint without any
-                                              confirmation from the peer. All
-                                              outstanding requests will be
-                                              completed with
-                                              @ref UCS_ERR_CANCELED error.
-                                              @note This mode may cause
-                                              transport level errors on remote
-                                              side, so it requires set
-                                              @ref UCP_ERR_HANDLING_MODE_PEER
-                                              for all endpoints created on
-                                              both (local and remote) sides to
-                                              avoid undefined behavior. */
-    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
-                                              flushes on all outstanding
-                                              operations. */
-};
-
-
-/**
- * @ingroup UCP_ENDPOINT
  * @brief UCP performance fields and flags
  *
  * The enumeration allows specifying which fields in @ref ucp_ep_evaluate_perf_param_t are
@@ -754,7 +728,9 @@ typedef enum {
     UCP_OP_ATTR_FLAG_MULTI_SEND     = UCS_BIT(19)  /**< optimize for bandwidth of
                                                         multiple in-flight operations,
                                                         rather than for the latency
-                                                        of a single operation */
+                                                        of a single operation.
+                                                        This flag and UCP_OP_ATTR_FLAG_FAST_CMPL
+                                                        are mutually exclusive. */
 } ucp_op_attr_t;
 
 

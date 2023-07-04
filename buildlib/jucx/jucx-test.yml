@@ -4,7 +4,9 @@ parameters:
 
 jobs:
   - job: ${{ parameters.name }}
-
+    workspace:
+      clean: all
+      
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
@@ -24,6 +26,7 @@ jobs:
       - bash: |
           set -xeE
           source buildlib/az-helpers.sh
+          check_gpu ${{ parameters.name }}
           az_init_modules
           az_module_load dev/mvn
           az_module_load dev/jdk-${JAVA_VERSION}
@@ -34,6 +37,7 @@ jobs:
           make -j`nproc`
           make install
         displayName: Build UCX
+
       - bash: |
           set -xeE
           source buildlib/az-helpers.sh

@@ -219,11 +219,65 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
-int uct_iface_is_reachable_v2(const uct_iface_h iface,
+static int uct_iface_is_same_device(const uct_iface_h iface,
+                                    const uct_device_addr_t *device_addr)
+{
+    void *dev_addr;
+    uct_iface_attr_t attr;
+    ucs_status_t status;
+
+    status = uct_iface_query(iface, &attr);
+    if (status != UCS_OK) {
+        ucs_error("failed to query iface %p", iface);
+        return 0;
+    }
+
+    dev_addr = ucs_alloca(attr.device_addr_len);
+    status   = uct_iface_get_device_address(iface, dev_addr);
+    if (status != UCS_OK) {
+        ucs_error("failed to get device address from %p", iface);
+        return 0;
+    }
+
+    return !memcmp(device_addr, dev_addr, attr.device_addr_len);
+}
+
+int
+uct_base_iface_is_reachable_v2(const uct_iface_h iface,
+                               const uct_iface_is_reachable_params_t *params)
+{
+    uct_iface_reachability_scope_t scope;
+
+    if (!uct_iface_is_reachable(iface, params->device_addr,
+                                params->iface_addr)) {
+        return 0;
+    }
+
+    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
+                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
+
+    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
+           uct_iface_is_same_device(iface, params->device_addr);
+}
+
+int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
                               const uct_iface_is_reachable_params_t *params)
 {
-    ucs_fatal("uct_iface_is_reachable_v2 not supported yet");
-    return 0;
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    if (!ucs_test_all_flags(params->field_mask,
+                            UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                            UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                  "iface_addr should be supplied.", params->field_mask);
+        return 0;
+    }
+
+    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
+        params->info_string[0] = '\0';
+    }
+
+    return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
@@ -272,11 +326,10 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
         (iface->prog.id == UCS_CALLBACKQ_ID_NULL)) {
         if (thread_safe) {
             iface->prog.id = ucs_callbackq_add_safe(&worker->super.progress_q,
-                                                    cb, iface,
-                                                    UCS_CALLBACKQ_FLAG_FAST);
+                                                    cb, iface);
         } else {
             iface->prog.id = ucs_callbackq_add(&worker->super.progress_q, cb,
-                                               iface, UCS_CALLBACKQ_FLAG_FAST);
+                                               iface);
         }
     }
     iface->progress_flags |= flags;
@@ -457,11 +510,12 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 }
 
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
+    .iface_estimate_perf   = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
@@ -706,9 +760,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
     uct_base_iface_t *iface = ucs_derived_of(self->super.iface,
                                              uct_base_iface_t);
 
-    ucs_callbackq_remove_if(&iface->worker->super.progress_q,
-                            uct_iface_ep_conn_reset_handle_progress_remove,
-                            self);
+    ucs_callbackq_remove_oneshot(&iface->worker->super.progress_q, self,
+                                 uct_iface_ep_conn_reset_handle_progress_remove,
+                                 self);
     UCS_STATS_NODE_FREE(self->stats);
 }
 
@@ -815,9 +869,8 @@ static void uct_iface_schedule_ep_err(uct_ep_h ep)
         return;
     }
 
-    ucs_callbackq_add_safe(&iface->worker->super.progress_q,
-                           uct_iface_ep_conn_reset_handle_progress, ep,
-                           UCS_CALLBACKQ_FLAG_ONESHOT);
+    ucs_callbackq_add_oneshot(&iface->worker->super.progress_q, ep,
+                              uct_iface_ep_conn_reset_handle_progress, ep);
 }
 
 ucs_status_t uct_ep_keepalive_init(uct_keepalive_info_t *ka, pid_t pid)
@@ -856,56 +909,6 @@ void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
         addr_ns->super.id |= UCT_IFACE_LOCAL_ADDR_FLAG_NS;
         addr_ns->sys_ns    = ucs_sys_get_ns(sys_ns_type);
     }
-}
-
-const char *uct_iface_get_sysfs_path(const char *dev_path, const char *dev_name,
-                                     char *path_buffer)
-{
-    const char *detected_type = NULL;
-    char device_file_path[PATH_MAX];
-    char *sysfs_realpath;
-    struct stat st_buf;
-    char *sysfs_path;
-    int ret;
-
-    /* realpath name is expected to be like below:
-     * PF: /sys/devices/.../0000:03:00.0/<interface_type>/<dev_name>
-     * SF: /sys/devices/.../0000:03:00.0/<UUID>/<interface_type>/<dev_name>
-     */
-
-    sysfs_realpath = realpath(dev_path, path_buffer);
-    if (sysfs_realpath == NULL) {
-        goto out_undetected;
-    }
-
-    /* Try PF: strip 2 components */
-    sysfs_path = ucs_dirname(sysfs_realpath, 2);
-    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
-                      sysfs_path);
-    ret = stat(device_file_path, &st_buf);
-    if (ret == 0) {
-        detected_type = "PF";
-        goto out_detected;
-    }
-
-    /* Try SF: strip 3 components (one more) */
-    sysfs_path = ucs_dirname(sysfs_path, 1);
-    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
-                      sysfs_path);
-    ret = stat(device_file_path, &st_buf);
-    if (ret == 0) {
-        detected_type = "SF";
-        goto out_detected;
-    }
-
-out_undetected:
-    ucs_debug("%s: sysfs path undetected", dev_name);
-    return NULL;
-
-out_detected:
-    ucs_debug("%s: %s sysfs path is '%s'\n", dev_name, detected_type,
-              sysfs_path);
-    return sysfs_path;
 }
 
 int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,

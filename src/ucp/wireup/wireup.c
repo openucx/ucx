@@ -307,10 +307,10 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
 {
     const ucp_address_entry_t *address;
     unsigned address_index;
-    ucp_lane_index_t lane, remote_lane;
+    ucp_lane_index_t lane, remote_lane, num_lanes;
     unsigned *ep_addr_indexes;
     unsigned ep_addr_index;
-    uint64_t UCS_V_UNUSED used_remote_lanes;
+    uint64_t used_remote_lanes;
 
     /* Initialize the counters of ep address index for each address entry */
     ep_addr_indexes = ucs_alloca(sizeof(ep_addr_index) *
@@ -326,7 +326,8 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
     }
 
     used_remote_lanes = 0;
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+    num_lanes         = ucp_ep_num_lanes(ep);
+    for (lane = 0; lane < num_lanes; ++lane) {
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
             continue;
         }
@@ -338,7 +339,9 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         address            = &remote_address->address_list[address_index];
         ep_addr_index      = ep_addr_indexes[address_index]++;
         ucs_assertv(ep_addr_index < address->num_ep_addrs,
+                    "lane=%d/%d tl_name_csum=0x%02x address_index=%u "
                     "ep_addr_index=%u num_ep_addrs=%u",
+                    lane, num_lanes, address->tl_name_csum, address_index,
                     ep_addr_index, address->num_ep_addrs);
         remote_lane        = address->ep_addrs[ep_addr_index].lane;
         lanes2remote[lane] = remote_lane;
@@ -436,12 +439,9 @@ static int ucp_ep_has_wireup_msg_pending(ucp_ep_h ucp_ep)
 
 static void ucp_wireup_eps_progress_sched(ucp_ep_h ucp_ep)
 {
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
-
     /* Use one-shot mode to avoid the need to save prog_id */
-    uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                      ucp_wireup_eps_progress, ucp_ep,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+    ucs_callbackq_add_oneshot(&ucp_ep->worker->uct->progress_q, ucp_ep,
+                              ucp_wireup_eps_progress, ucp_ep);
     ucp_worker_signal_internal(ucp_ep->worker);
 }
 
@@ -752,7 +752,6 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
                          const ucp_wireup_msg_t *msg,
                          const ucp_unpacked_address_t *remote_address)
 {
-    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucs_status_t status;
     int ack;
 
@@ -790,9 +789,8 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     if (ack) {
         /* Send `UCP_WIREUP_MSG_ACK` from progress function
          * to avoid calling UCT routines from an async thread */
-        uct_worker_progress_register_safe(worker->uct,
-                                          ucp_wireup_send_msg_ack, ep,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, ep,
+                                  ucp_wireup_send_msg_ack, ep);
     }
 }
 
@@ -1004,6 +1002,33 @@ ucp_wireup_ep_lane_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
                               ucp_ep_get_rsc_index(ep, lane));
 }
 
+static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
+                                             ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_context_h context = wiface->worker->context;
+
+    /* Activate worker iface if: a) new protocol selection logic is disabled; or
+     * b) stream support is requested, because stream API does not support new
+     * protocol selection logic; or c) lane is used for checking a connection
+     * state; or d) the endpoint is a mem-type ep; or e) iface was activated
+     * before (some ep was created and later destroyed). The last check is
+     * needed to workaround the following problem with proto v2:
+     * 1. ep is created using some ep config
+     * 2. Some protocols are selected for some operations and this enables
+     *    progress for the affected lanes
+     * 3. ep is destroyed and progress is disabled for all corresponding ifaces
+     * 4. New ep is created with the same ep config used during step n1
+     * 5. Progress is not enabled, because protocols selection for these
+     *    parameters (and ep config) was already done on step n2.
+     * TODO: Reconsider this approach when progress enabling scheme changes. */
+
+    return !context->config.ext.proto_enable ||
+           (context->config.features & UCP_FEATURE_STREAM) ||
+           (ucp_ep_config(ep)->key.keepalive_lane == lane) ||
+           (ep->flags & UCP_EP_FLAG_INTERNAL) ||
+           (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
+}
+
 static ucs_status_t
 ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
                                  unsigned path_index,
@@ -1073,7 +1098,10 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
         ucp_wireup_ep_lane_set_next_ep(ep, lane, uct_ep);
     }
 
-    ucp_worker_iface_progress_ep(wiface);
+    if (ucp_wireup_should_activate_wiface(wiface, ep, lane)) {
+        ucp_worker_iface_progress_ep(wiface);
+    }
+
     return UCS_OK;
 }
 
@@ -1113,7 +1141,10 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
         return status;
     }
 
-    ucp_worker_iface_progress_ep(wiface);
+    if (ucp_wireup_should_activate_wiface(wiface, ep, lane)) {
+        ucp_worker_iface_progress_ep(wiface);
+    }
+
     return UCS_OK;
 }
 
@@ -1210,6 +1241,9 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
         }
         ucs_log(log_level, "%s: %s", title, ucs_string_buffer_cstr(&strb));
     }
+
+    ucs_log(log_level, "%s: err mode %d, flags 0x%x", title, key->err_mode,
+            key->flags);
 }
 
 int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
@@ -1475,6 +1509,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                                           worker->context->tl_bitmap,
                                                           UCP_MAX_RESOURCES);
     ucp_rsc_index_t cm_idx               = UCP_NULL_RESOURCE;
+    ucp_tl_bitmap_t current_tl_bitmap;
+    ucp_rsc_index_t rsc_idx;
     ucp_lane_map_t connect_lane_bitmap;
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
@@ -1483,7 +1519,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     char str[32];
     ucs_queue_head_t replay_pending_queue;
 
-    UCS_BITMAP_AND_INPLACE(&tl_bitmap, worker->context->tl_bitmap);
     ucs_assert(!UCS_BITMAP_IS_ZERO_INPLACE(&tl_bitmap));
 
     ucs_trace("ep %p: initialize lanes", ep);
@@ -1491,7 +1526,27 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
+    ucp_ep_config_key_init_flags(&key, ep_init_flags);
     ucp_wireup_eps_pending_extract(ep, &replay_pending_queue);
+
+    /* Allow to choose only the lanes that were already chosen for case
+     * without CM to prevent reconfiguration error.
+     */
+    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+        !ucp_ep_has_cm_lane(ep)) {
+        UCS_BITMAP_CLEAR(&current_tl_bitmap);
+        for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
+            rsc_idx = ucp_ep_config(ep)->key.lanes[lane].rsc_index;
+            UCS_BITMAP_SET(current_tl_bitmap, rsc_idx);
+            ucs_assertv(
+                UCS_BITMAP_GET(tl_bitmap, rsc_idx),
+                "resource that was chosen previously is unavailable: tl_rscs[%d]="
+                UCT_TL_RESOURCE_DESC_FMT, rsc_idx,
+                UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_idx].tl_rsc)
+            );
+        }
+        UCS_BITMAP_AND_INPLACE(&tl_bitmap, current_tl_bitmap);
+    }
 
     status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
                                      remote_address, addr_indices, &key, 1);
@@ -1801,6 +1856,37 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
     }
 
     return flags;
+}
+
+double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface)
+{
+    return wiface->worker->context->config.ext.proto_enable ?
+        (wiface->attr.latency.c + wiface->distance.latency) :
+        wiface->attr.latency.c;
+}
+
+double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface)
+{
+    ucp_context_h context = wiface->worker->context;
+    ucs_linear_func_t lat = wiface->attr.latency;
+
+    if (context->config.ext.proto_enable) {
+        lat.c += wiface->distance.latency;
+    }
+    return ucp_tl_iface_latency(context, &lat);
+}
+
+double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface)
+{
+    const ucs_sys_dev_distance_t *distance = &wiface->distance;
+    const ucp_context_h context            = wiface->worker->context;
+    uct_ppn_bandwidth_t bandwidth          = wiface->attr.bandwidth;
+
+    if (context->config.ext.proto_enable) {
+        ucp_worker_iface_add_bandwidth(&bandwidth, distance->bandwidth);
+    }
+
+    return ucp_tl_iface_bandwidth(context, &bandwidth);
 }
 
 UCP_DEFINE_AM(UINT64_MAX, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler,

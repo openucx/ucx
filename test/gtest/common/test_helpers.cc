@@ -335,8 +335,9 @@ int test_time_multiplier()
 
 ucs_time_t get_deadline(double timeout_in_sec)
 {
-    return ucs_get_time() + ucs_time_from_sec(timeout_in_sec *
-                                              test_time_multiplier());
+    return ucs_get_time() +
+           ucs_time_from_sec(ucs_min(watchdog_get_timeout() * 0.75,
+                                     timeout_in_sec * test_time_multiplier()));
 }
 
 int max_tcp_connections()
@@ -468,7 +469,28 @@ bool is_interface_usable(struct ifaddrs *ifa)
            !netif_has_sysfs_file(ifa->ifa_name, "wireless");
 }
 
-static std::vector<std::string> read_dir(const std::string& path)
+
+ssize_t get_proc_self_status_field(const std::string &parameter)
+{
+    const std::string path("/proc/self/status");
+    std::ifstream proc_stats(path);
+    std::string line, name;
+    ssize_t value;
+
+    while (std::getline(proc_stats, line)) {
+        if (!(std::istringstream(line) >> name >> value)) {
+            continue;
+        }
+        if (name == (parameter + ":")) {
+            return value;
+        }
+    }
+
+    UCS_TEST_MESSAGE << path << " does not contain " << parameter << " value";
+    return -1;
+}
+
+std::vector<std::string> read_dir(const std::string &path)
 {
     std::vector<std::string> result;
     struct dirent *entry;

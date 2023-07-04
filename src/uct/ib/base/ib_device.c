@@ -152,16 +152,13 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {NULL}
 };
 
-static void uct_ib_device_get_locality(const char *dev_name,
-                                       ucs_sys_cpuset_t *cpu_mask,
-                                       int *numa_node)
+static void
+uct_ib_device_get_locality(const char *dev_name, ucs_sys_cpuset_t *cpu_mask)
 {
     char *p, buf[ucs_max(CPU_SETSIZE, 10)];
-    ucs_status_t status;
     ssize_t nread;
     uint32_t word;
     int base, k;
-    long n;
 
     /* Read list of CPUs close to the device */
     CPU_ZERO(cpu_mask);
@@ -192,12 +189,6 @@ static void uct_ib_device_get_locality(const char *dev_name,
             CPU_SET(k, cpu_mask);
         }
     }
-
-    /* Read NUMA node number */
-    status = ucs_read_file_number(&n, 1,
-                                  "/sys/class/infiniband/%s/device/numa_node",
-                                  dev_name);
-    *numa_node = (status == UCS_OK) ? n : -1;
 }
 
 static void
@@ -207,7 +198,7 @@ uct_ib_device_async_event_schedule_callback(uct_ib_device_t *dev,
     ucs_assert(ucs_spinlock_is_held(&dev->async_event_lock));
     ucs_assert(wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
     wait_ctx->cb_id = ucs_callbackq_add_safe(wait_ctx->cbq, wait_ctx->cb,
-                                             wait_ctx, 0);
+                                             wait_ctx);
 }
 
 static void
@@ -528,8 +519,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
 
     if (dev->num_ports > UCT_IB_DEV_MAX_PORTS) {
         ucs_debug("%s has %d ports, but only up to %d are supported",
-                  ibv_get_device_name(ibv_device), dev->num_ports,
-                  UCT_IB_DEV_MAX_PORTS);
+                  dev_name, dev->num_ports, UCT_IB_DEV_MAX_PORTS);
         dev->num_ports = UCT_IB_DEV_MAX_PORTS;
     }
 
@@ -543,7 +533,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         }
     }
 
-    sysfs_path = uct_iface_get_sysfs_path(dev_path, dev_name, path_buffer);
+    sysfs_path   = ucs_topo_resolve_sysfs_path(dev_path, path_buffer);
     dev->sys_dev = ucs_topo_get_sysfs_dev(dev_name, sysfs_path,
                                           sys_device_priority);
     uct_ib_device_set_pci_id(dev, sysfs_path);
@@ -561,7 +551,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     dev->async_events = async_events;
 
     uct_ib_device_get_locality(ibv_get_device_name(ibv_device),
-                               &dev->local_cpus, &dev->numa_node);
+                               &dev->local_cpus);
 
     status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
                                   stats_parent, "device");

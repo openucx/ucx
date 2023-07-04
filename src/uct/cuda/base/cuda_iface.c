@@ -9,8 +9,25 @@
 #endif
 
 #include "cuda_iface.h"
+#include <ucs/sys/string.h>
+
 
 double *uct_cuda_base_nvml_bw;
+
+
+const char *uct_cuda_base_cu_get_error_string(CUresult result)
+{
+    static __thread char buf[64];
+    const char *error_str;
+
+    if (cuGetErrorString(result, &error_str) != CUDA_SUCCESS) {
+        ucs_snprintf_safe(buf, sizeof(buf), "unrecognized error code %d",
+                          result);
+        error_str = buf;
+    }
+
+    return error_str;
+}
 
 ucs_status_t
 uct_cuda_base_query_devices_common(

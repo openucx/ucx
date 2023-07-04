@@ -234,10 +234,12 @@ int ucs_config_sprintf_hex(char *buf, size_t max,
 
 int ucs_config_sscanf_bool(const char *buf, void *dest, const void *arg)
 {
-    if (!strcasecmp(buf, "y") || !strcasecmp(buf, "yes") || !strcmp(buf, "1")) {
+    if (!strcasecmp(buf, "y") || !strcasecmp(buf, "yes") ||
+        !strcmp(buf, "on") || !strcmp(buf, "1")) {
         *(int*)dest = 1;
         return 1;
-    } else if (!strcasecmp(buf, "n") || !strcasecmp(buf, "no") || !strcmp(buf, "0")) {
+    } else if (!strcasecmp(buf, "n") || !strcasecmp(buf, "no") ||
+               !strcmp(buf, "off") || !strcmp(buf, "0")) {
         *(int*)dest = 0;
         return 1;
     } else {
@@ -347,6 +349,38 @@ int ucs_config_sprintf_enum(char *buf, size_t max,
     return 1;
 }
 
+int ucs_config_sscanf_uint_enum(const char *buf, void *dest, const void *arg)
+{
+    int i;
+
+    i = ucs_string_find_in_list(buf, (const char**)arg, 0);
+    if (i >= 0) {
+        *(unsigned*)dest = UCS_CONFIG_UINT_ENUM_INDEX(i);
+        return 1;
+    }
+
+    return sscanf(buf, "%u", (unsigned*)dest);
+}
+
+int ucs_config_sprintf_uint_enum(char *buf, size_t max,
+                                 const void *src, const void *arg)
+{
+   char* const *table = arg;
+   unsigned value, table_size;
+
+   for (table_size = 0; table[table_size] != NULL; table_size++) {
+       continue;
+   }
+
+   value = *(unsigned*)src;
+   if (UCS_CONFIG_UINT_ENUM_INDEX(table_size) < value) {
+        strncpy(buf, table[UCS_CONFIG_UINT_ENUM_INDEX(value)], max);
+        return 1;
+   }
+
+   return snprintf(buf, max, "%u", value);
+}
+
 static void __print_table_values(char * const *table, char *buf, size_t max)
 {
     char *ptr = buf, *end = buf + max;
@@ -364,6 +398,16 @@ static void __print_table_values(char * const *table, char *buf, size_t max)
 void ucs_config_help_enum(char *buf, size_t max, const void *arg)
 {
     __print_table_values(arg, buf, max);
+}
+
+void ucs_config_help_uint_enum(char *buf, size_t max, const void *arg)
+{
+    size_t len;
+
+    snprintf(buf, max, "a numerical value, or:");
+
+    len = strlen(buf);
+    __print_table_values(arg, buf + len, max - len);
 }
 
 ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *arg)
@@ -1224,10 +1268,6 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
 
     *added = 0;
 
-    if (!ucs_config_parser_env_vars_track()) {
-        return;
-    }
-
     pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
     iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, name);
@@ -1246,7 +1286,8 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
      * false-positive warning about potential leak of memory
      * pointed to by 'key' variable */
     iter = kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
-    if ((ret <= 0) || (iter == kh_end(&ucs_config_parser_env_vars))) {
+    if ((ret == UCS_KH_PUT_FAILED) || (ret == UCS_KH_PUT_KEY_PRESENT) ||
+        (iter == kh_end(&ucs_config_parser_env_vars))) {
         ucs_warn("kh_put(key=%s) failed", key);
         ucs_free(key);
         goto out;
@@ -1970,7 +2011,7 @@ static void ucs_config_parser_print_env_vars(const char *prefix)
 
         iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, var_name);
         if (iter == kh_end(&ucs_config_parser_env_vars)) {
-            if (ucs_global_opts.warn_unused_env_vars) {
+            if (ucs_config_parser_env_vars_track()) {
                 ucs_string_buffer_appendf(&unused_vars_strb, "%s", var_name);
                 ucs_config_parser_append_similar_vars_message(
                         prefix, var_name, &unused_vars_strb);
@@ -2062,6 +2103,20 @@ int ucs_config_names_search(const ucs_config_names_array_t *config_names,
     }
 
     return -1;
+}
+
+void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
+                                    const char *delimiter)
+{
+    const char *key, *env_val;
+
+    kh_foreach_key(&ucs_config_parser_env_vars, key, {
+        env_val = getenv(key);
+        if (env_val != NULL) {
+            ucs_string_buffer_appendf(env_strb, "%s=%s%s", key, env_val,
+                                      delimiter);
+        }
+    });
 }
 
 UCS_STATIC_CLEANUP {

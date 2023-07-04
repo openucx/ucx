@@ -389,7 +389,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
             m_failing_rkey.reset();
 
-            void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
+            void *creq = ep_close_nbx(ep, UCP_EP_CLOSE_FLAG_FORCE);
             request_wait(creq);
             short_progress_loop(); /* allow discard lanes & complete destroy EP */
 
@@ -539,7 +539,7 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     }
 
     /* kill EPs & ifaces */
-    failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_MODE_FORCE);
+    failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_FLAG_FORCE);
     if (get_variant_value() & WAKEUP) {
         wakeup_drain_check_no_events({ &sender() });
     }
@@ -554,7 +554,7 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     EXPECT_NE(0, m_err_count);
 
     ucp_ep_h ep = sender().revoke_ep(0, FAILING_EP_INDEX);
-    void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
+    void *creq  = ep_close_nbx(ep, UCP_EP_CLOSE_FLAG_FORCE);
     request_wait(creq);
 
     /* make sure no remaining events are returned from poll() */

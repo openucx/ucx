@@ -114,7 +114,6 @@ libucp_la_SOURCES = \
 	core/ucp_vfs.c \
 	core/ucp_worker.c \
 	dt/datatype_iter.c \
-	dt/dt_contig.c \
 	dt/dt_iov.c \
 	dt/dt_generic.c \
 	dt/dt.c \
@@ -149,6 +148,7 @@ libucp_la_SOURCES = \
 	rndv/rndv_ats.c \
 	rndv/rndv_rkey_ptr.c \
 	rndv/rndv.c \
+	stream/stream_multi.c \
 	stream/stream_recv.c \
 	stream/stream_send.c \
 	tag/eager_multi.c \
@@ -162,6 +162,7 @@ libucp_la_SOURCES = \
 	tag/tag_send.c \
 	tag/offload.c \
 	tag/offload/eager.c \
+	tag/offload/rndv.c \
 	wireup/address.c \
 	wireup/ep_match.c \
 	wireup/select.c \

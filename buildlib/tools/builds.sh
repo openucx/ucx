@@ -51,17 +51,6 @@ build_no_verbs() {
 }
 
 #
-# Build without numa support check
-#
-build_disable_numa() {
-	echo "==== Check --disable-numa compilation option ===="
-	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --disable-numa
-	$MAKEP
-	# Make sure config.h file undefines HAVE_NUMA proceprocessor macro
-	grep 'undef HAVE_NUMA' config.h || exit 1
-}
-
-#
 # Build a package in release mode
 #
 build_release_pkg() {
@@ -212,6 +201,11 @@ build_ugni() {
 # Build CUDA
 #
 build_cuda() {
+	if [[ $CONTAINER == *"rocm"* ]]; then
+		echo "==== Not building with cuda flags ===="
+		return
+	fi
+
 	if az_module_load $CUDA_MODULE
 	then
 		if az_module_load $GDRCOPY_MODULE
@@ -272,8 +266,6 @@ build_clang() {
 # Build with gcc-latest module
 #
 build_gcc() {
-	cflags=$1
-
 	#If the glibc version on the host is older than 2.14, don't run
 	#check the glibc version with the ldd version since it comes with glibc
 	#see https://www.linuxquestions.org/questions/linux-software-2/how-to-check-glibc-version-263103/
@@ -290,7 +282,7 @@ build_gcc() {
 		if az_module_load $GCC_MODULE
 		then
 			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
-			${WORKSPACE}/contrib/configure-devel CFLAGS="$cflags" CXXFLAGS="$cflags" --prefix=$ucx_inst
+			${WORKSPACE}/contrib/configure-devel $@ --prefix=$ucx_inst
 			$MAKEP
 			$MAKEP install
 			az_module_unload $GCC_MODULE
@@ -300,8 +292,12 @@ build_gcc() {
 	fi
 }
 
+build_no_devx() {
+	build_gcc --with-devx=no
+}
+
 build_gcc_debug_opt() {
-	build_gcc "-Og"
+	build_gcc CFLAGS=-Og CXXFLAGS=-Og
 }
 
 #
@@ -430,7 +426,6 @@ do_task "${prog}" build_docs
 do_task "${prog}" build_debug
 do_task "${prog}" build_prof
 do_task "${prog}" build_ugni
-do_task "${prog}" build_disable_numa
 do_task "${prog}" build_cuda
 do_task "${prog}" build_rocm
 do_task "${prog}" build_no_verbs
@@ -445,6 +440,7 @@ then
 	do_task 10 build_icc
 	do_task 10 build_pgi
 	do_task 10 build_gcc
+	do_task 8 build_no_devx
 	do_task 10 build_gcc_debug_opt
 	do_task 10 build_clang
 	do_task 10 build_armclang

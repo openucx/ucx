@@ -105,21 +105,31 @@ function az_init_modules() {
 
 #
 # Test if an environment module exists and load it if yes.
+# Retry 5 times in case of automount failure.
 # Otherwise, return error code.
 #
 function az_module_load() {
     module=$1
+    retries=5
 
-    if module avail -t 2>&1 | grep -q "^$module\$"
-    then
-        module load $module
-        return 0
-    else
-        echo "MODULEPATH='${MODULEPATH}'"
-        module avail || true
-        azure_log_warning "Module $module cannot be loaded"
-        return 1
-    fi
+    until module avail -t 2>&1 | grep -q "^$module\$"; do
+        if [ $retries -gt 1 ]; then
+            # Attempt to refresh automount
+            echo "Module $module not found, retrying..."
+            ls /hpc/local > /dev/null 2>&1
+            sleep 1
+        else
+            # Give up trying
+            echo "MODULEPATH='${MODULEPATH}'"
+            module avail || true
+            ls -l /hpc/local/etc/modulefiles/"$module" || true
+            azure_log_warning "Module $module cannot be loaded"
+            return 1
+        fi
+        ((retries--))
+    done
+    module load $module
+    return 0
 }
 
 #
@@ -130,6 +140,16 @@ function az_module_unload() {
     module unload "${module}" || true
 }
 
+# Ensure that GPU is present
+check_gpu() {
+    name=$1
+    if [ "$name" == "gpu" ]; then
+        if ! nvidia-smi -L |& grep -q GPU; then
+            azure_log_error "No GPU device found on $(hostname -s)"
+            exit 1
+        fi
+    fi
+}
 
 #
 # try load cuda modules if nvidia driver is installed
@@ -178,4 +198,17 @@ check_release_build() {
     fi
 
     echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
+}
+
+
+#
+# Return arch in the same format as Java System.getProperty("os.arch")
+#
+get_arch() {
+    arch=$(uname -m)
+    if [ "$arch" == "x86_64" ]; then
+        echo "amd64"
+    else
+        echo "$arch"
+    fi
 }

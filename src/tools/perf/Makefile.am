@@ -14,6 +14,7 @@ CC      = $(UCX_PERFTEST_CC)
 
 noinst_HEADERS = \
 	perftest.h \
+	perftest_mad.h \
 	api/libperf.h
 
 bin_PROGRAMS = ucx_perftest
@@ -23,9 +24,18 @@ ucx_perftest_SOURCES = \
 	perftest_run.c \
 	perftest_params.c
 
+if HAVE_MAD
+ucx_perftest_SOURCES += \
+	perftest_mad.c
+endif
+
 ucx_perftest_CPPFLAGS = $(BASE_CPPFLAGS)
-ucx_perftest_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS)
-ucx_perftest_LDFLAGS  = $(LDFLAGS_DYNAMIC_LIST_DATA)
+ucx_perftest_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS) $(MAD_CFLAGS)
+ucx_perftest_LDFLAGS  = \
+	$(LDFLAGS_DYNAMIC_LIST_DATA) \
+	$(MAD_LDFLAGS) \
+	$(MAD_LIBS)
+
 ucx_perftest_LDADD    = \
 	$(abs_top_builddir)/src/uct/libuct.la \
 	$(abs_top_builddir)/src/ucp/libucp.la \

@@ -52,6 +52,9 @@ protected:
                          uct_mem_h *memh_p);
     void test_reg_mem(unsigned access_mask, unsigned invalidate_flag);
 
+    void test_reg_advise(size_t size, size_t advise_size,
+                         size_t advice_offset, bool check_non_blocking = false);
+
     uct_md_h md() const {
         return m_md;
     }

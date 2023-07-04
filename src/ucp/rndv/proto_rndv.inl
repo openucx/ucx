@@ -14,6 +14,7 @@
 #include <ucp/proto/proto_am.inl>
 #include <ucp/proto/proto_single.inl>
 #include <ucp/proto/proto_multi.inl>
+#include <ucp/tag/offload.h>
 
 
 static UCS_F_ALWAYS_INLINE size_t
@@ -74,6 +75,11 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rephdr->req_id, 0, return UCS_OK,
                                "ATS %p", rephdr);
+
+    if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+        ucp_tag_offload_cancel_rndv(req);
+    }
+
     if (length >= sizeof(*ats)) {
         /* ATS message carries a size field */
         ats = ucs_derived_of(rephdr, ucp_rndv_ack_hdr_t);
@@ -83,8 +89,7 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
     }
 
     ucp_send_request_id_release(req);
-    ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, status);
 
     return UCS_OK;

@@ -260,7 +260,8 @@ void test_md::free_memory(void *address, ucs_memory_type_t mem_type)
 bool test_md::is_device_detected(ucs_memory_type_t mem_type)
 {
     return (mem_type != UCS_MEMORY_TYPE_ROCM) &&
-           (mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED);
+           (mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED) &&
+           (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED);
 }
 
 void test_md::dereg_cb(uct_completion_t *comp)
@@ -621,15 +622,23 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_md, reg_advise,
-                     !check_caps(UCT_MD_FLAG_REG |
-                                 UCT_MD_FLAG_ADVISE)) {
-    size_t size;
+void test_md::test_reg_advise(size_t size, size_t advise_size,
+                              size_t advice_offset, bool check_non_blocking)
+{
+    ssize_t vmpin_before, vmpin_after;
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
 
-    size = 128 * UCS_MBYTE;
+    if (check_non_blocking) {
+        if (!(md_attr().reg_nonblock_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
+            UCS_TEST_SKIP_R("MD does not support non-blocking registration");
+        }
+
+        vmpin_before = ucs::get_proc_self_status_field("VmPin");
+        ASSERT_NE(vmpin_before, -1);
+    }
+
     address = malloc(size);
     ASSERT_TRUE(address != NULL);
 
@@ -638,14 +647,27 @@ UCS_TEST_SKIP_COND_P(test_md, reg_advise,
                             &memh);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+    if (check_non_blocking) {
+        vmpin_after = ucs::get_proc_self_status_field("VmPin");
+        ASSERT_EQ(vmpin_before, vmpin_after);
+    }
 
-    status = uct_md_mem_advise(md(), memh, (char *)address + 7,
-                               32 * UCS_KBYTE, UCT_MADV_WILLNEED);
-    EXPECT_UCS_OK(status);
+    if (advise_size) {
+        status = uct_md_mem_advise(md(), memh,
+                                   UCS_PTR_BYTE_OFFSET(address, advice_offset),
+                                   advise_size, UCT_MADV_WILLNEED);
+        EXPECT_UCS_OK(status);
+    }
 
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
     free(address);
+}
+
+UCS_TEST_SKIP_COND_P(test_md, reg_advise,
+                     !check_caps(UCT_MD_FLAG_REG | UCT_MD_FLAG_ADVISE))
+{
+    test_reg_advise(128 * UCS_MBYTE, 32 * UCS_KBYTE, 7);
 }
 
 UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
@@ -758,7 +780,7 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
 UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
 {
     static const size_t size       = 1 * UCS_MBYTE;
-    const int limit                = 2000 / ucs::test_time_multiplier();
+    const int limit                = 64;
     static const unsigned md_flags = UCT_MD_MEM_ACCESS_REMOTE_PUT |
                                      UCT_MD_MEM_ACCESS_REMOTE_GET;
     std::vector<uct_mem_h> memhs;
@@ -784,6 +806,8 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
                               UCT_MD_MEM_DEREG_FIELD_MEMH |
                               UCT_MD_MEM_DEREG_FIELD_COMPLETION;
     dereg_params.comp       = &comp().comp;
+    pack_params.field_mask  = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+    pack_params.flags       = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA;
 
     for (mem_reg_count = 1; mem_reg_count < limit; mem_reg_count++) {
         comp().comp.count = (mem_reg_count + 1) / 2;
@@ -793,8 +817,6 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
         ASSERT_UCS_OK(status);
         memhs.push_back(memh);
 
-        pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
-        pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA;
         status = uct_md_mkey_pack_v2(md(), memh, &pack_params, &key);
         ASSERT_UCS_OK(status);
 
@@ -806,13 +828,19 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
             status = reg_mem(md_flags, ptr, size, &memh);
             ASSERT_UCS_OK(status);
             memhs.push_back(memh);
+
+            status = uct_md_mkey_pack_v2(md(), memh, &pack_params, &key);
+            ASSERT_UCS_OK(status);
         }
 
+        /* mix dereg and dereg(invalidate) operations */
         for (iter = 0; iter < mem_reg_count; iter++) {
-            /* mix dereg and dereg(invalidate) operations */
-            ASSERT_EQ(0, m_comp_count);
             memh = memhs.back();
-            if ((iter & 1) == 0) { /* on even iteration invalidate handle */
+            /* on half of iteration invalidate handle, make sure that in
+             * last iteration dereg will be called with invalidation, so
+             * completion will be called on last iteration only */
+            ASSERT_EQ(0, m_comp_count);
+            if ((iter & 1) != (mem_reg_count & 1)) {
                 dereg_params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
             } else {
                 dereg_params.flags = 0;
@@ -989,3 +1017,45 @@ UCS_TEST_P(test_md_memlock_limit, md_open)
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_memlock_limit)
+
+class test_md_non_blocking : public test_md
+{
+protected:
+    void init() override {
+        /* ODPv1 IB feature can work only for certain DEVX configuration */
+        modify_config("MLX5_DEVX_OBJECTS", "dct,dcsrq", IGNORE_IF_NOT_EXIST);
+        test_md::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_md_non_blocking, reg_advise,
+                     !check_caps(UCT_MD_FLAG_REG | UCT_MD_FLAG_ADVISE))
+{
+    test_reg_advise(UCS_KBYTE, UCS_KBYTE, 0, true);
+    test_reg_advise(UCS_KBYTE, UCS_KBYTE / 2, 0, true);
+    test_reg_advise(UCS_KBYTE, UCS_KBYTE / 2, UCS_KBYTE / 4, true);
+
+    /*
+     * TODO: These tests should be enabled
+     * when https://redmine.mellanox.com/issues/336376 fixed
+
+     * test_reg_advise(UCS_MBYTE, UCS_MBYTE, 0, true);
+     * test_reg_advise(UCS_MBYTE, UCS_MBYTE / 2, 0, true);
+     * test_reg_advise(UCS_MBYTE, UCS_MBYTE / 2, UCS_MBYTE / 4, true);
+     */
+}
+
+UCS_TEST_SKIP_COND_P(test_md_non_blocking, reg,
+                     !check_caps(UCT_MD_FLAG_REG))
+{
+    test_reg_advise(UCS_KBYTE, 0, 0, true);
+
+    /*
+     * TODO: This test should be enabled
+     * when https://redmine.mellanox.com/issues/336376 fixed
+
+     * test_reg_advise(UCS_MBYTE, 0, 0, true);
+     */
+}
+
+UCT_MD_INSTANTIATE_TEST_CASE(test_md_non_blocking)

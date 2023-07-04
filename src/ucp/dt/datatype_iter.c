@@ -33,36 +33,69 @@ size_t ucp_datatype_iter_iov_count(const ucp_datatype_iter_t *dt_iter)
     return iov_count;
 }
 
-static void
-ucp_datatype_iter_iov_check_memh_mds(const ucp_context_h context,
-                                     const ucp_datatype_iter_t *dt_iter,
-                                     ucp_md_map_t md_map)
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_iov_allocate_memh(
+        ucp_datatype_iter_t *dt_iter, size_t iov_count)
 {
-    size_t iov_index, length;
+    /* TODO allocate from memory pool */
+    ucp_mem_h *iov_memh;
 
-    ucp_datatype_iter_iov_for_each(iov_index, length, dt_iter) {
-        ucs_assertv(ucs_test_all_flags(
-                            dt_iter->type.iov.memh[iov_index]->md_map, md_map),
-                    "md_map mismatch: memh: %lu, required: %lu",
-                    dt_iter->type.iov.memh[iov_index]->md_map, md_map);
+    iov_memh = (ucp_mem_h*)ucs_calloc(iov_count, sizeof(*iov_memh),
+                                      "dt_iov_memh");
+    if (iov_memh == NULL) {
+        return UCS_ERR_NO_MEMORY;
     }
+
+    dt_iter->type.iov.memh = iov_memh;
+    return UCS_OK;
 }
 
-ucs_status_t
-ucp_datatype_iter_set_iov_memh(ucp_datatype_iter_t *dt_iter, ucp_mem_h memh)
+ucs_status_t ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer,
+                                        size_t count, size_t length,
+                                        ucp_datatype_iter_t *dt_iter,
+                                        const ucp_request_param_t *param)
 {
-    size_t iov_count = ucp_datatype_iter_iov_count(dt_iter);
-    size_t iov_index;
+    const ucp_dt_iov_t *iov = (const ucp_dt_iov_t*)buffer;
     ucs_status_t status;
+    size_t iov_index;
 
-    status = ucp_datatype_iter_iov_allocate_memh(dt_iter, iov_count);
-    if (status != UCS_OK) {
-        return status;
-    }
+    dt_iter->length              = length;
+    dt_iter->type.iov.iov        = iov;
+#if UCS_ENABLE_ASSERT
+    dt_iter->type.iov.iov_count = count;
+#endif
+    dt_iter->type.iov.iov_index  = 0;
+    dt_iter->type.iov.iov_offset = 0;
 
-    for (iov_index = 0; iov_index < iov_count; ++iov_index) {
-        /* All buffers are contained in a single memh */
-        dt_iter->type.iov.memh[iov_index] = memh;
+    if (ucs_unlikely(count == 0)) {
+        dt_iter->type.iov.memh = NULL;
+        ucp_memory_info_set_host(&dt_iter->mem_info);
+    } else if (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) {
+        status = ucp_datatype_iter_init_mem_info_from_user_memh(dt_iter,
+                                                                param->memh);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = ucp_datatype_iter_iov_allocate_memh(dt_iter, count);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        for (iov_index = 0; iov_index < count; ++iov_index) {
+            /* All buffers are contained in a single memh */
+            dt_iter->type.iov.memh[iov_index] = param->memh;
+        }
+    } else {
+        dt_iter->type.iov.memh = NULL;
+        ucp_datatype_iter_detect_mem_info(context, iov->buffer, iov->length,
+                                          dt_iter, param);
+        if (ENABLE_PARAMS_CHECK && (count > 1)) {
+            status = ucp_dt_iov_memtype_check(context, iov + 1, count - 1,
+                                              &dt_iter->mem_info);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
     }
 
     return UCS_OK;
@@ -78,31 +111,27 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
     ucs_status_t status;
     size_t iov_index;
 
-    if (md_map == 0) {
+    if ((md_map == 0) || (iov_count == 0)) {
         return UCS_OK;
     }
 
-    if (dt_iter->type.iov.memh != NULL) {
-        /* User memh supplied, verify all required MDs received */
-        ucp_datatype_iter_iov_check_memh_mds(context, dt_iter, md_map);
-        return UCS_OK;
-    }
+    if (dt_iter->type.iov.memh == NULL) {
+        status = ucp_datatype_iter_iov_allocate_memh(dt_iter, iov_count);
+        if (status != UCS_OK) {
+            return status;
+        }
 
-    status = ucp_datatype_iter_iov_allocate_memh(dt_iter, iov_count);
-    if (status != UCS_OK) {
-        return status;
+        /* For coverity */
+        ucs_assert(dt_iter->type.iov.memh != NULL);
     }
-
-    /* For coverity */
-    ucs_assert(dt_iter->type.iov.memh != NULL);
 
     for (iov_index = 0; iov_index < iov_count; ++iov_index) {
         iov    = ucp_datatype_iter_iov_at(dt_iter, iov_index);
-        status = ucp_memh_get(context, iov->buffer, iov->length,
-                              dt_iter->mem_info.type, md_map, uct_flags,
-                              &dt_iter->type.iov.memh[iov_index]);
+        status = ucp_datatype_iter_mem_reg_single(
+                context, iov->buffer, iov->length, dt_iter->mem_info.type,
+                md_map, uct_flags, &dt_iter->type.iov.memh[iov_index]);
         if (status != UCS_OK) {
-            ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
+            ucp_datatype_iter_iov_mem_dereg(dt_iter);
             return status;
         }
     }
@@ -110,22 +139,56 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
     return UCS_OK;
 }
 
-void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
-                                     ucp_datatype_iter_t *dt_iter)
+void ucp_datatype_iter_iov_mem_dereg(ucp_datatype_iter_t *dt_iter)
 {
     ucp_mem_h *memh = dt_iter->type.iov.memh;
     size_t iov_index, length;
 
-    if ((memh == NULL) || ucp_memh_is_user_memh(*memh)) {
-        return;
+    ucs_assert(memh != NULL);
+    ucp_datatype_iter_iov_for_each(iov_index, length, dt_iter) {
+        ucp_datatype_iter_mem_dereg_single(memh + iov_index);
     }
+}
+
+void ucp_datatype_iter_iov_seek_always(ucp_datatype_iter_t *dt_iter,
+                                       size_t offset)
+{
+    const ucp_dt_iov_t *iov = dt_iter->type.iov.iov;
+    ssize_t iov_offset;
+    size_t length_it;
+
+    iov_offset = dt_iter->type.iov.iov_offset + (offset - dt_iter->offset);
+    if (iov_offset < 0) {
+        /* seek backwards */
+        do {
+            ucs_assertv(dt_iter->type.iov.iov_index > 0, "dt_iter=%p", dt_iter);
+            --dt_iter->type.iov.iov_index;
+            iov_offset += iov[dt_iter->type.iov.iov_index].length;
+        } while (iov_offset < 0);
+    } else {
+        /* seek forward */
+        while (iov_offset >=
+               (length_it = iov[dt_iter->type.iov.iov_index].length)) {
+            iov_offset -= length_it;
+            ++dt_iter->type.iov.iov_index;
+            ucp_datatype_iter_iov_check(dt_iter);
+        }
+    }
+
+    dt_iter->offset              = offset;
+    dt_iter->type.iov.iov_offset = iov_offset;
+}
+
+void ucp_datatype_iter_iov_cleanup_check(ucp_datatype_iter_t *dt_iter)
+{
+#if UCS_ENABLE_ASSERT
+    size_t iov_index, length;
 
     ucp_datatype_iter_iov_for_each(iov_index, length, dt_iter) {
-        ucp_datatype_memh_dereg(context, memh + iov_index);
+        ucp_datatatype_iter_memh_cleanup_check(
+                dt_iter->type.iov.memh[iov_index]);
     }
-
-    ucs_free(memh);
-    dt_iter->type.iov.memh = NULL;
+#endif
 }
 
 size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
@@ -269,16 +332,15 @@ void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
     }
 }
 
-ucs_status_t
-ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
-                                     const ucp_mem_h memh)
+int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
+                                         const ucp_mem_h memh)
 {
     UCS_STRING_BUFFER_ONSTACK(err_msg, 256);
     size_t iov_count;
 
     if (memh == NULL) {
         ucs_error("got NULL memory handle");
-        return UCS_ERR_INVALID_PARAM;
+        return 0;
     }
 
     switch (dt_iter->dt_class) {
@@ -301,14 +363,14 @@ ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
     default:
         ucs_error("unsupported memory handle datatype: [%s]",
                   ucp_datatype_class_names[dt_iter->dt_class]);
-        return UCS_ERR_INVALID_PARAM;
+        return 0;
     }
 
-    return UCS_OK;
+    return 1;
 
 err_memh_mismatch:
     ucs_error("mismatched memory handle %p [address %p length %zu] for %s",
               memh, ucp_memh_address(memh), ucp_memh_length(memh),
               ucs_string_buffer_cstr(&err_msg));
-    return UCS_ERR_INVALID_PARAM;
+    return 0;
 }

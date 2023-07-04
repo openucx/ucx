@@ -1118,7 +1118,7 @@ out_list_add:
         }
 
         status = ucs_async_set_event_handler(
-                UCS_ASYNC_MODE_THREAD,
+                UCS_ASYNC_MODE_THREAD_SPINLOCK,
                 ucs_async_pipe_rfd(&ucs_rcache_global_context.pipe),
                 UCS_EVENT_SET_EVREAD, ucs_rcache_invalidate_handler, NULL,
                 NULL);
@@ -1151,6 +1151,11 @@ static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache)
     ucs_async_remove_handler(pipe.read_fd,
                              1);
     ucs_async_pipe_destroy(&pipe);
+}
+
+void ucs_rcache_atfork_disable()
+{
+    ucs_list_head_init(&ucs_rcache_global_context.list);
 }
 
 size_t ucs_rcache_distribution_get_num_bins()

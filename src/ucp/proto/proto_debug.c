@@ -102,9 +102,9 @@ void ucp_proto_select_init_trace_caps(
         .msg_length    = proto_caps->min_length
     };
     const UCS_V_UNUSED ucs_linear_func_t *perf;
-    size_t UCS_V_UNUSED range_start, range_end;
+    size_t range_start, range_end;
     ucp_proto_query_attr_t query_attr;
-    int UCS_V_UNUSED range_index;
+    int range_index;
     char min_length_str[64];
     char thresh_str[64];
 
@@ -203,7 +203,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
                            const ucp_proto_select_param_t *select_param,
-                           ucp_proto_select_elem_t *select_elem,
+                           ucp_proto_select_elem_t *select_elem, int show_all,
                            ucs_string_buffer_t *strb)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
@@ -219,7 +219,8 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
                                 select_param, ucp_operation_descs, &ep_cfg_strb,
                                 &sel_param_strb);
-    if (!ucp_proto_debug_is_info_enabled(
+    if (!show_all &&
+        !ucp_proto_debug_is_info_enabled(
                 worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
         return;
     }
@@ -232,10 +233,10 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     range_end    = -1;
     do {
         range_start = range_end + 1;
-
         proto_valid = ucp_proto_select_elem_query(worker, select_elem,
                                                   range_start, &proto_attr);
         range_end   = proto_attr.max_msg_length;
+
         if (!proto_valid) {
             continue;
         }
@@ -286,7 +287,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
 void ucp_proto_select_info(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
-                           const ucp_proto_select_t *proto_select,
+                           const ucp_proto_select_t *proto_select, int show_all,
                            ucs_string_buffer_t *strb)
 {
     ucp_proto_select_elem_t select_elem;
@@ -294,7 +295,8 @@ void ucp_proto_select_info(ucp_worker_h worker,
 
     kh_foreach(&proto_select->hash, key.u64, select_elem,
                ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                                          &key.param, &select_elem, strb);
+                                          &key.param, &select_elem, show_all,
+                                          strb);
                ucs_string_buffer_appendf(strb, "\n"))
 }
 
@@ -368,8 +370,6 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 const char **operation_names,
                                 ucs_string_buffer_t *strb)
 {
-    static const uint32_t op_attr_bits   = UCP_OP_ATTR_FLAG_FAST_CMPL |
-                                           UCP_OP_ATTR_FLAG_MULTI_SEND;
     static const char *op_attr_names[]   = {
         [ucs_ilog2(UCP_OP_ATTR_FLAG_FAST_CMPL)]  = "fast-completion",
         [ucs_ilog2(UCP_OP_ATTR_FLAG_MULTI_SEND)] = "multi",
@@ -386,8 +386,7 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     ucs_string_buffer_appendf(
             strb, "%s", operation_names[ucp_proto_select_op_id(select_param)]);
 
-    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
-                   op_attr_bits;
+    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
     op_flags     = ucp_proto_select_op_flags(select_param);
 
     if (op_attr_mask || op_flags) {
@@ -1009,7 +1008,7 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
 
     /* Print human-readable protocol selection table to the log */
     ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
-                               select_param, select_elem, &strb);
+                               select_param, select_elem, 0, &strb);
     ucs_string_buffer_for_each_token(line, &strb, "\n") {
         ucs_log_print_compact(line);
     }

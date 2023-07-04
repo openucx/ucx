@@ -83,6 +83,9 @@ typedef struct {
     const ucs_profile_header_t   *header;
     const ucs_profile_location_t *locations;
     profile_thread_data_t        *threads;
+    char                         *env_variables;
+    uint32_t                     num_locations;
+    unsigned                     num_threads;
 } profile_data_t;
 
 
@@ -105,14 +108,18 @@ static const char* time_units_str[] = {
     [TIME_UNITS_LAST] = NULL
 };
 
-
 static int read_profile_data(const char *file_name, profile_data_t *data)
 {
+    size_t total_num_records = 0;
+    size_t env_vars_size;
+    int ret, fd;
     uint32_t thread_idx;
     struct stat stt;
     const void *ptr;
-    int ret, fd;
+    const void *threads_start, *threads_end;
+    profile_thread_data_t *thread;
 
+    data->env_variables = NULL;
     fd = open(file_name, O_RDONLY);
     if (fd < 0) {
         print_error("failed to open %s: %m", file_name);
@@ -137,33 +144,59 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
 
     ptr          = data->mem;
     data->header = ptr;
-    ptr          = data->header + 1;
 
-    if (data->header->version != UCS_PROFILE_FILE_VERSION) {
-        print_error("invalid file version, expected: %u, actual: %u",
-                    UCS_PROFILE_FILE_VERSION, data->header->version);
+    if (data->header->version < UCS_PROFILE_FILE_MIN_VERSION) {
+        print_error("invalid file version, expected: %u or greater, actual: %u",
+                    UCS_PROFILE_FILE_MIN_VERSION, data->header->version);
         ret = -EINVAL;
         goto err_munmap;
     }
 
-    data->locations = ptr;
-    ptr             = data->locations + data->header->num_locations;
-
-    data->threads   = calloc(data->header->num_threads, sizeof(*data->threads));
-    if (data->threads == NULL) {
-        print_error("failed to allocate threads array");
+    env_vars_size       = data->header->env_vars.size;
+    /* coverity[tainted_data] */
+    data->env_variables = malloc(env_vars_size + 1);
+    if (data->env_variables == NULL) {
+        print_error("failed to allocate env variables");
+        ret = -1;
         goto err_munmap;
     }
 
-    for (thread_idx = 0; thread_idx < data->header->num_threads; ++thread_idx) {
-        profile_thread_data_t *thread = &data->threads[thread_idx];
-        thread->header    = ptr;
-        ptr               = thread->header + 1;
-        thread->locations = ptr;
-        ptr               = thread->locations + data->header->num_locations;
-        thread->records   = ptr;
-        ptr               = thread->records + thread->header->num_records;
+    /* coverity[tainted_data] */
+    memcpy(data->env_variables,
+           UCS_PTR_BYTE_OFFSET(data->mem, data->header->env_vars.offset),
+           env_vars_size);
+    data->env_variables[env_vars_size] = '\0';
+
+    data->num_locations = data->header->locations.size /
+                          sizeof(ucs_profile_location_t);
+    data->locations     = UCS_PTR_BYTE_OFFSET(data->mem,
+                                              data->header->locations.offset);
+    /* coverity[tainted_data] */
+    data->threads       = calloc(data->header->threads.size, 1);
+    if (data->threads == NULL) {
+        print_error("failed to allocate threads array");
+        ret = -1;
+        goto err_env_variables;
     }
+
+    threads_start = UCS_PTR_BYTE_OFFSET(data->mem,
+                                        data->header->threads.offset);
+    threads_end   = UCS_PTR_BYTE_OFFSET(threads_start,
+                                        data->header->threads.size);
+
+    for (thread_idx = 0, ptr = threads_start; ptr < threads_end; ++thread_idx) {
+        thread             = &data->threads[thread_idx];
+        thread->header     = ptr;
+        ptr                = thread->header + 1;
+        thread->locations  = ptr;
+        ptr                = thread->locations + data->num_locations;
+        thread->records    = ptr;
+        ptr                = thread->records + thread->header->num_records;
+        total_num_records += thread->header->num_records;
+    }
+
+    data->num_threads = ucs_profile_calc_num_threads(total_num_records,
+                                                     data->header);
 
     ret = 0;
 
@@ -171,6 +204,9 @@ out_close:
     close(fd);
 out:
     return ret;
+
+err_env_variables:
+    free(data->env_variables);
 err_munmap:
     munmap(data->mem, data->length);
     goto out_close;
@@ -179,6 +215,7 @@ err_munmap:
 static void release_profile_data(profile_data_t *data)
 {
     free(data->threads);
+    free(data->env_variables);
     munmap(data->mem, data->length);
 }
 
@@ -301,7 +338,7 @@ static int show_profile_data_accum(profile_data_t *data, options_t *opts)
         int  *last;
     } location_thread_info_t;
 
-    const uint32_t            num_locations          = data->header->num_locations;
+    const uint32_t            num_locations          = data->num_locations;
     profile_sorted_location_t *sorted_locations      = NULL;
     location_thread_info_t    *locations_thread_info = NULL;
     const ucs_profile_thread_location_t *thread_location;
@@ -545,7 +582,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
                 hash_it = kh_put(request_ids, &reqids, rec->param64,
                                  &hash_extra_status);
                 if (hash_it == kh_end(&reqids)) {
-                    if (hash_extra_status == 0) {
+                    if (hash_extra_status == UCS_KH_PUT_KEY_PRESENT) {
                         /* old request was not released, replace it */
                         hash_it = kh_get(request_ids, &reqids, rec->param64);
                         reqid = reqid_ctr++;
@@ -619,14 +656,18 @@ static int redirect_output(const profile_data_t *data, options_t *opts)
 
     if (data->header->mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
         num_lines += 1 + /* locations title */
-                     data->header->num_locations + /* locations data */
+                     data->num_locations + /* locations data */
                      1; /* locations footer */
     }
 
     if (data->header->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
         for (t = opts->thread_list; *t != -1; ++t) {
-            num_lines += 3 + /* thread header */
-                         data->threads[*t - 1].header->num_records; /* thread records */
+            num_lines += 3; /* thread header */
+            /* Suppressing a false positive for null value derefrence */
+            if (data->threads[*t - 1].header != NULL) {
+                num_lines += data->threads[*t - 1]
+                                     .header->num_records; /* thread records */
+            }
         }
     }
 
@@ -690,6 +731,7 @@ static int redirect_output(const profile_data_t *data, options_t *opts)
 
 static void show_header(profile_data_t *data, options_t *opts)
 {
+    int env_present = data->header->env_vars.size > 0;
     char buf[80];
 
     printf("\n");
@@ -697,7 +739,10 @@ static void show_header(profile_data_t *data, options_t *opts)
     printf("   host    : %s\n", data->header->hostname);
     printf("   command : %s\n", data->header->cmdline);
     printf("   pid     : %d\n", data->header->pid);
-    printf("   threads : %-3d", data->header->num_threads);
+    printf("   version : %d\n", data->header->version);
+    printf("   env     : %s\n", env_present ? data->env_variables : "N/A");
+
+    printf("   threads : %-3d", data->num_threads);
     if (opts->thread_list[0] != -1) {
         printf("(showing %s",
                (opts->thread_list[1] == -1) ? "thread" : "threads");
@@ -717,24 +762,25 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
     int ret;
     int *t;
 
-    if (data->header->num_threads > MAX_THREADS) {
+    if (data->num_threads > MAX_THREADS) {
         print_error("the profile contains %u threads, but only up to %d are "
-                    "supported", data->header->num_threads, MAX_THREADS);
+                    "supported",
+                    data->num_threads, MAX_THREADS);
         return -EINVAL;
     }
 
     /* validate and count thread numbers */
     if (opts->thread_list[0] == -1) {
-        for (i = 0; i < data->header->num_threads; ++i) {
+        for (i = 0; i < data->num_threads; ++i) {
             opts->thread_list[i] = i + 1;
         }
         opts->thread_list[i] = -1;
     } else {
         thread_list_len = 0;
         for (t = opts->thread_list; *t != -1; ++t) {
-            if (*t > data->header->num_threads) {
-                print_error("thread number %d is out of range (1..%u)",
-                            *t, data->header->num_threads);
+            if (*t > data->num_threads) {
+                print_error("thread number %d is out of range (1..%u)", *t,
+                            data->num_threads);
                 return -EINVAL;
             }
 
@@ -859,6 +905,7 @@ int main(int argc, char **argv)
         return (ret == -127) ? 0 : ret;
     }
 
+    /* coverity[tainted_argument] */
     ret = read_profile_data(opts.filename, &data);
     if (ret < 0) {
         return ret;

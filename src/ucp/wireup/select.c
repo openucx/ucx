@@ -22,8 +22,6 @@
 #include <inttypes.h>
 
 #define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
-#define UCP_WIREUP_UCT_EVENT_CAP_FLAGS     (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
-                                            UCT_IFACE_FLAG_EVENT_RECV)
 #define UCP_WIREUP_MAX_FLAGS_STRING_SIZE   50
 #define UCP_WIREUP_PATH_INDEX_UNDEFINED    UINT_MAX
 
@@ -650,28 +648,35 @@ out:
 
 static double ucp_wireup_fp8_pack_unpack_latency(double latency)
 {
-    ucs_fp8_t packed_lat = UCS_FP8_PACK(LATENCY, latency);
+    ucs_fp8_t packed_lat = UCS_FP8_PACK(LATENCY, latency * UCS_NSEC_PER_SEC);
     return UCS_FP8_UNPACK(LATENCY, packed_lat) / UCS_NSEC_PER_SEC;
 }
 
+static double ucp_wireup_fp8_pack_unpack_bw(double bandwidth)
+{
+    ucs_fp8_t packed_bw = UCS_FP8_PACK(BANDWIDTH, bandwidth);
+    return UCS_FP8_UNPACK(BANDWIDTH, packed_bw);
+}
+
 static inline double
-ucp_wireup_tl_iface_latency(ucp_context_h context,
-                            const uct_iface_attr_t *iface_attr,
+ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
                             const ucp_address_iface_attr_t *remote_iface_attr)
 {
-    double local_lat, lat_nsec;
+    ucp_context_h context = wiface->worker->context;
+    double local_lat, lat_lossy;
 
     if (remote_iface_attr->addr_version == UCP_OBJECT_VERSION_V1) {
+        local_lat = ucp_wireup_iface_lat_distance_v1(wiface);
         /* Address v1 contains just latency overhead */
-        return ((iface_attr->latency.c + remote_iface_attr->lat_ovh) / 2) +
-                (iface_attr->latency.m * context->config.est_num_eps);
+        return ((local_lat + remote_iface_attr->lat_ovh) / 2) +
+               (wiface->attr.latency.m * context->config.est_num_eps);
     } else {
+        local_lat = ucp_wireup_iface_lat_distance_v2(wiface);
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local latency as well */
-        lat_nsec  = ucp_tl_iface_latency(context, &iface_attr->latency) *
-                    UCS_NSEC_PER_SEC;
-        local_lat = ucp_wireup_fp8_pack_unpack_latency(lat_nsec);
-        return (remote_iface_attr->lat_ovh + local_lat) / 2;
+        lat_lossy = ucp_wireup_fp8_pack_unpack_latency(local_lat);
+
+        return (remote_iface_attr->lat_ovh + lat_lossy) / 2;
     }
 }
 
@@ -970,14 +975,12 @@ static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
                                         void *arg)
 {
     /* best for 4k messages */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                               &wiface->attr,
-                                               &remote_addr->iface_attr) +
-                   wiface->attr.overhead +
-                   (4096.0 /
-                    ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
-                                                   &wiface->attr.bandwidth),
-                            remote_addr->iface_attr.bandwidth)));
+    return 1e-3 /
+           (ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
+            wiface->attr.overhead +
+            (4096.0 / ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
+                                                     &wiface->attr.bandwidth),
+                              remote_addr->iface_attr.bandwidth)));
 }
 
 static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
@@ -997,10 +1000,9 @@ static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
                                         void *arg)
 {
     /* best end-to-end latency and larger bcopy size */
-    return (1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                                &wiface->attr,
-                                                &remote_addr->iface_attr) +
-            wiface->attr.overhead + remote_addr->iface_attr.overhead));
+    return (1e-3 /
+            (ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
+             wiface->attr.overhead + remote_addr->iface_attr.overhead));
 }
 
 static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
@@ -1125,7 +1127,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     tl_bitmap = ucp_tl_bitmap_max;
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+    ucs_memory_type_for_each(mem_type) {
         status = ucp_wireup_add_memaccess_lanes(select_params, &criteria,
                                                 mem_type, tl_bitmap,
                                                 UCP_LANE_TYPE_RMA, select_ctx);
@@ -1143,10 +1145,9 @@ double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  void *arg)
 {
     /* best one-sided latency */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                               &wiface->attr,
-                                               &remote_addr->iface_attr) +
-                   wiface->attr.overhead);
+    return 1e-3 /
+           (ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
+            wiface->attr.overhead);
 }
 
 static ucs_status_t
@@ -1199,10 +1200,9 @@ static double ucp_wireup_am_score_func(const ucp_worker_iface_t *wiface,
                                        void *arg)
 {
     /* best end-to-end latency */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                               &wiface->attr,
-                                               &remote_addr->iface_attr) +
-                   wiface->attr.overhead + remote_addr->iface_attr.overhead);
+    return 1e-3 /
+           (ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
+            wiface->attr.overhead + remote_addr->iface_attr.overhead);
 }
 
 static double ucp_tl_iface_bandwidth_ratio(ucp_context_h context,
@@ -1231,9 +1231,15 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     double eps                = 1e-3;
     double local_bw, remote_bw;
 
-    local_bw = ucp_tl_iface_bandwidth(context, &wiface->attr.bandwidth) *
-               ucp_tl_iface_bandwidth_ratio(context, local_dev_count[dev_index],
-                                            wiface->attr.dev_num_paths);
+    local_bw = ucp_wireup_iface_bw_distance(wiface) *
+         ucp_tl_iface_bandwidth_ratio(context, local_dev_count[dev_index],
+                                      wiface->attr.dev_num_paths);
+
+    if (remote_addr->iface_attr.addr_version == UCP_OBJECT_VERSION_V2) {
+        /* FP8 is a lossy compression method, so in order to create a symmetric
+         * calculation we pack/unpack the local bandwidth as well */
+        local_bw = ucp_wireup_fp8_pack_unpack_bw(local_bw);
+    }
 
     remote_bw = remote_addr->iface_attr.bandwidth *
                 ucp_tl_iface_bandwidth_ratio(
@@ -1254,11 +1260,10 @@ ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
      * a size which is likely to be used for high-bw memory access protocol, for
      * how long it would take to transfer it with a certain transport. */
     return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
-                ucp_wireup_iface_avail_bandwidth(
-                    wiface, remote_addr, dev_count->local, dev_count->remote)) +
-                ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                            &wiface->attr,
-                                            &remote_addr->iface_attr) +
+                 ucp_wireup_iface_avail_bandwidth(wiface, remote_addr,
+                                                  dev_count->local,
+                                                  dev_count->remote)) +
+                ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr) +
                 wiface->attr.overhead +
                 ucs_linear_func_apply(md_attr->reg_cost,
                                       UCP_WIREUP_RMA_BW_TEST_MSG_SIZE));
@@ -1389,14 +1394,11 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
      */
     double size = ucs_min(wiface->attr.cap.am.max_bcopy,
                           remote_addr->iface_attr.seg_size);
-    double t    = (size /
-                   ucp_wireup_iface_avail_bandwidth(
-                       wiface, remote_addr, dev_count->local,
-                       dev_count->remote)) +
+    double t    = (size / ucp_wireup_iface_avail_bandwidth(wiface, remote_addr,
+                                                           dev_count->local,
+                                                           dev_count->remote)) +
                   wiface->attr.overhead + remote_addr->iface_attr.overhead +
-                  ucp_wireup_tl_iface_latency(wiface->worker->context,
-                                              &wiface->attr,
-                                              &remote_addr->iface_attr);
+                  ucp_wireup_tl_iface_latency(wiface, &remote_addr->iface_attr);
 
     return size / t * 1e-5;
 }
@@ -1776,7 +1778,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         added_lanes = 0;
         UCS_BITMAP_CLEAR(&tl_bitmap);
 
-        for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+        ucs_memory_type_for_each(mem_type) {
             UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, reg_mem_types,
                                     mem_type_tl_bitmap);
 
@@ -1940,7 +1942,7 @@ ucp_wireup_keepalive_score_func(const ucp_worker_iface_t *wiface,
     ucs_status_t status;
 
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS;
-    status               = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    status               = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
         ucs_warn(UCT_TL_RESOURCE_DESC_FMT
                  ": getting perf estimations failed: %s",
@@ -2103,16 +2105,15 @@ static unsigned ucp_wireup_default_path_index(unsigned path_index)
 
 static ucs_status_t ucp_wireup_select_set_locality_flags(
         const ucp_wireup_select_params_t *select_params,
-        ucp_ep_config_key_t *key)
+        unsigned *addr_indices, ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker = select_params->ep->worker;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
-    ucp_rsc_index_t iface_id;
     ucp_address_entry_t *ae;
     ucp_lane_index_t lane;
-    ucs_status_t status;
-    void *dev_addr;
+    unsigned addr_index;
+    uct_iface_is_reachable_params_t params;
 
     if (select_params->address->uuid == worker->uuid) {
         key->flags |= UCP_EP_CONFIG_KEY_FLAG_SELF;
@@ -2130,37 +2131,38 @@ static ucs_status_t ucp_wireup_select_set_locality_flags(
         }
     }
 
-    /* If the local context matching at least one remote device address, it's
-       intra-node */
-    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        wiface = worker->ifaces[iface_id];
+    /* If the local context matching the corresponding remote device address,
+     * it's intra-node. Only selected lanes are compared to verify reachability.
+     */
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        rsc_index = key->lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        if (key->cm_lane == lane) {
+            continue;
+        }
+
+        addr_index = addr_indices[lane];
+        ae         = &select_params->address->address_list[addr_index];
+
+        wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->attr.device_addr_len == 0) {
             continue;
         }
 
-        dev_addr = ucs_malloc(wiface->attr.device_addr_len, "ucp_tmp_dev_addr");
-        if (dev_addr == NULL) {
-            ucs_error("failed to allocated device address of size %zu",
-                      wiface->attr.device_addr_len);
-            return UCS_ERR_NO_MEMORY;
-        }
+        params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                             UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR  |
+                             UCT_IFACE_IS_REACHABLE_FIELD_SCOPE;
+        params.device_addr = ae->dev_addr;
+        params.iface_addr  = ae->iface_addr;
+        params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
 
-        status = uct_iface_get_device_address(wiface->iface, dev_addr);
-        if (status != UCS_OK) {
-            ucs_free(dev_addr);
-            return status;
+        if (uct_iface_is_reachable_v2(wiface->iface, &params)) {
+            key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
+            return UCS_OK;
         }
-
-        ucp_unpacked_address_for_each(ae, select_params->address) {
-            if ((wiface->attr.device_addr_len == ae->dev_addr_len) &&
-                !memcmp(ae->dev_addr, dev_addr, ae->dev_addr_len)) {
-                key->flags |= UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE;
-                ucs_free(dev_addr);
-                return UCS_OK;
-            }
-        }
-
-        ucs_free(dev_addr);
     }
 
     return UCS_OK;
@@ -2298,7 +2300,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
      * msg packets */
     key->am_bw_lanes[0] = key->am_lane;
 
-    return ucp_wireup_select_set_locality_flags(select_params, key);
+    return ucp_wireup_select_set_locality_flags(select_params, addr_indices,
+                                                key);
 }
 
 ucs_status_t

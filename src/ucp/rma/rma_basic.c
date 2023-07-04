@@ -14,6 +14,20 @@
 
 #include <ucp/proto/proto_am.inl>
 
+/* Context for ucp_rma_basic_memcpy_pack */
+typedef struct {
+    const void *src;
+    size_t     length;
+} ucp_memcpy_pack_context_t;
+
+static size_t ucp_rma_basic_memcpy_pack(void *dest, void *arg)
+{
+    ucp_memcpy_pack_context_t *ctx = arg;
+    size_t length                  = ctx->length;
+
+    UCS_PROFILE_NAMED_CALL("memcpy_pack", memcpy, dest, ctx->src, length);
+    return length;
+}
 
 static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
 {
@@ -22,6 +36,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
     ucp_rkey_h rkey                 = req->send.rma.rkey;
     ucp_lane_index_t lane           = req->send.lane;
     ucp_ep_rma_config_t *rma_config = &ucp_ep_config(ep)->rma[lane];
+    ucp_md_index_t md_index;
     ucs_status_t status;
     ssize_t packed_len;
 
@@ -43,20 +58,21 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         pack_ctx.length = ucs_min(req->send.length, rma_config->max_put_bcopy);
         packed_len      = UCS_PROFILE_CALL(uct_ep_put_bcopy,
                                            ucp_ep_get_fast_lane(ep, lane),
-                                           ucp_memcpy_pack_cb, &pack_ctx,
+                                           ucp_rma_basic_memcpy_pack, &pack_ctx,
                                            req->send.rma.remote_addr,
                                            rkey->cache.rma_rkey);
         status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
     } else {
         uct_iov_t iov;
 
+        md_index   = ucp_ep_md_index(ep, lane);
         /* TODO: leave last fragment for bcopy */
         packed_len = ucs_min(req->send.length, rma_config->max_put_zcopy);
         /* TODO: use ucp_dt_iov_copy_uct */
         iov.buffer = (void *)req->send.buffer;
         iov.length = packed_len;
         iov.count  = 1;
-        iov.memh   = req->send.state.dt.dt.contig.memh[0];
+        iov.memh   = req->send.state.dt.dt.contig.memh->uct[md_index];
 
         status = UCS_PROFILE_CALL(uct_ep_put_zcopy,
                                   ucp_ep_get_fast_lane(ep, lane), &iov, 1,
@@ -76,6 +92,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
     ucp_rkey_h rkey                 = req->send.rma.rkey;
     ucp_lane_index_t lane           = req->send.lane;
     ucp_ep_rma_config_t *rma_config = &ucp_ep_config(ep)->rma[lane];
+    ucp_md_index_t md_index;
     ucs_status_t status;
     size_t frag_length;
 
@@ -93,11 +110,13 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
                                        &req->send.state.uct_comp);
     } else {
         uct_iov_t iov;
+
+        md_index    = ucp_ep_md_index(ep, lane);
         frag_length = ucs_min(req->send.length, rma_config->max_get_zcopy);
         iov.buffer  = (void *)req->send.buffer;
         iov.length  = frag_length;
         iov.count   = 1;
-        iov.memh    = req->send.state.dt.dt.contig.memh[0];
+        iov.memh    = req->send.state.dt.dt.contig.memh->uct[md_index];
 
         status = UCS_PROFILE_CALL(uct_ep_get_zcopy,
                                   ucp_ep_get_fast_lane(ep, lane), &iov, 1,

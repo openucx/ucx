@@ -191,7 +191,7 @@ static unsigned uct_rc_verbs_iface_progress(void *arg)
         return count;
     }
 
-    return uct_rc_verbs_iface_poll_tx(iface);
+    return count + uct_rc_verbs_iface_poll_tx(iface);
 }
 
 static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
@@ -382,20 +382,22 @@ err:
     return status;
 }
 
-ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface,
-                                                     unsigned max)
+ucs_status_t
+uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface)
 {
-    unsigned count;
+    if (iface->super.rx.srq.quota == 0) {
+        return UCS_OK;
+    }
 
-    count = ucs_min(max, iface->super.rx.srq.quota);
-    iface->super.rx.srq.available += count;
-    iface->super.rx.srq.quota     -= count;
+    iface->super.rx.srq.available = iface->super.rx.srq.quota;
+    iface->super.rx.srq.quota     = 0;
     while (iface->super.rx.srq.available > 0) {
         if (uct_rc_verbs_iface_post_recv_common(iface, 1) == 0) {
             ucs_error("failed to post receives");
             return UCS_ERR_NO_MEMORY;
         }
     }
+
     return UCS_OK;
 }
 
@@ -408,7 +410,7 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
          * to handle here, and some receives were already pre-posted during iface
          * creation anyway.
          */
-        uct_rc_verbs_iface_common_prepost_recvs(iface, UINT_MAX);
+        uct_rc_verbs_iface_common_prepost_recvs(iface);
     }
 
     uct_base_iface_progress_enable_cb(&iface->super.super.super,
@@ -496,16 +498,17 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
     .iface_get_address        = ucs_empty_function_return_success,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable,
-    };
+};
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf = uct_rc_iface_estimate_perf,
-            .iface_vfs_refresh   = uct_rc_iface_vfs_refresh,
-            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-            .ep_connect_to_ep_v2 = uct_rc_verbs_ep_connect_to_ep_v2
+            .iface_estimate_perf   = uct_rc_iface_estimate_perf,
+            .iface_vfs_refresh     = uct_rc_iface_vfs_refresh,
+            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+            .ep_connect_to_ep_v2   = uct_rc_verbs_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,

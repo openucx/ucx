@@ -218,6 +218,50 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
     return 1;
 }
 
+static ucs_status_t
+uct_tcp_iface_parse_virtual_dev(const struct dirent *entry, void *ctx)
+{
+    static const char *low_level_dev_prefix = "lower_";
+    ucs_string_buffer_t *dev_path           = ctx;
+
+    if (!strncmp(entry->d_name, low_level_dev_prefix,
+                 strlen(low_level_dev_prefix))) {
+        ucs_string_buffer_appendf(dev_path, "/%s", entry->d_name);
+        return UCS_ERR_CANCELED;
+    }
+
+    return UCS_OK;
+}
+
+static const char *
+uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
+{
+    ucs_string_buffer_t dev_path = UCS_STRING_BUFFER_INITIALIZER;
+    const char *sysfs_path;
+    ucs_status_t status;
+
+    /* Find and return the correct device sysfs path:
+     * 1) For regular device, use regular sysfs form.
+     * 2) For virtual device (RoCE LAG/VLAN), search for symbolic link of the
+     *    form "lower_*" */
+    ucs_string_buffer_appendf(&dev_path, "%s/%s", UCT_TCP_IFACE_NETDEV_DIR,
+                              dev_name);
+
+    status = ucs_sys_readdir(ucs_string_buffer_cstr(&dev_path),
+                             uct_tcp_iface_parse_virtual_dev, &dev_path);
+    if (status != UCS_ERR_CANCELED) {
+        ucs_string_buffer_cleanup(&dev_path);
+        return NULL;
+    }
+
+    /* 'path_buffer' size is PATH_MAX */
+    sysfs_path = ucs_topo_resolve_sysfs_path(ucs_string_buffer_cstr(&dev_path),
+                                             path_buffer);
+
+    ucs_string_buffer_cleanup(&dev_path);
+    return sysfs_path;
+}
+
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
                                         uct_iface_attr_t *attr)
 {
@@ -226,8 +270,9 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
                              sizeof(uct_tcp_am_hdr_t);
     ucs_status_t status;
     int is_default;
-    char sysfs_path[PATH_MAX];
     double pci_bw, network_bw, calculated_bw;
+    char path_buffer[PATH_MAX];
+    const char *sysfs_path;
 
     uct_base_iface_query(&iface->super, attr);
 
@@ -236,8 +281,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
         return status;
     }
 
-    ucs_snprintf_safe(sysfs_path, PATH_MAX, "%s/%s/device",
-                      UCT_TCP_IFACE_NETDEV_DIR, iface->if_name);
+    sysfs_path             = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
     pci_bw                 = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
     calculated_bw          = ucs_min(pci_bw, network_bw);
 
@@ -547,9 +591,11 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
         goto err_close_sock;
     }
 
-    ucs_debug("tcp_iface %p: listening for connections (fd=%d) on %s",
-              iface, iface->listen_fd, ucs_sockaddr_str((struct sockaddr *)&bind_addr,
-                                                       ip_port_str, sizeof(ip_port_str)));
+    ucs_debug("tcp_iface %p: listening for connections (fd=%d) on %s netif %s",
+              iface, iface->listen_fd,
+              ucs_sockaddr_str((struct sockaddr *)&iface->config.ifaddr,
+                              ip_port_str, sizeof(ip_port_str)),
+              iface->if_name);
     return UCS_OK;
 
 err_close_sock:
@@ -567,11 +613,12 @@ static ucs_mpool_ops_t uct_tcp_mpool_ops = {
 };
 
 static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = uct_tcp_ep_connect_to_ep_v2
+    .iface_estimate_perf   = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = uct_tcp_ep_connect_to_ep_v2,
+    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
@@ -843,7 +890,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     ucs_status_t status;
     DIR *dir;
     const char *sysfs_path;
-    char path_buffer[PATH_MAX], dev_path[PATH_MAX];
+    char path_buffer[PATH_MAX];
     ucs_sys_device_t sys_dev;
 
     dir = opendir(UCT_TCP_IFACE_NETDEV_DIR);
@@ -900,13 +947,9 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         }
         devices = tmp;
 
-        ucs_snprintf_safe(dev_path, PATH_MAX, "%s/%s", UCT_TCP_IFACE_NETDEV_DIR,
-                          entry->d_name);
-        sysfs_path = uct_iface_get_sysfs_path(dev_path, entry->d_name,
-                                              path_buffer);
-
-        sys_dev = ucs_topo_get_sysfs_dev(entry->d_name, sysfs_path,
-                                         sys_device_priority);
+        sysfs_path = uct_tcp_iface_get_sysfs_path(entry->d_name, path_buffer);
+        sys_dev    = ucs_topo_get_sysfs_dev(entry->d_name, sysfs_path,
+                                            sys_device_priority);
 
         ucs_snprintf_zero(devices[num_devices].name,
                           sizeof(devices[num_devices].name),

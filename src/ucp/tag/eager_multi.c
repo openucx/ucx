@@ -33,12 +33,7 @@ static ucs_status_t
 ucp_proto_eager_multi_init_common(ucp_proto_multi_init_params_t *params,
                                   ucp_proto_id_t op_id)
 {
-    /* TODO: Disable AM based protocols if tag lane is present! It can be done
-     * when tag offload rndv is implemented (so any msg size can be sent with
-     * tag offload). I. e. would need to check one more condition below:
-     * ucp_ep_config_key_has_tag_lane(params->super.super.ep_config_key)
-     */
-    if (!ucp_proto_init_check_op(&params->super.super, UCS_BIT(op_id))) {
+    if (!ucp_tag_eager_check_op_id(&params->super.super, op_id, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -113,7 +108,7 @@ ucp_proto_eager_bcopy_multi_send_func(ucp_request_t *req,
                                       ucp_datatype_iter_t *next_iter,
                                       ucp_lane_index_t *lane_shift)
 {
-    return ucp_proto_eager_bcopy_multi_common_send_func(
+    return ucp_proto_am_bcopy_multi_common_send_func(
             req, lpriv, next_iter, UCP_AM_ID_EAGER_FIRST,
             ucp_proto_eager_bcopy_pack_first, sizeof(ucp_eager_first_hdr_t),
             UCP_AM_ID_EAGER_MIDDLE, ucp_proto_eager_bcopy_pack_middle,
@@ -169,7 +164,7 @@ ucp_proto_eager_sync_bcopy_multi_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
-    return ucp_proto_eager_bcopy_multi_common_send_func(
+    return ucp_proto_am_bcopy_multi_common_send_func(
             req, lpriv, next_iter, UCP_AM_ID_EAGER_SYNC_FIRST,
             ucp_eager_sync_bcopy_pack_first, sizeof(ucp_eager_sync_first_hdr_t),
             UCP_AM_ID_EAGER_MIDDLE, ucp_proto_eager_bcopy_pack_middle,
@@ -250,40 +245,23 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_eager_multi_init_common(&params, UCP_OP_ID_TAG_SEND);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
-                                      const ucp_proto_multi_lane_priv_t *lpriv,
-                                      ucp_datatype_iter_t *next_iter,
-                                      ucp_lane_index_t *lane_shift)
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_eager_zcopy_multi_send_func(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
-    union {
-        ucp_eager_first_hdr_t  first;
-        ucp_eager_middle_hdr_t middle;
-    } hdr;
-    uct_iov_t iov[UCP_MAX_IOV];
-    size_t max_payload;
-    ucp_am_id_t am_id;
-    size_t hdr_size;
-    size_t iov_count;
+    ucp_eager_middle_hdr_t hdr_middle;
+    ucp_eager_first_hdr_t hdr_first;
 
     if (req->send.state.dt_iter.offset == 0) {
-        am_id    = UCP_AM_ID_EAGER_FIRST;
-        hdr_size = sizeof(hdr.first);
-        ucp_proto_eager_set_first_hdr(req, &hdr.first);
+        ucp_proto_eager_set_first_hdr(req, &hdr_first);
     } else {
-        am_id    = UCP_AM_ID_EAGER_MIDDLE;
-        hdr_size = sizeof(hdr.middle);
-        ucp_proto_eager_set_middle_hdr(req, &hdr.middle);
+        ucp_proto_eager_set_middle_hdr(req, &hdr_middle);
     }
 
-    max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
-    iov_count   = ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                                             max_payload, lpriv->super.md_index,
-                                             UCP_DT_MASK_CONTIG_IOV, next_iter,
-                                             iov, lpriv->super.max_iov);
-    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                           am_id, &hdr, hdr_size, iov, iov_count, 0,
-                           &req->send.state.uct_comp);
+    return ucp_proto_am_zcopy_multi_common_send_func(
+            req, lpriv, next_iter, UCP_AM_ID_EAGER_FIRST, &hdr_first,
+            sizeof(hdr_first), UCP_AM_ID_EAGER_MIDDLE, &hdr_middle,
+            sizeof(hdr_middle));
 }
 
 static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self)

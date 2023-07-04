@@ -328,7 +328,7 @@ static size_t ucp_address_packed_length_size(ucp_worker_h worker, size_t length,
 }
 
 static ucs_status_t
-ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
+ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                            const ucp_tl_bitmap_t *tl_bitmap, uint64_t flags,
                            ucp_object_version_t addr_version,
                            ucp_address_packed_device_t **devices_p,
@@ -358,12 +358,13 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
         dev = ucp_address_get_device(context, rsc_index, devices, &num_devices);
 
         if (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
-            ucs_assert(ep != NULL);
+            ucs_assert(key != NULL);
             /* Each lane which matches the resource index adds an ep address
              * entry. The length and flags is packed in non-unified mode only.
              */
-            ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
-                if (ucp_ep_get_rsc_index(ep, lane) == rsc_index) {
+            for (lane = 0; lane < key->num_lanes; ++lane) {
+                if ((key->lanes[lane].rsc_index == rsc_index) &&
+                    ucp_ep_config_connect_p2p(worker, key, rsc_index)) {
                     dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker);
                     dev->tl_addrs_size += iface_attr->ep_addr_len;
                     dev->tl_addrs_size += sizeof(uint8_t); /* lane index */
@@ -667,16 +668,15 @@ static uint64_t ucp_address_flags_from_iface_flags(uint64_t iface_cap_flags,
 }
 
 static unsigned
-ucp_address_pack_iface_attr_v1(ucp_worker_h worker, void *ptr,
-                               const uct_iface_attr_t *iface_attr,
+ucp_address_pack_iface_attr_v1(const ucp_worker_iface_t *wiface, void *ptr,
                                unsigned atomic_flags)
 {
+    const uct_iface_attr_t *iface_attr      = &wiface->attr;
     ucp_address_packed_iface_attr_t *packed = ptr;
 
-    packed->overhead       = iface_attr->overhead;
-    packed->bandwidth      = ucp_tl_iface_bandwidth(worker->context,
-                                                    &iface_attr->bandwidth);
-    packed->lat_ovh        = iface_attr->latency.c;
+    packed->lat_ovh   = ucp_wireup_iface_lat_distance_v1(wiface);
+    packed->bandwidth = ucp_wireup_iface_bw_distance(wiface);
+    packed->overhead  = iface_attr->overhead;
     /* Pack prio, capability and atomic flags */
     packed->prio_cap_flags = (uint8_t)iface_attr->priority |
                              ucp_address_pack_flags(iface_attr->cap.flags,
@@ -717,23 +717,24 @@ size_t ucp_address_iface_seg_size(const uct_iface_attr_t *iface_attr)
 }
 
 static unsigned
-ucp_address_pack_iface_attr_v2(ucp_worker_h worker, void *ptr,
-                               const uct_iface_attr_t *iface_attr,
+ucp_address_pack_iface_attr_v2(const ucp_worker_iface_t *wiface, void *ptr,
                                unsigned atomic_flags)
 {
+    const uct_iface_attr_t *iface_attr         = &wiface->attr;
     ucp_address_v2_packed_iface_attr_t *packed = ptr;
+
     uint64_t addr_iface_flags;
-    double latency_nsec, overhead_nsec;
+    double latency_nsec, overhead_nsec, latency, bandwidth;
     size_t seg_size;
 
-    latency_nsec  = ucp_tl_iface_latency(worker->context, &iface_attr->latency) *
-                    UCS_NSEC_PER_SEC;
+    latency   = ucp_wireup_iface_lat_distance_v2(wiface);
+    bandwidth = ucp_wireup_iface_bw_distance(wiface);
+
+    latency_nsec  = latency * UCS_NSEC_PER_SEC;
     overhead_nsec = iface_attr->overhead * UCS_NSEC_PER_SEC;
 
     packed->overhead  = UCS_FP8_PACK(OVERHEAD, overhead_nsec);
-    packed->bandwidth = UCS_FP8_PACK(BANDWIDTH,
-                                     ucp_tl_iface_bandwidth(worker->context,
-                                     &iface_attr->bandwidth));
+    packed->bandwidth = UCS_FP8_PACK(BANDWIDTH, bandwidth);
     packed->latency   = UCS_FP8_PACK(LATENCY, latency_nsec);
     packed->prio      = ucs_min(UINT8_MAX, iface_attr->priority);
     addr_iface_flags  = ucp_address_flags_from_iface_flags(
@@ -748,15 +749,17 @@ ucp_address_pack_iface_attr_v2(ucp_worker_h worker, void *ptr,
     return sizeof(*packed);
 }
 
-static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
-                                       ucp_rsc_index_t rsc_index,
-                                       const uct_iface_attr_t *iface_attr,
+static int ucp_address_pack_iface_attr(const ucp_worker_iface_t *wiface,
+                                       void *ptr, ucp_rsc_index_t rsc_index,
                                        unsigned pack_flags,
                                        ucp_object_version_t addr_version,
                                        int enable_atomics)
 {
-    unsigned atomic_flags = 0;
+    const uct_iface_attr_t *iface_attr = &wiface->attr;
+    ucp_worker_h worker                = wiface->worker;
+    unsigned atomic_flags              = 0;
     unsigned packed_len;
+    double lat_ovh;
     ucp_address_unified_iface_attr_t *unified;
 
     if (ucp_worker_is_unified_mode(worker)) {
@@ -766,8 +769,11 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
          * depends on device NUMA locality. */
         unified            = ptr;
         unified->rsc_index = rsc_index;
-        unified->lat_ovh   = enable_atomics ? -iface_attr->latency.c :
-                                               iface_attr->latency.c;
+        lat_ovh            = ucp_wireup_iface_lat_distance_v1(wiface);
+        if (enable_atomics) {
+            lat_ovh = -lat_ovh;
+        }
+        unified->lat_ovh = lat_ovh;
 
         return sizeof(*unified);
     }
@@ -788,11 +794,9 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     }
 
     if (addr_version == UCP_OBJECT_VERSION_V1) {
-        packed_len = ucp_address_pack_iface_attr_v1(worker, ptr, iface_attr,
-                                                    atomic_flags);
+        packed_len = ucp_address_pack_iface_attr_v1(wiface, ptr, atomic_flags);
     } else {
-        packed_len = ucp_address_pack_iface_attr_v2(worker, ptr, iface_attr,
-                                                    atomic_flags);
+        packed_len = ucp_address_pack_iface_attr_v2(wiface, ptr, atomic_flags);
     }
 
     if (pack_flags & UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX) {
@@ -1270,9 +1274,9 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
 
             /* Transport information */
             enable_amo = UCS_BITMAP_GET(worker->atomic_tls, rsc_index);
-            attr_len   = ucp_address_pack_iface_attr(worker, ptr, rsc_index,
-                                                     iface_attr, pack_flags,
-                                                     addr_version, enable_amo);
+            attr_len   = ucp_address_pack_iface_attr(wiface, ptr, rsc_index,
+                                                     pack_flags, addr_version,
+                                                     enable_amo);
             if (attr_len < 0) {
                 return UCS_ERR_INVALID_ADDR;
             }
@@ -1423,6 +1427,32 @@ out:
     return UCS_OK;
 }
 
+ucs_status_t
+ucp_address_length(ucp_worker_h worker, const ucp_ep_config_key_t *key,
+                   const ucp_tl_bitmap_t *tl_bitmap, unsigned pack_flags,
+                   ucp_object_version_t addr_version, size_t *size_p)
+{
+    ucp_address_packed_device_t *devices;
+    ucp_rsc_index_t num_devices;
+    ucs_status_t status;
+
+    /* Collect all devices required to pack their address */
+    status = ucp_address_gather_devices(worker, key, tl_bitmap, pack_flags,
+                                        addr_version, &devices, &num_devices);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    /* Calculate the required ucp address length */
+    *size_p = ucp_address_packed_size(worker, devices, num_devices, pack_flags,
+                                      addr_version);
+    status  = UCS_OK;
+    ucs_free(devices);
+
+out:
+    return status;
+}
+
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
                               const ucp_tl_bitmap_t *tl_bitmap,
                               unsigned pack_flags,
@@ -1432,16 +1462,20 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
 {
     ucp_address_packed_device_t *devices;
     ucp_rsc_index_t num_devices;
+    const ucp_ep_config_key_t *key;
     ucs_status_t status;
     void *buffer;
     size_t size;
 
     if (ep == NULL) {
         pack_flags &= ~UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+        key         = NULL;
+    } else {
+        key         = &ucp_ep_config(ep)->key;
     }
 
     /* Collect all devices we want to pack */
-    status = ucp_address_gather_devices(worker, ep, tl_bitmap, pack_flags,
+    status = ucp_address_gather_devices(worker, key, tl_bitmap, pack_flags,
                                         addr_version, &devices, &num_devices);
     if (status != UCS_OK) {
         goto out;

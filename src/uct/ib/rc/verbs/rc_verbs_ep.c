@@ -192,10 +192,9 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    uct_rc_verbs_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
-                                                              uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_t *ep                    = ucs_derived_of(tl_ep,
-                                                              uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
     UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge,
@@ -660,24 +659,40 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 
     status = uct_rc_iface_qp_init(&iface->super, self->qp);
     if (status != UCS_OK) {
-        goto err_qp_cleanup;
+        goto err_destroy_qp;
     }
 
     status = uct_ib_device_async_event_register(&md->dev,
                                                 IBV_EVENT_QP_LAST_WQE_REACHED,
                                                 self->qp->qp_num);
     if (status != UCS_OK) {
-        goto err_qp_cleanup;
+        goto err_destroy_qp;
     }
 
-    uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
+    status = uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
+    if (status != UCS_OK) {
+        goto err_event_unreg;
+    }
+
+    status = uct_rc_verbs_iface_common_prepost_recvs(iface);
+    if (status != UCS_OK) {
+        goto err_remove_qp;
+    }
+
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
     uct_ib_fence_info_init(&self->fi);
 
     return UCS_OK;
 
-err_qp_cleanup:
+
+err_remove_qp:
+    uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
+err_event_unreg:
+    uct_ib_device_async_event_unregister(&md->dev,
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         self->qp->qp_num);
+err_destroy_qp:
     uct_ib_destroy_qp(self->qp);
 err:
     return status;

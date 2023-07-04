@@ -572,11 +572,12 @@ uct_mm_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 }
 
 static uct_iface_internal_ops_t uct_mm_iface_internal_ops = {
-    .iface_estimate_perf = uct_mm_estimate_perf,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
+    .iface_estimate_perf   = uct_mm_estimate_perf,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
 };
 
 static void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj,
@@ -697,7 +698,7 @@ err:
 
 static void uct_mm_iface_log_created(uct_mm_iface_t *iface)
 {
-    uct_mm_seg_t UCS_V_UNUSED *seg = iface->recv_fifo_mem.memh;
+    uct_mm_seg_t *seg = iface->recv_fifo_mem.memh;
 
     ucs_debug("created mm iface %p FIFO id 0x%"PRIx64
               " va %p size %zu (%u x %u elems)",

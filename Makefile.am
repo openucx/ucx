@@ -84,8 +84,28 @@ EXTRA_DIST += debian/rules
 EXTRA_DIST += debian/source/format
 EXTRA_DIST += ucx.pc.in
 EXTRA_DIST += LICENSE
+
 endif #!DOCS_ONLY
 EXTRA_DIST += docs/uml/uct.dot
+
+.PHONY: lcov lcov-clean
+
+if HAVE_LCOV
+distclean-local: lcov-clean
+	find . -name "*.gcno" -type f -exec rm -f {} \;
+
+LCOV_DIR = lcov_data
+LCOV_INFO = lcov.info
+
+lcov-clean:
+	$(RM) -r $(LCOV_DIR)
+	find . -name "*.gcda" -type f -exec rm -f {} \;
+
+lcov:
+	mkdir -p $(LCOV_DIR)
+	$(LCOVBIN) -c -d src -o $(LCOV_DIR)/$(LCOV_INFO)
+	$(GENHTMLBIN) -o $(LCOV_DIR) --legend $(LCOV_DIR)/$(LCOV_INFO)
+endif
 
 include $(srcdir)/docs/doxygen/doxygen.am
 

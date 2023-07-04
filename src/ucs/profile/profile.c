@@ -86,7 +86,8 @@ const char *ucs_profile_mode_names[] = {
  */
 ucs_profile_context_t *ucs_profile_default_ctx;
 
-static ucs_status_t ucs_profile_file_write_data(int fd, void *data, size_t size)
+static ucs_status_t
+ucs_profile_file_write_data(int fd, const void *data, size_t size)
 {
     ssize_t written;
 
@@ -110,6 +111,40 @@ ucs_profile_file_write_records(int fd, ucs_profile_record_t *begin,
                                ucs_profile_record_t *end)
 {
     return ucs_profile_file_write_data(fd, begin, UCS_PTR_BYTE_DIFF(begin, end));
+}
+
+static ucs_status_t
+ucs_profile_write_profiling_records(ucs_profile_context_t *ctx, int fd,
+                                    ucs_profile_thread_context_t *thread_ctx)
+{
+    ucs_status_t status;
+
+    if (!(ctx->profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG))) {
+        return UCS_OK;
+    }
+
+    if (thread_ctx->log.wraparound) {
+        status = ucs_profile_file_write_records(fd, thread_ctx->log.current,
+                                                thread_ctx->log.end);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return ucs_profile_file_write_records(fd, thread_ctx->log.start,
+                                          thread_ctx->log.current);
+}
+
+size_t ucs_profile_calc_num_records(ucs_profile_context_t *ctx,
+                                    ucs_profile_thread_context_t *thread_ctx)
+{
+    if (!(ctx->profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG))) {
+        return 0;
+    }
+
+    return thread_ctx->log.wraparound ?
+                   (thread_ctx->log.end - thread_ctx->log.start) :
+                   (thread_ctx->log.current - thread_ctx->log.start);
 }
 
 /* Global lock must be held */
@@ -143,13 +178,7 @@ ucs_profile_file_write_thread(ucs_profile_context_t *ctx, int fd,
         thread_hdr.end_time = default_end_time;
     }
 
-    if (ctx->profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
-        thread_hdr.num_records = thread_ctx->log.wraparound ?
-                             (thread_ctx->log.end     - thread_ctx->log.start) :
-                             (thread_ctx->log.current - thread_ctx->log.start);
-    } else {
-        thread_hdr.num_records = 0;
-    }
+    thread_hdr.num_records = ucs_profile_calc_num_records(ctx, thread_ctx);
 
     status = ucs_profile_file_write_data(fd, &thread_hdr, sizeof(thread_hdr));
     if (status != UCS_OK) {
@@ -179,28 +208,17 @@ ucs_profile_file_write_thread(ucs_profile_context_t *ctx, int fd,
         }
     }
 
-    /* write profiling records */
-    if (ctx->profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
-        if (thread_ctx->log.wraparound) {
-            status = ucs_profile_file_write_records(fd, thread_ctx->log.current,
-                                                    thread_ctx->log.end);
-            if (status != UCS_OK) {
-                return status;
-            }
-        }
+    status = ucs_profile_write_profiling_records(ctx, fd, thread_ctx);
 
-        status = ucs_profile_file_write_records(fd, thread_ctx->log.start,
-                                                thread_ctx->log.current);
-        if (status != UCS_OK) {
-            return status;
-        }
+    if (status != UCS_OK) {
+        return status;
     }
 
     return UCS_OK;
 }
 
-static ucs_status_t ucs_profile_write_locations(ucs_profile_context_t *ctx,
-                                                int fd)
+static ucs_status_t
+ucs_profile_write_locations(int fd, ucs_profile_context_t *ctx)
 {
     ucs_profile_global_location_t *loc;
     ucs_status_t status;
@@ -215,18 +233,71 @@ static ucs_status_t ucs_profile_write_locations(ucs_profile_context_t *ctx,
     return UCS_OK;
 }
 
+static ucs_status_t ucs_profile_write_threads(int fd,
+                                              ucs_profile_context_t *ctx,
+                                              ucs_time_t write_time)
+{
+    ucs_status_t status;
+    ucs_profile_thread_context_t *thread_ctx;
+
+    ucs_list_for_each(thread_ctx, &ctx->thread_list, list) {
+        status = ucs_profile_file_write_thread(ctx, fd, thread_ctx, write_time);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
+static void ucs_profile_calc_blocks(ucs_profile_header_t *header,
+                                    ucs_profile_context_t *ctx,
+                                    const char *env_variables)
+{
+    size_t num_threads = ucs_list_length(&ctx->thread_list);
+    size_t threads_locations_size, thread_header_size;
+    ucs_profile_thread_context_t *thread_ctx;
+
+    header->env_vars.offset = sizeof(ucs_profile_header_t);
+    header->env_vars.size   = strlen(env_variables);
+
+    header->locations.offset = header->env_vars.offset + header->env_vars.size;
+    header->locations.size   = ctx->num_locations *
+                               sizeof(ucs_profile_location_t);
+
+    threads_locations_size = ctx->num_locations *
+                             sizeof(ucs_profile_thread_location_t);
+    thread_header_size     = sizeof(ucs_profile_thread_header_t);
+    header->threads.offset = header->locations.offset + header->locations.size;
+    header->threads.size   = (thread_header_size + threads_locations_size) *
+                             num_threads;
+
+    if (ctx->profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
+        ucs_list_for_each(thread_ctx, &ctx->thread_list, list) {
+            header->threads.size += 
+                    ucs_profile_calc_num_records(ctx, thread_ctx) *
+                    sizeof(ucs_profile_record_t);
+        }
+    }
+}
+
 static void ucs_profile_write(ucs_profile_context_t *ctx)
 {
-    ucs_profile_thread_context_t *thread_ctx;
     ucs_profile_header_t header;
     char fullpath[1024] = {0};
     char filename[1024] = {0};
     ucs_time_t write_time;
     ucs_status_t status;
     int fd;
+    ucs_string_buffer_t env_strb;
+    const char *env_variables;
+
+    ucs_string_buffer_init(&env_strb);
+    ucs_config_parser_get_env_vars(&env_strb, " ");
+    env_variables = ucs_string_buffer_cstr(&env_strb);
 
     if (!ctx->profile_mode) {
-        return;
+        goto out_free_env;
     }
 
     pthread_mutex_lock(&ctx->mutex);
@@ -242,37 +313,46 @@ static void ucs_profile_write(ucs_profile_context_t *ctx)
         goto out_unlock;
     }
 
-    /* write header */
     memset(&header, 0, sizeof(header));
-    ucs_read_file(header.cmdline, sizeof(header.cmdline), 1, "/proc/self/cmdline");
-    strncpy(header.hostname, ucs_get_host_name(), sizeof(header.hostname) - 1);
+    ucs_strncpy_safe(header.cmdline, ucs_get_process_cmdline(),
+                     sizeof(header.cmdline));
+    ucs_strncpy_safe(header.hostname, ucs_get_host_name(),
+                     sizeof(header.hostname));
     header.version       = UCS_PROFILE_FILE_VERSION;
-    strncpy(header.ucs_path, ucs_sys_get_lib_path(), sizeof(header.ucs_path) - 1);
+    ucs_strncpy_safe(header.ucs_path, ucs_sys_get_lib_path(),
+                     sizeof(header.ucs_path));
+
     header.pid           = getpid();
     header.mode          = ctx->profile_mode;
-    header.num_locations = ctx->num_locations;
-    header.num_threads   = ucs_list_length(&ctx->thread_list);
     header.one_second    = ucs_time_from_sec(1.0);
+    header.feature_flags = 0;
+
+    ucs_profile_calc_blocks(&header, ctx, env_variables);
+
     ucs_profile_file_write_data(fd, &header, sizeof(header));
 
-    /* write locations */
-    status = ucs_profile_write_locations(ctx, fd);
+    status = ucs_profile_file_write_data(fd, env_variables,
+                                         header.env_vars.size);
     if (status != UCS_OK) {
         goto out_close_fd;
     }
 
-    /* write threads */
-    ucs_list_for_each(thread_ctx, &ctx->thread_list, list) {
-        status = ucs_profile_file_write_thread(ctx, fd, thread_ctx, write_time);
-        if (status != UCS_OK) {
-            goto out_close_fd;
-        }
+    status = ucs_profile_write_locations(fd, ctx);
+    if (status != UCS_OK) {
+        goto out_close_fd;
+    }
+
+    status = ucs_profile_write_threads(fd, ctx, write_time);
+    if (status != UCS_OK) {
+        goto out_close_fd;
     }
 
 out_close_fd:
     close(fd);
 out_unlock:
     pthread_mutex_unlock(&ctx->mutex);
+out_free_env:
+    ucs_string_buffer_cleanup(&env_strb);
 }
 
 static UCS_F_NOINLINE ucs_profile_thread_context_t*
@@ -618,6 +698,21 @@ void ucs_profile_dump(ucs_profile_context_t *ctx)
     /* write and cleanup all completed threads (including the current thread) */
     ucs_profile_write(ctx);
     ucs_profile_cleanup_completed_threads(ctx);
+}
+
+unsigned ucs_profile_calc_num_threads(size_t total_num_records,
+                                      const ucs_profile_header_t *header)
+{
+    size_t num_locations          = header->locations.size /
+                                    sizeof(ucs_profile_location_t);
+    size_t threads_locations_size = num_locations *
+                                    sizeof(ucs_profile_thread_location_t);
+    size_t thread_header_size     = sizeof(ucs_profile_thread_header_t);
+    size_t records_size           = sizeof(ucs_profile_record_t) * 
+                                    total_num_records;
+
+    return (header->threads.size - records_size) /
+           (thread_header_size + threads_locations_size);
 }
 
 ucs_status_t ucs_profile_init(unsigned profile_mode, const char *file_name,

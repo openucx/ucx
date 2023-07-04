@@ -67,16 +67,13 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #endif
 
 
-#if HAVE_ODP_IMPLICIT
-#  define UCT_IB_HAVE_ODP_IMPLICIT(_attr)           ((_attr)->odp_caps.general_caps & IBV_ODP_SUPPORT_IMPLICIT)
-#else
-#  define UCT_IB_HAVE_ODP_IMPLICIT(_attr)           0
-#endif
-
 #if !HAVE_DECL_IBV_ACCESS_RELAXED_ORDERING
 #  define IBV_ACCESS_RELAXED_ORDERING               0
 #endif
 
+#if !HAVE_DECL_IBV_ACCESS_ON_DEMAND
+#  define IBV_ACCESS_ON_DEMAND                      0
+#endif
 
 /*
  * DC support
@@ -87,15 +84,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 /*
  * Atomics support
  */
-#if HAVE_DECL_IBV_QUERY_DEVICE_EX
-#  define IBV_HAVE_ATOMIC_HCA(_attr)            ((_attr)->orig_attr.atomic_cap == IBV_ATOMIC_HCA)
-#  define IBV_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->orig_attr.atomic_cap == IBV_ATOMIC_GLOB)
-#  define IBV_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
-#else
-#  define IBV_HAVE_ATOMIC_HCA(_attr)            ((_attr)->atomic_cap == IBV_ATOMIC_HCA)
-#  define IBV_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->atomic_cap == IBV_ATOMIC_GLOB)
-#  define IBV_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
-#endif
+#define IBV_DEVICE_ATOMIC_HCA(dev)              (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_HCA)
 
 
 /* Ethernet link layer */

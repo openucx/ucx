@@ -13,8 +13,6 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
-#include <ucs/memory/numa.h>
-#include <ucs/memory/rcache.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
 #define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)
@@ -91,10 +89,8 @@ typedef struct uct_ib_md_ext_config {
     int                      enable_indirect_atomic; /** Enable indirect atomic */
 
     struct {
-        ucs_numa_policy_t    numa_policy;  /**< NUMA policy flags for ODP */
         int                  prefetch;     /**< Auto-prefetch non-blocking memory
                                                 registrations / allocations */
-        size_t               max_size;     /**< Maximal memory region size for ODP */
     } odp;
 
     unsigned long            gid_index;    /**< IB GID index to use */
@@ -139,8 +135,6 @@ typedef enum {
  */
 typedef struct uct_ib_md {
     uct_md_t                 super;
-    ucs_rcache_t             *rcache;   /**< Registration cache (can be NULL) */
-    uct_mem_h                global_odp;/**< Implicit ODP memory handle */
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     ucs_linear_func_t        reg_cost;  /**< Memory registration cost */
@@ -159,6 +153,7 @@ typedef struct uct_ib_md {
     int                      fork_init;
     size_t                   memh_struct_size;
     uint64_t                 reg_mem_types;
+    uint64_t                 reg_nonblock_mem_types;
     uint64_t                 cap_flags;
     char                     *name;
     /* flush_remote rkey is used as atomic_mr_id value (8-16 bits of rkey)
@@ -183,12 +178,7 @@ typedef struct uct_ib_md_packed_mkey {
 typedef struct uct_ib_md_config {
     uct_md_config_t          super;
 
-    /** List of registration methods in order of preference */
-    UCS_CONFIG_STRING_ARRAY_FIELD(rmtd) reg_methods;
-
-    uct_md_rcache_config_t   rcache;       /**< Registration cache config */
-    ucs_linear_func_t        uc_reg_cost;  /**< Memory registration cost estimation
-                                                without using the cache */
+    ucs_linear_func_t        reg_cost;     /**< Memory registration cost estimation */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */
     int                      async_events; /**< Whether async events should be delivered */
 
@@ -202,7 +192,7 @@ typedef struct uct_ib_md_config {
 
     unsigned                 devx;         /**< DEVX support */
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
-    ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
+    ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
 } uct_ib_md_config_t;
 
@@ -352,23 +342,6 @@ typedef ucs_status_t (*uct_ib_md_dereg_multithreaded_func_t)(uct_ib_md_t *md,
                                                              uct_ib_mr_type_t mr_type);
 
 /**
- * Memory domain method to prefetch physical memory for virtual memory area.
- *
- * @param [in]  md      Memory domain.
- *
- * @param [in]  memh    Memory region handle.
- *
- * @param [in]  address Memory area start address.
- *
- * @param [in]  length  Memory area length.
- *
- * @return UCS_OK on success or error code in case of failure.
- */
-typedef ucs_status_t (*uct_ib_md_mem_prefetch_func_t)(uct_ib_md_t *md,
-                                                      uct_ib_mem_t *memh,
-                                                      void *addr, size_t length);
-
-/**
  * Memory domain method to get unique atomic mr id.
  *
  * @param [in]  md      Memory domain.
@@ -422,20 +395,10 @@ typedef struct uct_ib_md_ops {
     uct_ib_md_dereg_atomic_key_func_t    dereg_atomic_key;
     uct_ib_md_reg_multithreaded_func_t   reg_multithreaded;
     uct_ib_md_dereg_multithreaded_func_t dereg_multithreaded;
-    uct_ib_md_mem_prefetch_func_t        mem_prefetch;
     uct_ib_md_get_atomic_mr_id_func_t    get_atomic_mr_id;
     uct_ib_md_reg_exported_key_func_t    reg_exported_key;
     uct_ib_md_import_key_func_t          import_exported_key;
 } uct_ib_md_ops_t;
-
-
-/**
- * IB memory region in the registration cache.
- */
-typedef struct uct_ib_rcache_region {
-    ucs_rcache_region_t  super;
-    uct_ib_mem_t         memh;      /**<  mr exposed to the user as the memh */
-} uct_ib_rcache_region_t;
 
 
 /**
@@ -630,6 +593,10 @@ uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
 
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p);
+
+void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
+                                   const uct_ib_md_config_t *md_config,
+                                   int is_supported);
 
 int uct_ib_device_is_accessible(struct ibv_device *device);
 

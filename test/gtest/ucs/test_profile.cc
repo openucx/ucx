@@ -9,6 +9,8 @@ extern "C" {
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
 #include <ucs/profile/profile.h>
+#include <ucs/config/parser.h>
+#include <ucp/api/ucp.h>
 }
 
 #include <pthread.h>
@@ -16,8 +18,12 @@ extern "C" {
 
 class scoped_profile {
 public:
-    scoped_profile(ucs::test_base& test, const std::string &file_name,
-                   const char *mode) : m_test(test), m_file_name(file_name) {
+    scoped_profile(ucs::test_base &test, const std::string &file_name,
+                   const char *mode) :
+        m_test(test), m_file_name(file_name), m_tls_env(TLS_ENV, TLS_ENV_VALUE)
+    {
+        ucp_config_t *config;
+        EXPECT_EQ(ucp_config_read(NULL, NULL, &config), UCS_OK);
         ucs_profile_reset_locations_id(ucs_profile_default_ctx);
         ucs_profile_cleanup(ucs_profile_default_ctx);
         m_test.push_config();
@@ -27,6 +33,7 @@ public:
                          ucs_global_opts.profile_file,
                          ucs_global_opts.profile_log_size,
                          &ucs_profile_default_ctx);
+        ucp_config_release(config);
     }
 
     std::string read() {
@@ -46,9 +53,14 @@ public:
                          ucs_global_opts.profile_log_size,
                          &ucs_profile_default_ctx);
     }
+
+    static constexpr const char *TLS_ENV       = "UCX_TLS";
+    static constexpr const char *TLS_ENV_VALUE = "all";
+
 private:
-    ucs::test_base&   m_test;
-    const std::string m_file_name;
+    ucs::test_base     &m_test;
+    const std::string  m_file_name;
+    ucs::scoped_setenv m_tls_env;
 };
 
 class test_profile : public testing::TestWithParam<int>,
@@ -83,7 +95,7 @@ protected:
     void run_profiled_code(int num_iters);
 
     void test_header(const ucs_profile_header_t *hdr, unsigned exp_mode,
-                     const void **ptr);
+                     const void **ptr, unsigned num_locations);
 
     void test_locations(const ucs_profile_location_t *locations,
                         unsigned num_locations, const void **ptr);
@@ -94,6 +106,8 @@ protected:
 
     void test_nesting(const ucs_profile_location_t *loc, int nesting,
                       const std::string &exp_name, int exp_nesting);
+
+    void test_env(const void **ptr, const ucs_profile_block_header_t &env_vars);
 
     void do_test(unsigned int_mode, const std::string &str_mode);
 };
@@ -201,15 +215,15 @@ void test_profile::run_profiled_code(int num_iters)
     }
 }
 
-void test_profile::test_header(const ucs_profile_header_t *hdr, unsigned exp_mode,
-                               const void **ptr)
+void test_profile::test_header(const ucs_profile_header_t *hdr,
+                               unsigned exp_mode, const void **ptr,
+                               unsigned num_locations)
 {
     EXPECT_EQ(UCS_PROFILE_FILE_VERSION,         hdr->version);
     EXPECT_EQ(std::string(ucs_get_host_name()), std::string(hdr->hostname));
     EXPECT_EQ(getpid(),                         (pid_t)hdr->pid);
     EXPECT_EQ(exp_mode,                         hdr->mode);
-    EXPECT_EQ(NUM_LOCAITONS,                    hdr->num_locations);
-    EXPECT_EQ((uint32_t)num_threads(),          hdr->num_threads);
+    EXPECT_EQ(NUM_LOCAITONS,                    num_locations);
     EXPECT_NEAR(hdr->one_second / ucs_time_from_sec(1.0), 1.0, 0.01);
 
     *ptr = hdr + 1;
@@ -276,6 +290,16 @@ void test_profile::test_nesting(const ucs_profile_location_t *loc, int nesting,
     }
 }
 
+void test_profile::test_env(const void **ptr,
+                            const ucs_profile_block_header_t &env_vars)
+{
+    auto expected_env = std::string(scoped_profile::TLS_ENV) + "=" +
+                        std::string(scoped_profile::TLS_ENV_VALUE);
+    std::string env((char*)*ptr, env_vars.size);
+    EXPECT_NE(env.find(expected_env), std::string::npos);
+    *ptr = UCS_PTR_BYTE_OFFSET(*ptr, env_vars.size);
+}
+
 void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
 {
     const int ITER           = 5;
@@ -292,27 +316,47 @@ void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
     const void *ptr  = &data[0];
 
     /* Read and test file header */
+    /* coverity[tainted_data_downcast] */
     const ucs_profile_header_t *hdr =
                     reinterpret_cast<const ucs_profile_header_t*>(ptr);
-    test_header(hdr, int_mode, &ptr);
+    uint32_t num_locations = hdr->locations.size /
+                             sizeof(ucs_profile_location_t);
+    test_header(hdr, int_mode, &ptr, num_locations);
 
+    /* Read and test env variables*/
+    test_env(&ptr, hdr->env_vars);
+
+    EXPECT_EQ(&data[hdr->locations.offset], ptr);
     /* Read and test global locations */
+    /* coverity[tainted_data_downcast] */
     const ucs_profile_location_t *locations =
                     reinterpret_cast<const ucs_profile_location_t*>(ptr);
-    test_locations(locations, hdr->num_locations, &ptr);
+    test_locations(locations, num_locations, &ptr);
+
+    EXPECT_EQ(UCS_PTR_BYTE_OFFSET(locations, hdr->locations.size), ptr);
+
+    EXPECT_EQ(&data[hdr->threads.offset], ptr);
+    const void *threads_end = UCS_PTR_BYTE_OFFSET(ptr, hdr->threads.size);
+
+    size_t total_num_records = 0;
 
     /* Read and test threads */
     for (int i = 0; i < num_threads(); ++i) {
+        /* coverity[tainted_data_downcast] */
         const ucs_profile_thread_header_t *thread_hdr =
                         reinterpret_cast<const ucs_profile_thread_header_t*>(ptr);
 
-        test_thread_locations(thread_hdr, hdr->num_locations, exp_count,
+        test_thread_locations(thread_hdr, num_locations, exp_count,
                               exp_num_records, &ptr);
 
         const ucs_profile_record_t *records =
                 reinterpret_cast<const ucs_profile_record_t*>(ptr);
         uint64_t prev_ts = records[0].timestamp;
         int nesting      = 0;
+
+        if (!(hdr->mode & UCS_BIT(UCS_PROFILE_MODE_LOG))) {
+            EXPECT_EQ(0, thread_hdr->num_records);
+        }
 
         for (uint64_t i = 0; i < thread_hdr->num_records; ++i) {
             const ucs_profile_record_t *rec = &records[i];
@@ -350,9 +394,16 @@ void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
             test_nesting(loc, nesting, "sum", 1);
         }
 
-        ptr = records + thread_hdr->num_records;
+        ptr                = records + thread_hdr->num_records;
+        total_num_records += thread_hdr->num_records;
     }
 
+    unsigned profiled_threads = ucs_profile_calc_num_threads(total_num_records,
+                                                             hdr);
+    EXPECT_EQ(num_threads(), profiled_threads);
+    EXPECT_EQ(threads_end, ptr);
+
+    /* Test that ptr reached the end of the file */
     EXPECT_EQ(&data[data.size()], ptr) << data.size();
 }
 

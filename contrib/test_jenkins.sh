@@ -73,6 +73,7 @@ MAKEP="make -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
 
 have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
+have_strace=$(strace -V || true)
 
 #
 # Set initial port number for client/server applications
@@ -866,6 +867,7 @@ run_mpi_tests() {
 			$MAKEP installcheck
 
 			MPIRUN="mpirun \
+					--allow-run-as-root \
 					--bind-to none \
 					-x UCX_ERROR_SIGNALS \
 					-x UCX_HANDLE_ERRORS \
@@ -918,7 +920,7 @@ test_profiling() {
 }
 
 test_ucs_load() {
-	if [ -z "${have_ptrace}" ]
+	if [ -z "${have_ptrace}" ] || [ -z "${have_strace}" ]
 	then
 		log_warning "==== Not running UCS library loading test ===="
 		return
@@ -1280,6 +1282,8 @@ run_tests() {
 	export UCX_IB_ROCE_LOCAL_SUBNET=y
 	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
+	export UCX_PROTO_REQUEST_RESET=y
+
 	# load cuda env only if GPU available for remaining tests
 	try_load_cuda_env
 
@@ -1316,7 +1320,7 @@ run_tests() {
 	do_distributed_task 0 4 run_release_mode_tests
 }
 
-run_test_proto_enable() {
+run_test_proto_disable() {
 	export UCX_HANDLE_ERRORS=bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
@@ -1329,8 +1333,7 @@ run_test_proto_enable() {
 	# build for devel tests and gtest
 	build devel --enable-gtest
 
-	export UCX_PROTO_ENABLE=y
-	export UCX_PROTO_REQUEST_RESET=y
+	export UCX_PROTO_ENABLE=n
 
 	# all are running gtest
 	run_gtest "default"
@@ -1342,8 +1345,8 @@ try_load_cuda_env
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
     check_machine
-    if [[ "$PROTO_ENABLE" == "yes" ]]; then
-        run_test_proto_enable
+    if [[ "$PROTO_ENABLE" == "no" ]]; then
+        run_test_proto_disable
     else
         run_tests
     fi

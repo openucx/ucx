@@ -12,6 +12,7 @@
 #include "ucp_context.h"
 #include "ucp_worker.h"
 #include "ucp_request.inl"
+#include "ucp_mm.inl"
 
 #include <ucp/proto/proto_am.h>
 #include <ucp/proto/proto_debug.h>
@@ -351,21 +352,29 @@ static unsigned ucp_request_dt_invalidate_progress(void *arg)
     return 1;
 }
 
-static void ucp_request_mem_invalidate_completion(uct_completion_t *comp)
+static void ucp_request_mem_invalidate_completion(void *arg)
 {
-    ucp_request_t *req         = ucs_container_of(comp, ucp_request_t,
-                                                  send.state.uct_comp);
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_request_t *req  = arg;
+    ucp_worker_h worker = req->send.invalidate.worker;
 
-    uct_worker_progress_register_safe(req->send.invalidate.worker->uct,
-                                      ucp_request_dt_invalidate_progress,
-                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &prog_id);
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
+                              ucp_request_dt_invalidate_progress, req);
 }
 
-static ucp_md_map_t ucp_request_get_invalidation_map(ucp_request_t *req)
+static void
+ucp_request_dt_dereg(ucp_mem_h *memhs, size_t count, ucp_request_t *req_dbg)
 {
-    ucp_ep_h ep              = req->send.ep;
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        ucp_trace_req(req_dbg, "mem dereg buffer %ld/%ld md_map 0x%" PRIx64, i,
+                      count, memhs[i]->md_map);
+        ucp_memh_put(memhs[i]);
+    }
+}
+
+static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
+{
     ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
     ucp_lane_index_t lane;
     ucp_lane_index_t i;
@@ -384,81 +393,37 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_request_t *req)
         }
     }
 
-    return inv_map & req->send.state.dt.dt.contig.md_map;
+    return inv_map;
 }
 
 void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
 {
-    uct_md_mem_dereg_params_t params = {
-        .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
-                      UCT_MD_MEM_DEREG_FIELD_FLAGS |
-                      UCT_MD_MEM_DEREG_FIELD_COMPLETION,
-        .flags      = UCT_MD_MEM_DEREG_FLAG_INVALIDATE,
-        .comp       = &req->send.state.uct_comp
-    };
-    ucp_worker_h worker   = req->send.ep->worker;
+    ucp_ep_h ep           = req->send.ep;
+    ucp_worker_h worker   = ep->worker;
     ucp_context_h context = worker->context;
-    uct_mem_h *uct_memh   = req->send.state.dt.dt.contig.memh;
     ucp_md_map_t invalidate_map;
-    unsigned md_index;
-    unsigned memh_index;
 
     ucs_assert(status != UCS_OK);
-    ucs_assert(ucp_ep_config(req->send.ep)->key.err_mode !=
-               UCP_ERR_HANDLING_MODE_NONE);
+    ucs_assert(ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_NONE);
     ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_USER_MEMH));
 
-    invalidate_map                  = ucp_request_get_invalidation_map(req);
-    req->send.ep                    = NULL;
-    req->send.state.uct_comp.count  = 1;
-    req->send.state.uct_comp.func   = ucp_request_mem_invalidate_completion;
-    req->send.state.uct_comp.status = UCS_OK;
-    req->send.invalidate.worker     = worker;
-    req->status                     = status;
+    req->send.ep                = NULL;
+    req->send.invalidate.worker = worker;
+    req->status                 = status;
 
-    ucp_trace_req(req, "mem dereg buffer md_map 0x%"PRIx64, invalidate_map);
-    /* dereg all lanes except for 'invalidate_map' */
-    ucp_mem_rereg_mds(context, invalidate_map, NULL, 0, 0, NULL,
-                      UCS_MEMORY_TYPE_HOST, NULL,
-                      req->send.state.dt.dt.contig.memh,
-                      &req->send.state.dt.dt.contig.md_map);
-    ucp_trace_req(req, "mem invalidate buffer md_map 0x%"PRIx64,
-                  req->send.state.dt.dt.contig.md_map);
-
-    memh_index = 0;
-    ucs_log_indent(1);
-    ucs_for_each_bit(md_index, req->send.state.dt.dt.contig.md_map) {
-        ucs_trace_req("invalidating memh[%d]=%p from md[%d]", memh_index,
-                      uct_memh[memh_index], md_index);
-        req->send.state.uct_comp.count++;
-        params.memh = uct_memh[memh_index];
-        status      = uct_md_mem_dereg_v2(context->tl_mds[md_index].md,
-                                          &params);
-        if (status != UCS_OK) {
-            ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
-                     context->tl_mds[md_index].rsc.md_name,
-                     ucs_status_string(status));
-            req->send.state.uct_comp.count--;
-        }
-        memh_index++;
+    if (req->send.state.dt.dt.contig.memh == NULL) {
+        ucp_request_complete_send(req, status);
+        return;
     }
 
-    ucs_log_indent(-1);
-    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
-}
-
-static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
-                                 size_t count, ucp_request_t *req_dbg)
-{
-    size_t i;
-
-    for (i = 0; i < count; ++i) {
-        ucp_trace_req(req_dbg, "mem dereg buffer %ld/%ld md_map 0x%"PRIx64,
-                      i, count, dt_reg[i].md_map);
-        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, UCS_MEMORY_TYPE_HOST, NULL,
-                          dt_reg[i].memh, &dt_reg[i].md_map);
-        ucs_assert(dt_reg[i].md_map == 0);
-    }
+    invalidate_map = ucp_request_get_invalidation_map(ep);
+    ucp_trace_req(req, "mem invalidate buffer md_map 0x%" PRIx64 "/0x%" PRIx64,
+                  invalidate_map, req->send.state.dt.dt.contig.memh->md_map);
+    ucp_memh_invalidate(context, req->send.state.dt.dt.contig.memh,
+                        ucp_request_mem_invalidate_completion, req,
+                        invalidate_map);
+    ucp_memh_put(req->send.state.dt.dt.contig.memh);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
@@ -469,77 +434,68 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
                  ucs_memory_type_t mem_type, ucp_request_t *req,
                  unsigned uct_flags)
 {
+    ucp_md_map_t reg_md_map = md_map & context->reg_md_map[mem_type];
+    int flags               = UCT_MD_MEM_ACCESS_RMA | uct_flags;
+    ucs_status_t status     = UCS_OK;
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;
-    ucp_dt_reg_t *dt_reg;
-    ucs_status_t status;
-    int flags;
+    ucp_mem_h *memhs;
     int level;
 
     ucs_trace_func("context=%p md_map=0x%"PRIx64" buffer=%p length=%zu "
                    "datatype=0x%"PRIx64" state=%p", context, md_map, buffer,
                    length, datatype, state);
 
-    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-        ucs_assert(UCP_DT_IS_CONTIG(datatype));
-
-        /* All memory domains that we need were provided by user memh */
-        if (ucs_likely(ucs_test_all_flags(state->dt.contig.md_map, md_map))) {
-            ucp_trace_req(req, "memh already registered");
-            return UCS_OK;
-        }
-
-        /* We can't mix user-provided memh with internal registrations, since
-         * would need to track which ones to release.
-         * Forget about what user provided and register what we need.
-         */
-        ucp_trace_req(req, "mds 0x%" PRIx64 " not registered - drop user memh",
-                      md_map & ~state->dt.contig.md_map);
-        req->flags             &= ~UCP_REQUEST_FLAG_USER_MEMH;
-        state->dt.contig.md_map = 0;
-    }
-
-    status = UCS_OK;
-    flags  = UCT_MD_MEM_ACCESS_RMA | uct_flags;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        ucs_assert(ucs_popcount(md_map) <= UCP_MAX_OP_MDS);
-        status = ucp_mem_rereg_mds(context, md_map, buffer, length, flags,
-                                   NULL, mem_type, NULL, state->dt.contig.memh,
-                                   &state->dt.contig.md_map);
-        ucp_trace_req(req, "mem reg md_map 0x%" PRIx64 "/0x%" PRIx64,
-                      state->dt.contig.md_map, md_map);
-        break;
-    case UCP_DATATYPE_IOV:
-        iovcnt = state->dt.iov.iovcnt;
-        iov    = buffer;
-        dt_reg = ((state->dt.iov.dt_reg == NULL) ?
-                  ucs_calloc(iovcnt, sizeof(*dt_reg), "iov_dt_reg") :
-                  state->dt.iov.dt_reg);
-        if (NULL == dt_reg) {
-            status = UCS_ERR_NO_MEMORY;
+        status = ucp_memh_get_or_update(context, buffer, length, mem_type,
+                                        reg_md_map, flags,
+                                        &state->dt.contig.memh);
+        if (status != UCS_OK) {
             goto err;
         }
-        for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-            if (iov[iov_it].length) {
-                status = ucp_mem_rereg_mds(context, md_map, iov[iov_it].buffer,
-                                           iov[iov_it].length, flags, NULL,
-                                           mem_type, NULL, dt_reg[iov_it].memh,
-                                           &dt_reg[iov_it].md_map);
-                if (status != UCS_OK) {
-                    /* unregister previously registered memory */
-                    ucp_request_dt_dereg(context, dt_reg, iov_it, req);
-                    ucs_free(dt_reg);
-                    goto err;
-                }
-                ucp_trace_req(req,
-                              "mem reg iov %ld/%ld md_map 0x%" PRIx64
-                              "/0x%" PRIx64,
-                              iov_it, iovcnt, dt_reg[iov_it].md_map, md_map);
+        ucp_trace_req(req, "mem reg md_map 0x%" PRIx64 "/0x%" PRIx64,
+                      state->dt.contig.memh->md_map, reg_md_map);
+        break;
+
+    case UCP_DATATYPE_IOV:
+        ucs_assert(!(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS));
+        iovcnt = state->dt.iov.iovcnt;
+        iov    = buffer;
+        if (ucs_unlikely(state->dt.iov.memhs != NULL)) {
+            memhs = state->dt.iov.memhs;
+        } else {
+            memhs = ucs_calloc(iovcnt, sizeof(*memhs), "iov_memhs");
+            if (NULL == memhs) {
+                status = UCS_ERR_NO_MEMORY;
+                goto err;
             }
         }
-        state->dt.iov.dt_reg = dt_reg;
+
+        for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+            status = ucp_memh_get_or_update(context, iov[iov_it].buffer,
+                                            iov[iov_it].length, mem_type,
+                                            reg_md_map, flags, &memhs[iov_it]);
+            if (status != UCS_OK) {
+                /* unregister previously registered memory */
+                /* coverity[check_after_deref] */
+                if (state->dt.iov.memhs == NULL) {
+                    ucp_request_dt_dereg(memhs, iov_it, req);
+                } else {
+                    ucp_request_dt_dereg(memhs, iovcnt, req);
+                    state->dt.iov.memhs = NULL;
+                }
+                ucs_free(memhs);
+                goto err;
+            }
+
+            ucp_trace_req(req,
+                          "mem reg iov %ld/%ld md_map 0x%" PRIx64 "/0x%" PRIx64,
+                          iov_it, iovcnt, memhs[iov_it]->md_map, reg_md_map);
+        }
+        state->dt.iov.memhs = memhs;
         break;
+
     default:
         status = UCS_ERR_INVALID_PARAM;
         ucs_error("Invalid data type 0x%"PRIx64, datatype);
@@ -557,27 +513,25 @@ err:
     return status;
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req),
-                      ucp_context_t *context, ucp_datatype_t datatype,
-                      ucp_dt_state_t *state, ucp_request_t *req)
+UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (datatype, state, req),
+                      ucp_datatype_t datatype, ucp_dt_state_t *state,
+                      ucp_request_t *req)
 {
-    ucs_trace_func("context=%p datatype=0x%"PRIx64" state=%p", context,
-                   datatype, state);
-
-    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-        return;
-    }
+    ucs_trace_func("datatype=0x%" PRIx64 " state=%p", datatype, state);
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        ucp_request_dt_dereg(context, &state->dt.contig, 1, req);
+        if (state->dt.contig.memh != NULL) {
+            ucp_request_dt_dereg(&state->dt.contig.memh, 1, req);
+            state->dt.contig.memh = NULL;
+        }
         break;
     case UCP_DATATYPE_IOV:
-        if (state->dt.iov.dt_reg != NULL) {
-            ucp_request_dt_dereg(context, state->dt.iov.dt_reg,
-                                 state->dt.iov.iovcnt, req);
-            ucs_free(state->dt.iov.dt_reg);
-            state->dt.iov.dt_reg = NULL;
+        if (state->dt.iov.memhs != NULL) {
+            ucp_request_dt_dereg(state->dt.iov.memhs, state->dt.iov.iovcnt,
+                                 req);
+            ucs_free(state->dt.iov.memhs);
+            state->dt.iov.memhs = NULL;
         }
         break;
     default:
@@ -658,7 +612,7 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             return status;
         }
 
-        status = ucp_request_send_buffer_reg_lane(req, req->send.lane, 0);
+        status = ucp_request_send_reg_lane(req, req->send.lane);
         if (status != UCS_OK) {
             return status;
         }

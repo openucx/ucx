@@ -77,6 +77,30 @@ protected:
     static const size_t data_size = 152;
     static const size_t align = 128;
     static size_t leak_count;
+
+    ucs_status_t setup_mpool(ucs_mpool_t *mp, size_t elem_size,
+                             unsigned elems_per_chunk, unsigned max_elems = 0)
+    {
+        static ucs_mpool_ops_t mpool_ops = {ucs_mpool_chunk_malloc,
+                                            ucs_mpool_chunk_free, NULL, NULL,
+                                            NULL};
+        if (max_elems == 0) {
+            max_elems = elems_per_chunk;
+        }
+
+        ucs_mpool_params_t mp_params;
+
+        ucs_mpool_params_reset(&mp_params);
+        mp_params.elem_size       = header_size + elem_size;
+        mp_params.align_offset    = header_size;
+        mp_params.alignment       = align;
+        mp_params.max_chunk_size  = 4 * UCS_GBYTE;
+        mp_params.elems_per_chunk = elems_per_chunk;
+        mp_params.max_elems       = max_elems;
+        mp_params.ops             = &mpool_ops;
+        mp_params.name            = "tests";
+        return ucs_mpool_init(&mp_params, mp);
+    }
 };
 
 size_t test_mpool::leak_count;
@@ -407,21 +431,9 @@ UCS_TEST_SKIP_COND_F(test_mpool, alloc_4g, RUNNING_ON_VALGRIND) {
     const size_t elem_size         = 32 * UCS_MBYTE;
     const unsigned elems_per_chunk = ucs::limit_buffer_size(4 * UCS_GBYTE) /
                                      elem_size;
-    ucs_mpool_ops_t mpool_ops = {ucs_mpool_chunk_malloc, ucs_mpool_chunk_free,
-                                 NULL, NULL, NULL};
-    ucs_mpool_t mp;
-    ucs_mpool_params_t mp_params;
 
-    ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = header_size + elem_size;
-    mp_params.align_offset    = header_size;
-    mp_params.alignment       = align;
-    mp_params.max_chunk_size  = 4 * UCS_GBYTE;
-    mp_params.elems_per_chunk = elems_per_chunk;
-    mp_params.max_elems       = elems_per_chunk;
-    mp_params.ops             = &mpool_ops;
-    mp_params.name            = "tests";
-    ucs_status_t status = ucs_mpool_init(&mp_params, &mp);
+    ucs_mpool_t mp;
+    ucs_status_t status = setup_mpool(&mp, elem_size, elems_per_chunk);
     ASSERT_UCS_OK(status);
 
     // Allocate objects per one chunk size
@@ -443,4 +455,43 @@ UCS_TEST_SKIP_COND_F(test_mpool, alloc_4g, RUNNING_ON_VALGRIND) {
     }
 
     ucs_mpool_cleanup(&mp, 1);
+}
+
+class test_mpool_fifo : public test_mpool {
+public:
+    void init()
+    {
+        modify_config("MPOOL_FIFO", ucs::to_string(1).c_str());
+        test_mpool::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_F(test_mpool_fifo, alloc_release, !ENABLE_DEBUG_DATA)
+{
+    const size_t elem_size         = 16;
+    const unsigned elems_per_chunk = 32;
+    const unsigned max_elems       = 128;
+    ucs_mpool_t mp;
+    std::vector<void*> objs;
+
+    ucs_status_t status = setup_mpool(&mp, elem_size, elems_per_chunk,
+                                      max_elems);
+    ASSERT_UCS_OK(status);
+
+    for (unsigned i = 0; i < 2 * elems_per_chunk; ++i) {
+        objs.push_back(ucs_mpool_get(&mp));
+    }
+
+    void *obj = ucs_mpool_get(&mp);
+    EXPECT_NE(nullptr, obj);
+    ucs_mpool_put(obj);
+
+    for (auto obj : objs) {
+        ASSERT_NE(nullptr, obj);
+        ucs_mpool_elem_t *elem = (ucs_mpool_elem_t*)obj - 1;
+        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
+        ASSERT_EQ(&mp, elem->mpool);
+    }
+
+    ucs_mpool_cleanup(&mp, 0); // skip individual put as obj could be corrupted
 }

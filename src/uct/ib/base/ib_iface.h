@@ -245,12 +245,6 @@ typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
 typedef void (*uct_ib_iface_destroy_cq_func_t)(uct_ib_iface_t *iface,
                                                uct_ib_dir_t dir);
 
-typedef ucs_status_t (*uct_ib_iface_arm_cq_func_t)(uct_ib_iface_t *iface,
-                                                   uct_ib_dir_t dir,
-                                                   int solicited_only);
-
-typedef ucs_status_t (*uct_ib_iface_pre_arm_func_t)(uct_ib_iface_t *iface);
-
 typedef void (*uct_ib_iface_event_cq_func_t)(uct_ib_iface_t *iface,
                                              uct_ib_dir_t dir);
 
@@ -482,6 +476,10 @@ ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
 
 int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr);
+
+
+int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                 const uct_iface_is_reachable_params_t *params);
 
 /*
  * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)

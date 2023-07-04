@@ -1,18 +1,21 @@
 parameters:
-  temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/tmp-settings.xml
+  temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/tmp-settings.xml
   gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg
-  target: package
 
 jobs:
-  - job: jucx_release
+  - job: jucx_publish
+    displayName: JUCX publish
+    dependsOn:
+    - jucx_build_amd64
+    - jucx_build_aarch64
+    condition: succeeded()
 
     pool:
       name: MLNX
-      demands:
-        - harbor_registry -equals yes
+      demands: ucx_docker
 
     # we need to use lowest version for compatible
-    container: centos7_cuda11
+    container: centos7_cuda11_x86_64
 
     steps:
       - checkout: self
@@ -21,17 +24,34 @@ jobs:
         path: "we/need/to/go/deeper"
         # ^workaround agent issue with container in root path
 
+      - task: DownloadBuildArtifacts@0
+        displayName: Interim artifact - get
+        inputs:
+          downloadType: 'specific'
+          itemPattern: 'libjucx_*.so/libjucx_*.so'
+          downloadPath: '$(System.DefaultWorkingDirectory)'
+
       - bash: |
           set -eEx
           gcc --version
           ./autogen.sh
           ./contrib/configure-release --with-java
-        displayName: Configure
-
-      - bash: |
-          set -eEx
           make -s -j`nproc`
         displayName: Build ucx
+
+      - bash: |
+          source buildlib/az-helpers.sh
+          az_init_modules
+          az_module_load dev/mvn
+          # use the lowest supported Java version for compatibility:
+          az_module_load dev/jdk-1.8
+          TAG=`git describe --tags`
+          # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
+          # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
+          MAVEN_VERSION=${TAG:1}
+          make -C bindings/java/src/main/native/ multi-arch JUCX_VERSION=${MAVEN_VERSION}
+        displayName: Build multi-arch JUCX without publishing
+        condition: eq(variables['Build.Reason'], 'PullRequest')
 
       - bash: |
           set -eE
@@ -42,6 +62,7 @@ jobs:
             echo -e "</server></servers></settings>"
           } > ${{ parameters.temp_cfg }}
         displayName: Generate temporary config
+        condition: eq(variables['Build.Reason'], 'IndividualCI')
 
       - task: DownloadSecureFile@1
         displayName: Download Secure file
@@ -62,7 +83,7 @@ jobs:
           # use the lowest supported Java version for compatibility:
           az_module_load dev/jdk-1.8
           mvn --version
-          mkdir ${{ parameters.gpg_dir }}
+          mkdir -p ${{ parameters.gpg_dir }}
           export GPG_TTY=`tty`
           chmod 700 ${{ parameters.gpg_dir }}
           cp $(publicKey.secureFilePath)  ${{ parameters.gpg_dir }}/pubring.gpg
@@ -72,9 +93,10 @@ jobs:
           # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
           # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
           MAVEN_VERSION=${TAG:1}
-          make -C bindings/java/src/main/native/ ${{ parameters.target }} \
+          make -C bindings/java/src/main/native/ publish-release \
               ARGS="--settings ${{ parameters.temp_cfg }}" JUCX_VERSION=${MAVEN_VERSION}
         displayName: Publish JUCX jar to maven central
+        condition: eq(variables['Build.Reason'], 'IndividualCI')
         env:
           GPG_PASSPHRASE: $(GPG_PASSPHRASE)
           SONATYPE_PASSWORD: $(SONATYPE_PASSWORD)

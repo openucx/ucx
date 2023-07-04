@@ -25,7 +25,7 @@ ucp_proto_eager_sync_send_completed_common(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_eager_sync_bcopy_send_completed(ucp_request_t *req)
 {
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
     ucp_proto_eager_sync_send_completed_common(req);
     return UCS_OK;
 }

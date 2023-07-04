@@ -197,19 +197,16 @@ ucp_stream_rdesc_advance(ucp_recv_desc_t *rdesc, ssize_t offset,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_stream_process_rdesc_inplace(
-        ucp_recv_desc_t *rdesc, ucp_datatype_t dt, void *buffer, size_t count,
-        size_t length, const ucp_request_param_t *param, ucp_ep_ext_t *ep_ext)
+        ucp_recv_desc_t *rdesc, void *buffer, size_t count, size_t length,
+        const ucp_request_param_t *param, ucp_ep_ext_t *ep_ext)
 {
     ucp_worker_h worker = ep_ext->ep->worker;
-    ucs_memory_type_t mem_type;
     ucs_status_t status;
     ssize_t unpacked;
 
-    mem_type = ucp_request_get_memory_type(worker->context, buffer, length,
-                                           param);
-    status   = ucp_dt_unpack_only(worker, buffer, count, dt, mem_type,
-                                  ucp_stream_rdesc_payload(rdesc), length, 0);
-
+    status   = ucp_datatype_iter_unpack_single(worker, buffer, count,
+                                               ucp_stream_rdesc_payload(rdesc),
+                                               length, 0, param);
     unpacked = ucs_likely(status == UCS_OK) ? length : status;
 
     return ucp_stream_rdesc_advance(rdesc, unpacked, ep_ext);
@@ -253,8 +250,9 @@ ucp_stream_recv_request_init(ucp_request_t *req, ucp_ep_h ep, void *buffer,
     req->recv.length   = ucs_likely(!UCP_DT_IS_GENERIC(datatype)) ? length :
                          ucp_dt_length(datatype, count, NULL, &req->recv.state);
     req->recv.mem_type = ucp_request_get_memory_type(ep->worker->context,
-                                                     (void*)buffer,
-                                                     req->recv.length, param);
+                                                     (void*)buffer, count,
+                                                     datatype, req->recv.length,
+                                                     param);
 
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
         req->flags         |= UCP_REQUEST_FLAG_CALLBACK;
@@ -314,9 +312,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nbx,
         dt_length = count; /* use dt_length to suppress coverity false positive */
         if (ucs_likely(ucp_stream_recv_nb_is_inplace(ep_ext, count))) {
             rdesc   = ucp_stream_rdesc_get(ep_ext);
-            status  = ucp_stream_process_rdesc_inplace(rdesc, datatype, buffer,
-                                                       count, dt_length, param,
-                                                       ep_ext);
+            status  = ucp_stream_process_rdesc_inplace(rdesc, buffer, count,
+                                                       dt_length, param, ep_ext);
             *length = count;
             goto out_status;
         }
@@ -325,11 +322,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nbx,
         if (!UCP_DT_IS_GENERIC(datatype)) {
             dt_length = ucp_dt_length(datatype, count, buffer, NULL);
             if (ucp_stream_recv_nb_is_inplace(ep_ext, dt_length)) {
-                rdesc   = ucp_stream_rdesc_get(ep_ext);
-                status  = ucp_stream_process_rdesc_inplace(rdesc, datatype,
-                                                           buffer, count,
-                                                           dt_length, param,
-                                                           ep_ext);
+                rdesc  = ucp_stream_rdesc_get(ep_ext);
+                status = ucp_stream_process_rdesc_inplace(rdesc, buffer, count,
+                                                          dt_length, param,
+                                                          ep_ext);
                 *length = dt_length;
                 goto out_status;
             }

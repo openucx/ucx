@@ -187,6 +187,9 @@ enum {
     UCT_IB_MLX5_MD_FLAG_CQE128_ZIP           = UCS_BIT(11),
     /* Device performance is optimized when RDMA_WRITE is not used */
     UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED = UCS_BIT(12),
+    /* Device supports indirect xgvmi MR. This flag is removed if xgvmi access
+     * command fails */
+    UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI       = UCS_BIT(13),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,

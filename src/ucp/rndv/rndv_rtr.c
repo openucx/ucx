@@ -71,7 +71,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
     };
     ucs_status_t status;
 
-    status = ucp_proto_rndv_ctrl_init(&params);
+    status = ucp_proto_rndv_ctrl_am_init(&params);
     if (status != UCS_OK) {
         return status;
     }
@@ -121,9 +121,7 @@ ucp_proto_rndv_rtr_hdr_pack(ucp_request_t *req, ucp_rndv_rtr_hdr_t *rtr,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_common_complete(ucp_request_t *req, unsigned dt_mask)
 {
-    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter, dt_mask);
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, dt_mask);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, dt_mask);
     if (req->send.rndv.rkey != NULL) {
         ucp_proto_rndv_rkey_destroy(req);
     }
@@ -153,7 +151,7 @@ static size_t ucp_proto_rndv_rtr_pack_with_rkey(void *dest, void *arg)
     ucp_rndv_rtr_hdr_t *rtr            = dest;
     ucp_request_t *req                 = arg;
     const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    const ucp_proto_rndv_rtr_priv_t UCS_V_UNUSED *rpriv;
+    const ucp_proto_rndv_rtr_priv_t *rpriv;
     size_t rkey_size;
 
     rpriv = req->send.proto_config->priv;
@@ -236,6 +234,7 @@ static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
     ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
                                 params->msg_length, attr);
     attr->is_estimation = 1;
+    attr->lane_map      = UCS_BIT(rpriv->lane);
 }
 
 static void ucp_proto_rndv_rtr_abort(ucp_request_t *req, ucs_status_t status)
@@ -277,7 +276,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
-                                          mdesc->memh, &mem_info, 0, NULL,
+                                          mdesc->memh, &mem_info, 0, NULL, 0,
                                           rtr + 1);
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
@@ -432,6 +431,7 @@ ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
 
     attr->is_estimation  = 1;
     attr->max_msg_length = remote_attr.max_msg_length;
+    attr->lane_map       = UCS_BIT(rpriv->lane);
     ucp_proto_rndv_mtype_query_desc(params, attr, remote_attr.desc);
     ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
 }

@@ -102,3 +102,6 @@ test/apps/profiling/ucx_profiling
 test/apps/uct_info/uct_info
 test/apps/uct_info/uct_info_static
 cmake/*.cmake
+*.gcno
+*.gcda
+lcov_data/

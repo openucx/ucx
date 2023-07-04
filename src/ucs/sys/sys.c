@@ -255,7 +255,9 @@ static long ucs_sysconf(int name)
     errno = 0;
 
     rc = sysconf(name);
-    ucs_assert_always(errno == 0);
+    if (rc == -1) {
+        ucs_assert_always(errno == 0);
+    }
 
     return rc;
 }
@@ -1354,6 +1356,16 @@ int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset)
     return ret;
 }
 
+ucs_status_t ucs_sys_pthread_getaffinity(ucs_sys_cpuset_t *cpuset)
+{
+    if (pthread_getaffinity_np(pthread_self(), sizeof(*cpuset), cpuset)) {
+        ucs_error("pthread_getaffinity_np() failed: %m");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
 {
     int c;
@@ -1479,12 +1491,14 @@ failed_no_mem:
     return res;
 }
 
-static ucs_status_t ucs_sys_enum_threads_cb(struct dirent *entry, void *_ctx)
+static ucs_status_t
+ucs_sys_enum_threads_cb(const struct dirent *entry, void *arg)
 {
-    ucs_sys_enum_threads_t *ctx = (ucs_sys_enum_threads_t*)_ctx;
+    ucs_sys_enum_threads_t *ctx = (ucs_sys_enum_threads_t*)arg;
 
     return strncmp(entry->d_name, ".", 1) ?
-           ctx->cb((pid_t)atoi(entry->d_name), ctx->ctx) : UCS_OK;
+                   ctx->cb((pid_t)atoi(entry->d_name), ctx->ctx) :
+                   UCS_OK;
 }
 
 ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx)

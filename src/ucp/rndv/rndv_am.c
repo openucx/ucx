@@ -11,6 +11,21 @@
 #include "proto_rndv.inl"
 
 
+static size_t
+ucp_rndv_am_cfg_thresh(ucp_context_t *context, size_t am_thresh)
+{
+    size_t cfg_thresh = ucp_proto_rndv_cfg_thresh(context,
+                                                  UCS_BIT(UCP_RNDV_MODE_AM));
+
+    if (cfg_thresh == UCS_MEMUNITS_AUTO) {
+        cfg_thresh = am_thresh;
+    } else if (cfg_thresh != UCS_MEMUNITS_INF) {
+        cfg_thresh = ucs_max(cfg_thresh, am_thresh);
+    }
+
+    return cfg_thresh;
+}
+
 static ucs_status_t
 ucp_proto_rndv_am_init_common(ucp_proto_multi_init_params_t *params)
 {
@@ -76,12 +91,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_am_bcopy_send_func(
     packed_size = uct_ep_am_bcopy(ucp_ep_get_lane(ep, lpriv->super.lane),
                                   UCP_AM_ID_RNDV_DATA,
                                   ucp_proto_rndv_am_bcopy_pack, &pack_ctx, 0);
-    if (ucs_unlikely(packed_size < 0)) {
-        return (ucs_status_t)packed_size;
-    }
 
-    ucs_assert(packed_size >= hdr_size);
-    return UCS_OK;
+    return ucp_proto_bcopy_send_func_status(packed_size);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -108,7 +119,8 @@ ucp_proto_rndv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = context->config.ext.bcopy_thresh,
+        .super.cfg_thresh    = ucp_rndv_am_cfg_thresh(context,
+                                                      context->config.ext.bcopy_thresh),
         .super.cfg_priority  = 20,
         .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -148,24 +160,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rndv_am_zcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
-    const size_t hdr_size    = sizeof(ucp_request_data_hdr_t);
-    const size_t max_payload = ucp_proto_multi_max_payload(req, lpriv,
-                                                           hdr_size);
     ucp_request_data_hdr_t hdr;
-    uct_iov_t iov[UCP_MAX_IOV];
-    size_t iov_count;
 
     ucp_rndv_am_fill_header(&hdr, req);
-
-    ucs_assert(lpriv->super.max_iov > 0);
-    iov_count = ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                                           max_payload, lpriv->super.md_index,
-                                           UCP_DT_MASK_CONTIG_IOV, next_iter,
-                                           iov, lpriv->super.max_iov);
-
-    return uct_ep_am_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                           UCP_AM_ID_RNDV_DATA, &hdr, hdr_size, iov, iov_count,
-                           0, &req->send.state.uct_comp);
+    return ucp_proto_am_zcopy_multi_common_send_func(req, lpriv, next_iter,
+                                                     UCP_AM_ID_RNDV_DATA, &hdr,
+                                                     sizeof(hdr),
+                                                     UCP_AM_ID_RNDV_DATA, &hdr,
+                                                     sizeof(hdr));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -194,7 +196,8 @@ ucp_rndv_am_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = context->config.ext.zcopy_thresh,
+        .super.cfg_thresh    = ucp_rndv_am_cfg_thresh(context,
+                                                      context->config.ext.zcopy_thresh),
         .super.cfg_priority  = 30,
         .super.min_iov       = 1,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),

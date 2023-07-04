@@ -62,14 +62,14 @@ ucp_proto_select_op_attr_pack(uint32_t op_attr_mask)
     UCS_STATIC_ASSERT(
             (UCP_PROTO_SELECT_OP_ATTR_MASK / UCP_PROTO_SELECT_OP_ATTR_BASE) <
             UCP_PROTO_SELECT_OP_FLAGS_BASE);
-    return op_attr_mask / UCP_PROTO_SELECT_OP_ATTR_BASE;
+    return (op_attr_mask & UCP_PROTO_SELECT_OP_ATTR_MASK) /
+           UCP_PROTO_SELECT_OP_ATTR_BASE;
 }
 
 static UCS_F_ALWAYS_INLINE uint32_t
 ucp_proto_select_op_attr_unpack(uint8_t op_attr)
 {
-    return (op_attr * UCP_PROTO_SELECT_OP_ATTR_BASE) &
-           UCP_PROTO_SELECT_OP_ATTR_MASK;
+    return op_attr * UCP_PROTO_SELECT_OP_ATTR_BASE;
 }
 
 static UCS_F_ALWAYS_INLINE ucp_operation_id_t

@@ -4,6 +4,7 @@ parameters:
   demands: []
   name: subtest
   container:
+  proto_enable: yes
 
 jobs:
   - job: tests_${{ parameters.name }}
@@ -28,6 +29,7 @@ jobs:
 
       - bash: |
           source ./buildlib/az-helpers.sh
+          check_gpu ${{ parameters.name }}
           az_init_modules
           ./contrib/test_jenkins.sh
           exit $?

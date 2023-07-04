@@ -181,10 +181,21 @@ UCS_PTR_MAP_IMPL(request, 0);
 
 
 #define UCP_REQUEST_CHECK_PARAM(_param) \
-    if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
-        ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
-        ucs_error("invalid memory type parameter: %d", (_param)->memory_type); \
-        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+    if (ENABLE_PARAMS_CHECK) { \
+        if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
+            ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
+            ucs_error("invalid memory type parameter: %d", \
+                      (_param)->memory_type); \
+            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+        } \
+        \
+        if (ucs_test_all_flags((_param)->op_attr_mask, \
+                               (UCP_OP_ATTR_FLAG_FAST_CMPL | \
+                                UCP_OP_ATTR_FLAG_MULTI_SEND))) { \
+            ucs_error("UCP_OP_ATTR_FLAG_FAST_CMPL and " \
+                      "UCP_OP_ATTR_FLAG_MULTI_SEND are mutually exclusive"); \
+            return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+        } \
     }
 
 
@@ -399,13 +410,13 @@ ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        req->send.state.dt.dt.contig.md_map     = 0;
+        req->send.state.dt.dt.contig.memh       = NULL;
         return;
     case UCP_DATATYPE_IOV:
         req->send.state.dt.dt.iov.iovcnt_offset = 0;
         req->send.state.dt.dt.iov.iov_offset    = 0;
         req->send.state.dt.dt.iov.iovcnt        = dt_count;
-        req->send.state.dt.dt.iov.dt_reg        = NULL;
+        req->send.state.dt.dt.iov.memhs         = NULL;
         return;
     case UCP_DATATYPE_GENERIC:
         dt_gen    = ucp_dt_to_generic(datatype);
@@ -526,8 +537,7 @@ ucp_request_send_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_request_send_buffer_reg_lane_check(ucp_request_t *req, ucp_lane_index_t lane,
-                                       ucp_md_map_t prev_md_map, unsigned uct_flags)
+ucp_request_send_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
 {
     ucp_md_map_t md_map;
 
@@ -536,43 +546,8 @@ ucp_request_send_buffer_reg_lane_check(ucp_request_t *req, ucp_lane_index_t lane
     }
 
     ucs_assert(ucp_ep_md_attr(req->send.ep, lane)->flags & UCT_MD_FLAG_REG);
-    md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane)) | prev_md_map;
-    return ucp_request_send_buffer_reg(req, md_map, uct_flags);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_request_send_buffer_reg_lane(ucp_request_t *req, ucp_lane_index_t lane,
-                                 unsigned uct_flags)
-{
-    return ucp_request_send_buffer_reg_lane_check(req, lane, 0, uct_flags);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_send_request_add_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
-{
-    /* Add new lane to registration map */
-    ucp_md_map_t md_map;
-
-    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-        /* Do not force using the existing registration map if it's user memory
-           handle, since number of memory domains can exceed UCP_MAX_OP_MDS. */
-        md_map = 0;
-    } else if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
-        md_map = req->send.state.dt.dt.contig.md_map;
-    } else if (UCP_DT_IS_IOV(req->send.datatype) &&
-               (req->send.state.dt.dt.iov.dt_reg != NULL)) {
-        /* dt_reg can be NULL if underlying UCT TL doesn't require
-         * memory handle for for local AM/GET/PUT operations
-         * (i.e. UCT_MD_FLAG_NEED_MEMH is not set) */
-        /* Can use the first DT registration element, since
-         * they have the same MD maps */
-        md_map = req->send.state.dt.dt.iov.dt_reg[0].md_map;
-    } else {
-        md_map = 0;
-    }
-
-    ucs_assert(ucs_popcount(md_map) <= UCP_MAX_OP_MDS);
-    return ucp_request_send_buffer_reg_lane_check(req, lane, md_map, 0);
+    md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane));
+    return ucp_request_send_buffer_reg(req, md_map, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -588,39 +563,12 @@ ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map,
 
 static UCS_F_ALWAYS_INLINE void ucp_request_send_buffer_dereg(ucp_request_t *req)
 {
-    ucp_request_memory_dereg(req->send.ep->worker->context, req->send.datatype,
-                             &req->send.state.dt, req);
+    ucp_request_memory_dereg(req->send.datatype, &req->send.state.dt, req);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_request_recv_buffer_dereg(ucp_request_t *req)
 {
-    ucp_request_memory_dereg(req->recv.worker->context, req->recv.datatype,
-                             &req->recv.state, req);
-}
-
-/* Copy UCT memory handles from memh to state->contig, according to md_map,
-   and up to UCP_MAX_OP_MDS */
-static UCS_F_ALWAYS_INLINE void
-ucp_request_init_dt_reg_from_memh(ucp_request_t *req, ucp_md_map_t md_map,
-                                  ucp_mem_h memh, ucp_dt_reg_t *dt_reg)
-{
-    ucp_md_index_t md_index, memh_index;
-
-    ucs_assertv(dt_reg->md_map == 0, "md_map=0x%" PRIx64, dt_reg->md_map);
-    ucs_assert((dt_reg == &req->send.state.dt.dt.contig) ||
-               (dt_reg == &req->recv.state.dt.contig));
-
-    req->flags |= UCP_REQUEST_FLAG_USER_MEMH;
-    memh_index  = 0;
-    ucs_for_each_bit(md_index, memh->md_map) {
-        if (md_map & UCS_BIT(md_index)) {
-            dt_reg->memh[memh_index++] = memh->uct[md_index];
-            dt_reg->md_map            |= UCS_BIT(md_index);
-            if (memh_index >= UCP_MAX_OP_MDS) {
-                break;
-            }
-        }
-    }
+    ucp_request_memory_dereg(req->recv.datatype, &req->recv.state, req);
 }
 
 /* Returns whether user-provided memory handle can be used. If the result is 0,
@@ -675,9 +623,8 @@ ucp_send_request_set_user_memh(ucp_request_t *req, ucp_md_map_t md_map,
     /* req->send.state.dt should not be used with protov2 */
     ucs_assert(!req->send.ep->worker->context->config.ext.proto_enable);
 
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_USER_MEMH));
-    ucp_request_init_dt_reg_from_memh(req, md_map, param->memh,
-                                      &req->send.state.dt.dt.contig);
+    req->flags                       |= UCP_REQUEST_FLAG_USER_MEMH;
+    req->send.state.dt.dt.contig.memh = param->memh;
     return UCS_OK;
 }
 
@@ -693,12 +640,23 @@ ucp_recv_request_set_user_memh(ucp_request_t *req,
         return status;
     }
 
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_USER_MEMH));
     req->flags         |= UCP_REQUEST_FLAG_USER_MEMH;
     req->recv.user_memh = param->memh;
     /* dt_reg will be updated later if the protocol needs it */
 
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_check_user_memh(ucp_dt_state_t *state, ucp_request_t *rreq)
+{
+    if (!(rreq->flags & UCP_REQUEST_FLAG_USER_MEMH)) {
+        return;
+    }
+
+    state->dt.contig.memh = rreq->recv.user_memh;
+    ucs_assert(!rreq->recv.worker->context->config.ext.proto_enable);
+    ucs_assert(UCP_DT_IS_CONTIG(rreq->recv.datatype));
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -742,8 +700,11 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
     ucs_assertv(req->status == UCS_OK, "status: %s",
                 ucs_status_string(req->status));
 
-    ucp_trace_req(req, "unpack recv_data req_len %zu data_len %zu offset %zu last: %s",
-                  req->recv.length, length, offset, last ? "yes" : "no");
+    ucp_trace_req(req,
+                  "unpack recv_data req_len %zu data_len %zu offset %zu "
+                  "memtype %s last: %s", req->recv.length, length, offset,
+                  ucs_memory_type_names[req->recv.mem_type],
+                  last ? "yes" : "no");
 
     if (ucs_unlikely((length + offset) > req->recv.length)) {
         return ucp_request_recv_msg_truncated(req, length, offset);
@@ -992,19 +953,30 @@ ucp_request_param_user_data(const ucp_request_param_t *param)
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucp_request_get_memory_type(ucp_context_h context, const void *address,
-                            size_t length, const ucp_request_param_t *param)
+                            size_t count, ucp_datatype_t datatype,
+                            size_t contig_length,
+                            const ucp_request_param_t *param)
 {
     ucp_memory_info_t mem_info;
+    uint8_t UCS_V_UNUSED dummy_sg_count;
 
-    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ||
-        (param->memory_type == UCS_MEMORY_TYPE_UNKNOWN)) {
-        ucp_memory_detect(context, address, length, &mem_info);
-        ucs_assert(mem_info.type < UCS_MEMORY_TYPE_UNKNOWN);
-        return (ucs_memory_type_t)mem_info.type;
+    if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) &&
+        (param->memory_type != UCS_MEMORY_TYPE_UNKNOWN)) {
+        return param->memory_type;
     }
 
-    ucs_assert(param->memory_type < UCS_MEMORY_TYPE_UNKNOWN);
-    return param->memory_type;
+    if (UCP_DT_IS_CONTIG(datatype)) {
+        ucp_memory_detect_param(context, address, contig_length, param,
+                                &mem_info);
+    } else if (UCP_DT_IS_IOV(datatype)) {
+        ucp_dt_iov_memtype_detect(context, (ucp_dt_iov_t*)address, count,
+                                  param, &dummy_sg_count, &mem_info);
+    } else {
+        ucp_memory_info_set_host(&mem_info);
+    }
+
+    ucs_assert((ucs_memory_type_t)mem_info.type < UCS_MEMORY_TYPE_UNKNOWN);
+    return (ucs_memory_type_t)mem_info.type;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -1044,7 +1016,7 @@ ucp_send_request_get_id(const ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
 {
     ucp_ep_h ep;
-    ucs_status_t UCS_V_UNUSED status;
+    ucs_status_t status;
 
     ucs_assert(!(req->flags &
                  (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)));

@@ -14,8 +14,9 @@
 #include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
 #include <ucs/profile/profile.h>
+#include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
-#include <ucp/dt/dt.h>
+#include <ucp/dt/dt_contig.h>
 
 #include <string.h>
 #include <unistd.h>
@@ -25,12 +26,8 @@ void ucp_dt_iov_gather(ucp_worker_h worker, void *dest, const ucp_dt_iov_t *iov,
                        size_t length, size_t *iov_offset, size_t *iovcnt_offset,
                        ucs_memory_type_t mem_type)
 {
-    ucp_dt_pack_func_t pack = UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ?
-                                      ucp_memcpy_pack_unpack :
-                                      ucp_mem_type_pack;
     size_t length_it = 0;
     size_t item_len, item_reminder, item_len_to_copy;
-
 
     while (length_it < length) {
         item_len      = iov[*iovcnt_offset].length;
@@ -39,9 +36,10 @@ void ucp_dt_iov_gather(ucp_worker_h worker, void *dest, const ucp_dt_iov_t *iov,
         item_len_to_copy = item_reminder -
                            ucs_max((ssize_t)((length_it + item_reminder) - length), 0);
 
-        pack(worker, UCS_PTR_BYTE_OFFSET(dest, length_it),
-             UCS_PTR_BYTE_OFFSET(iov[*iovcnt_offset].buffer, *iov_offset),
-             item_len_to_copy, mem_type);
+        ucp_dt_contig_pack(worker, UCS_PTR_BYTE_OFFSET(dest, length_it),
+                           UCS_PTR_BYTE_OFFSET(iov[*iovcnt_offset].buffer,
+                                               *iov_offset),
+                           item_len_to_copy, mem_type);
         length_it += item_len_to_copy;
 
         ucs_assert(length_it <= length);
@@ -54,15 +52,11 @@ void ucp_dt_iov_gather(ucp_worker_h worker, void *dest, const ucp_dt_iov_t *iov,
     }
 }
 
-
 size_t ucp_dt_iov_scatter(ucp_worker_h worker, const ucp_dt_iov_t *iov,
                           size_t iovcnt, const void *src, size_t length,
                           size_t *iov_offset, size_t *iovcnt_offset,
                           ucs_memory_type_t mem_type)
 {
-    ucp_dt_unpack_func_t unpack = UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ?
-                                          ucp_memcpy_pack_unpack :
-                                          ucp_mem_type_unpack;
     size_t length_it = 0;
     size_t item_len, item_len_to_copy;
 
@@ -72,9 +66,11 @@ size_t ucp_dt_iov_scatter(ucp_worker_h worker, const ucp_dt_iov_t *iov,
                                    length - length_it);
         ucs_assert(*iov_offset <= item_len);
 
-        unpack(worker,
-               UCS_PTR_BYTE_OFFSET(iov[*iovcnt_offset].buffer, *iov_offset),
-               UCS_PTR_BYTE_OFFSET(src, length_it), item_len_to_copy, mem_type);
+        ucp_dt_contig_unpack(worker,
+                             UCS_PTR_BYTE_OFFSET(iov[*iovcnt_offset].buffer,
+                                                 *iov_offset),
+                             UCS_PTR_BYTE_OFFSET(src, length_it),
+                             item_len_to_copy, mem_type);
         length_it += item_len_to_copy;
 
         ucs_assert(length_it <= length);
@@ -124,4 +120,52 @@ size_t ucp_dt_iov_count_nonempty(const ucp_dt_iov_t *iov, size_t iovcnt)
         count += iov[iov_it].length != 0;
     }
     return count;
+}
+
+ucs_status_t ucp_dt_iov_memtype_check(ucp_context_h context,
+                                      const ucp_dt_iov_t *iov, size_t iovcnt,
+                                      const ucp_memory_info_t *mem_info)
+{
+    ucp_memory_info_t mem_info_iter;
+    size_t i;
+
+    for (i = 0; i < iovcnt; ++i) {
+        ucp_memory_detect(context, iov[i].buffer, iov[i].length,
+                          &mem_info_iter);
+        if ((mem_info_iter.type != mem_info->type) ||
+            (mem_info_iter.sys_dev != mem_info->sys_dev)) {
+            ucs_error("inconsistent iov memtypes: iov[%zu]=%s-%s iov[0]=%s-%s"
+                      " iovcnt=%zu",
+                      i, ucs_memory_type_names[mem_info_iter.type],
+                      ucs_topo_sys_device_get_name(mem_info_iter.sys_dev),
+                      ucs_memory_type_names[mem_info->type],
+                      ucs_topo_sys_device_get_name(mem_info->sys_dev), iovcnt);
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucp_dt_iov_memtype_detect(ucp_context_h context,
+                                       const ucp_dt_iov_t *iov, size_t iovcnt,
+                                       const ucp_request_param_t *param,
+                                       uint8_t *sg_count,
+                                       ucp_memory_info_t *mem_info)
+{
+    if (ucs_unlikely(iovcnt == 0)) {
+        ucp_memory_info_set_host(mem_info);
+        *sg_count = 1;
+        return UCS_OK;
+    }
+
+    ucp_memory_detect_param(context, iov->buffer, iov->length, param, mem_info);
+
+    *sg_count = ucs_min(iovcnt, (size_t)UINT8_MAX);
+
+    if (ENABLE_PARAMS_CHECK) {
+        return ucp_dt_iov_memtype_check(context, iov + 1, iovcnt - 1, mem_info);
+    }
+
+    return UCS_OK;
 }

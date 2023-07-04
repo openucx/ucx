@@ -326,8 +326,8 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
                                 ucs_linear_func_t *memreg_time,
                                 ucp_proto_perf_node_t **perf_node_p)
 {
-    ucp_context_h context = params->super.worker->context;
-    ucp_proto_perf_node_t *perf_node;
+    ucp_context_h context            = params->super.worker->context;
+    ucp_proto_perf_node_t *perf_node = NULL;
     const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
     const char *md_name;
@@ -335,8 +335,17 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
     *memreg_time = UCS_LINEAR_FUNC_ZERO;
 
     if (reg_md_map == 0) {
-        *perf_node_p = NULL;
-        return;
+        goto out;
+    }
+
+    if (context->rcache != NULL) {
+        perf_node = ucp_proto_perf_node_new_data("rcache lookup", "");
+
+        *memreg_time = ucs_linear_func_make(50.0e-9, 0);
+
+        ucp_proto_perf_node_add_data(perf_node, "lookup", *memreg_time);
+
+        goto out;
     }
 
     perf_node = ucp_proto_perf_node_new_data("mem reg", "");
@@ -357,6 +366,7 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
         ucp_proto_perf_node_add_data(perf_node, "total", *memreg_time);
     }
 
+out:
     *perf_node_p = perf_node;
 }
 
@@ -432,7 +442,7 @@ ucp_proto_init_buffer_copy_time(ucp_worker_h worker, const char *title,
 
     rsc_index = ep_config->key.lanes[lane].rsc_index;
     wiface    = ucp_worker_iface(worker, rsc_index);
-    status    = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    status    = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
         return status;
     }

@@ -23,7 +23,7 @@ public:
     enum {
         VARIANT_GDR_OFF     = UCS_BIT(0),
         VARIANT_TAG_OFFLOAD = UCS_BIT(1),
-        VARIANT_PROTO       = UCS_BIT(2),
+        VARIANT_PROTO_V1    = UCS_BIT(2),
         VARIANT_MAX         = UCS_BIT(3)
     };
 
@@ -49,12 +49,9 @@ public:
             enable_tag_mp_offload();
 
             if (RUNNING_ON_VALGRIND) {
-                if (variant_flags & VARIANT_PROTO) {
-                    skip_protov2();
+                if (variant_flags & VARIANT_PROTO_V1) {
+                    UCS_TEST_SKIP_R("Skip proto v1 with valgrind");
                 }
-
-                skip_external_protov2();
-
                 m_env.push_back(
                         new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
                 m_env.push_back(
@@ -64,8 +61,9 @@ public:
             }
         }
 
-        if (variant_flags & VARIANT_PROTO) {
-            modify_config("PROTO_ENABLE", "y");
+        if (variant_flags & VARIANT_PROTO_V1) {
+            modify_config("PROTO_ENABLE", "n");
+        } else {
             modify_config("PROTO_REQUEST_RESET", "y");
         }
 
@@ -107,8 +105,8 @@ public:
             name += ",offload";
         }
 
-        if (variant_flags & VARIANT_PROTO) {
-            name += ",proto";
+        if (variant_flags & VARIANT_PROTO_V1) {
+            name += ",proto_v1";
         }
 
         add_variant_with_value(variants, get_ctx_params(), variant_value, name);

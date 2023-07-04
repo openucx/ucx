@@ -5,7 +5,7 @@
  */
 
 #include <common/test.h>
-#include <deque>
+#include <vector>
 
 extern "C" {
 #include <ucs/arch/atomic.h>
@@ -13,16 +13,16 @@ extern "C" {
 #include <ucs/datastruct/callbackq.h>
 }
 
-
-class test_callbackq :
-    public ucs::test_base,
-    public ::testing::TestWithParam<int> {
+class test_callbackq : public ucs::test {
 protected:
 
     enum {
         COMMAND_REMOVE_SELF,
-        COMMAND_ENQUEUE_KEY,
+        COMMAND_REMOVE_SELF_SAFE,
+        COMMAND_ENQUEUE_USER_ID,
         COMMAND_ADD_ANOTHER,
+        COMMAND_ADD_ANOTHER_ONESHOT,
+        COMMAND_REMOVE_ANOTHER_ONESHOT,
         COMMAND_NONE
     };
 
@@ -32,8 +32,9 @@ protected:
         uint32_t                  count;
         int                       command;
         callback_ctx              *to_add;
-        unsigned                  flags;
-        int                       key;
+        void                      *to_remove;
+        void                      *key;
+        int                       user_id;
     };
 
     test_callbackq() {
@@ -61,16 +62,26 @@ protected:
     unsigned callback(callback_ctx *ctx)
     {
         ucs_atomic_add32(&ctx->count, 1);
+        ucs_atomic_add32(&m_total_count, 1);
 
         switch (ctx->command) {
         case COMMAND_REMOVE_SELF:
             remove(ctx);
             break;
+        case COMMAND_REMOVE_SELF_SAFE:
+            remove_safe(ctx);
+            break;
         case COMMAND_ADD_ANOTHER:
             add(ctx->to_add);
             break;
-        case COMMAND_ENQUEUE_KEY:
-            m_keys_queue.push_back(ctx->key);
+        case COMMAND_ADD_ANOTHER_ONESHOT:
+            add_oneshot(ctx->to_add);
+            break;
+        case COMMAND_REMOVE_ANOTHER_ONESHOT:
+            remove_oneshot(ctx->to_remove);
+            break;
+        case COMMAND_ENQUEUE_USER_ID:
+            m_user_id_queue.push_back(ctx->user_id);
             break;
         case COMMAND_NONE:
         default:
@@ -79,63 +90,66 @@ protected:
         return 1;
     }
 
-    void init_ctx(callback_ctx *ctx, int key = 0)
+    void init_ctx(callback_ctx *ctx, void *key = nullptr, int user_id = 0)
     {
         ctx->test        = this;
         ctx->callback_id = UCS_CALLBACKQ_ID_NULL;
         ctx->count       = 0;
         ctx->command     = COMMAND_NONE;
-        ctx->to_add      = NULL;
-        ctx->flags       = 0;
+        ctx->to_add      = nullptr;
+        ctx->to_remove   = nullptr;
         ctx->key         = key;
+        ctx->user_id     = user_id;
     }
 
-    virtual unsigned cb_flags() {
-        return GetParam();
-    }
-
-    void add(callback_ctx *ctx, unsigned flags = 0)
+    void add(callback_ctx *ctx)
     {
         ctx->callback_id = ucs_callbackq_add(&m_cbq, callback_proxy,
-                                             reinterpret_cast<void*>(ctx),
-                                             ctx->flags | cb_flags() | flags);
+                                             reinterpret_cast<void*>(ctx));
     }
 
-    void remove(int callback_id)
+    void *remove(int callback_id)
     {
-        ucs_callbackq_remove(&m_cbq, callback_id);
+        return ucs_callbackq_remove(&m_cbq, callback_id);
     }
 
     void remove(callback_ctx *ctx)
     {
-        remove(ctx->callback_id);
+        void *arg = remove(ctx->callback_id);
+        EXPECT_EQ(reinterpret_cast<void*>(ctx), arg);
     }
 
-    void add_safe(callback_ctx *ctx, unsigned flags = 0)
+    void add_safe(callback_ctx *ctx)
     {
         ctx->callback_id = ucs_callbackq_add_safe(&m_cbq, callback_proxy,
-                                                  reinterpret_cast<void*>(ctx),
-                                                  cb_flags() | flags);
+                                                  reinterpret_cast<void*>(ctx));
     }
 
     void remove_safe(callback_ctx *ctx)
     {
-        ucs_callbackq_remove_safe(&m_cbq, ctx->callback_id);
+        void *arg = ucs_callbackq_remove_safe(&m_cbq, ctx->callback_id);
+        EXPECT_EQ(reinterpret_cast<void*>(ctx), arg);
     }
 
-    static int remove_if_pred(const ucs_callbackq_elem_t *elem, void *arg)
+    static int remove_pred(const ucs_callbackq_elem_t *elem, void *arg)
     {
         callback_ctx *ctx = reinterpret_cast<callback_ctx*>(elem->arg);
-        int key           = *reinterpret_cast<int*>(arg);
+        int user_id       = *reinterpret_cast<int*>(arg);
 
         /* remove callbacks with the given key */
-        return (elem->cb == callback_proxy) && (ctx->key == key);
+        return (elem->cb == callback_proxy) && (ctx->user_id == user_id);
     }
 
-    void remove_if(int key)
+    void add_oneshot(callback_ctx *ctx)
     {
-        ucs_callbackq_remove_if(&m_cbq, remove_if_pred,
-                                reinterpret_cast<void*>(&key));
+        ucs_callbackq_add_oneshot(&m_cbq, ctx->key, callback_proxy,
+                                  reinterpret_cast<void*>(ctx));
+    }
+
+    void remove_oneshot(void *key = nullptr, int user_id = 0)
+    {
+        ucs_callbackq_remove_oneshot(&m_cbq, key, remove_pred,
+                                     reinterpret_cast<void*>(&user_id));
     }
 
     unsigned dispatch(unsigned count = 1)
@@ -147,11 +161,12 @@ protected:
         return total;
     }
 
-    ucs_callbackq_t     m_cbq;
-    std::deque<int>     m_keys_queue;
+    ucs_callbackq_t  m_cbq;
+    uint32_t         m_total_count = 0;
+    std::vector<int> m_user_id_queue;
 };
 
-UCS_TEST_P(test_callbackq, single) {
+UCS_TEST_F(test_callbackq, single) {
     callback_ctx ctx;
 
     init_ctx(&ctx);
@@ -161,7 +176,7 @@ UCS_TEST_P(test_callbackq, single) {
     EXPECT_EQ(1u, ctx.count);
 }
 
-UCS_TEST_P(test_callbackq, count) {
+UCS_TEST_F(test_callbackq, count) {
     callback_ctx ctx;
 
     init_ctx(&ctx);
@@ -172,7 +187,7 @@ UCS_TEST_P(test_callbackq, count) {
     EXPECT_EQ(1u, count);
 }
 
-UCS_TEST_P(test_callbackq, multi) {
+UCS_TEST_F(test_callbackq, multi) {
     for (unsigned count = 0; count < 20; ++count) {
         callback_ctx ctx[count];
         for (unsigned i = 0; i < count; ++i) {
@@ -189,7 +204,7 @@ UCS_TEST_P(test_callbackq, multi) {
     }
 }
 
-UCS_TEST_P(test_callbackq, remove_self) {
+UCS_TEST_F(test_callbackq, remove_self) {
     callback_ctx ctx;
 
     init_ctx(&ctx);
@@ -203,7 +218,24 @@ UCS_TEST_P(test_callbackq, remove_self) {
     EXPECT_EQ(1u, ctx.count);
 }
 
-UCS_TEST_P(test_callbackq, add_another) {
+UCS_TEST_F(test_callbackq, remove_self_safe) {
+    callback_ctx ctx1;
+    init_ctx(&ctx1);
+    add(&ctx1);
+    remove_safe(&ctx1); /* This can add proxy as 2nd fast elem */
+
+    callback_ctx ctx2;
+    init_ctx(&ctx2);
+    ctx2.command = COMMAND_REMOVE_SELF_SAFE;
+    add(&ctx2);
+
+    dispatch(1000);
+
+    EXPECT_EQ(0u, ctx1.count);
+    EXPECT_EQ(1u, ctx2.count);
+}
+
+UCS_TEST_F(test_callbackq, add_another) {
     callback_ctx ctx, ctx2;
 
     init_ctx(&ctx);
@@ -218,9 +250,7 @@ UCS_TEST_P(test_callbackq, add_another) {
     ctx.command = COMMAND_NONE;
 
     unsigned count = ctx.count;
-    if (cb_flags() & UCS_CALLBACKQ_FLAG_FAST) {
-        count++; /* fast CBs are executed immediately after "add" */
-    }
+    count++; /* fast CBs are executed immediately after "add" */
 
     dispatch();
     EXPECT_EQ(2u, ctx.count);
@@ -236,8 +266,7 @@ UCS_TEST_P(test_callbackq, add_another) {
     EXPECT_EQ(count + 1, ctx2.count);
 }
 
-UCS_MT_TEST_P(test_callbackq, threads, 10) {
-
+UCS_MT_TEST_F(test_callbackq, threads, 10) {
     static unsigned COUNT = 2000;
     if (barrier()) {
         for (unsigned i = 0; i < COUNT; ++i) {
@@ -278,7 +307,7 @@ UCS_MT_TEST_P(test_callbackq, threads, 10) {
     }
 }
 
-UCS_MT_TEST_P(test_callbackq, remove, 10) {
+UCS_MT_TEST_F(test_callbackq, remove, 10) {
     static callback_ctx ctx1;
 
     init_ctx(&ctx1);
@@ -320,134 +349,129 @@ UCS_MT_TEST_P(test_callbackq, remove, 10) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(fast_path, test_callbackq, ::
-                        testing::Values(static_cast<int>(UCS_CALLBACKQ_FLAG_FAST)));
-INSTANTIATE_TEST_SUITE_P(slow_path, test_callbackq, ::testing::Values(0));
-
-
-class test_callbackq_noflags : public test_callbackq {
-protected:
-    virtual unsigned cb_flags() {
-        return 0;
-    }
-};
-
-UCS_TEST_F(test_callbackq_noflags, oneshot) {
+UCS_MT_TEST_F(test_callbackq, oneshot_mt, 10) {
     callback_ctx ctx;
 
     init_ctx(&ctx);
     ctx.command = COMMAND_NONE;
 
-    add(&ctx, UCS_CALLBACKQ_FLAG_ONESHOT);
+    add_oneshot(&ctx);
     dispatch(100);
     EXPECT_EQ(1u, ctx.count);
 }
 
-UCS_TEST_F(test_callbackq_noflags, oneshot_recursive) {
+UCS_TEST_F(test_callbackq, oneshot_add_recursive) {
     callback_ctx ctx;
 
     init_ctx(&ctx);
-    ctx.command = COMMAND_ADD_ANOTHER;
-    ctx.flags   = UCS_CALLBACKQ_FLAG_ONESHOT;
+    ctx.command = COMMAND_ADD_ANOTHER_ONESHOT;
     ctx.to_add  = &ctx;
-
-    add(&ctx);
+    add_oneshot(&ctx);
 
     for (unsigned i = 0; i < 10; ++i) {
         dispatch(1);
         EXPECT_LE(i + 1, ctx.count);
     }
 
-    remove(ctx.callback_id);
+    remove_oneshot();
 }
 
-UCS_TEST_F(test_callbackq_noflags, remove_if) {
+UCS_TEST_F(test_callbackq, oneshot_remove_self) {
+    void *key = this;
+
+    callback_ctx ctx1;
+    init_ctx(&ctx1, key);
+    ctx1.command   = COMMAND_REMOVE_ANOTHER_ONESHOT;
+    ctx1.to_remove = key;
+    add_oneshot(&ctx1);
+
+    dispatch(100);
+    EXPECT_EQ(1, ctx1.count);
+}
+
+UCS_TEST_F(test_callbackq, oneshot_remove_another) {
+    int dummy[2];
+    void *key1 = &dummy[0];
+    void *key2 = &dummy[1];
+
+    // Each callback removes the other one
+
+    callback_ctx ctx1;
+    init_ctx(&ctx1, key1);
+    ctx1.command   = COMMAND_REMOVE_ANOTHER_ONESHOT;
+    ctx1.to_remove = key2;
+    add_oneshot(&ctx1);
+
+    callback_ctx ctx2;
+    init_ctx(&ctx2, key2);
+    ctx2.command   = COMMAND_REMOVE_ANOTHER_ONESHOT;
+    ctx2.to_remove = key1;
+    add_oneshot(&ctx2);
+
+    dispatch(100);
+
+    // We don't know the order of the callbacks but only one of them should
+    // be called
+    EXPECT_EQ(1, ctx1.count + ctx2.count);
+}
+
+UCS_TEST_F(test_callbackq, oneshot_remove_by_key) {
     const size_t count = 1000;
     const int num_keys = 10;
     std::vector<callback_ctx> ctx(count);
     size_t key_counts[num_keys] = {0};
+    int keys[num_keys];
 
     for (size_t i = 0; i < count; ++i) {
-        init_ctx(&ctx[i], ucs::rand() % num_keys);
-        add(&ctx[i], (i % 2) ? UCS_CALLBACKQ_FLAG_FAST : 0);
-        ++key_counts[ctx[i].key];
+        /* The key is the address of key_idx in keys array */
+        int key_idx = ucs::rand() % num_keys;
+        init_ctx(&ctx[i], &keys[key_idx], i);
+        add_oneshot(&ctx[i]);
+        ++key_counts[key_idx];
     }
 
-    /* calculate how many callbacks expected to remain after removing each of
-     * the keys.
-     */
-    size_t exp_count[num_keys] = {0};
-    for (int key = num_keys - 2; key >= 0; --key) {
-        exp_count[key] = exp_count[key + 1] + key_counts[key + 1];
-    }
-
-    /* remove keys one after another and make sure the exact expected number
-     * of callbacks is being called after every removal.
-     */
-    for (int key = 0; key < num_keys; ++key) {
-        remove_if(key);
-
-        /* count how many different callbacks were called */
-        size_t num_cbs = 0;
-        dispatch(1000);
-        for (size_t i = 0; i < count; ++i) {
-            num_cbs += !!ctx[i].count;
-            ctx[i].count = 0; /* reset for next iteration */
+    unsigned remaining_count = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if ((ucs::rand() % 2) == 0) {
+            remove_oneshot(ctx[i].key, i);
+        } else {
+            ++remaining_count;
         }
-
-        EXPECT_EQ(exp_count[key], num_cbs) << "key=" << key;
     }
+
+    EXPECT_EQ(0, m_total_count);
+
+    dispatch(1);
+    EXPECT_EQ(remaining_count, m_total_count);
+
+    dispatch(100);
+    EXPECT_EQ(remaining_count, m_total_count);
 }
 
-UCS_TEST_F(test_callbackq_noflags, ordering) {
-    static const int UNUSED_CB_KEY = -1;
-    static const int num_callbacks = 100;
-    std::vector<callback_ctx> ctxs(num_callbacks);
-    std::deque<int> gc_list;
-    std::deque<int> oneshot_callback_keys;
+UCS_TEST_F(test_callbackq, oneshot_ordering) {
+    static const int count = 1000;
+    void *key              = nullptr;
+    std::vector<callback_ctx> ctx(count);
 
-    for (int i = 0; i < num_callbacks; ++i) {
-        callback_ctx& r_ctx = ctxs[i];
+    for (size_t i = 0; i < count; ++i) {
+        init_ctx(&ctx[i], key, i);
+        ctx[i].command = COMMAND_ENQUEUE_USER_ID;
+        add_oneshot(&ctx[i]);
+    }
 
-        // randomize: either permanent callback with key=i or oneshot callback
-        // with key=-1
-        init_ctx(&r_ctx);
-        unsigned cb_flags = 0;
-        if (ucs::rand() % 2) {
-            // oneshot callback, which must stay in order
-            r_ctx.key     = i;
-            r_ctx.command = COMMAND_ENQUEUE_KEY;
-            cb_flags      = UCS_CALLBACKQ_FLAG_ONESHOT;
-            oneshot_callback_keys.push_back(i);
+    std::vector<int> remaining_user_ids;
+    for (size_t i = 0; i < count; ++i) {
+        if ((ucs::rand() % 2) == 0) {
+            remove_oneshot(key, i);
         } else {
-            // permanent
-            r_ctx.key     = UNUSED_CB_KEY;
-            if (ucs::rand() % 2) {
-                // do-nothing callback
-                r_ctx.command = COMMAND_NONE;
-            } else {
-                // non-one-shot callback which removes itself - for more fun
-                r_ctx.command = COMMAND_REMOVE_SELF;
-            }
-        }
-
-        add(&r_ctx, cb_flags);
-
-        if (r_ctx.command == COMMAND_NONE) {
-            // we need to remove callbacks which don't remove themselves in the
-            // end of the test
-            gc_list.push_back(r_ctx.callback_id);
+            remaining_user_ids.push_back(i);
         }
     }
 
-    dispatch(10);
+    dispatch(1);
+    EXPECT_EQ(remaining_user_ids.size(), m_total_count);
+    EXPECT_EQ(remaining_user_ids, m_user_id_queue);
 
-    // make sure the ONESHOT callbacks were executed in order
-    EXPECT_EQ(oneshot_callback_keys, m_keys_queue);
-
-    // remove remaining callbacks
-    while (!gc_list.empty()) {
-        remove(gc_list.front());
-        gc_list.pop_front();
-    }
+    dispatch(100);
+    EXPECT_EQ(remaining_user_ids.size(), m_total_count);
 }

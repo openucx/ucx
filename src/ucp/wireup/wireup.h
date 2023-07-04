@@ -32,6 +32,10 @@ typedef struct {
 #define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
 
 
+#define UCP_WIREUP_UCT_EVENT_CAP_FLAGS \
+    (UCT_IFACE_FLAG_EVENT_SEND_COMP | UCT_IFACE_FLAG_EVENT_RECV)
+
+
 /**
  * Wireup message types
  */
@@ -207,6 +211,12 @@ ucp_wireup_connect_local(ucp_ep_h ep,
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
 unsigned ucp_wireup_eps_progress(void *arg);
+
+double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
+
+double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface);
+
+double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {

@@ -16,7 +16,7 @@
 #include <ucs/sys/stubs.h>
 #include <ucs/type/init_once.h>
 
-#define UCS_CPU_CACHE_FILE_FMT   "/sys/devices/system/cpu/cpu%d/cache/index%d/%s"
+#define UCS_CPU_CACHE_FILE_FMT   UCS_SYS_FS_CPUS_PATH "/cpu%d/cache/index%d/%s"
 #define UCS_CPU_CACHE_LEVEL_FILE "level"
 #define UCS_CPU_CACHE_TYPE_FILE  "type"
 #define UCS_CPU_CACHE_SIZE_FILE  "size"
@@ -76,7 +76,7 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
 const size_t ucs_cpu_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_UNKNOWN]     = UCS_CPU_EST_BCOPY_BW_DEFAULT,
     [UCS_CPU_VENDOR_INTEL]       = UCS_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_AMD]         = UCS_CPU_EST_BCOPY_BW_AMD,
+    [UCS_CPU_VENDOR_AMD]         = UCS_CPU_EST_BCOPY_BW_DEFAULT,
     [UCS_CPU_VENDOR_GENERIC_ARM] = UCS_CPU_EST_BCOPY_BW_DEFAULT,
     [UCS_CPU_VENDOR_GENERIC_PPC] = UCS_CPU_EST_BCOPY_BW_DEFAULT,
     [UCS_CPU_VENDOR_FUJITSU_ARM] = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,

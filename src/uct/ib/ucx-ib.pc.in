@@ -12,5 +12,5 @@ Name: @PACKAGE@-ib
 Description: Unified Communication X Library IB module
 Version: @VERSION@
 Libs:
-Libs.private: -L${libdir} -luct_ib -Wl,--undefined=uct_ib_init @IBVERBS_LDFLAGS@ @NUMA_LIBS@
+Libs.private: -L${libdir} -luct_ib -Wl,--undefined=uct_ib_init @IBVERBS_LDFLAGS@
 Requires.private: libibverbs

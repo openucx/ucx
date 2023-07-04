@@ -74,6 +74,7 @@ test_malloc_hook() {
 	done
 }
 
+check_gpu 'gpu'
 prepare
 build
 check_cuda_driver

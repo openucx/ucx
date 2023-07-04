@@ -53,6 +53,8 @@
     _macro(ucp_rndv_put_mtype_proto) \
     _macro(ucp_rndv_rkey_ptr_proto) \
     _macro(ucp_rndv_rkey_ptr_mtype_proto) \
+    _macro(ucp_tag_rndv_offload_proto) \
+    _macro(ucp_tag_rndv_offload_sw_proto) \
     _macro(ucp_tag_offload_eager_bcopy_single_proto) \
     _macro(ucp_am_eager_short_proto) \
     _macro(ucp_am_eager_single_bcopy_proto) \
@@ -63,6 +65,8 @@
     _macro(ucp_am_eager_single_bcopy_reply_proto) \
     _macro(ucp_am_eager_single_zcopy_reply_proto) \
     _macro(ucp_am_rndv_proto) \
+    _macro(ucp_stream_multi_bcopy_proto) \
+    _macro(ucp_stream_multi_zcopy_proto) \
     UCP_PROTO_AMO_FOR_EACH(_macro, post) \
     UCP_PROTO_AMO_FOR_EACH(_macro, fetch) \
     UCP_PROTO_AMO_FOR_EACH(_macro, cswap)
@@ -131,6 +135,7 @@ void ucp_proto_default_query(const ucp_proto_query_params_t *params,
 
     attr->max_msg_length = SIZE_MAX;
     attr->is_estimation  = 0;
+    attr->lane_map       = 0;
     ucs_strncpy_safe(attr->desc, params->proto->desc, sizeof(attr->desc));
     ucs_strncpy_safe(attr->config, "", sizeof(attr->config));
 }
