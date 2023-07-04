@@ -211,7 +211,7 @@ typedef struct ucx_perf_params {
         char                   tl_name[UCT_TL_NAME_MAX];      /* Transport to use */
         char                   md_name[UCT_MD_NAME_MAX];      /* Memory domain name to use */
         uct_perf_data_layout_t data_layout; /* Data layout to use */
-        unsigned               fc_window;   /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
+        unsigned               fc_window;   /* Window size for flow control <= UCT_PERF_TEST_MAX_FC_WINDOW */
         size_t                 am_hdr_size; /* UCT Active Message header size
                                                (included in message size) */
     } uct;
