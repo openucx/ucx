@@ -2,7 +2,13 @@ parameters:
   demands: []
   name: subtest
   container:
-  test_v12: yes
+  ucx_targets:
+    ucx_1_12:
+      ucx_tag: v1.12.0
+      ucx_env: UCX_CM_USE_ALL_DEVICES=n UCX_TLS=^sm UCX_IB_ROCE_LOCAL_SUBNET=y
+    ucx_1_14:
+      ucx_tag: v1.14.0
+      ucx_env: ""
 
 jobs:
   - job: build_pr_${{ parameters.name }}
@@ -23,7 +29,7 @@ jobs:
       - bash: |
           set -eE
           ./autogen.sh
-          ucx_dir=$(System.DefaultWorkingDirectory)/ucx-install-master
+          ucx_dir=$(System.DefaultWorkingDirectory)/ucx-install-current
           ./contrib/configure-release --enable-assertions  --without-java --without-go --prefix=${ucx_dir}
           make -s -j `nproc`
           make install
@@ -31,54 +37,11 @@ jobs:
 
       - task: PublishBuildArtifacts@1
         inputs:
-          pathToPublish: '$(System.DefaultWorkingDirectory)/ucx-install-master'
-          artifactName: ucx_master_$(Build.BuildId)_${{ parameters.name }}
-
-    # Perform test builds on relevant distributions.
-  - job: build_${{ parameters.name }}
-    dependsOn: build_pr_${{ parameters.name }}
-    condition: or(ne(variables.ucx_tag, 'v1.12.0'), eq('${{ parameters.test_v12 }}', 'yes'))
-    displayName: Build on ${{ parameters.name }}
-    workspace:
-      clean: all
-    pool:
-      name: MLNX
-      demands: ${{ parameters.demands }}
-    strategy:
-      matrix:
-        ucx_1_12:
-            ucx_tag: v1.12.0
-        ucx_1_14:
-            ucx_tag: v1.14.0
-    ${{ if parameters.container }}:
-      container: ${{ parameters.container }}
-    steps:
-      - checkout: none
-
-      - bash: |
-          set -eEx
-          git clone --depth 1 -b $(ucx_tag) https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)
-          cd $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)
-          ucx_dir=${PWD}/install
-          ./autogen.sh
-          ./contrib/configure-release --enable-assertions --prefix=${ucx_dir} --without-java --without-go
-          make -s -j `nproc`
-          make install
-
-          mkdir -p ${ucx_dir}/examples
-          cd $(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)/examples
-          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/client_server ucp_client_server.c -lm -lucs -lucp
-          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ${ucx_dir}/examples/ucp_hworld ucp_hello_world.c -lm -lucs -lucp
-        displayName: Build ucx artifact
-
-      - task: PublishBuildArtifacts@1
-        inputs:
-          pathToPublish: '$(System.DefaultWorkingDirectory)/ucx-$(ucx_tag)/install'
-          artifactName: ucx_$(ucx_tag)_$(Build.BuildId)_${{ parameters.name }}
+          pathToPublish: '$(System.DefaultWorkingDirectory)/ucx-install-current'
+          artifactName: ucx_current_$(Build.BuildId)_${{ parameters.name }}
 
   - job: test_wire_compat_${{ parameters.name }}
-    dependsOn: build_${{ parameters.name }}
-    condition: or(ne(variables.ucx_tag, 'v1.12.0'), eq('${{ parameters.test_v12 }}', 'yes'))
+    dependsOn: build_pr_${{ parameters.name }}
     displayName: Test wire compatibility ${{ parameters.name }}
     workspace:
       clean: all
@@ -86,83 +49,68 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     strategy:
-      matrix:
-        ucx1_12:
-            ucx_tag: v1.12.0
-            ucx_env: UCX_CM_USE_ALL_DEVICES=n UCX_TLS=^sm UCX_IB_ROCE_LOCAL_SUBNET=y
-        ucx1_14:
-            ucx_tag: v1.14.0
-            ucx_env: ""
-        ucx1_14_no_sm:
-            ucx_tag: v1.14.0
-            ucx_env: UCX_TLS=^sm
+      matrix: ${{ parameters.ucx_targets }}
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     variables:
-        ucx_master: ucx_master_$(Build.BuildId)_${{ parameters.name }}
+        ucx_current: ucx_current_$(Build.BuildId)_${{ parameters.name }}
         ucx_legacy: ucx_$(ucx_tag)_$(Build.BuildId)_${{ parameters.name }}
         test_dir: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
     steps:
-      - checkout: none
+      - checkout: self
         clean: true
+        fetchDepth: 1
       - task: DownloadBuildArtifacts@0
-        displayName: Download UCX master
+        displayName: Download UCX current
         inputs:
-          artifactName: $(ucx_master)
-          downloadPath: $(System.DefaultWorkingDirectory)
-      - task: DownloadBuildArtifacts@0
-        displayName: Download UCX $(ucx_tag)
-        inputs:
-          artifactName: $(ucx_legacy)
+          artifactName: $(ucx_current)
           downloadPath: $(System.DefaultWorkingDirectory)
       - bash: |
-          chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_master) -R
+          set -eEx
+          ucx_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)
+          git clone --depth 1 -b $(ucx_tag) https://github.com/openucx/ucx.git ${ucx_dir}
+          cd ${ucx_dir}
+          ./autogen.sh
+          ./contrib/configure-release --enable-assertions --prefix=${PWD} --without-java --without-go
+          make -s -j `nproc`
+          make install
+
+          cd ./examples
+          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o client_server ucp_client_server.c -lm -lucs -lucp
+          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ucp_hworld ucp_hello_world.c -lm -lucs -lucp
+        displayName: Build ucx artifact
+      - bash: |
+          chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_current) -R
           chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_legacy) -R
-      - bash: |
-          set -Eex
-          export UCX_CM_REUSEADDR=y UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
-          port=$((10000 + 1000 * $(AZP_AGENT_ID)))
-          exe_cmd="stdbuf -oL $(test_dir)/client_server -c tag -p ${port}"
-
-          # Test server is legacy, client is legacy
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} &
-          server_pid=$!
-          sleep 5
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${exe_cmd} -a 127.0.0.1
-          if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
-
-          # Test server is master, client is legacy
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${exe_cmd} &
-          server_pid=$!
-          sleep 5
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} -a 127.0.0.1
-          if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
+      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "$(ucx_env)"
         env:
-          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_master)/lib
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
+          AZP_AGENT_ID: $(AZP_AGENT_ID)
         displayName: ucp_client_server with UCX $(ucx_tag)
         timeoutInMinutes: 2
-      - bash: |
-          set -Eex
-          export UCX_CM_REUSEADDR=y UCX_LOG_LEVEL=info UCX_WARN_UNUSED_ENV_VARS=n $(ucx_env)
-          port=$((10000 + 1000 * $(AZP_AGENT_ID)))
-          exe_cmd="stdbuf -oL $(test_dir)/ucp_hworld -p ${port}"
-
-          # Test server is legacy, client is legacy
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} &
-          server_pid=$!
-          sleep 5
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${exe_cmd} -n 127.0.0.1
-          if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
-
-          # Test server is master, client is legacy
-          LD_LIBRARY_PATH=${UCX_PR_LIB_PATH} ${exe_cmd} &
-          server_pid=$!
-          sleep 5
-          LD_LIBRARY_PATH=${UCX_LEGACY_LIB_PATH} ${exe_cmd} -n 127.0.0.1
-          if ! kill -9 ${server_pid}; then echo "server already terminated"; fi
+      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n "$(ucx_env)"
         env:
-          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_master)/lib
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
           UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
+          AZP_AGENT_ID: $(AZP_AGENT_ID)
         displayName: ucp_hello_world with UCX $(ucx_tag)
         timeoutInMinutes: 2
+      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "$(ucx_env)"
+        env:
+          UCX_TLS: ^sm
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
+          UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
+          AZP_AGENT_ID: $(AZP_AGENT_ID)
+        displayName: ucp_client_server (no sm) with UCX $(ucx_tag)
+        timeoutInMinutes: 2
+        condition: ne(variables.ucx_tag, 'v1.12.0')
+      - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/ucp_hworld -n "$(ucx_env)"
+        env:
+          UCX_TLS: ^sm
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
+          UCX_LEGACY_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/lib
+          AZP_AGENT_ID: $(AZP_AGENT_ID)
+        displayName: ucp_hello_world (no sm) with UCX $(ucx_tag)
+        timeoutInMinutes: 2
+        condition: ne(variables.ucx_tag, 'v1.12.0')

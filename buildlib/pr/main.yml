@@ -268,7 +268,9 @@ stages:
       parameters:
         name: bond
         demands: ucx_iodemo -equals yes
-        test_v12: no
+        ucx_targets:
+          ucx_1_14:
+            ucx_tag: v1.14.0
 
   - stage: Coverity
     dependsOn: [Static_check]
