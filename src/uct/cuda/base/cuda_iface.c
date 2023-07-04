@@ -9,6 +9,7 @@
 #endif
 
 #include "cuda_iface.h"
+
 #include <ucs/sys/string.h>
 
 
