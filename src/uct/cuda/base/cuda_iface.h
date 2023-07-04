@@ -170,9 +170,9 @@ uct_cuda_base_get_sys_dev(CUdevice cuda_device,
 
 ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
 
-ucs_status_t
-uct_cuda_base_nvml_get_estimate_perf(const char *bus_str1, const char *bus_str2,
-                                     double *bw);
+ucs_status_t uct_cuda_base_nvml_get_estimate_perf(const char *bus_str1,
+                                                  const char *bus_str2,
+                                                  double *bw);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);
