@@ -874,6 +874,9 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
 int uct_iface_is_reachable_params_valid(
         const uct_iface_is_reachable_params_t *params, uint64_t flags);
 
+int uct_iface_is_allowed_alloc_method(uct_base_iface_t *iface,
+                                      uct_alloc_method_t method);
+
 /*
  * Invoke active message handler.
  *

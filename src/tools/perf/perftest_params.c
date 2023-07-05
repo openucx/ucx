@@ -10,6 +10,7 @@
 
 #include "perftest.h"
 
+#include <ucp/core/ucp_context.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/sock.h>
@@ -18,13 +19,13 @@
 
 static void print_memory_type_usage(void)
 {
+    uint64_t available_mem_types = supported_mem_types();
     ucs_memory_type_t it;
 
     ucs_memory_type_for_each(it) {
-        if (ucx_perf_mem_type_allocators[it] != NULL) {
+        if (UCS_BIT(it) & available_mem_types) {
             printf("                        %s - %s\n",
-                   ucs_memory_type_names[it],
-                   ucs_memory_type_descs[it]);
+                   ucs_memory_type_names[it], ucs_memory_type_descs[it]);
         }
     }
 }
@@ -162,8 +163,7 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
     }
 
     ucs_memory_type_for_each(it) {
-        if(!strcmp(opt_arg, ucs_memory_type_names[it]) &&
-           (ucx_perf_mem_type_allocators[it] != NULL)) {
+        if (!strcmp(opt_arg, ucs_memory_type_names[it])) {
             *mem_type = it;
             return UCS_OK;
         }
@@ -544,8 +544,6 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     int c;
 
     ucs_trace_func("");
-
-    ucx_perf_global_init(); /* initialize memory types */
 
     status = init_test_params(&ctx->params);
     if (status != UCS_OK) {
