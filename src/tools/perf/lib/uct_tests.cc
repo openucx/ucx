@@ -665,11 +665,13 @@ public:
             recv_mem_type  = UCS_MEMORY_TYPE_HOST;
             recv_sn        = &m_last_recvd_sn;
         } else if (direction_to_responder) {
-            recv_mem_type  = m_perf.uct.recv_mem.mem_type;
-            recv_sn        = (psn_t*)m_perf.recv_buffer;
+            recv_mem_type = m_perf.uct.recv_mem.mem_type;
+            recv_sn       = (psn_t*)m_perf.recv_buffer;
+            // Recv allocator = Recv Allocator
         } else {
-            recv_mem_type  = m_perf.uct.send_mem.mem_type;
-            recv_sn        = (psn_t*)m_perf.send_buffer;
+            recv_mem_type = m_perf.uct.send_mem.mem_type;
+            recv_sn       = (psn_t*)m_perf.send_buffer;
+            // Recv Allocator = Send Allocator
         }
 
         uct_perf_barrier(&m_perf);

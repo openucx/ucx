@@ -303,6 +303,9 @@ ucs_status_t uct_perf_test_memcpy(ucx_perf_context_t *perf, void *dst,
         memcpy(dst, src, size);
         return UCS_OK;
     }
+
+    ucs_error("BAD MEMCPY!");
+
     return UCS_ERR_NO_MEMORY;
 
 
