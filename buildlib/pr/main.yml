@@ -271,6 +271,8 @@ stages:
         ucx_targets:
           ucx_1_14:
             ucx_tag: v1.14.0
+          ucx_1_15:
+            ucx_tag: v1.15.x
 
   - stage: Coverity
     dependsOn: [Static_check]

@@ -8,7 +8,8 @@ parameters:
       ucx_env: UCX_CM_USE_ALL_DEVICES=n UCX_TLS=^sm UCX_IB_ROCE_LOCAL_SUBNET=y
     ucx_1_14:
       ucx_tag: v1.14.0
-      ucx_env: ""
+    ucx_1_15:
+      ucx_tag: v1.15.x
 
 jobs:
   - job: build_pr_${{ parameters.name }}
