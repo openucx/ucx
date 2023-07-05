@@ -248,6 +248,23 @@ uct_base_iface_is_reachable_v2(const uct_iface_h iface,
 {
     uct_iface_reachability_scope_t scope;
 
+    if (!uct_iface_is_reachable(iface, params->device_addr,
+                                params->iface_addr)) {
+        return 0;
+    }
+
+    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
+                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
+
+    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
+           uct_iface_is_same_device(iface, params->device_addr);
+}
+
+int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                              const uct_iface_is_reachable_params_t *params)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
     if (!ucs_test_all_flags(params->field_mask,
                             UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
                             UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
@@ -260,19 +277,6 @@ uct_base_iface_is_reachable_v2(const uct_iface_h iface,
         params->info_string[0] = '\0';
     }
 
-    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
-                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
-
-    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ?
-                   uct_iface_is_reachable(iface, params->device_addr,
-                                          params->iface_addr) :
-                   uct_iface_is_same_device(iface, params->device_addr);
-}
-
-int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                              const uct_iface_is_reachable_params_t *params)
-{
-    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
 }
 
