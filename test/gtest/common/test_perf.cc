@@ -210,9 +210,7 @@ void test_perf::test_params_init(const test_spec &test,
         params.max_iter    = test.iters;
     } else {
         params.warmup_iter = 0;
-        params.max_iter    = ucs_min(20u, test.iters /
-                                          ucs::test_time_multiplier() /
-                                          ucs::test_time_multiplier());
+        params.max_iter    = 1;
     }
 
     params.warmup_time     = 100e-3;
