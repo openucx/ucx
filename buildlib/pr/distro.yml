@@ -79,9 +79,6 @@ jobs:
           gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o client_server ucp_client_server.c -lm -lucs -lucp
           gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ucp_hworld ucp_hello_world.c -lm -lucs -lucp
         displayName: Build ucx artifact
-      - bash: |
-          chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_current) -R
-          chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_legacy) -R
       - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a "$(ucx_env)"
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib
