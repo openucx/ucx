@@ -617,6 +617,20 @@ public:
         }
     }
 
+    static ucs_status_t perf_memset(void *buffer, uint8_t value, size_t length,
+                                    ucs_memory_type memory_type, uct_ep_h ep,
+                                    uct_rkey_t rkey)
+    {
+        if(memory_type == UCS_MEMORY_TYPE_HOST)
+        {
+            memset(buffer, value, length);
+            return UCS_OK;
+        }
+
+        const std::vector<uint8_t> values(length, value);
+        return uct_ep_put_short(ep, values.data(), length, (uint64_t)buffer, rkey);
+    }
+
     ucs_status_t run_stream_req_uni(bool flow_control, bool send_window,
                                     bool direction_to_responder)
     {
@@ -635,10 +649,17 @@ public:
         ucs_assert(length >= sizeof(psn_t));
         ucs_assert(m_perf.params.uct.fc_window <= ((psn_t)-1) / 2);
 
-        //TODO: Perf cleanup allocators
-        // m_perf.send_allocator->memset(m_perf.send_buffer, 0, length);
-        // m_perf.recv_allocator->memset(m_perf.recv_buffer, 0, length);
+        my_index   = rte_call(&m_perf, group_index);
+        peer_index = rte_peer_index(group_size, my_index);
+        ep         = m_perf.uct.peers[peer_index].ep;
+        rkey       = m_perf.uct.peers[peer_index].rkey.rkey;
 
+        perf_memset(m_perf.send_buffer, 0, length, m_perf.uct.send_mem.mem_type,
+                    ep, rkey);
+        perf_memset(m_perf.recv_buffer, 0, length, m_perf.uct.recv_mem.mem_type,
+                    ep, rkey);
+
+        uct_perf_test_prepare_iov_buffer();
 
         if ((CMD == UCX_PERF_CMD_AM) && direction_to_responder) {
             recv_mem_type  = UCS_MEMORY_TYPE_HOST;
@@ -650,17 +671,6 @@ public:
             recv_mem_type  = m_perf.uct.send_mem.mem_type;
             recv_sn        = (psn_t*)m_perf.send_buffer;
         }
-
-        my_index   = rte_call(&m_perf, group_index);
-        peer_index = rte_peer_index(group_size, my_index);
-        ep         = m_perf.uct.peers[peer_index].ep;
-        rkey       = m_perf.uct.peers[peer_index].rkey.rkey;
-
-        const std::vector<uint8_t> zeros(length, 0);
-        uct_ep_put_short(ep, zeros.data(), length, (uint64_t)m_perf.send_buffer, rkey);
-        uct_ep_put_short(ep, zeros.data(), length, (uint64_t)m_perf.recv_buffer, rkey);
-
-        uct_perf_test_prepare_iov_buffer();
 
         uct_perf_barrier(&m_perf);
 
