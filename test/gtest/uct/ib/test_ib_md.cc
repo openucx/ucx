@@ -145,7 +145,8 @@ UCS_TEST_P(test_ib_md, relaxed_order, "PCI_RELAXED_ORDERING=try") {
 
 UCS_TEST_P(test_ib_md, aligned) {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
-    ib_md_umr_check(&rkey_buffer[0], true, UCT_IB_MD_MAX_MR_SIZE, true);
+    size_t size = RUNNING_ON_VALGRIND ? 8192 : UCT_IB_MD_MAX_MR_SIZE;
+    ib_md_umr_check(&rkey_buffer[0], true, size, true);
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
