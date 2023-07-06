@@ -119,6 +119,14 @@ typedef struct {
 } ucp_am_first_desc_t;
 
 
+#define UCP_AM_FIRST_FRAG_META_LEN \
+    (sizeof(ucp_am_hdr_t) + sizeof(ucp_am_first_ftr_t))
+
+
+#define UCP_AM_MID_FRAG_META_LEN \
+    (sizeof(ucp_am_hdr_t) + sizeof(ucp_am_mid_ftr_t))
+
+
 ucs_status_t ucp_am_init(ucp_worker_h worker);
 
 void ucp_am_cleanup(ucp_worker_h worker);
