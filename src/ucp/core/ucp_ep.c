@@ -3054,20 +3054,22 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     uct_tl_resource_desc_t *rsc;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t dst_md_index;
+    ucp_md_index_t md_index;
     ucp_rsc_index_t cmpt_index;
     unsigned path_index;
     int prio;
 
     rsc_index  = key->lanes[lane].rsc_index;
     rsc        = &context->tl_rscs[rsc_index].tl_rsc;
-
+    md_index   = context->tl_rscs[rsc_index].md_index;
     path_index = key->lanes[lane].path_index;
+
     ucs_string_buffer_appendf(strbuf,
-            "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
-            lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index,
-            context->tl_rscs[rsc_index].md_index,
-            20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)),
-            ' ');
+       "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
+       lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index, md_index,
+       20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name) +
+                       !!(md_index > 9)),
+       ' ');
 
     if (addr_indices != NULL) {
         ucs_string_buffer_appendf(strbuf, "addr[%d].", addr_indices[lane]);
@@ -3075,9 +3077,10 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 
     dst_md_index = key->lanes[lane].dst_md_index;
     cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
-    ucs_string_buffer_appendf(strbuf, "md[%d]/%s/sysdev[%d]", dst_md_index,
-                              context->tl_cmpts[cmpt_index].attr.name,
-                              key->lanes[lane].dst_sys_dev);
+    ucs_string_buffer_appendf(
+         strbuf, "md[%d]/%s/sysdev[%d] seg %zu", dst_md_index,
+         context->tl_cmpts[cmpt_index].attr.name, key->lanes[lane].dst_sys_dev,
+         key->lanes[lane].seg_size);
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane);
     if (prio != -1) {
