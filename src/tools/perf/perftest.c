@@ -776,7 +776,8 @@ static ucs_status_t check_system(struct perftest_context *ctx)
     if (ctx->flags & TEST_FLAG_SET_AFFINITY) {
         for (i = 0; i < ctx->num_cpus; i++) {
             if (ctx->cpus[i] >= nr_cpus) {
-                ucs_error("cpu (%u) out of range (0..%u)", ctx->cpus[i], nr_cpus - 1);
+                ucs_error("cpu (%u) out of range [0..%u]", ctx->cpus[i],
+                          nr_cpus - 1);
                 return UCS_ERR_INVALID_PARAM;
             }
         }

@@ -175,8 +175,9 @@ ucx_perf_test_memcpy_host(void *dst, ucs_memory_type_t dst_mem_type,
 {
     if ((dst_mem_type != UCS_MEMORY_TYPE_HOST) ||
         (src_mem_type != UCS_MEMORY_TYPE_HOST)) {
-        ucs_error("wrong memory type passed src - %d, dst - %d",
-                  src_mem_type, dst_mem_type);
+        ucs_error("wrong memory type passed src - %s, dst - %s",
+                  ucs_memory_type_names[src_mem_type],
+                  ucs_memory_type_names[dst_mem_type]);
     } else {
         memcpy(dst, src, count);
     }
