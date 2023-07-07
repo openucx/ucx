@@ -30,6 +30,11 @@
 
 ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len);
 
+ucs_status_t
+ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len);
+
+void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes);
+
 ucs_status_t ucm_bistro_create_restore_point(void *addr, size_t len,
                                              ucm_bistro_restore_point_t **rp);
 
