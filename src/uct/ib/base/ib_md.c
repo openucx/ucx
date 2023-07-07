@@ -1258,7 +1258,7 @@ static void uct_ib_md_release_device_config(uct_ib_md_t *md)
     ucs_free(md->custom_devices.specs);
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_md_parse_reg_methods(uct_ib_md_t *md,
                             const uct_ib_md_config_t *md_config)
 {
@@ -1524,9 +1524,20 @@ out:
     return status;
 }
 
+static void uct_ib_md_init_memh_size(uct_ib_md_t *md, size_t memh_base_size,
+                                     size_t mr_size)
+{
+    int num_mrs = md->relaxed_order ?
+                  2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
+                  1 /* UCT_IB_MR_DEFAULT */;
+
+    md->memh_struct_size = memh_base_size + (mr_size * num_mrs);
+}
+
 void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
                                    const uct_ib_md_config_t *md_config,
-                                   int is_supported)
+                                   int is_supported,
+                                   size_t memh_base_size, size_t mr_size)
 {
     int have_relaxed_order = (IBV_ACCESS_RELAXED_ORDERING != 0) && is_supported;
 
@@ -1546,18 +1557,11 @@ void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
                             ucs_cpu_prefer_relaxed_order();
     }
 
+    /* Reset the memory handler size */
+    uct_ib_md_init_memh_size(md, memh_base_size, mr_size);
+
     ucs_debug("%s: relaxed order memory access is %sabled",
               uct_ib_device_name(&md->dev), md->relaxed_order ? "en" : "dis");
-}
-
-static void uct_ib_md_init_memh_size(uct_ib_md_t *md, size_t memh_base_size,
-                                     size_t mr_size)
-{
-    int num_mrs = md->relaxed_order ?
-                  2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
-                  1 /* UCT_IB_MR_DEFAULT */;
-
-    md->memh_struct_size = memh_base_size + (mr_size * num_mrs);
 }
 
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
@@ -1601,8 +1605,7 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
-                                   const uct_ib_md_config_t *md_config,
-                                   size_t memh_base_size, size_t mr_size)
+                                   const uct_ib_md_config_t *md_config)
 {
     ucs_status_t status;
 
@@ -1614,8 +1617,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                           UCT_MD_FLAG_NEED_RKEY |
                           UCT_MD_FLAG_ADVISE;
     md->relaxed_order   = 0;
-
-    uct_ib_md_init_memh_size(md, memh_base_size, mr_size);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
@@ -1665,11 +1666,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                   "is supported.",
                   uct_ib_device_name(&md->dev));
         status = UCS_ERR_UNSUPPORTED;
-        goto err_cleanup_device;
-    }
-
-    status = uct_ib_md_parse_reg_methods(md, md_config);
-    if (status != UCS_OK) {
         goto err_cleanup_device;
     }
 
@@ -1843,9 +1839,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_device_config_release;
     }
 
-    status  = uct_ib_md_open_common(md, ibv_device, md_config,
-                                    sizeof(uct_ib_verbs_mem_t),
-                                    sizeof(uct_ib_mr_t));
+    status  = uct_ib_md_open_common(md, ibv_device, md_config);
     if (status != UCS_OK) {
         goto err_md_free;
     }
@@ -1855,7 +1849,14 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     uct_ib_md_ece_check(md);
-    uct_ib_md_parse_relaxed_order(md, md_config, 0);
+    uct_ib_md_parse_relaxed_order(md, md_config, 0,
+                                  sizeof(uct_ib_verbs_mem_t),
+                                  sizeof(uct_ib_mr_t));
+
+    status = uct_ib_md_parse_reg_methods(md, md_config);
+    if (status != UCS_OK) {
+        goto err_md_free;
+    }
 
     *p_md = md;
     return UCS_OK;
