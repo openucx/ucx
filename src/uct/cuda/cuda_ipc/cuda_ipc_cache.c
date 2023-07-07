@@ -151,10 +151,11 @@ uct_cuda_ipc_get_remote_cache(pid_t pid, uct_cuda_ipc_cache_t **cache)
     khiter_t khiter;
     int khret;
 
+    UCT_CUDA_IPC_GET_DEVICE(key.cu_device);
+
     ucs_recursive_spin_lock(&uct_cuda_ipc_remote_cache.lock);
 
     key.pid = pid;
-    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&key.cu_device));
 
     khiter = kh_put(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, key,
                     &khret);
