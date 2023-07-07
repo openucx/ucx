@@ -361,7 +361,7 @@ public:
         ucs_status_t status;
         uint8_t gid_index;
 
-        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_ib_md_close, uct_ib_md_open,
+        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
                                &uct_ib_component,
                                ibv_get_device_name(m_ibctx->device), m_md_config);
 
@@ -414,7 +414,7 @@ public:
         ucs_status_t status;
         ucs::handle<uct_md_h> uct_md;
 
-        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_ib_md_close, uct_ib_md_open,
+        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
                                &uct_ib_component,
                                ibv_get_device_name(m_ibctx->device),
                                m_md_config);
@@ -757,7 +757,7 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
             continue;
         }
 
-        status = uct_ib_md_open(&uct_ib_component, dev_name, md_config, &md);
+        status = uct_md_open(&uct_ib_component, dev_name, md_config, &md);
         EXPECT_UCS_OK(status);
         if (status != UCS_OK) {
             goto out_md_config_release;
@@ -784,7 +784,7 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
             ucs_string_buffer_cleanup(&strb);
         }
 
-        uct_ib_md_close(md);
+        uct_md_close(md);
 
 out_md_config_release:
         uct_config_release(md_config);

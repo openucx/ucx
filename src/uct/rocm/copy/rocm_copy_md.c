@@ -282,17 +282,16 @@ static ucs_status_t uct_rocm_copy_mem_free(uct_md_h md, uct_mem_h memh)
 }
 
 static uct_md_ops_t md_ops = {
-    .close                  = uct_rocm_copy_md_close,
-    .query                  = uct_rocm_copy_md_query,
-    .mkey_pack              = uct_rocm_copy_mkey_pack,
-    .mem_alloc              = uct_rocm_copy_mem_alloc,
-    .mem_free               = uct_rocm_copy_mem_free,
-    .mem_reg                = uct_rocm_copy_mem_reg,
-    .mem_dereg              = uct_rocm_copy_mem_dereg,
-    .mem_attach             = ucs_empty_function_return_unsupported,
-    .mem_query              = uct_rocm_base_mem_query,
-    .detect_memory_type     = uct_rocm_base_detect_memory_type,
-    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .close              = uct_rocm_copy_md_close,
+    .query              = uct_rocm_copy_md_query,
+    .mkey_pack          = uct_rocm_copy_mkey_pack,
+    .mem_alloc          = uct_rocm_copy_mem_alloc,
+    .mem_free           = uct_rocm_copy_mem_free,
+    .mem_reg            = uct_rocm_copy_mem_reg,
+    .mem_dereg          = uct_rocm_copy_mem_dereg,
+    .mem_attach         = ucs_empty_function_return_unsupported,
+    .mem_query          = uct_rocm_base_mem_query,
+    .detect_memory_type = uct_rocm_base_detect_memory_type,
 };
 
 static inline uct_rocm_copy_rcache_region_t*
@@ -340,17 +339,16 @@ uct_rocm_copy_mem_rcache_dereg(uct_md_h uct_md,
 }
 
 static uct_md_ops_t md_rcache_ops = {
-    .close                  = uct_rocm_copy_md_close,
-    .query                  = uct_rocm_copy_md_query,
-    .mem_alloc              = uct_rocm_copy_mem_alloc,
-    .mem_free               = uct_rocm_copy_mem_free,
-    .mkey_pack              = uct_rocm_copy_mkey_pack,
-    .mem_reg                = uct_rocm_copy_mem_rcache_reg,
-    .mem_dereg              = uct_rocm_copy_mem_rcache_dereg,
-    .mem_attach             = ucs_empty_function_return_unsupported,
-    .mem_query              = uct_rocm_base_mem_query,
-    .detect_memory_type     = uct_rocm_base_detect_memory_type,
-    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .close              = uct_rocm_copy_md_close,
+    .query              = uct_rocm_copy_md_query,
+    .mem_alloc          = uct_rocm_copy_mem_alloc,
+    .mem_free           = uct_rocm_copy_mem_free,
+    .mkey_pack          = uct_rocm_copy_mkey_pack,
+    .mem_reg            = uct_rocm_copy_mem_rcache_reg,
+    .mem_dereg          = uct_rocm_copy_mem_rcache_dereg,
+    .mem_attach         = ucs_empty_function_return_unsupported,
+    .mem_query          = uct_rocm_base_mem_query,
+    .detect_memory_type = uct_rocm_base_detect_memory_type,
 };
 
 static ucs_status_t

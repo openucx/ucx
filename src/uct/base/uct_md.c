@@ -602,7 +602,7 @@ ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
 int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                   uct_sockaddr_accessibility_t mode)
 {
-    return md->ops->is_sockaddr_accessible(md, sockaddr, mode);
+    return 0; /* Retained for API backward compatibility */
 }
 
 ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr, size_t length,
