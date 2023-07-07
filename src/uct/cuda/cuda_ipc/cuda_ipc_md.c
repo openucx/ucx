@@ -152,10 +152,8 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
      * stream sequentialization */
     rkey->dev_num = peer_idx;
 
-    if ((CUDA_SUCCESS != cuCtxGetDevice(&this_device)) ||
-        (CUDA_SUCCESS != cuDeviceGetCount(&num_devices))) {
-        goto err;
-    }
+    UCT_CUDA_IPC_GET_DEVICE(this_device);
+    UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
 
     accessible = &mdc->md->peer_accessible_cache[peer_idx * num_devices + this_device];
     if (*accessible == UCS_TRY) { /* unchecked, add to cache */
@@ -313,11 +311,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         .detect_memory_type = ucs_empty_function_return_unsupported
     };
 
-    int num_devices;
     uct_cuda_ipc_md_t* md;
     uct_cuda_ipc_component_t* com;
-
-    UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
 
     md = ucs_calloc(1, sizeof(uct_cuda_ipc_md_t), "uct_cuda_ipc_md");
     if (md == NULL) {
