@@ -555,7 +555,8 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
 
 void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
                                    const uct_ib_md_config_t *md_config,
-                                   int is_supported);
+                                   int is_supported,
+                                   size_t memh_base_size, size_t mr_size);
 
 ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr);
 
@@ -579,8 +580,7 @@ int uct_ib_device_is_accessible(struct ibv_device *device);
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
-                                   const uct_ib_md_config_t *md_config,
-                                   size_t mem_size, size_t mr_size);
+                                   const uct_ib_md_config_t *md_config);
 
 void uct_ib_md_close_common(uct_ib_md_t *md);
 
