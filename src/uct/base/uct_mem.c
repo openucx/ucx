@@ -163,7 +163,6 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 mem->mem_type = mem_type;
                 mem->memh     = memh;
                 goto allocated;
-
             }
 
             if (mem_type != UCS_MEMORY_TYPE_HOST) {
