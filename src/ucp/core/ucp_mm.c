@@ -236,12 +236,7 @@ ucp_mem_do_alloc(ucp_context_h context, void *address, size_t length,
     uct_mem_alloc_params_t params;
     unsigned method_index, md_index, num_mds;
     ucs_status_t status;
-    uct_md_h *mds;
-
-    mds = ucs_calloc(context->num_mds, sizeof(*mds), "temp mds");
-    if (mds == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
+    uct_md_h mds[UCP_MAX_MDS];
 
     for (method_index = 0; method_index < context->config.num_alloc_methods;
                     ++method_index)
@@ -282,7 +277,6 @@ ucp_mem_do_alloc(ucp_context_h context, void *address, size_t length,
     status = UCS_ERR_NO_MEMORY;
 
 out:
-    ucs_free(mds);
     return status;
 }
 
@@ -492,7 +486,7 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
 
     ucs_for_each_bit(md_index, reg_md_map) {
         ucs_assertv(context->reg_md_map[mem_type] & UCS_BIT(md_index),
-                    "mem_type=%s md[%d]=%s reg_md_map=%" PRIx64,
+                    "mem_type=%s md[%d]=%s reg_md_map=0x%" PRIx64,
                     ucs_memory_type_names[mem_type], md_index,
                     context->tl_mds[md_index].rsc.md_name,
                     context->reg_md_map[mem_type]);
@@ -829,9 +823,9 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     if (!(params->field_mask &
           (UCP_MEM_MAP_PARAM_FIELD_LENGTH |
            UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER))) {
-        ucs_error("the length value or exported_memh_buffer for mapping memory"
-                  " aren't set: %s", ucs_status_string(UCS_ERR_INVALID_PARAM));
         status = UCS_ERR_INVALID_PARAM;
+        ucs_error("the length value or exported_memh_buffer for mapping memory"
+                  " aren't set: %s", ucs_status_string(status));
         goto out;
     }
 
