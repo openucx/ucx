@@ -905,7 +905,9 @@ uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     if (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
         atomic_rkey = memh->atomic_rkey;
     } else {
-        ucs_assert(!(memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING));
+        if (!(flags & UCT_MD_MKEY_PACK_FLAG_EXPORT)) {
+            ucs_assert(!(memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING));
+        }
         atomic_rkey = UCT_IB_INVALID_MKEY;
     }
 
