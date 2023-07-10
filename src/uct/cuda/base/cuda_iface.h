@@ -95,11 +95,10 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
     })
 
 
-#define UCT_NVML_FUNC_LOG_ERR(_func) \
-    UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
+#define UCT_NVML_FUNC_LOG_ERR(_func) UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
-#define UCT_NVML_FUNC_LOG_DEBUG(_func) UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
+#define UCT_NVML_FUNC_LOG_DIAG(_func) UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_DIAG)
 
 
 #define UCT_CUDADRV_FUNC(_func, _log_level) \
