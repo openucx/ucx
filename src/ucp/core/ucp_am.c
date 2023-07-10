@@ -24,13 +24,6 @@
 #include <ucs/datastruct/array.inl>
 
 
-#define UCP_AM_FIRST_FRAG_META_LEN \
-    (sizeof(ucp_am_hdr_t) + sizeof(ucp_am_first_ftr_t))
-
-#define UCP_AM_MID_FRAG_META_LEN \
-    (sizeof(ucp_am_hdr_t) + sizeof(ucp_am_mid_ftr_t))
-
-
 UCS_ARRAY_IMPL(ucp_am_cbs, unsigned, ucp_am_entry_t, static)
 
 ucs_status_t ucp_am_init(ucp_worker_h worker)
@@ -1199,8 +1192,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     } else {
         /* data_desc represents eager message and can be received in place
          * without initializing request */
-        status      = ucp_dt_unpack_only(worker, buffer, count, datatype,
-                                         mem_type, data_desc, desc->length, 1);
+        status      = ucp_datatype_iter_unpack_single(worker, buffer, count,
+                                                      data_desc, desc->length, 1,
+                                                      param);
         recv_length = desc->length;
     }
 

@@ -743,13 +743,4 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq);
 
-static UCS_F_ALWAYS_INLINE int
-uct_rc_mlx5_iface_flush_rkey_enabled(uct_rc_mlx5_iface_common_t *iface)
-{
-    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
-
-    return iface->super.config.flush_remote &&
-           uct_ib_md_is_flush_rkey_valid(md->flush_rkey);
-}
-
 #endif

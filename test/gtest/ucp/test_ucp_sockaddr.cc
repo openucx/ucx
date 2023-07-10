@@ -2266,26 +2266,6 @@ protected:
                                     message, &recv_param);
     }
 
-    void sreq_release(void *sreq) {
-        if ((sreq == NULL) || !UCS_PTR_IS_PTR(sreq)) {
-            return;
-        }
-
-        if (ucp_request_check_status(sreq) == UCS_INPROGRESS) {
-            ucp_request_t *req = (ucp_request_t*)sreq - 1;
-            req->flags        |= UCP_REQUEST_FLAG_COMPLETED;
-
-            ucp_request_t *req_from_id;
-            ucs_status_t status = ucp_send_request_get_by_id(
-                    sender().worker(), req->id,&req_from_id, 1);
-            if (status == UCS_OK) {
-                EXPECT_EQ(req, req_from_id);
-            }
-        }
-
-        ucp_request_release(sreq);
-    }
-
     void extra_send_before_disconnect(entity &e, const std::string &send_buf,
                                       const ucp_request_param_t &send_param)
     {

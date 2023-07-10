@@ -53,10 +53,10 @@ jobs:
           CONTAINER: centos8_cuda_11_3
         centos8_cuda_11_4:
           CONTAINER: centos8_cuda_11_4
-        centos8_cuda_11_5:
-          CONTAINER: centos8_cuda_11_5
-        centos8_cuda_11_6:
-          CONTAINER: centos8_cuda_11_6
+        ubi8_cuda_11_5:
+          CONTAINER: ubi8_cuda_11_5
+        ubi8_cuda_11_6:
+          CONTAINER: ubi8_cuda_11_6
         ubuntu18_cuda_11_0:
           CONTAINER: ubuntu18_cuda_11_0
         ubuntu18_cuda_11_1:
@@ -117,6 +117,7 @@ jobs:
       - bash: |
           set -xeE
           $(workspace)/buildlib/pr/cuda/test_malloc_hook.sh
+        displayName: Memory hooks test
         env:
           WORKSPACE: $(workspace)
       - bash: |

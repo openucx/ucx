@@ -16,7 +16,6 @@
 #include <ucs/debug/log.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack_int.h>
-#include <ucs/type/spinlock.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
@@ -201,7 +200,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     search_start = start;
     search_end   = end - 1;
 
-    pthread_rwlock_wrlock(&memtype_cache->lock);
+    ucs_spin_lock(&memtype_cache->lock);
 
     /* find and remove all regions which intersect with new one */
     ucs_pgtable_search_range(&memtype_cache->pgtable, search_start, search_end,
@@ -261,7 +260,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     }
 
 out_unlock:
-    pthread_rwlock_unlock(&memtype_cache->lock);
+    ucs_spin_unlock(&memtype_cache->lock);
 }
 
 void ucs_memtype_cache_update(const void *address, size_t size,
@@ -336,7 +335,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    pthread_rwlock_rdlock(&memtype_cache->lock);
+    ucs_spin_lock(&memtype_cache->lock);
 
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &memtype_cache->pgtable,
                                   start);
@@ -367,7 +366,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
                 ucs_memory_type_names[mem_info->type], mem_info->type);
 
 out_unlock:
-    pthread_rwlock_unlock(&memtype_cache->lock);
+    ucs_spin_unlock(&memtype_cache->lock);
     return status;
 }
 
@@ -376,9 +375,9 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
     ucs_status_t status;
     int ret;
 
-    ret = pthread_rwlock_init(&self->lock, NULL);
+    ret = ucs_spinlock_init(&self->lock, 0);
     if (ret) {
-        ucs_error("pthread_rwlock_init() failed: %m");
+        ucs_error("ucs_spinlock_init() failed: %m");
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
@@ -405,7 +404,7 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
 err_cleanup_pgtable:
     ucs_pgtable_cleanup(&self->pgtable);
 err_destroy_rwlock:
-    pthread_rwlock_destroy(&self->lock);
+    ucs_spinlock_destroy(&self->lock);
 err:
     return status;
 }
@@ -416,7 +415,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t)
                             ucs_memtype_cache_event_callback, self);
     ucs_memtype_cache_purge(self);
     ucs_pgtable_cleanup(&self->pgtable);
-    pthread_rwlock_destroy(&self->lock);
+    ucs_spinlock_destroy(&self->lock);
 }
 
 void ucs_memtype_cache_global_init()

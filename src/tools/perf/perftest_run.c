@@ -154,7 +154,7 @@ static void print_header(struct perftest_context *ctx)
 
         if ((test->api == UCX_PERF_API_UCP) &&
             (test->command == UCX_PERF_CMD_AM)) {
-            printf("| AM header size: %-60zu             |\n",
+            printf("| AM header size: %-60zu                             |\n",
                    ctx->params.super.ucp.am_hdr_size);
         }
     }

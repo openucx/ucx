@@ -53,36 +53,6 @@ typedef struct {
 } ucp_memory_info_t;
 
 
-/**
- * This type describes a datatype packing function, used to pack into
- * a contiguous buffer.
- *
- * @param [in]  worker   UCP worker
- * @param [out] dest     Pack into this buffer
- * @param [in]  src      Source data to pack
- * @param [in]  length   Length of the data to pack
- * @param [in]  mem_type Memory type of the source data
- */
-typedef void (*ucp_dt_pack_func_t)(ucp_worker_h worker, void *dest,
-                                   const void *src, size_t length,
-                                   ucs_memory_type_t mem_type);
-
-
-/**
- * This type describes a datatype unpacking function, used to unpack from
- * a contiguous buffer.
- *
- * @param [in]  worker   UCP worker
- * @param [out] dest     Unpack into this buffer
- * @param [in]  src      Source buffer to unpack
- * @param [in]  length   Length of the data to unpack
- * @param [in]  mem_type Memory type of the dest data
- */
-typedef void (*ucp_dt_unpack_func_t)(ucp_worker_h worker, void *dest,
-                                     const void *src, size_t length,
-                                     ucs_memory_type_t mem_type);
-
-
 extern const char *ucp_datatype_class_names[];
 
 size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
@@ -98,10 +68,10 @@ void ucp_mem_type_unpack(ucp_worker_h worker, void *buffer,
 
 
 static UCS_F_ALWAYS_INLINE void
-ucp_memcpy_pack_unpack(ucp_worker_h worker, void *buffer, const void *data,
-                       size_t length, ucs_memory_type_t mem_type)
+ucp_memcpy_pack_unpack(void *buffer, const void *data, size_t length,
+                       const char *name)
 {
-    UCS_PROFILE_CALL(ucs_memcpy_relaxed, buffer, data, length);
+    UCS_PROFILE_NAMED_CALL(name, ucs_memcpy_relaxed, buffer, data, length);
 }
 
 

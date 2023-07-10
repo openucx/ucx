@@ -169,17 +169,20 @@ static ucs_status_t
 uct_cuda_ipc_open_memhandle(void **mapped_addr, const uct_cuda_ipc_key_t *key)
 {
     CUresult cuerr;
-    const char *cu_err_str;
+    ucs_status_t status;
 
-    cuerr = cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr,
-                               key->ph, CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
-    if ((cuerr != CUDA_SUCCESS) && (cuerr != CUDA_ERROR_ALREADY_MAPPED)) {
-        cuGetErrorString(cuerr, &cu_err_str);
-        ucs_debug("cuIpcOpenMemHandle() failed: %s", cu_err_str);
-        return UCS_ERR_INVALID_PARAM;
+    cuerr = cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr, key->ph,
+                               CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
+    if (cuerr == CUDA_SUCCESS) {
+        status = UCS_OK;
+    } else {
+        ucs_debug("cuIpcOpenMemHandle() failed: %s",
+                  uct_cuda_base_cu_get_error_string(cuerr));
+        status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_ERR_ALREADY_EXISTS :
+                                                        UCS_ERR_INVALID_PARAM;
     }
 
-    return UCS_OK;
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,

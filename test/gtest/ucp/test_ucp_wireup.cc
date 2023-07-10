@@ -1755,7 +1755,7 @@ public:
                                "tag,unified");
     }
 
-    void check_fp_values(double unpacked, double original, double convert)
+    void check_fp_values(double unpacked, double original)
     {
         double max_error = original / pow(2, _UCS_FP8_MANTISSA_BITS);
         EXPECT_NEAR(original, unpacked, max_error);
@@ -1797,14 +1797,12 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         EXPECT_LT(ucp_address_iface_seg_size(attr) - ae->iface_attr.seg_size,
                   UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR);
         EXPECT_EQ(UCP_OBJECT_VERSION_V2, ae->iface_attr.addr_version);
-        check_fp_values(ae->iface_attr.overhead, attr->overhead,
-                        UCS_NSEC_PER_SEC);
+        check_fp_values(ae->iface_attr.overhead, attr->overhead);
         check_fp_values(ae->iface_attr.lat_ovh,
-                        ucp_tl_iface_latency(worker->context, &attr->latency),
-                        UCS_NSEC_PER_SEC);
+                        ucp_tl_iface_latency(worker->context, &attr->latency));
         check_fp_values(
                 ae->iface_attr.bandwidth,
-                ucp_tl_iface_bandwidth(worker->context, &attr->bandwidth), 1);
+                ucp_tl_iface_bandwidth(worker->context, &attr->bandwidth));
     }
 
     ucs_free(unpacked_address.address_list);

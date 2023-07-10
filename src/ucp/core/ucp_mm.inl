@@ -24,9 +24,10 @@ ucp_memh_rcache_print(ucp_mem_h memh, void *address, size_t length)
     const char UCS_V_UNUSED *type = (memh->flags & UCP_MEMH_FLAG_IMPORTED) ?
                                     "imported " : "";
 
-    ucs_trace("%smemh %p: address %p/%p length %zu/%zu md_map %" PRIx64
-              " obtained from rcache", type, memh, address,
-              ucp_memh_address(memh), length, ucp_memh_length(memh),
+    ucs_trace("%smemh %p: address %p/%p length %zu/%zu %s md_map %" PRIx64
+              " obtained from rcache",
+              type, memh, address, ucp_memh_address(memh), length,
+              ucp_memh_length(memh), ucs_memory_type_names[memh->mem_type],
               memh->md_map);
 }
 
@@ -72,26 +73,31 @@ not_found:
                              uct_flags, memh_p);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_memh_put(ucp_context_h context, ucp_mem_h memh)
+/*
+ * If the memory handle @a memh is zero-length or created by @ref ucp_mem_map(),
+ * do nothing and return 0. Otherwise, release the memory handle and return 1.
+ */
+static UCS_F_ALWAYS_INLINE int ucp_memh_put(ucp_mem_h memh)
 {
+    ucp_context_h context = memh->context;
+
     ucs_trace("memh %p: release address %p length %zu md_map %" PRIx64,
               memh, ucp_memh_address(memh), ucp_memh_length(memh),
               memh->md_map);
 
     /* user memh or zero length memh */
     if (memh->parent != NULL) {
-        return;
+        return 0;
     }
 
     if (ucs_likely(context->rcache != NULL)) {
         UCP_THREAD_CS_ENTER(&context->mt_lock);
         ucs_rcache_region_put_unsafe(context->rcache, &memh->super);
         UCP_THREAD_CS_EXIT(&context->mt_lock);
-        return;
+    } else {
+        ucp_memh_put_slow(context, memh);
     }
-
-    ucp_memh_put_slow(context, memh);
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memh_is_user_memh(ucp_mem_h memh)

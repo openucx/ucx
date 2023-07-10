@@ -87,6 +87,8 @@ UcxLog::~UcxLog()
 
 #define UCX_LOG UcxLog("[UCX]", true)
 
+ucp_request_param_t UcxContext::recv_param;
+
 UcxContext::UcxAcceptCallback::UcxAcceptCallback(UcxContext &context,
                                                  UcxConnection &connection) :
     _context(context), _connection(connection)
@@ -191,6 +193,10 @@ bool UcxContext::init(const char *name)
     }
 
     UCX_LOG << "created worker " << _worker;
+
+    recv_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    recv_param.cb.recv      = (ucp_tag_recv_nbx_callback_t)iomsg_recv_callback;
 
     if (_use_am) {
         set_am_handler(am_recv_callback, this);
@@ -529,11 +535,10 @@ UcxContext::wait_completion(ucs_status_ptr_t status_ptr, const char *title,
 
 void UcxContext::recv_io_message()
 {
-    ucs_status_ptr_t status_ptr = ucp_tag_recv_nb(_worker, &_iomsg_buffer[0],
-                                                  _iomsg_buffer.size(),
-                                                  ucp_dt_make_contig(1),
-                                                  IOMSG_TAG, IOMSG_TAG,
-                                                  iomsg_recv_callback);
+    ucs_status_ptr_t status_ptr = ucp_tag_recv_nbx(_worker, &_iomsg_buffer[0],
+                                                   _iomsg_buffer.size(),
+                                                   IOMSG_TAG, IOMSG_TAG,
+                                                   &recv_param);
     assert(status_ptr != NULL);
     _iomsg_recv_request = reinterpret_cast<ucx_request*>(status_ptr);
 }
@@ -955,7 +960,7 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
     ucp_request_param_t param;
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
                          UCP_OP_ATTR_FIELD_FLAGS;
-    param.cb.send      = common_request_callback_nbx;
+    param.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;
     param.flags        = UCP_AM_SEND_FLAG_REPLY;
     param.datatype     = 0; // make coverity happy
     if (memh) {
@@ -1073,13 +1078,6 @@ void UcxConnection::data_recv_callback(void *request, ucs_status_t status,
     common_request_callback(request, status);
 }
 
-void UcxConnection::common_request_callback_nbx(void *request,
-                                                ucs_status_t status,
-                                                void *user_data)
-{
-    common_request_callback(request, status);
-}
-
 void UcxConnection::am_data_recv_callback(void *request, ucs_status_t status,
                                           size_t length, void *user_data)
 {
@@ -1108,13 +1106,20 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 
 void UcxConnection::connect_tag(UcxCallback *callback)
 {
-    const ucp_datatype_t dt_int = ucp_dt_make_contig(sizeof(uint32_t));
+    ucp_request_param_t param;
     size_t recv_len;
 
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                         UCP_OP_ATTR_FIELD_CALLBACK | UCP_OP_ATTR_FIELD_FLAGS;
+    param.datatype     = ucp_dt_make_contig(sizeof(uint32_t));
+
     // receive remote connection id
-    void *rreq = ucp_stream_recv_nb(_ep, &_remote_conn_id, 1, dt_int,
-                                    stream_recv_callback, &recv_len,
-                                    UCP_STREAM_RECV_FLAG_WAITALL);
+    param.cb.recv_stream = (ucp_stream_recv_nbx_callback_t)stream_recv_callback;
+    param.flags          = UCP_STREAM_RECV_FLAG_WAITALL;
+
+    void *rreq = ucp_stream_recv_nbx(_ep, &_remote_conn_id, 1, &recv_len,
+                                     &param);
+
     if (UCS_PTR_IS_PTR(rreq)) {
         process_request("conn_id receive", rreq, callback);
         _context._conns_in_progress.push_back(std::make_pair(
@@ -1131,8 +1136,11 @@ void UcxConnection::connect_tag(UcxCallback *callback)
     }
 
     // send local connection id
-    void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
-                                    common_request_callback, 0);
+    param.cb.send = (ucp_send_nbx_callback_t)common_request_callback;
+    param.flags   = 0;
+
+    void *sreq = ucp_stream_send_nbx(_ep, &_conn_id, 1, &param);
+
     // we do not have to check the status here, in case if the endpoint is
     // failed we should handle it in ep_params.err_handler.cb set above
     process_request("conn_id send", sreq, EmptyCallback::get());

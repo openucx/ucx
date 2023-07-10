@@ -326,11 +326,10 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
         (iface->prog.id == UCS_CALLBACKQ_ID_NULL)) {
         if (thread_safe) {
             iface->prog.id = ucs_callbackq_add_safe(&worker->super.progress_q,
-                                                    cb, iface,
-                                                    UCS_CALLBACKQ_FLAG_FAST);
+                                                    cb, iface);
         } else {
             iface->prog.id = ucs_callbackq_add(&worker->super.progress_q, cb,
-                                               iface, UCS_CALLBACKQ_FLAG_FAST);
+                                               iface);
         }
     }
     iface->progress_flags |= flags;

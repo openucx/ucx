@@ -1,9 +1,9 @@
-#!/bin/bash -eEx
+#!/bin/bash -eE
 
-# Search for zombie or defunct processes; kill them all
-out=$(ps -eo pid,stat | awk '$2 == "Z|defunct" {print $1}')
+# Search for zombies; kill them all
+out=$(ps -eo pid,stat,%cpu | grep Z | awk '{print $1}')
 if [ -z "$out" ]; then
-  echo "No zombies found"
+  echo "No zombies were found"
   exit 0
 else
   for i in $out ; do
@@ -11,10 +11,10 @@ else
   done
 fi
 
-# Search again; tell parents you killed their kids; kill parents
-out=$(ps -eo pid,stat | awk '$2 == "Z|defunct" {print $1}')
+# Search for survivors; tell parents you killed their kids; kill parents
+out=$(ps -eo pid,stat,%cpu | grep Z | awk '$3>85.0 {print $1}')
 for i in $out ; do
-  pid_parent=$(ps -o ppid=$i)
+  pid_parent=$(ps -p "$i" -o ppid=)
   kill -s SIGCHLD $pid_parent
   kill -9 $pid_parent
 done

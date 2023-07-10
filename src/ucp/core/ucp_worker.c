@@ -2116,9 +2116,9 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                         UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
                                         UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
                                         &ep_config->am_u.max_eager_short);
-    } else {
-        ucp_worker_print_used_tls(worker, ep_cfg_index);
     }
+
+    ucp_worker_print_used_tls(worker, ep_cfg_index);
 
 out:
     *cfg_index_p = ep_cfg_index;
@@ -3403,8 +3403,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
     ucs_trace("ep %p flags 0x%x: set keepalive lane to %u", ep,
               ep->flags, ucp_ep_config(ep)->key.keepalive_lane);
     uct_worker_progress_register_safe(worker->uct,
-                                      ucp_worker_keepalive_progress, worker,
-                                      UCS_CALLBACKQ_FLAG_FAST,
+                                      ucp_worker_keepalive_progress, worker, 0,
                                       &worker->keepalive.cb_id);
 }
 

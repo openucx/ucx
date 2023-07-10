@@ -39,7 +39,7 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
 static ucs_status_t
 uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->flags                  = UCT_MD_FLAG_REG | 
+    md_attr->flags                  = UCT_MD_FLAG_REG |
                                       UCT_MD_FLAG_NEED_RKEY |
                                       UCT_MD_FLAG_INVALIDATE |
                                       UCT_MD_FLAG_INVALIDATE_RMA |
@@ -319,14 +319,13 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                      const uct_md_config_t *config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close                  = uct_cuda_ipc_md_close,
-        .query                  = uct_cuda_ipc_md_query,
-        .mkey_pack              = uct_cuda_ipc_mkey_pack,
-        .mem_reg                = uct_cuda_ipc_mem_reg,
-        .mem_dereg              = uct_cuda_ipc_mem_dereg,
-        .mem_attach             = ucs_empty_function_return_unsupported,
-        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-        .detect_memory_type     = ucs_empty_function_return_unsupported
+        .close              = uct_cuda_ipc_md_close,
+        .query              = uct_cuda_ipc_md_query,
+        .mkey_pack          = uct_cuda_ipc_mkey_pack,
+        .mem_reg            = uct_cuda_ipc_mem_reg,
+        .mem_dereg          = uct_cuda_ipc_mem_dereg,
+        .mem_attach         = ucs_empty_function_return_unsupported,
+        .detect_memory_type = ucs_empty_function_return_unsupported
     };
 
 

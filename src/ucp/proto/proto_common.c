@@ -687,7 +687,7 @@ void ucp_proto_request_select_error(ucp_request_t *req,
 
     ucp_proto_select_param_str(sel_param, ucp_operation_names, &sel_param_strb);
     ucp_proto_select_info(ep->worker, ep->cfg_index, rkey_cfg_index,
-                          proto_select, &proto_select_strb);
+                          proto_select, 1, &proto_select_strb);
     ucs_fatal("req %p on ep %p to %s: could not find a protocol for %s "
               "length %zu\navailable protocols:\n%s\n",
               req, ep, ucp_ep_peer_name(ep),
@@ -791,7 +791,7 @@ void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
 
 void ucp_proto_request_bcopy_abort(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, status);
 }
 

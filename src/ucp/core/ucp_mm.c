@@ -236,12 +236,7 @@ ucp_mem_do_alloc(ucp_context_h context, void *address, size_t length,
     uct_mem_alloc_params_t params;
     unsigned method_index, md_index, num_mds;
     ucs_status_t status;
-    uct_md_h *mds;
-
-    mds = ucs_calloc(context->num_mds, sizeof(*mds), "temp mds");
-    if (mds == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
+    uct_md_h mds[UCP_MAX_MDS];
 
     for (method_index = 0; method_index < context->config.num_alloc_methods;
                     ++method_index)
@@ -282,7 +277,6 @@ ucp_mem_do_alloc(ucp_context_h context, void *address, size_t length,
     status = UCS_ERR_NO_MEMORY;
 
 out:
-    ucs_free(mds);
     return status;
 }
 
@@ -440,7 +434,8 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
 ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                ucp_md_map_t md_map, unsigned uct_flags)
 {
-    ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[memh->mem_type];
+    ucs_memory_type_t mem_type          = memh->mem_type;
+    ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[mem_type];
     void *address                       = ucp_memh_address(memh);
     size_t length                       = ucp_memh_length(memh);
     ucp_md_map_t reg_md_map             = ~memh->md_map & md_map;
@@ -459,7 +454,7 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
     err_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
                                                             UCS_LOG_LEVEL_ERROR;
 
-    if (context->config.ext.reg_nb_mem_types & UCS_BIT(memh->mem_type)) {
+    if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
         uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
     }
 
@@ -490,6 +485,12 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
     }
 
     ucs_for_each_bit(md_index, reg_md_map) {
+        ucs_assertv(context->reg_md_map[mem_type] & UCS_BIT(md_index),
+                    "mem_type=%s md[%d]=%s reg_md_map=0x%" PRIx64,
+                    ucs_memory_type_names[mem_type], md_index,
+                    context->tl_mds[md_index].rsc.md_name,
+                    context->reg_md_map[mem_type]);
+
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
         if (dmabuf_md_map & UCS_BIT(md_index)) {
             /* If this MD can consume a dmabuf and we have it - provide it */
@@ -500,9 +501,9 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
         status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, address,
                                    length, &reg_params, &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
-            ucp_memh_register_log_fail(err_level, address, length,
-                                       memh->mem_type, reg_params.dmabuf_fd,
-                                       md_index, context, status);
+            ucp_memh_register_log_fail(err_level, address, length, mem_type,
+                                       reg_params.dmabuf_fd, md_index, context,
+                                       status);
             if (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) {
                 continue;
             }
@@ -822,9 +823,9 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     if (!(params->field_mask &
           (UCP_MEM_MAP_PARAM_FIELD_LENGTH |
            UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER))) {
-        ucs_error("the length value or exported_memh_buffer for mapping memory"
-                  " aren't set: %s", ucs_status_string(UCS_ERR_INVALID_PARAM));
         status = UCS_ERR_INVALID_PARAM;
+        ucs_error("the length value or exported_memh_buffer for mapping memory"
+                  " aren't set: %s", ucs_status_string(status));
         goto out;
     }
 

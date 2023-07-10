@@ -67,13 +67,13 @@ resources:
       image: nvidia/cuda:11.1.1-devel-centos7
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_2
-      image: nvidia/cuda:11.2.0-devel-centos7
+      image: nvidia/cuda:11.2.2-devel-centos7
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_3
-      image: nvidia/cuda:11.3.0-devel-centos7
+      image: nvidia/cuda:11.3.1-devel-centos7
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_4
-      image: nvidia/cuda:11.4.0-devel-centos7
+      image: nvidia/cuda:11.4.3-devel-centos7
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-centos8
@@ -82,19 +82,19 @@ resources:
       image: nvidia/cuda:11.1.1-devel-centos8
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_2
-      image: nvidia/cuda:11.2.0-devel-centos8
+      image: nvidia/cuda:11.2.2-devel-centos8
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_3
-      image: nvidia/cuda:11.3.0-devel-centos8
+      image: nvidia/cuda:11.3.1-devel-centos8
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_4
-      image: nvidia/cuda:11.4.0-devel-centos8
+      image: nvidia/cuda:11.4.3-devel-centos8
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_5
-      image: nvidia/cuda:11.5.0-devel-centos8
+    - container: ubi8_cuda_11_5
+      image: nvidia/cuda:11.5.2-devel-ubi8
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_6
-      image: nvidia/cuda:11.6.0-devel-centos8
+    - container: ubi8_cuda_11_6
+      image: nvidia/cuda:11.6.2-devel-ubi8
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-ubuntu18.04
@@ -103,19 +103,19 @@ resources:
       image: nvidia/cuda:11.1.1-devel-ubuntu18.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_2
-      image: nvidia/cuda:11.2.0-devel-ubuntu18.04
+      image: nvidia/cuda:11.2.2-devel-ubuntu18.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_3
-      image: nvidia/cuda:11.3.0-devel-ubuntu18.04
+      image: nvidia/cuda:11.3.1-devel-ubuntu18.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_4
-      image: nvidia/cuda:11.4.0-devel-ubuntu18.04
+      image: nvidia/cuda:11.4.3-devel-ubuntu18.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_5
-      image: nvidia/cuda:11.5.0-devel-ubuntu18.04
+      image: nvidia/cuda:11.5.2-devel-ubuntu18.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_6
-      image: nvidia/cuda:11.6.0-devel-ubuntu18.04
+      image: nvidia/cuda:11.6.2-devel-ubuntu18.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-ubuntu20.04
@@ -124,19 +124,19 @@ resources:
       image: nvidia/cuda:11.1.1-devel-ubuntu20.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_2
-      image: nvidia/cuda:11.2.0-devel-ubuntu20.04
+      image: nvidia/cuda:11.2.2-devel-ubuntu20.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_3
-      image: nvidia/cuda:11.3.0-devel-ubuntu20.04
+      image: nvidia/cuda:11.3.1-devel-ubuntu20.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_4
-      image: nvidia/cuda:11.4.0-devel-ubuntu20.04
+      image: nvidia/cuda:11.4.3-devel-ubuntu20.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_5
-      image: nvidia/cuda:11.5.0-devel-ubuntu20.04
+      image: nvidia/cuda:11.5.2-devel-ubuntu20.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_6
-      image: nvidia/cuda:11.6.0-devel-ubuntu20.04
+      image: nvidia/cuda:11.6.2-devel-ubuntu20.04
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos7_cuda_12_0
       image: nvidia/cuda:12.0.0-devel-centos7
@@ -176,7 +176,7 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu2004_rocm_5_4_0
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu2004:rocm_5_4_0
-      options: $(DOCKER_OPT_ARGS)
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
   - stage: Codestyle

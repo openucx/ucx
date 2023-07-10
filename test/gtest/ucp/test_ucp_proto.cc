@@ -71,7 +71,7 @@ void test_ucp_proto::do_mem_reg(ucp_datatype_iter_t *dt_iter,
 {
     ucp_datatype_iter_mem_reg(context(), dt_iter, md_map, UCT_MD_MEM_ACCESS_ALL,
                               UCP_DT_MASK_ALL);
-    ucp_datatype_iter_mem_dereg(context(), dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_mem_dereg(dt_iter, UCP_DT_MASK_ALL);
 }
 
 void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,

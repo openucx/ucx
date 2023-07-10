@@ -151,7 +151,6 @@ struct uct_md_ops {
     uct_md_mem_query_func_t              mem_query;
     uct_md_mkey_pack_func_t              mkey_pack;
     uct_md_mem_attach_func_t             mem_attach;
-    uct_md_is_sockaddr_accessible_func_t is_sockaddr_accessible;
     uct_md_detect_memory_type_func_t     detect_memory_type;
 };
 

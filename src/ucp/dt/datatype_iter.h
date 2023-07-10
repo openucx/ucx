@@ -68,18 +68,22 @@ typedef struct {
     } type;
 } ucp_datatype_iter_t;
 
-ucs_status_t
-ucp_datatype_iter_set_iov_memh(ucp_datatype_iter_t *dt_iter, ucp_mem_h memh);
+ucs_status_t ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer,
+                                        size_t count, size_t length,
+                                        ucp_datatype_iter_t *dt_iter,
+                                        const ucp_request_param_t *param);
 
 ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
                                            ucp_datatype_iter_t *dt_iter,
                                            ucp_md_map_t md_map,
                                            unsigned uct_flags);
 
+void ucp_datatype_iter_iov_mem_dereg(ucp_datatype_iter_t *dt_iter);
 
-void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
-                                     ucp_datatype_iter_t *dt_iter);
+void ucp_datatype_iter_iov_seek_always(ucp_datatype_iter_t *dt_iter,
+                                       size_t offset);
 
+void ucp_datatype_iter_iov_cleanup_check(ucp_datatype_iter_t *dt_iter);
 
 size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
                                       size_t max_length,
@@ -92,8 +96,7 @@ size_t ucp_datatype_iter_iov_count(const ucp_datatype_iter_t *dt_iter);
 void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
                            ucs_string_buffer_t *strb);
 
-ucs_status_t
-ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
-                                     const ucp_mem_h memh);
+int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
+                                         const ucp_mem_h memh);
 
 #endif

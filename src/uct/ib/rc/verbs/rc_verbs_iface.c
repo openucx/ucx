@@ -191,7 +191,7 @@ static unsigned uct_rc_verbs_iface_progress(void *arg)
         return count;
     }
 
-    return uct_rc_verbs_iface_poll_tx(iface);
+    return count + uct_rc_verbs_iface_poll_tx(iface);
 }
 
 static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
@@ -211,8 +211,6 @@ static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
-    uct_ib_md_t *md             = uct_ib_iface_md(ucs_derived_of(iface, uct_ib_iface_t));
-    uint8_t mr_id;
     ucs_status_t status;
 
     status = uct_rc_iface_query(&iface->super, iface_attr,
@@ -230,7 +228,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
     iface_attr->overhead   = 75e-9; /* Software overhead */
 
-    iface_attr->ep_addr_len = (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) ?
+    iface_attr->ep_addr_len = uct_rc_iface_flush_rkey_enabled(&iface->super) ?
                               sizeof(uct_rc_verbs_ep_flush_addr_t) :
                               sizeof(uct_rc_verbs_ep_addr_t);
 

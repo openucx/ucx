@@ -137,11 +137,12 @@ protected:
         entity(const resource& resource, uct_md_config_t *md_config,
                uct_cm_config_t *cm_config);
 
-        void mem_alloc_host(size_t length, uct_allocated_memory_t *mem) const;
+        void mem_alloc_host(size_t length, unsigned mem_flags,
+                            uct_allocated_memory_t *mem) const;
 
         void mem_free_host(const uct_allocated_memory_t *mem) const;
 
-        void mem_type_reg(uct_allocated_memory_t *mem) const;
+        void mem_type_reg(uct_allocated_memory_t *mem, unsigned flags) const;
 
         void mem_type_dereg(uct_allocated_memory_t *mem) const;
 
@@ -239,9 +240,10 @@ protected:
 
     class mapped_buffer {
     public:
-        mapped_buffer(size_t size, uint64_t seed, const entity& entity,
+        mapped_buffer(size_t size, uint64_t seed, const entity &entity,
                       size_t offset = 0,
-                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
+                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                      unsigned mem_flags = UCT_MD_MEM_ACCESS_ALL);
         virtual ~mapped_buffer();
 
         void *ptr() const;
@@ -329,7 +331,7 @@ protected:
                               ucs::test_time_multiplier();
         while ((ucs_get_time() < deadline) && (!ucs_test_all_flags(*flag, mask))) {
             /* Don't do short_progress_loop() to avoid extra timings */
-            progress();
+            progress_mt();
         }
     }
 
@@ -391,6 +393,7 @@ protected:
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
+    unsigned progress_mt() const;
     void flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS,
                                      entity *e = NULL) const;

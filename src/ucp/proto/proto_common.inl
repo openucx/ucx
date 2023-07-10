@@ -24,7 +24,7 @@ ucp_proto_request_complete_success(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 {
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
     if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
         UCP_OP_ID_TAG_SEND) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
@@ -79,16 +79,15 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_zcopy_clean(ucp_request_t *req, unsigned dt_mask)
 {
-    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter, dt_mask);
+    ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter, dt_mask);
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_CONTIG_IOV);
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1,
+                              UCP_DT_MASK_CONTIG_IOV);
     if (ucp_proto_select_op_id(&req->send.proto_config->select_param) ==
         UCP_OP_ID_TAG_SEND) {
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)

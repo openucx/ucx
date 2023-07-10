@@ -698,17 +698,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_posix_rkey_release,(component, rkey, handle),
 
 static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
     .super = {
-        .close                  = uct_mm_md_close,
-        .query                  = uct_posix_md_query,
-        .mem_alloc              = uct_posix_mem_alloc,
-        .mem_free               = uct_posix_mem_free,
-        .mem_advise             = ucs_empty_function_return_unsupported,
-        .mem_reg                = ucs_empty_function_return_unsupported,
-        .mem_dereg              = ucs_empty_function_return_unsupported,
-        .mem_attach             = ucs_empty_function_return_unsupported,
-        .mkey_pack              = uct_posix_md_mkey_pack,
-        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-        .detect_memory_type     = ucs_empty_function_return_unsupported
+        .close              = uct_mm_md_close,
+        .query              = uct_posix_md_query,
+        .mem_alloc          = uct_posix_mem_alloc,
+        .mem_free           = uct_posix_mem_free,
+        .mem_advise         = ucs_empty_function_return_unsupported,
+        .mem_reg            = ucs_empty_function_return_unsupported,
+        .mem_dereg          = ucs_empty_function_return_unsupported,
+        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mkey_pack          = uct_posix_md_mkey_pack,
+        .detect_memory_type = ucs_empty_function_return_unsupported
     },
     .query             = uct_posix_query,
     .iface_addr_length = uct_posix_iface_addr_length,

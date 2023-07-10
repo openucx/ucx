@@ -21,9 +21,16 @@ noinst_PROGRAMS = \
 	test_link_map \
 	test_dlopen_cfg_print \
 	test_init_mt \
-	test_memtrack_limit
+	test_memtrack_limit \
+	test_hooks
 
 objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
+
+test_hooks_SOURCES  = test_hooks.c
+test_hooks_CPPFLAGS = $(BASE_CPPFLAGS) \
+                      -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so
+test_hooks_CFLAGS   = $(BASE_CFLAGS)
+test_hooks_LDADD    = -ldl
 
 test_ucs_dlopen_SOURCES  = test_ucs_dlopen.c
 test_ucs_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) \

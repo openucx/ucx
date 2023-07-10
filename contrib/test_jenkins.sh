@@ -974,6 +974,25 @@ test_ucp_dlopen() {
 	fi
 }
 
+test_ucm_hooks() {
+    total=30
+    echo "==== Running UCM Bistro hook test ===="
+    for i in $(seq 1 $total); do
+        threads=$(((RANDOM % (2 * `nproc`)) + 1))
+
+        echo "iteration $i/$total: $threads threads"
+        timeout 10 ./test/apps/test_hooks -n $threads >test_hooks.log 2>&1 || \
+            { \
+                echo "ERROR running bistro hook test:"; \
+                cat test_hooks.log; \
+                exit 1; \
+            }
+    done
+
+    echo "SUCCESS running bistro hook test:"
+    cat test_hooks.log
+}
+
 test_init_mt() {
 	echo "==== Running multi-thread init ===="
 	# Each thread requires 5MB. Cap threads number by total available shared memory.
@@ -1267,6 +1286,7 @@ run_release_mode_tests() {
 	test_ucs_load
 	test_ucp_dlopen
 	run_gtest_release
+	test_ucm_hooks
 }
 
 #
