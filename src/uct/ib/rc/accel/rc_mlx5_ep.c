@@ -684,7 +684,7 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
         uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.qp_num);
     }
 
-    if (uct_rc_mlx5_iface_flush_rkey_enabled(iface)) {
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
         ext_addr                            = ucs_derived_of(rc_addr,
                                                              uct_rc_mlx5_ep_ext_address_t);
         ext_addr->flags                     = UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY;
