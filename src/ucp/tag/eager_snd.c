@@ -175,9 +175,6 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
                                  ucp_proto_am_zcopy_req_complete, 1);
 }
 
-ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self,
-                                     const ucp_request_param_t *param);
-
 const ucp_request_send_proto_t ucp_tag_eager_proto = {
     .contig_short            = ucp_tag_eager_contig_short,
     .bcopy_single            = ucp_tag_eager_bcopy_single,
