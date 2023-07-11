@@ -504,32 +504,6 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_reg_mr_params(uct_ib_md_t *md, void *address, size_t length,
-                                  const uct_md_mem_reg_params_t *params,
-                                  uint64_t access_flags, struct ibv_mr **mr_p)
-{
-    size_t dmabuf_offset;
-    ucs_status_t status;
-    uint64_t flags;
-    int dmabuf_fd;
-
-    flags         = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
-    dmabuf_fd     = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_fd,
-                                    DMABUF_FD, UCT_DMABUF_FD_INVALID);
-    dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
-                                    DMABUF_OFFSET, 0);
-
-    status = uct_ib_reg_mr(md->pd, address, length, access_flags, dmabuf_fd,
-                           dmabuf_offset, mr_p,
-                           flags & UCT_MD_MEM_FLAG_HIDE_ERRORS);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
-    return UCS_OK;
-}
-
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 {
     int ret;

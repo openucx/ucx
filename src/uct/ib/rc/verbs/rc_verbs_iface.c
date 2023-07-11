@@ -231,9 +231,8 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
     iface_attr->overhead   = 75e-9; /* Software overhead */
 
-    status                  = uct_ib_md_ops(md)->get_atomic_mr_id(md, &mr_id);
     iface_attr->ep_addr_len = (uct_rc_iface_flush_rkey_enabled(&iface->super) ||
-                               (status == UCS_OK)) ?
+                               (uct_ib_md_get_atomic_mr_id(md) != 0)) ?
                                       sizeof(uct_rc_verbs_ep_flush_addr_t) :
                                       sizeof(uct_rc_verbs_ep_addr_t);
 
