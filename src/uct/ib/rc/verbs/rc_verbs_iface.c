@@ -118,9 +118,10 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     ucs_log(log_lvl,
-            "send completion with error: %s [qpn 0x%x wrid 0x%lx"
-            "vendor_err 0x%x]\n%s", ibv_wc_status_str(wc->status), wc->qp_num,
-            wc->wr_id, wc->vendor_err, peer_info);
+            "send completion with error: %s [qpn 0x%x wrid 0x%lx "
+            "vendor_err 0x%x]\n%s",
+            ibv_wc_status_str(wc->status), wc->qp_num, wc->wr_id,
+            wc->vendor_err, peer_info);
 
 out:
     uct_rc_iface_arbiter_dispatch(iface);
@@ -211,6 +212,7 @@ static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
     ucs_status_t status;
 
     status = uct_rc_iface_query(&iface->super, iface_attr,
@@ -228,9 +230,10 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
     iface_attr->overhead   = 75e-9; /* Software overhead */
 
-    iface_attr->ep_addr_len = uct_rc_iface_flush_rkey_enabled(&iface->super) ?
-                              sizeof(uct_rc_verbs_ep_flush_addr_t) :
-                              sizeof(uct_rc_verbs_ep_addr_t);
+    iface_attr->ep_addr_len = (uct_rc_iface_flush_rkey_enabled(&iface->super) ||
+                               (uct_ib_md_get_atomic_mr_id(md) != 0)) ?
+                                      sizeof(uct_rc_verbs_ep_flush_addr_t) :
+                                      sizeof(uct_rc_verbs_ep_addr_t);
 
     return UCS_OK;
 }
