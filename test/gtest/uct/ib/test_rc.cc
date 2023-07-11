@@ -156,6 +156,13 @@ public:
         return uct_rc_iface_flush_rkey_enabled(rc_iface);
     }
 
+    int rc_iface_mr_id(entity *e)
+    {
+        uct_rc_iface_t *rc_iface = ucs_derived_of(e->iface(), uct_rc_iface_t);
+        uct_ib_md_t *md          = uct_ib_iface_md(&rc_iface->super);
+        return uct_ib_md_get_atomic_mr_id(md);
+    }
+
     static uct_iface_params_t iface_params()
     {
         uct_iface_params_t params = {};
@@ -199,7 +206,7 @@ UCS_TEST_P(test_rc_iface_address, size_no_flush_remote)
     map_size_t sizes = {
         {"rc_mlx5", {7, 1}},
         {"dc_mlx5", {0, 5}},
-        {"rc_verbs", {4, 0}},
+        {"rc_verbs", {7, 0}},
     };
     check_sizes(m_entity, sizes);
 }
@@ -207,10 +214,11 @@ UCS_TEST_P(test_rc_iface_address, size_no_flush_remote)
 UCS_TEST_P(test_rc_iface_address, size_flush_remote)
 {
     int flush_rkey_enabled = rc_iface_flush_rkey_enabled(m_entity_flush_rkey);
+    int mr_id              = rc_iface_mr_id(m_entity_flush_rkey);
     map_size_t sizes = {
         {"rc_mlx5", {flush_rkey_enabled ? 10 : 7, 1}},
         {"dc_mlx5", {0, flush_rkey_enabled ? 7 : 5}},
-        {"rc_verbs", {flush_rkey_enabled ? 7 : 4, 0}},
+        {"rc_verbs", {flush_rkey_enabled || (mr_id != 0) ? 7 : 4, 0}},
     };
     check_sizes(m_entity_flush_rkey, sizes);
 }

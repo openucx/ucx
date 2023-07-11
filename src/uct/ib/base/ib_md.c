@@ -493,9 +493,10 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     *mr_p = mr;
 
     /* to prevent clang dead code */
-    ucs_trace("%s(pd=%p addr=%p len=%zu fd=%d offset=%zu): mr=%p took %.3f ms",
-              title, pd, addr, length, dmabuf_fd, dmabuf_offset, mr,
-              ucs_time_to_msec(ucs_get_time() - start_time));
+    ucs_trace("%s(pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%lx): mr=%p "
+              "lkey=0x%x took %.3f ms",
+              title, pd, addr, length, dmabuf_fd, dmabuf_offset, access, mr,
+              mr->lkey, ucs_time_to_msec(ucs_get_time() - start_time));
     return UCS_OK;
 }
 

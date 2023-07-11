@@ -82,9 +82,10 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
 static inline ucs_status_t
 uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
                            size_t iovcnt, size_t iov_total_length,
-                           uint64_t remote_addr, uct_rkey_t rkey,
-                           uct_completion_t *comp, uct_rc_send_handler_t handler,
-                           uint16_t op_flags, int opcode)
+                           uint64_t remote_addr, uint32_t rkey,
+                           uct_completion_t *comp,
+                           uct_rc_send_handler_t handler, uint16_t op_flags,
+                           int opcode)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
@@ -588,9 +589,8 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 
     rc_addr->super.flags = 0;
     uct_ib_pack_uint24(rc_addr->super.qp_num, ep->qp->qp_num);
-
-    uct_ib_md_ops(md)->get_atomic_mr_id(md, &mr_id);
-    if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
+    mr_id = uct_ib_md_get_atomic_mr_id(md);
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super) || (mr_id != 0)) {
         rc_addr->super.flags  |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
         rc_addr->atomic_mr_id  = mr_id;
         rc_addr->flush_rkey_hi = md->flush_rkey >> 16;
