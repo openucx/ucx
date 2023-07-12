@@ -24,6 +24,8 @@
 #  - COV_OPT  : command line options for Coverity static checker
 #
 
+source $(dirname $0)/../buildlib/tools/common.sh
+
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda11.4"
@@ -108,34 +110,6 @@ log_warning() {
 log_error() {
 	msg=$1
 	test "x$RUNNING_IN_AZURE" = "xyes" && { azure_log_error "${msg}" ; set -x; } || echo "${msg}"
-}
-
-#
-# cleanup ucx
-#
-make_clean() {
-	rm -rf ${ucx_inst}
-	$MAKEP ${1:-clean}
-}
-
-#
-# Configure and build
-#   $1 - mode (devel|release)
-#
-build() {
-	mode=$1
-	shift
-
-	config_args="--prefix=$ucx_inst --without-java"
-	if [ "X$have_cuda" == "Xyes" ]
-	then
-		config_args+=" --with-iodemo-cuda"
-	fi
-
-	../contrib/configure-${mode} ${config_args} "$@"
-	make_clean
-	$MAKEP
-	$MAKEP install
 }
 
 #
@@ -359,23 +333,6 @@ get_non_rdma_ip_addr() {
 }
 
 #
-# Prepare build environment
-#
-prepare() {
-	echo " ==== Prepare ===="
-	env
-	cd ${WORKSPACE}
-	if [ -d build-test ]
-	then
-		chmod u+rwx build-test -R
-		rm -rf build-test
-	fi
-	./autogen.sh
-	mkdir -p build-test
-	cd build-test
-}
-
-#
 # Expands a CPU list such as "0-3,17" to "0 1 2 3 17" (each cpu in a new line)
 #
 expand_cpulist() {
@@ -419,12 +376,6 @@ run_loopback_app() {
 	pid=$!
 
 	wait ${pid} || true
-}
-
-step_server_port() {
-	# Cycle server_port between (server_port_min)..(server_port_max-1)
-	server_port=$((server_port + 1))
-	server_port=$((server_port >= server_port_max ? server_port_min : server_port))
 }
 
 run_client_server_app() {

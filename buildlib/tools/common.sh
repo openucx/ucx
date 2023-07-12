@@ -31,6 +31,52 @@ MAKEP="make V=1 -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
 
 #
+# Prepare build environment
+#
+prepare() {
+	echo " ==== Prepare ===="
+	env
+	cd ${WORKSPACE}
+	if [ -d build-test ]
+	then
+		chmod u+rwx build-test -R
+		rm -rf build-test
+	fi
+	./autogen.sh
+	mkdir -p build-test
+	cd build-test
+}
+
+#
+# Configure and build
+#   $1 - mode (devel|release)
+#
+build() {
+	mode=$1
+	shift
+
+	config_args="--prefix=$ucx_inst --without-java"
+	if [ "X$have_cuda" == "Xyes" ]
+	then
+		config_args+=" --with-iodemo-cuda"
+	fi
+
+	../contrib/configure-${mode} ${config_args} "$@"
+	make_clean
+	$MAKEP
+	$MAKEP install
+}
+
+#
+# Update global server port
+#
+step_server_port() {
+	# Cycle server_port between (server_port_min)..(server_port_max-1)
+	server_port=$((server_port + 1))
+	server_port=$((server_port >= server_port_max ? server_port_min : server_port))
+}
+
+#
 # cleanup ucx
 #
 make_clean() {
@@ -42,7 +88,7 @@ make_clean() {
 # Prepare build environment
 #
 prepare_build() {
-	echo " ==== Prepare ===="
+	echo " ==== Prepare Build ===="
 	env
 	cd ${WORKSPACE}
 	if [ -d ${ucx_build_dir} ]

@@ -74,16 +74,30 @@ uct_cma_iface_is_reachable(const uct_iface_h tl_iface,
                            const uct_iface_addr_t *tl_iface_addr)
 {
     ucs_cma_iface_ext_device_addr_t *iface_addr = (void*)tl_iface_addr;
+    struct iovec iov                            = {
+        .iov_base = &iov,
+        .iov_len  = sizeof(iov),
+    };
+    pid_t peer_pid;
 
     if (!uct_sm_iface_is_reachable(tl_iface, dev_addr, tl_iface_addr)) {
         return 0;
     }
 
     if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
-        return ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == iface_addr->pid_ns;
+        if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != iface_addr->pid_ns) {
+            return 0;
+        }
+    } else if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        return 0;
     }
 
-    return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID);
+    /* Confirm reachability by actually trying to read from the remote, as
+     * permissions are enforced before the remote address sanity checks.
+     */
+    peer_pid = iface_addr->super.id & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
+    return (process_vm_readv(peer_pid, &iov, 1, &iov, 1, 0) != -1) ||
+           (errno != EPERM);
 }
 
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
