@@ -1238,11 +1238,18 @@ UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
     ASSERT_EQ(num_lanes, max_lanes);
 
     for (int i = 0; i < num_lanes; ++i) {
+        UCS_TEST_MESSAGE << "sender lane[" << i
+                         << "] : " << get_bytes_sent(sender().ep(), i)
+                         << " bytes";
+        UCS_TEST_MESSAGE << "receiver lane[" << i
+                         << "] : " << get_bytes_sent(receiver().ep(), i)
+                         << " bytes";
+
         uint64_t bytes_sent = get_bytes_sent(sender().ep(), i) +
                               get_bytes_sent(receiver().ep(), i);
 
         /* Verify that each lane sent something */
-        ASSERT_GE(bytes_sent, 50000 / ucs::test_time_multiplier());
+        EXPECT_GE(bytes_sent, 50000 / ucs::test_time_multiplier());
     }
 }
 

@@ -36,7 +36,6 @@ typedef uint8_t                      ucp_rsc_index_t;
 typedef ucp_rsc_index_t              ucp_md_index_t;
 #define UCP_MAX_MDS                  ((UCP_MD_INDEX_BITS < UCP_MAX_RESOURCES) ? \
                                       UCP_MD_INDEX_BITS : UCP_MAX_RESOURCES)
-#define UCP_MAX_OP_MDS               4  /* maximal number of MDs per single op */
 UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 
