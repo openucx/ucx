@@ -58,8 +58,7 @@ ucp_md_map_t test_ucp_proto::get_md_map(ucs_memory_type_t mem_type)
         if ((md_attr->flags & UCT_MD_FLAG_REG) &&
             (md_attr->reg_mem_types & UCS_BIT(mem_type)) &&
             /* ucp_datatype_iter_mem_reg() always goes directly to registration cache */
-            (md_attr->cache_mem_types & UCS_BIT(mem_type)) &&
-            (ucs_popcount(md_map) < UCP_MAX_OP_MDS)) {
+            (md_attr->cache_mem_types & UCS_BIT(mem_type))) {
             md_map |= UCS_BIT(md_index);
         }
     }

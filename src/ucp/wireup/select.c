@@ -1403,13 +1403,6 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
     return size / t * 1e-5;
 }
 
-static int
-ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
-{
-    return context->config.ext.proto_enable ||
-           (ucs_popcount(md_map) < UCP_MAX_OP_MDS);
-}
-
 static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
                                      const ucp_wireup_select_info_t *sinfo,
                                      const ucp_address_entry_t *address)
@@ -1503,8 +1496,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     /* lookup for requested number of lanes or limit of MD map
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
-    while ((ucs_array_length(&sinfo_array) < bw_info->max_lanes) &&
-           ucp_wireup_is_md_map_count_valid(context, md_map)) {
+    while (ucs_array_length(&sinfo_array) < bw_info->max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
             sinfo  = ucs_array_append_fixed(select_info, &sinfo_array);
             status = ucp_wireup_select_transport(select_ctx, select_params,
@@ -2263,10 +2255,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                                           key->num_lanes);
     }
 
-    /* add to map first UCP_MAX_OP_MDS fastest MD's */
-    for (i = 0;
-         (key->rma_bw_lanes[i] != UCP_NULL_LANE) &&
-         (ucs_popcount(key->rma_bw_md_map) < UCP_MAX_OP_MDS); i++) {
+    for (i = 0; key->rma_bw_lanes[i] != UCP_NULL_LANE; i++) {
         lane = key->rma_bw_lanes[i];
         rsc_index = select_ctx->lane_descs[lane].rsc_index;
         md_index  = context->tl_rscs[rsc_index].md_index;
@@ -2279,17 +2268,13 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    if ((key->rkey_ptr_lane != UCP_NULL_LANE) &&
-        (ucs_popcount(key->rma_bw_md_map) < UCP_MAX_OP_MDS)) {
+    if (key->rkey_ptr_lane != UCP_NULL_LANE) {
         rsc_index            = select_ctx->lane_descs[key->rkey_ptr_lane].rsc_index;
         md_index             = context->tl_rscs[rsc_index].md_index;
         key->rma_bw_md_map  |= UCS_BIT(md_index);
     }
 
-    /* add to map first UCP_MAX_OP_MDS fastest MD's */
-    for (i = 0;
-         (key->rma_lanes[i] != UCP_NULL_LANE) &&
-         (ucs_popcount(key->rma_md_map) < UCP_MAX_OP_MDS); i++) {
+    for (i = 0; key->rma_lanes[i] != UCP_NULL_LANE; i++) {
         lane             = key->rma_lanes[i];
         rsc_index        = select_ctx->lane_descs[lane].rsc_index;
         md_index         = context->tl_rscs[rsc_index].md_index;
