@@ -1448,8 +1448,8 @@ UCS_TEST_SKIP_COND_P(test_max_lanes, 16_lanes_reconf, !cm_use_all_devices(),
     /* get configuration index for EP created through CM */
     listen_and_communicate(false, SEND_DIRECTION_C2S);
 
-    ASSERT_EQ(16, ucp_ep_num_lanes(sender().ep()));
-    ASSERT_EQ(16, ucp_ep_num_lanes(receiver().ep()));
+    ASSERT_EQ(16, (int)ucp_ep_num_lanes(sender().ep()));
+    ASSERT_EQ(16, (int)ucp_ep_num_lanes(receiver().ep()));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, ib, "ib")
