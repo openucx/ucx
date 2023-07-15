@@ -344,6 +344,8 @@ public:
                          UCP_DATATYPE_IOV,
                          UCP_DATATYPE_GENERIC});
 
+    void skip_no_am_lane_caps(uint64_t caps, const std::string &str);
+
 protected:
     virtual ucs_memory_type_t tx_memtype() const
     {
@@ -698,6 +700,22 @@ void test_ucp_am_nbx::test_datatypes(std::function<void()> test_f,
     }
 }
 
+void test_ucp_am_nbx::skip_no_am_lane_caps(uint64_t caps,
+                                           const std::string &reason)
+{
+    ucp_ep_config_key_t key  = ucp_ep_config(sender().ep())->key;
+    ucp_lane_index_t am_lane = key.am_lane;
+    if (am_lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("am lane is null");
+    }
+
+    uint64_t iface_caps = ucp_worker_iface_get_attr(
+            sender().worker(), key.lanes[am_lane].rsc_index)->cap.flags;
+    if (!ucs_test_all_flags(iface_caps, caps)) {
+        UCS_TEST_SKIP_R(reason);
+    }
+}
+
 
 UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
 {
@@ -879,30 +897,12 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 
 class test_ucp_am_nbx_reply_always : public test_ucp_am_nbx {
-public:
-    bool am_lane_has_caps(uint64_t caps);
-
 protected:
     virtual unsigned get_send_flag() const
     {
         return UCP_AM_SEND_FLAG_REPLY;
     }
 };
-
-bool test_ucp_am_nbx_reply_always::am_lane_has_caps(uint64_t caps)
-{
-    ucp_ep_config_key_t key  = ucp_ep_config(sender().ep())->key;
-    ucp_lane_index_t am_lane = key.am_lane;
-
-    if (am_lane == UCP_NULL_LANE) {
-        return false;
-    }
-
-    uct_iface_attr_t *iface_attr = ucp_worker_iface_get_attr(
-            sender().worker(), key.lanes[am_lane].rsc_index);
-
-    return ucs_test_all_flags(iface_attr->cap.flags, caps);
-}
 
 /* The following two tests, "multi_bcopy" and "multi_zcopy", check correctness
  * of AM API when using UCP_AM_SEND_FLAG_REPLY flag.
@@ -912,10 +912,7 @@ bool test_ucp_am_nbx_reply_always::am_lane_has_caps(uint64_t caps)
 UCS_TEST_P(test_ucp_am_nbx_reply_always, multi_bcopy, "ZCOPY_THRESH=inf",
            "RNDV_THRESH=inf")
 {
-    if (!am_lane_has_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
-        UCS_TEST_SKIP_R("am_bcopy is not supported");
-    }
-
+    skip_no_am_lane_caps(UCT_IFACE_FLAG_AM_BCOPY, "am_bcopy is not supported");
     size_t bcopy_fragment_size = fragment_size() - sizeof(ucp_am_reply_ftr_t);
     test_am_send_recv(bcopy_fragment_size + 1, 0);
 }
@@ -923,10 +920,7 @@ UCS_TEST_P(test_ucp_am_nbx_reply_always, multi_bcopy, "ZCOPY_THRESH=inf",
 UCS_TEST_P(test_ucp_am_nbx_reply_always, multi_zcopy, "ZCOPY_THRESH=1",
            "RNDV_THRESH=inf")
 {
-    if (!am_lane_has_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
-        UCS_TEST_SKIP_R("am_zcopy is not supported");
-    }
-
+    skip_no_am_lane_caps(UCT_IFACE_FLAG_AM_ZCOPY, "am_zcopy is not supported");
     size_t zcopy_fragment_size = ucp_ep_config(sender().ep())->am.max_zcopy -
                                  sizeof(ucp_am_hdr_t) -
                                  sizeof(ucp_am_reply_ftr_t);
@@ -1522,6 +1516,7 @@ UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
 
 UCS_TEST_P(test_ucp_am_nbx_dts, zcopy_send, "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 {
+    skip_no_am_lane_caps(UCT_IFACE_FLAG_AM_ZCOPY, "am_zcopy is not supported");
     test_datatypes([&]() {
         test_am(4 * UCS_KBYTE);
         test_am(64 * UCS_KBYTE);
