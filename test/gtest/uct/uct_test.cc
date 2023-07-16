@@ -830,10 +830,8 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
         params->mode.device.dev_name = resource.dev_name.c_str();
     }
 
-    params->field_mask |= UCT_IFACE_PARAM_FIELD_STATS_ROOT |
-                          UCT_IFACE_PARAM_FIELD_CPU_MASK;
+    params->field_mask |= UCT_IFACE_PARAM_FIELD_STATS_ROOT;
     params->stats_root  = ucs_stats_get_root();
-    UCS_CPU_ZERO(&params->cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
                            uct_worker_create, &m_async.m_async,
