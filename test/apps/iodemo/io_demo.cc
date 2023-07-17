@@ -28,7 +28,6 @@
 #include <set>
 
 #ifdef HAVE_CUDA
-#include <cuda.h>
 #include <cuda_runtime.h>
 #endif
 

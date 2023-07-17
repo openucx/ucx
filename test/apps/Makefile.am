@@ -80,7 +80,7 @@ test_cuda_hook_dynamic_CFLAGS   = $(BASE_CFLAGS)
 test_cuda_hook_dynamic_LDFLAGS  = $(CUDA_LDFLAGS)
 test_cuda_hook_dynamic_LDADD    = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
-                                  $(CUDA_LIBS)
+                                  $(CUDA_LIBS) $(CUDART_LIBS)
 
 noinst_PROGRAMS          += test_no_cuda_ctx
 test_no_cuda_ctx_SOURCES  = test_no_cuda_ctx.c
@@ -98,7 +98,7 @@ test_cuda_hook_static_CFLAGS    = $(BASE_CFLAGS)
 test_cuda_hook_static_LDFLAGS   = $(CUDA_LDFLAGS)
 test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
-                                  $(CUDA_STATIC_LIBS) -lcuda -lrt -ldl -lpthread
+                                  $(CUDART_STATIC_LIBS) $(CUDA_LIBS)
 endif
 
 endif
