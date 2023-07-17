@@ -227,7 +227,7 @@ static uct_ib_md_ops_entry_t *uct_ib_ops[] = {
     &UCT_IB_MD_OPS_NAME(verbs)
 };
 
-typedef struct uct_ib_verbs_mem {
+typedef struct {
     uct_ib_mem_t        super;
     uct_ib_mr_t         mrs[];
 } uct_ib_verbs_mem_t;
@@ -620,19 +620,6 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, uint32_t flags)
     memh->flags         = flags;
 }
 
-uct_ib_mem_t *uct_ib_memh_alloc(uct_ib_md_t *md, uint32_t flags)
-{
-    uct_ib_mem_t *memh;
-
-    memh = ucs_calloc(1, md->memh_struct_size, "ib_memh");
-    if (memh == NULL) {
-        return NULL;
-    }
-
-    uct_ib_mem_init(memh, flags);
-    return memh;
-}
-
 static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
                                        size_t length)
 {
@@ -757,6 +744,7 @@ uct_ib_mem_reg_params_to_internal(const uct_md_mem_reg_params_t *params,
 
 ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
                             const uct_md_mem_reg_params_t *params,
+                            size_t memh_base_size, size_t mr_size,
                             uct_mem_h *memh_p)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
@@ -766,11 +754,9 @@ ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
     uct_ib_mem_reg_params_to_internal(params, &reg_params);
 
-    memh = uct_ib_memh_alloc(md, 0);
-    if (memh == NULL) {
-        uct_ib_md_log_mem_reg_error(md, reg_params.flags,
-                                    "failed to allocate memory handle");
-        return UCS_ERR_NO_MEMORY;
+    status = uct_ib_memh_new(md, length, 0, memh_base_size, mr_size, &memh);
+    if (status != UCS_OK) {
+        goto out;
     }
 
     status = uct_ib_mem_reg_internal(uct_md, address, length, &reg_params,
@@ -784,6 +770,7 @@ ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
 err_memh_free:
     ucs_free(memh);
+out:
     return status;
 }
 
@@ -1462,21 +1449,9 @@ out:
     return status;
 }
 
-
-static void uct_ib_md_init_memh_size(uct_ib_md_t *md, size_t memh_base_size,
-                                     size_t mr_size)
-{
-    int num_mrs = md->relaxed_order ?
-                  2 /* UCT_IB_MR_DEFAULT and UCT_IB_MR_STRICT_ORDER */ :
-                  1 /* UCT_IB_MR_DEFAULT */;
-
-    md->memh_struct_size = memh_base_size + (mr_size * num_mrs);
-}
-
 void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
                                    const uct_ib_md_config_t *md_config,
-                                   int is_supported,
-                                   size_t memh_base_size, size_t mr_size)
+                                   int is_supported)
 {
     int have_relaxed_order = (IBV_ACCESS_RELAXED_ORDERING != 0) && is_supported;
 
@@ -1495,9 +1470,6 @@ void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
         md->relaxed_order = have_relaxed_order &&
                             ucs_cpu_prefer_relaxed_order();
     }
-
-    /* Reset the memory handler size */
-    uct_ib_md_init_memh_size(md, memh_base_size, mr_size);
 
     ucs_debug("%s: relaxed order memory access is %sabled",
               uct_ib_device_name(&md->dev), md->relaxed_order ? "en" : "dis");
@@ -1781,9 +1753,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     uct_ib_md_ece_check(md);
-    uct_ib_md_parse_relaxed_order(md, md_config, 0,
-                                  sizeof(uct_ib_verbs_mem_t),
-                                  sizeof(uct_ib_mr_t));
+    uct_ib_md_parse_relaxed_order(md, md_config, 0);
 
     *p_md = md;
     return UCS_OK;
