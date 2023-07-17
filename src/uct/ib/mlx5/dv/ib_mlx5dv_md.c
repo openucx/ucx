@@ -517,11 +517,13 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
         return status;
     }
 
-    ucs_debug("KSM registered memory %p..%p offset 0x%x%s on %s rkey 0x%x",
+    ucs_debug("KSM registered memory %p..%p lkey 0x%x offset 0x%x%s on %s rkey "
+              "0x%x",
               mr->super.ib->addr,
               UCS_PTR_BYTE_OFFSET(mr->super.ib->addr, mr->super.ib->length),
-              uct_ib_md_atomic_offset(mr_id), is_atomic ? " atomic" : "",
-              uct_ib_device_name(&md->super.dev), memh->super.atomic_rkey);
+              mr->super.ib->lkey, uct_ib_md_atomic_offset(mr_id),
+              is_atomic ? " atomic" : "", uct_ib_device_name(&md->super.dev),
+              memh->super.atomic_rkey);
     return status;
 }
 

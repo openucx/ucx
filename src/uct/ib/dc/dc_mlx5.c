@@ -944,7 +944,7 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
         addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
     }
 
-    uct_ib_md_ops(md)->get_atomic_mr_id(md, &addr->super.atomic_mr_id);
+    addr->super.atomic_mr_id = uct_ib_md_get_atomic_mr_id(md);
     if (uct_rc_iface_flush_rkey_enabled(&iface->super.super)) {
         addr->flush_rkey_hi = md->flush_rkey >> 16;
         addr->super.flags  |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;

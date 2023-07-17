@@ -550,6 +550,17 @@ uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
     return (flush_rkey & UCT_IB_MD_INVALID_FLUSH_RKEY) == 0;
 }
 
+static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
+{
+    uint8_t mr_id;
+
+    if (uct_ib_md_ops(md)->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
+        return mr_id;
+    }
+
+    return 0;
+}
+
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p);
 
