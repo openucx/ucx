@@ -239,7 +239,7 @@ gtest_CPPFLAGS += \
 gtest_LDFLAGS += \
 	$(CUDA_LDFLAGS)
 gtest_LDADD += \
-	$(CUDA_LIBS) \
+	$(CUDA_LIBS) $(CUDART_LIBS) $(NVML_LIBS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
 endif
 

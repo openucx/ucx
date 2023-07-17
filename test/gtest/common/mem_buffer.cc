@@ -17,8 +17,9 @@
 #include <common/test_helpers.h>
 
 #if HAVE_CUDA
-#  include <cuda.h>
-#  include <cuda_runtime.h>
+#include <cuda_runtime.h>
+#include <nvml.h>
+
 
 #define CUDA_CALL(_code, _details) \
     do { \
@@ -30,10 +31,22 @@
         } \
     } while (0)
 
-#endif
 
-#if HAVE_NVML_H
-#include <nvml.h>
+#define NVML_CALL(_code) \
+    ({ \
+        ucs_status_t _status = UCS_OK; \
+        do { \
+            nvmlReturn_t err = _code; \
+            if (err != NVML_SUCCESS) { \
+                UCS_TEST_MESSAGE << #_code \
+                                 << " failed: " << nvmlErrorString(err) \
+                                 << ", error code: " << err; \
+                _status = UCS_ERR_IO_ERROR; \
+            } \
+        } while (0); \
+        _status; \
+    })
+
 #endif
 
 #if HAVE_ROCM
@@ -155,43 +168,29 @@ size_t mem_buffer::get_bar1_free_size()
      * done on the device 0. The same assumption is followed here. */
     size_t available_size = SIZE_MAX;
 
-#if HAVE_NVML_H
-    nvmlReturn_t ret;
+#if HAVE_CUDA
     nvmlDevice_t device;
     nvmlBAR1Memory_t bar1mem;
 
-    ret = nvmlInit_v2();
-    if (ret != NVML_SUCCESS) {
-        UCS_TEST_MESSAGE << "nvmlInit_v2 failed: " << nvmlErrorString(ret)
-                         << ", error code: " << ret;
+    if (NVML_CALL(nvmlInit_v2()) != UCS_OK) {
         return available_size;
     }
 
-    ret = nvmlDeviceGetHandleByIndex(0, &device);
-    if (ret != NVML_SUCCESS) {
+    if (NVML_CALL(nvmlDeviceGetHandleByIndex(0, &device)) != UCS_OK) {
         /* For whatever reason we cannot open device handle.
          * As a result let's assume there is no limit on the size
          * and in the worse case scenario gtest will fail in runtime */
-        UCS_TEST_MESSAGE << "nvmlDeviceGetHandleByIndex failed: "
-                         << nvmlErrorString(ret) << ", error code: " << ret;
         return available_size;
     }
 
-    ret = nvmlDeviceGetBAR1MemoryInfo(device, &bar1mem);
-    if (ret != NVML_SUCCESS) {
+    if (NVML_CALL(nvmlDeviceGetBAR1MemoryInfo(device, &bar1mem)) != UCS_OK) {
         /* Similarly let's assume there is no limit on the size */
-        UCS_TEST_MESSAGE << "nvmlDeviceGetBAR1MemoryInfo failed: "
-                         << nvmlErrorString(ret) << ", error code: " << ret;
         return available_size;
     }
 
     available_size = (size_t)bar1mem.bar1Free;
 
-    ret = nvmlShutdown();
-    if (ret != NVML_SUCCESS) {
-        UCS_TEST_MESSAGE << "nvmlShutdown failed: " << nvmlErrorString(ret)
-                         << ", error code: " << ret;
-    }
+    NVML_CALL(nvmlShutdown());
 #endif
 
     return available_size;
