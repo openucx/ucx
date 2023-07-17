@@ -250,6 +250,9 @@ typedef struct {
     struct mlx5dv_devx_obj  *indirect_dvmr;
     struct mlx5dv_devx_umem *umem;
     struct mlx5dv_devx_obj  *cross_mr;
+    uint32_t                atomic_rkey;
+    uint32_t                indirect_rkey;
+    uint32_t                exported_lkey;
     uct_ib_mlx5_devx_mr_t   mrs[];
 } uct_ib_mlx5_devx_mem_t;
 
@@ -640,7 +643,6 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
     uint64_t           filed_boundary;
 } UCS_S_PACKED;
 
-ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *md, uint8_t *mr_id);
 
 ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
                                               uct_ib_mlx5_qp_t *txwq);
