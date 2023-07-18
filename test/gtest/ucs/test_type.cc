@@ -118,9 +118,12 @@ UCS_TEST_F(test_type, pack_float) {
     EXPECT_TRUE(isnan(unpacked));
 
     /* Below min -> min */
-    EXPECT_EQ(UCS_FP8_UNPACK(TEST_LATENCY,
-                             UCS_FP8_PACK(TEST_LATENCY, UCS_BIT(7))),
-              UCS_FP8_UNPACK(TEST_LATENCY, UCS_FP8_PACK(TEST_LATENCY, 15)));
+    for (uint64_t min_val = UCS_BIT(0); min_val <= UCS_BIT(7); min_val <<= 1) {
+        UCS_TEST_MESSAGE << " Pack/unpack " << min_val;
+        EXPECT_EQ(
+         UCS_FP8_UNPACK(TEST_LATENCY, UCS_FP8_PACK(TEST_LATENCY, UCS_BIT(7))),
+         UCS_FP8_UNPACK(TEST_LATENCY, UCS_FP8_PACK(TEST_LATENCY, min_val)));
+    }
 
     /* Precision test throughout the whole range */
     for (std::vector<double>::const_iterator it = values.begin();
