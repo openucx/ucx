@@ -679,20 +679,6 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_str       = NULL
 };
 
-static int uct_ib_mlx5_has_roce_port(uct_ib_device_t *dev)
-{
-    int port_num;
-
-    for (port_num = dev->first_port;
-         port_num < dev->first_port + dev->num_ports; port_num++) {
-        if (uct_ib_device_is_port_roce(dev, port_num)) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                        const uct_ib_md_config_t *md_config,
                                        void *cap)
@@ -703,11 +689,6 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     const void *odp_cap;
     const char *reason;
     uint8_t version;
-
-    if (uct_ib_mlx5_has_roce_port(&md->super.dev)) {
-        reason = "the port is ROCE";
-        goto no_odp;
-    }
 
     if (IBV_ACCESS_ON_DEMAND == 0) {
         reason = "IBV_ACCESS_ON_DEMAND is not supported";
