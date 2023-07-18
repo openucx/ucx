@@ -2324,6 +2324,52 @@ void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
                             "counters/ep_failures");
 }
 
+static void ucp_worker_set_max_am_header(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+    uct_iface_attr_t *if_attr;
+    ucp_rsc_index_t iface_id;
+    size_t max_am_header, max_rts_size, max_ucp_header, max_uct_fragment;
+
+    if (!(context->config.features & UCP_FEATURE_AM)) {
+        worker->max_am_header = 0ul;
+        return;
+    }
+
+    max_am_header  = SIZE_MAX;
+    max_rts_size   = sizeof(ucp_rndv_rts_hdr_t) +
+                     ucp_rkey_packed_size(context, UCS_MASK(context->num_mds),
+                                          UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+    max_ucp_header = ucs_max(max_rts_size, UCP_AM_FIRST_FRAG_META_LEN);
+
+    /* Make sure maximal AM header can fit into one bcopy fragment
+     * together with RTS or first eager header (whatever is bigger)
+     */
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        if_attr = &worker->ifaces[iface_id]->attr;
+
+        /* UCT_IFACE_FLAG_AM_BCOPY is required by UCP AM feature, therefore
+         * at least one interface should support it.
+         * Make sure that except user header single UCT fragment can fit
+         * first fragment header and footer and at least 1 byte of data. It is
+         * needed to correctly use generic AM based multi-fragment protocols,
+         * which expect some amount of payload to be packed to the first
+         * fragment.
+         * TODO: fix generic AM based multi-fragment protocols, so that this
+         * trick is not needed.
+         */
+        if (if_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+            max_uct_fragment = ucs_max(if_attr->cap.am.max_bcopy,
+                                       max_ucp_header - 1) -
+                               max_ucp_header - 1;
+            max_am_header    = ucs_min(max_am_header, max_uct_fragment);
+        }
+    }
+
+    worker->max_am_header = (max_am_header != SIZE_MAX) ?
+                            ucs_min(max_am_header, UINT32_MAX) : 0ul;
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -2517,6 +2563,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Warn unused cached uct configuration */
     ucp_warn_unused_uct_config(context);
+
+    ucp_worker_set_max_am_header(worker);
 
     ucp_worker_create_vfs(context, worker);
 
@@ -2854,7 +2902,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     }
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER) {
-        attr->max_am_header = ucp_am_max_header_size(worker);
+        attr->max_am_header = worker->max_am_header;
     }
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_NAME) {
