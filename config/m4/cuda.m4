@@ -24,17 +24,15 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          CUDA_CPPFLAGS=""
          CUDA_LDFLAGS=""
          CUDA_LIBS=""
-         CUDA_STATIC_LIBS=""
+         CUDART_LIBS=""
+         CUDART_STATIC_LIBS=""
+         NVML_LIBS=""
 
          AS_IF([test ! -z "$with_cuda" -a "x$with_cuda" != "xyes" -a "x$with_cuda" != "xguess"],
                [ucx_check_cuda_dir="$with_cuda"
                 AS_IF([test -d "$with_cuda/lib64"], [libsuff="64"], [libsuff=""])
                 ucx_check_cuda_libdir="$with_cuda/lib$libsuff"
                 CUDA_CPPFLAGS="-I$with_cuda/include"
-                CUDA_LDFLAGS="-L$ucx_check_cuda_libdir -L$ucx_check_cuda_libdir/stubs"])
-
-         AS_IF([test ! -z "$with_cuda_libdir" -a "x$with_cuda_libdir" != "xyes"],
-               [ucx_check_cuda_libdir="$with_cuda_libdir"
                 CUDA_LDFLAGS="-L$ucx_check_cuda_libdir -L$ucx_check_cuda_libdir/stubs"])
 
          CPPFLAGS="$CPPFLAGS $CUDA_CPPFLAGS"
@@ -50,7 +48,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                              [CUDA_LIBS="$CUDA_LIBS -lcuda"], [cuda_happy="no"])])
          AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],
-                             [CUDA_LIBS="$CUDA_LIBS -lcudart"], [cuda_happy="no"])])
+                             [CUDART_LIBS="$CUDART_LIBS -lcudart"], [cuda_happy="no"])])
 
          # Check nvml header files
          AS_IF([test "x$cuda_happy" = "xyes"],
@@ -63,18 +61,16 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          # Check nvml library
          AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_CHECK_LIB([nvidia-ml], [nvmlInit],
-                             [CUDA_LIBS="$CUDA_LIBS -lnvidia-ml"],
+                             [NVML_LIBS="$NVML_LIBS -lnvidia-ml"],
                              [AS_IF([test "x$with_cuda" != "xguess"],
                                     [AC_MSG_ERROR([libnvidia-ml not found. Install appropriate nvidia-driver package])])
                               cuda_happy="no"])])
-
-         LDFLAGS="$save_LDFLAGS"
 
          # Check for cuda static library
          have_cuda_static="no"
          AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_CHECK_LIB([cudart_static], [cudaGetDeviceCount],
-                             [CUDA_STATIC_LIBS="$CUDA_STATIC_LIBS -lcudart_static"
+                             [CUDART_STATIC_LIBS="$CUDART_STATIC_LIBS -lcudart_static -lrt -ldl -lpthread"
                               have_cuda_static="yes"],
                              [], [-ldl -lrt -lpthread])])
 
@@ -86,7 +82,9 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                [AC_SUBST([CUDA_CPPFLAGS], ["$CUDA_CPPFLAGS"])
                 AC_SUBST([CUDA_LDFLAGS], ["$CUDA_LDFLAGS"])
                 AC_SUBST([CUDA_LIBS], ["$CUDA_LIBS"])
-                AC_SUBST([CUDA_STATIC_LIBS], ["$CUDA_STATIC_LIBS"])
+                AC_SUBST([CUDART_LIBS], ["$CUDART_LIBS"])
+                AC_SUBST([NVML_LIBS], ["$NVML_LIBS"])
+                AC_SUBST([CUDART_STATIC_LIBS], ["$CUDART_STATIC_LIBS"])
                 AC_DEFINE([HAVE_CUDA], 1, [Enable CUDA support])],
                [AS_IF([test "x$with_cuda" != "xguess"],
                       [AC_MSG_ERROR([CUDA support is requested but cuda packages cannot be found])],
