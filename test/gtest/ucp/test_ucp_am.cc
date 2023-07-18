@@ -776,6 +776,19 @@ UCS_TEST_P(test_ucp_am_nbx, max_am_header)
     EXPECT_LT(max_am_hdr(), min_am_bcopy);
 }
 
+#if ENABLE_PARAMS_CHECK
+UCS_TEST_P(test_ucp_am_nbx, am_header_error)
+{
+    scoped_log_handler wrap_err(wrap_errors_logger);
+
+    ucp_request_param_t param;
+    param.op_attr_mask    = 0ul;
+    ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
+                                            max_am_hdr() + 1, NULL, 0, &param);
+    EXPECT_EQ(UCS_PTR_STATUS(sptr), UCS_ERR_INVALID_PARAM);
+}
+#endif
+
 UCS_TEST_P(test_ucp_am_nbx, zero_send)
 {
     test_am_send_recv(0, max_am_hdr());
