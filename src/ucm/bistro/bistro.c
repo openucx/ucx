@@ -50,12 +50,18 @@ static ucs_status_t ucm_bistro_protect(void *addr, size_t len, int prot)
 
 void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes)
 {
-    uint32_t value;
+    uint16_t value16;
+    uint32_t value32;
 
-    UCS_STATIC_ASSERT(sizeof(*bytes) <= sizeof(value));
-    memcpy(&value, dst, sizeof(value));
-    memcpy(&value, bytes, sizeof(*bytes));
-    (void)ucs_atomic_swap32(dst, value);
+    UCS_STATIC_ASSERT((sizeof(*bytes) == 2) || (sizeof(*bytes) == 4));
+
+    if (sizeof(*bytes) == 2) {
+        memcpy(&value16, bytes, sizeof(*bytes));
+        (void)ucs_atomic_swap16(dst, value16);
+    } else {
+        memcpy(&value32, bytes, sizeof(*bytes));
+        (void)ucs_atomic_swap32(dst, value32);
+    }
 }
 
 ucs_status_t
