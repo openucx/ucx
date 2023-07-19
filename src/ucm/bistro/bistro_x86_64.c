@@ -59,13 +59,10 @@ typedef struct {
 } UCS_S_PACKED ucm_bistro_cmp_xlt_t;
 
 typedef struct {
-    uint8_t jmp_rel[2];
-    uint8_t jmp_out[2];
-    struct {
-        uint8_t  push_imm;
-        uint32_t value;
-    } UCS_S_PACKED hi, lo;
-    uint8_t        ret;
+    uint8_t                   jmp_rel[2];
+    uint8_t                   jmp_out[2];
+    ucm_bistro_jmp_indirect_t jmp_rip;
+    uint64_t                  addr;
 } UCS_S_PACKED ucm_bistro_jcc_xlt_t;
 
 
@@ -135,10 +132,8 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
     };
     ucm_bistro_jcc_xlt_t jcc = {
         .jmp_rel = {0x00, 0x02},
-        .jmp_out = {0xeb, 0x0b},
-        .hi      = {0x68, 0},
-        .lo      = {0x68, 0},
-        .ret     = 0xc3
+        .jmp_out = {0xeb, 0x0e},
+        .jmp_rip = {0xff, 0x25, 0}
     };
     uint8_t rex, opcode, modrm, mod;
     size_t dst_length;
@@ -226,16 +221,14 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
          * to:
          *        jCC L1
          *    L1: jmp L2        ; condition 'CC' did not hold
-         *        push $addrhi
-         *        push $addrlo
-         *        ret           ; 64-bit jump to destination
+         *        jmp *(%rip)
+         *   .long $addr          ; 64-bit jump to destination
          *    L2:               ; continue execution
          */
         disp8          = *ucs_serialize_next(&ctx->src_p, const int8_t);
         jmpdest        = (uintptr_t)UCS_PTR_BYTE_OFFSET(ctx->src_p, disp8);
         jcc.jmp_rel[0] = opcode; /* keep original jump condition */
-        jcc.hi.value   = jmpdest >> 32;
-        jcc.lo.value   = jmpdest & UCS_MASK(32);
+        jcc.addr       = jmpdest;
         copy_src       = &jcc;
         dst_length     = sizeof(jcc);
         /* Prevent patching past jump target */
