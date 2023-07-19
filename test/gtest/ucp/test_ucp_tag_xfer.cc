@@ -1237,19 +1237,18 @@ UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
     ASSERT_EQ(ucp_ep_num_lanes(receiver().ep()), num_lanes);
     ASSERT_EQ(num_lanes, max_lanes);
 
-    for (int i = 0; i < num_lanes; ++i) {
-        UCS_TEST_MESSAGE << "sender lane[" << i
-                         << "] : " << get_bytes_sent(sender().ep(), i)
-                         << " bytes";
-        UCS_TEST_MESSAGE << "receiver lane[" << i
-                         << "] : " << get_bytes_sent(receiver().ep(), i)
-                         << " bytes";
+    for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+        size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
+        size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
+        UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
+                         << "sender " << sender_tx << " receiver " << sender_tx;
 
-        uint64_t bytes_sent = get_bytes_sent(sender().ep(), i) +
-                              get_bytes_sent(receiver().ep(), i);
-
-        /* Verify that each lane sent something */
-        EXPECT_GE(bytes_sent, 50000 / ucs::test_time_multiplier());
+        /* Verify that each lane sent something, except the active message lane
+           that could be used only for control messages */
+        if (lane != ucp_ep_get_am_lane(sender().ep())) {
+            EXPECT_GE(sender_tx + receiver_tx,
+                      50000 / ucs::test_time_multiplier());
+        }
     }
 }
 
