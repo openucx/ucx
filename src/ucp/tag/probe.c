@@ -29,8 +29,8 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
                                     return NULL);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64" remove=%d", tag, tag_mask,
-                  rem);
+    ucs_trace_poll("probe_nb tag %"PRIx64"/%"PRIx64" remove=%d", tag, tag_mask,
+                   rem);
 
     rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 0, "probe");
     if (rdesc != NULL) {
@@ -61,6 +61,11 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
         if (rem) {
              ucp_tag_unexp_remove(rdesc);
         }
+
+        ucs_trace_req(
+         "probe_nb tag %"PRIx64"/%"PRIx64" sender tag %"PRIx64" length %zi %s",
+         tag, tag_mask, info->sender_tag, info->length,
+         (rem ? "desc removed" : ""));
     }
 
 out:
