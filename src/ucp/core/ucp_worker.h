@@ -316,6 +316,9 @@ typedef struct ucp_worker {
     ucp_tag_match_t                  tm;                  /* Tag-matching queues and offload info */
     ucp_am_info_t                    am;                  /* Array of AM callbacks and their data */
     uint64_t                         am_message_id;       /* For matching long AMs */
+    size_t                           max_am_header;       /* Maximum allowed
+                                                             header size used by
+                                                             UCP AM */
     ucp_ep_h                         mem_type_ep[UCS_MEMORY_TYPE_LAST]; /* Memory type EPs */
 
     UCS_STATS_NODE_DECLARE(stats)
