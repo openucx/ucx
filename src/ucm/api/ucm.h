@@ -218,6 +218,7 @@ typedef struct ucm_global_config {
     size_t               alloc_alignment;             /* Alignment for memory allocations */
     int                  dlopen_process_rpath;        /* Process RPATH section in dlopen hook */
     int                  module_unload_prevent_mode;  /* Module unload prevention mode */
+    int                  bistro_force_far_jump;       /* Force far jump with bistro pathcing */
 } ucm_global_config_t;
 
 

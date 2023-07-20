@@ -334,17 +334,17 @@ ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
 
     jmp_base = UCS_PTR_BYTE_OFFSET(func_ptr, sizeof(jmp_near));
     jmp_disp = UCS_PTR_BYTE_DIFF(jmp_base, hook);
-    if (labs(jmp_disp) < INT32_MAX) {
+    if (ucm_global_opts.bistro_force_far_jump || (labs(jmp_disp) > INT32_MAX)) {
+        jmp_rax.ptr = hook;
+        patch       = &jmp_rax;
+        patch_len   = sizeof(jmp_rax);
+    } else {
         /* if 32-bit near jump is possible, use it, since it's a short 5-byte
          * instruction which reduces the chances of racing with other thread
          */
         jmp_near.disp = jmp_disp;
         patch         = &jmp_near;
         patch_len     = sizeof(jmp_near);
-    } else {
-        jmp_rax.ptr = hook;
-        patch       = &jmp_rax;
-        patch_len   = sizeof(jmp_rax);
     }
 
     if (orig_func_p != NULL) {
