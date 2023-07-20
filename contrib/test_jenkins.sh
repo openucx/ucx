@@ -1147,14 +1147,6 @@ run_gtest() {
 	export GTEST_UCT_TCP_FASTEST_DEV=1
 	export OMP_NUM_THREADS=4
 
-	GTEST_EXTRA_ARGS=""
-	if [ "$JENKINS_TEST_PERF" == 1 ]
-	then
-		# Check performance with 10 retries and 2 seconds interval
-		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
-	fi
-	export GTEST_EXTRA_ARGS
-
 	# Run specific tests
 	do_distributed_task 1 4 run_malloc_hook_gtest
 	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
@@ -1166,9 +1158,19 @@ run_gtest() {
 	# Report TOP-20 longest test at the end of testing
 	export GTEST_REPORT_LONGEST_TESTS=20
 
+	GTEST_EXTRA_ARGS=""
+	if [ "$JENKINS_TEST_PERF" == 1 ]
+	then
+		# Check performance with 10 retries and 2 seconds interval
+		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
+	fi
+	export GTEST_EXTRA_ARGS
+
 	# Run all tests
 	echo "==== Running unit tests, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT make -C test/gtest test
+
+	unset GTEST_EXTRA_ARGS
 
 	# Run valgrind tests
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
@@ -1191,7 +1193,6 @@ run_gtest() {
 	unset GTEST_REPORT_LONGEST_TESTS
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_SHARD_INDEX
-	unset GTEST_EXTRA_ARGS
 	unset OMP_NUM_THREADS
 	unset GTEST_UCT_TCP_FASTEST_DEV
 	unset GTEST_SHUFFLE
