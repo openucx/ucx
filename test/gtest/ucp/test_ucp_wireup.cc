@@ -470,7 +470,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_max,
                               UCP_ADDRESS_PACK_FLAGS_ALL, addr_v,
-                              m_lanes2remote, &size, &buffer);
+                              m_lanes2remote, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -524,8 +524,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
 
     status = ucp_address_pack(sender().worker(), sender().ep(),
                               &ucp_tl_bitmap_max, UCP_ADDRESS_PACK_FLAGS_ALL,
-                              UCP_OBJECT_VERSION_V1, m_lanes2remote, &size,
-                              &buffer);
+                              UCP_OBJECT_VERSION_V1, m_lanes2remote, UINT_MAX,
+                              &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
 
@@ -551,7 +551,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_min,
                               UCP_ADDRESS_PACK_FLAGS_ALL, addr_v,
-                              m_lanes2remote, &size, &buffer);
+                              m_lanes2remote, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -1772,7 +1772,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
 
     status = ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
                               UCP_ADDRESS_PACK_FLAGS_ALL, UCP_OBJECT_VERSION_V2,
-                              NULL, &size, &buffer);
+                              NULL, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
 

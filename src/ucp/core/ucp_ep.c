@@ -698,7 +698,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
 
         status = ucp_address_pack(worker, NULL, &mem_access_tls, pack_flags,
                                   context->config.ext.worker_addr_version, NULL,
-                                  &address_length, &address_buffer);
+                                  UINT_MAX, &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }

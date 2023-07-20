@@ -219,6 +219,7 @@ ucp_address_length(ucp_worker_h worker, const ucp_ep_config_key_t *key,
  *                            will be the local lane index. Otherwise, specifies
  *                            which lane index should be packed in the ep address
  *                            for each local lane.
+ * @param [in]  max_num_paths Limits number of paths to pack per device.
  * @param [out] size_p        Filled with buffer size.
  * @param [out] buffer_p      Filled with pointer to packed buffer. It should be
  *                            released by ucs_free().
@@ -228,6 +229,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
                               unsigned pack_flags,
                               ucp_object_version_t addr_version,
                               const ucp_lane_index_t *lanes2remote,
+                              unsigned max_num_paths,
                               size_t *size_p, void **buffer_p);
 
 
