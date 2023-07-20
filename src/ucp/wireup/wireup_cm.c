@@ -188,7 +188,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
      * perspective. */
     status = ucp_address_pack(worker, NULL, tl_bitmap, addr_pack_flags,
                               context->config.ext.worker_addr_version, NULL,
-                              &ucp_addr_size, &ucp_addr);
+                              UINT_MAX, &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out;
     }
@@ -318,7 +318,7 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
                          ucs_log_level_t log_level,
                          ucp_object_version_t sa_data_version,
                          void **data_buf_p, size_t *data_buf_length_p,
-                         unsigned pack_flags)
+                         unsigned pack_flags, unsigned max_num_paths)
 {
     ucp_worker_h worker   = ep->worker;
     ucp_context_h context = worker->context;
@@ -335,7 +335,7 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
      * uct_cm_remote_data_t */
     status = ucp_address_pack(worker, ep, tl_bitmap, pack_flags,
                               context->config.ext.worker_addr_version, NULL,
-                              &ucp_addr_size, &ucp_addr);
+                              max_num_paths, &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto err;
     }
@@ -520,7 +520,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
         status = ucp_cm_ep_priv_data_pack(
                 ep, &tl_bitmap, fallback_log_level,
                 context->config.ext.sa_client_min_hdr_version, &priv_data,
-                &priv_data_length, ep_pack_flags);
+                &priv_data_length, ep_pack_flags, UINT_MAX);
         if (status == UCS_OK) {
             break;
         } else if (status != UCS_ERR_BUFFER_TOO_SMALL) {
@@ -1312,7 +1312,8 @@ static ucs_status_t
 ucp_ep_server_init_priv_data(ucp_ep_h ep, const char *dev_name,
                              const void **data_buf_p, size_t *data_buf_size_p,
                              unsigned ep_init_flags,
-                             ucp_object_version_t sa_data_version)
+                             ucp_object_version_t sa_data_version,
+                             unsigned max_num_paths)
 {
     ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     ucp_worker_h worker           = ep->worker;
@@ -1338,7 +1339,8 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep, const char *dev_name,
 
     status = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, UCS_LOG_LEVEL_ERROR,
                                       sa_data_version, (void**)data_buf_p,
-                                      data_buf_size_p, ep_pack_flags);
+                                      data_buf_size_p, ep_pack_flags,
+                                      max_num_paths);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1407,10 +1409,12 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
                               const ucp_unpacked_address_t *remote_address,
                               const unsigned *addr_indices)
 {
-    ucp_worker_h worker   = ep->worker;
-    ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
+    ucp_worker_h worker    = ep->worker;
+    ucp_lane_index_t lane  = ucp_ep_get_cm_lane(ep);
+    unsigned max_num_paths = 0;
     ucp_rsc_index_t dst_rsc_indices[UCP_MAX_LANES];
     uct_ep_params_t uct_ep_params;
+    const ucp_address_entry_t *ae;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
@@ -1419,6 +1423,15 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
     ucp_wireup_get_dst_rsc_indices(ep, &ucp_ep_config(ep)->key,
                                    remote_address, addr_indices,
                                    dst_rsc_indices);
+
+    ucp_unpacked_address_for_each(ae, remote_address) {
+        max_num_paths = ucs_max(max_num_paths, ae->dev_num_paths);
+    }
+
+    /* Address should not be empty and contain transport addresses of a single
+     * device.
+     */
+    ucs_assert(max_num_paths > 0);
 
     /* TODO: split CM and wireup lanes */
     status = ucp_wireup_ep_create(ep, dst_rsc_indices, &uct_ep);
@@ -1454,7 +1467,8 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
     status = ucp_ep_server_init_priv_data(ep, dev_name,
                                           &uct_ep_params.private_data,
                                           &uct_ep_params.private_data_length,
-                                          ep_init_flags, sa_data_version);
+                                          ep_init_flags, sa_data_version,
+                                          max_num_paths);
     if (status != UCS_OK) {
         goto err;
     }

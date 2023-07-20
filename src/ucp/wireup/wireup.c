@@ -210,7 +210,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     /* pack all addresses */
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, pack_flags,
                               context->config.ext.worker_addr_version,
-                              lanes2remote, address_length_p, address_p);
+                              lanes2remote, UINT_MAX, address_length_p,
+                              address_p);
     if (status != UCS_OK) {
         ucs_error("failed to pack address: %s", ucs_status_string(status));
     }

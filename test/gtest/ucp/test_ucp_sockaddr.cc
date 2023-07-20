@@ -2800,9 +2800,15 @@ public:
         create_entity();
     }
 
-    void create_entities_and_connect(bool server_less_num_paths) {
+    void create_entities_and_connect(bool server_less_num_paths,
+                                     bool use_v2_addr = false) {
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv max_eager_lanes_env("UCX_MAX_EAGER_LANES", "2");
+
+        if (use_v2_addr) {
+            modify_config("SA_DATA_VERSION", "v2");
+            modify_config("ADDRESS_VERSION", "v2");
+        }
 
         if (server_less_num_paths) {
             // create the client
@@ -2840,6 +2846,13 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
            diff_num_paths_small_msg_server_more_lanes)
 {
     create_entities_and_connect(false);
+    test_tag_send_recv(4 * UCS_KBYTE, false, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
+           diff_num_paths_small_msg_server_more_lanes_v2)
+{
+    create_entities_and_connect(false, true);
     test_tag_send_recv(4 * UCS_KBYTE, false, false);
 }
 
