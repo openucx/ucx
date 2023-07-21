@@ -132,7 +132,7 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
         return num_nvlinks;
     }
 
-    status = UCT_NVML_FUNC_LOG_ERR(nvmlInit_v2());
+    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
         goto err;
     }
