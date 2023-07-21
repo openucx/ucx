@@ -183,6 +183,11 @@ stages:
     jobs:
     - template: tests.yml
       parameters:
-        name: roce
+        name: roce_1
+        demands: ucx_roce -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: roce_2
         demands: ucx_roce -equals yes
         test_perf: 0
