@@ -585,12 +585,13 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_verbs_ep_t *ep                 = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_ib_md_t *md                       = uct_ib_iface_md(&iface->super.super);
     uct_rc_verbs_ep_flush_addr_t *rc_addr = (uct_rc_verbs_ep_flush_addr_t*)addr;
+    ucs_status_t status;
     uint8_t mr_id;
 
     rc_addr->super.flags = 0;
     uct_ib_pack_uint24(rc_addr->super.qp_num, ep->qp->qp_num);
-    mr_id = uct_ib_md_get_atomic_mr_id(md);
-    if (uct_rc_iface_flush_rkey_enabled(&iface->super) || (mr_id != 0)) {
+    status = uct_ib_md_ops(md)->get_atomic_mr_id(md, &mr_id);
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super) || (status == UCS_OK)) {
         rc_addr->super.flags  |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
         rc_addr->atomic_mr_id  = mr_id;
         rc_addr->flush_rkey_hi = md->flush_rkey >> 16;
