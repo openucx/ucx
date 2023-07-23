@@ -1304,7 +1304,8 @@ const char* uct_ib_ah_attr_str(char *buf, size_t max,
         p += strlen(p);
         uct_ib_gid_str(&ah_attr->grh.dgid, p, endp - p);
         p += strlen(p);
-        snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
+        snprintf(p, endp - p, " flow_label=0x%x sgid_index=%d "
+                 "traffic_class=%d", ah_attr->grh.flow_label,
                  ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
     }
 
