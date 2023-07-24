@@ -218,47 +218,25 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
     return 1;
 }
 
-static ucs_status_t
-uct_tcp_iface_parse_virtual_dev(const struct dirent *entry, void *ctx)
-{
-    static const char *low_level_dev_prefix = "lower_";
-    ucs_string_buffer_t *dev_path           = ctx;
-
-    if (!strncmp(entry->d_name, low_level_dev_prefix,
-                 strlen(low_level_dev_prefix))) {
-        ucs_string_buffer_appendf(dev_path, "/%s", entry->d_name);
-        return UCS_ERR_CANCELED;
-    }
-
-    return UCS_OK;
-}
-
 static const char *
 uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
 {
-    ucs_string_buffer_t dev_path = UCS_STRING_BUFFER_INITIALIZER;
-    const char *sysfs_path;
     ucs_status_t status;
+    const char *sysfs_path;
+    char lowest_path_buf[PATH_MAX];
 
-    /* Find and return the correct device sysfs path:
+    /* Deep search to find the lowest device sysfs path:
      * 1) For regular device, use regular sysfs form.
      * 2) For virtual device (RoCE LAG/VLAN), search for symbolic link of the
      *    form "lower_*" */
-    ucs_string_buffer_appendf(&dev_path, "%s/%s", UCT_TCP_IFACE_NETDEV_DIR,
-                              dev_name);
-
-    status = ucs_sys_readdir(ucs_string_buffer_cstr(&dev_path),
-                             uct_tcp_iface_parse_virtual_dev, &dev_path);
-    if (status != UCS_ERR_CANCELED) {
-        ucs_string_buffer_cleanup(&dev_path);
+    status = ucs_netif_get_lowest_device_path(dev_name, lowest_path_buf,
+                                              PATH_MAX);
+    if (status != UCS_OK) {
         return NULL;
     }
 
     /* 'path_buffer' size is PATH_MAX */
-    sysfs_path = ucs_topo_resolve_sysfs_path(ucs_string_buffer_cstr(&dev_path),
-                                             path_buffer);
-
-    ucs_string_buffer_cleanup(&dev_path);
+    sysfs_path = ucs_topo_resolve_sysfs_path(lowest_path_buf, path_buffer);
     return sysfs_path;
 }
 
