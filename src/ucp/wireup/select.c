@@ -1412,15 +1412,23 @@ ucp_wireup_is_md_map_count_valid(ucp_context_h context, ucp_md_map_t md_map)
 
 static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
                                      const ucp_wireup_select_info_t *sinfo,
-                                     const ucp_address_entry_t *address)
+                                     const ucp_address_entry_t *address_list)
 {
     ucp_context_h context = worker->context;
     const uct_iface_attr_t *iface_attr;
+    const ucp_address_entry_t *address;
     double bw_local, bw_remote;
 
     iface_attr = ucp_worker_iface_get_attr(worker, sinfo->rsc_index);
     bw_local   = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
-    bw_remote  = address[sinfo->addr_index].iface_attr.bandwidth;
+    address    = &address_list[sinfo->addr_index];
+    bw_remote  = address->iface_attr.bandwidth;
+
+    if (address->iface_attr.addr_version == UCP_OBJECT_VERSION_V2) {
+        /* FP8 is a lossy compression method, so in order to create a symmetric
+         * calculation we pack/unpack the local bandwidth as well */
+        bw_local = ucp_wireup_fp8_pack_unpack_bw(bw_local);
+    }
 
     return ucs_min(bw_local, bw_remote);
 }
