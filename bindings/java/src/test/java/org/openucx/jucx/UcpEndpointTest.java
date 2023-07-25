@@ -13,6 +13,7 @@ import org.junit.runner.RunWith;
 import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.ucs.UcsConstants;
 
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +54,52 @@ public class UcpEndpointTest extends UcxTest {
 
         Collections.addAll(resources, context, worker, endpoint);
         closeResources();
+    }
+
+    @Test
+    public void testGetAddress() {
+        UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
+        UcpWorker worker = context.newWorker(new UcpWorkerParams());
+
+        AtomicReference<UcpConnectionRequest> connRequest = new AtomicReference<>(null);
+
+        UcpListenerParams listenerParams = new UcpListenerParams()
+                .setSockAddr(new InetSocketAddress("127.0.0.1", 0))
+                .setConnectionHandler(connRequest::set);
+        UcpListener listener = worker.newListener(listenerParams);
+
+        UcpEndpoint clientEndpoint = worker.newEndpoint(
+                new UcpEndpointParams()
+                .setPeerErrorHandlingMode()
+                .setSocketAddress(listener.getAddress()));
+
+        try {
+            while (connRequest.get() == null) {
+                worker.progress();
+            }
+        } catch (Exception e) {
+            fail(e.getMessage());
+        }
+
+        UcpEndpoint serverEndpoint = worker.newEndpoint(
+                new UcpEndpointParams()
+                .setPeerErrorHandlingMode()
+                .setConnectionRequest(connRequest.get()));
+
+        try {
+            ByteBuffer buffer = ByteBuffer.allocateDirect(8);
+            worker.progressRequest(clientEndpoint.sendStreamNonBlocking(buffer, null));
+            worker.progressRequest(serverEndpoint.sendStreamNonBlocking(buffer, null));
+            worker.progressRequest(clientEndpoint.recvStreamNonBlocking(buffer, 8, null));
+            worker.progressRequest(serverEndpoint.recvStreamNonBlocking(buffer, 8, null));
+        } catch (Exception e) {
+            fail(e.getMessage());
+        }
+
+        assertNotEquals(0, clientEndpoint.getLocalAddress().getPort());
+        assertNotEquals(0, clientEndpoint.getRemoteAddress().getPort());
+        assertEquals("127.0.0.1", clientEndpoint.getLocalAddress().getHostString());
+        assertEquals("127.0.0.1", clientEndpoint.getRemoteAddress().getHostString());
     }
 
     @Theory
