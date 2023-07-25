@@ -1445,7 +1445,7 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
 
 static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
                                      const ucp_wireup_select_info_t *sinfo,
-                                     const ucp_address_entry_t *address)
+                                     const ucp_unpacked_address_t *address)
 {
     ucp_context_h context = worker->context;
     const uct_iface_attr_t *iface_attr;
@@ -1453,7 +1453,13 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
 
     iface_attr = ucp_worker_iface_get_attr(worker, sinfo->rsc_index);
     bw_local   = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
-    bw_remote  = address[sinfo->addr_index].iface_attr.bandwidth;
+    bw_remote  = address->address_list[sinfo->addr_index].iface_attr.bandwidth;
+
+    if (address->addr_version == UCP_OBJECT_VERSION_V2) {
+        /* FP8 is a lossy compression method, so in order to create a symmetric
+         * calculation we pack/unpack the local bandwidth as well */
+        bw_local = ucp_wireup_fp8_pack_unpack_bw(bw_local);
+    }
 
     return ucs_min(bw_local, bw_remote);
 }
@@ -1469,24 +1475,20 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
     double max_bw              = 0;
     ucp_context_h context      = worker->context;
     const double max_ratio     = 1. / context->config.ext.multi_lane_max_ratio;
-    const ucp_address_entry_t *address_list;
-    unsigned wire_version;
+    unsigned wire_version      = select_params->address->wire_version;
     ucs_status_t status;
     double lane_bw;
     const ucp_wireup_select_info_t *sinfo;
 
-    address_list = select_params->address->address_list;
-    wire_version = select_params->address->wire_version;
-
     /* Iterate over all elements and calculate max BW */
     ucs_array_for_each(sinfo, sinfo_array) {
-        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, address_list);
+        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, select_params->address);
         max_bw  = ucs_max(lane_bw, max_bw);
     }
 
     /* Compare each element to max BW and filter only fast lanes */
     ucs_array_for_each(sinfo, sinfo_array) {
-        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, address_list);
+        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, select_params->address);
 
         if ((wire_version > UCP_RELEASE_LEGACY) &&
             (lane_bw < (max_bw * max_ratio))) {
