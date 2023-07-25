@@ -1241,15 +1241,20 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     double eps                = 1e-3;
     double local_bw, remote_bw;
 
-    local_bw = ucp_wireup_iface_bw_distance(wiface) *
-         ucp_tl_iface_bandwidth_ratio(context, local_dev_count[dev_index],
-                                      wiface->attr.dev_num_paths);
+    local_bw = ucp_wireup_iface_bw_distance(wiface);
 
     if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V2) {
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local bandwidth as well */
         local_bw = ucp_wireup_fp8_pack_unpack_bw(local_bw);
     }
+
+    /* Apply dev num paths ratio after fp8 pack/unpack to make sure it is not
+     * neglected because of fp8 inaccuracy
+     */
+    local_bw *= ucp_tl_iface_bandwidth_ratio(
+                   context, local_dev_count[dev_index],
+                   wiface->attr.dev_num_paths);
 
     remote_bw = remote_addr->iface_attr.bandwidth *
                 ucp_tl_iface_bandwidth_ratio(
