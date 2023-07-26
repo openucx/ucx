@@ -556,21 +556,6 @@ ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num)
-{
-    ucs_status_t s, status = UCS_OK;
-    int i;
-
-    for (i = 0; i < mr_num; i++) {
-        s = uct_ib_dereg_mr(mrs[i]);
-        if (s != UCS_OK) {
-            status = s;
-        }
-    }
-
-    return status;
-}
-
 static ucs_status_t uct_ib_memh_dereg_key(uct_ib_md_t *md, uct_ib_mem_t *memh,
                                           uct_ib_mr_type_t mr_type)
 {

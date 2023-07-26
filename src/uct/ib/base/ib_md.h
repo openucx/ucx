@@ -607,7 +607,6 @@ ucs_status_t uct_ib_reg_mr_params(uct_ib_md_t *md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,
                                   uint64_t access_flags, struct ibv_mr **mr_p);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
-ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
 
 
 /**
