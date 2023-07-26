@@ -511,7 +511,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
             .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
             .ep_connect_to_ep_v2   = uct_rc_verbs_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2
+            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
+            .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,
