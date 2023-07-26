@@ -743,7 +743,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
 
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
         return uct_rc_mlx5_iface_common_devx_connect_qp(
                 iface, qp, qp_num, ah_attr, path_mtu, path_index,
                 iface->super.config.max_rd_atomic);
