@@ -103,8 +103,14 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "Module unload prevention mode\n"
    " lazy - use RTLD_LAZY flag to add reference to module.\n"
    " now  - use RTLD_NOW flag to add reference to module.\n"
-   " none - don't prevent module unload, use it for debug purposes only."
-   ,ucs_offsetof(ucm_global_config_t, module_unload_prevent_mode), UCS_CONFIG_TYPE_ENUM(ucm_module_unload_prevent_modes)},
+   " none - don't prevent module unload, use it for debug purposes only.",
+   ucs_offsetof(ucm_global_config_t, module_unload_prevent_mode),
+   UCS_CONFIG_TYPE_ENUM(ucm_module_unload_prevent_modes)},
+
+  {"BISTRO_FORCE_FAR_JUMP", "n",
+   "Force far jump when applying bistro patches. Used for testing purpose.",
+   ucs_offsetof(ucm_global_config_t, bistro_force_far_jump),
+   UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };

@@ -1132,6 +1132,17 @@ run_malloc_hook_gtest() {
 		MALLOC_MMAP_THRESHOLD_=16384 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 			make -C test/gtest test
+
+	echo "==== Running cuda hooks, $compiler_name compiler ===="
+	$AFFINITY $TIMEOUT env \
+		GTEST_FILTER='cuda_hooks.*' \
+			make -C test/gtest test
+
+	echo "==== Running cuda hooks with far jump, $compiler_name compiler ===="
+	$AFFINITY $TIMEOUT env \
+		UCM_BISTRO_FORCE_FAR_JUMP=y \
+		GTEST_FILTER='cuda_hooks.*' \
+			make -C test/gtest test
 }
 
 #

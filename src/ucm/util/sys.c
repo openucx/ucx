@@ -46,7 +46,8 @@ ucm_global_config_t ucm_global_opts = {
                                   UCS_BIT(UCM_MMAP_HOOK_RELOC),
     .enable_dynamic_mmap_thresh = 1,
     .alloc_alignment            = 16,
-    .dlopen_process_rpath       = 1
+    .dlopen_process_rpath       = 1,
+    .bistro_force_far_jump      = 0,
 };
 
 size_t ucm_get_page_size()
