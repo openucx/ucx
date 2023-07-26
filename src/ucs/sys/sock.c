@@ -26,7 +26,8 @@
 #include <string.h>
 
 
-#define UCS_NETIF_BOND_AD_NUM_PORTS_FMT  "/sys/class/net/%s/bonding/ad_num_ports"
+#define UCS_NETIF_DIR                    "/sys/class/net"
+#define UCS_BOND_NUM_PORTS_FILE          "bonding/ad_num_ports"
 #define UCS_SOCKET_MAX_CONN_PATH         "/proc/sys/net/core/somaxconn"
 /* The port space of IPv6 is shared with IPv4 */
 #define UCX_PROCESS_IP_PORT_RANGE        "/proc/sys/net/ipv4/ip_local_port_range"
@@ -171,13 +172,23 @@ unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
 {
     ucs_status_t status;
     long ad_num_ports;
+    const char *bond_path;
+    char lowest_path_buf[PATH_MAX];
 
-    status = ucs_read_file_number(&ad_num_ports, 1,
-                                  UCS_NETIF_BOND_AD_NUM_PORTS_FMT, bond_name);
+    status = ucs_netif_get_lowest_device_path(bond_name, lowest_path_buf,
+                                              PATH_MAX);
+    if (status != UCS_OK) {
+        return 1;
+    }
+
+    bond_path = ucs_dirname(lowest_path_buf, 1);
+    status    = ucs_read_file_number(&ad_num_ports, 1, "%s/%s", bond_path,
+                                     UCS_BOND_NUM_PORTS_FILE);
     if ((status != UCS_OK) || (ad_num_ports <= 0) ||
         (ad_num_ports > UINT_MAX)) {
-        ucs_trace("failed to read from " UCS_NETIF_BOND_AD_NUM_PORTS_FMT ": %m, "
-                 "assuming 802.3ad bonding is disabled", bond_name);
+        ucs_trace("failed to read from %s/%s: %m, "
+                  "assuming 802.3ad bonding is disabled",
+                  bond_path, UCS_BOND_NUM_PORTS_FILE);
         return 1;
     }
 
@@ -1043,4 +1054,45 @@ ucs_sockaddr_get_ipstr(const struct sockaddr *addr, char *str, size_t max_size)
     }
 
     return UCS_OK;
+}
+
+static ucs_status_t
+uct_netif_parse_virtual_dev(const struct dirent *entry, void *ctx)
+{
+    static const char *low_level_dev_prefix = "lower_";
+    ucs_string_buffer_t *dev_path           = ctx;
+
+    if (!strncmp(entry->d_name, low_level_dev_prefix,
+                 strlen(low_level_dev_prefix))) {
+        ucs_string_buffer_appendf(dev_path, "/%s", entry->d_name);
+        return UCS_ERR_CANCELED;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_netif_get_lowest_device_path(const char *if_name,
+                                              char *path_buffer, size_t max)
+{
+    ucs_string_buffer_t dev_path = UCS_STRING_BUFFER_INITIALIZER;
+    const int max_depth          = 8;
+    int depth;
+    ucs_status_t status;
+
+    ucs_string_buffer_appendf(&dev_path, "%s/%s", UCS_NETIF_DIR, if_name);
+
+    for (depth = 0; depth < max_depth; ++depth) {
+        status = ucs_sys_readdir(ucs_string_buffer_cstr(&dev_path),
+                                 uct_netif_parse_virtual_dev, &dev_path);
+        if (status != UCS_ERR_CANCELED) {
+            break;
+        }
+    }
+
+    if (status == UCS_OK) {
+        ucs_strncpy_safe(path_buffer, ucs_string_buffer_cstr(&dev_path), max);
+    }
+
+    ucs_string_buffer_cleanup(&dev_path);
+    return status;
 }
