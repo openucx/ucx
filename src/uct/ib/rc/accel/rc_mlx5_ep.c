@@ -577,16 +577,11 @@ uct_rc_mlx5_ep_flush_remote(uct_ep_h tl_ep, uct_completion_t *comp)
     desc->super.handler   = uct_rc_ep_flush_remote_handler;
     desc->super.user_comp = comp;
 
-    uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
+      uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
                                        &ep->tx.wq, MLX5_OPCODE_RDMA_READ,
                                        UCT_IB_MD_FLUSH_REMOTE_LENGTH, 0,
-<<<<<<< HEAD
-                                       ep->super.flush_rkey, NULL, NULL,
-                                       0, MLX5_WQE_CTRL_CQ_UPDATE, 0, desc,
-=======
                                        ep->super.flush_rkey, 0,
                                        MLX5_WQE_CTRL_CQ_UPDATE, 0, 0, desc,
->>>>>>> a299e75da (DC/HW-DCS: enabled HW DCS)
                                        desc + 1, NULL);
     ep->super.flags &= ~UCT_RC_EP_FLAG_FLUSH_REMOTE;
 

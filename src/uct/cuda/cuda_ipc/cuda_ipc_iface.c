@@ -486,7 +486,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_cuda_iface_t, &uct_cuda_ipc_iface_ops,
-                              &uct_base_iface_internal_ops, md, worker, params,
+                              &uct_cuda_ipc_iface_internal_ops, md, worker, params,
                               tl_config, "cuda_ipc");
 
     if (strncmp(params->mode.device.dev_name,

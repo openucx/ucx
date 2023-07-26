@@ -628,14 +628,9 @@ static void
 ucp_proto_perf_node_append_child(ucp_proto_perf_node_t *perf_node,
                                  ucp_proto_perf_node_t *child_perf_node)
 {
-    ucs_status_t status;
-
-    status = ucs_array_append(ucp_proto_perf_node, &perf_node->children);
-    if (status != UCS_OK) {
-        ucs_diag("failed to add perf node child");
-        return;
-    }
-
+    ucs_array_append(ucp_proto_perf_node, &perf_node->children,
+                     ucs_diag("failed to add perf node child");
+                     return );
     *ucs_array_last(&perf_node->children) = child_perf_node;
 }
 
@@ -678,7 +673,6 @@ void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
                                   const ucs_linear_func_t value)
 {
     ucp_proto_perf_node_data_t *data;
-    ucs_status_t status;
 
     if (perf_node == NULL) {
         return;
@@ -686,12 +680,10 @@ void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
 
     ucs_assert(perf_node->type == UCP_PROTO_PERF_NODE_TYPE_DATA);
 
-    status = ucs_array_append(ucp_proto_perf_node_data, &perf_node->data);
-    if (status != UCS_OK) {
-        ucs_diag("failed to add perf node data");
-        return;
-    }
-
+    ucs_array_append(ucp_proto_perf_node_data, &perf_node->data,
+                     ucs_diag("failed to add perf node data");
+                     return );
+  
     data        = ucs_array_last(&perf_node->data);
     data->name  = name;
     data->value = value;
