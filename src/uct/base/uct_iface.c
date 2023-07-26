@@ -280,6 +280,23 @@ int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
 }
 
+int uct_ep_is_conntected(const uct_ep_h ep,
+                         const uct_ep_is_connected_params_t *params)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    if (!ucs_test_all_flags(params->field_mask,
+                            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
+                            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
+                            UCT_EP_IS_CONNECTED_FIELD_EP_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), device_addr, iface_addr "
+                  " and ep_addr should be supplied.", params->field_mask);
+        return 0;
+    }
+
+    return iface->internal_ops->ep_is_connected(ep, params);
+}
+
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
                           uct_completion_t *comp)
 {
@@ -515,7 +532,8 @@ uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)

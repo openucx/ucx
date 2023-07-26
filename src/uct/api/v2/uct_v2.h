@@ -343,6 +343,17 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief field mask of @ref uct_ep_is_connected
+ */
+typedef enum {
+    UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR = UCS_BIT(0), /**< device_addr field */
+    UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR  = UCS_BIT(1), /**< iface_addr field */
+    UCT_EP_IS_CONNECTED_FIELD_EP_ADDR     = UCS_BIT(2), /**< ep_addr field */
+} uct_ep_is_connected_field_mask_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Endpoint attributes, capabilities and limitations.
  */
 struct uct_ep_attr {
@@ -575,6 +586,40 @@ typedef struct uct_iface_is_reachable_params {
      */
     uct_iface_reachability_scope_t scope;
 } uct_iface_is_reachable_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Operation parameters passed to @ref uct_ep_is_connected.
+ */
+typedef struct uct_ep_is_connected_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ep_is_connected_field_mask_t. Fields not specified in this
+     * mask will be ignored. Provides ABI compatibility with respect to adding
+     * new fields.
+     */
+    uint64_t                 field_mask;
+
+    /**
+     * Device address to check for connectivity.
+     * This field must not be passed if iface_attr.dev_addr_len == 0.
+     */
+    const uct_device_addr_t *device_addr;
+
+    /**
+     * Interface address to check for connectivity.
+     * This field must not be passed if iface_attr.iface_addr_len == 0.
+     */
+    const uct_iface_addr_t *iface_addr;
+
+    /**
+     * EP address to check for connectivity.
+     * This field must not be passed if iface_attr.iface_addr_len == 0.
+     */
+    const uct_ep_addr_t    *ep_addr;
+
+} uct_ep_is_connected_params_t;
 
 
 /**
@@ -962,6 +1007,19 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
                                      const uct_device_addr_t *device_addr,
                                      const uct_ep_addr_t *ep_addr,
                                      const uct_ep_connect_to_ep_params_t *params);
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Checks if endpoint is connected a remote endpoint.
+ *
+ * @param [in] ep      Endpoint to check.
+ * @param [in] params  Parameters as defined in @ref
+ *                     uct_ep_is_connected_params_t.
+ *
+ * @return Nonzero if connected, 0 if not.
+ */
+int uct_ep_is_connected(const uct_ep_h ep,
+                        const uct_ep_is_connected_params_t *params);
 
 END_C_DECLS
 
