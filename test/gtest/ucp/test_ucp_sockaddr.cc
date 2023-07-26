@@ -1869,6 +1869,10 @@ protected:
         test_base::init();
         // entities will be created in a test
     }
+
+    void cleanup() {
+        ucp_test::cleanup();
+    }
 };
 
 
