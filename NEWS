@@ -11,6 +11,20 @@
 ### Features:
 ### Bugfixes:
 
+## 1.14.1 (May 22, 2023)
+### Bugfixes:
+* Fixed ROCm to prevent the locking of host pinned memory
+* Added CUDA 12 based UCX builds to the release flow
+* Increased the maximal number of endpoint configurations
+* Fixed filter for a slow-lanes in selection logic
+* Fixed TCP transport bandwidth calculation
+* Fixed device detection for ROCM
+* Fixed compatibility with CUDA 12
+* Fixed rendezvous threshold for multi-path configurations
+* Fixed error message in case of static link
+* Fixed BlueField-3 detection
+* Multiple fixes for Azure CI pipeline
+
 ## 1.14.0 (March 13, 2023)
 ### Features:
 #### Core
