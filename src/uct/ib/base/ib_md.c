@@ -403,7 +403,6 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
 
             CPU_ZERO(&thread_set);
             CPU_SET(cpu_id, &thread_set);
-            cpu_id++;
             pthread_attr_setaffinity_np(&attr, sizeof(ucs_sys_cpuset_t), &thread_set);
         }
 
