@@ -261,7 +261,7 @@ typedef int (*uct_iface_is_reachable_v2_func_t)(
         const uct_iface_is_reachable_params_t *params);
 
 
-/* Check if remote ep is connected */
+/* Check if a remote endpoint is connected */
 typedef int (*uct_ep_is_connected_func_t)(
         const uct_ep_h ep,
         const uct_ep_is_connected_params_t *params);

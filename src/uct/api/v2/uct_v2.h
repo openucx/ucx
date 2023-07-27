@@ -591,7 +591,8 @@ typedef struct uct_iface_is_reachable_params {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Operation parameters passed to @ref uct_ep_is_connected.
- * The fields must not be passed if addr_len == 0.
+ * For each address field with addr_len == 0, it must be excluded from
+ * field_mask.
  */
 typedef struct uct_ep_is_connected_params {
     /**
@@ -1008,13 +1009,13 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Checks if endpoint is connected to a remote endpoint.
+ * @brief Checks if an endpoint is connected to a remote endpoint.
  *
  * @param [in] ep      Endpoint to check.
  * @param [in] params  Parameters as defined in @ref
  *                     uct_ep_is_connected_params_t.
  *
- * @return Nonzero if connected, 0 if not.
+ * @return Nonzero if connected, 0 otherwise.
  */
 int uct_ep_is_connected(const uct_ep_h ep,
                         const uct_ep_is_connected_params_t *params);

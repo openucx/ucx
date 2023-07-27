@@ -290,7 +290,7 @@ int uct_ep_is_conntected(const uct_ep_h ep,
                             UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
                             UCT_EP_IS_CONNECTED_FIELD_EP_ADDR)) {
         ucs_error("missing params (field_mask: %lu), device_addr, iface_addr "
-                  " and ep_addr should be supplied.", params->field_mask);
+                  " and ep_addr must be provided.", params->field_mask);
         return 0;
     }
 
