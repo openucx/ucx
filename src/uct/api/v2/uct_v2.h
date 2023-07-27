@@ -346,9 +346,14 @@ typedef enum {
  * @brief field mask of @ref uct_ep_is_connected
  */
 typedef enum {
-    UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR = UCS_BIT(0), /**< device_addr field */
-    UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR  = UCS_BIT(1), /**< iface_addr field */
-    UCT_EP_IS_CONNECTED_FIELD_EP_ADDR     = UCS_BIT(2), /**< ep_addr field */
+    /** Device address length */
+    UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(0),
+
+    /** Iface address length */
+    UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR_LENGTH  = UCS_BIT(1),
+
+    /** Endpoint address length */
+    UCT_EP_IS_CONNECTED_FIELD_EP_ADDR_LENGTH     = UCS_BIT(2)
 } uct_ep_is_connected_field_mask_t;
 
 
@@ -591,33 +596,26 @@ typedef struct uct_iface_is_reachable_params {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Operation parameters passed to @ref uct_ep_is_connected.
- * For each address field with addr_len == 0, it must be excluded from
- * field_mask.
+ * For each addr_length field which is not provided, the transport will assume a
+ * default minimal length according to the address buffer contents.
  */
 typedef struct uct_ep_is_connected_params {
     /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref uct_ep_is_connected_field_mask_t. Fields not specified in this
-     * mask will be ignored. Provides ABI compatibility with respect to adding
-     * new fields.
+     * Mask of valid fields in this structure and operation flags, using
+     * bits from @ref uct_ep_is_connected_params_t. Fields not specified
+     * in this mask will be ignored. Provides ABI compatibility with respect to
+     * adding new fields.
      */
-    uint64_t                 field_mask;
+    uint64_t field_mask;
 
-    /**
-     * Device address to check for connectivity.
-     */
-    const uct_device_addr_t *device_addr;
+    /** Device address length */
+    size_t   device_addr_length;
 
-    /**
-     * Interface address to check for connectivity.
-     */
-    const uct_iface_addr_t *iface_addr;
+    /** Iface address length */
+    size_t   iface_addr_length;
 
-    /**
-     * EP address to check for connectivity.
-     */
-    const uct_ep_addr_t    *ep_addr;
-
+    /** Endpoint address length */
+    size_t   ep_addr_length;
 } uct_ep_is_connected_params_t;
 
 
@@ -1012,12 +1010,18 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
  * @brief Checks if an endpoint is connected to a remote endpoint.
  *
  * @param [in] ep      Endpoint to check.
+ * @param [in] device_addr  Remote device address.
+ * @param [in] iface_addr   Remote interface address.
+ * @param [in] ep_addr      Remote endpoint address.
  * @param [in] params  Parameters as defined in @ref
  *                     uct_ep_is_connected_params_t.
  *
  * @return Nonzero if connected, 0 otherwise.
  */
 int uct_ep_is_connected(const uct_ep_h ep,
+                        const uct_device_addr_t *device_addr,
+                        const uct_iface_addr_t *iface_addr,
+                        const uct_ep_addr_t *ep_addr,
                         const uct_ep_is_connected_params_t *params);
 
 END_C_DECLS
