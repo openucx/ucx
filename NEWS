@@ -11,9 +11,139 @@
 ### Features:
 ### Bugfixes:
 
-## 1.15.0-rc1 (May 10, 2023)
-TBD
+## 1.15.0-rc2 (July 27, 2023)
+### Features:
+#### RDMA CORE (IB, ROCE, etc.)
+* Implemented is_reachable_v2 for IB interfaces
+#### Build
+* Enabled build with binutils 2.40
+* Added versioned dependency to switch between packages with the same names
 
+### Bugfixes:
+#### UCP
+* Fixed endpoint reconfiguration error due to wrong locality detection
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixed performance degradation when indirect atomic key is not supported by the hardware
+* Fixed remote access error to strict-order key because of wrong offset
+#### GPU (CUDA, ROCM)
+* Fixed CUDA IPC performance degradation after libnuma removal
+
+## 1.15.0-rc1 (May 10, 2023)
+### Features:
+#### UCP
+* Added 2-stage pipeline protocol in the new protocol infrastructure
+* Added reset and abort functionality of rendezvous protocols in the new infrastructure
+* Added zero-copy rendezvous data send protocol in the new infrastructure
+* Added support for user memory handle in the new protocol infrastructure
+* Added option to force ODP registration for certain memory types
+* Enabled lock free memory region deregistration
+* Updated allow/deny transport list feature to control auxiliary transport selection
+* Multiple performance improvements of the new protocol infrastructure
+* Multiple improvements in error and debug messages
+#### UCT
+* Split UCT_MD_MKEY_PACK_FLAG_INVALIDATE into two flags for RMA and AMO
+* Added put_zcopy and get_zcopy scheme support for self transport
+* Added base implementation of is_reachable_v2 API using intra/inter flag
+* Introduced MD capability for non-blocking registration memory types
+#### RDMA CORE (IB, ROCE, etc.)
+* Added option to control CQE zipping per CQ RX/TX direction
+* Added option to specify how DCI selects port under RoCE LAG
+* Added hw_dcs to the list of policies to select DCI by an endpoint
+* Removed implicit on-demand paging
+* Added option to set RoCE lag dct port for response under queue affinity mode
+* Improved IB memlock limit logging
+#### UCS
+* Added ucs_string_buffer_rbrk() to split token
+#### GPU (CUDA, ROCM)
+* Added support for atomic reply_buffer on GPU memory
+* Added system device information for AMD GPUs
+* Improved performance estimation of gdr_copy transport
+* Added a simplistic implementation of performance estimation of cuda_ipc transport
+* Improved performance estimation of cuda_ipc on Hopper architecture
+* Added rcache parameters for rocm transports
+* Introduced dmabuf support for rocm transports
+* Implemented asynchronous progress for the zcopy operations in the rocm_copy transport
+* Added option to enable using cross-device dmabuf file descriptor for rocm
+#### Java
+* Added Java bindings for exported memh feature
+#### Tests
+* Added a rocm docker container for testing
+* Added option to send client_id in iodemo test
+* Added support for multiple connections to the same server in iodemo test
+* Added synchronization before exit to hello world examples
+#### Tools
+* Added user-side memcpy option for AM benchmarks in ucx_perftest
+* Added wireshark LUA dissectors for some UCX protocols
+#### Build
+* Added a separate xpmem deb subpackage
+* Added aarch64 support to the binary distribution pipeline
+* Removed dependency on libnuma
+
+### Bugfixes:
+#### UCP
+* Fixed crash during connection manager cleanup
+* Fixed rkey index calculation for rendezvous protocol
+* Fixed rcache dump function
+* Removed logging from rkey unpack in release mode
+* Fixed dobule free of rkey in rendezvous protocol
+* Fixed rendezvous pipeline protocol error flow
+* Fixed error handling in rendezvous get zcopy protocol
+* Replay pending requests of wireup EP CM during connection establishment to prevent potential ordering issues and wrong configuration
+* Pass user-provided memory type to the function that checks whether the buffer can be sent inline or not
+* Avoid memory registration during UCP context initialization
+* Fixed CPU/device atomics selection in the new protocol infrastructure
+* Multiple fixes in the new protocol infrastructure information output
+#### UCT
+* Fixed exported memh packing
+* Fixed an error in checking return status of multi-threaded memory registration function
+#### RDMA CORE (IB, ROCE, etc.)
+* Added check for UAR support to memory domain opening
+* Fixed updating port counters for devx qp
+* Fixed ibv_create_cq error message on node without Infiniband
+* Fixed performance degradation due to using 2 paths on NDR400 by default
+* Removed unnecessary async lock which otherwise would block UD progress
+#### UCS
+* Fixed displaying wrong environment variable suggestions
+* Fixed VFS warning output
+* Fixed SEGV in ucs_debug_backtrace_next(), upon previous SEGV handling, due to ENOMEM situation
+* Fixed memory corruption when using UCX_MPOOL_FIFO=y
+#### UCM
+* Fixed mremap() override
+#### GPU (CUDA, ROCM)
+* Fixed usage of dmabuf when the buffer is not page-aligned
+* Removed async_cb from cuda_copy to avoid the issue with UCP worker async lock
+#### Java
+* Fixed leakage of jucx_request global references
+#### Documentation
+* Updated ucp_worker_release_address description
+#### Tests
+* Fixed wrong usage of ep_close in examples
+#### Tools
+* Removed support for librte from perf
+* Fixed worker flush deadlock when using multiple workers in ucx_perftest
+#### Build
+* Changed 'unsupported option' ICC command line warning to error
+* Removed never used fault-injection configuration option
+* Fixed obsolete macro warnings in new autoconf/libtool
+* Fixed building UCX with GCC 13
+* Fixed UCX RPM build on machines that have libxpmem-devel rpm from MLNX_OFED installation
+* Fixed ucx-rdmacm package requirements
+* Fixed compilation errors with armcc-22.1
+* Fixed passing port number to goperftest
+
+## 1.14.1 (May 22, 2023)
+### Bugfixes:
+* Fixed ROCm to prevent the locking of host pinned memory
+* Added CUDA 12 based UCX builds to the release flow
+* Increased the maximal number of endpoint configurations
+* Fixed filter for a slow-lanes in selection logic
+* Fixed TCP transport bandwidth calculation
+* Fixed device detection for ROCM
+* Fixed compatibility with CUDA 12
+* Fixed rendezvous threshold for multi-path configurations
+* Fixed error message in case of static link
+* Fixed BlueField-3 detection
+* Multiple fixes for Azure CI pipeline
 
 ## 1.14.0 (March 13, 2023)
 ### Features:
