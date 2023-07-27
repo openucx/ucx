@@ -73,7 +73,7 @@ UCX abstracts the differences across various drivers and fill-in the gaps using 
 
 #### What stuff should I have on my machine to use UCX?
 
-UCX detects the exiting libraries on the build machine and enables/disables support
+UCX detects the existing libraries on the build machine and enables/disables support
 for various features accordingly. 
 If some of the modules UCX was built with are not found during runtime, they will
 be silently disabled.
