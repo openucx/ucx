@@ -129,8 +129,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         .field_mask            = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
                                  UCT_IFACE_PARAM_FIELD_DEVICE      |
                                  UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
-                                 UCT_IFACE_PARAM_FIELD_RX_HEADROOM |
-                                 UCT_IFACE_PARAM_FIELD_CPU_MASK,
+                                 UCT_IFACE_PARAM_FIELD_RX_HEADROOM,
         .open_mode             = UCT_IFACE_OPEN_MODE_DEVICE,
         .mode.device.tl_name   = resource->tl_name,
         .mode.device.dev_name  = resource->dev_name,
@@ -143,7 +142,6 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     ucs_status_t status;
     uct_iface_h iface;
 
-    UCS_CPU_ZERO(&iface_params.cpu_mask);
     status = uct_md_iface_config_read(md, resource->tl_name, NULL, NULL, &iface_config);
     if (status != UCS_OK) {
         return;

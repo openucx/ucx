@@ -1301,7 +1301,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     if (params->field_mask & UCT_IFACE_PARAM_FIELD_CPU_MASK) {
         cpu_mask = params->cpu_mask;
     } else {
-        memset(&cpu_mask, 0, sizeof(cpu_mask));
+        UCS_CPU_ZERO(&cpu_mask);
     }
 
     preferred_cpu = ucs_cpu_set_find_lcs(&cpu_mask);
