@@ -34,7 +34,9 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         get_test_variants(variants, 0, "");
-        get_test_variants(variants, DISABLE_PROTO, "/proto_v1");
+        if (!RUNNING_ON_VALGRIND) {
+            get_test_variants(variants, DISABLE_PROTO, "/proto_v1");
+        }
     }
 
     struct send_func_data {

@@ -55,8 +55,11 @@ public:
                                "req_int");
         add_variant_with_value(variants, get_ctx_params(), RECV_REQ_EXTERNAL,
                                "req_ext");
-        add_variant_with_value(variants, get_ctx_params(),
-                               RECV_REQ_INTERNAL | DISABLE_PROTO, "req_int_proto_v1");
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_with_value(variants, get_ctx_params(),
+                                   RECV_REQ_INTERNAL | DISABLE_PROTO,
+                                   "req_int_proto_v1");
+        }
     }
 
     virtual bool is_external_request()

@@ -48,10 +48,6 @@ public:
     }
 
     virtual void init() {
-        if (RUNNING_ON_VALGRIND && (get_variant_value() == VARIANT_PROTO_V1)) {
-            UCS_TEST_SKIP_R("Skip proto v1 with valgrind");
-        }
-
         if (get_variant_value() == VARIANT_RNDV_PUT_ZCOPY) {
             modify_config("RNDV_SCHEME", "put_zcopy");
         } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
@@ -97,8 +93,10 @@ public:
                                VARIANT_RNDV_AM_ZCOPY, "rndv_am_zcopy");
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_SEND_NBR, "send_nbr");
-        add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO_V1,
-                               "proto_v1");
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO_V1,
+                                   "proto_v1");
+        }
     }
 
     virtual ucp_ep_params_t get_ep_params() {

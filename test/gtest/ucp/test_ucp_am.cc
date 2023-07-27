@@ -41,7 +41,9 @@ public:
     static void get_test_variants(variant_vec_t &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_AM, 1, "proto_v1");
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_with_value(variants, UCP_FEATURE_AM, 1, "proto_v1");
+        }
     }
 
     virtual void init()

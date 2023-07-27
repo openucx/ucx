@@ -515,7 +515,10 @@ public:
     static void get_test_variants_proto(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, get_test_variants_prereg, 0);
-        add_variant_values(variants, get_test_variants_prereg, 1, "proto_v1");
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_values(variants, get_test_variants_prereg, 1,
+                               "proto_v1");
+        }
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
