@@ -1483,12 +1483,10 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     uint64_t local_dev_bitmap;
     uint64_t remote_dev_bitmap;
     ucp_rsc_index_t dev_index;
-    ucp_md_map_t md_map;
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
     ucp_wireup_select_info_t *sinfo;
 
-    md_map                = bw_info->md_map;
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
     bw_info->criteria.arg = &dev_count;
@@ -1537,8 +1535,6 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
             /* exclude remote device if reached max concurrency level */
             remote_dev_bitmap &= ~UCS_BIT(ae->dev_index);
         }
-
-        md_map |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
     }
 
     bw_info->criteria.arg = NULL; /* To suppress compiler warning */
