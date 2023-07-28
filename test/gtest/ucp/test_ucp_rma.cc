@@ -24,8 +24,11 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "flush_worker");
         add_variant_with_value(variants, UCP_FEATURE_RMA, FLUSH_EP, "flush_ep");
-        add_variant_with_value(variants, UCP_FEATURE_RMA,
-                               FLUSH_EP | DISABLE_PROTO, "flush_ep_proto_v1");
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_with_value(variants, UCP_FEATURE_RMA,
+                                   FLUSH_EP | DISABLE_PROTO,
+                                   "flush_ep_proto_v1");
+        }
         add_variant_with_value(variants, UCP_FEATURE_RMA, USER_MEMH,
                                "user_memh");
     }

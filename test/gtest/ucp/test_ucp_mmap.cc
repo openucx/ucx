@@ -37,8 +37,10 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features, 0, "");
         add_variant_with_value(variants, UCP_FEATURE_RMA |extra_features,
                                VARIANT_MAP_NONBLOCK, "map_nb");
-        add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
-                               VARIANT_PROTO_DISABLE, "proto_v1");
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
+                                   VARIANT_PROTO_DISABLE, "proto_v1");
+        }
         add_variant_with_value(variants, UCP_FEATURE_RMA | extra_features,
                                VARIANT_NO_RCACHE, "no_rcache");
     }
@@ -87,9 +89,6 @@ public:
     virtual void init() {
         ucs::skip_on_address_sanitizer();
         if (disable_proto()) {
-            if (RUNNING_ON_VALGRIND) {
-                UCS_TEST_SKIP_R("Skip proto v1 with valgrind");
-            }
             modify_config("PROTO_ENABLE", "n");
         }
 

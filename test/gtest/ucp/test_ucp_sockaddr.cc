@@ -2718,34 +2718,37 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
     test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, true, false);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols,
-           am_rndv_64k_prereg_proto_v1_single_rndv_put_zcopy_lane,
-           "RNDV_THRESH=0", "MAX_RNDV_LANES=1", "RNDV_SCHEME=put_zcopy",
-           "PROTO_ENABLE=n")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols,
+                     am_rndv_64k_prereg_proto_v1_single_rndv_put_zcopy_lane,
+                     RUNNING_ON_VALGRIND,
+                     "RNDV_THRESH=0", "MAX_RNDV_LANES=1",
+                     "RNDV_SCHEME=put_zcopy", "PROTO_ENABLE=n")
 {
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=n",
-           "ZCOPY_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_short_reset,
+                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n", "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=n",
-           "ZCOPY_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_bcopy_reset,
+                     RUNNING_ON_VALGRIND,
+                     "PROTO_ENABLE=n", "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=n")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_zcopy_reset,
+                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=n",
-           "RNDV_THRESH=0")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_rndv_reset,
+                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n", "RNDV_THRESH=0")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
