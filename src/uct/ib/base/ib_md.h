@@ -25,7 +25,6 @@
                                   IBV_ACCESS_REMOTE_READ | \
                                   IBV_ACCESS_REMOTE_ATOMIC)
 
-#define UCT_IB_MEM_DEREG          0
 #define UCT_IB_CONFIG_PREFIX      "IB_"
 
 #define UCT_IB_MD_NAME(_x)        "ib_" UCS_PP_QUOTE(_x)
@@ -608,7 +607,6 @@ ucs_status_t uct_ib_reg_mr_params(uct_ib_md_t *md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,
                                   uint64_t access_flags, struct ibv_mr **mr_p);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
-ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
 
 
 /**
@@ -618,10 +616,9 @@ void uct_ib_md_ece_check(uct_ib_md_t *md);
 
 
 ucs_status_t
-uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
-                                       size_t length, uint64_t access,
-                                       size_t chunk, struct ibv_mr **mrs,
-                                       int silent);
+uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
+                            const uct_md_mem_reg_params_t *params,
+                            uint64_t access_flags, struct ibv_mr **mrs);
 
 ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address, size_t length,
                                  uint64_t access_flags, int dmabuf_fd,
