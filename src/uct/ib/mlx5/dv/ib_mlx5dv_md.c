@@ -974,7 +974,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     uint8_t lag_state                                      = 0;
     uint64_t cap_flags                                     = 0;
     uint8_t log_max_qp;
-    uct_ib_uint128_t vhca_id;
+    uint16_t vhca_id;
     struct ibv_context *ctx;
     uct_ib_device_t *dev;
     uct_ib_mlx5_md_t *md;
@@ -1139,8 +1139,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG;
     }
 
-    memcpy(vhca_id, UCT_IB_MLX5DV_ADDR_OF(cmd_hca_cap, cap, vhca_id),
-           sizeof(vhca_id));
+    vhca_id = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, vhca_id);
 
     if (uct_ib_mlx5_is_xgvmi_alias_supported(ctx)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
@@ -1233,8 +1232,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
     md->super.name       = UCT_IB_MD_NAME(mlx5);
     md->super.cap_flags |= cap_flags;
-
-    memcpy(md->super.vhca_id, vhca_id, sizeof(vhca_id));
+    md->super.vhca_id    = vhca_id;
 
     ksm_atomic = 0;
     if (md->flags & UCT_IB_MLX5_MD_FLAG_KSM) {
@@ -1589,7 +1587,6 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     void *hdr, *alias_ctx;
     ucs_status_t status;
     void *access_key;
-    void *target_vhca_id_p;
     int ret;
 
     ib_memh = uct_ib_memh_alloc(&md->super, UCT_IB_MEM_FLAG_NO_RCACHE);
@@ -1612,11 +1609,8 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
                       UCT_IB_MLX5_OBJ_TYPE_MKEY);
     UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr, hdr, alias_object, 1);
 
-    target_vhca_id_p = UCT_IB_MLX5DV_ADDR_OF(alias_context, alias_ctx,
-                                             vhca_id_to_be_accessed);
-    memcpy(target_vhca_id_p, packed_mkey->vhca_id,
-           sizeof(packed_mkey->vhca_id));
-
+    UCT_IB_MLX5DV_SET(alias_context, alias_ctx, vhca_id_to_be_accessed,
+                      packed_mkey->vhca_id);
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, object_id_to_be_accessed,
                       packed_mkey->lkey >> 8);
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, metadata_1,

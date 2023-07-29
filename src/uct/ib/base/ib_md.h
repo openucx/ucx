@@ -161,13 +161,13 @@ typedef struct uct_ib_md {
      * means that flush_rkey is invalid and flush_remote operation could not
      * be initiated.  */
     uint32_t                 flush_rkey;
-    uct_ib_uint128_t         vhca_id;
+    uint16_t                 vhca_id;
 } uct_ib_md_t;
 
 
 typedef struct uct_ib_md_packed_mkey {
-    uint32_t         lkey;
-    uct_ib_uint128_t vhca_id;
+    uint32_t lkey;
+    uint16_t vhca_id;
 } UCS_S_PACKED uct_ib_md_packed_mkey_t;
 
 
@@ -427,8 +427,8 @@ uct_ib_md_pack_exported_mkey(uct_ib_md_t *md, uint32_t lkey, void *buffer)
 {
     uct_ib_md_packed_mkey_t *mkey = (uct_ib_md_packed_mkey_t*)buffer;
 
-    mkey->lkey = lkey;
-    memcpy(mkey->vhca_id, md->vhca_id, sizeof(md->vhca_id));
+    mkey->lkey    = lkey;
+    mkey->vhca_id = md->vhca_id;
 
     ucs_trace("packed exported mkey on %s: lkey 0x%x",
               uct_ib_device_name(&md->dev), lkey);
