@@ -343,7 +343,7 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief field mask of @ref uct_ep_is_connected
+ * @brief field mask of @ref uct_ep_is_connected_params_t
  */
 typedef enum {
     /** Device address length */
@@ -1009,11 +1009,11 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
  * @ingroup UCT_RESOURCE
  * @brief Checks if an endpoint is connected to a remote endpoint.
  *
- * @param [in] ep      Endpoint to check.
+ * @param [in] ep           Endpoint to check.
  * @param [in] device_addr  Remote device address.
  * @param [in] iface_addr   Remote interface address.
  * @param [in] ep_addr      Remote endpoint address.
- * @param [in] params  Parameters as defined in @ref
+ * @param [in] params       Parameters as defined in @ref
  *                     uct_ep_is_connected_params_t.
  *
  * @return Nonzero if connected, 0 otherwise.

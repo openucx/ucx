@@ -280,11 +280,11 @@ int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
 }
 
-int uct_ep_is_conntected(const uct_ep_h ep,
-                         const uct_device_addr_t *device_addr,
-                         const uct_iface_addr_t *iface_addr,
-                         const uct_ep_addr_t *ep_addr,
-                         const uct_ep_is_connected_params_t *params)
+int uct_ep_is_connected(const uct_ep_h ep,
+                        const uct_device_addr_t *device_addr,
+                        const uct_iface_addr_t *iface_addr,
+                        const uct_ep_addr_t *ep_addr,
+                        const uct_ep_is_connected_params_t *params)
 {
     const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
     return iface->internal_ops->ep_is_connected(ep, device_addr, iface_addr,
