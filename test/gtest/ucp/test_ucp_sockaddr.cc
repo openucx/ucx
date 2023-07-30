@@ -1443,7 +1443,7 @@ public:
 
 UCS_TEST_SKIP_COND_P(test_max_lanes, 16_lanes_reconf, !cm_use_all_devices(),
                      "MAX_RNDV_LANES=16", "MAX_EAGER_LANES=16",
-                     "IB_NUM_PATHS?=16", "TM_SW_RNDV=y")
+                     "IB_NUM_PATHS?=16", "TM_SW_RNDV=y", "PROTO_ENABLE=y")
 {
     /* get configuration index for EP created through CM */
     listen_and_communicate(false, SEND_DIRECTION_C2S);
