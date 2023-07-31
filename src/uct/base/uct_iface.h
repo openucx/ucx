@@ -264,9 +264,6 @@ typedef int (*uct_iface_is_reachable_v2_func_t)(
 /* Check if a remote endpoint is connected */
 typedef int (*uct_ep_is_connected_func_t)(
         const uct_ep_h ep,
-        const uct_device_addr_t *device_addr,
-        const uct_iface_addr_t *iface_addr,
-        const uct_ep_addr_t *ep_addr,
         const uct_ep_is_connected_params_t *params);
 
 
