@@ -600,7 +600,7 @@ typedef struct uct_iface_is_reachable_params {
 typedef struct uct_ep_is_connected_params {
     /**
      * Mask of valid fields in this structure and operation flags, using
-     * bits from @ref uct_ep_is_connected_params_t. Fields not specified
+     * bits from @ref uct_ep_is_connected_field_mask_t. Fields not specified
      * in this mask will be ignored. Provides ABI compatibility with respect to
      * adding new fields.
      */
