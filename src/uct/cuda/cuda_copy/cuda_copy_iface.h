@@ -68,4 +68,9 @@ typedef struct uct_cuda_copy_event_desc {
     uct_completion_t *comp;
     ucs_queue_elem_t queue;
 } uct_cuda_copy_event_desc_t;
+
+int uct_cuda_copy_iface_is_reachable(const uct_iface_h tl_iface,
+                                     const uct_device_addr_t *dev_addr,
+                                     const uct_iface_addr_t *iface_addr);
+
 #endif

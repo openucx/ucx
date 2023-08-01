@@ -859,6 +859,9 @@ void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
 
+int uct_base_ep_is_connected(const uct_ep_h ep,
+                             const uct_ep_is_connected_params_t *params);
+
 int
 uct_base_iface_is_reachable_v2(const uct_iface_h iface,
                                const uct_iface_is_reachable_params_t *params);

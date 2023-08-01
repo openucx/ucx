@@ -599,6 +599,19 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     return UCS_OK;
 }
 
+int uct_rc_verbs_ep_is_connected(const uct_ep_h tl_ep,
+                                 const uct_ep_is_connected_params_t *params)
+{
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    const uct_rc_verbs_ep_addr_t *rc_addr;
+    uint32_t addr_qp;
+
+    rc_addr = (const uct_rc_verbs_ep_addr_t*)params->ep_addr;
+    addr_qp = uct_ib_unpack_uint24(rc_addr->qp_num);
+
+    return uct_ib_verbs_ep_is_connected(params, ep->qp, addr_qp);
+}
+
 ucs_status_t
 uct_rc_verbs_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                  const uct_device_addr_t *dev_addr,

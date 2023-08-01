@@ -831,6 +831,37 @@ ucs_status_t uct_tcp_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
                                  (uct_iface_addr_t*)&addr->iface_addr);
 }
 
+int uct_tcp_ep_is_connected(uct_ep_h tl_ep,
+                            const uct_ep_is_connected_params_t *params)
+{
+    uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    ucs_status_t status;
+    struct sockaddr_storage dest_addr;
+    int is_connected;
+
+    if (!ucs_test_all_flags(params->field_mask,
+            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                      "iface_addr must be provided.", params->field_mask);
+        return 0;
+    }
+
+    status = uct_tcp_ep_set_dest_addr(params->device_addr, params->iface_addr,
+                                      (struct sockaddr*)&dest_addr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    is_connected = ucs_sockaddr_cmp((struct sockaddr*)&ep->peer_addr,
+                                    (struct sockaddr*)&dest_addr, &status);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return is_connected;
+}
+
 ucs_status_t
 uct_tcp_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                             const uct_device_addr_t *dev_addr,

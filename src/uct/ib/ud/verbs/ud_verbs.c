@@ -568,6 +568,22 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
     return UCS_OK;
 }
 
+int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
+                                 const uct_ep_is_connected_params_t *params)
+{
+    uct_ud_ep_t *ep             = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_ud_verbs_iface_t);
+    const uct_ud_ep_addr_t *ud_addr;
+    uint32_t addr_qp;
+
+    ud_addr = (const uct_ud_ep_addr_t*)params->ep_addr;
+    addr_qp = uct_ib_unpack_uint24(ud_addr->iface_addr.qp_num);
+
+    return uct_ib_verbs_ep_is_connected(params, iface->super.qp, addr_qp) &&
+           (ep->dest_ep_id == uct_ib_unpack_uint24(ud_addr->ep_id));
+}
+
 static void *uct_ud_verbs_ep_get_peer_address(uct_ud_ep_t *ud_ep)
 {
     uct_ud_verbs_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_verbs_ep_t);
@@ -608,7 +624,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
             .ep_invalidate         = uct_ud_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_ud_ep_connect_to_ep_v2,
             .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-            .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_unsupported
+            .ep_is_connected       = uct_ud_verbs_ep_is_connected
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,

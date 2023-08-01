@@ -474,6 +474,11 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);
 
+
+int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
+                                const union ibv_gid *dgid);
+
+
 int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr);
 
@@ -649,6 +654,11 @@ uct_ib_fence_info_init(uct_ib_fence_info_t* fence)
 {
     fence->fence_beat = 0;
 }
+
+int
+uct_ib_verbs_ep_is_connected(const uct_ep_is_connected_params_t *params,
+                             struct ibv_qp *qp,
+                             uint32_t addr_qp);
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_ib_cq_size(uct_ib_iface_t *iface, const uct_ib_iface_init_attr_t *init_attr,

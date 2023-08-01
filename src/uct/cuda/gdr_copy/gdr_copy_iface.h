@@ -22,4 +22,7 @@ typedef struct uct_gdr_copy_iface_config {
     uct_iface_config_t      super;
 } uct_gdr_copy_iface_config_t;
 
+int uct_gdr_copy_iface_is_reachable(const uct_iface_h tl_iface,
+                                    const uct_device_addr_t *dev_addr,
+                                    const uct_iface_addr_t *iface_addr);
 #endif

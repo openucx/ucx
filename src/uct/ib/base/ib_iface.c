@@ -666,24 +666,51 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     return ret;
 }
 
-static int uct_ib_iface_is_same_device(uct_ib_iface_t *iface,
-                                       const uct_ib_address_t *ib_addr)
+int
+uct_ib_verbs_ep_is_connected(const uct_ep_is_connected_params_t *params,
+                             struct ibv_qp *qp,
+                             uint32_t addr_qp)
 {
-    const union ibv_gid *gid = &iface->gid_info.gid;
+    ucs_status_t status;
+    struct ibv_ah_attr ah;
+    uint32_t qp_num;
+    const uct_ib_address_t *ib_addr;
+
+    if (!ucs_test_all_flags(params->field_mask,
+            UCT_EP_IS_CONNECTED_FIELD_EP_ADDR |
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                      "ep_addr must be provided.", params->field_mask);
+        return 0;
+    }
+
+    status = uct_ib_query_qp_peer_info(qp, &ah, &qp_num);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    ib_addr = (const uct_ib_address_t*)params->device_addr;
+    return uct_ib_iface_is_same_device(ib_addr, ah.dlid, &ah.grh.dgid) &&
+           (qp_num == addr_qp);
+}
+
+int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
+                                const union ibv_gid *dgid)
+{
     uct_ib_address_pack_params_t params;
 
     uct_ib_address_unpack(ib_addr, &params);
 
     if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
-        return !memcmp(gid->raw, params.gid.raw, sizeof(params.gid.raw));
+        return !memcmp(dgid->raw, params.gid.raw, sizeof(params.gid.raw));
     }
 
-    if (uct_ib_iface_port_attr(iface)->lid != params.lid) {
+    if (dlid != params.lid) {
         return 0;
     }
 
     if ((params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) &&
-        (params.gid.global.interface_id != gid->global.interface_id)) {
+        (params.gid.global.interface_id != dgid->global.interface_id)) {
         return 0;
     }
 
@@ -706,7 +733,9 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                             UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
 
     return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
-           uct_ib_iface_is_same_device(iface, ib_addr);
+           uct_ib_iface_is_same_device(ib_addr,
+                                       uct_ib_iface_port_attr(iface)->lid,
+                                       &iface->gid_info.gid);
 }
 
 int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,

@@ -160,6 +160,9 @@ ucs_status_t uct_rc_verbs_ep_atomic64_fetch(uct_ep_h tl_ep, uct_atomic_op_t opco
                                             uint64_t remote_addr, uct_rkey_t rkey,
                                             uct_completion_t *comp);
 
+int uct_rc_verbs_ep_is_connected(const uct_ep_h tl_ep,
+                                 const uct_ep_is_connected_params_t *params);
+
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp);
 

@@ -51,6 +51,21 @@ void uct_knem_iovec_set_buffer(struct knem_cmd_param_iovec *iov, void *buffer)
     iov->base = (uintptr_t)buffer;
 }
 
+int uct_knem_ep_is_connected(const uct_ep_h tl_ep,
+                             const uct_ep_is_connected_params_t *params)
+{
+    if (!ucs_test_all_flags(params->field_mask,
+            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                      "iface_addr must be provided.", params->field_mask);
+        return 0;
+    }
+
+    return uct_sm_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                     params->iface_addr);
+}
+
 ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
                             ucs_iov_iter_t *iov_iter, size_t *length_p,
                             uint64_t remote_addr, uct_rkey_t rkey,

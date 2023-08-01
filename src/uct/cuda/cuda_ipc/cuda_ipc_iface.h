@@ -66,4 +66,9 @@ typedef struct uct_cuda_ipc_event_desc {
 
 
 ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface);
+
+int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
+                                    const uct_device_addr_t *dev_addr,
+                                    const uct_iface_addr_t *iface_addr);
+
 #endif

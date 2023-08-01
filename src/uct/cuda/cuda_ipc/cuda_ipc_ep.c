@@ -46,6 +46,27 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_ep_t, uct_ep_t);
 #define uct_cuda_ipc_trace_data(_addr, _rkey, _fmt, ...)     \
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_addr), (_rkey))
 
+int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
+                                 const uct_ep_is_connected_params_t *params)
+{
+    uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
+    pid_t addr_pid;
+
+    if (!ucs_test_all_flags(params->field_mask,
+            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                      "iface_addr must be provided.", params->field_mask);
+        return 0;
+    }
+
+    addr_pid = *(pid_t*)params->iface_addr;
+
+    return uct_cuda_ipc_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                           params->iface_addr) &&
+           (ep->remote_pid == addr_pid);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                   const uct_iov_t *iov, uct_rkey_t rkey,

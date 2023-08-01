@@ -84,6 +84,27 @@ uct_cma_ep_tx_error(uct_cma_ep_t *ep, const char *cma_call_name,
             strerror(cma_call_errno));
 }
 
+int uct_cma_ep_is_connected(const uct_ep_h tl_ep,
+                            const uct_ep_is_connected_params_t *params)
+{
+    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
+    pid_t addr_pid;
+
+    if (!ucs_test_all_flags(params->field_mask,
+            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                      "iface_addr must be provided.", params->field_mask);
+        return 0;
+    }
+
+    addr_pid = *(pid_t*)params->iface_addr & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
+
+    return uct_cma_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                      params->iface_addr) &&
+           (ep->remote_pid == addr_pid);
+}
+
 ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
                            ucs_iov_iter_t *iov_iter, size_t *length_p,
                            uint64_t remote_addr, uct_rkey_t rkey,

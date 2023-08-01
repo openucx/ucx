@@ -919,6 +919,26 @@ ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_iface_t *iface,
     }
 }
 
+int uct_ib_mlx5_ep_is_connected(uct_ib_iface_t *iface,
+                                const uct_device_addr_t *device_addr,
+                                uct_ib_mlx5_qp_t *txwq,
+                                uint32_t addr_qp)
+{
+    ucs_status_t status;
+    struct ibv_ah_attr ah;
+    uint32_t qp_num;
+    const uct_ib_address_t *ib_addr;
+
+    status = uct_ib_mlx5_query_qp_peer_info(iface, txwq, &ah, &qp_num);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    ib_addr = (const uct_ib_address_t*)device_addr;
+    return uct_ib_iface_is_same_device(ib_addr, ah.dlid, &ah.grh.dgid) &&
+           (qp_num == addr_qp);
+}
+
 ucs_status_t
 uct_ib_mlx5_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
                                struct ibv_ah_attr *ah_attr, uint32_t *dest_qpn)

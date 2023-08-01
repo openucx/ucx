@@ -25,4 +25,6 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
                             uint64_t remote_addr, uct_rkey_t rkey,
                             uct_scopy_tx_op_t tx_op);
 
+int uct_knem_ep_is_connected(const uct_ep_h tl_ep,
+                             const uct_ep_is_connected_params_t *params);
 #endif

@@ -41,4 +41,7 @@ ucs_status_t uct_cuda_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey);
 
+int uct_cuda_copy_ep_is_connected(const uct_ep_h tl_ep,
+                                  const uct_ep_is_connected_params_t *params);
+
 #endif

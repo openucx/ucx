@@ -632,6 +632,30 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
+int uct_ud_mlx5_ep_is_connected(const uct_ep_h tl_ep,
+                                const uct_ep_is_connected_params_t *params)
+{
+    uct_ud_ep_t *ep            = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_mlx5_iface_t);
+    const uct_ud_ep_addr_t *ud_addr;
+    uint32_t addr_qp;
+
+    if (!ucs_test_all_flags(params->field_mask,
+            UCT_EP_IS_CONNECTED_FIELD_EP_ADDR |
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                      "ep_addr must be provided.", params->field_mask);
+        return 0;
+    }
+
+    ud_addr = (const uct_ud_ep_addr_t*)params->ep_addr;
+    addr_qp = uct_ib_unpack_uint24(ud_addr->iface_addr.qp_num);
+
+    return uct_ib_mlx5_ep_is_connected(&iface->super.super, params->device_addr,
+                                       &iface->tx.wq.super, addr_qp) &&
+           (ep->dest_ep_id == uct_ib_unpack_uint24(ud_addr->ep_id));
+}
+
 static ucs_status_t
 uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
                                       const uct_ib_address_t *ib_addr,
@@ -831,7 +855,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
             .ep_invalidate         = uct_ud_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_ud_ep_connect_to_ep_v2,
             .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
-            .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_unsupported
+            .ep_is_connected       = uct_ud_mlx5_ep_is_connected
         },
         .create_cq      = uct_ud_mlx5_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,

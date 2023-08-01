@@ -630,6 +630,11 @@ ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          enum ibv_qp_state state);
 
+int uct_ib_mlx5_ep_is_connected(uct_ib_iface_t *iface,
+                                const uct_device_addr_t *device_addr,
+                                uct_ib_mlx5_qp_t *txwq,
+                                uint32_t addr_qp);
+
 ucs_status_t
 uct_ib_mlx5_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
                                struct ibv_ah_attr *ah_attr, uint32_t *dest_qpn);

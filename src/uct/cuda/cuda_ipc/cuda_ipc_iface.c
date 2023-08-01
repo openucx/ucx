@@ -73,9 +73,9 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
-                                           const uct_device_addr_t *dev_addr,
-                                           const uct_iface_addr_t *iface_addr)
+int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
+                                    const uct_device_addr_t *dev_addr,
+                                    const uct_iface_addr_t *iface_addr)
 {
     return (ucs_get_system_id() == *((const uint64_t*)dev_addr)) &&
            (getpid() != *(pid_t*)iface_addr);
@@ -474,7 +474,7 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2,
-    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_unsupported
+    .ep_is_connected       = uct_cuda_ipc_ep_is_connected
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,

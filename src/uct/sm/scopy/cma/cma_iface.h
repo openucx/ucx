@@ -23,5 +23,8 @@ typedef struct uct_cma_iface {
     uct_scopy_iface_t             super;
 } uct_cma_iface_t;
 
+int uct_cma_iface_is_reachable(const uct_iface_h tl_iface,
+                               const uct_device_addr_t *dev_addr,
+                               const uct_iface_addr_t *tl_iface_addr);
 
 #endif

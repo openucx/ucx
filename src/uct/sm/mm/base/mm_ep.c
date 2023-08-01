@@ -71,6 +71,33 @@ uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
     return UCS_OK;
 }
 
+int uct_mm_ep_is_connected(const uct_ep_h tl_ep,
+                           const uct_ep_is_connected_params_t *params)
+{
+    uct_mm_ep_t *ep              = ucs_derived_of(tl_ep, uct_mm_ep_t);
+    uct_mm_iface_addr_t *mm_addr = (uct_mm_iface_addr_t*)params->iface_addr;
+    uct_mm_iface_t *iface;
+    uct_mm_md_t *md;
+
+    if (!ucs_test_all_flags(params->field_mask,
+            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                      "iface_addr must be provided.", params->field_mask);
+        return 0;
+    }
+
+    iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
+    md    = ucs_derived_of(iface->super.super.md, uct_mm_md_t);
+
+    return (kh_get(uct_mm_remote_seg, &ep->remote_segs, mm_addr->fifo_seg_id) !=
+            kh_end(&ep->remote_segs)) &&
+           ((ep->remote_iface_addr == NULL) ||
+           !memcmp(ep->remote_iface_addr, mm_addr + 1, md->iface_addr_len)) &&
+           uct_iface_local_is_reachable((uct_iface_local_addr_ns_t*)params->device_addr,
+                                         UCS_SYS_NS_TYPE_IPC);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_mm_ep_get_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id, size_t length,
                          void **address_p)

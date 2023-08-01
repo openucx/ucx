@@ -37,6 +37,21 @@ UCS_CLASS_DEFINE(uct_gdr_copy_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_gdr_copy_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_gdr_copy_ep_t, uct_ep_t);
 
+int uct_gdr_copy_ep_is_connected(const uct_ep_h tl_ep,
+                                 const uct_ep_is_connected_params_t *params)
+{
+    if (!ucs_test_all_flags(params->field_mask,
+            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), both device_addr and "
+                      "iface_addr must be provided.", params->field_mask);
+        return 0;
+    }
+
+    return uct_gdr_copy_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                           params->iface_addr);
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_ep_put_short,
                  (tl_ep, buffer, length, remote_addr, rkey),
                  uct_ep_h tl_ep, const void *buffer, unsigned length,
