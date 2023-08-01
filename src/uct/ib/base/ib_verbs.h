@@ -101,7 +101,6 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #endif
 
 typedef uint8_t uct_ib_uint24_t[3];
-typedef uint8_t uct_ib_uint128_t[0x10];
 
 static inline void uct_ib_pack_uint24(uct_ib_uint24_t buf, uint32_t val)
 {
