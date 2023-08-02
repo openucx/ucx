@@ -26,6 +26,11 @@ ucs_config_field_t uct_tcp_sockcm_config_table[] = {
 
    UCT_TCP_SYN_CNT(ucs_offsetof(uct_tcp_sockcm_config_t, syn_cnt)),
 
+  {"SOURCE_ADDRESS", "",
+   "If non-empty, specify the local source address (IPv4 or IPv6) to use \n"
+   "when creating a client connection",
+   ucs_offsetof(uct_tcp_sockcm_config_t, src_addr), UCS_CONFIG_TYPE_STRING},
+
   {NULL}
 };
 
@@ -207,6 +212,8 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
 {
     uct_tcp_sockcm_config_t *cm_config = ucs_derived_of(config,
                                                         uct_tcp_sockcm_config_t);
+    ucs_status_t status;
+    size_t size;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_tcp_sockcm_ops,
                               &uct_tcp_sockcm_iface_ops,
@@ -219,6 +226,22 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
     self->sockopt_rcvbuf = cm_config->sockopt.rcvbuf;
     self->syn_cnt        = cm_config->syn_cnt;
 
+    status = ucs_sock_create_sockaddr(cm_config->src_addr,
+                                      (struct sockaddr**)&self->src_addr.addr,
+                                      "tcp_sockcm_src_addr");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (self->src_addr.addr != NULL) {
+        status = ucs_sockaddr_sizeof(self->src_addr.addr, &size);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        self->src_addr.addrlen = size;
+    }
+
     ucs_list_head_init(&self->ep_list);
 
     ucs_debug("created tcp_sockcm %p", self);
@@ -229,6 +252,8 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
 UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_t)
 {
     uct_tcp_sockcm_ep_t *ep, *tmp;
+
+    ucs_free((struct sockaddr*)self->src_addr.addr);
 
     UCS_ASYNC_BLOCK(self->super.iface.worker->async);
 

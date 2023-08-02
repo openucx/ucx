@@ -887,41 +887,6 @@ static uct_iface_internal_ops_t uct_rdmacm_cm_iface_internal_ops = {
     .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
 };
 
-static ucs_status_t
-uct_rdmacm_cm_ipstr_to_sockaddr(const char *ip_str, struct sockaddr **saddr_p,
-                                const char *debug_name)
-{
-    struct sockaddr_storage *sa_storage;
-    ucs_status_t status;
-
-    /* NULL-pointer for empty parameter */
-    if (ip_str[0] == '\0') {
-        sa_storage = NULL;
-        goto out;
-    }
-
-    sa_storage = ucs_calloc(1, sizeof(struct sockaddr_storage), debug_name);
-    if (sa_storage == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        ucs_error("cannot allocate memory for rdmacm source address");
-        goto err;
-    }
-
-    status = ucs_sock_ipstr_to_sockaddr(ip_str, sa_storage);
-    if (status != UCS_OK) {
-        goto err_free;
-    }
-
-out:
-    *saddr_p = (struct sockaddr*)sa_storage;
-    return UCS_OK;
-
-err_free:
-    ucs_free(sa_storage);
-err:
-    return status;
-}
-
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
                     uct_worker_h worker, const uct_cm_config_t *config)
 {
@@ -967,9 +932,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
         goto err_destroy_ev_ch;
     }
 
-    status = uct_rdmacm_cm_ipstr_to_sockaddr(rdmacm_config->src_addr,
-                                             &self->config.src_addr,
-                                             "rdmacm_src_addr");
+    status = ucs_sock_create_sockaddr(rdmacm_config->src_addr,
+                                      &self->config.src_addr,
+                                      "rdmacm_src_addr");
     if (status != UCS_OK) {
         goto ucs_async_remove_handler;
     }

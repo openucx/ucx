@@ -436,6 +436,23 @@ ucs_status_t ucs_sock_ipstr_to_sockaddr(const char *ip_str,
 
 
 /**
+ * Create and fill the sockaddr storage with IP address extracted from a given
+ * string.
+ *
+ * @param [in]  ip_str       A string to take IP address from.
+ * @param [out] sa_storage_p sockaddr storage filled with the IP address and
+ *                           address family. NULL if string is empty.
+ * @param [in]  debug_name   A string for debug purpose.
+ *
+ * @return UCS_OK on success, UCS_ERR_INVALID_ADDR if @a ip_str is invalid,
+ *         UCS_ERR_NO_MEMORY if failed to allocate the sockaddr storage.
+ */
+ucs_status_t ucs_sock_create_sockaddr(const char *ip_str,
+                                      struct sockaddr **saddr_p,
+                                      const char *debug_name);
+
+
+/**
  * Check if the address family of the given sockaddr is IPv4 or IPv6
  *
  * @param [in] sa       Pointer to sockaddr structure.

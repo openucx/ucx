@@ -824,6 +824,41 @@ ucs_status_t ucs_sock_ipstr_to_sockaddr(const char *ip_str,
     return UCS_ERR_INVALID_ADDR;
 }
 
+ucs_status_t ucs_sock_create_sockaddr(const char *ip_str,
+                                      struct sockaddr **saddr_p,
+                                      const char *debug_name)
+{
+    struct sockaddr_storage *sa_storage;
+    ucs_status_t status;
+
+    /* NULL-pointer for empty parameter */
+    if (ip_str[0] == '\0') {
+        sa_storage = NULL;
+        goto out;
+    }
+
+    sa_storage = ucs_calloc(1, sizeof(struct sockaddr_storage), debug_name);
+    if (sa_storage == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        ucs_error("cannot allocate memory for %s", debug_name);
+        goto err;
+    }
+
+    status = ucs_sock_ipstr_to_sockaddr(ip_str, sa_storage);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
+
+out:
+    *saddr_p = (struct sockaddr*)sa_storage;
+    return UCS_OK;
+
+err_free:
+    ucs_free(sa_storage);
+err:
+    return status;
+}
+
 int ucs_sockaddr_cmp(const struct sockaddr *sa1,
                      const struct sockaddr *sa2,
                      ucs_status_t *status_p)
