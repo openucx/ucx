@@ -87,15 +87,15 @@ int uct_mm_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
+    iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     md    = ucs_derived_of(iface->super.super.md, uct_mm_md_t);
 
     return (kh_get(uct_mm_remote_seg, &ep->remote_segs, mm_addr->fifo_seg_id) !=
             kh_end(&ep->remote_segs)) &&
            ((ep->remote_iface_addr == NULL) ||
-           !memcmp(ep->remote_iface_addr, mm_addr + 1, md->iface_addr_len)) &&
-           uct_iface_local_is_reachable((uct_iface_local_addr_ns_t*)params->device_addr,
-                                         UCS_SYS_NS_TYPE_IPC);
+            !memcmp(ep->remote_iface_addr, mm_addr + 1, md->iface_addr_len)) &&
+           uct_mm_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                     params->iface_addr);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

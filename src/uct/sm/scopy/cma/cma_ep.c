@@ -100,9 +100,9 @@ int uct_cma_ep_is_connected(const uct_ep_h tl_ep,
 
     addr_pid = *(pid_t*)params->iface_addr & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
 
-    return uct_cma_iface_is_reachable(tl_ep->iface, params->device_addr,
-                                      params->iface_addr) &&
-           (ep->remote_pid == addr_pid);
+    return (ep->remote_pid == addr_pid) &&
+           uct_cma_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                      params->iface_addr);
 }
 
 ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,

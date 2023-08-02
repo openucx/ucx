@@ -104,10 +104,9 @@ uct_mm_iface_query_tl_devices(uct_md_h md,
     return uct_sm_base_query_tl_devices(md, tl_devices_p, num_tl_devices_p);
 }
 
-static int
-uct_mm_iface_is_reachable(const uct_iface_h tl_iface,
-                          const uct_device_addr_t *dev_addr,
-                          const uct_iface_addr_t *tl_iface_addr)
+int uct_mm_iface_is_reachable(const uct_iface_h tl_iface,
+                              const uct_device_addr_t *dev_addr,
+                              const uct_iface_addr_t *tl_iface_addr)
 {
     uct_mm_iface_t      *iface      = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_mm_md_t         *md         = ucs_derived_of(iface->super.super.md,

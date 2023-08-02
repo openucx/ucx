@@ -853,8 +853,8 @@ int uct_tcp_ep_is_connected(uct_ep_h tl_ep,
         return 0;
     }
 
-    is_connected = ucs_sockaddr_cmp((struct sockaddr*)&ep->peer_addr,
-                                    (struct sockaddr*)&dest_addr, &status);
+    is_connected = !ucs_sockaddr_cmp((struct sockaddr*)&ep->peer_addr,
+                                     (struct sockaddr*)&dest_addr, &status);
     if (status != UCS_OK) {
         return 0;
     }

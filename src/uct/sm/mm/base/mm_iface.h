@@ -292,5 +292,8 @@ void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc);
 
 ucs_status_t uct_mm_flush();
 
+int uct_mm_iface_is_reachable(const uct_iface_h tl_iface,
+                              const uct_device_addr_t *dev_addr,
+                              const uct_iface_addr_t *tl_iface_addr);
 
 #endif
