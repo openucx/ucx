@@ -690,8 +690,8 @@ uct_ib_verbs_ep_is_connected(const uct_ep_is_connected_params_t *params,
     }
 
     ib_addr = (const uct_ib_address_t*)params->device_addr;
-    return uct_ib_iface_is_same_device(ib_addr, ah.dlid, &ah.grh.dgid) &&
-           (qp_num == addr_qp);
+    return (qp_num == addr_qp) &&
+            uct_ib_iface_is_same_device(ib_addr, ah.dlid, &ah.grh.dgid);
 }
 
 int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,

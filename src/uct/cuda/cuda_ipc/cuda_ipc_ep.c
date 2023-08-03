@@ -62,9 +62,9 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
 
     addr_pid = *(pid_t*)params->iface_addr;
 
-    return uct_cuda_ipc_iface_is_reachable(tl_ep->iface, params->device_addr,
-                                           params->iface_addr) &&
-           (ep->remote_pid == addr_pid);
+    return (ep->remote_pid == addr_pid) &&
+            uct_cuda_ipc_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                           params->iface_addr);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
