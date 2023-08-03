@@ -26,13 +26,6 @@ static ucs_config_field_t uct_knem_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_knem_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"RCACHE", "try", "Enable using memory registration cache",
-     ucs_offsetof(uct_knem_md_config_t, rcache_enable), UCS_CONFIG_TYPE_TERNARY},
-
-    {"", "", NULL,
-     ucs_offsetof(uct_knem_md_config_t, rcache),
-     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
-
     {NULL}
 };
 
@@ -79,9 +72,7 @@ out_empty:
 static void uct_knem_md_close(uct_md_h md)
 {
     uct_knem_md_t *knem_md = ucs_derived_of(md, uct_knem_md_t);
-    if (knem_md->rcache != NULL) {
-        ucs_rcache_destroy(knem_md->rcache);
-    }
+
     close(knem_md->knem_fd);
     ucs_free(knem_md);
 }
@@ -110,9 +101,6 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
     rc = ioctl(knem_fd, KNEM_CMD_CREATE_REGION, &create);
     if (rc < 0) {
         if (!silent && !(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
-            /* do not report error in silent mode: it called from rcache
-             * internals, rcache will try to register memory again with
-             * more accurate data */
             ucs_error("KNEM failed to create region address %p length %zi: %m",
                       address, length);
         }
@@ -273,107 +261,11 @@ static uct_md_ops_t md_ops = {
     .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
-static inline uct_knem_rcache_region_t* uct_knem_rcache_region_from_memh(uct_mem_h memh)
-{
-    return ucs_container_of(memh, uct_knem_rcache_region_t, key);
-}
-
-static ucs_status_t
-uct_knem_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
-                        const uct_md_mem_reg_params_t *params,
-                        uct_mem_h *memh_p)
-{
-    uint64_t flags    = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS,
-                                                   0);
-    uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
-    ucs_rcache_region_t *rregion;
-    ucs_status_t status;
-
-    status = ucs_rcache_get(md->rcache, address, length, PROT_READ|PROT_WRITE,
-                            &flags, &rregion);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_assert(rregion->refcount > 0);
-    *memh_p = &ucs_derived_of(rregion, uct_knem_rcache_region_t)->key;
-    return UCS_OK;
-}
-
-static ucs_status_t
-uct_knem_mem_rcache_dereg(uct_md_h uct_md,
-                          const uct_md_mem_dereg_params_t *params)
-{
-    uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
-    uct_knem_rcache_region_t *region;
-
-    UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(params);
-
-    region = uct_knem_rcache_region_from_memh(params->memh);
-
-    ucs_rcache_region_put(md->rcache, &region->super);
-    return UCS_OK;
-}
-
-static uct_md_ops_t uct_knem_md_rcache_ops = {
-    .close              = uct_knem_md_close,
-    .query              = uct_knem_md_query,
-    .mkey_pack          = uct_knem_mkey_pack,
-    .mem_reg            = uct_knem_mem_rcache_reg,
-    .mem_dereg          = uct_knem_mem_rcache_dereg,
-    .mem_attach         = ucs_empty_function_return_unsupported,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
-};
-
-
-static ucs_status_t uct_knem_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                               void *arg, ucs_rcache_region_t *rregion,
-                                               uint16_t rcache_mem_reg_flags)
-{
-    uct_knem_rcache_region_t *region = ucs_derived_of(rregion, uct_knem_rcache_region_t);
-    uct_knem_md_t *md                = context;
-    int *flags                       = arg;
-
-    return uct_knem_mem_reg_internal(&md->super, (void*)region->super.super.start,
-                                     region->super.super.end - region->super.super.start,
-                                     *flags,
-                                     rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS,
-                                     &region->key);
-}
-
-static void uct_knem_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
-                                         ucs_rcache_region_t *rregion)
-{
-    uct_knem_rcache_region_t *region = ucs_derived_of(rregion, uct_knem_rcache_region_t);
-    uct_knem_md_t            *md     = context;
-
-    uct_knem_mem_dereg_internal(&md->super, &region->key);
-}
-
-static void uct_knem_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,
-                                           ucs_rcache_region_t *rregion, char *buf,
-                                           size_t max)
-{
-    uct_knem_rcache_region_t *region = ucs_derived_of(rregion, uct_knem_rcache_region_t);
-    uct_knem_key_t *key = &region->key;
-
-    snprintf(buf, max, "cookie %"PRIu64" addr %p", key->cookie, (void*)key->address);
-}
-
-static ucs_rcache_ops_t uct_knem_rcache_ops = {
-    .mem_reg     = uct_knem_rcache_mem_reg_cb,
-    .mem_dereg   = uct_knem_rcache_mem_dereg_cb,
-    .dump_region = uct_knem_rcache_dump_region_cb
-};
-
 static ucs_status_t
 uct_knem_md_open(uct_component_t *component, const char *md_name,
                  const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
-    const uct_knem_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_knem_md_config_t);
     uct_knem_md_t *knem_md;
-    ucs_rcache_params_t rcache_params;
-    ucs_status_t status;
 
     knem_md = ucs_malloc(sizeof(uct_knem_md_t), "uct_knem_md_t");
     if (NULL == knem_md) {
@@ -384,7 +276,6 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
     knem_md->super.ops       = &md_ops;
     knem_md->super.component = &uct_knem_component;
     knem_md->reg_cost        = ucs_linear_func_make(1200.0e-9, 0.007e-9);
-    knem_md->rcache          = NULL;
 
     knem_md->knem_fd = open("/dev/knem", O_RDWR);
     if (knem_md->knem_fd < 0) {
@@ -393,44 +284,8 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (md_config->rcache_enable != UCS_NO) {
-        uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
-        rcache_params.region_struct_size = sizeof(uct_knem_rcache_region_t);
-        rcache_params.max_alignment      = ucs_get_page_size();
-        rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
-        rcache_params.context            = knem_md;
-        rcache_params.ops                = &uct_knem_rcache_ops;
-        status = ucs_rcache_create(&rcache_params, "knem", ucs_stats_get_root(),
-                                   &knem_md->rcache);
-        if (status == UCS_OK) {
-            knem_md->super.ops = &uct_knem_md_rcache_ops;
-            knem_md->reg_cost  = ucs_linear_func_make(
-                                 uct_md_rcache_overhead(&md_config->rcache), 0);
-        } else {
-            ucs_assert(knem_md->rcache == NULL);
-            if (md_config->rcache_enable == UCS_YES) {
-                ucs_error("Failed to create registration cache: %s",
-                          ucs_status_string(status));
-                uct_knem_md_close(&knem_md->super);
-                return status;
-            } else {
-                ucs_debug("Could not create registration cache: %s",
-                          ucs_status_string(status));
-            }
-        }
-    }
-
     *md_p = (uct_md_h)knem_md;
     return UCS_OK;
-}
-
-static void uct_knem_md_vfs_init(uct_md_h md)
-{
-    uct_knem_md_t *knem_md = (uct_knem_md_t*)md;
-
-    if (knem_md->rcache != NULL) {
-        ucs_vfs_obj_add_sym_link(md, knem_md->rcache, "rcache");
-    }
 }
 
 uct_component_t uct_knem_component = {
@@ -450,5 +305,5 @@ uct_component_t uct_knem_component = {
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_knem_component),
     .flags              = 0,
-    .md_vfs_init        = uct_knem_md_vfs_init
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };

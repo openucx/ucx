@@ -11,7 +11,6 @@
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
-#include <ucs/memory/rcache.h>
 #include <uct/base/uct_md.h>
 #include <uct/api/v2/uct_v2.h>
 
@@ -24,7 +23,6 @@ ucs_status_t uct_knem_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr);
 typedef struct uct_knem_md {
     struct uct_md       super;    /**< Domain info */
     int                 knem_fd;  /**< File descriptor for /dev/knem */
-    ucs_rcache_t       *rcache;   /**< Registration cache (can be NULL) */
     ucs_linear_func_t   reg_cost; /**< Memory registration cost */
 } uct_knem_md_t;
 
@@ -41,16 +39,6 @@ typedef struct uct_knem_key {
  */
 typedef struct uct_knem_md_config {
     uct_md_config_t          super;
-    ucs_ternary_auto_value_t rcache_enable;
-    uct_md_rcache_config_t   rcache;
 } uct_knem_md_config_t;
-
-/**
- * KNEM memory region in the registration cache.
- */
-typedef struct uct_knem_rcache_region {
-    ucs_rcache_region_t super;
-    uct_knem_key_t      key;      /**<  exposed to the user as the memh */
-} uct_knem_rcache_region_t;
 
 #endif
