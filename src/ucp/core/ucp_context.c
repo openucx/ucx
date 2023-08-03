@@ -425,7 +425,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "dynamically allocated memory.",
    ucs_offsetof(ucp_context_config_t, rkey_mpool_max_md), UCS_CONFIG_TYPE_INT},
 
-  {"ADDRESS_VERSION", "v2",
+  {"ADDRESS_VERSION", "v1",
    "Defines UCP worker address format obtained with ucp_worker_get_address() or\n"
    "ucp_worker_query() routines.",
    ucs_offsetof(ucp_context_config_t, worker_addr_version),
