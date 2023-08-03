@@ -237,6 +237,7 @@ ucp_worker_default_address_pack_flags(ucp_worker_h worker)
     return ucp_worker_common_address_pack_flags(worker) |
            UCP_ADDRESS_PACK_FLAG_WORKER_UUID |
            UCP_ADDRESS_PACK_FLAG_WORKER_NAME |
+           UCP_ADDRESS_PACK_FLAG_V1_EXTRA_INFO |
            UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
            UCP_ADDRESS_PACK_FLAG_IFACE_ADDR | UCP_ADDRESS_PACK_FLAG_EP_ADDR;
 }
