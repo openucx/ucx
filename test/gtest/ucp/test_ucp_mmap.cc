@@ -94,7 +94,6 @@ public:
 
         if (get_variant_value() == VARIANT_NO_RCACHE) {
             modify_config("RCACHE_ENABLE", "n");
-            ucs::scoped_setenv knem_rcache_env("UCX_KNEM_RCACHE", "no");
             ucp_test::init(); // Init UCP with rcache disabled
         } else {
             ucp_test::init();
