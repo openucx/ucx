@@ -53,13 +53,14 @@ void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes)
     uint16_t value16;
     uint32_t value32;
 
-    UCS_STATIC_ASSERT((sizeof(*bytes) == 2) || (sizeof(*bytes) == 4));
+    UCS_STATIC_ASSERT((sizeof(*bytes) == sizeof(value16)) ||
+                      (sizeof(*bytes) == sizeof(value32)));
 
-    if (sizeof(*bytes) == 2) {
-        memcpy(&value16, bytes, sizeof(*bytes));
+    if (sizeof(*bytes) == sizeof(value16)) {
+        memcpy(&value16, bytes, sizeof(value16));
         (void)ucs_atomic_swap16(dst, value16);
     } else {
-        memcpy(&value32, bytes, sizeof(*bytes));
+        memcpy(&value32, bytes, sizeof(value32));
         (void)ucs_atomic_swap32(dst, value32);
     }
 }
