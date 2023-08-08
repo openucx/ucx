@@ -11,6 +11,17 @@
 ### Features:
 ### Bugfixes:
 
+## 1.15.0-rc3 (August 8, 2023)
+### Bugfixes:
+#### UCP
+* Fixed endpoint reconfiguration issues because of assymetrical selection
+#### UCT
+* Check dmabuf kernel support in ROCm memory domain
+#### UCM
+* Fixed conditional jump patching
+#### Tools
+ * Fixed memory access flags in perftest
+
 ## 1.15.0-rc2 (July 27, 2023)
 ### Features:
 #### RDMA CORE (IB, ROCE, etc.)
