@@ -673,25 +673,17 @@ uct_ib_verbs_ep_is_connected(const uct_ep_is_connected_params_t *params,
 {
     ucs_status_t status;
     struct ibv_ah_attr ah;
-    uint32_t qp_num;
+    uint32_t dest_qpn;
     const uct_ib_address_t *ib_addr;
 
-    if (!ucs_test_all_flags(params->field_mask,
-            UCT_EP_IS_CONNECTED_FIELD_EP_ADDR |
-            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
-        ucs_error("missing params (field_mask: %lu), both device_addr and "
-                      "ep_addr must be provided.", params->field_mask);
-        return 0;
-    }
-
-    status = uct_ib_query_qp_peer_info(qp, &ah, &qp_num);
+    status = uct_ib_query_qp_peer_info(qp, &ah, &dest_qpn);
     if (status != UCS_OK) {
         return 0;
     }
 
     ib_addr = (const uct_ib_address_t*)params->device_addr;
-    return (qp_num == addr_qp) &&
-            uct_ib_iface_is_same_device(ib_addr, ah.dlid, &ah.grh.dgid);
+    return (dest_qpn == addr_qp) &&
+           uct_ib_iface_is_same_device(ib_addr, ah.dlid, &ah.grh.dgid);
 }
 
 int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,

@@ -90,14 +90,7 @@ int uct_cma_ep_is_connected(const uct_ep_h tl_ep,
     uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
     pid_t addr_pid;
 
-    if (!ucs_test_all_flags(params->field_mask,
-            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
-            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
-        ucs_error("missing params (field_mask: %lu), both device_addr and "
-                      "iface_addr must be provided.", params->field_mask);
-        return 0;
-    }
-
+    UCT_EP_PARAMS_CHECK_IS_CONNECTED_DEV_IFACE_ADDRS(params);
     addr_pid = *(pid_t*)params->iface_addr & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
 
     return (ep->remote_pid == addr_pid) &&

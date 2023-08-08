@@ -839,13 +839,7 @@ int uct_tcp_ep_is_connected(uct_ep_h tl_ep,
     struct sockaddr_storage dest_addr;
     int is_connected;
 
-    if (!ucs_test_all_flags(params->field_mask,
-            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
-            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
-        ucs_error("missing params (field_mask: %lu), both device_addr and "
-                      "iface_addr must be provided.", params->field_mask);
-        return 0;
-    }
+    UCT_EP_PARAMS_CHECK_IS_CONNECTED_DEV_IFACE_ADDRS(params);
 
     status = uct_tcp_ep_set_dest_addr(params->device_addr, params->iface_addr,
                                       (struct sockaddr*)&dest_addr);

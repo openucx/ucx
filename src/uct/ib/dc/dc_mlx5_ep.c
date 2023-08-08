@@ -614,17 +614,10 @@ int uct_dc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
     uint32_t addr_qp;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    if (!ucs_test_all_flags(params->field_mask,
-            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
-            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
-        ucs_error("missing params (field_mask: %lu), both device_addr and "
-                      "iface_addr must be provided.", params->field_mask);
-        return 0;
-    }
+    UCT_EP_PARAMS_CHECK_IS_CONNECTED_DEV_IFACE_ADDRS(params);
 
     dc_addr = (const uct_dc_mlx5_iface_addr_t*)params->iface_addr;
     iface   = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
-    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
     if (((dc_addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) !=
          iface->version_flag) ||
@@ -633,6 +626,7 @@ int uct_dc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
+    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
     atomic_offset = uct_ib_md_atomic_offset(dc_addr->atomic_mr_id);
     addr_qp       = uct_ib_unpack_uint24(dc_addr->qp_num);
 

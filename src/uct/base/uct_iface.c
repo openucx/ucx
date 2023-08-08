@@ -242,8 +242,8 @@ static int uct_iface_is_same_device(const uct_iface_h iface,
     return !memcmp(device_addr, dev_addr, attr.device_addr_len);
 }
 
-int uct_base_ep_is_connected(const uct_ep_h ep,
-                             const uct_ep_is_connected_params_t *params)
+int uct_base_iface_ep_is_connected(const uct_ep_h ep,
+                                   const uct_ep_is_connected_params_t *params)
 {
     return 1;
 }
@@ -529,7 +529,7 @@ uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2,
-    .ep_is_connected       = uct_base_ep_is_connected
+    .ep_is_connected       = uct_base_iface_ep_is_connected
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)

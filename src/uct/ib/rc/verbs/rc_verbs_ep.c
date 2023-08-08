@@ -606,6 +606,7 @@ int uct_rc_verbs_ep_is_connected(const uct_ep_h tl_ep,
     const uct_rc_verbs_ep_addr_t *rc_addr;
     uint32_t addr_qp;
 
+    UCT_EP_PARAMS_CHECK_IS_CONNECTED_DEV_EP_ADDRS(params);
     rc_addr = (const uct_rc_verbs_ep_addr_t*)params->ep_addr;
     addr_qp = uct_ib_unpack_uint24(rc_addr->qp_num);
 

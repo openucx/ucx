@@ -569,6 +569,9 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  uct_ib_dir_t dir,
                                  int solicited_only);
 
+int uct_ib_verbs_ep_is_connected(const uct_ep_is_connected_params_t *params,
+                                 struct ibv_qp *qp, uint32_t addr_qp);
+
 ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl);
@@ -654,11 +657,6 @@ uct_ib_fence_info_init(uct_ib_fence_info_t* fence)
 {
     fence->fence_beat = 0;
 }
-
-int
-uct_ib_verbs_ep_is_connected(const uct_ep_is_connected_params_t *params,
-                             struct ibv_qp *qp,
-                             uint32_t addr_qp);
 
 static UCS_F_ALWAYS_INLINE unsigned
 uct_ib_cq_size(uct_ib_iface_t *iface, const uct_ib_iface_init_attr_t *init_attr,

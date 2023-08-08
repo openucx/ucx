@@ -57,14 +57,7 @@ ucs_status_t uct_cuda_copy_init_stream(cudaStream_t *stream)
 int uct_cuda_copy_ep_is_connected(const uct_ep_h tl_ep,
                                   const uct_ep_is_connected_params_t *params)
 {
-    if (!ucs_test_all_flags(params->field_mask,
-            UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR |
-            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
-        ucs_error("missing params (field_mask: %lu), both device_addr and "
-                      "iface_addr must be provided.", params->field_mask);
-        return 0;
-    }
-
+    UCT_EP_PARAMS_CHECK_IS_CONNECTED_DEV_IFACE_ADDRS(params);
     return uct_cuda_copy_iface_is_reachable(tl_ep->iface, params->device_addr,
                                             params->iface_addr);
 }

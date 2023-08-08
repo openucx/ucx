@@ -753,29 +753,6 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 }
 
-static uint32_t
-uct_rc_mlx5_ep_get_flush_rkey(const uct_rc_mlx5_ep_address_t *ep_addr,
-                              size_t addr_length)
-{
-    uint16_t atomic_mr_offset = uct_ib_md_atomic_offset(ep_addr->atomic_mr_id);
-    const uct_rc_mlx5_ep_ext_address_t *ext_addr;
-    uint32_t flush_rkey_hi;
-    const void *ptr;
-
-    if (addr_length <= sizeof(uct_rc_mlx5_ep_address_t)) {
-        return UCT_IB_MD_INVALID_FLUSH_RKEY;
-    }
-
-    ext_addr = ucs_derived_of(ep_addr, uct_rc_mlx5_ep_ext_address_t);
-    if (!(ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY)) {
-        return UCT_IB_MD_INVALID_FLUSH_RKEY;
-    }
-
-    ptr           = ext_addr + 1;
-    flush_rkey_hi = *ucs_serialize_next(&ptr, uint16_t);
-    return (flush_rkey_hi << 16) | ((uint32_t)atomic_mr_offset << 8);
-}
-
 int uct_rc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
                                 const uct_ep_is_connected_params_t *params)
 {
@@ -784,14 +761,7 @@ int uct_rc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
     uint32_t addr_qp;
     uint16_t atomic_offset;
 
-    if (!ucs_test_all_flags(params->field_mask,
-            UCT_EP_IS_CONNECTED_FIELD_EP_ADDR |
-            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
-        ucs_error("missing params (field_mask: %lu), both device_addr and "
-                      "ep_addr must be provided.", params->field_mask);
-        return 0;
-    }
-
+    UCT_EP_PARAMS_CHECK_IS_CONNECTED_DEV_EP_ADDRS(params);
     rc_addr       = (uct_rc_mlx5_ep_address_t*)params->ep_addr;
     addr_qp       = UCT_RC_MLX5_TM_ENABLED(iface) ?
                         uct_ib_unpack_uint24(rc_addr->tm_qp_num) :
@@ -812,11 +782,14 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     const uct_ib_address_t *ib_addr         = (const uct_ib_address_t *)device_addr;
     const uct_rc_mlx5_ep_address_t *rc_addr = (const uct_rc_mlx5_ep_address_t*)ep_addr;
+    const uct_rc_mlx5_ep_ext_address_t *ext_addr;
+    size_t addr_length;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
+    const void *ptr;
+    uint32_t flush_rkey_hi;
     ucs_status_t status;
-    size_t addr_length;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                         ep->super.path_index, &ah_attr,
@@ -855,7 +828,22 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                                  params, ep_addr_length,
                                                  EP_ADDR_LENGTH,
                                                  sizeof(uct_rc_mlx5_ep_address_t));
-    ep->super.flush_rkey       = uct_rc_mlx5_ep_get_flush_rkey(rc_addr, addr_length);
+
+    if (addr_length <= sizeof(uct_rc_mlx5_ep_address_t)) {
+        ep->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
+        return UCS_OK;
+    }
+
+    ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
+    if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY) {
+        ptr                  = ext_addr + 1;
+        flush_rkey_hi        = *ucs_serialize_next(&ptr, uint16_t);
+        ep->super.flush_rkey = (flush_rkey_hi << 16) |
+                               ((uint32_t)rc_addr->atomic_mr_id << 8);
+    } else {
+        ep->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
+    }
+
     return UCS_OK;
 }
 

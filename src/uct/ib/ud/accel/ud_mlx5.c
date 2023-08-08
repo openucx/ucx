@@ -640,14 +640,7 @@ int uct_ud_mlx5_ep_is_connected(const uct_ep_h tl_ep,
     const uct_ud_ep_addr_t *ud_addr;
     uint32_t addr_qp;
 
-    if (!ucs_test_all_flags(params->field_mask,
-            UCT_EP_IS_CONNECTED_FIELD_EP_ADDR |
-            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR)) {
-        ucs_error("missing params (field_mask: %lu), both device_addr and "
-                      "ep_addr must be provided.", params->field_mask);
-        return 0;
-    }
-
+    UCT_EP_PARAMS_CHECK_IS_CONNECTED_DEV_EP_ADDRS(params);
     ud_addr = (const uct_ud_ep_addr_t*)params->ep_addr;
     addr_qp = uct_ib_unpack_uint24(ud_addr->iface_addr.qp_num);
 
