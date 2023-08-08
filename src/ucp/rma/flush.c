@@ -226,7 +226,8 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {
         /* Request was detached from pending and should be scheduled again */
         if (ucp_ep_has_cm_lane(ep) ||
-            ep->worker->context->config.ext.proto_request_reset) {
+            (ucp_ep_config(ep)->p2p_lanes &&
+             ep->worker->context->config.ext.proto_request_reset)) {
             ucs_assertv(!req->send.flush.started_lanes,
                         "req=%p flush started_lanes=0x%x", req,
                         req->send.flush.started_lanes);
