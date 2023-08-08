@@ -1252,12 +1252,18 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
 {
     ucp_context_h context      = ep->worker->context;
     ucp_worker_iface_t *wiface = ucp_worker_iface(ep->worker, rsc_index);
+    uct_iface_is_reachable_params_t params = {
+        .field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                       UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
+        .device_addr = ae->dev_addr,
+        .iface_addr  = ae->iface_addr,
+    };
 
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
            (/* assume reachability is checked by CM, if EP selects lanes
              * during CM phase */
             (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
-            uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr));
+            uct_iface_is_reachable_v2(wiface->iface, &params));
 }
 
 static void

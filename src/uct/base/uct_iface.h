@@ -856,6 +856,10 @@ int
 uct_base_iface_is_reachable_v2(const uct_iface_h iface,
                                const uct_iface_is_reachable_params_t *params);
 
+int uct_base_iface_is_reachable(const uct_iface_h tl_iface,
+                                const uct_device_addr_t *dev_addr,
+                                const uct_iface_addr_t *iface_addr);
+
 ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                uct_completion_t *comp);
 
@@ -866,6 +870,9 @@ void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
 
 int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                                  ucs_sys_namespace_type_t sys_ns_type);
+
+int uct_iface_is_reachable_params_valid(
+        const uct_iface_is_reachable_params_t *params, uint64_t flags);
 
 /*
  * Invoke active message handler.
