@@ -1486,7 +1486,8 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
     uct_iface_params_t iface_params = {
         .field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
                                 UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
-                                UCT_IFACE_PARAM_FIELD_RX_HEADROOM,
+                                UCT_IFACE_PARAM_FIELD_RX_HEADROOM |
+                                UCT_IFACE_PARAM_FIELD_DEVICE,
         .open_mode            = UCT_IFACE_OPEN_MODE_DEVICE,
         .mode.device.tl_name  = params->uct.tl_name,
         .mode.device.dev_name = params->uct.dev_name,

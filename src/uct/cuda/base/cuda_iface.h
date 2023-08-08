@@ -17,8 +17,6 @@
 
 const char *uct_cuda_base_cu_get_error_string(CUresult result);
 
-#define UCT_CUDA_DEV_NAME       "cuda"
-
 
 #if CUDART_VERSION >= 11010
 #define UCT_CUDA_FUNC_PTX_ERR(_result, _func, _err_str)         \
@@ -138,11 +136,6 @@ ucs_status_t
 uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,
         uct_tl_device_resource_t **tl_devices_p, unsigned *num_tl_devices_p);
-
-ucs_status_t
-uct_cuda_base_query_devices(
-        uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
-        unsigned *num_tl_devices_p);
 
 void
 uct_cuda_base_get_sys_dev(CUdevice cuda_device,
