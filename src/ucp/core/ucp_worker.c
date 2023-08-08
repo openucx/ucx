@@ -2576,7 +2576,7 @@ err_tag_match_cleanup:
 err_destroy_mpools:
     ucp_worker_destroy_mpools(worker);
 err_destroy_memtype_eps:
-    ucp_worker_mem_type_eps_create(worker);
+    ucp_worker_mem_type_eps_destroy(worker);
 err_close_cms:
     ucp_worker_close_cms(worker);
 err_close_ifaces:
