@@ -410,10 +410,9 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
                               &uct_cuda_copy_iface_internal_ops, md, worker,
                               params, tl_config, "cuda_copy");
 
-    if (strncmp(params->mode.device.dev_name,
-                UCT_CUDA_DEV_NAME, strlen(UCT_CUDA_DEV_NAME)) != 0) {
-        ucs_error("no device was found: %s", params->mode.device.dev_name);
-        return UCS_ERR_NO_DEVICE;
+    status = uct_cuda_base_check_device_name(params);
+    if (status != UCS_OK) {
+        return status;
     }
 
     self->id                     = ucs_generate_uuid((uintptr_t)self);

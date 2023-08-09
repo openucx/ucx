@@ -19,7 +19,7 @@
 #include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
 #include <uct/api/v2/uct_v2.h>
-#include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_md.h>
 
 #define UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN 65536
 
@@ -114,7 +114,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
                  unsigned flags, uct_gdr_copy_mem_t *mem_hndl)
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    CUdeviceptr d_ptr     = ((CUdeviceptr )(char *) address);
+    unsigned long d_ptr   = ((unsigned long)(char*)address);
     ucs_log_level_t log_level;
     int ret;
 
