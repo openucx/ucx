@@ -10,6 +10,7 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
 #include <ucs/async/eventfd.h>
+#include <ucs/sys/math.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
 #include <nvml.h>
@@ -77,8 +78,11 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
     })
 
 
-#define UCT_NVML_FUNC_LOG_ERR(_func) \
-    UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
+#define UCT_NVML_FUNC_LOG_ERR(_func) UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
+
+
+#define UCT_NVML_FUNC_LOG_DIAG(_func) UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_DIAG)
+
 
 #define UCT_CUDADRV_FUNC(_func, _log_level) \
     ({ \
@@ -134,6 +138,8 @@ typedef struct uct_cuda_iface {
     int              eventfd;
 } uct_cuda_iface_t;
 
+extern double *uct_cuda_base_nvml_bw;
+
 ucs_status_t
 uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,
@@ -149,6 +155,10 @@ uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                           ucs_sys_device_t *sys_dev_p);
 
 ucs_status_t uct_cuda_base_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
+
+ucs_status_t uct_cuda_base_nvml_get_estimate_perf(const char *bus_str1,
+                                                  const char *bus_str2,
+                                                  double *bw);
 
 #if (__CUDACC_VER_MAJOR__ >= 100000)
 void CUDA_CB uct_cuda_base_iface_stream_cb_fxn(void *arg);
