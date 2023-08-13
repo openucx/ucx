@@ -1,0 +1,144 @@
+trigger: none
+pr:
+  branches:
+    include:
+    - '*'
+  paths:
+    include:
+    - '*'
+
+variables:
+- name: WorkDir
+  value: /hpc/scrap/azure/$(Build.DefinitionName)/$(Build.BuildId)-$(Build.BuildNumber)
+- name: perf_nodes
+  value: vulcan03,vulcan04
+- name: threshold
+  value: 5
+
+resources:
+  repositories:
+  - repository: PerfX
+    type: github
+    name: Mellanox-lab/PerfX
+    endpoint: Al3xR01
+    ref: master
+
+stages:
+  - stage: Prepare
+    jobs:
+      - job: Prepare
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 10
+
+          - checkout: PerfX
+            clean: true
+            fetchDepth: 1
+
+          - bash: |
+              set -xeE
+              mkdir -p $(WorkDir)
+              mv $(Build.SourcesDirectory)/* $(WorkDir)    
+            displayName: Prepare WorkDir with code
+
+
+  - stage: Performance
+    dependsOn: Prepare
+    jobs:
+      - job: Perf
+        displayName: Performance testing
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: none
+            clean: true
+
+          - bash: |
+              printf '\n%79s\n\n' | tr ' ' =
+              echo "Triggered by repo: $(Build.Repository.Name)"
+              echo "Triggering repo URL: $(Build.Repository.Uri)"
+              echo "The branch of the triggering repo the build was queued for: $(Build.SourceBranch)"
+              echo "PR's merge message: $(Build.SourceVersionMessage)"
+              
+              # Extract commit SHAs from the PR's merge message.
+              SHA_After=$(echo $(Build.SourceVersionMessage) | awk '{print $2}')
+              SHA_Before=$(echo $(Build.SourceVersionMessage) | awk '{print $4}')
+                            
+              printf '\n%79s\n\n' | tr ' ' =
+              echo "Base SHA from Git log:       $(cd $(WorkDir)/ucx && git rev-parse HEAD^)"
+              echo "Base SHA from merge message: $SHA_Before"
+
+              printf '\n%79s\n\n' | tr ' ' =
+              echo "Latest SHA from Git log:  $(cd $(WorkDir)/ucx && git rev-parse HEAD)"
+              echo "Latest SHA from Azure:    $(Build.SourceVersion)"
+              echo "Topic commit to merge:    $SHA_After"
+              echo -e "The merge commit will be used for testing. \n"
+            displayName: Debug info
+            workingDirectory: $(WorkDir)
+
+          - bash: |
+              set -eE
+              # Extract commit SHAs from the PR's merge message.
+              # SHA_After=$(Build.SourceVersion)
+              SHA_After=$(echo $(Build.SourceVersionMessage) | awk '{print $2}')
+              SHA_Before=$(echo $(Build.SourceVersionMessage) | awk '{print $4}')
+
+              python3 -m venv VENV
+              source VENV/bin/activate
+              cd $(WorkDir)/PerfX
+              pip3 install -q -r requirements.txt
+              module load /hpc/local/etc/modulefiles/hpcx-gcc
+
+              set -xeE -o pipefail
+              python3 -u perfx.py \
+                --config ucx-rdmz.yml \
+                --before "$SHA_Before" \
+                --after "$SHA_After" \
+                --module hpcx-gcc \
+                --filter \
+                --extra-ompi-opts " -H $(perf_nodes)" | tee $(WorkDir)/results.txt
+            displayName: Perf test
+            workingDirectory: $(WorkDir)
+
+          - script: $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results.txt $(threshold)
+            displayName: Results analyzer
+            workingDirectory: $(WorkDir)
+
+          - bash: |
+              set -x
+              cat perfx.log
+            displayName: Print raw log
+            workingDirectory: $(WorkDir)/PerfX
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(WorkDir)/PerfX/perfx.log'
+              artifactName: perfx.log
+            displayName: Publish raw log
+            condition: always()
+
+
+  - stage: Cleanup
+    dependsOn: Performance
+    condition: always()
+    jobs:
+      - job: Cleanup
+        displayName: Cleanup WorkDir
+        pool:
+          name: MLNX
+        steps:
+          - checkout: none
+            clean: true
+          - bash: |
+              set -x
+              rm -rf $(WorkDir)
+            displayName: Cleanup WorkDir
