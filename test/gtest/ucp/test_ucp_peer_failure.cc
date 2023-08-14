@@ -15,6 +15,9 @@ extern "C" {
 #include <ucp/core/ucp_worker.h>  /* for testing memory consumption */
 }
 
+#include <unordered_map>
+#include <array>
+
 class test_ucp_peer_failure : public ucp_test {
 public:
     test_ucp_peer_failure();
@@ -28,9 +31,10 @@ protected:
 
     enum {
         TEST_AM  = UCS_BIT(0),
-        TEST_RMA = UCS_BIT(1),
-        FAIL_IMM = UCS_BIT(2),
-        WAKEUP   = UCS_BIT(3)
+        TEST_TAG = UCS_BIT(1),
+        TEST_RMA = UCS_BIT(2),
+        FAIL_IMM = UCS_BIT(3),
+        WAKEUP   = UCS_BIT(4)
     };
 
     enum {
@@ -57,7 +61,7 @@ protected:
                                   const ucs_log_component_config_t *comp_conf,
                                   const char *message, va_list ap);
     void fail_receiver();
-    void smoke_test(bool stable_pair);
+    std::pair<ucs_status_t, ucs_status_t> smoke_test(bool stable_pair);
     static void unmap_memh(ucp_mem_h memh, ucp_context_h context);
     void get_rkey(ucp_ep_h ep, entity& dst, mem_handle_t& memh,
                   ucs::handle<ucp_rkey_h>& rkey);
@@ -69,12 +73,15 @@ protected:
     void do_test(size_t msg_size, int pre_msg_count, bool force_close,
                  bool request_must_fail);
 
-    size_t                              m_am_rx_count;
-    size_t                              m_err_count;
-    ucs_status_t                        m_err_status;
-    std::string                         m_sbuf, m_rbuf;
-    mem_handle_t                        m_stable_memh, m_failing_memh;
-    ucs::handle<ucp_rkey_h>             m_stable_rkey, m_failing_rkey;
+    void cleanup_rndv_descs();
+
+    std::queue<void *>      m_am_rndv_descs;
+    size_t                  m_am_rx_count;
+    size_t                  m_err_count;
+    ucs_status_t            m_err_status;
+    std::string             m_sbuf, m_rbuf;
+    mem_handle_t            m_stable_memh, m_failing_memh;
+    ucs::handle<ucp_rkey_h> m_stable_rkey, m_failing_rkey;
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
@@ -137,6 +144,12 @@ test_ucp_peer_failure::am_callback(void *arg, const void *header,
 {
     test_ucp_peer_failure *self = reinterpret_cast<test_ucp_peer_failure*>(arg);
     ++self->m_am_rx_count;
+
+    if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
+        self->m_am_rndv_descs.push(data);
+        return UCS_INPROGRESS;
+    }
+
     return UCS_OK;
 }
 
@@ -176,6 +189,8 @@ void *test_ucp_peer_failure::send_nb(ucp_ep_h ep, ucp_rkey_h rkey)
     if (get_variant_value() & TEST_AM) {
         return ucp_am_send_nbx(ep, AM_ID, NULL, 0, &m_sbuf[0], m_sbuf.size(),
                                &param);
+    } else if (get_variant_value() & TEST_TAG) {
+        return ucp_tag_send_nbx(ep, &m_sbuf[0], m_sbuf.size(), 0, &param);
     } else if (get_variant_value() & TEST_RMA) {
         return ucp_put_nbx(ep, &m_sbuf[0], m_sbuf.size(), (uintptr_t)&m_rbuf[0],
                            rkey, &param);
@@ -217,31 +232,54 @@ void test_ucp_peer_failure::fail_receiver() {
          * message that are expected here, since we closed receiver w/o
          * reading the messages that were potentially received */
         scoped_log_handler slh(warn_unreleased_rdesc_handler);
+
+        cleanup_rndv_descs();
         failing_receiver().cleanup();
     }
 }
 
-void test_ucp_peer_failure::smoke_test(bool stable_pair)
+std::pair<ucs_status_t, ucs_status_t>
+test_ucp_peer_failure::smoke_test(bool stable_pair)
 {
-    ucp_ep_h send_ep = stable_pair ? stable_sender() : failing_sender();
-    size_t am_count  = m_am_rx_count;
+    ucp_ep_h send_ep        = stable_pair ? stable_sender() : failing_sender();
+    entity &recv_entity     = stable_pair ? stable_receiver() :
+                                            failing_receiver();
+    size_t prev_am_rx_count = m_am_rx_count;
+    ucp_request_param_t req_param{};
+    std::pair<ucs_status_t, ucs_status_t> result;
 
     // Send and wait for completion
     void *sreq = send_nb(send_ep, stable_pair ? m_stable_rkey : m_failing_rkey);
-    request_wait(sreq);
 
     if (get_variant_value() & TEST_AM) {
         // Wait for active message to be received
-        while (m_am_rx_count < am_count) {
+        while (m_am_rx_count == prev_am_rx_count) {
             progress();
         }
+
+        while (!m_am_rndv_descs.empty()) {
+            void* rreq    = ucp_am_recv_data_nbx(recv_entity.worker(),
+                                                 m_am_rndv_descs.front(),
+                                                 &m_rbuf[0], m_rbuf.size(),
+                                                 &req_param);
+            result.second = request_wait(rreq);
+            m_am_rndv_descs.pop();
+        }
+    } else if (get_variant_value() & TEST_TAG) {
+        void* rreq    = ucp_tag_recv_nbx(recv_entity.worker(), &m_rbuf[0],
+                                         m_rbuf.size(), 0, 0, &req_param);
+        result.second = request_wait(rreq);
     } else if (get_variant_value() & TEST_RMA) {
         // Flush the sender and expect data to arrive on receiver
         void *freq = ucp_ep_flush_nb(send_ep, 0,
                                      (ucp_send_callback_t)ucs_empty_function);
         request_wait(freq);
         EXPECT_EQ(m_sbuf, m_rbuf);
+        result.second = UCS_OK;
     }
+
+    result.first = request_wait(sreq);
+    return result;
 }
 
 void test_ucp_peer_failure::unmap_memh(ucp_mem_h memh, ucp_context_h context)
@@ -408,6 +446,8 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
             EXPECT_NE(UCS_INPROGRESS, ucp_request_test(req, NULL));
             ucp_request_release(req);
         }
+
+        cleanup_rndv_descs();
     }
 
     /* Since we won't test peer failure anymore, reset UCT/UD EP timeout to the
@@ -422,6 +462,14 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
     /* Destroy rkey for failing pair */
     m_failing_rkey.reset();
+}
+
+void test_ucp_peer_failure::cleanup_rndv_descs() {
+    while (!m_am_rndv_descs.empty()) {
+        ucp_am_data_release(failing_receiver().worker(),
+                            m_am_rndv_descs.front());
+        m_am_rndv_descs.pop();
+    }
 }
 
 UCS_TEST_P(test_ucp_peer_failure, basic) {
@@ -570,3 +618,167 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_keepalive)
+
+
+class test_ucp_peer_failure_rndv_abort : public test_ucp_peer_failure {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_AM, TEST_AM, "am");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, TEST_TAG, "tag");
+    }
+
+protected:
+    void init()
+    {
+        self = this;
+
+        test_ucp_peer_failure::init();
+
+        receiver().connect(&sender(), get_ep_params());
+        sender().connect(&receiver(), get_ep_params());
+        set_am_handler(receiver());
+
+        m_sbuf.resize(UCS_KBYTE);
+        m_rbuf.resize(UCS_KBYTE);
+    }
+
+    template<typename Func>
+    void for_each_protos_progress(Func func)
+    {
+        for (int proto_id = 0; proto_id < ucp_protocols_count(); ++proto_id) {
+            auto proto = const_cast<ucp_proto_t*>(ucp_protocols[proto_id]);
+            int stage = UCP_PROTO_STAGE_START;
+            for (; stage < UCP_PROTO_STAGE_LAST; ++stage) {
+                func(proto, stage);
+            }
+        }
+    }
+
+    void protos_replace_progress()
+    {
+        auto replace_progress = [&](ucp_proto_t* proto, int stage) {
+            m_progress_storage[proto][stage] = proto->progress[stage];
+            proto->progress[stage]           = &progress_wrapper;
+        };
+        for_each_protos_progress(replace_progress);
+    }
+
+    void protos_restore_progress()
+    {
+        auto restore_progress = [&](ucp_proto_t* proto, int stage) {
+            proto->progress[stage] = m_progress_storage[proto][stage];
+        };
+        for_each_protos_progress(restore_progress);
+    }
+
+    ucs_status_t static
+    return_err_connection_reset(uct_ep_h ep, const uct_iov_t *iov,
+                                size_t iovcnt, uint64_t remote_addr,
+                                uct_rkey_t rkey, uct_completion_t *comp)
+    {
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
+    void replace_ep_put_zcopy(ucp_ep_h ep)
+    {
+        for (auto lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            if (lane == ucp_ep_get_cm_lane(ep)) {
+                continue;
+            }
+
+            auto iface  = ucp_ep_get_lane(ep, lane)->iface;
+            auto result = m_sender_uct_ops.emplace(iface, iface->ops);
+            if (result.second) {
+                iface->ops.ep_put_zcopy = return_err_connection_reset;
+            }
+        }
+    }
+
+    void restore_ep_put_zcopy() {
+        for (auto &elem : m_sender_uct_ops) {
+            elem.first->ops = elem.second;
+        }
+    }
+
+    static ucs_status_t progress_wrapper(uct_pending_req_t *uct_req)
+    {
+        auto *req       = ucs_container_of(uct_req, ucp_request_t, send.uct);
+        auto *proto     = req->send.proto_config->proto;
+        auto stage      = req->send.proto_stage;
+        auto proto_name = proto->name;
+
+        if (std::string(proto_name) == "rndv/put/zcopy") {
+            if (stage == UCP_PROTO_STAGE_START) {
+                if (!self->m_is_ep_closed) {
+                    scoped_log_handler slh(wrap_errors_logger);
+                    self->receiver().close_all_eps(*self, 0,
+                                                   UCP_EP_CLOSE_FLAG_FORCE);
+                    self->replace_ep_put_zcopy(req->send.ep);
+                    self->m_is_ep_closed = true;
+                }
+            } else {
+                EXPECT_TRUE(false) << "Unexpected proto stage";
+            }
+        }
+
+        ucs_status_t status = self->m_progress_storage[proto][stage](uct_req);
+
+        if (self->m_is_ep_closed) {
+            self->restore_ep_put_zcopy();
+        }
+
+        return status;
+    }
+
+    virtual void cleanup()
+    {
+        test_ucp_peer_failure::cleanup();
+
+        self = nullptr;
+    }
+
+    using progress_array =
+            std::array<uct_pending_callback_t, UCP_PROTO_STAGE_LAST>;
+    using progress_hash_map =
+            std::unordered_map<const ucp_proto_t*, progress_array>;
+
+    std::map<uct_iface_h, uct_iface_ops_t> m_sender_uct_ops{};
+    progress_hash_map                      m_progress_storage{};
+    bool                                   m_is_ep_closed{false};
+
+    static test_ucp_peer_failure_rndv_abort *self;
+};
+
+test_ucp_peer_failure_rndv_abort *test_ucp_peer_failure_rndv_abort::self = nullptr;
+
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, put_zcopy,
+                     !m_ucp_config->ctx.proto_enable,
+                     "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy")
+{
+    if (ucp_ep_config(sender().ep())->key.rma_bw_lanes[0] == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("transport has no rma_bw lanes");
+    }
+
+    smoke_test(true);
+
+    /* Replace progress functions for all protocols and do another
+     * send-receive loop to close the ep during first rndv/put/zcopy call
+     * and replace put_zcopy to function that returns error. This should
+     * imitate network error.
+     */
+    protos_replace_progress();
+
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+        auto result = smoke_test(true);
+        ASSERT_EQ(result.first, UCS_ERR_CONNECTION_RESET);
+    }
+
+    protos_restore_progress();
+
+    /* Check that rndv/put/zcopy progress was called and ep was closed. */
+    ASSERT_TRUE(m_is_ep_closed);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_rndv_abort)

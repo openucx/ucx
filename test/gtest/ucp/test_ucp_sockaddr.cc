@@ -1208,6 +1208,13 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, force_close_during_rndv,
     do_force_close_during_rndv(false);
 }
 
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, force_close_during_rndv_put_zcopy,
+                     (send_recv_type() != SEND_RECV_TAG), "RNDV_THRESH=0",
+                     "RNDV_SCHEME=put_zcopy")
+{
+    do_force_close_during_rndv(false);
+}
+
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, fail_and_force_close_during_rndv,
                      (send_recv_type() != SEND_RECV_TAG), "RNDV_THRESH=0")
 {

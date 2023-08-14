@@ -58,6 +58,14 @@ typedef struct {
 } ucp_proto_rndv_put_atp_pack_ctx_t;
 
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_put_common_complete(ucp_request_t *req)
+{
+    ucp_trace_req(req, "rndv_put_common_complete");
+    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_put_common_send(ucp_request_t *req,
                                const ucp_proto_multi_lane_priv_t *lpriv,
@@ -79,7 +87,14 @@ ucp_proto_rndv_put_common_flush_completion_send_atp(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
 
-    ucp_trace_req(req, "rndv_put_common_completion_send_atp");
+    ucp_trace_req(req, "rndv_put_common_completion_send_atp status %s",
+                  ucs_status_string(uct_comp->status));
+
+    if (ucs_unlikely(uct_comp->status != UCS_OK)) {
+        ucp_proto_rndv_put_common_complete(req);
+        return;
+    }
+
     ucp_proto_completion_init(&req->send.state.uct_comp, rpriv->atp_comp_cb);
     ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_PUT_STAGE_ATP);
     ucp_request_send(req);
@@ -182,14 +197,6 @@ ucp_proto_rndv_put_common_data_sent(ucp_request_t *req)
     ucp_trace_req(req, "rndv_put_common_data_sent");
     ucp_proto_request_set_stage(req, rpriv->stage_after_put);
     return UCS_INPROGRESS;
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_put_common_complete(ucp_request_t *req)
-{
-    ucp_trace_req(req, "rndv_put_common_complete");
-    ucp_proto_rndv_rkey_destroy(req);
-    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -385,7 +392,8 @@ static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
 static ucs_status_t
 ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
 {
-    unsigned flags = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY;
+    unsigned flags = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
+                     UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING;
 
     return ucp_proto_rndv_put_common_init(init_params,
                                           UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY),
@@ -417,7 +425,7 @@ ucp_proto_t ucp_rndv_put_zcopy_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_put_common_atp_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_request_zcopy_abort,
     .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
