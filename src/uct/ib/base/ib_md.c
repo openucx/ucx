@@ -74,7 +74,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCT_IB_MD_RCACHE_DEFAULT_ALIGN), NULL,
      ucs_offsetof(uct_ib_md_config_t, rcache),
-     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
+     UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
     {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
      ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.c), UCS_CONFIG_TYPE_TIME},
@@ -1268,7 +1268,7 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md,
 
     for (i = 0; i < md_config->reg_methods.count; ++i) {
         if (!strcasecmp(md_config->reg_methods.rmtd[i], "rcache")) {
-            uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
+            ucs_rcache_set_params(&rcache_params, &md_config->rcache);
             rcache_params.region_struct_size = sizeof(ucs_rcache_region_t) +
                                                md->memh_struct_size;
             rcache_params.max_alignment      = ucs_get_page_size();

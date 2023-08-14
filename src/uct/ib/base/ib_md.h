@@ -183,7 +183,7 @@ typedef struct uct_ib_md_config {
     /** List of registration methods in order of preference */
     UCS_CONFIG_STRING_ARRAY_FIELD(rmtd) reg_methods;
 
-    uct_md_rcache_config_t   rcache;       /**< Registration cache config */
+    ucs_rcache_config_t      rcache;       /**< Registration cache config */
     ucs_linear_func_t        uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */

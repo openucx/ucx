@@ -32,7 +32,7 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
 
     {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN), NULL,
      ucs_offsetof(uct_gdr_copy_md_config_t, rcache),
-     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
+     UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
     {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
      ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.m), UCS_CONFIG_TYPE_TIME},
@@ -413,13 +413,14 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
     }
 
     if (md_config->enable_rcache != UCS_NO) {
-        uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
+        ucs_rcache_set_params(&rcache_params, &md_config->rcache);
         rcache_params.region_struct_size = sizeof(uct_gdr_copy_rcache_region_t);
         rcache_params.max_alignment      = UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN;
         rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_gdr_copy_rcache_ops;
         rcache_params.flags              = 0;
+
         status = ucs_rcache_create(&rcache_params, "gdr_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
             md->super.ops = &md_rcache_ops;

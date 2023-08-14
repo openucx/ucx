@@ -19,6 +19,8 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/string.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucm/api/ucm.h>
@@ -93,6 +95,40 @@ static ucs_stats_class_t ucs_rcache_stats_class = {
 };
 #endif
 
+ucs_config_field_t ucs_config_rcache_table[] = {
+    {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
+     ucs_offsetof(ucs_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
+
+    {"RCACHE_OVERHEAD", "auto", "Registration cache lookup overhead",
+     ucs_offsetof(ucs_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME_UNITS},
+
+    {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
+     "Registration cache address alignment, must be power of 2\n"
+     "between " UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN) "and system page size",
+     ucs_offsetof(ucs_rcache_config_t, alignment), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"RCACHE_MAX_REGIONS", "inf",
+     "Maximal number of regions in the registration cache",
+     ucs_offsetof(ucs_rcache_config_t, max_regions),
+     UCS_CONFIG_TYPE_ULUNITS},
+
+    {"RCACHE_MAX_SIZE", "inf",
+     "Maximal total size of registration cache regions",
+     ucs_offsetof(ucs_rcache_config_t, max_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"RCACHE_MAX_UNRELEASED", "inf",
+     "Maximal size of total memory regions in invalidate queue and garbage,\n"
+     "after which a cleanup is triggered.",
+     ucs_offsetof(ucs_rcache_config_t, max_unreleased),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"RCACHE_PURGE_ON_FORK", "y",
+     "Purge registration cache upon fork",
+     ucs_offsetof(ucs_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
+
+    {NULL}
+};
+
 
 /*
  * Global rcache context
@@ -143,6 +179,35 @@ void ucs_rcache_region_log(const char *file, int line, const char *function,
                      UCS_RCACHE_PROT_ARG(region->prot),
                      region->refcount,
                      region_desc);
+}
+
+void ucs_rcache_set_default_params(ucs_rcache_params_t *rcache_params)
+{
+    rcache_params->region_struct_size = sizeof(ucs_rcache_region_t);
+    rcache_params->alignment          = UCS_RCACHE_MIN_ALIGNMENT;
+    rcache_params->max_alignment      = ucs_get_page_size();
+    rcache_params->ucm_events         = 0;
+    rcache_params->ucm_event_priority = 1000;
+    rcache_params->ops                = NULL;
+    rcache_params->context            = NULL;
+    rcache_params->flags              = 0;
+    rcache_params->max_regions        = UCS_MEMUNITS_INF;
+    rcache_params->max_size           = UCS_MEMUNITS_INF;
+    rcache_params->max_unreleased     = UCS_MEMUNITS_INF;
+}
+
+void ucs_rcache_set_params(ucs_rcache_params_t *rcache_params,
+                           const ucs_rcache_config_t *rcache_config)
+{
+    ucs_rcache_set_default_params(rcache_params);
+
+    rcache_params->alignment          = rcache_config->alignment;
+    rcache_params->ucm_event_priority = rcache_config->event_prio;
+    rcache_params->max_regions        = rcache_config->max_regions;
+    rcache_params->max_size           = rcache_config->max_size;
+    rcache_params->max_unreleased     = rcache_config->max_unreleased;
+    rcache_params->flags              = !rcache_config->purge_on_fork ? 0 :
+                                        UCS_RCACHE_FLAG_PURGE_ON_FORK;
 }
 
 static size_t ucs_rcache_stat_max_pow2()

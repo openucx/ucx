@@ -94,7 +94,6 @@ public:
             modify_config("RCACHE_ENABLE", "n");
             ucs::scoped_setenv ib_reg_methods_env("UCX_IB_REG_METHODS",
                                                   "direct");
-            ucs::scoped_setenv knem_rcache_env("UCX_KNEM_RCACHE", "no");
             ucp_test::init(); // Init UCP with rcache disabled
         } else {
             ucp_test::init();
