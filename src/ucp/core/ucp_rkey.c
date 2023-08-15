@@ -1181,3 +1181,10 @@ void ucp_rkey_proto_select_dump(ucp_worker_h worker,
     ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
                           &rkey_config->proto_select, 0, strb);
 }
+
+ucs_status_t
+ucp_rkey_compare(ucp_context_h context, ucp_rkey_h rkey1, ucp_rkey_h rkey2,
+                 const ucp_rkey_compare_params_t *params, int *result)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
