@@ -186,7 +186,7 @@ ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
 static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
                                            ucs_status_t status)
 {
-    ucp_request_t *rreq UCS_V_UNUSED;
+    ucp_request_t *rreq;
 
     switch (request->send.proto_stage) {
     case UCP_PROTO_RNDV_GET_STAGE_FETCH:
@@ -202,7 +202,7 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
          * invalidation is not implemented in DC, so need to fail request to
          * avoid data corruption.
          * FIXME: del next line when memory invalidation in DC is implemented */
-        ucp_request_get_super(request)->status = status;
+        rreq->status = status;
         ucp_proto_rndv_recv_complete(request);
         break;
     default:
