@@ -100,6 +100,7 @@ stages:
 
               set -xeE -o pipefail
               python3 -u perfx.py \
+                --source-branch $(Build.SourceBranch) \
                 --config ucx-rdmz.yml \
                 --before "$SHA_Before" \
                 --after "$SHA_After" \
