@@ -474,10 +474,6 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);
 
-int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
-                              const uct_iface_addr_t *iface_addr);
-
-
 int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                  const uct_iface_is_reachable_params_t *params);
 
@@ -578,7 +574,6 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_qp_attr_t *attr);
 
 uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
-
 
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"

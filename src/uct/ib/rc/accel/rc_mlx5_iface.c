@@ -703,17 +703,21 @@ static ucs_status_t uct_rc_mlx5_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
-                                   const uct_device_addr_t *dev_addr,
-                                   const uct_iface_addr_t *iface_addr)
+static int
+uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                  const uct_iface_is_reachable_params_t *params)
 {
     uint8_t my_type = uct_rc_mlx5_iface_get_address_type(tl_iface);
+    const uct_iface_addr_t *iface_addr;
 
+    iface_addr = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
+                                 iface_addr, IFACE_ADDR, NULL);
+    /* Check hardware tag matching compatibility */
     if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
         return 0;
     }
 
-    return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
+    return uct_ib_iface_is_reachable_v2(tl_iface, params);
 }
 
 ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
@@ -1007,7 +1011,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate         = uct_rc_mlx5_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_rc_mlx5_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2
+            .iface_is_reachable_v2 = uct_rc_mlx5_iface_is_reachable_v2
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -1069,7 +1073,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .iface_query              = uct_rc_mlx5_iface_query,
     .iface_get_address        = uct_rc_mlx5_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_rc_mlx5_iface_is_reachable
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static ucs_status_t
