@@ -30,7 +30,7 @@ typedef struct uct_rocm_copy_md {
 typedef struct uct_rocm_copy_md_config {
     uct_md_config_t             super;
     ucs_ternary_auto_value_t    enable_rcache;/**< Enable registration cache */
-    uct_md_rcache_config_t      rcache;       /**< Registration cache config */
+    ucs_rcache_config_t         rcache;       /**< Registration cache config */
     ucs_linear_func_t           uc_reg_cost;  /**< Memory registration cost estimation
                                                    without using the cache */
     ucs_ternary_auto_value_t    enable_dmabuf; /**< Turn using dmabuf on/off */

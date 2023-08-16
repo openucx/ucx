@@ -31,9 +31,9 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
      ucs_offsetof(uct_rocm_copy_md_config_t, enable_rcache),
      UCS_CONFIG_TYPE_TERNARY},
 
-    {"", "", NULL,
+    {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE), NULL,
      ucs_offsetof(uct_rocm_copy_md_config_t, rcache),
-     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
+     UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
     {"DMABUF", "no",
      "Enable using cross-device dmabuf file descriptor",
@@ -427,7 +427,7 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
     }
 
     if (md_config->enable_rcache != UCS_NO) {
-        uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
+        ucs_rcache_set_params(&rcache_params, &md_config->rcache);
         rcache_params.region_struct_size = sizeof(uct_rocm_copy_rcache_region_t);
         rcache_params.alignment          = ucs_get_page_size();
         rcache_params.max_alignment      = ucs_get_page_size();
@@ -436,6 +436,7 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
         rcache_params.context            = md;
         rcache_params.ops                = &uct_rocm_copy_rcache_ops;
         rcache_params.flags              = 0;
+
         status = ucs_rcache_create(&rcache_params, "rocm_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
             md->super.ops = &md_rcache_ops;

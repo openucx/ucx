@@ -32,7 +32,7 @@ typedef struct uct_gdr_copy_md {
 typedef struct uct_gdr_copy_md_config {
     uct_md_config_t         super;
     int                     enable_rcache;/**< Enable registration cache */
-    uct_md_rcache_config_t  rcache;       /**< Registration cache config */
+    ucs_rcache_config_t     rcache;       /**< Registration cache config */
     ucs_linear_func_t       uc_reg_cost;  /**< Memory registration cost estimation
                                              without using the cache */
 } uct_gdr_copy_md_config_t;

@@ -170,7 +170,8 @@ void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
 
 void ucp_memh_put_slow(ucp_context_h context, ucp_mem_h memh);
 
-ucs_status_t ucp_mem_rcache_init(ucp_context_h context);
+ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
+                                 const ucs_rcache_config_t *rcache_config);
 
 void ucp_mem_rcache_cleanup(ucp_context_h context);
 

@@ -17,6 +17,8 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/stats/stats_fwd.h>
+#include <ucs/time/time_def.h>
+#include <ucs/config/parser.h>
 #include <sys/mman.h>
 
 
@@ -35,6 +37,7 @@ typedef struct ucs_rcache         ucs_rcache_t;
 typedef struct ucs_rcache_ops     ucs_rcache_ops_t;
 typedef struct ucs_rcache_params  ucs_rcache_params_t;
 typedef struct ucs_rcache_region  ucs_rcache_region_t;
+typedef struct ucs_rcache_config  ucs_rcache_config_t;
 
 /*
  * Memory region flags.
@@ -67,6 +70,7 @@ enum {
 };
 
 
+extern ucs_config_field_t ucs_config_rcache_table[];
 typedef void (*ucs_rcache_invalidate_comp_func_t)(void *arg);
 
 
@@ -141,6 +145,20 @@ struct ucs_rcache_params {
     unsigned long          max_regions;         /**< Maximal number of regions */
     size_t                 max_size;            /**< Maximal total size of regions */
     size_t                 max_unreleased;      /**< Threshold for triggering a cleanup */
+};
+
+
+/*
+ * Registration cache configuration parameters.
+ */
+struct ucs_rcache_config {
+    size_t        alignment;      /**< Force address alignment */
+    unsigned      event_prio;     /**< Memory events priority */
+    ucs_time_t    overhead;       /**< Lookup overhead estimation */
+    unsigned long max_regions;    /**< Maximal number of rcache regions */
+    size_t        max_size;       /**< Maximal size of mapped memory */
+    size_t        max_unreleased; /**< Threshold for triggering a cleanup */
+    int           purge_on_fork;  /**< Enable/disable rcache purge on fork */
 };
 
 
@@ -240,6 +258,26 @@ void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
                                   ucs_rcache_region_t *region,
                                   ucs_rcache_invalidate_comp_func_t cb,
                                   void *arg);
+
+
+/**
+ * Set rcache parameters based on fields in rcache configuration.
+ *
+ * @param [out] rcache_params On success, rcache_params fields are populated
+ *                            with default values.
+ */
+void ucs_rcache_set_default_params(ucs_rcache_params_t *rcache_params);
+
+
+/**
+ * Set rcache parameters based on fields in rcache configuration.
+ *
+ * @param [out] rcache_params On success, rcache_params fields are populated
+ *                            with values provided in rcache_config.
+ * @param [in]  rcache_config Configuration used to populate rcache parameters.
+ */
+void ucs_rcache_set_params(ucs_rcache_params_t *rcache_params,
+                           const ucs_rcache_config_t *rcache_config);
 
 
 #endif
