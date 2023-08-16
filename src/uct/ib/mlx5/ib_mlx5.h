@@ -245,6 +245,7 @@ typedef union {
 
 typedef struct {
     uct_ib_mem_t            super;
+    void                    *address;
     struct mlx5dv_devx_obj  *atomic_dvmr;
     struct mlx5dv_devx_obj  *indirect_dvmr;
     struct mlx5dv_devx_umem *umem;

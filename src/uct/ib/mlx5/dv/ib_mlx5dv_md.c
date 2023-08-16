@@ -34,6 +34,8 @@ uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address, size_t length,
     uct_ib_mlx5_devx_mem_t *memh = ucs_derived_of(ib_memh,
                                                   uct_ib_mlx5_devx_mem_t);
 
+    memh->address = address;
+
     return uct_ib_reg_key_impl(md, address, length, access_flags, dmabuf_fd,
                                dmabuf_offset, ib_memh,
                                &memh->mrs[mr_type].super, mr_type, silent);
@@ -129,11 +131,12 @@ uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md, int atomic, uintptr_t address,
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md, int atomic,
+uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md, int atomic, void *address,
                               uct_ib_mlx5_devx_ksm_data_t *ksm_data,
                               size_t length, off_t off, const char *reason,
                               struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
 {
+    void *mr_address = address;
     ucs_status_t status;
     char *in;
     void *klm;
@@ -146,15 +149,15 @@ uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md, int atomic,
 
     klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
     for (i = 0; i < ksm_data->mr_num; i++) {
-        UCT_IB_MLX5DV_SET64(klm, klm, address,
-                            (uintptr_t)ksm_data->mrs[i]->addr);
+        UCT_IB_MLX5DV_SET64(klm, klm, address, (uintptr_t)mr_address);
         UCT_IB_MLX5DV_SET(klm, klm, byte_count, ksm_data->mrs[i]->length);
         UCT_IB_MLX5DV_SET(klm, klm, mkey, ksm_data->mrs[i]->lkey);
-        klm = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
+        klm        = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
+        mr_address = UCS_PTR_BYTE_OFFSET(mr_address, ksm_data->mrs[i]->length);
     }
 
     status = uct_ib_mlx5_devx_reg_ksm(md, atomic,
-                                      (uintptr_t)ksm_data->mrs[0]->addr + off,
+                                      (uintptr_t)address + off,
                                       length, ksm_data->mr_num,
                                       ksm_data->mrs[0]->length, in, reason,
                                       mr_p, mkey);
@@ -195,20 +198,22 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_addr(
 static ucs_status_t
 uct_ib_mlx5_devx_reg_ksm_data_contig(uct_ib_mlx5_md_t *md,
                                      uct_ib_mlx5_devx_mr_t *mr, off_t offset,
-                                     int atomic, const char *reason,
+                                     void *address, int atomic,
+                                     const char *reason,
                                      struct mlx5dv_devx_obj **mr_p,
                                      uint32_t *mkey)
 {
-    uintptr_t mr_address = (uintptr_t)mr->super.ib->addr;
+    size_t mr_length = mr->super.ib->length;
     uintptr_t ksm_address;
     size_t ksm_length;
     int list_size;
 
     /* FW requires indirect atomic MR address and length to be aligned
      * to max supported atomic argument size */
-    ksm_address = ucs_align_down_pow2(mr_address, UCT_IB_MD_MAX_MR_SIZE);
-    ksm_length  = ucs_align_up(mr->super.ib->length + mr_address - ksm_address,
-                               md->super.dev.atomic_align);
+    ksm_address = ucs_align_down_pow2((uintptr_t)address,
+                                      UCT_IB_MD_MAX_MR_SIZE);
+    ksm_length  = mr_length + (uintptr_t)address - ksm_address;
+    ksm_length  = ucs_align_up(ksm_length, md->super.dev.atomic_align);
 
     /* Add offset to workaround CREATE_MKEY range check issue */
     list_size = ucs_div_round_up(ksm_length + offset, UCT_IB_MD_MAX_MR_SIZE);
@@ -372,8 +377,9 @@ static ucs_status_t uct_ib_mlx5_devx_reg_indirect_key(uct_ib_md_t *ibmd,
 
     do {
         status = uct_ib_mlx5_devx_reg_ksm_data_contig(
-                md, &memh->mrs[UCT_IB_MR_DEFAULT], 0, 0, "indirect key",
-                &memh->indirect_dvmr, &memh->super.indirect_rkey);
+                md, &memh->mrs[UCT_IB_MR_DEFAULT], 0, memh->address, 0,
+                "indirect key", &memh->indirect_dvmr,
+                &memh->super.indirect_rkey);
         if (status != UCS_OK) {
             break;
         }
@@ -480,7 +486,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
     is_atomic = memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
 
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
-        return uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, mr->ksm_data,
+        return uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, memh->address,
+                                             mr->ksm_data,
                                              mr->ksm_data->length,
                                              uct_ib_md_atomic_offset(mr_id),
                                              "multi-thread atomic key",
@@ -489,16 +496,16 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
     }
 
     status = uct_ib_mlx5_devx_reg_ksm_data_contig(
-            md, mr, uct_ib_md_atomic_offset(mr_id), is_atomic, "atomic key",
-            &memh->atomic_dvmr, &memh->super.atomic_rkey);
+            md, mr, uct_ib_md_atomic_offset(mr_id), memh->address, is_atomic,
+            "atomic key", &memh->atomic_dvmr, &memh->super.atomic_rkey);
     if (status != UCS_OK) {
         return status;
     }
 
     ucs_debug("KSM registered memory %p..%p lkey 0x%x offset 0x%x%s on %s rkey "
               "0x%x",
-              mr->super.ib->addr,
-              UCS_PTR_BYTE_OFFSET(mr->super.ib->addr, mr->super.ib->length),
+              memh->address,
+              UCS_PTR_BYTE_OFFSET(memh->address, mr->super.ib->length),
               mr->super.ib->lkey, uct_ib_md_atomic_offset(mr_id),
               is_atomic ? " atomic" : "", uct_ib_device_name(&md->super.dev),
               memh->super.atomic_rkey);
@@ -523,7 +530,6 @@ static ucs_status_t
 uct_ib_mlx5_devx_reg_mt(uct_ib_md_t *ibmd, void *address, size_t length,
                         uint64_t access, uct_ib_mem_t *ib_memh,
                         uct_ib_mr_type_t mr_type, int silent)
-
 {
     uct_ib_mlx5_md_t *md         = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
     uct_ib_mlx5_devx_mem_t *memh = ucs_derived_of(ib_memh,
@@ -565,9 +571,9 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_md_t *ibmd, void *address, size_t length,
         goto err_free;
     }
 
-    status = uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, ksm_data, length, 0,
-                                           "multi-thread key", &ksm_data->dvmr,
-                                           &mkey);
+    status = uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, address, ksm_data,
+                                           length, 0, "multi-thread key",
+                                           &ksm_data->dvmr, &mkey);
     if (status != UCS_OK) {
         goto err_dereg;
     }
@@ -577,6 +583,7 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_md_t *ibmd, void *address, size_t length,
         uct_ib_memh_init_keys(ib_memh, mkey, mkey);
     }
 
+    memh->address = address;
     return UCS_OK;
 
 err_dereg:
@@ -1465,18 +1472,18 @@ static ucs_status_t uct_ib_mlx5_devx_xgvmi_umem_mr(uct_ib_mlx5_md_t *md,
     struct mlx5dv_devx_umem *umem;
     uint32_t exported_lkey;
     ucs_status_t status;
-    void *address, *aligned_address;
+    void *aligned_address;
     size_t length;
     void *mkc;
 
-    address = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->addr;
     length  = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length;
 
     /* register umem */
-    umem_in.addr        = address;
+    umem_in.addr        = memh->address;
     umem_in.size        = length;
     umem_in.access      = UCT_IB_MLX5_MD_UMEM_ACCESS;
-    aligned_address     = ucs_align_down_pow2_ptr(address, ucs_get_page_size());
+    aligned_address     = ucs_align_down_pow2_ptr(memh->address,
+                                                  ucs_get_page_size());
     umem_in.pgsz_bitmap = UCS_MASK(ucs_ffs64((uint64_t)aligned_address) + 1);
     umem_in.comp_mask   = 0;
 
@@ -1506,7 +1513,7 @@ static ucs_status_t uct_ib_mlx5_devx_xgvmi_umem_mr(uct_ib_mlx5_md_t *md,
     UCT_IB_MLX5DV_SET(mkc, mkc, qpn, 0xffffff);
     UCT_IB_MLX5DV_SET(mkc, mkc, pd, uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET(mkc, mkc, mkey_7_0, md->mkey_tag);
-    UCT_IB_MLX5DV_SET64(mkc, mkc, start_addr, (intptr_t)address);
+    UCT_IB_MLX5DV_SET64(mkc, mkc, start_addr, (intptr_t)memh->address);
     UCT_IB_MLX5DV_SET64(mkc, mkc, len, length);
 
     cross_mr = uct_ib_mlx5_devx_obj_create(md->super.dev.ibv_context, in,
@@ -1560,7 +1567,8 @@ uct_ib_mlx5_devx_reg_exported_key(uct_ib_md_t *ib_md, uct_ib_mem_t *ib_memh)
 
     status = uct_ib_mlx5_devx_reg_ksm_data_contig(md,
                                                   &memh->mrs[UCT_IB_MR_DEFAULT],
-                                                  0, 0, "exported key",
+                                                  0, memh->address,
+                                                  0, "exported key",
                                                   &cross_mr, &exported_lkey);
     if (status != UCS_OK) {
         return status;
