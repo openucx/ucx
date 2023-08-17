@@ -664,6 +664,19 @@ typedef struct uct_ep_connect_to_ep_params {
 
 
 /**
+ * @ingroup UCT_MD
+ * @brief Parameters for comparing remote keys using @ref uct_rkey_compare.
+ */
+typedef struct uct_rkey_compare_params {
+    /**
+     * Mask of valid fields in this structure. Must currently be equal to zero.
+     * Fields not specified in this mask will be ignored. Provides ABI
+     * compatibility with respect to adding new fields.
+     */
+    uint64_t                      field_mask;
+} uct_rkey_compare_params_t;
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Get interface performance attributes, by memory types and operation.
  *        A pointer to uct_perf_attr_t struct must be passed, with the memory
@@ -1035,6 +1048,28 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
  */
 int uct_ep_is_connected(uct_ep_h ep,
                         const uct_ep_is_connected_params_t *params);
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief This routine compares two remote keys.
+ *
+ * It sets the @a result argument to < 0 if rkey1 is lower than rkey2, 0 if they
+ * are equal or > 0 if rkey1 is greater than rkey2. The result value can be used
+ * for sorting remote keys.
+ *
+ * @param[in]  component  Component to use for the comparison
+ * @param[in]  rkey1      First rkey to compare
+ * @param[in]  rkey2      Second rkey to compare
+ * @param[in]  params     Additional parameters for comparison
+ * @param[out] result     Result of the comparison
+ *
+ * @return UCS_OK         @a result contains the comparison result
+ *         Other          Error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t
+uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
+                 const uct_rkey_compare_params_t *params, int *result);
 
 END_C_DECLS
 
