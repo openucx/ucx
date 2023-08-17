@@ -1,11 +1,13 @@
-trigger: none
+trigger:
 pr:
   branches:
     include:
-    - '*'
+    - master
+    - v*.*.x
   paths:
     include:
-    - '*'
+    - buildlib/azure-pipelines-perf.yml
+    - buildlib/tools/perf_results.py
 
 variables:
 - name: WorkDir
