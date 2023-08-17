@@ -545,25 +545,29 @@ enum {
      * mapping up-front, and mapping them later when they are accessed by
      * communication routines.
      */
-    UCP_MEM_MAP_NONBLOCK         = UCS_BIT(0),
+    UCP_MEM_MAP_NONBLOCK            = UCS_BIT(0),
 
     /**
      * Identify requirement for allocation, if passed address is not a
      * null-pointer, then it will be used as a hint or direct address for
      * allocation.
      */
-    UCP_MEM_MAP_ALLOCATE         = UCS_BIT(1),
+    UCP_MEM_MAP_ALLOCATE            = UCS_BIT(1),
 
     /**
      * Don't interpret address as a hint: place the mapping at exactly that
      * address. The address must be a multiple of the page size.
      */
-    UCP_MEM_MAP_FIXED            = UCS_BIT(2),
+    UCP_MEM_MAP_FIXED               = UCS_BIT(2),
 
     /**
-     * For memory registration, request for expected identifier allocation.
+     * Register the memory region so its remote access key would likely be
+     * equal to remote access keys received from other peers, when compared with
+     * @ref ucp_rkey_compare. This flag is best-effort. When remote access keys
+     * received from different peers are equal, they can be used
+     * interchangeably, avoiding the need to keep all of them in memory.
      */
-    UCP_MEM_MAP_MKEY_INDEX_ALLOC = UCS_BIT(3)
+    UCP_MEM_MAP_MKEY_SYMMETRIC_RKEY = UCS_BIT(3)
 };
 
 
