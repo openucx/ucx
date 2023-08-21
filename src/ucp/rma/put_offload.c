@@ -139,7 +139,7 @@ static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self
     return ucp_proto_multi_progress(req, req->send.proto_config->priv,
                                     ucp_proto_put_offload_bcopy_send_func,
                                     ucp_proto_request_bcopy_complete_success,
-                                    UCS_BIT(UCP_DATATYPE_CONTIG));
+                                    UCP_DT_MASK_ALL);
 }
 
 static ucs_status_t
@@ -166,7 +166,7 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
-        .max_lanes           = context->config.ext.max_rma_lanes,
+        .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_BCOPY,
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,

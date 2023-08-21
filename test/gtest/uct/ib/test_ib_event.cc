@@ -360,8 +360,8 @@ private:
         }
 
         ~mlx5_qp() {
-            uct_ib_mlx5_qp_mmio_cleanup(&m_txwq.super, m_txwq.reg);
             uct_ib_mlx5_destroy_qp(m_md, &m_txwq.super);
+            uct_ib_mlx5_qp_mmio_cleanup(&m_txwq.super, m_txwq.reg);
         }
 
         uint32_t qp_num() const {
