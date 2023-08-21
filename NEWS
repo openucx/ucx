@@ -11,6 +11,12 @@
 ### Features:
 ### Bugfixes:
 
+## 1.15.0-rc4 (August 22, 2023)
+### Bugfixes:
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixed dma-buf based memory region registration
+* Fixed memory handle data corruption when PCIe relaxed ordering is enabled
+
 ## 1.15.0-rc3 (August 8, 2023)
 ### Bugfixes:
 #### UCP
