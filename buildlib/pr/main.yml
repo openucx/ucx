@@ -248,10 +248,29 @@ stages:
               long_test: $(long_test)
               test_static: $(test_static)
 
-  - stage: Distro
+  - stage: WireCompat
     dependsOn: [Static_check]
     jobs:
-    - template: distro.yml
+    - template: wire_compat.yml
+      parameters:
+        name: althca
+        demands: ucx_althca -equals yes
+    - template: wire_compat.yml
+      parameters:
+        name: gpu
+        demands: ucx_gpu -equals yes
+        container: centos7_cuda11
+        ucx_targets:
+          ucx_1_15:
+            ucx_tag: v1.15.x
+    - template: wire_compat.yml
+      parameters:
+        name: new
+        demands: ucx_new -equals yes
+    - template: wire_compat.yml
+      parameters:
+        name: bond
+        demands: ucx_iodemo -equals yes
 
   - stage: Coverity
     dependsOn: [Static_check]

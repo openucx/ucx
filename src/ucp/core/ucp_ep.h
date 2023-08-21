@@ -261,6 +261,9 @@ struct ucp_ep_config_key {
 
     /* Additional flags */
     unsigned                 flags;
+
+    /* Indicates peer release version */
+    unsigned                 dst_version;
 };
 
 
