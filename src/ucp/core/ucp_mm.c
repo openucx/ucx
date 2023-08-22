@@ -908,7 +908,6 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 
 out:
     if (status == UCS_OK) {
-        ucs_assert(memh->md_map != 0);
         ucs_assert(ucp_memh_is_user_memh(memh));
         *memh_p = memh;
     }

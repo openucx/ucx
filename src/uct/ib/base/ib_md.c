@@ -158,6 +158,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Maximal number of invalidated memory keys that are kept idle before reuse.",
      ucs_offsetof(uct_ib_md_config_t, ext.max_idle_rkey_count), UCS_CONFIG_TYPE_UINT},
 
+    {"REG_RETRY_CNT", "7",
+     "Number of memory registration attempts.",
+     ucs_offsetof(uct_ib_md_config_t, ext.reg_retry_cnt), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -435,6 +439,7 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
                            uint64_t access_flags, struct ibv_mr **mr_p)
 {
     ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
+    unsigned retry                     = 0;
     size_t UCS_V_UNUSED dmabuf_offset;
     const char *title;
     struct ibv_mr *mr;
@@ -449,8 +454,14 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
 
     if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
         title = "ibv_reg_mr";
-        mr    = UCS_PROFILE_CALL_ALWAYS(ibv_reg_mr, md->pd, address, length,
-                                        access_flags);
+        do {
+            /* when access_flags contains IBV_ACCESS_ON_DEMAND ibv_reg_mr() may
+             * fail with EAGAIN. It means prefetch failed due to collision
+             * with invalidation */
+            mr = UCS_PROFILE_CALL_ALWAYS(ibv_reg_mr, md->pd, address, length,
+                                         access_flags);
+        } while ((mr == NULL) && (errno == EAGAIN) &&
+                 (retry++ < md->config.reg_retry_cnt));
     } else {
 #if HAVE_DECL_IBV_REG_DMABUF_MR
         title = "ibv_reg_dmabuf_mr";
@@ -469,9 +480,10 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
     }
 
     ucs_trace("%s(pd=%p addr=%p len=%zu fd=%d offset=%zu access=0x%" PRIx64 "):"
-              " mr=%p took %.3f ms",
+              " mr=%p lkey=0x%x retry=%d took %.3f ms",
               title, md->pd, address, length, dmabuf_fd, dmabuf_offset,
-              access_flags, mr, ucs_time_to_msec(ucs_get_time() - start_time));
+              access_flags, mr, mr->lkey, retry,
+              ucs_time_to_msec(ucs_get_time() - start_time));
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
 
     *mr_p = mr;

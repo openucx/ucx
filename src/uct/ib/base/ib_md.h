@@ -96,6 +96,7 @@ typedef struct uct_ib_md_ext_config {
                                                        invalidated memory keys
                                                        that are kept idle before
                                                        reuse*/
+    unsigned                 reg_retry_cnt; /**< Memory registration retry count */
 } uct_ib_md_ext_config_t;
 
 

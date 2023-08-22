@@ -566,9 +566,10 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PRE_REQUEST);
     ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
-              " dst_ep_id 0x%"PRIx64" conn_sn %u",
+              " dst_ep_id 0x%"PRIx64" conn_sn %u address version %u/%u",
               remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
-              msg->conn_sn);
+              msg->conn_sn, remote_address->addr_version,
+              remote_address->dst_version);
 
     ucs_assert(ucp_ep_get_cm_wireup_ep(ep) != NULL);
     ucs_assert(ep->flags & UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ);
@@ -611,9 +612,11 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     int has_cm_lane;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
-    ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64""
-              " dst_ep_id 0x%"PRIx64" conn_sn %d", remote_address->uuid,
-              msg->src_ep_id, msg->dst_ep_id, msg->conn_sn);
+    ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
+              " dst_ep_id 0x%"PRIx64" conn_sn %d address version %u/%u",
+              remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
+              msg->conn_sn, remote_address->addr_version,
+              remote_address->dst_version);
 
     if (ep != NULL) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
@@ -1534,6 +1537,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
     ucp_ep_config_key_init_flags(&key, ep_init_flags);
     ucp_wireup_eps_pending_extract(ep, &replay_pending_queue);
+
+    key.dst_version = remote_address->dst_version;
 
     /* Allow to choose only the lanes that were already chosen for case
      * without CM to prevent reconfiguration error.

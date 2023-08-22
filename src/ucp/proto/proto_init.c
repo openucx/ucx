@@ -341,7 +341,7 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
     if (context->rcache != NULL) {
         perf_node = ucp_proto_perf_node_new_data("rcache lookup", "");
 
-        *memreg_time = ucs_linear_func_make(50.0e-9, 0);
+        *memreg_time = UCP_RCACHE_LOOKUP_FUNC;
 
         ucp_proto_perf_node_add_data(perf_node, "lookup", *memreg_time);
 
