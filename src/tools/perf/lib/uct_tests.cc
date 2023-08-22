@@ -18,6 +18,7 @@
 
 #include "libperf_int.h"
 
+
 #include <limits>
 #include <vector>
 
@@ -605,7 +606,7 @@ public:
                                          ucs_memory_type memory_type,
                                          uct_ep_h ep, uct_rkey_t rkey)
     {
-        const std::vector<uint8_t> values(length, 0);
+        const std::vector<uint8_t> values(length);
         if (memory_type == UCS_MEMORY_TYPE_HOST) {
             memset(buffer, 0, length);
             return UCS_OK;

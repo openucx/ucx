@@ -30,7 +30,6 @@ include $(top_srcdir)/config/module.am
 endif
 
 # Add ROCM dependencies
-# UCX_CHECK_ROCM
 if HAVE_HIP
 libucxperf_la_CPPFLAGS += $(HIP_CPPFLAGS)
 libucxperf_la_CFLAGS   += $(HIP_CFLAGS)
