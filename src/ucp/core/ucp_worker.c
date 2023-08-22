@@ -2886,7 +2886,7 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
 
     return ucp_address_pack(worker, NULL, &tl_bitmap, flags,
                             context->config.ext.worker_addr_version, NULL,
-                            address_length_p, (void**)address_p);
+                            UINT_MAX, address_length_p, (void**)address_p);
 }
 
 ucs_status_t ucp_worker_query(ucp_worker_h worker,
