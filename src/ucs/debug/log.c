@@ -478,20 +478,28 @@ overflow:
     return buf;
 }
 
-void ucs_log_dump_hex_buf_impl(const char *file, unsigned line,
-                               const char *function, ucs_log_level_t level,
-                               ucs_log_component_config_t *comp_conf,
-                               const void* buff, size_t len)
+void __ucs_log_wqe(const char *file, unsigned line,
+                   const char *function, ucs_log_level_t level,
+                   ucs_log_component_config_t *comp_conf,
+                   const void* buff, size_t len)
 {
-    uint32_t *p = (uint32_t *)buff, c, i = 0;
-    char *out = alloca(len * 5), *outp = out;
+    const uint32_t *p = (const uint32_t *)buff;
+    size_t buflen     = 41 * ucs_div_round_up(len, 16);
+    char *out         = ucs_alloca(buflen);
+    char *outp        = out;
+    unsigned i        = 0;
+    unsigned c;
 
-    while(i * 16 < len) {
+    while (i * 16 < len) {
         outp += sprintf(outp, "\n%02x: ", i);
-        for (c = 0; c < 4; c++)
+        for (c = 0; c < 4; c++) {
             outp += sprintf(outp, "%08x ", ntohl(p[i * 4 + c]));
+        }
+
         i++;
     }
+
+    ucs_assert(UCS_PTR_BYTE_DIFF(out, outp) <= buflen);
     ucs_log_dispatch(file, line, function, level, comp_conf, "%s", out);
 }
 
