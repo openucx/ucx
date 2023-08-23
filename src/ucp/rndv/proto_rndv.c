@@ -154,6 +154,9 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     rkey_config_key.ep_cfg_index = ep_cfg_index;
     rkey_config_key.sys_dev      = params->mem_info.sys_dev;
     rkey_config_key.mem_type     = params->mem_info.type;
+
+    rkey_config_key.unreachable_md_map = 0;
+
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
         ucp_proto_common_get_lane_distance(&params->super.super, lane,
                                            params->mem_info.sys_dev,
@@ -226,22 +229,27 @@ static ucs_status_t
 ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
                               ucp_lane_index_t lane)
 {
-    ucp_context_h context             = params->super.super.worker->context;
-    ucp_proto_rndv_ctrl_priv_t *rpriv = params->super.super.priv;
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_context_h context                      = init_params->worker->context;
+    ucp_proto_rndv_ctrl_priv_t *rpriv          = init_params->priv;
     const ucp_proto_select_param_t *select_param;
     ucp_proto_select_param_t remote_select_param;
     ucp_memory_info_t mem_info;
     uint32_t op_attr_mask;
 
-    select_param                   = params->super.super.select_param;
-    *params->super.super.priv_size = sizeof(ucp_proto_rndv_ctrl_priv_t);
-    rpriv->lane                    = lane;
+    select_param            = init_params->select_param;
+    *init_params->priv_size = sizeof(ucp_proto_rndv_ctrl_priv_t);
+    rpriv->lane             = lane;
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
                    UCP_OP_ATTR_FLAG_MULTI_SEND;
 
+    /* Initialize estimated memory registration map */
+    ucp_proto_rndv_ctrl_get_md_map(params, &rpriv->md_map, &rpriv->sys_dev_map,
+                                   rpriv->sys_dev_distance);
+
     /* Construct select parameter for the remote protocol */
-    if (params->super.super.rkey_config_key == NULL) {
+    if (init_params->rkey_config_key == NULL) {
         /* Remote buffer is unknown, assume same params as local */
         mem_info.type    = select_param->mem_type;
         mem_info.sys_dev = select_param->sys_dev;
@@ -252,16 +260,17 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
         /* If we know the remote buffer parameters, these are actually the local
          * parameters for the remote protocol
          */
-        mem_info.sys_dev = params->super.super.rkey_config_key->sys_dev;
-        mem_info.type    = params->super.super.rkey_config_key->mem_type;
+        mem_info.sys_dev = init_params->rkey_config_key->sys_dev;
+        mem_info.type    = init_params->rkey_config_key->mem_type;
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     op_attr_mask, 0, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);
+        /* Use only memory domains for which the unpacking of the remote key was
+         * successful
+         */
+        rpriv->md_map &= ~init_params->rkey_config_key->unreachable_md_map;
     }
 
-    /* Initialize estimated memory registration map */
-    ucp_proto_rndv_ctrl_get_md_map(params, &rpriv->md_map, &rpriv->sys_dev_map,
-                                   rpriv->sys_dev_distance);
     rpriv->packed_rkey_size = ucp_rkey_packed_size(context, rpriv->md_map,
                                                    select_param->sys_dev,
                                                    rpriv->sys_dev_map);
