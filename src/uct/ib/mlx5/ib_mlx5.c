@@ -472,7 +472,7 @@ uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
     }
 
     if (cqe->op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK) {
-        ucs_log_wqe(cqe, sizeof(struct mlx5_cqe64));
+        UCT_IB_LOG_WQE(iface, "ERR CQE", cqe, sizeof(struct mlx5_cqe64));
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
         uct_ib_mlx5_check_completion_with_err(iface, cq, cqe);

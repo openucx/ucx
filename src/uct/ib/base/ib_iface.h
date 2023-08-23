@@ -189,6 +189,9 @@ struct uct_ib_iface_config {
 
     /* QP counter set ID */
     unsigned long           counter_set_id;
+
+    /* Enable WQE/CQE output */
+    int                     log_print_queues;
 };
 
 
@@ -298,6 +301,7 @@ struct uct_ib_iface {
         uint8_t               force_global_addr;
         enum ibv_mtu          path_mtu;
         uint8_t               counter_set_id;
+        uint8_t               log_print_queues;
     } config;
 
     uct_ib_iface_ops_t        *ops;
@@ -606,6 +610,16 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
 
 #define UCT_IB_MAX_ZCOPY_LOG_SGE(_iface) \
     (uct_ib_iface_device(_iface)->max_zcopy_log_sge)
+
+#define UCT_IB_LOG_WQE(_iface, _prefix, _data, _length) \
+    do { \
+        if (_iface->config.log_print_queues) { \
+            __ucs_log_wqe(__FILE__, __LINE__, __FUNCTION__, \
+                          UCS_LOG_LEVEL_PRINT, &ucs_global_opts.log_component, \
+                          _prefix, _data, _length); \
+        } \
+    } while(0)
+
 
 /**
  * Fill ibv_sge data structure by data provided in uct_iov_t

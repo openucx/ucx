@@ -480,26 +480,15 @@ overflow:
 
 void __ucs_log_wqe(const char *file, unsigned line,
                    const char *function, ucs_log_level_t level,
-                   ucs_log_component_config_t *comp_conf,
+                   ucs_log_component_config_t *comp_conf, const char *prefix,
                    const void* buff, size_t len)
 {
-    const uint32_t *p = (const uint32_t *)buff;
-    size_t buflen     = 41 * ucs_div_round_up(len, 16);
-    char *out         = ucs_alloca(buflen);
-    char *outp        = out;
-    unsigned i        = 0;
-    unsigned c;
+    /* PFX xx: xxxxxxxx:xxxxxxxx:xxxxxxxx:xxxxxxxx\n
+     *     |-------------------42------------------| */
+    size_t buflen = (strlen(prefix) + 42) * ucs_div_round_up(len, 16);
+    char *out     = ucs_alloca(buflen);
 
-    while (i * 16 < len) {
-        outp += sprintf(outp, "\n%02x: ", i);
-        for (c = 0; c < 4; c++) {
-            outp += sprintf(outp, "%08x ", ntohl(p[i * 4 + c]));
-        }
-
-        i++;
-    }
-
-    ucs_assert(UCS_PTR_BYTE_DIFF(out, outp) <= buflen);
+    ucs_str_dump_hex_bulk(buff, len, out, buflen, 16, 4, prefix);
     ucs_log_dispatch(file, line, function, level, comp_conf, "%s", out);
 }
 
