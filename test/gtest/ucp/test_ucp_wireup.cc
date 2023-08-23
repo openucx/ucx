@@ -942,6 +942,9 @@ UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_2sided)
+/* Test use tcp as AUX transport */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_2sided,
+                              tcp_aux, "tcp,rc_verbs")
 
 class test_ucp_wireup_errh_peer : public test_ucp_wireup_1sided
 {
