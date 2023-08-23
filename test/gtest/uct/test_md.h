@@ -54,6 +54,7 @@ protected:
 
     void test_reg_advise(size_t size, size_t advise_size,
                          size_t advice_offset, bool check_non_blocking = false);
+    void test_alloc_advise(ucs_memory_type_t mem_type);
 
     uct_md_h md() const {
         return m_md;

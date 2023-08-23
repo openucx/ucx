@@ -253,6 +253,10 @@ typedef struct {
     struct mlx5dv_devx_umem *umem;
     struct mlx5dv_devx_obj  *cross_mr;
     struct mlx5dv_devx_obj  *smkey_mr;
+    struct mlx5dv_devx_obj  *dm_addr_dvmr;
+#if HAVE_IBV_DM
+    struct ibv_dm           *dm;
+#endif
     uint32_t                atomic_rkey;
     uint32_t                indirect_rkey;
     uint32_t                exported_lkey;
