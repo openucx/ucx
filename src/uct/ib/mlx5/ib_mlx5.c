@@ -933,25 +933,6 @@ uct_ib_mlx5_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
     }
 }
 
-ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *ibmd, uint8_t *mr_id)
-{
-    uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
-
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-        goto unsupported;
-    }
-
-    /* Get atomic UMR id. We want umrs for same virtual addresses to have
-     * different ids across processes.
-     */
-    *mr_id = ibmd->flush_rkey >> 8;
-    return UCS_OK;
-
-unsupported:
-    *mr_id = 0;
-    return UCS_ERR_UNSUPPORTED;
-}
-
 void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
 {
     switch (qp->type) {
