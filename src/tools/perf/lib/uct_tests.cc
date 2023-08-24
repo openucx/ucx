@@ -18,10 +18,7 @@
 
 #include "libperf_int.h"
 
-
 #include <limits>
-#include <vector>
-
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, uct_perf_data_layout_t DATA, bool ONESIDED>
 class uct_perf_test_runner {
@@ -606,14 +603,21 @@ public:
                                          ucs_memory_type memory_type,
                                          uct_ep_h ep, uct_rkey_t rkey)
     {
-        const std::vector<uint8_t> values(length);
+        ucs_status_t status;
+        void *zero_buf; 
         if (memory_type == UCS_MEMORY_TYPE_HOST) {
             memset(buffer, 0, length);
             return UCS_OK;
         }
 
-        return uct_ep_put_short(ep, values.data(), length, (uint64_t)buffer,
-                                rkey);
+        /* RDMA equivalent to memset 0 */
+        zero_buf = calloc(1, length);
+        if (zero_buf == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+        status = uct_ep_put_short(ep, zero_buf, length, (uint64_t)buffer, rkey);
+        free(zero_buf);
+        return status;
     }
 
     ucs_status_t run_stream_req_uni(bool flow_control, bool send_window,
