@@ -498,8 +498,7 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
     .iface_query              = uct_rc_verbs_iface_query,
     .iface_get_address        = ucs_empty_function_return_success,
-    .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_base_iface_is_reachable,
+    .iface_get_device_address = uct_ib_iface_get_device_address
 };
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {

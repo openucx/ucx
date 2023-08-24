@@ -175,8 +175,7 @@ static uct_iface_ops_t uct_rocm_copy_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_copy_iface_t),
     .iface_query              = uct_rocm_copy_iface_query,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
-    .iface_get_address        = uct_rocm_copy_iface_get_address,
-    .iface_is_reachable       = uct_base_iface_is_reachable
+    .iface_get_address        = uct_rocm_copy_iface_get_address
 };
 
 

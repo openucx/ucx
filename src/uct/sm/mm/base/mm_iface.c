@@ -502,8 +502,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
     .iface_query              = uct_mm_iface_query,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_get_address        = uct_mm_iface_get_address,
-    .iface_is_reachable       = uct_base_iface_is_reachable
+    .iface_get_address        = uct_mm_iface_get_address
 };
 
 static ucs_status_t

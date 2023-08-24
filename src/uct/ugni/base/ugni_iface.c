@@ -42,11 +42,6 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *dev_addr, const uct_iface_addr_t *iface_addr)
-{
-    return 1;
-}
-
 int uct_ugni_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
@@ -70,6 +65,9 @@ void uct_ugni_cleanup_base_iface(uct_ugni_iface_t *iface)
     uct_ugni_destroy_cq(iface->local_cq, &iface->cdm);
     uct_ugni_destroy_cdm(&iface->cdm);
 }
+
+uct_iface_internal_ops_t uct_ugni_base_iface_internal_ops =
+        UCT_IFACE_INTERNAL_OPS_INITIALIZER(uct_ugni_iface_is_reachable_v2);
 
 UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,

@@ -215,6 +215,19 @@ enum {
 
 
 /**
+ * Common default initializer where only reachabilty can be customized
+ */
+#define UCT_IFACE_INTERNAL_OPS_INITIALIZER(_is_reachable_v2) \
+    { \
+        .iface_estimate_perf   = uct_base_iface_estimate_perf, \
+        .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function, \
+        .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported, \
+        .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported, \
+        .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported, \
+        .iface_is_reachable_v2 = _is_reachable_v2 \
+    }
+
+/**
  * Declare classes for structures defined in api/tl.h
  */
 UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_md_h);
@@ -848,10 +861,6 @@ void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
-
-int uct_base_iface_is_reachable(const uct_iface_h tl_iface,
-                                const uct_device_addr_t *dev_addr,
-                                const uct_iface_addr_t *iface_addr);
 
 int uct_iface_scope_is_reachable(const uct_iface_h iface,
                                  const uct_iface_is_reachable_params_t *params);

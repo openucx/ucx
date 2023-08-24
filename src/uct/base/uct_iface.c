@@ -213,10 +213,19 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr)
     return iface->ops.iface_get_address(iface, addr);
 }
 
-int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev_addr,
+int uct_iface_is_reachable(const uct_iface_h tl_iface,
+                           const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
 {
-    return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
+    const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_iface_is_reachable_params_t params = {
+        .field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                       UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
+        .device_addr = dev_addr,
+        .iface_addr  = iface_addr
+    };
+
+    return iface->internal_ops->iface_is_reachable_v2(tl_iface, &params);
 }
 
 static int uct_iface_is_same_device(const uct_iface_h iface,
@@ -291,20 +300,6 @@ int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
     const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
-}
-
-int uct_base_iface_is_reachable(const uct_iface_h tl_iface,
-                                const uct_device_addr_t *dev_addr,
-                                const uct_iface_addr_t *iface_addr)
-{
-    uct_iface_is_reachable_params_t params = {
-        .field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
-                       UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
-        .device_addr = dev_addr,
-        .iface_addr  = iface_addr
-    };
-
-    return uct_iface_is_reachable_v2(tl_iface, &params);
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
@@ -549,7 +544,6 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
     ucs_assert_always(ops->iface_close              != NULL);
     ucs_assert_always(ops->iface_query              != NULL);
     ucs_assert_always(ops->iface_get_device_address != NULL);
-    ucs_assert_always(ops->iface_is_reachable       != NULL);
 
     self->ops = *ops;
     return UCS_OK;
@@ -580,6 +574,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
                         UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS) ?
                        params->err_handler_flags : 0);
 
+    ucs_assert(internal_ops != NULL);
     ucs_assert(internal_ops->iface_estimate_perf != NULL);
     ucs_assert(internal_ops->iface_vfs_refresh != NULL);
     ucs_assert(internal_ops->ep_query != NULL);

@@ -208,7 +208,6 @@ static uct_iface_ops_t uct_ugni_aries_rdma_iface_ops = {
     .iface_query              = uct_ugni_rdma_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
-    .iface_is_reachable       = uct_ugni_iface_is_reachable
 };
 
 static uct_iface_ops_t uct_ugni_gemini_rdma_iface_ops = {
@@ -235,7 +234,6 @@ static uct_iface_ops_t uct_ugni_gemini_rdma_iface_ops = {
     .iface_query              = uct_ugni_rdma_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
-    .iface_is_reachable       = uct_ugni_iface_is_reachable
 };
 
 static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {
@@ -275,7 +273,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
         status = UCS_ERR_NO_DEVICE;
         goto exit;
     }
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops, NULL,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops,
+                              &uct_ugni_base_iface_internal_ops,
                               &config->super UCS_STATS_ARG(NULL));
     /* Setting initial configuration */
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;

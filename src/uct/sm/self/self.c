@@ -366,14 +366,8 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     return length;
 }
 
-static uct_iface_internal_ops_t uct_self_iface_internal_ops = {
-    .iface_estimate_perf   = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_self_iface_is_reachable_v2
-};
+static uct_iface_internal_ops_t uct_self_iface_internal_ops =
+        UCT_IFACE_INTERNAL_OPS_INITIALIZER(uct_self_iface_is_reachable_v2);
 
 static uct_iface_ops_t uct_self_iface_ops = {
     .ep_put_short             = uct_sm_ep_put_short,
@@ -403,8 +397,7 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_self_iface_t),
     .iface_query              = uct_self_iface_query,
     .iface_get_device_address = ucs_empty_function_return_success,
-    .iface_get_address        = uct_self_iface_get_address,
-    .iface_is_reachable       = uct_base_iface_is_reachable
+    .iface_get_address        = uct_self_iface_get_address
 };
 
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_v2_t *attr)

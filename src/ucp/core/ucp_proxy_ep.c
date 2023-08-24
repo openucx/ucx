@@ -170,7 +170,6 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     self->iface.ops.iface_query              = (uct_iface_query_func_t)ucp_proxy_ep_fatal;
     self->iface.ops.iface_get_device_address = (uct_iface_get_device_address_func_t)ucp_proxy_ep_fatal;
     self->iface.ops.iface_get_address        = (uct_iface_get_address_func_t)ucp_proxy_ep_fatal;
-    self->iface.ops.iface_is_reachable       = (uct_iface_is_reachable_func_t)ucp_proxy_ep_fatal;
 
     return UCS_OK;
 }
