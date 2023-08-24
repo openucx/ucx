@@ -54,13 +54,33 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t* patch);
 static UCS_F_MAYBE_UNUSED
 void* ucm_reloc_get_orig(const char *symbol, void *replacement)
 {
+    static const int flags = RTLD_LOCAL | RTLD_NODELETE | RTLD_LAZY;
     const char *error;
-    void *func_ptr;
+    void *func_ptr = NULL;
+    int ret;
+    void *dl;
+    Dl_info info;
 
-    func_ptr = dlsym(RTLD_NEXT, symbol);
+    (void)dlerror();
+    ret = dladdr((void*)ucm_reloc_get_orig, &info);
+    if (ret == 0) {
+        ucm_warn("could not find address of current library: %s", dlerror());
+        return NULL;
+    }
+
+    (void)dlerror();
+    dl = dlopen(info.dli_fname, flags);
+    if (dl != NULL) {
+        (void)dlerror();
+        func_ptr = dlsym(dl, symbol);
+        ucm_trace("(libucm) found symbol %s at %p", symbol, func_ptr);
+        dlclose(dl);
+    }
+
     if (func_ptr == NULL) {
         (void)dlerror();
         func_ptr = dlsym(RTLD_DEFAULT, symbol);
+        ucm_trace("(default) found symbol %s at %p", symbol, func_ptr);
         if (func_ptr == replacement) {
             error = dlerror();
             ucm_fatal("could not find address of original %s(): %s", symbol,
