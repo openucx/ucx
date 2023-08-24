@@ -13,6 +13,7 @@
 #include <uct/ugni/base/ugni_def.h>
 #include <uct/ugni/base/ugni_md.h>
 #include <uct/ugni/base/ugni_device.h>
+#include <ucs/sys/math.h>
 
 static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     /* This tuning controls the allocation priorities for bouncing buffers */
