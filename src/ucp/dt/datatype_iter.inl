@@ -265,6 +265,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
         ucs_memory_type_t mem_type, ucp_md_map_t md_map, unsigned uct_flags,
         ucp_mem_h *memh_p)
 {
+    const char *alloc_name = "dt_iter";
     ucp_mem_h memh = *memh_p;
     ucs_status_t status;
 
@@ -277,7 +278,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
 
     if (memh == NULL) {
         return ucp_memh_get(context, buffer, length, mem_type, md_map,
-                            uct_flags, memh_p);
+                            uct_flags, alloc_name, memh_p);
     }
 
     if (ucs_likely(ucs_test_all_flags(memh->md_map, md_map)) ||
@@ -286,7 +287,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
     }
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
-    status = ucp_memh_register(context, memh, md_map, uct_flags);
+    status = ucp_memh_register(context, memh, md_map, uct_flags, alloc_name);
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }

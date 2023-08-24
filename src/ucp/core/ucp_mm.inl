@@ -34,7 +34,7 @@ ucp_memh_rcache_print(ucp_mem_h memh, void *address, size_t length)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_memh_get(ucp_context_h context, void *address, size_t length,
              ucs_memory_type_t mem_type, ucp_md_map_t reg_md_map,
-             unsigned uct_flags, ucp_mem_h *memh_p)
+             unsigned uct_flags, const char *alloc_name, ucp_mem_h *memh_p)
 {
     ucs_rcache_region_t *rregion;
     ucp_mem_h memh;
@@ -70,7 +70,7 @@ not_found:
     }
 
     return ucp_memh_get_slow(context, address, length, mem_type, reg_md_map,
-                             uct_flags, memh_p);
+                             uct_flags, alloc_name, memh_p);
 }
 
 /*
@@ -146,11 +146,12 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
                        ucs_memory_type_t mem_type, ucp_md_map_t md_map,
                        unsigned uct_flags, ucp_mem_h *memh_p)
 {
-    ucs_status_t status = UCS_OK;
+    const char *alloc_name = "get_or_update";
+    ucs_status_t status    = UCS_OK;
 
     if (*memh_p == NULL) {
         return ucp_memh_get(context, address, length, mem_type, md_map,
-                            uct_flags, memh_p);
+                            uct_flags, alloc_name, memh_p);
     }
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
@@ -162,7 +163,7 @@ ucp_memh_get_or_update(ucp_context_h context, void *address, size_t length,
     ucs_assert((*memh_p)->parent == NULL);
     ucs_assert(ucs_test_all_flags(context->cache_md_map[mem_type], md_map));
 
-    status = ucp_memh_register(context, *memh_p, md_map, uct_flags);
+    status = ucp_memh_register(context, *memh_p, md_map, uct_flags, alloc_name);
 out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
