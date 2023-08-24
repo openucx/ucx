@@ -94,6 +94,7 @@ noinst_HEADERS = \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
 	datastruct/frag_list.h \
+        datastruct/lru.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.inl \
 	datastruct/mpool_set.inl \
@@ -156,6 +157,7 @@ libucs_la_SOURCES = \
 	datastruct/array.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
+	datastruct/lru.c \
 	datastruct/mpmc.c \
 	datastruct/mpool.c \
 	datastruct/mpool_set.c \
