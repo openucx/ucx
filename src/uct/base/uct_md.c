@@ -44,40 +44,6 @@ ucs_config_field_t uct_md_config_table[] = {
   {NULL}
 };
 
-ucs_config_field_t uct_md_config_rcache_table[] = {
-    {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
-     ucs_offsetof(uct_md_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
-
-    {"RCACHE_OVERHEAD", "auto", "Registration cache lookup overhead",
-     ucs_offsetof(uct_md_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME_UNITS},
-
-    {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
-     "Registration cache address alignment, must be power of 2\n"
-     "between " UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN) "and system page size",
-     ucs_offsetof(uct_md_rcache_config_t, alignment), UCS_CONFIG_TYPE_UINT},
-
-    {"RCACHE_MAX_REGIONS", "inf",
-     "Maximal number of regions in the registration cache",
-     ucs_offsetof(uct_md_rcache_config_t, max_regions),
-     UCS_CONFIG_TYPE_ULUNITS},
-
-    {"RCACHE_MAX_SIZE", "inf",
-     "Maximal total size of registration cache regions",
-     ucs_offsetof(uct_md_rcache_config_t, max_size), UCS_CONFIG_TYPE_MEMUNITS},
-
-    {"RCACHE_MAX_UNRELEASED", "512M",
-     "Maximal size of total memory regions in invalidate queue and garbage,\n"
-     "after which a cleanup is triggered.",
-     ucs_offsetof(uct_md_rcache_config_t, max_unreleased),
-     UCS_CONFIG_TYPE_MEMUNITS},
-
-    {"RCACHE_PURGE_ON_FORK", "y",
-     "Purge registration cache upon fork",
-     ucs_offsetof(uct_md_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
-
-    {NULL}
-};
-
 
 const char *uct_device_type_names[] = {
     [UCT_DEVICE_TYPE_NET]  = "network",
@@ -630,19 +596,7 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
     return UCS_OK;
 }
 
-void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
-                              const uct_md_rcache_config_t *rcache_config)
-{
-    rcache_params->alignment          = rcache_config->alignment;
-    rcache_params->ucm_event_priority = rcache_config->event_prio;
-    rcache_params->max_regions        = rcache_config->max_regions;
-    rcache_params->max_size           = rcache_config->max_size;
-    rcache_params->max_unreleased     = rcache_config->max_unreleased;
-    rcache_params->flags              = !rcache_config->purge_on_fork ? 0 :
-                                        UCS_RCACHE_FLAG_PURGE_ON_FORK;
-}
-
-double uct_md_rcache_overhead(const uct_md_rcache_config_t *rcache_config)
+double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config)
 {
     if (rcache_config->overhead == UCS_TIME_AUTO) {
         if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {

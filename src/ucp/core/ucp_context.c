@@ -374,7 +374,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
 
   {"PROTO_ENABLE", "y",
-   "Experimental: enable new protocol selection logic",
+   "Enable new protocol selection logic",
    ucs_offsetof(ucp_context_config_t, proto_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"PROTO_REQUEST_RESET", "n",
@@ -413,7 +413,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_context_config_t, rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
 
-  {"SA_DATA_VERSION", "v1",
+  {"SA_DATA_VERSION", "v2",
    "Defines the minimal header version the client will use for establishing\n"
    "client/server connection",
    ucs_offsetof(ucp_context_config_t, sa_client_min_hdr_version),
@@ -549,6 +549,10 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"RCACHE_ENABLE", "try", "Use user space memory registration cache.",
    ucs_offsetof(ucp_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
+
+  {"", "RCACHE_PURGE_ON_FORK=y;RCACHE_MEM_PRIO=500;", NULL,
+   ucs_offsetof(ucp_config_t, rcache_config),
+   UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
   {"", "", NULL,
    ucs_offsetof(ucp_config_t, ctx),
@@ -2171,7 +2175,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     context->next_memh_reg_id = 0;
 
     if (config->enable_rcache != UCS_NO) {
-        status = ucp_mem_rcache_init(context);
+        status = ucp_mem_rcache_init(context, &config->rcache_config);
         if (status != UCS_OK) {
             if (config->enable_rcache == UCS_YES) {
                 ucs_error("could not create UCP registration cache: %s",

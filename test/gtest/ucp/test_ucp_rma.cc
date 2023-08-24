@@ -107,7 +107,6 @@ public:
                    rkey, arg);
     }
 
-
 protected:
     static size_t default_max_size() {
         return (100 * UCS_MBYTE) / ucs::test_time_multiplier();
@@ -136,6 +135,11 @@ protected:
                            UCS_MEMORY_TYPE_HOST, UCP_MEM_MAP_NONBLOCK);
     }
 
+    void test_message_sizes(send_func_t send_func) {
+        test_message_sizes(send_func, 128, default_max_size(),
+                           UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST, 0);
+    }
+
     bool disable_proto() {
         return !m_ucp_config->ctx.proto_enable;
     }
@@ -150,7 +154,7 @@ private:
     enum {
         FLUSH_EP      = UCS_BIT(0), /* If not set, flush worker */
         DISABLE_PROTO = UCS_BIT(1),
-        USER_MEMH     = UCS_BIT(2)
+        USER_MEMH     = UCS_BIT(2),
     };
 
     void init_iov(size_t size, ucp_dt_iov_t *iov, size_t iov_count,
@@ -277,6 +281,29 @@ private:
 
 };
 
+class test_ucp_rma_reg_nb : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+        /* TODO pending MOFED 23.07 upgrade
+        add_variant_with_value(variants, UCP_FEATURE_RMA, NO_DEVX, "no_devx");
+        */
+    }
+
+    virtual void init() {
+        modify_config("REG_NONBLOCK_MEM_TYPES", "host");
+        if (get_variant_value() & NO_DEVX) {
+            modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
+        }
+        test_ucp_rma::init();
+    }
+
+private:
+    enum {
+        NO_DEVX = UCS_BIT(0),
+    };
+};
+
 UCS_TEST_P(test_ucp_rma, put_blocking) {
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b));
 }
@@ -321,3 +348,21 @@ UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)
+
+UCS_TEST_P(test_ucp_rma_reg_nb, put_blocking) {
+    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_reg_nb, put_nonblocking) {
+    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
+}
+
+UCS_TEST_P(test_ucp_rma_reg_nb, get_blocking) {
+    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCS_TEST_P(test_ucp_rma_reg_nb, get_nonblocking) {
+    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_rma_reg_nb)

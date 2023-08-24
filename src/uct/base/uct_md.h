@@ -59,18 +59,6 @@
     }
 
 
-typedef struct uct_md_rcache_config {
-    size_t        alignment;      /**< Force address alignment */
-    unsigned      event_prio;     /**< Memory events priority */
-    ucs_time_t    overhead;       /**< Lookup overhead estimation */
-    unsigned long max_regions;    /**< Maximal number of rcache regions */
-    size_t        max_size;       /**< Maximal size of mapped memory */
-    size_t        max_unreleased; /**< Threshold for triggering a cleanup */
-    int           purge_on_fork;  /**< Enable/disable rcache purge on fork */
-} uct_md_rcache_config_t;
-
-
-extern ucs_config_field_t uct_md_config_rcache_table[];
 extern const char *uct_device_type_names[];
 
 /**
@@ -244,10 +232,7 @@ ucs_status_t uct_md_dummy_mem_reg(uct_md_h md, void *address, size_t length,
 ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
                                     const uct_md_mem_dereg_params_t *params);
 
-void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
-                              const uct_md_rcache_config_t *rcache_config);
-
-double uct_md_rcache_overhead(const uct_md_rcache_config_t *rcache_config);
+double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config);
 
 extern ucs_config_field_t uct_md_config_table[];
 

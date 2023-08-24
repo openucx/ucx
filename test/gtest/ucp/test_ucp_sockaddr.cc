@@ -48,7 +48,7 @@ public:
         TEST_MODIFIER_MASK               = UCS_MASK(16),
         TEST_MODIFIER_MT                 = UCS_BIT(16),
         TEST_MODIFIER_CM_USE_ALL_DEVICES = UCS_BIT(17),
-        TEST_MODIFIER_SA_DATA_V2         = UCS_BIT(18)
+        TEST_MODIFIER_SA_DATA_V1         = UCS_BIT(18)
     };
 
     enum {
@@ -69,7 +69,7 @@ public:
         m_err_count = 0;
         modify_config("KEEPALIVE_INTERVAL", "5s");
         modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
-        modify_config("SA_DATA_VERSION", sa_data_version_v2() ? "v2" : "v1");
+        modify_config("SA_DATA_VERSION", sa_data_version_v1() ? "v1" : "v2");
         modify_config("RC_TIMEOUT", "100us", IGNORE_IF_NOT_EXIST);
         modify_config("RC_RETRY_COUNT", "3", IGNORE_IF_NOT_EXIST);
         modify_config("UD_TIMEOUT", "5s", IGNORE_IF_NOT_EXIST);
@@ -95,7 +95,7 @@ public:
                              modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES, name);
         get_test_variants_mt(variants, features,
                              modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES |
-                             TEST_MODIFIER_SA_DATA_V2, name + ",sa_data_v2");
+                             TEST_MODIFIER_SA_DATA_V1, name + ",sa_data_v1");
         get_test_variants_mt(variants, features, modifier, name + ",not_all_devs");
     }
 
@@ -881,8 +881,8 @@ protected:
         return get_variant_value() & TEST_MODIFIER_CM_USE_ALL_DEVICES;
     }
 
-    bool sa_data_version_v2() const {
-        return get_variant_value() & TEST_MODIFIER_SA_DATA_V2;
+    bool sa_data_version_v1() const {
+        return get_variant_value() & TEST_MODIFIER_SA_DATA_V1;
     }
 
     bool has_rndv_lanes(ucp_ep_h ep)
@@ -2807,9 +2807,15 @@ public:
         create_entity();
     }
 
-    void create_entities_and_connect(bool server_less_num_paths) {
+    void create_entities_and_connect(bool server_less_num_paths,
+                                     bool use_v2_addr = false) {
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv max_eager_lanes_env("UCX_MAX_EAGER_LANES", "2");
+
+        if (use_v2_addr) {
+            modify_config("SA_DATA_VERSION", "v2");
+            modify_config("ADDRESS_VERSION", "v2");
+        }
 
         if (server_less_num_paths) {
             // create the client
@@ -2847,6 +2853,13 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
            diff_num_paths_small_msg_server_more_lanes)
 {
     create_entities_and_connect(false);
+    test_tag_send_recv(4 * UCS_KBYTE, false, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
+           diff_num_paths_small_msg_server_more_lanes_v2)
+{
+    create_entities_and_connect(false, true);
     test_tag_send_recv(4 * UCS_KBYTE, false, false);
 }
 

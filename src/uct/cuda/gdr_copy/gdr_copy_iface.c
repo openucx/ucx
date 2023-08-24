@@ -42,14 +42,22 @@ static ucs_status_t uct_gdr_copy_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static int uct_gdr_copy_iface_is_reachable(const uct_iface_h tl_iface,
-                                           const uct_device_addr_t *dev_addr,
-                                           const uct_iface_addr_t *iface_addr)
+static int
+uct_gdr_copy_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                   const uct_iface_is_reachable_params_t *params)
 {
-    uct_gdr_copy_iface_t  *iface = ucs_derived_of(tl_iface, uct_gdr_copy_iface_t);
-    uct_gdr_copy_iface_addr_t *addr = (uct_gdr_copy_iface_addr_t*)iface_addr;
+    uct_gdr_copy_iface_t *iface = ucs_derived_of(tl_iface,
+                                                 uct_gdr_copy_iface_t);
+    uct_gdr_copy_iface_addr_t *addr;
 
-    return (addr != NULL) && (iface->id == *addr);
+    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+        return 0;
+    }
+
+    addr = (uct_gdr_copy_iface_addr_t*)params->iface_addr;
+
+    return (addr != NULL) && (iface->id == *addr) &&
+           uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static ucs_status_t
@@ -168,7 +176,7 @@ static uct_iface_ops_t uct_gdr_copy_iface_ops = {
     .iface_query              = uct_gdr_copy_iface_query,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
     .iface_get_address        = uct_gdr_copy_iface_get_address,
-    .iface_is_reachable       = uct_gdr_copy_iface_is_reachable,
+    .iface_is_reachable       = uct_base_iface_is_reachable,
 };
 
 static uct_iface_internal_ops_t uct_gdr_copy_iface_internal_ops = {
@@ -177,7 +185,7 @@ static uct_iface_internal_ops_t uct_gdr_copy_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+    .iface_is_reachable_v2 = uct_gdr_copy_iface_is_reachable_v2
 };
 
 static UCS_CLASS_INIT_FUNC(uct_gdr_copy_iface_t, uct_md_h md, uct_worker_h worker,

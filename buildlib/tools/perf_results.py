@@ -31,7 +31,6 @@ def check_perf_results(filename, threshold):
         msg = f"Max performance regression detected in {test_name_max}, regression: {max_regression}%"
         print(f"{msg}")
         print(f"##vso[task.complete result=SucceededWithIssues;]DONE${msg}")
-        exit(1)
     print("No significant performance regression detected.")
     return 0
 

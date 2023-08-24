@@ -209,12 +209,13 @@ static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
     iface->inl_rwrite_wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
 }
 
-static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+static ucs_status_t
+uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface,
+                                                 uct_rc_verbs_iface_t);
     uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
     ucs_status_t status;
-    uint8_t UCS_V_UNUSED mr_id;
 
     status = uct_rc_iface_query(&iface->super, iface_attr,
                                 iface->config.max_inline,
@@ -231,9 +232,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
     iface_attr->overhead   = 75e-9; /* Software overhead */
 
-    status                  = uct_ib_md_ops(md)->get_atomic_mr_id(md, &mr_id);
-    iface_attr->ep_addr_len = (uct_rc_iface_flush_rkey_enabled(&iface->super) ||
-                               (status == UCS_OK)) ?
+    iface_attr->ep_addr_len = uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
                                       sizeof(uct_rc_verbs_ep_flush_addr_t) :
                                       sizeof(uct_rc_verbs_ep_addr_t);
 

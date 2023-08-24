@@ -20,6 +20,8 @@ pr:
     - README.md
     - NEWS
     - AUTHORS
+    - buildlib/azure-pipelines-perf.yml
+    - buildlib/tools/perf_results.py
 
 extends:
   template: pr/main.yml

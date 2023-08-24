@@ -908,7 +908,6 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 
 out:
     if (status == UCS_OK) {
-        ucs_assert(memh->md_map != 0);
         ucs_assert(ucp_memh_is_user_memh(memh));
         *memh_p = memh;
     }
@@ -1393,32 +1392,28 @@ static ucs_rcache_ops_t ucp_mem_rcache_ops = {
 
 static ucs_status_t
 ucp_mem_rcache_create(ucp_context_h context, const char *name,
-                      ucs_rcache_t **rcache_p)
+                      ucs_rcache_t **rcache_p, ucs_rcache_params_t *rcache_params)
 {
-    ucs_rcache_params_t rcache_params;
+    rcache_params->region_struct_size = ucp_memh_size(context);
+    rcache_params->ucm_events         = UCM_EVENT_VM_UNMAPPED |
+                                        UCM_EVENT_MEM_TYPE_FREE;
+    rcache_params->context            = context;
+    rcache_params->ops                = &ucp_mem_rcache_ops;
 
-    rcache_params.region_struct_size = ucp_memh_size(context);
-    rcache_params.max_alignment      = ucs_get_page_size();
-    rcache_params.max_unreleased     = SIZE_MAX;
-    rcache_params.max_regions        = -1;
-    rcache_params.max_size           = -1;
-    rcache_params.ucm_event_priority = 500; /* Default UCT pri - 1000 */
-    rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED |
-                                       UCM_EVENT_MEM_TYPE_FREE;
-    rcache_params.context            = context;
-    rcache_params.ops                = &ucp_mem_rcache_ops;
-    rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
-    rcache_params.alignment          = UCS_RCACHE_MIN_ALIGNMENT;
-
-    return ucs_rcache_create(&rcache_params, name, ucs_stats_get_root(),
+    return ucs_rcache_create(rcache_params, name, ucs_stats_get_root(),
                              rcache_p);
 }
 
-ucs_status_t ucp_mem_rcache_init(ucp_context_h context)
+ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
+                                 const ucs_rcache_config_t *rcache_config)
 {
     ucs_status_t status;
+    ucs_rcache_params_t rcache_params;
 
-    status = ucp_mem_rcache_create(context, "ucp_rcache", &context->rcache);
+    ucs_rcache_set_params(&rcache_params, rcache_config);
+
+    status = ucp_mem_rcache_create(context, "ucp_rcache", &context->rcache,
+                                   &rcache_params);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1540,6 +1535,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
                      ucp_unpacked_exported_memh_t *unpacked)
 {
     ucs_rcache_t *rcache;
+    ucs_rcache_params_t rcache_params;
     ucs_status_t status;
     ucp_mem_h memh;
     char rcache_name[128];
@@ -1555,7 +1551,11 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
             ucs_snprintf_safe(rcache_name, sizeof(rcache_name),
                               "ucp_import_rcache[0x%" PRIx64 "]",
                               unpacked->remote_uuid);
-            status = ucp_mem_rcache_create(context, rcache_name, &rcache);
+
+            ucs_rcache_set_default_params(&rcache_params);
+
+            status = ucp_mem_rcache_create(context, rcache_name, &rcache,
+                                           &rcache_params);
             if (status != UCS_OK) {
                 goto out;
             }

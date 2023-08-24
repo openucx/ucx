@@ -470,7 +470,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_max,
                               UCP_ADDRESS_PACK_FLAGS_ALL, addr_v,
-                              m_lanes2remote, &size, &buffer);
+                              m_lanes2remote, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -524,8 +524,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
 
     status = ucp_address_pack(sender().worker(), sender().ep(),
                               &ucp_tl_bitmap_max, UCP_ADDRESS_PACK_FLAGS_ALL,
-                              UCP_OBJECT_VERSION_V1, m_lanes2remote, &size,
-                              &buffer);
+                              UCP_OBJECT_VERSION_V1, m_lanes2remote, UINT_MAX,
+                              &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
 
@@ -551,7 +551,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_min,
                               UCP_ADDRESS_PACK_FLAGS_ALL, addr_v,
-                              m_lanes2remote, &size, &buffer);
+                              m_lanes2remote, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -942,6 +942,9 @@ UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_2sided)
+/* Test use tcp as AUX transport */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_2sided,
+                              tcp_aux, "tcp,rc_verbs")
 
 class test_ucp_wireup_errh_peer : public test_ucp_wireup_1sided
 {
@@ -1774,7 +1777,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
 
     status = ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
                               UCP_ADDRESS_PACK_FLAGS_ALL, UCP_OBJECT_VERSION_V2,
-                              NULL, &size, &buffer);
+                              NULL, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
 
@@ -1786,6 +1789,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         ASSERT_UCS_OK(status);
     }
 
+    EXPECT_EQ(UCP_OBJECT_VERSION_V2, unpacked_address.addr_version);
+
     const ucp_address_entry_t *ae;
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
         ucp_rsc_index_t rsc_idx = ae->iface_attr.dst_rsc_index;
@@ -1796,7 +1801,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         // smaller than the original value by up to 64 bytes.
         EXPECT_LT(ucp_address_iface_seg_size(attr) - ae->iface_attr.seg_size,
                   UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR);
-        EXPECT_EQ(UCP_OBJECT_VERSION_V2, ae->iface_attr.addr_version);
         check_fp_values(ae->iface_attr.overhead, attr->overhead);
         check_fp_values(ae->iface_attr.lat_ovh,
                         ucp_tl_iface_latency(worker->context, &attr->latency));
