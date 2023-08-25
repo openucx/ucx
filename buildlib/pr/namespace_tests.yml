@@ -1,0 +1,27 @@
+jobs:
+  - job: tests_${{ parameters.name }}
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    displayName: ${{ parameters.name }} on worker
+    timeoutInMinutes: 30
+    workspace:
+      clean: all
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+          source buildlib/az-helpers.sh
+          if ! unshare --user whoami; then
+              msg="Missing user namespace support on $(hostname)"
+              azure_log_error "$msg"
+              azure_complete_with_issues "$msg"
+          else
+              ./contrib/test_namespace.sh
+          fi
+        displayName: Run namespace test
+        env:
+          BUILD_NUMBER: "$(Build.BuildId)-$(Build.BuildNumber)"
+          JOB_URL: "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"

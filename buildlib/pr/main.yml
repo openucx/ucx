@@ -316,6 +316,14 @@ stages:
         demands: ucx_bf -equals yes
         test_perf: 0
 
+  - stage: Namespace_Tests
+    dependsOn: [Static_check]
+    jobs:
+    - template: namespace_tests.yml
+      parameters:
+        name: new_namespace
+        demands: ucx_new -equals yes
+
   - stage: io_demo
     dependsOn: [Static_check]
     jobs:
