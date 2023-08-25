@@ -35,6 +35,8 @@
 #define UCT_NVML_FUNC_LOG_ERR(_func) \
     UCT_NVML_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
+#define UCS_SYS_TOPO_NVML_DEV_LEN 16
+
 typedef enum {
     UCS_SYS_TOPO_COMMON_DEVICE,
     UCS_SYS_TOPO_COMMON_PCIE_SWITCH,
@@ -225,7 +227,7 @@ static void ucs_sys_nvml_get_nvml_device(ucs_sys_device_t sys_device,
     ucs_sys_bus_id_t bus_id;
     ucs_status_t status;
 
-    if (sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if (sys_device == UCS_SYS_DEVICE_ID_UNKNOWN) {
         goto err;
     }
 
@@ -240,8 +242,35 @@ static void ucs_sys_nvml_get_nvml_device(ucs_sys_device_t sys_device,
     }
 
 err:
-    device = NULL;
+    *device = 0;
     return;
+}
+
+static double ucs_sys_nvml_get_nvml_device_bw(nvmlDevice_t device)
+{
+    double bw;
+    unsigned int bus_width, bus_clock;
+    nvmlReturn_t nvml_err;
+
+    nvml_err = nvmlDeviceGetMemoryBusWidth(device, &bus_width);
+    if (nvml_err != NVML_SUCCESS) {
+        goto exit;
+    }
+
+    nvml_err = nvmlDeviceGetMaxClockInfo(device, NVML_CLOCK_MEM, &bus_clock);
+    if (nvml_err != NVML_SUCCESS) {
+        goto exit;
+    }
+
+    bw = (bus_width / 8) * bus_clock * 1024.0 * 1024.0;
+
+    ucs_trace("device bus width %u bus clock %u bw %lf", bus_width, bus_clock, bw);
+
+    return bw;
+
+exit:
+    bw = 0.0;
+    return bw;
 }
 
 /* report peak host<->device bandwidth */
@@ -290,7 +319,7 @@ exit:
     return bw;
 }
 
-static ucs_status_t 
+static ucs_status_t
 ucs_topo_get_distance_nvml(ucs_sys_device_t local_sys_device,
                            ucs_sys_device_t remote_sys_device,
                            ucs_sys_dev_distance_t *distance)
@@ -299,36 +328,46 @@ ucs_topo_get_distance_nvml(ucs_sys_device_t local_sys_device,
     double lat                 = 1e-9;
     nvmlDevice_t local_device  = 0;
     nvmlDevice_t remote_device = 0;
+    char local_device_name[UCS_SYS_TOPO_NVML_DEV_LEN];
+    char remote_device_name[UCS_SYS_TOPO_NVML_DEV_LEN];
     ucs_sys_topo_common_ancestor_t common_ancestor;
     ucs_status_t status;
+
+    strcpy(local_device_name, ucs_topo_sys_device_get_name(local_sys_device));
+    strcpy(remote_device_name, ucs_topo_sys_device_get_name(remote_sys_device));
 
     ucs_sys_nvml_get_nvml_device(local_sys_device, &local_device);
     ucs_sys_nvml_get_nvml_device(remote_sys_device, &remote_device);
 
-    /* if neither device is recognizable, return error */
-    if ((local_device == 0) && (remote_device == 0)) {
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    if ((local_device != 0) && (remote_device != 0) &&
-        (local_device != remote_device)) {
-        /* both are recognized by nvml */
-        status = ucs_sys_nvml_get_common_ancestor(local_device, remote_device,
-                                                  &common_ancestor);
-        if (status == UCS_OK) {
-            if (common_ancestor != UCS_SYS_TOPO_COMMON_SYSTEM) {
-                /* both devices in the same numa domain */
-                bw = ucs_sys_nvml_get_nvlink_bw(local_device, remote_device);
-                if (bw == 0.0) {
-                    /* if no nvlink/nvswitch, assume peak pcie bw b/w devices */
-                    goto pci_bw;
+    if ((!strncmp(local_device_name, "GPU", 3) && (remote_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) ||
+        (!strncmp(remote_device_name, "GPU", 3) && (local_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN))) {
+        /* assume pci between local and remote for now */
+        goto pci_bw;
+    } else if (!strncmp(remote_device_name, "GPU", 3) && !strncmp(local_device_name, "GPU", 3)) {
+        if (local_device != remote_device) {
+            status = ucs_sys_nvml_get_common_ancestor(local_device, remote_device,
+                    &common_ancestor);
+            if (status == UCS_OK) {
+                if (common_ancestor != UCS_SYS_TOPO_COMMON_SYSTEM) {
+                    /* both devices in the same numa domain */
+                    bw = ucs_sys_nvml_get_nvlink_bw(local_device, remote_device);
+                    if (bw == 0.0) {
+                        /* if no nvlink/nvswitch, assume peak pcie bw b/w devices */
+                        goto pci_bw;
+                    }
+                } else {
+                    goto out;
                 }
             } else {
                 goto out;
             }
         } else {
+            /* report same device bandwidth */
+            bw = ucs_sys_nvml_get_nvml_device_bw(local_device);
             goto out;
         }
+    } else {
+        return UCS_ERR_NO_DEVICE;
     }
 
 pci_bw:
@@ -339,6 +378,8 @@ pci_bw:
 out:
     distance->bandwidth = bw;
     distance->latency   = lat;
+
+    ucs_trace("%s<->%s bw %lf lat %lf", local_device_name, remote_device_name, bw, lat);
     return UCS_OK;
 }
 

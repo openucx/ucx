@@ -38,7 +38,7 @@ AS_IF([test "x$with_nvml" != xno],
                       [], [nvml_happy="no"],
                       [[#include <nvml.h>]])
 
-       # Try to link a simple program using nvmlInit/nvmlShutdown 
+       # Try to link a simple program using nvmlInit/nvmlShutdown
        AC_MSG_CHECKING([nvmlInit])
        AC_LINK_IFELSE([AC_LANG_SOURCE([[
                 #include <nvml.h>
