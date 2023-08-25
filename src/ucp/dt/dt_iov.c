@@ -146,26 +146,3 @@ ucs_status_t ucp_dt_iov_memtype_check(ucp_context_h context,
 
     return UCS_OK;
 }
-
-ucs_status_t ucp_dt_iov_memtype_detect(ucp_context_h context,
-                                       const ucp_dt_iov_t *iov, size_t iovcnt,
-                                       const ucp_request_param_t *param,
-                                       uint8_t *sg_count,
-                                       ucp_memory_info_t *mem_info)
-{
-    if (ucs_unlikely(iovcnt == 0)) {
-        ucp_memory_info_set_host(mem_info);
-        *sg_count = 1;
-        return UCS_OK;
-    }
-
-    ucp_memory_detect_param(context, iov->buffer, iov->length, param, mem_info);
-
-    *sg_count = ucs_min(iovcnt, (size_t)UINT8_MAX);
-
-    if (ENABLE_PARAMS_CHECK) {
-        return ucp_dt_iov_memtype_check(context, iov + 1, iovcnt - 1, mem_info);
-    }
-
-    return UCS_OK;
-}

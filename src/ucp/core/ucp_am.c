@@ -1077,8 +1077,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     ucp_context_h context = worker->context;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
-    ucp_datatype_t datatype;
-    ucs_memory_type_t mem_type;
     ucp_rndv_rts_hdr_t *rts;
     ucs_status_t status;
     size_t recv_length, rkey_length;
@@ -1104,13 +1102,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     }
 
     desc->flags |= UCP_RECV_DESC_FLAG_RECV_STARTED;
-    datatype     = ucp_request_param_datatype(param);
-    mem_type     = ucp_request_get_memory_type(context, buffer, count, datatype,
-                                               desc->length, param);
 
-    ucs_trace("AM recv %s buffer %p dt 0x%lx count %zu memtype %s",
+    ucs_trace("AM recv %s buffer %p dt 0x%lx count %zu",
               (desc->flags & UCP_RECV_DESC_FLAG_RNDV) ? "rndv" : "eager",
-              buffer, datatype, count, ucs_memory_type_names[mem_type]);
+              buffer, ucp_request_param_datatype(param), count);
 
     if (ucs_unlikely((desc->flags & UCP_RECV_DESC_FLAG_RNDV) &&
                      (count > 0ul))) {
@@ -1119,36 +1114,31 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
                                      goto out;});
 
         /* Initialize receive request */
-        req->status        = UCS_OK;
-        req->recv.worker   = worker;
-        req->recv.buffer   = buffer;
-        req->flags         = UCP_REQUEST_FLAG_RECV_AM;
-        req->recv.datatype = datatype;
-        ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
-        req->recv.length   = ucp_dt_length(datatype, count, buffer,
-                                           &req->recv.state);
-        req->recv.mem_type = mem_type;
-        req->recv.op_attr  = param->op_attr_mask;
-        req->recv.am.desc  = desc;
-        rts                = data_desc;
+        req->status       = UCS_OK;
+        req->recv.worker  = worker;
+        req->flags        = UCP_REQUEST_FLAG_RECV_AM;
+        req->recv.op_attr = param->op_attr_mask;
+        req->recv.am.desc = desc;
+        rts               = data_desc;
+
+        status = ucp_datatype_iter_init_unpack(context, buffer, count,
+                                               &req->recv.dt_iter, param);
+        if (ucs_unlikely(status != UCS_OK)) {
+            ret = UCS_STATUS_PTR(status);
+            ucp_request_put_param(param, req);
+            goto out;
+        }
 
 #if ENABLE_DEBUG_DATA
         req->recv.proto_rndv_config = NULL;
 #endif
 
-        status = ucp_recv_request_set_user_memh(req, param);
-        if (status != UCS_OK) {
-            ucp_request_put_param(param, req);
-            ret = UCS_STATUS_PTR(status);
-            goto out;
-        }
-
         ucp_request_set_callback_param(param, recv_am, req, recv.am);
 
         ucs_assert(rts->opcode == UCP_RNDV_RTS_AM);
-        ucs_assertv(req->recv.length >= rts->size,
-                    "rx buffer too small %zu, need %zu", req->recv.length,
-                    rts->size);
+        ucs_assertv(req->recv.dt_iter.length >= rts->size,
+                    "rx buffer too small %zu, need %zu",
+                    req->recv.dt_iter.length, rts->size);
 
         rkey_length = desc->length - sizeof(*rts) -
                       ucp_am_hdr_from_rts(rts)->header_length;

@@ -210,7 +210,7 @@ ucp_tag_unexp_search(ucp_tag_match_t *tm, ucp_tag_t tag, uint64_t tag_mask,
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_recv_request_release_non_contig_buffer(ucp_request_t *req)
 {
-    ucs_assert(!UCP_DT_IS_CONTIG(req->recv.datatype));
+    ucs_assert(req->recv.dt_iter.dt_class != UCP_DATATYPE_CONTIG);
     ucs_free(req->recv.tag.non_contig_buf);
     req->recv.tag.non_contig_buf = NULL;
 }
@@ -219,8 +219,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
                               size_t length, unsigned recv_flags)
 {
-    size_t offset;
     ucp_offload_ssend_hdr_t *sync_hdr;
+    size_t offset;
+    void *buffer;
 
     /* Should be used in multi-fragmented flow only */
     ucs_assert(!(recv_flags & UCP_RECV_DESC_FLAG_EAGER_ONLY));
@@ -238,49 +239,46 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
      * adding length of already received data.
      * NOTE: total length of unexpected eager offload message is not known
      * until last fragment arrives. */
-    offset = req->recv.offset;
+    offset = req->recv.dt_iter.offset;
 
     if (ucs_unlikely(req->status != UCS_OK)) {
         goto out;
     }
 
-    if (ucs_unlikely(req->recv.length < (length + offset))) {
+    if (ucs_unlikely(req->recv.dt_iter.length < (length + offset))) {
         /* We have to release non-contig buffer only in case of
          * this is not the first segment and the datatype is
          * non-contig */
-        if ((offset != 0) && !UCP_DT_IS_CONTIG(req->recv.datatype)) {
+        if ((offset != 0) &&
+            (req->recv.dt_iter.dt_class != UCP_DATATYPE_CONTIG)) {
             ucp_tag_recv_request_release_non_contig_buffer(req);
         }
         req->status = ucp_request_recv_msg_truncated(req, length, offset);
         goto out;
     }
 
-    if (UCP_DT_IS_CONTIG(req->recv.datatype)) {
-        ucp_request_unpack_contig(req,
-                                  UCS_PTR_BYTE_OFFSET(req->recv.buffer, offset),
-                                  data, length);
-    } else {
+    if (req->recv.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
+        buffer = req->recv.dt_iter.type.contig.buffer;
+    } else if (offset == 0) {
         /* For non-contig data need to assemble the whole message
          * before calling unpack. */
-        if (offset == 0) {
-            req->recv.tag.non_contig_buf = ucs_malloc(req->recv.length,
-                                                      "tag gen buffer");
-            if (ucs_unlikely(req->recv.tag.non_contig_buf == NULL)) {
-               req->status = UCS_ERR_NO_MEMORY;
-               goto out;
-            }
+        buffer = ucs_malloc(req->recv.dt_iter.length, "tag gen buffer");
+        if (ucs_unlikely(buffer == NULL)) {
+            req->status = UCS_ERR_NO_MEMORY;
+            goto out;
         }
 
-        ucp_request_unpack_contig(req,
-                                  UCS_PTR_BYTE_OFFSET(req->recv.tag.non_contig_buf,
-                                                      offset),
-                                  data, length);
+        req->recv.tag.non_contig_buf = buffer;
+    } else {
+        buffer = req->recv.tag.non_contig_buf;
     }
 
+    ucp_dt_contig_unpack(req->recv.worker, UCS_PTR_BYTE_OFFSET(buffer, offset),
+                         data, length, req->recv.dt_iter.mem_info.type);
     req->status = UCS_OK;
 
 out:
-    req->recv.offset += length;
+    req->recv.dt_iter.offset += length;
 
     if (!(recv_flags & UCP_RECV_DESC_FLAG_EAGER_LAST)) {
         return UCS_INPROGRESS;
@@ -288,12 +286,17 @@ out:
 
     /* Need to update recv info length. In tag offload protocol we do not
      * know the total message length until the last fragment arrives. */
-    req->recv.tag.info.length = req->recv.offset;
+    req->recv.tag.info.length = req->recv.dt_iter.offset;
 
-    if (!UCP_DT_IS_CONTIG(req->recv.datatype) && (req->status == UCS_OK)) {
+    if ((req->recv.dt_iter.dt_class != UCP_DATATYPE_CONTIG) &&
+        (req->status == UCS_OK)) {
+
+        /* Rewind the offset since we are unpacking the whole receive data from
+           non-contig buffer back to user buffer, starting from offset 0 */
+        ucp_datatype_iter_rewind(&req->recv.dt_iter, UCP_DT_MASK_ALL);
         req->status = ucp_request_recv_data_unpack(req,
                                                    req->recv.tag.non_contig_buf,
-                                                   req->recv.tag.info.length,
+                                                   req->recv.tag.info.length, 0,
                                                    0, 1);
 
         ucp_tag_recv_request_release_non_contig_buffer(req);
@@ -409,10 +412,11 @@ ucp_request_recv_offload_first(ucp_request_t *req,
     ucp_tag_frag_match_t *matchq;
     ucs_status_t status;
 
-    req->recv.offset = 0ul;
-    status           = ucp_request_recv_offload_data(
-                           req, first_hdr + 1, length - sizeof(*first_hdr),
-                           flags);
+    ucs_assertv(req->recv.dt_iter.offset == 0, "req=%p offset=%zu", req,
+                req->recv.dt_iter.offset);
+
+    status = ucp_request_recv_offload_data(req, first_hdr + 1,
+                                           length - sizeof(*first_hdr), flags);
     if (status != UCS_INPROGRESS) {
         return;
     }

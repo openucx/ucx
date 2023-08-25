@@ -3479,8 +3479,7 @@ static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
 
     if ((ucp_ep_config(req->send.ep)->key.err_mode !=
          UCP_ERR_HANDLING_MODE_NONE) &&
-        (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE) &&
-        !(req->flags & UCP_REQUEST_FLAG_USER_MEMH)) {
+        (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         ucp_request_dt_invalidate(req, status);
         return;
     }
@@ -3515,13 +3514,13 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
-        ucp_request_recv_buffer_dereg(req);
+        ucp_datatype_iter_cleanup(&req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
         ucp_request_complete_am_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RECV_TAG) {
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
-        ucp_request_recv_buffer_dereg(req);
+        ucp_datatype_iter_cleanup(&req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
         ucp_request_complete_tag_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         ucs_assert(req->flags & UCP_REQUEST_FLAG_SUPER_VALID);
@@ -3531,7 +3530,7 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         /* It means that purging started from a request responsible for sending
          * RTR, so a request is responsible for copying data from staging buffer
          * and it uses a receive part of a request */
-        req->super_req->recv.remaining -= req->recv.length;
+        req->super_req->recv.remaining -= req->recv.dt_iter.length;
         if (req->super_req->recv.remaining == 0) {
             ucp_ep_req_purge(ucp_ep, ucp_request_get_super(req), status, 1);
         }

@@ -659,7 +659,6 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
     attr->max_msg_length = SIZE_MAX;
     attr->is_estimation  = 0;
     ucp_proto_multi_query_config(&multi_query_params, attr);
-    attr->lane_map |= UCS_BIT(rpriv->super.lane);
 }
 
 static ucs_status_t
@@ -756,7 +755,7 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     ucp_ep_h ep;
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id, {
-        ucp_proto_rndv_recv_super_complete_status(recv_req, UCS_ERR_CANCELED);
+        ucp_proto_rndv_recv_req_complete(recv_req, UCS_ERR_CANCELED);
         return;
     }, "RTS on non-existing endpoint");
 
@@ -773,24 +772,18 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.rndv.offset         = 0;
     ucp_request_set_super(req, recv_req);
 
-    if (ucs_likely(rts->size <= recv_req->recv.length)) {
+    if (ucs_likely(rts->size <= recv_req->recv.dt_iter.length)) {
         ucp_proto_rndv_check_rkey_length(rts->address, rkey_length, "rts");
         op_id            = UCP_OP_ID_RNDV_RECV;
         recv_req->status = UCS_OK;
-        status           = UCS_PROFILE_CALL(
-                              ucp_datatype_iter_init_from_dt_state,
-                              worker->context, recv_req->recv.buffer, rts->size,
-                              recv_req->recv.datatype, &recv_req->recv.state,
-                              &req->send.state.dt_iter, &sg_count);
-        if (status != UCS_OK) {
-            goto err;
-        }
+        UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move, &req->send.state.dt_iter,
+                              &recv_req->recv.dt_iter, rts->size, &sg_count);
     } else {
         /* Short receive: complete with error, and send reply to sender */
         rkey_length      = 0; /* Override rkey length to disable data fetch */
         op_id            = UCP_OP_ID_RNDV_RECV_DROP;
         recv_req->status = UCS_ERR_MESSAGE_TRUNCATED;
-        ucp_request_recv_generic_dt_finish(recv_req);
+        ucp_datatype_iter_cleanup(&recv_req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
         ucp_datatype_iter_init_null(&req->send.state.dt_iter, rts->size,
                                     &sg_count);
     }
@@ -799,8 +792,9 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                        recv_req->recv.op_attr, rts->size,
                                        rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
-        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
-        goto err;
+        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
+        ucs_mpool_put(req);
+        return;
     }
 
 #if ENABLE_DEBUG_DATA
@@ -808,11 +802,6 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
 #endif
 
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
-
-    return;
-
-err:
-    ucs_mpool_put(req);
 }
 
 static ucs_status_t
@@ -873,7 +862,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 0, return UCS_OK,
                                "RTR %p", rtr);
 
-    ucp_trace_req(req, "RTR offset %zu length %zu/%zu req %p", rtr->offset,
+    ucp_trace_req(req, "recv RTR offset %zu length %zu/%zu req %p", rtr->offset,
                   rtr->size, req->send.state.dt_iter.length, req);
 
     if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
@@ -892,7 +881,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         ucs_assert(rtr->offset == 0);
 
         ucp_send_request_id_release(req);
-        ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
+        ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+        req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
         sg_count = select_param->sg_count;
         status   = ucp_proto_rndv_send_start(worker, req, op_attr_mask, rtr,
