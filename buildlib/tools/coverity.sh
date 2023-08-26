@@ -4,7 +4,8 @@ realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 
-COV_MODULE="tools/cov-2019.12"
+COV_MODULE="tools/cov-2021.12"
+# COV_MODULE="tools/cov-2019.12"
 
 #
 # Run Coverity and report errors
@@ -64,7 +65,9 @@ run_coverity() {
 		cov-manage-emit --dir $cov_build --tu-pattern "file('.*/test/gtest/common/googletest/*')" delete
 	fi
 	cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
-	nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
+	set -x
+	cov-format-errors --dir $cov_build --emacs-style	##### TMP
+	nerrors=$(cov-format-errors --dir $cov_build --emacs-style | awk '/Processing [0-9]+ errors?/ { print $2 }')
 	rc=$(($rc+$nerrors))
 
 	if [ $nerrors -gt 0 ]; then
