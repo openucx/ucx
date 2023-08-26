@@ -8,7 +8,6 @@
 #  include "config.h"
 #endif
 
-#include <uct/api/v2/uct_v2.h>
 #include "ucp_context.h"
 #include "ucp_worker.h"
 #include "ucp_request.inl"
@@ -17,7 +16,7 @@
 #include <ucp/proto/proto_am.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/tag/tag_rndv.h>
-
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
