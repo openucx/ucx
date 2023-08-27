@@ -69,21 +69,43 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
 }
 
 static int
-uct_cma_iface_is_reachable(const uct_iface_h tl_iface,
-                           const uct_device_addr_t *dev_addr,
-                           const uct_iface_addr_t *tl_iface_addr)
+uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                              const uct_iface_is_reachable_params_t *params)
 {
-    ucs_cma_iface_ext_device_addr_t *iface_addr = (void*)tl_iface_addr;
+    struct iovec iov = {
+        .iov_base = &iov,
+        .iov_len  = sizeof(iov),
+    };
+    ucs_cma_iface_ext_device_addr_t *iface_addr;
+    pid_t peer_pid;
 
-    if (!uct_sm_iface_is_reachable(tl_iface, dev_addr, tl_iface_addr)) {
+    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
         return 0;
     }
 
-    if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
-        return ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == iface_addr->pid_ns;
+    if (!uct_sm_iface_is_reachable(tl_iface, params->device_addr)) {
+        return 0;
     }
 
-    return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID);
+    iface_addr = (ucs_cma_iface_ext_device_addr_t*)params->iface_addr;
+    if (iface_addr->super.id & UCT_CMA_IFACE_ADDR_FLAG_PID_NS) {
+        if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) != iface_addr->pid_ns) {
+            return 0;
+        }
+    } else if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        return 0;
+    }
+
+    /* Confirm reachability by actually trying to read from the remote, as
+     * permissions are enforced before the remote address sanity checks.
+     */
+    peer_pid = iface_addr->super.id & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
+    if ((process_vm_readv(peer_pid, &iov, 1, &iov, 1, 0) == -1) &&
+        (errno == EPERM)) {
+        return 0;
+    }
+
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
@@ -109,7 +131,7 @@ static uct_iface_ops_t uct_cma_iface_tl_ops = {
     .iface_query              = uct_cma_iface_query,
     .iface_get_address        = uct_cma_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_is_reachable       = uct_cma_iface_is_reachable,
+    .iface_is_reachable       = uct_base_iface_is_reachable,
 };
 
 static uct_scopy_iface_ops_t uct_cma_iface_ops = {
@@ -119,7 +141,7 @@ static uct_scopy_iface_ops_t uct_cma_iface_ops = {
         .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
         .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
         .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-        .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+        .iface_is_reachable_v2 = uct_cma_iface_is_reachable_v2
     },
     .ep_tx = uct_cma_ep_tx,
 };

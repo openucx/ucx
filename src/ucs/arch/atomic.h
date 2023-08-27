@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -14,6 +15,8 @@
 #elif defined(__powerpc64__)
 #  include "generic/atomic.h"
 #elif defined(__aarch64__)
+#  include "generic/atomic.h"
+#elif defined(__riscv)
 #  include "generic/atomic.h"
 #else
 #  error "Unsupported architecture"

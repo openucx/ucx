@@ -46,6 +46,8 @@ protected:
     ucp_worker_h worker() {
         return sender().worker();
     }
+
+    static ucp_rkey_config_key_t create_rkey_config_key(ucp_md_map_t md_map);
 };
 
 ucp_md_map_t test_ucp_proto::get_md_map(ucs_memory_type_t mem_type)
@@ -100,6 +102,20 @@ void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,
                      << " nsec";
 }
 
+ucp_rkey_config_key_t
+test_ucp_proto::create_rkey_config_key(ucp_md_map_t md_map)
+{
+    ucp_rkey_config_key_t rkey_config_key;
+
+    rkey_config_key.ep_cfg_index       = 0;
+    rkey_config_key.md_map             = md_map;
+    rkey_config_key.mem_type           = UCS_MEMORY_TYPE_HOST;
+    rkey_config_key.sys_dev            = UCS_SYS_DEVICE_ID_UNKNOWN;
+    rkey_config_key.unreachable_md_map = 0;
+
+    return rkey_config_key;
+}
+
 UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_proto_select_param_t select_param;
     ucs_string_buffer_t strb;
@@ -133,13 +149,7 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
 }
 
 UCS_TEST_P(test_ucp_proto, rkey_config) {
-    ucp_rkey_config_key_t rkey_config_key;
-
-    rkey_config_key.ep_cfg_index = 0;
-    rkey_config_key.md_map       = 0;
-    rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-
+    ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);
     ucs_status_t status;
 
     /* similar configurations should return same index */
@@ -155,10 +165,7 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
 
     EXPECT_EQ(static_cast<int>(cfg_index1), static_cast<int>(cfg_index2));
 
-    rkey_config_key.ep_cfg_index = 0;
-    rkey_config_key.md_map       = 1;
-    rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+    rkey_config_key = create_rkey_config_key(1);
 
     /* different configuration should return different index */
     ucp_worker_cfg_index_t cfg_index3;
@@ -171,14 +178,8 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
 
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
 {
-    ucp_rkey_config_key_t rkey_config_key;
+    ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);
 
-    rkey_config_key.ep_cfg_index = 0;
-    rkey_config_key.md_map       = 0;
-    rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-
-    /* similar configurations should return same index */
     ucp_worker_cfg_index_t cfg_index;
     ucs_status_t status = ucp_worker_rkey_config_get(worker(), &rkey_config_key,
                                                      NULL, &cfg_index);
