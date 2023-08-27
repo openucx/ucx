@@ -362,6 +362,7 @@ static ucs_status_t
 ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                            const ucp_tl_bitmap_t *tl_bitmap, uint64_t flags,
                            ucp_object_version_t addr_version,
+                           unsigned max_num_paths,
                            ucp_address_packed_device_t **devices_p,
                            ucp_rsc_index_t *num_devices_p)
 {
@@ -441,7 +442,7 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 
         dev->rsc_index  = rsc_index;
         UCS_BITMAP_SET(dev->tl_bitmap, rsc_index);
-        dev->num_paths  = iface_attr->dev_num_paths;
+        dev->num_paths  = ucs_min(max_num_paths, iface_attr->dev_num_paths);
     }
 
     *devices_p     = devices;
@@ -1511,7 +1512,8 @@ ucp_address_length(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 
     /* Collect all devices required to pack their address */
     status = ucp_address_gather_devices(worker, key, tl_bitmap, pack_flags,
-                                        addr_version, &devices, &num_devices);
+                                        addr_version, UINT_MAX, &devices,
+                                        &num_devices);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1531,7 +1533,8 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
                               unsigned pack_flags,
                               ucp_object_version_t addr_version,
                               const ucp_lane_index_t *lanes2remote,
-                              size_t *size_p, void **buffer_p)
+                              unsigned max_num_paths, size_t *size_p,
+                              void **buffer_p)
 {
     ucp_address_packed_device_t *devices;
     ucp_rsc_index_t num_devices;
@@ -1549,7 +1552,8 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
 
     /* Collect all devices we want to pack */
     status = ucp_address_gather_devices(worker, key, tl_bitmap, pack_flags,
-                                        addr_version, &devices, &num_devices);
+                                        addr_version, max_num_paths, &devices,
+                                        &num_devices);
     if (status != UCS_OK) {
         goto out;
     }
