@@ -698,6 +698,6 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
 
-uint64_t supported_mem_types();
+uint64_t ucp_supported_mem_types();
 
 #endif

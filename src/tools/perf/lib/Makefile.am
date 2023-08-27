@@ -19,14 +19,11 @@ libucxperf_la_LIBADD   = \
 	$(abs_top_builddir)/src/ucs/libucs.la
 
 # Add CUDA dependencies
-
 if HAVE_CUDA
 libucxperf_la_CPPFLAGS += $(CUDA_CPPFLAGS)
 libucxperf_la_CFLAGS   += $(CUDA_CFLAGS)
 libucxperf_la_LDFLAGS  += $(CUDA_LDFLAGS) -version-info $(SOVERSION)
 libucxperf_la_LIBADD   += $(CUDART_LIBS)
-
-include $(top_srcdir)/config/module.am
 endif
 
 # Add ROCM dependencies
@@ -37,8 +34,6 @@ libucxperf_la_LDFLAGS  += $(HIP_LDFLAGS) $(HIP_LIBS) -version-info $(SOVERSION) 
                           $(patsubst %, -Xlinker %, -L$(ROCM_ROOT)/lib -rpath $(ROCM_ROOT)/hip/lib -rpath $(ROCM_ROOT)/lib) \
                           $(patsubst %, -Xlinker %, --enable-new-dtags) \
                           $(patsubst %, -Xlinker %, -rpath $(ROCM_ROOT)/lib64)
-
-include $(top_srcdir)/config/module.am
 endif
 
 
@@ -50,8 +45,8 @@ noinst_HEADERS = \
 
 libucxperf_la_SOURCES = \
 	libperf.c \
+	libperf_memcpy.c \
 	libperf_memory.c \
 	libperf_thread.c \
-	libperf_memcpy.c \
-	uct_tests.cc \
-	ucp_tests.cc
+	ucp_tests.cc \
+	uct_tests.cc

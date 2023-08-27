@@ -146,7 +146,7 @@ void ucp_perf_barrier(ucx_perf_context_t *perf);
 
 ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf);
 void ucp_perf_test_free_mem(ucx_perf_context_t *perf);
-ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf);
+ucs_status_t uct_perf_test_alloc_buffers(ucx_perf_context_t *perf);
 void uct_perf_test_free_mem(ucx_perf_context_t *perf);
 ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                    ucx_perf_result_t* result);
@@ -162,7 +162,7 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
 
 void ucx_perf_report(ucx_perf_context_t *perf);
 
-memcpy_func_t ucx_get_perf_memcpy(ucx_perf_context_t *perf);
+memcpy_func_t ucx_get_perf_memcpy(const ucx_perf_context_t *perf);
 
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
 {

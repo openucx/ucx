@@ -1521,7 +1521,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
         goto out_iface_close;
     }
 
-    status = uct_perf_test_alloc_mem(perf);
+    status = uct_perf_test_alloc_buffers(perf);
     if (status != UCS_OK) {
         goto out_iface_close;
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2023. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2023. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -19,11 +19,12 @@
 #endif
 
 #include <tools/perf/lib/libperf_int.h>
+#include <ucs/memory/memory_type.h>
 #include <ucs/sys/compiler.h>
 
 
 #if HAVE_CUDA
-static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
+static ucs_status_t ucx_perf_cuda_init(const ucx_perf_context_t *perf)
 {
     cudaError_t cerr;
     unsigned group_index;
@@ -69,7 +70,7 @@ static void *ucx_perf_cuda_memcpy(void *dst, const void *src, size_t length)
 #endif
 
 #if HAVE_ROCM
-static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
+static ucs_status_t ucx_perf_rocm_init(const ucx_perf_context_t *perf)
 {
     hipError_t ret;
     unsigned group_index;
@@ -105,10 +106,15 @@ static void *ucx_perf_rocm_memcpy(void *dst, const void *src, size_t length)
 }
 #endif
 
-memcpy_func_t ucx_get_perf_memcpy(ucx_perf_context_t *perf)
+memcpy_func_t ucx_get_perf_memcpy(const ucx_perf_context_t *perf)
 {
-    ucs_memory_type_t mem_type, send_mem_type = perf->params.send_mem_type,
-                                recv_mem_type = perf->params.recv_mem_type;
+    ucs_memory_type_t send_mem_type = perf->params.send_mem_type,
+                      recv_mem_type = perf->params.recv_mem_type;
+    ucs_memory_type_t mem_type;
+#if HAVE_CUDA || HAVE_ROCM
+    ucs_status_t status;
+#endif
+
     if (send_mem_type == recv_mem_type) {
         mem_type = send_mem_type;
     } else if (send_mem_type != UCS_MEMORY_TYPE_HOST) {
@@ -124,19 +130,28 @@ memcpy_func_t ucx_get_perf_memcpy(ucx_perf_context_t *perf)
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        ucx_perf_cuda_init(perf);
+        status = ucx_perf_cuda_init(perf);
+        if(status != UCS_OK) {
+            break;
+        }
         return ucx_perf_cuda_memcpy;
 #endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
-        ucx_perf_rocm_init(perf);
+        status = ucx_perf_rocm_init(perf);
+        if(status != UCS_OK) {
+            break;
+        }
         return ucx_perf_rocm_memcpy;
 #endif
     default:
-        ucs_error("memcpy was not defined for memory type: %d or memtype "
-                  "was is not supported",
-                  mem_type);
+        ucs_error("memcpy was not defined for memory type: "
+                  "%s", ucs_memory_type_names[mem_type]);
         return NULL;
     }
+
+    ucs_error("Failed to init memory type: "
+              "%s", ucs_memory_type_names[mem_type]);
+    return NULL;
 }

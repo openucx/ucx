@@ -2442,9 +2442,8 @@ const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)
     return context->tl_cmpts[context->config.cm_cmpt_idxs[cm_idx]].attr.name;
 }
 
-uint64_t supported_mem_types()
+uint64_t ucp_supported_mem_types()
 {
-    static const uint64_t default_memory_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     ucp_context_attr_t context_attr;
     ucp_params_t context_params;
     ucp_context_h context;
@@ -2454,13 +2453,13 @@ uint64_t supported_mem_types()
     context_params.features   = UCP_FEATURE_AM;
     status                    = ucp_init(&context_params, NULL, &context);
     if (status != UCS_OK) {
-        return default_memory_types;
+        return UCS_BIT(UCS_MEMORY_TYPE_HOST);
     }
 
     context_attr.field_mask = UCP_ATTR_FIELD_MEMORY_TYPES;
     status                  = ucp_context_query(context, &context_attr);
     if (status != UCS_OK) {
-        context_attr.memory_types = default_memory_types;
+        context_attr.memory_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     }
 
     ucp_cleanup(context);

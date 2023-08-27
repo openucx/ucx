@@ -132,7 +132,6 @@ public:
                        const void *src_sn) const
     {
         if (ucs_likely(dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
-            ucs_assert(dst_mem_type == UCS_MEMORY_TYPE_HOST);
             *reinterpret_cast<psn_t*>(dst_sn) = *reinterpret_cast<const psn_t*>(src_sn);
         }
 

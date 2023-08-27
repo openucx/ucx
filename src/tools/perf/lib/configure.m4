@@ -4,8 +4,6 @@
 # See file LICENSE for terms.
 #
 
-
-
 AC_LANG_PUSH([C++])
 
 UCX_CHECK_CUDA

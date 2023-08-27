@@ -41,7 +41,7 @@ static void usage()
     printf("  -e                   Show UCP endpoint configuration\n");
     printf("  -m <size>[,<type>]   Show UCP memory allocation info for a given size and type\n");
     printf("                       Supported memory types are: %s\n",
-           ucs_flags_str(buf, sizeof(buf), supported_mem_types(),
+           ucs_flags_str(buf, sizeof(buf), ucp_supported_mem_types(),
                          ucs_memory_type_names));
     printf("  -u <features>        UCP context features to use. String of one or more of:\n");
     printf("                        'a' : atomic operations\n");

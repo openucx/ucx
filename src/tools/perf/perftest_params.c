@@ -19,11 +19,11 @@
 
 static void print_memory_type_usage(void)
 {
-    uint64_t available_mem_types = supported_mem_types();
+    const uint64_t available_mem_types = ucp_supported_mem_types();
     ucs_memory_type_t it;
 
     ucs_memory_type_for_each(it) {
-        if (UCS_BIT(it) & available_mem_types) {
+        if (available_mem_types & UCS_BIT(it)) {
             printf("                        %s - %s\n",
                    ucs_memory_type_names[it], ucs_memory_type_descs[it]);
         }
