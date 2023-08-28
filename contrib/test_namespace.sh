@@ -17,11 +17,6 @@ ucx_inst=${WORKSPACE}/install
 
 echo "==== Running namespace tests on $(hostname) ===="
 
-server_port_range=1000
-server_port_min=10500
-server_port_max=$((server_port_min + server_port_range))
-server_port=${server_port_min}
-
 test_namespace() {
 	# Make sure to try to use CMA when possible
 	# Expect fallback on SYSV
