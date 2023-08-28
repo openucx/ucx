@@ -20,7 +20,7 @@ resources:
   - repository: PerfX
     type: github
     name: Mellanox-lab/PerfX
-    endpoint: Al3xR01
+    endpoint: Mellanox-lab
     ref: master
 
 stages:
