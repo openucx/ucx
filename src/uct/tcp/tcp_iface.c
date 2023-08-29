@@ -12,6 +12,7 @@
 
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/config/types.h>
 #include <sys/socket.h>
 #include <sys/poll.h>
@@ -122,11 +123,8 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
 {
     uct_tcp_iface_t *iface          = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     uct_tcp_device_addr_t *dev_addr = (uct_tcp_device_addr_t*)addr;
-    void *pack_ptr                   = dev_addr + 1;
+    void *pack_ptr                  = dev_addr + 1;
     const struct sockaddr *saddr    = (struct sockaddr*)&iface->config.ifaddr;
-    const void *in_addr;
-    size_t ip_addr_len;
-    ucs_status_t status;
 
     dev_addr->flags     = 0;
     dev_addr->sa_family = saddr->sa_family;
@@ -135,17 +133,11 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
         dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK;
         memset(pack_ptr, 0, sizeof(uct_iface_local_addr_ns_t));
         uct_iface_get_local_address(pack_ptr, UCS_SYS_NS_TYPE_NET);
-    } else {
-        in_addr = ucs_sockaddr_get_inet_addr(saddr);
-        status  = ucs_sockaddr_inet_addr_sizeof(saddr, &ip_addr_len);
-        if (status != UCS_OK) {
-            return status;
-        }
 
-        memcpy(pack_ptr, in_addr, ip_addr_len);
+        return UCS_OK;
     }
 
-    return UCS_OK;
+    return uct_tcp_pack_inet_addr(pack_ptr, saddr);
 }
 
 static size_t uct_tcp_iface_get_device_address_length(uct_tcp_iface_t *iface)
@@ -162,6 +154,10 @@ static size_t uct_tcp_iface_get_device_address_length(uct_tcp_iface_t *iface)
         ucs_assert_always(status == UCS_OK);
 
         addr_len += in_addr_len;
+
+        if (uct_tcp_is_in6_link_local_addr(saddr)) {
+            addr_len += sizeof(uint32_t); /* in6_scope_id */
+        }
     }
 
     return addr_len;
@@ -962,6 +958,29 @@ int uct_tcp_keepalive_is_enabled(uct_tcp_iface_t *iface)
 #else /* UCT_TCP_EP_KEEPALIVE */
     return 0;
 #endif /* UCT_TCP_EP_KEEPALIVE */
+}
+
+ucs_status_t uct_tcp_pack_inet_addr(void *ptr, const struct sockaddr *saddr)
+{
+    size_t addr_len;
+    ucs_status_t status;
+    const void *in_addr;
+
+    status = ucs_sockaddr_inet_addr_sizeof((struct sockaddr*)saddr,
+                                           &addr_len);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    in_addr = ucs_sockaddr_get_inet_addr(saddr);
+    memcpy(ptr, in_addr, addr_len);
+
+    if (uct_tcp_is_in6_link_local_addr(saddr)) {
+        *(uint32_t*)UCS_PTR_BYTE_OFFSET(ptr, addr_len) =
+            UCS_SOCKET_INET6_SCOPE_ID(saddr);
+    }
+
+    return UCS_OK;
 }
 
 UCT_TL_DEFINE_ENTRY(&uct_tcp_component, tcp, uct_tcp_query_devices,

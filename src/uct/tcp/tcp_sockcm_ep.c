@@ -17,7 +17,8 @@
 
 
 #define UCT_TCP_SOCKCM_EP_MAX_DEVICE_ADDR_LEN (sizeof(uct_tcp_device_addr_t) + \
-                                               sizeof(struct in6_addr))
+                                               sizeof(struct in6_addr) + \
+                                               sizeof(uint32_t) /* in6_scope_id */)
 
 
 const char *uct_tcp_sockcm_cm_ep_peer_addr_str(uct_tcp_sockcm_ep_t *cep,
@@ -588,8 +589,15 @@ uct_tcp_sockcm_ep_get_remote_device_addr(const uct_tcp_sockcm_ep_t *cep,
     remote_dev_addr->flags     = 0u;
     remote_dev_addr->sa_family = saddr->ss_family;
 
-    memcpy(remote_dev_addr + 1,
-           ucs_sockaddr_get_inet_addr((struct sockaddr*)saddr), in_addr_len);
+    status = uct_tcp_pack_inet_addr(remote_dev_addr + 1,
+                                    (struct sockaddr*)saddr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (uct_tcp_is_in6_link_local_addr((struct sockaddr*)saddr)) {
+        remote_dev_addr_len += sizeof(uint32_t);
+    }
 
     return remote_dev_addr_len;
 }
