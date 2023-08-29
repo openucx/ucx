@@ -453,6 +453,9 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
             case 0x55:
                 cpu_model = UCS_CPU_MODEL_INTEL_SKYLAKE;
                 break;
+            case 0x8f:
+                cpu_model = UCS_CPU_MODEL_INTEL_SAPPHIRERAPIDS;
+                break;
             }
             break;
         /* AMD Zen2 */

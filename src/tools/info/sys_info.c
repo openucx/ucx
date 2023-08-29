@@ -22,21 +22,22 @@
 
 
 static const char *cpu_model_names[] = {
-    [UCS_CPU_MODEL_UNKNOWN]            = "unknown",
-    [UCS_CPU_MODEL_INTEL_IVYBRIDGE]    = "IvyBridge",
-    [UCS_CPU_MODEL_INTEL_SANDYBRIDGE]  = "SandyBridge",
-    [UCS_CPU_MODEL_INTEL_NEHALEM]      = "Nehalem",
-    [UCS_CPU_MODEL_INTEL_WESTMERE]     = "Westmere",
-    [UCS_CPU_MODEL_INTEL_HASWELL]      = "Haswell",
-    [UCS_CPU_MODEL_INTEL_BROADWELL]    = "Broadwell",
-    [UCS_CPU_MODEL_INTEL_SKYLAKE]      = "Skylake",
-    [UCS_CPU_MODEL_ARM_AARCH64]        = "ARM 64-bit",
-    [UCS_CPU_MODEL_AMD_NAPLES]         = "Naples",
-    [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
-    [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
-    [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
-    [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
-    [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui"
+    [UCS_CPU_MODEL_UNKNOWN]              = "unknown",
+    [UCS_CPU_MODEL_INTEL_IVYBRIDGE]      = "IvyBridge",
+    [UCS_CPU_MODEL_INTEL_SANDYBRIDGE]    = "SandyBridge",
+    [UCS_CPU_MODEL_INTEL_NEHALEM]        = "Nehalem",
+    [UCS_CPU_MODEL_INTEL_WESTMERE]       = "Westmere",
+    [UCS_CPU_MODEL_INTEL_HASWELL]        = "Haswell",
+    [UCS_CPU_MODEL_INTEL_BROADWELL]      = "Broadwell",
+    [UCS_CPU_MODEL_INTEL_SKYLAKE]        = "Skylake",
+    [UCS_CPU_MODEL_INTEL_SAPPHIRERAPIDS] = "SapphireRapids",
+    [UCS_CPU_MODEL_ARM_AARCH64]          = "ARM 64-bit",
+    [UCS_CPU_MODEL_AMD_NAPLES]           = "Naples",
+    [UCS_CPU_MODEL_AMD_ROME]             = "Rome",
+    [UCS_CPU_MODEL_AMD_MILAN]            = "Milan",
+    [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG]   = "Zhangjiang",
+    [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]     = "Wudaokou",
+    [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]     = "Lujiazui"
 };
 
 static const char* cpu_vendor_names[] = {

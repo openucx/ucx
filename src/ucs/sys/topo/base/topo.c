@@ -308,6 +308,9 @@ static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
 {
     distance->latency = 500e-9;
     switch (ucs_arch_get_cpu_model()) {
+    case UCS_CPU_MODEL_INTEL_SAPPHIRERAPIDS:
+        distance->bandwidth = 23288 * UCS_MBYTE;
+        break;
     case UCS_CPU_MODEL_AMD_ROME:
     case UCS_CPU_MODEL_AMD_MILAN:
         distance->bandwidth = 5100 * UCS_MBYTE;
