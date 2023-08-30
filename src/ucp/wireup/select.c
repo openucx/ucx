@@ -1509,6 +1509,28 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
 }
 
 static unsigned
+ucp_wireup_get_current_num_lanes(ucp_ep_h ep, ucp_lane_type_t type)
+{
+    unsigned current_num_lanes = 0;
+    ucp_lane_index_t lane;
+
+    /* First initialization (current lanes weren't chosen yet) or
+     * CM is enabled (so we can reconfigure the endpoint).
+     */
+    if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
+        ucp_ep_has_cm_lane(ep)) {
+        return UCP_PROTO_MAX_LANES;
+    }
+
+    for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
+        if (ucp_ep_config(ep)->key.lanes[lane].lane_types & UCS_BIT(type)) {
+            ++current_num_lanes;
+        }
+    }
+    return current_num_lanes;
+}
+
+static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_bw_info_t *bw_info,
                         ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
@@ -1527,15 +1549,24 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
     ucp_wireup_select_info_t *sinfo;
+    unsigned max_lanes;
 
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
     bw_info->criteria.arg = &dev_count;
 
+    /* Restrict choosing more lanes that were already chosen when CM is disabled
+     * to prevent EP reconfiguration in case of dropping lanes due to low BW.
+     * TODO: Remove when endpoint reconfiguration is supported.
+     */
+    max_lanes = ucp_wireup_get_current_num_lanes(select_params->ep,
+                                                 bw_info->criteria.lane_type);
+    max_lanes = ucs_min(max_lanes, bw_info->max_lanes);
+
     /* lookup for requested number of lanes or limit of MD map
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
-    while (ucs_array_length(&sinfo_array) < bw_info->max_lanes) {
+    while (ucs_array_length(&sinfo_array) < max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
             sinfo  = ucs_array_append_fixed(select_info, &sinfo_array);
             status = ucp_wireup_select_transport(select_ctx, select_params,
