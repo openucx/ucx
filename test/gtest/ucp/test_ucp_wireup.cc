@@ -1559,6 +1559,18 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback_amo,
  * create our own entities.
  */
 class test_ucp_wireup_asymmetric : public ucp_test {
+public:
+    test_ucp_wireup_asymmetric() {
+        if (get_variant_value()) {
+            modify_config("ADDRESS_VERSION", "v2");
+        }
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "addr_v2");
+    }
+
 protected:
     void tag_sendrecv(size_t size) {
         std::string send_data(size, 's');
@@ -1576,11 +1588,6 @@ protected:
         request_wait(rreq);
 
         EXPECT_EQ(send_data, recv_data);
-    }
-
-public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG);
     }
 };
 
