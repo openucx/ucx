@@ -4,7 +4,7 @@
 # See file LICENSE for terms.
 #
 
-set(prefix "@prefix@")
+get_filename_component(prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 set(exec_prefix "@exec_prefix@")
 
 add_library(ucx::ucs SHARED IMPORTED)
