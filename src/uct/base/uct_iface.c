@@ -307,6 +307,13 @@ int uct_base_iface_is_reachable(const uct_iface_h tl_iface,
     return uct_iface_is_reachable_v2(tl_iface, &params);
 }
 
+int uct_ep_is_connected(uct_ep_h ep, const uct_ep_is_connected_params_t *params)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_is_connected(ep, params);
+}
+
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
                           uct_completion_t *comp)
 {
