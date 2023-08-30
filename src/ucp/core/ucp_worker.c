@@ -1209,21 +1209,30 @@ static void ucp_worker_iface_set_sys_device_distance(ucp_worker_iface_t *wiface)
     ucs_sys_dev_distance_t *distance = &wiface->distance;
     ucs_sys_device_t device          = UCS_SYS_DEVICE_ID_UNKNOWN;
     ucs_sys_device_t cmp_device      = UCS_SYS_DEVICE_ID_UNKNOWN;
-    ucp_rsc_index_t md_index, i;
+    ucp_rsc_index_t i;
+    ucp_tl_resource_desc_t *cmp_rsc;
+    char buf[128];
 
     *distance = ucs_topo_default_distance;
 
     for (i = 0; i < context->num_tls; i++) {
-        md_index = context->tl_rscs[i].md_index;
-        if (strcmp(context->tl_mds[md_index].rsc.md_name,
+        cmp_rsc = &context->tl_rscs[i];
+        if (strcmp(context->tl_mds[cmp_rsc->md_index].rsc.md_name,
                    context->config.ext.select_distance_md)) {
             continue;
         }
 
         device     = ucp_worker_iface_get_sys_device(wiface);
-        cmp_device = context->tl_rscs[i].tl_rsc.sys_device;
+        cmp_device = cmp_rsc->tl_rsc.sys_device;
 
         ucs_topo_get_distance(device, cmp_device, distance);
+
+        ucs_trace("distance between %s/%s and %s/%s is %s",
+                  context->tl_rscs[wiface->rsc_index].tl_rsc.tl_name,
+                  ucs_topo_sys_device_get_name(device), cmp_rsc->tl_rsc.tl_name,
+                  ucs_topo_sys_device_get_name(cmp_device),
+                  ucs_topo_distance_str(distance, buf, sizeof(buf)));
+        return;
     }
 }
 
