@@ -1,4 +1,5 @@
-trigger: none
+trigger: 
+  batch: true
 pr:
   branches:
     include:
