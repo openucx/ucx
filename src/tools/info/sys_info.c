@@ -31,6 +31,7 @@ static const char *cpu_model_names[] = {
     [UCS_CPU_MODEL_INTEL_HASWELL]      = "Haswell",
     [UCS_CPU_MODEL_INTEL_BROADWELL]    = "Broadwell",
     [UCS_CPU_MODEL_INTEL_SKYLAKE]      = "Skylake",
+    [UCS_CPU_MODEL_INTEL_ICELAKE]      = "Icelake",
     [UCS_CPU_MODEL_ARM_AARCH64]        = "ARM 64-bit",
     [UCS_CPU_MODEL_AMD_NAPLES]         = "Naples",
     [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
