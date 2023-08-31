@@ -27,7 +27,7 @@ function azure_set_variable() {
     value=$2
     # Do not remove 'set +x': https://developercommunity.visualstudio.com/t/pipeline-variable-incorrectly-inserts-single-quote/375679#T-N394968
     set +x
-    echo "##vso[task.setvariable variable=${name}]${value}"
+    echo "##vso[task.setvariable variable=${name};isOutput=true]${value}"
 }
 
 # Report an issue to Azure pipeline and stop step execution
@@ -196,8 +196,7 @@ check_release_build() {
             [[ "$title" == "${title_mask}"* ]] && launch=True;
         done
     fi
-
-    echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
+    azure_set_variable "Launch" "${launch}"
 }
 
 
