@@ -141,6 +141,7 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
  * @param [in]  component               Compare remote keys on this component
  * @param [in]  rkey1                   First remote key to compare
  * @param [in]  rkey2                   Second remote key to compare
+ * @param [in]  params                  Parameters for the comparison
  * @param [out] result                  Comparison result, < 0, 0 or > 0
  *
  * @return Error code or UCS_OK if result is valid. If rkey1 is lower, equal or

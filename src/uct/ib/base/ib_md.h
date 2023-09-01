@@ -155,7 +155,7 @@ typedef struct uct_ib_md {
     uint16_t                 vhca_id;
     struct {
         uint32_t base;
-        size_t   size; /* Feature is activated when size is non-zero */
+        size_t   size;
     } mkey_by_name_reserve;
 } uct_ib_md_t;
 

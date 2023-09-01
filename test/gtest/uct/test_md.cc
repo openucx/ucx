@@ -958,6 +958,7 @@ public:
         uct_allocated_memory_t         mem;
         void                           *rkey_buffer;
         uct_md_h                       md;
+        uct_component_h                component;
 
         std::vector<uct_rkey_bundle_t> bundles;
 
@@ -968,6 +969,12 @@ public:
     mem_chunk mem_chunk_create();
 
     std::vector<mem_chunk> chunk;
+
+    static bool is_skip_transport()
+    {
+        static std::set<std::string> skip = {"posix", "sysv"};
+        return skip.find(GetParam().md_name) != skip.end();
+    }
 
     void init() override
     {
@@ -1051,7 +1058,8 @@ test_md_rkey_compare::mem_chunk test_md_rkey_compare::mem_chunk_create()
     status      = uct_md_mkey_pack(md_ref, memh, rkey_buffer);
     ASSERT_UCS_OK(status);
 
-    return {addr, mem_type, size, memh, mem, rkey_buffer, md_ref};
+    return {addr, mem_type,    size,   memh,
+            mem,  rkey_buffer, md_ref, GetParam().component};
 }
 
 void test_md_rkey_compare::mem_chunk::destroy()
@@ -1071,7 +1079,7 @@ void test_md_rkey_compare::mem_chunk::destroy()
         free(rkey_buffer);
 
         for (auto rkey_bundle : bundles) {
-            uct_rkey_release(md->component, &rkey_bundle);
+            uct_rkey_release(component, &rkey_bundle);
         }
     }
 }
@@ -1081,7 +1089,7 @@ uct_rkey_t test_md_rkey_compare::mem_chunk::unpack()
     uct_rkey_bundle_t bundle;
     ucs_status_t status;
 
-    status = uct_rkey_unpack(md->component, rkey_buffer, &bundle);
+    status = uct_rkey_unpack(component, rkey_buffer, &bundle);
     ASSERT_UCS_OK(status);
     bundles.push_back(bundle);
     return bundle.rkey;
@@ -1103,12 +1111,11 @@ UCS_TEST_P(test_md_rkey_compare, params_check)
 
 UCS_TEST_P(test_md_rkey_compare, equal)
 {
-    std::set<std::string> skip = {"posix", "sysv"};
     int result;
     uct_rkey_t rkey0, rkey1;
     ucs_status_t status;
 
-    if (skip.find(GetParam().md_name) != skip.end()) {
+    if (is_skip_transport()) {
         UCS_TEST_SKIP_R("Remote keys won't compare equal");
     }
 
@@ -1149,8 +1156,13 @@ UCS_TEST_P(test_md_rkey_compare, transitive_antisymmetric)
             } else {
                 EXPECT_GE(result, 0);
             }
+
             diff += !!result;
         }
+    }
+
+    if (is_skip_transport()) {
+        return;
     }
 
     if (always_match.find(md_attr().component_name) != always_match.end()) {

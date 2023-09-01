@@ -959,6 +959,7 @@ void test_ucp_rkey_compare::mem_chunk::destroy()
 test_ucp_rkey_compare::mem_chunk
 test_ucp_rkey_compare::mem_chunk::create(ucp_context_h context)
 {
+    void *rkey_buffer           = NULL;
     size_t size                 = 4096;
     ucp_mem_map_params_t params = {
         .field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
@@ -970,7 +971,6 @@ test_ucp_rkey_compare::mem_chunk::create(ucp_context_h context)
     };
     ucs_status_t status;
     ucp_mem_h memh;
-    void *rkey_buffer;
     size_t rkey_size;
 
     status = ucp_mem_map(context, &params, &memh);
@@ -981,7 +981,8 @@ test_ucp_rkey_compare::mem_chunk::create(ucp_context_h context)
 
     status = ucp_rkey_pack(context, memh, &rkey_buffer, &rkey_size);
     if (status != UCS_OK) {
-        ucp_mem_unmap(context, memh);
+        status = ucp_mem_unmap(context, memh);
+        ASSERT_UCS_OK(status);
         memh = NULL;
         goto out;
     }

@@ -23,10 +23,10 @@ protected:
                          size_t size = 8192, bool aligned = false);
     bool has_ksm() const;
 
-    ucs_status_t reg_pack(void *buffer, size_t size,
-                          uct_ib_mlx5_devx_mem_t **memh,
+    ucs_status_t reg_pack(void *buffer, size_t size, uct_ib_mem_t **memh,
                           uct_rkey_t *rkey_p = NULL);
     void check_smkeys(uct_rkey_t rkey1, uct_rkey_t rkey2);
+    void check_devx_smkeys(uct_ib_mem_t *ib_memh1, uct_ib_mem_t *ib_memh2);
 
 private:
 #ifdef HAVE_MLX5_DV
@@ -171,8 +171,7 @@ UCS_TEST_SKIP_COND_P(test_ib_md, smkey_fw,
 }
 
 ucs_status_t test_ib_md::reg_pack(void *buffer, size_t size,
-                                  uct_ib_mlx5_devx_mem_t **memh,
-                                  uct_rkey_t *rkey_p)
+                                  uct_ib_mem_t **memh, uct_rkey_t *rkey_p)
 {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
     uct_rkey_bundle_t bundle;
@@ -182,7 +181,7 @@ ucs_status_t test_ib_md::reg_pack(void *buffer, size_t size,
                                          UCT_MD_MEM_SYMMETRIC_RKEY,
                                          (void**)memh);
     if (status == UCS_OK) {
-        status = uct_md_mkey_pack(md(), &(*memh)->super, &rkey_buffer[0]);
+        status = uct_md_mkey_pack(md(), *memh, &rkey_buffer[0]);
         if ((status == UCS_OK) && (rkey_p != NULL)) {
             status = uct_rkey_unpack(md()->component, &rkey_buffer[0], &bundle);
             if (status == UCS_OK) {
@@ -208,26 +207,15 @@ void test_ib_md::check_smkeys(uct_rkey_t rkey1, uct_rkey_t rkey2)
               uct_ib_md_direct_rkey(rkey2));
 }
 
-UCS_TEST_SKIP_COND_P(test_ib_md, smkey_reg_atomic,
-                     !check_caps(UCT_MD_FLAG_SYMMETRIC_RKEY))
+void test_ib_md::check_devx_smkeys(uct_ib_mem_t *ib_memh1,
+                                   uct_ib_mem_t *ib_memh2)
 {
-    size_t size = 8192;
-    int ret;
-    void *buffer;
-    ucs_status_t status;
-    uct_ib_mlx5_devx_mem_t *memh1, *memh2, *memh3;
-    uct_rkey_t rkey1, rkey2, rkey3;
-
-    ret = ucs_posix_memalign(&buffer, size, size, "smkey_reg_atomic");
-    ASSERT_EQ(0, ret);
-
-    status = reg_pack(buffer, size, &memh1, &rkey1);
-    EXPECT_UCS_OK(status);
-    status = reg_pack(buffer, size, &memh2, &rkey2);
-    EXPECT_UCS_OK(status);
-    check_smkeys(rkey1, rkey2);
-
 #ifdef HAVE_DEVX
+    uct_ib_mlx5_devx_mem_t *memh1 = ucs_derived_of(ib_memh1,
+                                                   uct_ib_mlx5_devx_mem_t);
+    uct_ib_mlx5_devx_mem_t *memh2 = ucs_derived_of(ib_memh2,
+                                                   uct_ib_mlx5_devx_mem_t);
+
     EXPECT_NE(nullptr, memh1->smkey_mr);
     EXPECT_NE(nullptr, memh2->smkey_mr);
     EXPECT_NE(UCT_IB_INVALID_MKEY, memh1->symmetric_rkey);
@@ -238,15 +226,37 @@ UCS_TEST_SKIP_COND_P(test_ib_md, smkey_reg_atomic,
               memh2->symmetric_rkey - memh2->atomic_rkey);
     EXPECT_EQ(memh1->symmetric_rkey + 0x100, memh2->symmetric_rkey);
 #endif
+}
+
+UCS_TEST_SKIP_COND_P(test_ib_md, smkey_reg_atomic,
+                     !check_caps(UCT_MD_FLAG_SYMMETRIC_RKEY))
+{
+    size_t size = 8192;
+    int ret;
+    void *buffer;
+    ucs_status_t status;
+    uct_ib_mem_t *memh1, *memh2, *memh3;
+    uct_rkey_t rkey1, rkey2, rkey3;
+
+    ret = ucs_posix_memalign(&buffer, size, size, "smkey_reg_atomic");
+    ASSERT_EQ(0, ret);
+
+    status = reg_pack(buffer, size, &memh1, &rkey1);
+    ASSERT_UCS_OK(status);
+    status = reg_pack(buffer, size, &memh2, &rkey2);
+    ASSERT_UCS_OK(status);
+    check_smkeys(rkey1, rkey2);
+
+    check_devx_smkeys(memh1, memh2);
 
     status = uct_md_mem_dereg(md(), memh1);
     EXPECT_UCS_OK(status);
     status = reg_pack(buffer, size, &memh1, &rkey1);
-    EXPECT_UCS_OK(status);
+    ASSERT_UCS_OK(status);
     check_smkeys(rkey1, rkey2); // Confirm lower mkey context was selected
 
     status = reg_pack(buffer, size, &memh3, &rkey3);
-    EXPECT_UCS_OK(status);
+    ASSERT_UCS_OK(status);
     check_smkeys(rkey2, rkey3); // Confirm first available position selected
 
     status = uct_md_mem_dereg(md(), memh1);
