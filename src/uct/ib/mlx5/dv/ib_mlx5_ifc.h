@@ -506,7 +506,13 @@ struct uct_ib_mlx5_cmd_hca_cap_2_bits {
 
     uint8_t    introspection_mkey[0x20];
 
-    uint8_t    reserved_at_160[0x6a0];
+    uint8_t    reserved_at_160[0x260];
+    uint8_t    mkey_by_name_reserve[0x1];
+    uint8_t    reserved_at_3c1[0x1];
+    uint8_t    mkey_by_name_reserve_log_size[0x6];
+    uint8_t    mkey_by_name_reserve_base[0x18];
+
+    uint8_t    reserved_at_3e0[0x420];
 };
 
 struct uct_ib_mlx5_odp_per_transport_service_cap_bits {
@@ -770,7 +776,8 @@ struct uct_ib_mlx5_create_mkey_in_bits {
     uint8_t    reserved_at_20[0x10];
     uint8_t    op_mod[0x10];
 
-    uint8_t    reserved_at_40[0x20];
+    uint8_t    reserved_at_40[0x8];
+    uint8_t    input_mkey_index[0x18];
 
     uint8_t    pg_access[0x1];
     uint8_t    mkey_umem_valid[0x1];
@@ -788,7 +795,13 @@ struct uct_ib_mlx5_create_mkey_in_bits {
 
     uint8_t    mkey_umem_offset[0x40];
 
-    uint8_t    reserved_at_380[0x500];
+    uint8_t    bsf_octword_actual_size[0x20];
+
+    uint8_t    reserved_at_380[0x8];
+
+    uint8_t    input_mkey_index_last[0x18];
+
+    uint8_t    reserved_at_3c0[0x4c0];
 
     uint8_t    klm_pas_mtt[0][0x20];
 };

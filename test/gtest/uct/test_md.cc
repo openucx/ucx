@@ -27,9 +27,7 @@ extern "C" {
 #include <netdb.h>
 #include <net/if.h>
 
-
-#define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
+#define UCT_MD_TEST_CASE \
                    knem, \
                    cma, \
                    posix, \
@@ -42,8 +40,14 @@ extern "C" {
                    ib, \
                    ugni, \
                    sockcm, \
-                   rdmacm \
-                   )
+                   rdmacm
+
+#define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, UCT_MD_TEST_CASE)
+
+#define UCT_MD_RKEY_INSTANTIATE_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
+                   UCT_MD_TEST_CASE, tcp, self)
 
 void* test_md::alloc_thread(void *arg)
 {
@@ -918,6 +922,245 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md)
+
+class test_md_rkey_compare :
+    private ucs::clear_dontcopy_regions,
+    public test_md {
+public:
+    ucs_status_t rkey_compare(uct_rkey_t rkey1, uct_rkey_t rkey2, int &result);
+
+    static ucs_memory_type_t first_mem_type(uint64_t mem_types)
+    {
+        unsigned mem_type;
+
+        ucs_for_each_bit(mem_type, mem_types) {
+            return static_cast<ucs_memory_type_t>(mem_type);
+        }
+
+        return UCS_MEMORY_TYPE_LAST;
+    }
+
+    ucs_memory_type_t reg_mem_type()
+    {
+        return first_mem_type(md_attr().reg_mem_types);
+    }
+
+    ucs_memory_type_t alloc_mem_type()
+    {
+        return first_mem_type(md_attr().alloc_mem_types);
+    }
+
+    struct mem_chunk {
+        void                           *addr;
+        ucs_memory_type_t              mem_type;
+        size_t                         size;
+        uct_mem_h                      memh;
+        uct_allocated_memory_t         mem;
+        void                           *rkey_buffer;
+        uct_md_h                       md;
+
+        std::vector<uct_rkey_bundle_t> bundles;
+
+        void                           destroy();
+        uct_rkey_t                     unpack();
+    };
+
+    mem_chunk mem_chunk_create();
+
+    std::vector<mem_chunk> chunk;
+
+    void init() override
+    {
+        test_md::init();
+
+        for (int i = 0; i < 10; i++) {
+            chunk.push_back(mem_chunk_create());
+            EXPECT_NE(NULL, uintptr_t(chunk.back().memh));
+        }
+    }
+
+    void cleanup() override
+    {
+        for (auto c : chunk) {
+            c.destroy();
+        }
+
+        test_md::cleanup();
+    }
+};
+
+ucs_status_t test_md_rkey_compare::rkey_compare(uct_rkey_t rkey1,
+                                                uct_rkey_t rkey2, int &result)
+{
+    uct_rkey_compare_params_t params = {};
+
+    result = INT_MAX;
+    return uct_rkey_compare(GetParam().component, rkey1, rkey2, &params,
+                            &result);
+}
+
+test_md_rkey_compare::mem_chunk test_md_rkey_compare::mem_chunk_create()
+{
+    uct_md_h md_ref            = md();
+    uct_alloc_method_t method  = UCT_ALLOC_METHOD_MD;
+    uct_allocated_memory_t mem = {};
+    void *rkey_buffer          = NULL;
+    uct_mem_h memh             = NULL;
+    size_t size                = 4096;
+    void *addr                 = NULL;
+    uct_mem_alloc_params_t params;
+    ucs_status_t status;
+    ucs_memory_type_t mem_type;
+
+    if (GetParam().md_name == "cuda_ipc") {
+        UCS_TEST_SKIP_R("Skip for cuda-ipc: its unpack needs active peer");
+    }
+
+    if (check_caps(UCT_MD_FLAG_ALLOC)) {
+        mem_type = alloc_mem_type();
+
+        params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                            UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+        params.flags      = UCT_MD_MEM_ACCESS_ALL;
+        params.name       = "get_chunk";
+        params.mem_type   = mem_type;
+        params.mds.mds    = &md_ref;
+        params.mds.count  = 1;
+        params.address    = 0;
+
+        status = uct_mem_alloc(size, &method, 1, &params, &mem);
+        if (status == UCS_OK) {
+            memh = mem.memh;
+        }
+    } else {
+        mem_type = reg_mem_type();
+        addr     = mem_buffer::allocate(size, mem_type);
+        if (addr != NULL) {
+            status = reg_mem(UCT_MD_MEM_ACCESS_ALL, addr, size, &memh);
+            if (status != UCS_OK) {
+                mem_buffer::release(addr, mem_type);
+                memh = NULL;
+            }
+        }
+    }
+
+    rkey_buffer = malloc(md_attr().rkey_packed_size);
+    status      = uct_md_mkey_pack(md_ref, memh, rkey_buffer);
+    ASSERT_UCS_OK(status);
+
+    return {addr, mem_type, size, memh, mem, rkey_buffer, md_ref};
+}
+
+void test_md_rkey_compare::mem_chunk::destroy()
+{
+    ucs_status_t status;
+
+    if (memh != NULL) {
+        if (mem.memh != NULL) {
+            uct_mem_free(&mem);
+        } else {
+            status = uct_md_mem_dereg(md, memh);
+            EXPECT_UCS_OK(status);
+            mem_buffer::release(addr, mem_type);
+        }
+
+        memh = NULL;
+        free(rkey_buffer);
+
+        for (auto rkey_bundle : bundles) {
+            uct_rkey_release(md->component, &rkey_bundle);
+        }
+    }
+}
+
+uct_rkey_t test_md_rkey_compare::mem_chunk::unpack()
+{
+    uct_rkey_bundle_t bundle;
+    ucs_status_t status;
+
+    status = uct_rkey_unpack(md->component, rkey_buffer, &bundle);
+    ASSERT_UCS_OK(status);
+    bundles.push_back(bundle);
+    return bundle.rkey;
+}
+
+UCS_TEST_P(test_md_rkey_compare, params_check)
+{
+    uct_rkey_compare_params_t params = {};
+    ucs_status_t status;
+    int result;
+
+    status = uct_rkey_compare(GetParam().component, 0, 0, &params, NULL);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    params.field_mask = 1;
+    status = uct_rkey_compare(GetParam().component, 0, 0, &params, &result);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
+UCS_TEST_P(test_md_rkey_compare, equal)
+{
+    std::set<std::string> skip = {"posix", "sysv"};
+    int result;
+    uct_rkey_t rkey0, rkey1;
+    ucs_status_t status;
+
+    if (skip.find(GetParam().md_name) != skip.end()) {
+        UCS_TEST_SKIP_R("Remote keys won't compare equal");
+    }
+
+    rkey0 = chunk.front().unpack();
+    rkey1 = chunk.front().unpack();
+
+    status = rkey_compare(rkey0, rkey1, result);
+    ASSERT_UCS_OK(status);
+    ASSERT_EQ(0, result);
+}
+
+UCS_TEST_P(test_md_rkey_compare, transitive_antisymmetric)
+{
+    std::set<std::string> always_match = {"self", "tcp", "cma"};
+    int diff                           = 0;
+    std::vector<uct_rkey_t> rkeys;
+    int result;
+    ucs_status_t status;
+
+    for (auto &c : chunk) {
+        rkeys.push_back(c.unpack());
+    }
+
+    std::sort(rkeys.begin(), rkeys.end(),
+              [this](const uct_rkey_t &rkey0, const uct_rkey_t &rkey1) {
+                  int result;
+
+                  ASSERT_UCS_OK(rkey_compare(rkey0, rkey1, result));
+                  return result < 0;
+              });
+
+    for (int i = 0; i < rkeys.size(); i++) {
+        for (int j = 0; j < rkeys.size(); j++) {
+            status = rkey_compare(rkeys[i], rkeys[j], result);
+            ASSERT_UCS_OK(status);
+            if (i < j) {
+                EXPECT_LE(result, 0);
+            } else {
+                EXPECT_GE(result, 0);
+            }
+            diff += !!result;
+        }
+    }
+
+    if (always_match.find(md_attr().component_name) != always_match.end()) {
+        ASSERT_EQ(0, diff);
+    } else {
+        ASSERT_LT(rkeys.size() * rkeys.size() / 4, diff);
+    }
+}
+
+UCT_MD_RKEY_INSTANTIATE_TEST_CASE(test_md_rkey_compare);
 
 class test_md_fork : private ucs::clear_dontcopy_regions, public test_md {
 };

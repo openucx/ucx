@@ -153,6 +153,10 @@ typedef struct uct_ib_md {
      * be initiated.  */
     uint32_t                 flush_rkey;
     uint16_t                 vhca_id;
+    struct {
+        uint32_t base;
+        size_t   size; /* Feature is activated when size is non-zero */
+    } mkey_by_name_reserve;
 } uct_ib_md_t;
 
 

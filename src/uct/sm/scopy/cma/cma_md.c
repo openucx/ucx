@@ -218,7 +218,9 @@ ucs_status_t uct_cma_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_cma_md_t *md = ucs_derived_of(uct_md, uct_cma_md_t);
 
     md_attr->rkey_packed_size       = 0;
-    md_attr->flags                  = UCT_MD_FLAG_REG | md->extra_caps;
+    md_attr->flags                  = UCT_MD_FLAG_REG            |
+                                      UCT_MD_FLAG_SYMMETRIC_RKEY |
+                                      md->extra_caps;
     md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
@@ -241,6 +243,7 @@ uct_component_t uct_cma_component = {
     .rkey_unpack        = uct_md_stub_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
+    .rkey_compare       = uct_base_rkey_compare_as_same,
     .name               = "cma",
     .md_config          = {
         .name           = "CMA memory domain",

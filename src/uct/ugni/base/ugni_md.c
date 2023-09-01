@@ -155,7 +155,7 @@ static ucs_status_t uct_ugni_rkey_unpack(uct_component_t *component,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    mem_hndl = ucs_malloc(sizeof(gni_mem_handle_t), "gni_mem_handle_t");
+    mem_hndl = ucs_calloc(1, sizeof(gni_mem_handle_t), "gni_mem_handle_t");
     if (NULL == mem_hndl) {
         ucs_error("Failed to allocate memory for gni_mem_handle_t");
         return UCS_ERR_NO_MEMORY;
@@ -165,6 +165,15 @@ static ucs_status_t uct_ugni_rkey_unpack(uct_component_t *component,
     mem_hndl->qword2 = ptr[2];
     *rkey_p = (uintptr_t)mem_hndl;
     *handle_p = NULL;
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_ugni_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                      uct_rkey_t rkey2, const uct_rkey_compare_params_t *params,
+                      int *result)
+{
+    *result = memcmp((void*)rkey1, (void*)rkey2, sizeof(gni_mem_handle_t));
     return UCS_OK;
 }
 
@@ -233,6 +242,7 @@ uct_component_t uct_ugni_component = {
     .rkey_unpack        = uct_ugni_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_ugni_rkey_release,
+    .rkey_compare       = uct_ugni_rkey_compare,
     .name               = UCT_UGNI_MD_NAME,
     .md_config          = {
         .name           = "UGNI memory domain",

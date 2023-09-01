@@ -27,8 +27,9 @@ static ucs_config_field_t uct_tcp_md_config_table[] = {
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    attr->flags                  = UCT_MD_FLAG_REG |
-                                   UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
+    attr->flags                  = UCT_MD_FLAG_REG       |
+                                   UCT_MD_FLAG_NEED_RKEY | /* TODO ignore rkey in rma/amo ops */
+                                   UCT_MD_FLAG_SYMMETRIC_RKEY;
     attr->max_alloc              = 0;
     attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
@@ -121,6 +122,7 @@ uct_component_t uct_tcp_component = {
     .rkey_unpack        = uct_tcp_md_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
+    .rkey_compare       = uct_base_rkey_compare_as_same,
     .name               = UCT_TCP_NAME,
     .md_config          = {
         .name           = "TCP memory domain",

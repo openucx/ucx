@@ -718,6 +718,23 @@ static ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
     return UCS_OK;
 }
 
+static ucs_status_t uct_ib_rkey_compare(uct_component_t *component,
+                                        uct_rkey_t rkey1, uct_rkey_t rkey2,
+                                        const uct_rkey_compare_params_t *params,
+                                        int *result)
+{
+    uint32_t a = uct_ib_md_direct_rkey(rkey1);
+    uint32_t b = uct_ib_md_direct_rkey(rkey2);
+
+    if (a == b) {
+        a = uct_ib_md_atomic_rkey(rkey1);
+        b = uct_ib_md_atomic_rkey(rkey2);
+    }
+
+    *result = (int)(a - b);
+    return UCS_OK;
+}
+
 static const char *uct_ib_device_transport_type_name(struct ibv_device *device)
 {
     switch (device->transport_type) {
@@ -1429,6 +1446,7 @@ uct_component_t uct_ib_component = {
     .rkey_unpack        = uct_ib_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
+    .rkey_compare       = uct_ib_rkey_compare,
     .name               = "ib",
     .md_config          = {
         .name           = "IB memory domain",

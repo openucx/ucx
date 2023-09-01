@@ -139,3 +139,12 @@ void uct_mm_md_close(uct_md_h md)
     ucs_free(mm_md->config);
     ucs_free(mm_md);
 }
+
+ucs_status_t uct_mm_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                                 uct_rkey_t rkey2,
+                                 const uct_rkey_compare_params_t *params,
+                                 int *result)
+{
+    *result = rkey1 > rkey2 ? 1 : rkey1 < rkey2 ? -1 : 0;
+    return UCS_OK;
+}

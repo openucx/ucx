@@ -1186,5 +1186,52 @@ ucs_status_t
 ucp_rkey_compare(ucp_context_h context, ucp_rkey_h rkey1, ucp_rkey_h rkey2,
                  const ucp_rkey_compare_params_t *params, int *result)
 {
-    return UCS_ERR_UNSUPPORTED;
+    uct_rkey_compare_params_t uct_params = {};
+    ucs_status_t status;
+    uct_component_h cmpt;
+    ucp_md_index_t remote_md_index;
+    unsigned i;
+    uct_rkey_t uct_rkey1, uct_rkey2;
+    ucp_worker_cfg_index_t cfg_index1, cfg_index2;
+
+    if (params->field_mask != 0) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* Matching config indices means that the possibly unrelated remote MDs all
+     * resolve to the same local components.
+     */
+    if (context->config.ext.proto_enable) {
+        cfg_index1 = rkey1->cfg_index;
+        cfg_index2 = rkey2->cfg_index;
+    } else {
+        cfg_index1 = rkey1->cache.ep_cfg_index;
+        cfg_index2 = rkey2->cache.ep_cfg_index;
+    }
+
+    if (cfg_index1 != cfg_index2) {
+        *result = cfg_index1 > cfg_index2 ? 1 : -1;
+        return UCS_OK;
+    }
+
+    ucs_assert(rkey1->md_map == rkey2->md_map);
+
+    *result = 0;
+    i       = 0;
+    ucs_for_each_bit(remote_md_index, rkey1->md_map) {
+        cmpt      = rkey1->tl_rkey[i].cmpt;
+        uct_rkey1 = rkey1->tl_rkey[i].rkey.rkey;
+        uct_rkey2 = rkey2->tl_rkey[i].rkey.rkey;
+
+        ucs_assert(cmpt == rkey2->tl_rkey[i].cmpt);
+        i++;
+
+        status = uct_rkey_compare(cmpt, uct_rkey1, uct_rkey2, &uct_params,
+                                  result);
+        if ((status != UCS_OK) || (*result != 0)) {
+            break;
+        }
+    }
+
+    return status;
 }

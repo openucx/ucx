@@ -171,6 +171,7 @@ typedef struct uct_mm_component {
             .rkey_unpack        = _rkey_unpack, \
             .rkey_ptr           = uct_sm_rkey_ptr, \
             .rkey_release       = _rkey_release, \
+            .rkey_compare       = uct_mm_rkey_compare, \
             .name               = #_name, \
             .md_config          = { \
                 .name           = #_name " memory domain", \
@@ -212,5 +213,10 @@ uct_mm_md_make_rkey(void *local_address, uintptr_t remote_address,
 {
     *rkey_p = (uintptr_t)local_address - remote_address;
 }
+
+ucs_status_t uct_mm_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                                 uct_rkey_t rkey2,
+                                 const uct_rkey_compare_params_t *params,
+                                 int *result);
 
 #endif
