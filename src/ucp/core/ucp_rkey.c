@@ -1187,7 +1187,7 @@ ucp_rkey_compare(ucp_context_h context, ucp_rkey_h rkey1, ucp_rkey_h rkey2,
                  const ucp_rkey_compare_params_t *params, int *result)
 {
     uct_rkey_compare_params_t uct_params = {};
-    ucs_status_t status;
+    ucs_status_t status                  = UCS_OK;
     uct_component_h cmpt;
     ucp_md_index_t remote_md_index;
     unsigned i;
