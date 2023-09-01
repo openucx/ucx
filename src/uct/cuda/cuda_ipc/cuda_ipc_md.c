@@ -28,15 +28,51 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {NULL}
 };
 
+static int uct_cuda_ipc_md_check_mem_reg()
+{
+    CUdevice dev;
+    CUdevice_attribute attribute;
+    int value;
+    int ret;
+
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&dev)) != UCS_OK) {
+        return 0;
+    }
+
+#if CUDA_VERSION >= 12000
+    attribute = CU_DEVICE_ATTRIBUTE_IPC_EVENT_SUPPORTED;
+#else
+    attribute = CU_DEVICE_ATTRIBUTE_INTEGRATED;
+#endif
+
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(
+                cuDeviceGetAttribute(&value, attribute, dev)) != UCS_OK) {
+        return 0;
+    }
+
+#if CUDA_VERSION >= 12000
+    ret = value;
+#else
+    ret = !value;
+#endif
+
+    ucs_debug("memory registration is%s supported on cuda device %d",
+              ret ? "" : " not", dev);
+    return ret;
+}
+
 static ucs_status_t
 uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->flags                  = UCT_MD_FLAG_REG |
-                                      UCT_MD_FLAG_NEED_RKEY |
+    md_attr->flags                  = UCT_MD_FLAG_NEED_RKEY |
                                       UCT_MD_FLAG_INVALIDATE |
                                       UCT_MD_FLAG_INVALIDATE_RMA |
                                       UCT_MD_FLAG_INVALIDATE_AMO;
-    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->reg_mem_types          = 0;
+    if (uct_cuda_ipc_md_check_mem_reg()) {
+        md_attr->flags         |= UCT_MD_FLAG_REG;
+        md_attr->reg_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    }
     md_attr->reg_nonblock_mem_types = 0;
     md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->alloc_mem_types        = 0;
