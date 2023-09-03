@@ -1086,7 +1086,7 @@ void test_md_rkey_compare::mem_chunk::destroy()
 
 uct_rkey_t test_md_rkey_compare::mem_chunk::unpack()
 {
-    uct_rkey_bundle_t bundle;
+    uct_rkey_bundle_t bundle = {};
     ucs_status_t status;
 
     status = uct_rkey_unpack(component, rkey_buffer, &bundle);

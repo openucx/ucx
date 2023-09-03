@@ -1036,10 +1036,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_rkey_compare, rkey_compare_different_config,
     ASSERT_UCS_OK(status);
     ASSERT_EQ(0, result);
 
-    if (disable_proto()) {
-        cfg_index = &rkey1->cache.ep_cfg_index;
-    } else {
+    if (m_ucp_config->ctx.proto_enable) {
         cfg_index = &rkey1->cfg_index;
+    } else {
+        cfg_index = &rkey1->cache.ep_cfg_index;
     }
 
     (*cfg_index)++;
