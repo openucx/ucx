@@ -125,11 +125,4 @@ ucs_status_t ucp_dt_iov_memtype_check(ucp_context_h context,
                                       const ucp_dt_iov_t *iov, size_t iovcnt,
                                       const ucp_memory_info_t *mem_info);
 
-
-ucs_status_t ucp_dt_iov_memtype_detect(ucp_context_h context,
-                                       const ucp_dt_iov_t *iov, size_t iovcnt,
-                                       const ucp_request_param_t *param,
-                                       uint8_t *sg_count,
-                                       ucp_memory_info_t *mem_info);
-
 #endif

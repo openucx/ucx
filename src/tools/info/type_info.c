@@ -280,6 +280,7 @@ void print_type_info(const char * tl_name)
     PRINT_FIELD_SIZE(ucp_request_t, send.flush);
     PRINT_FIELD_SIZE(ucp_request_t, send.amo);
     PRINT_FIELD_SIZE(ucp_request_t, recv);
+    PRINT_FIELD_SIZE(ucp_request_t, recv.dt_iter);
     PRINT_FIELD_SIZE(ucp_request_t, recv.uct_ctx);
     PRINT_FIELD_SIZE(ucp_request_t, recv.tag);
     PRINT_FIELD_SIZE(ucp_request_t, recv.stream);

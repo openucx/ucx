@@ -99,6 +99,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_am_bcopy_complete(ucp_request_t *req)
 {
     ucp_rndv_am_destroy_rkey(req);
+    ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
     return ucp_proto_request_bcopy_complete_success(req);
 }
 

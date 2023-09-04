@@ -197,7 +197,7 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
         break;
     case UCP_PROTO_RNDV_GET_STAGE_ATS:
         rreq = ucp_request_get_super(request);
-        ucs_assert(rreq->recv.length == rreq->recv.tag.info.length);
+        ucs_assert(rreq->recv.dt_iter.length == rreq->recv.tag.info.length);
         /* Locally the data is received, can complete with OK, but memory
          * invalidation is not implemented in DC, so need to fail request to
          * avoid data corruption.

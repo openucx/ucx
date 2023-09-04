@@ -171,6 +171,8 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
         ucp_proto_rndv_rkey_destroy(req);
     }
 
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
+
     if ((req->send.rndv.ppln.ack_data_size > 0) && !abort) {
         ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_PPLN_STAGE_ACK);
         ucp_request_send(req);
@@ -265,7 +267,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
 
         ucp_trace_req(req, "send freq %p offset %zu size %zu", freq,
                       freq->send.rndv.offset, freq->send.state.dt_iter.length);
-        ucp_request_send(freq);
+        UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
 
         ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
                                         UCS_BIT(UCP_DATATYPE_CONTIG));

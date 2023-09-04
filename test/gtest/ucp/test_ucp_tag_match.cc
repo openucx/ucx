@@ -785,7 +785,8 @@ UCS_TEST_P(test_ucp_tag_match_rndv, post_larger_recv)
         wait(my_recv_req);
 
         EXPECT_EQ(sendbuf.size(), my_recv_req->info.length);
-        EXPECT_EQ(recvbuf.size(), ((ucp_request_t*)my_recv_req - 1)->recv.length);
+        EXPECT_EQ(recvbuf.size(),
+                  ((ucp_request_t*)my_recv_req - 1)->recv.dt_iter.length);
         EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
         EXPECT_TRUE(my_recv_req->completed);
         EXPECT_NE(sendbuf, recvbuf);

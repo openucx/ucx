@@ -203,42 +203,36 @@ ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
     ucp_memory_info_set_host(&dt_iter->mem_info);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_datatype_iter_init_from_dt_state(ucp_context_h context, void *buffer,
-                                     size_t length, ucp_datatype_t datatype,
-                                     const ucp_dt_state_t *dt_state,
-                                     ucp_datatype_iter_t *dt_iter,
-                                     uint8_t *sg_count)
+/* Move the datatype iterator state from 'src' to 'dst', reset 'src', and
+   return sg_count for protocol selection */
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_move(ucp_datatype_iter_t *dst_iter,
+                       ucp_datatype_iter_t *src_iter, size_t length,
+                       uint8_t *sg_count)
 {
-    static const ucp_request_param_t dummy_param = {0};
-    ucs_status_t status;
+    size_t iov_count;
 
-    dt_iter->offset   = 0;
-    dt_iter->dt_class = ucp_datatype_class(datatype);
+    ucs_assertv(src_iter->offset == 0, "offset=%zu", src_iter->offset);
 
-    if (ucs_likely(dt_iter->dt_class == UCP_DATATYPE_CONTIG)) {
-        ucp_datatype_contig_iter_init(context, buffer, length, dt_iter,
-                                      &dummy_param);
+    dst_iter->dt_class = src_iter->dt_class;
+    dst_iter->mem_info = src_iter->mem_info;
+    dst_iter->length   = length;
+    dst_iter->offset   = 0;
+    dst_iter->type     = src_iter->type;
+
+    if (src_iter->dt_class == UCP_DATATYPE_CONTIG) {
         *sg_count = 1;
-    } else if (dt_iter->dt_class == UCP_DATATYPE_IOV) {
-        ucp_datatype_iter_iov_set_sg_count(sg_count, dt_state->dt.iov.iovcnt);
-        status = ucp_datatype_iov_iter_init(context, buffer,
-                                            dt_state->dt.iov.iovcnt, length,
-                                            dt_iter, &dummy_param);
-        if (status != UCS_OK) {
-            return status;
-        }
+    } else if (src_iter->dt_class == UCP_DATATYPE_IOV) {
+        iov_count = ucp_datatype_iter_iov_count(src_iter);
+        ucp_datatype_iter_iov_set_sg_count(sg_count, iov_count);
     } else {
-        ucs_assert(dt_iter->dt_class == UCP_DATATYPE_GENERIC);
-        /* Transfer ownership from dt_state to dt_iter */
-        dt_iter->length              = length;
-        dt_iter->type.generic.dt_gen = ucp_dt_to_generic(datatype);
-        dt_iter->type.generic.state  = dt_state->dt.generic.state;
-        ucp_memory_info_set_host(&dt_iter->mem_info);
         *sg_count = 0;
     }
 
-    return UCS_OK;
+    /* Invalidate source iterator */
+#if UCS_ENABLE_ASSERT
+    src_iter->dt_class = UCP_DATATYPE_CLASS_MASK;
+#endif
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -632,6 +626,16 @@ static UCS_F_ALWAYS_INLINE int
 ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
 {
     return ucp_datatype_iter_is_end_position(dt_iter, dt_iter);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_rewind(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
+{
+    dt_iter->offset = 0;
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
+        dt_iter->type.iov.iov_index  = 0;
+        dt_iter->type.iov.iov_offset = 0;
+    }
 }
 
 /*

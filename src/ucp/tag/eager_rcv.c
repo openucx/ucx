@@ -55,7 +55,7 @@ ucp_eager_offload_handler(void *arg, void *data, size_t length,
     if (req != NULL) {
         ucp_eager_common_matched(worker, req, data, length, recv_tag, flags);
         req->recv.tag.info.length = length;
-        status = ucp_request_recv_data_unpack(req, data, length, 0, 1);
+        status = ucp_request_recv_data_unpack(req, data, length, 0, 0, 1);
         ucp_request_complete_tag_recv(req, status);
         status = UCS_OK;
     } else {
@@ -103,7 +103,8 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
 
         if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
             req->recv.tag.info.length = recv_len;
-            status = ucp_request_recv_data_unpack(req, payload, recv_len, 0, 1);
+            status = ucp_request_recv_data_unpack(req, payload, recv_len, 0, 0,
+                                                  1);
             ucp_request_complete_tag_recv(req, status);
         } else {
             /* Multi fragment tag offload flow does not use this handler */
@@ -341,7 +342,8 @@ ucp_tag_offload_eager_first_handler(ucp_worker_h worker, void *data,
 
     req = ucp_tag_exp_search(&worker->tm, stag);
     if (req != NULL) {
-        req->recv.offset = 0ul;
+        ucs_assertv(req->recv.dt_iter.offset == 0, "req=%p offset=%zu", req,
+                    req->recv.dt_iter.offset);
         ucp_tag_frag_hash_init_exp(matchq, req);
         ucp_eager_common_matched(worker, req, data, length, stag, flags);
         ucp_request_recv_offload_data(req, data, length, flags);
