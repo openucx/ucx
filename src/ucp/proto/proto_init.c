@@ -267,8 +267,13 @@ ucp_proto_init_parallel_stages(const ucp_proto_common_init_params_t *params,
     ucs_array_for_each(elem, &concave) {
         range             = &caps->ranges[caps->num_ranges];
         range->max_length = elem->max_length;
-        range->node       = ucp_proto_perf_node_new_data(params->super.proto_name,
+        if (fabs(bias) > UCP_PROTO_PERF_EPSILON) {
+            range->node   = ucp_proto_perf_node_new_data(params->super.proto_name,
+                                                         "bias %f", bias);
+        } else {
+            range->node   = ucp_proto_perf_node_new_data(params->super.proto_name,
                                                          "");
+        }
 
         /* "single" performance estimation is sum of "stages" with the bias */
         range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
