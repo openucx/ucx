@@ -171,6 +171,7 @@ typedef struct uct_mm_component {
             .rkey_unpack        = _rkey_unpack, \
             .rkey_ptr           = uct_sm_rkey_ptr, \
             .rkey_release       = _rkey_release, \
+            .rkey_compare       = ucs_empty_function_return_unsupported, \
             .name               = #_name, \
             .md_config          = { \
                 .name           = #_name " memory domain", \

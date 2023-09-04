@@ -182,6 +182,7 @@ uct_component_t uct_rocm_ipc_component = {
     .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_rocm_ipc_rkey_release,
+    .rkey_compare       = ucs_empty_function_return_unsupported,
     .name               = "rocm_ipc",
     .md_config          = {
         .name           = "ROCm-IPC memory domain",

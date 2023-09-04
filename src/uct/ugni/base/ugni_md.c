@@ -233,6 +233,7 @@ uct_component_t uct_ugni_component = {
     .rkey_unpack        = uct_ugni_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_ugni_rkey_release,
+    .rkey_compare       = ucs_empty_function_return_unsupported,
     .name               = UCT_UGNI_MD_NAME,
     .md_config          = {
         .name           = "UGNI memory domain",
