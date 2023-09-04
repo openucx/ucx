@@ -35,7 +35,10 @@ static int uct_cuda_ipc_md_check_mem_reg()
     int value;
     int ret;
 
-    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&dev)) != UCS_OK) {
+    if ((UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&dev)) != UCS_OK) &&
+        /* Context may be not set yet. Check attribute for 0 device, assuming
+         * support is uniform across all devices. */
+        (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&dev, 0)) != UCS_OK)) {
         return 0;
     }
 
