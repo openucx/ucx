@@ -223,6 +223,15 @@ static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
 }
 
 static ucs_status_t
+uct_cuda_ipc_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                          uct_rkey_t rkey2,
+                          const uct_rkey_compare_params_t *params, int *result)
+{
+    *result = memcmp((void*)rkey1, (void*)rkey2, sizeof(uct_cuda_ipc_key_t));
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
                               unsigned flags, uct_cuda_ipc_key_t *key)
 {
@@ -342,7 +351,7 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
         .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
         .rkey_ptr           = ucs_empty_function_return_unsupported,
         .rkey_release       = uct_cuda_ipc_rkey_release,
-        .rkey_compare       = ucs_empty_function_return_unsupported,
+        .rkey_compare       = uct_cuda_ipc_rkey_compare,
         .name               = "cuda_ipc",
         .md_config          = {
             .name           = "Cuda-IPC memory domain",

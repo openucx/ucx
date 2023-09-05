@@ -84,7 +84,7 @@ static ucs_status_t uct_gdr_copy_rkey_unpack(uct_component_t *component,
     uct_gdr_copy_key_t *packed = (uct_gdr_copy_key_t *)rkey_buffer;
     uct_gdr_copy_key_t *key;
 
-    key = ucs_malloc(sizeof(uct_gdr_copy_key_t), "uct_gdr_copy_key_t");
+    key = ucs_calloc(1, sizeof(uct_gdr_copy_key_t), "uct_gdr_copy_key_t");
     if (NULL == key) {
         ucs_error("failed to allocate memory for uct_gdr_copy_key_t");
         return UCS_ERR_NO_MEMORY;
@@ -105,6 +105,15 @@ static ucs_status_t uct_gdr_copy_rkey_release(uct_component_t *component,
 {
     ucs_assert(NULL == handle);
     ucs_free((void *)rkey);
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_gdr_copy_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                          uct_rkey_t rkey2,
+                          const uct_rkey_compare_params_t *params, int *result)
+{
+    *result = memcmp((void*)rkey1, (void*)rkey2, sizeof(uct_gdr_copy_key_t));
     return UCS_OK;
 }
 
@@ -454,7 +463,7 @@ uct_component_t uct_gdr_copy_component = {
     .rkey_unpack        = uct_gdr_copy_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_gdr_copy_rkey_release,
-    .rkey_compare       = ucs_empty_function_return_unsupported,
+    .rkey_compare       = uct_gdr_copy_rkey_compare,
     .name               = "gdr_copy",
     .md_config          = {
         .name           = "GDR-copy memory domain",

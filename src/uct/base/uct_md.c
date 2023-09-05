@@ -362,6 +362,16 @@ ucs_status_t uct_rkey_release(uct_component_h component,
 }
 
 ucs_status_t
+uct_base_rkey_compare_as_same(uct_component_t *component, uct_rkey_t rkey1,
+                              uct_rkey_t rkey2,
+                              const uct_rkey_compare_params_t *params,
+                              int *result)
+{
+    *result = 0;
+    return UCS_OK;
+}
+
+ucs_status_t
 uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
                  const uct_rkey_compare_params_t *params, int *result)
 {

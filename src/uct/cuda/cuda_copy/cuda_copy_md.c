@@ -101,7 +101,9 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
-    md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    md_attr->flags                  = UCT_MD_FLAG_REG   |
+                                      UCT_MD_FLAG_ALLOC |
+                                      UCT_MD_FLAG_SYMMETRIC_RKEY;
     md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
@@ -614,7 +616,7 @@ uct_component_t uct_cuda_copy_component = {
     .rkey_unpack        = uct_cuda_copy_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_cuda_copy_rkey_release,
-    .rkey_compare       = ucs_empty_function_return_unsupported,
+    .rkey_compare       = uct_base_rkey_compare_as_same,
     .name               = "cuda_cpy",
     .md_config          = {
         .name           = "Cuda-copy memory domain",
