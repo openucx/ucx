@@ -2410,6 +2410,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     ucs_array_init_dynamic(&worker->ep_config);
+    /* There may be a race when UD async thread reallocs ep_config array while
+     * main thread is accessing it.
+     */
+    ucs_array_reserve(ep_config_arr, &worker->ep_config, 64);
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
