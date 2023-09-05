@@ -410,8 +410,9 @@ static uct_iface_ops_t uct_self_iface_ops = {
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    attr->flags                  = UCT_MD_FLAG_REG |
-                                   UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
+    attr->flags                  = UCT_MD_FLAG_REG       |
+                                   UCT_MD_FLAG_NEED_RKEY | /* TODO ignore rkey in rma/amo ops */
+                                   UCT_MD_FLAG_SYMMETRIC_RKEY;
     attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
@@ -472,7 +473,7 @@ static uct_component_t uct_self_component = {
     .rkey_unpack        = uct_self_md_rkey_unpack,
     .rkey_ptr           = uct_sm_rkey_ptr,
     .rkey_release       = ucs_empty_function_return_success,
-    .rkey_compare       = ucs_empty_function_return_unsupported,
+    .rkey_compare       = uct_base_rkey_compare_as_same,
     .name               = UCT_SELF_NAME,
     .md_config          = {
         .name           = "Self memory domain",
