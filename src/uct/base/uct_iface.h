@@ -115,6 +115,30 @@ enum {
         return UCS_ERR_INVALID_PARAM; \
     }
 
+/**
+ * Returns 0 if @a _params field mask does not have the required flags set.
+ */
+#define UCT_PARAMS_CHECK_FIELD_MASK(_params, _required_fields, _err_message, \
+                                    ...) \
+    if (!ucs_test_all_flags((_params)->field_mask, _required_fields)) { \
+        ucs_error(_err_message, ##__VA_ARGS__); \
+        return 0; \
+    }
+
+/**
+ * Returns 0 if @a _params field mask does not have
+ * @ref UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR and @ref UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR
+ * flags set.
+ */
+#define UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(_params) \
+    UCT_PARAMS_CHECK_FIELD_MASK( \
+            _params, \
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR | \
+                    UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR, \
+            "missing params (field_mask: %lu), both device_addr and " \
+            "iface_addr must be provided.", \
+            params->field_mask)
+
 
 /**
  * In release mode - do nothing.

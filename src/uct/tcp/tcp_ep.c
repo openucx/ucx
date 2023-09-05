@@ -2163,3 +2163,29 @@ uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     hdr->length = 0;
     return uct_tcp_ep_am_send(ep, hdr);
 }
+
+int uct_tcp_ep_is_connected(uct_ep_h tl_ep,
+                            const uct_ep_is_connected_params_t *params)
+{
+    uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    ucs_status_t status;
+    struct sockaddr_storage dest_addr;
+    int is_connected;
+
+    UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(params);
+
+    status = uct_tcp_ep_set_dest_addr(params->device_addr, params->iface_addr,
+                                      (struct sockaddr*)&dest_addr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    is_connected = !ucs_sockaddr_cmp((const struct sockaddr*)&ep->peer_addr,
+                                     (const struct sockaddr*)&dest_addr,
+                                     &status);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return is_connected;
+}
