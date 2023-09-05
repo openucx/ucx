@@ -472,6 +472,7 @@ static uct_component_t uct_self_component = {
     .rkey_unpack        = uct_self_md_rkey_unpack,
     .rkey_ptr           = uct_sm_rkey_ptr,
     .rkey_release       = ucs_empty_function_return_success,
+    .rkey_compare       = ucs_empty_function_return_unsupported,
     .name               = UCT_SELF_NAME,
     .md_config          = {
         .name           = "Self memory domain",

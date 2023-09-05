@@ -342,6 +342,7 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
         .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
         .rkey_ptr           = ucs_empty_function_return_unsupported,
         .rkey_release       = uct_cuda_ipc_rkey_release,
+        .rkey_compare       = ucs_empty_function_return_unsupported,
         .name               = "cuda_ipc",
         .md_config          = {
             .name           = "Cuda-IPC memory domain",

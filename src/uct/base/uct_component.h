@@ -9,6 +9,7 @@
 #define UCT_COMPONENT_H_
 
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/list.h>
 
@@ -135,6 +136,24 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
 
 
 /**
+ * Component method to compare two unpacked remote keys
+ *
+ * @param [in]  component               Compare remote keys on this component
+ * @param [in]  rkey1                   First remote key to compare
+ * @param [in]  rkey2                   Second remote key to compare
+ * @param [in]  params                  Parameters for the comparison
+ * @param [out] result                  Comparison result, < 0, 0 or > 0
+ *
+ * @return Error code or UCS_OK if result is valid. If rkey1 is lower, equal or
+ *         greater than rkey2, result is respectively lower, equal or greater
+ *         than 0.
+ */
+typedef ucs_status_t (*uct_component_rkey_compare_func_t)(
+        uct_component_t *component, uct_rkey_t rkey1, uct_rkey_t rkey2,
+        const uct_rkey_compare_params_t *params, int *result);
+
+
+/**
  * Component method to initialize VFS for memory domain.
  *
  * @param [in]  md                      Handle to the opened memory domain.
@@ -156,6 +175,7 @@ struct uct_component {
     uct_component_rkey_unpack_func_t        rkey_unpack;        /**< Remote key unpack method */
     uct_component_rkey_ptr_func_t           rkey_ptr;           /**< Remote key access pointer method */
     uct_component_rkey_release_func_t       rkey_release;       /**< Remote key release method */
+    uct_component_rkey_compare_func_t       rkey_compare;       /**< Remote key comparison method */
     ucs_config_global_list_entry_t          md_config;          /**< MD configuration entry */
     ucs_config_global_list_entry_t          cm_config;          /**< CM configuration entry */
     ucs_list_link_t                         tl_list;            /**< List of transports */

@@ -1429,6 +1429,7 @@ uct_component_t uct_ib_component = {
     .rkey_unpack        = uct_ib_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
+    .rkey_compare       = ucs_empty_function_return_unsupported,
     .name               = "ib",
     .md_config          = {
         .name           = "IB memory domain",
