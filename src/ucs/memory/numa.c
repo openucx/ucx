@@ -147,7 +147,7 @@ ucs_numa_node_t ucs_numa_node_of_device(const char *dev_path)
     long parsed_node;
     ucs_status_t status;
 
-    status = ucs_read_file_number(&parsed_node, 0, "%s/numa_node", dev_path);
+    status = ucs_read_file_number(&parsed_node, 1, "%s/numa_node", dev_path);
 
     if ((status != UCS_OK) || (parsed_node < 0) ||
         (parsed_node >= UCS_NUMA_NODE_MAX)) {
