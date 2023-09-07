@@ -2055,6 +2055,23 @@ ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
     max_eager_short->memtype_on  = proto_short.max_length_host_mem;
 }
 
+static unsigned ucp_worker_ep_config_free_cb(void *arg)
+{
+    ucs_free(arg);
+    return 1;
+}
+
+static int
+ucp_worker_ep_config_filter(const ucs_callbackq_elem_t *elem, void *arg)
+{
+    if (elem->cb == ucp_worker_ep_config_free_cb) {
+        ucp_worker_ep_config_free_cb(elem->arg);
+        return 1;
+    }
+
+    return 0;
+}
+
 /* All the ucp endpoints will share the configurations. No need for every ep to
  * have its own configuration (to save memory footprint). Same config can be used
  * by different eps.
@@ -2072,6 +2089,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     ucp_memtype_thresh_t *tag_max_short;
     ucp_lane_index_t tag_exp_lane;
     unsigned tag_proto_flags;
+    void *old_ep_cfg_buf;
     ucs_status_t status;
 
     ucs_assertv_always(key->num_lanes > 0,
@@ -2086,18 +2104,28 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     }
 
     /* Create new configuration */
-    ucs_array_append(ep_config_arr, &worker->ep_config,
-                     return UCS_ERR_NO_MEMORY);
     if (ucs_array_length(&worker->ep_config) >= UCP_WORKER_MAX_EP_CONFIG) {
-        ucs_array_pop_back(&worker->ep_config);
         ucs_error("too many ep configurations: %d (max: %d)",
                   ucs_array_length(&worker->ep_config),
                   UCP_WORKER_MAX_EP_CONFIG);
         return UCS_ERR_EXCEEDS_LIMIT;
     }
 
-    ep_config = ucs_array_last(&worker->ep_config);
-    status    = ucp_ep_config_init(worker, ep_config, key);
+    old_ep_cfg_buf = NULL;
+    ep_config      = ucs_array_append_safe(ep_config_arr, &worker->ep_config,
+                                           &old_ep_cfg_buf,
+                                           return UCS_ERR_NO_MEMORY);
+    if (old_ep_cfg_buf != NULL) {
+        /* Schedule release of old ep configs array backing buffer on the main
+         * thread (this func can be called by async thread).
+         * So the main thread can still access the old configuration buffer
+         * if it's modified by async thread.
+         */
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
+                                  ucp_worker_ep_config_free_cb, old_ep_cfg_buf);
+    }
+
+    status = ucp_ep_config_init(worker, ep_config, key);
     if (status != UCS_OK) {
         return status;
     }
@@ -2844,6 +2872,9 @@ void ucp_worker_destroy(ucp_worker_h worker)
                                  worker->keepalive.timerfd);
         close(worker->keepalive.timerfd);
     }
+
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, worker,
+                                 ucp_worker_ep_config_filter, NULL);
 
     ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);

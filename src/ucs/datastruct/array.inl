@@ -22,44 +22,59 @@
     \
     _scope UCS_F_MAYBE_UNUSED ucs_status_t \
     UCS_ARRAY_IDENTIFIER(_name, _grow)(ucs_array_t(_name) *array, \
-                                       _index_type min_capacity) \
+                                       _index_type min_capacity, \
+                                       void **old_buffer_p) \
     { \
         ucs_status_t status; \
         size_t capacity; \
+        void *old_buffer; \
         \
         if (ucs_array_is_fixed(array)) { \
             return UCS_ERR_NO_MEMORY; \
         } \
         \
-        capacity = array->capacity; \
-		status   = ucs_array_grow((void**)&array->buffer, &capacity, min_capacity, \
-		                          sizeof(_value_type), UCS_PP_MAKE_STRING(_name), \
-		                          UCS_PP_MAKE_STRING(_value_type)); \
-		if (status != UCS_OK) { \
-		    return status; \
-		} \
+        capacity   = array->capacity; \
+        old_buffer = (void*)array->buffer; \
+        status     = ucs_array_grow((void**)&array->buffer, &capacity, min_capacity, \
+                                    sizeof(_value_type), UCS_PP_MAKE_STRING(_name), \
+                                    UCS_PP_MAKE_STRING(_value_type)); \
+        if (status != UCS_OK) { \
+            return status; \
+        } \
         \
         array->capacity = capacity; \
+        if (old_buffer_p == NULL) { \
+            ucs_free(old_buffer); \
+        } else { \
+            *old_buffer_p = old_buffer; \
+        } \
         return UCS_OK; \
     } \
     \
     _scope UCS_F_MAYBE_UNUSED ucs_status_t \
     UCS_ARRAY_IDENTIFIER(_name, _reserve)(ucs_array_t(_name) *array, \
-                                          _index_type min_capacity) \
+                                          _index_type min_capacity, \
+                                          void **old_buffer_p) \
     { \
         if (ucs_likely(min_capacity <= ucs_array_capacity(array))) { \
-        	return UCS_OK; \
+            if (old_buffer_p != NULL) { \
+                *old_buffer_p = NULL; \
+            }\
+            return UCS_OK; \
         } \
         \
-        return UCS_ARRAY_IDENTIFIER(_name, _grow)(array, min_capacity); \
+        return UCS_ARRAY_IDENTIFIER(_name, _grow)(array, min_capacity, \
+                                                  old_buffer_p); \
     } \
     \
     _scope UCS_F_MAYBE_UNUSED ucs_status_t \
-    UCS_ARRAY_IDENTIFIER(_name, _append)(ucs_array_t(_name) *array) \
+    UCS_ARRAY_IDENTIFIER(_name, _append)(ucs_array_t(_name) *array,\
+                                         void **old_buffer_p) \
     { \
         ucs_status_t status; \
         \
-        status = UCS_ARRAY_IDENTIFIER(_name, _reserve)(array, array->length + 1); \
+        status = UCS_ARRAY_IDENTIFIER(_name, _reserve)(array, array->length + 1, \
+                                                       old_buffer_p); \
         if (ucs_unlikely(status != UCS_OK)) { \
             return status; \
         } \
