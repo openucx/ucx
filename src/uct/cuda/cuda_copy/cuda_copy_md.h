@@ -24,6 +24,7 @@ typedef enum {
  */
 typedef struct uct_cuda_copy_md {
     struct uct_md               super;           /* Domain info */
+    int                         cuda_ctx_retained;
     struct {
         ucs_on_off_auto_value_t alloc_whole_reg; /* force return of allocation
                                                     range even for small bar
