@@ -344,7 +344,7 @@ int ucp_request_pending_add(ucp_request_t *req)
               ucs_status_string(status));
 }
 
-static unsigned ucp_request_dt_invalidate_progress(void *arg)
+static unsigned ucp_request_memh_invalidate_progress(void *arg)
 {
     ucp_request_t *req = arg;
 
@@ -358,7 +358,7 @@ static void ucp_request_mem_invalidate_completion(void *arg)
     ucp_worker_h worker = req->send.invalidate.worker;
 
     ucs_callbackq_add_oneshot(&worker->uct->progress_q, worker,
-                              ucp_request_dt_invalidate_progress, req);
+                              ucp_request_memh_invalidate_progress, req);
 }
 
 static void
@@ -396,33 +396,50 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     return inv_map;
 }
 
-void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
+int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_ep_h ep           = req->send.ep;
-    ucp_worker_h worker   = ep->worker;
-    ucp_context_h context = worker->context;
-    ucp_mem_h memh        = req->send.state.dt.dt.contig.memh;
+    ucp_ep_h ep                      = req->send.ep;
+    ucp_err_handling_mode_t err_mode = ucp_ep_config(ep)->key.err_mode;
+    ucp_worker_h worker              = ep->worker;
+    ucp_context_h context            = worker->context;
+    ucp_mem_h *memh_p;
     ucp_md_map_t invalidate_map;
 
-    ucs_assert(status != UCS_OK);
-    ucs_assert(ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_NONE);
-    ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
+    if ((err_mode != UCP_ERR_HANDLING_MODE_PEER) ||
+        !(req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
+        return 0;
+    }
 
-    req->send.ep                = NULL;
+    /* Get the contig memh from the request basing on the proto version */
+    if (context->config.ext.proto_enable) {
+        ucs_assertv(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG,
+                    "dt_class=%s",
+                    ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
+        memh_p = &req->send.state.dt_iter.type.contig.memh;
+    } else {
+        ucs_assertv(UCP_DT_IS_CONTIG(req->send.datatype), "datatype=0x%" PRIx64,
+                    req->send.datatype);
+        memh_p = &req->send.state.dt.dt.contig.memh;
+    }
+
+    if ((*memh_p == NULL) || ucp_memh_is_user_memh(*memh_p)) {
+        return 0;
+    }
+
+    ucs_assert(status != UCS_OK);
+
     req->send.invalidate.worker = worker;
     req->status                 = status;
 
-    if ((memh == NULL) || ucp_memh_is_user_memh(memh)) {
-        ucp_request_complete_send(req, status);
-        return;
-    }
-
     invalidate_map = ucp_request_get_invalidation_map(ep);
     ucp_trace_req(req, "mem invalidate buffer md_map 0x%" PRIx64 "/0x%" PRIx64,
-                  invalidate_map, memh->md_map);
-    ucp_memh_invalidate(context, memh, ucp_request_mem_invalidate_completion,
+                  invalidate_map, (*memh_p)->md_map);
+    ucp_memh_invalidate(context, *memh_p, ucp_request_mem_invalidate_completion,
                         req, invalidate_map);
-    ucp_memh_put(memh);
+
+    ucp_memh_put(*memh_p);
+    *memh_p = NULL;
+    return 1;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,

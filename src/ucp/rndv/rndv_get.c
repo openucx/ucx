@@ -171,38 +171,17 @@ ucp_proto_rndv_get_zcopy_fetch_progress(uct_pending_req_t *uct_req)
             ucp_proto_rndv_get_zcopy_fetch_completion);
 }
 
-static void
-ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
-{
-    ucp_request_t *req  = ucs_container_of(uct_comp, ucp_request_t,
-                                          send.state.uct_comp);
-
-    ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter,
-                                UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_proto_rndv_rkey_destroy(req);
-    ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
-}
-
 static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
                                            ucs_status_t status)
 {
-    ucp_request_t *rreq;
-
     switch (request->send.proto_stage) {
     case UCP_PROTO_RNDV_GET_STAGE_FETCH:
-        /* The error completion handler is not sending ATS */
-        request->send.state.uct_comp.func =
-                ucp_proto_rndv_get_zcopy_fetch_err_completion;
         ucp_proto_request_zcopy_abort(request, status);
         break;
     case UCP_PROTO_RNDV_GET_STAGE_ATS:
-        rreq = ucp_request_get_super(request);
-        ucs_assert(rreq->recv.dt_iter.length == rreq->recv.tag.info.length);
-        /* Locally the data is received, can complete with OK, but memory
-         * invalidation is not implemented in DC, so need to fail request to
-         * avoid data corruption.
-         * FIXME: del next line when memory invalidation in DC is implemented */
-        rreq->status = status;
+        /* The data was received locally and not invalidated, so we can complete
+         * with UCS_OK
+         */
         ucp_proto_rndv_recv_complete(request);
         break;
     default:

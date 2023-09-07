@@ -237,12 +237,29 @@ static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
     attr->lane_map      = UCS_BIT(rpriv->lane);
 }
 
+static void ucp_proto_rndv_rtr_abort_super(void *request, ucs_status_t status,
+                                           void *user_data)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+    ucp_proto_rndv_recv_complete(req);
+}
+
 static void ucp_proto_rndv_rtr_abort(ucp_request_t *req, ucs_status_t status)
 {
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     ucp_request_t *rreq                    = ucp_request_get_super(req);
 
     rreq->status = status;
+    ucp_request_set_callback(req, send.cb, ucp_proto_rndv_rtr_abort_super);
+
+    if (ucp_request_memh_invalidate(req, status)) {
+        if (req->send.rndv.rkey != NULL) {
+            ucp_proto_rndv_rkey_destroy(req);
+        }
+        ucp_proto_request_zcopy_id_reset(req);
+        return;
+    }
+
     rpriv->data_received(req, 0);
 }
 
