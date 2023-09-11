@@ -1360,8 +1360,14 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    if (IBV_DEVICE_ATOMIC_HCA(dev)) {
+    if (IBV_DEVICE_ATOMIC_HCA(dev) ||
+        IBV_DEVICE_ATOMIC_GLOB(dev)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);
+    }
+
+    if (IBV_DEVICE_ATOMIC_GLOB(dev)) {
+        dev->pci_fadd_arg_sizes = sizeof(uint64_t);
+        dev->pci_cswap_arg_sizes = sizeof(uint64_t);
     }
 
     status  = uct_ib_md_parse_device_config(md, md_config);
