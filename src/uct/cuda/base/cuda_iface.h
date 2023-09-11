@@ -86,7 +86,7 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
             if (CUDA_ERROR_NOT_READY == _result) { \
                 _status = UCS_INPROGRESS; \
             } else if (CUDA_SUCCESS != _result) { \
-                ucs_log((_log_level), "%s() failed: %s", \
+                ucs_log((_log_level), "%s failed: %s", \
                         UCS_PP_MAKE_STRING(_func), \
                         uct_cuda_base_cu_get_error_string(_result)); \
                 _status = UCS_ERR_IO_ERROR; \
