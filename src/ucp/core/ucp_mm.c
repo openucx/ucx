@@ -955,12 +955,12 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
-                                      ucp_md_index_t md_index, uct_mem_h *memh,
-                                      ucp_md_map_t *md_map,
+                                      ucp_md_index_t md_index, ucp_mem_h *memh_p,
                                       uct_rkey_bundle_t *rkey_bundle)
 {
     ucp_context_h context           = worker->context;
     const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
+    ucp_mem_h memh                  = NULL; /* To suppress compiler warning */
     uct_component_h cmpt;
     ucp_tl_md_t *tl_md;
     ucs_status_t status;
@@ -976,15 +976,14 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     tl_md  = &context->tl_mds[md_index];
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
 
-    status = ucp_mem_rereg_mds(context, UCS_BIT(md_index), remote_addr, length,
-                               UCT_MD_MEM_ACCESS_ALL,
-                               NULL, mem_type, NULL, memh, md_map);
+    status = ucp_memh_get(context, remote_addr, length, mem_type,
+                          UCS_BIT(md_index), UCT_MD_MEM_ACCESS_ALL, &memh);
     if (status != UCS_OK) {
         goto out;
     }
 
     rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
-    status      = uct_md_mkey_pack(tl_md->md, memh[0], rkey_buffer);
+    status      = uct_md_mkey_pack(tl_md->md, memh->uct[md_index], rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("failed to pack key from md[%d]: %s",
                   md_index, ucs_status_string(status));
@@ -998,20 +997,17 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
         goto out_dereg_mem;
     }
 
+    *memh_p = memh;
     return UCS_OK;
 
 out_dereg_mem:
-    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, mem_type, NULL,
-                      memh, md_map);
+    ucp_memh_put(memh);
 out:
-    *memh = UCT_MEM_HANDLE_NULL;
     return status;
 }
 
-void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
-                                ucp_md_index_t md_index, uct_mem_h *memh,
-                                ucp_md_map_t *md_map,
-                                uct_rkey_bundle_t *rkey_bundle)
+void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucp_md_index_t md_index,
+                                ucp_mem_h memh, uct_rkey_bundle_t *rkey_bundle)
 {
     ucp_context_h context = worker->context;
     ucp_rsc_index_t cmpt_index;
@@ -1019,10 +1015,8 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
     if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
         cmpt_index = context->tl_mds[md_index].cmpt_index;
         uct_rkey_release(context->tl_cmpts[cmpt_index].cmpt, rkey_bundle);
+        ucp_memh_put(memh);
     }
-
-    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, mem_type, NULL,
-                      memh, md_map);
 }
 
 ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
