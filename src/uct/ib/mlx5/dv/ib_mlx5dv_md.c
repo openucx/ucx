@@ -810,6 +810,11 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         goto no_odp;
     }
 
+    if (!IBV_DEVICE_HAS_ODP(&md->super.dev)) {
+        reason = "device does not support ODP";
+        goto no_odp;
+    }
+
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, pg)) {
         reason = "cap.pg is not supported";
         goto no_odp;
