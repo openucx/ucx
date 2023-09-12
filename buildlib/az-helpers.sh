@@ -185,7 +185,7 @@ check_release_build() {
             [[ "$title" == "${title_mask}"* ]] && launch=True;
         done
     fi
-
+    set +x
     echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
 }
 
