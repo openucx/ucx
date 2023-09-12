@@ -139,6 +139,16 @@ enum {
             "iface_addr must be provided.", \
             params->field_mask)
 
+/**
+ * Returns 0 if @a _params field mask does not have
+ * @ref UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR flag set.
+ */
+#define UCT_EP_IS_CONNECTED_CHECK_DEV_ADDR(_params) \
+    UCT_PARAMS_CHECK_FIELD_MASK( \
+            _params, UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR, \
+            "missing params (field_mask: %lu), device_addr " \
+            "must be provided.", \
+            params->field_mask)
 
 /**
  * In release mode - do nothing.

@@ -1818,6 +1818,26 @@ ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
     return UCS_OK;
 }
 
+int uct_ud_ep_is_connected_to_addr(const uct_ud_ep_t *ep,
+                                   const uct_ep_is_connected_params_t *params,
+                                   uint32_t dqpn)
+{
+    const uct_ud_ep_addr_t *ep_addr;
+    uct_ud_iface_addr_t *iface_addr;
+
+    UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(params);
+
+    if (params->field_mask & UCT_EP_IS_CONNECTED_FIELD_EP_ADDR) {
+        ep_addr = (const uct_ud_ep_addr_t*)params->ep_addr;
+        if (ep->dest_ep_id != uct_ib_unpack_uint24(ep_addr->ep_id)) {
+            return 0;
+        }
+    }
+
+    iface_addr = (uct_ud_iface_addr_t*)params->iface_addr;
+    return dqpn == uct_ib_unpack_uint24(iface_addr->qp_num);
+}
+
 void uct_ud_ep_vfs_populate(uct_ud_ep_t *ep)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,

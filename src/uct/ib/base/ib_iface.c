@@ -666,28 +666,29 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     return ret;
 }
 
-static int uct_ib_iface_is_same_device(uct_ib_iface_t *iface,
-                                       const uct_ib_address_t *ib_addr)
+int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
+                                const union ibv_gid *dgid)
 {
-    const union ibv_gid *gid = &iface->gid_info.gid;
     uct_ib_address_pack_params_t params;
 
     uct_ib_address_unpack(ib_addr, &params);
 
+    if (!(params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) &&
+        (dlid != params.lid)) {
+        return 0;
+    }
+
+    if (dgid == NULL) {
+        return !(params.flags & (UCT_IB_ADDRESS_PACK_FLAG_ETH |
+                                 UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID));
+    }
+
     if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
-        return !memcmp(gid->raw, params.gid.raw, sizeof(params.gid.raw));
+        return !memcmp(dgid->raw, params.gid.raw, sizeof(params.gid.raw));
     }
 
-    if (uct_ib_iface_port_attr(iface)->lid != params.lid) {
-        return 0;
-    }
-
-    if ((params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) &&
-        (params.gid.global.interface_id != gid->global.interface_id)) {
-        return 0;
-    }
-
-    return 1;
+    return !(params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) ||
+           (params.gid.global.interface_id == dgid->global.interface_id);
 }
 
 static int uct_ib_iface_dev_addr_is_reachable(uct_ib_iface_t *iface,
@@ -747,7 +748,9 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
     scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
                             UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
     return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
-           uct_ib_iface_is_same_device(iface, device_addr);
+           uct_ib_iface_is_same_device(device_addr,
+                                       uct_ib_iface_port_attr(iface)->lid,
+                                       &iface->gid_info.gid);
 }
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
