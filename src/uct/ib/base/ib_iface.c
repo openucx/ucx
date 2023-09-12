@@ -789,8 +789,10 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
         ah_attr->src_path_bits = path_bits;
     }
 
-    if (iface->config.force_global_addr ||
-        (iface->gid_info.gid.global.subnet_prefix != gid->global.subnet_prefix)) {
+    if ((gid != NULL) &&
+        (iface->config.force_global_addr ||
+         (iface->gid_info.gid.global.subnet_prefix !=
+          gid->global.subnet_prefix))) {
         ucs_assert_always(gid->global.interface_id != 0);
         ah_attr->is_global      = 1;
         ah_attr->grh.dgid       = *gid;
@@ -810,6 +812,7 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          struct ibv_ah_attr *ah_attr,
                                          enum ibv_mtu *path_mtu)
 {
+    union ibv_gid *gid = NULL;
     uct_ib_address_pack_params_t params;
 
     ucs_assert(!uct_ib_iface_is_roce(iface) ==
@@ -830,7 +833,14 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
         params.gid_index = iface->gid_info.gid_index;
     }
 
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, params.lid, &params.gid,
+    if (ucs_test_all_flags(params.flags,
+                           UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
+                           UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX) ||
+        params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
+        gid = &params.gid;
+    }
+
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, params.lid, gid,
                                            params.gid_index, path_index,
                                            ah_attr);
 }
