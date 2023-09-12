@@ -150,28 +150,6 @@ uct_cma_query_md_resources(uct_component_t *component,
     }
 }
 
-static ucs_status_t uct_cma_mem_reg(uct_md_h md, void *address, size_t length,
-                                    const uct_md_mem_reg_params_t *params,
-                                    uct_mem_h *memh_p)
-{
-    /* For testing we have to make sure that
-     * memh_h != UCT_MEM_HANDLE_NULL
-     * otherwise gtest is not happy */
-    UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_MEM_HANDLE_NULL);
-    *memh_p = (void *) 0xdeadbeef;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_cma_mem_dereg(uct_md_h uct_md,
-                                      const uct_md_mem_dereg_params_t *params)
-{
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
-
-    ucs_assert(params->memh == (void*)0xdeadbeef);
-
-    return UCS_OK;
-}
-
 static void uct_cma_md_close(uct_md_h md)
 {
     ucs_free(md);
@@ -189,8 +167,8 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
         .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_success,
         .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_success,
         .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
-        .mem_reg            = uct_cma_mem_reg,
-        .mem_dereg          = uct_cma_mem_dereg,
+        .mem_reg            = uct_md_dummy_mem_reg,
+        .mem_dereg          = uct_md_dummy_mem_dereg,
         .mem_attach         = ucs_empty_function_return_unsupported,
         .detect_memory_type = ucs_empty_function_return_unsupported,
     };
