@@ -335,8 +335,9 @@ int test_time_multiplier()
 
 ucs_time_t get_deadline(double timeout_in_sec)
 {
-    return ucs_get_time() + ucs_time_from_sec(timeout_in_sec *
-                                              test_time_multiplier());
+    return ucs_get_time() +
+           ucs_time_from_sec(ucs_min(watchdog_get_timeout() * 0.75,
+                                     timeout_in_sec * test_time_multiplier()));
 }
 
 int max_tcp_connections()
@@ -434,6 +435,10 @@ void safe_usleep(double usec) {
 }
 
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
+    if (ifa_addr == NULL) {
+        return false;
+    }
+
     if (ifa_addr->sa_family == AF_INET6) {
         /* Skip IPv6 link-local and loopback address, that could not be used for
            connection establishment */
@@ -460,10 +465,32 @@ bool is_interface_usable(struct ifaddrs *ifa)
     return ucs_netif_flags_is_active(ifa->ifa_flags) &&
            ucs::is_inet_addr(ifa->ifa_addr) &&
            !netif_has_sysfs_file(ifa->ifa_name, "bridge") &&
-           !netif_has_sysfs_file(ifa->ifa_name, "brport");
+           !netif_has_sysfs_file(ifa->ifa_name, "brport") &&
+           !netif_has_sysfs_file(ifa->ifa_name, "wireless");
 }
 
-static std::vector<std::string> read_dir(const std::string& path)
+
+ssize_t get_proc_self_status_field(const std::string &parameter)
+{
+    const std::string path("/proc/self/status");
+    std::ifstream proc_stats(path);
+    std::string line, name;
+    ssize_t value;
+
+    while (std::getline(proc_stats, line)) {
+        if (!(std::istringstream(line) >> name >> value)) {
+            continue;
+        }
+        if (name == (parameter + ":")) {
+            return value;
+        }
+    }
+
+    UCS_TEST_MESSAGE << path << " does not contain " << parameter << " value";
+    return -1;
+}
+
+std::vector<std::string> read_dir(const std::string &path)
 {
     std::vector<std::string> result;
     struct dirent *entry;
@@ -601,8 +628,17 @@ uint16_t get_port() {
     return port;
 }
 
-void *mmap_fixed_address() {
-    return (void*)0xff0000000;
+void *mmap_fixed_address(size_t length) {
+    void *ptr = mmap(NULL, length, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED) {
+        return nullptr;
+    }
+
+    munmap(ptr, length);
+
+    /* coverity[use_after_free] */
+    return ptr;
 }
 
 std::string compact_string(const std::string &str, size_t length)

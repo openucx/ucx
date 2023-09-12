@@ -10,6 +10,7 @@
 
 #include "rdmacm_cm_ep.h"
 #include <uct/ib/base/ib_iface.h>
+#include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/async/async.h>
 
@@ -81,6 +82,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
     uct_rdmacm_cm_reserved_qpn_blk_t *blk;
     uint64_t general_obj_types_caps;
+    uint8_t log_max_num_reserved_qpn;
     ucs_status_t status;
     void *cap;
 #endif
@@ -150,6 +152,8 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 
     ctx->log_reserved_qpn_granularity =
             UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap, log_reserved_qpn_granularity);
+    log_max_num_reserved_qpn          =
+            UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap, log_max_num_reserved_qpn);
 
     /* Try-allocate a reserved QPN block. If fails, fallback to dummy QP. */
     status = uct_rdmacm_cm_reserved_qpn_blk_alloc(ctx, verbs,
@@ -160,8 +164,9 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 
     uct_rdmacm_cm_reserved_qpn_blk_release(blk);
 
-    ucs_debug("%s reserved qpn cap: log_reserved_qpn_granularity is 0x%x",
-              dev_name, ctx->log_reserved_qpn_granularity);
+    ucs_debug("%s with reserved qpn cap log_max_num_reserved_qpn=%d "
+              "log_reserved_qpn_granularity=%d", dev_name,
+              log_max_num_reserved_qpn, ctx->log_reserved_qpn_granularity);
 
     ctx->use_reserved_qpn = 1;
 
@@ -182,7 +187,8 @@ dummy_qp_ctx_init:
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
     if (ctx->cq == NULL) {
-        ucs_error("ibv_create_cq(%s) failed: %m", dev_name);
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+                                       "%s: ibv_create_cq()", dev_name);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -240,13 +246,13 @@ ucs_status_t uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_t *cm,
 
     iter = kh_put(uct_rdmacm_cm_device_contexts, &cm->ctxs,
                   ibv_get_device_guid(verbs->device), &ret);
-    if (ret == -1) {
+    if (ret == UCS_KH_PUT_FAILED) {
         ucs_error("cm %p: cannot allocate hash entry for device context", cm);
         status = UCS_ERR_NO_MEMORY;
         goto out;
     }
 
-    if (ret == 0) {
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
         /* already exists so use it */
         ctx = kh_value(&cm->ctxs, iter);
     } else {
@@ -869,15 +875,17 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .iface_query              = (uct_iface_query_func_t)ucs_empty_function_return_unsupported,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_unsupported,
     .iface_get_address        = (uct_iface_get_address_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable       = (uct_iface_is_reachable_func_t)ucs_empty_function_return_zero
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static uct_iface_internal_ops_t uct_rdmacm_cm_iface_internal_ops = {
-    .iface_estimate_perf = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = uct_rdmacm_ep_query,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = ucs_empty_function_return_unsupported
+    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = uct_rdmacm_ep_query,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
 };
 
 static ucs_status_t
@@ -932,11 +940,10 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     self->ev_ch = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
+        status  = UCS_ERR_IO_ERROR;
         if ((errno == ENODEV) || (errno == ENOENT)) {
-            status  = UCS_ERR_IO_ERROR;
             log_lvl = UCS_LOG_LEVEL_DIAG;
         } else {
-            status  = UCS_ERR_IO_ERROR;
             log_lvl = UCS_LOG_LEVEL_ERROR;
         }
 

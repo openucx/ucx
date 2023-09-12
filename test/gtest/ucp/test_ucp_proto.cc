@@ -46,24 +46,15 @@ protected:
     ucp_worker_h worker() {
         return sender().worker();
     }
+
+    static ucp_rkey_config_key_t create_rkey_config_key(ucp_md_map_t md_map);
 };
 
 ucp_md_map_t test_ucp_proto::get_md_map(ucs_memory_type_t mem_type)
 {
-    ucp_md_map_t md_map = 0;
-
-    for (ucp_md_index_t md_index = 0; md_index < context()->num_mds;
-         ++md_index) {
-        const uct_md_attr_v2_t *md_attr = &context()->tl_mds[md_index].attr;
-        if ((md_attr->flags & UCT_MD_FLAG_REG) &&
-            (md_attr->reg_mem_types & UCS_BIT(mem_type)) &&
-            /* ucp_datatype_iter_mem_reg() always goes directly to registration cache */
-            (md_attr->cache_mem_types & UCS_BIT(mem_type)) &&
-            (ucs_popcount(md_map) < UCP_MAX_OP_MDS)) {
-            md_map |= UCS_BIT(md_index);
-        }
-    }
-    return md_map;
+    return context()->reg_md_map[mem_type] &
+    /* ucp_datatype_iter_mem_reg() always goes directly to registration cache */
+           context()->cache_md_map[mem_type];
 }
 
 void test_ucp_proto::do_mem_reg(ucp_datatype_iter_t *dt_iter,
@@ -71,7 +62,7 @@ void test_ucp_proto::do_mem_reg(ucp_datatype_iter_t *dt_iter,
 {
     ucp_datatype_iter_mem_reg(context(), dt_iter, md_map, UCT_MD_MEM_ACCESS_ALL,
                               UCP_DT_MASK_ALL);
-    ucp_datatype_iter_mem_dereg(context(), dt_iter, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_mem_dereg(dt_iter, UCP_DT_MASK_ALL);
 }
 
 void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,
@@ -82,8 +73,12 @@ void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,
 
     ucp_datatype_iter_t dt_iter;
     uint8_t sg_count;
+    /* Pass empty param argument to disable memh initialization */
+    ucp_request_param_t param;
+    param.op_attr_mask = 0;
+
     ucp_datatype_iter_init(context(), buffer.ptr(), size, UCP_DATATYPE_CONTIG,
-                           size, 1, &dt_iter, &sg_count);
+                           size, 1, &dt_iter, &sg_count, &param);
 
     ucs_time_t start_time = ucs_get_time();
     ucs_time_t deadline   = start_time + ucs_time_from_sec(test_time_sec);
@@ -107,17 +102,32 @@ void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,
                      << " nsec";
 }
 
+ucp_rkey_config_key_t
+test_ucp_proto::create_rkey_config_key(ucp_md_map_t md_map)
+{
+    ucp_rkey_config_key_t rkey_config_key;
+
+    rkey_config_key.ep_cfg_index       = 0;
+    rkey_config_key.md_map             = md_map;
+    rkey_config_key.mem_type           = UCS_MEMORY_TYPE_HOST;
+    rkey_config_key.sys_dev            = UCS_SYS_DEVICE_ID_UNKNOWN;
+    rkey_config_key.unreachable_md_map = 0;
+
+    return rkey_config_key;
+}
+
 UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_proto_select_param_t select_param;
     ucs_string_buffer_t strb;
 
-    select_param.op_id      = UCP_OP_ID_TAG_SEND;
-    select_param.op_flags   = 0;
-    select_param.dt_class   = UCP_DATATYPE_CONTIG;
-    select_param.mem_type   = UCS_MEMORY_TYPE_HOST;
-    select_param.sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
-    select_param.sg_count   = 1;
-    select_param.padding    = 0;
+    select_param.op_id_flags   = UCP_OP_ID_TAG_SEND;
+    select_param.op_attr       = 0;
+    select_param.dt_class      = UCP_DATATYPE_CONTIG;
+    select_param.mem_type      = UCS_MEMORY_TYPE_HOST;
+    select_param.sys_dev       = UCS_SYS_DEVICE_ID_UNKNOWN;
+    select_param.sg_count      = 1;
+    select_param.op.padding[0] = 0;
+    select_param.op.padding[1] = 0;
 
     ucs_string_buffer_init(&strb);
     ucp_proto_select_param_str(&select_param, ucp_operation_names, &strb);
@@ -128,22 +138,18 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_worker_cfg_index_t ep_cfg_index   = sender().ep()->cfg_index;
     ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
 
-    auto select_elem = ucp_proto_select_lookup(
-            worker, &worker->ep_config[ep_cfg_index].proto_select, ep_cfg_index,
-            rkey_cfg_index, &select_param, 0);
+    auto proto_select = &ucs_array_elem(&worker->ep_config,
+                                        ep_cfg_index).proto_select;
+    auto select_elem  = ucp_proto_select_lookup(worker, proto_select,
+                                                ep_cfg_index, rkey_cfg_index,
+                                                &select_param, 0);
     EXPECT_NE(nullptr, select_elem);
 
     ucp_ep_print_info(sender().ep(), stdout);
 }
 
 UCS_TEST_P(test_ucp_proto, rkey_config) {
-    ucp_rkey_config_key_t rkey_config_key;
-
-    rkey_config_key.ep_cfg_index = 0;
-    rkey_config_key.md_map       = 0;
-    rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-
+    ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);
     ucs_status_t status;
 
     /* similar configurations should return same index */
@@ -159,10 +165,7 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
 
     EXPECT_EQ(static_cast<int>(cfg_index1), static_cast<int>(cfg_index2));
 
-    rkey_config_key.ep_cfg_index = 0;
-    rkey_config_key.md_map       = 1;
-    rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+    rkey_config_key = create_rkey_config_key(1);
 
     /* different configuration should return different index */
     ucp_worker_cfg_index_t cfg_index3;
@@ -175,14 +178,8 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
 
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
 {
-    ucp_rkey_config_key_t rkey_config_key;
+    ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);
 
-    rkey_config_key.ep_cfg_index = 0;
-    rkey_config_key.md_map       = 0;
-    rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-
-    /* similar configurations should return same index */
     ucp_worker_cfg_index_t cfg_index;
     ucs_status_t status = ucp_worker_rkey_config_get(worker(), &rkey_config_key,
                                                      NULL, &cfg_index);

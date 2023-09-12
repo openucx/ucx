@@ -173,8 +173,21 @@ enum {
  * Endpoint configuration key flags
  */
 enum {
-    UCP_EP_CONFIG_KEY_FLAG_SELF       = UCS_BIT(0), /** Endpoint is connected to own worker */
-    UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE = UCS_BIT(1)  /** Endpoint is within same node */
+    /**
+     * Endpoint is connected to own worker.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_SELF         = UCS_BIT(0),
+
+    /**
+     * Endpoint is within same node.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE   = UCS_BIT(1),
+
+    /**
+     * Endpoint is in an intermediate connection establishment phase,
+     * some capabilities may be limited or disabled.
+     */
+    UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE = UCS_BIT(2)
 };
 
 
@@ -248,6 +261,9 @@ struct ucp_ep_config_key {
 
     /* Additional flags */
     unsigned                 flags;
+
+    /* Indicates peer release version */
+    unsigned                 dst_version;
 };
 
 
@@ -687,6 +703,9 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
+void ucp_ep_config_key_init_flags(ucp_ep_config_key_t *key,
+                                  unsigned ep_init_flags);
+
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 
 void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg);
@@ -745,7 +764,8 @@ void ucp_worker_mem_type_eps_print_info(ucp_worker_h worker,
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
-void ucp_ep_get_tl_bitmap(ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap);
+void ucp_ep_get_tl_bitmap(const ucp_ep_config_key_t *key,
+                          ucp_tl_bitmap_t *tl_bitmap);
 
 uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);
 
@@ -755,7 +775,8 @@ int ucp_ep_is_local_connected(ucp_ep_h ep);
 
 unsigned ucp_ep_local_disconnect_progress(void *arg);
 
-size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
+size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_context_h context,
+                                          const ucp_ep_config_key_t *key);
 
 void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
                                      ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
@@ -787,7 +808,7 @@ void ucp_ep_peer_mem_destroy(ucp_context_h context,
 
 ucp_ep_peer_mem_data_t*
 ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
-                    size_t size, void *rkey_buf,
+                    size_t size, const void *rkey_buf,
                     ucs_memory_type_t local_mem_type,
                     ucp_md_index_t rkey_ptr_md_index);
 

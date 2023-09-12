@@ -9,6 +9,7 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/sys/preprocessor.h>
+#include <ucs/type/status.h>
 
 BEGIN_C_DECLS
 

@@ -19,6 +19,28 @@
 #include <inttypes.h>
 
 
+#define UCP_RCACHE_LOOKUP_FUNC ucs_linear_func_make(50.0e-9, 0)
+
+
+/**
+ * Memory handle flags.
+ */
+enum {
+    /*
+     * Memory handle was imported and points to some peer's memory buffer.
+     */
+    UCP_MEMH_FLAG_IMPORTED  = UCS_BIT(0)
+};
+
+
+/**
+ * Memory handle buffer packed flags.
+ */
+enum {
+    UCP_MEMH_BUFFER_FLAG_EXPORTED = UCS_BIT(0)
+};
+
+
 /**
  * Memory handle.
  * Contains general information, and a list of UCT handles.
@@ -27,14 +49,21 @@
  */
 typedef struct ucp_mem {
     ucs_rcache_region_t super;
+    uint8_t             flags;          /* Memory handle flags */
     ucp_context_h       context;        /* UCP context that owns a memory handle */
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
+    ucs_sys_device_t    sys_dev;        /* System device index */
     ucs_memory_type_t   mem_type;       /* Type of allocated or registered memory */
     ucp_md_index_t      alloc_md_index; /* Index of MD used to allocate the memory */
+    uint64_t            remote_uuid;    /* Remote UUID */
     ucp_md_map_t        md_map;         /* Which MDs have valid memory handles */
-    ucp_mem_h           parent;         /* - NULL if entry should be returned to rcache
-                                           - pointer to self if rcache disabled
-                                           - pointer to rcache memh if entry is a user memh */
+    ucp_md_map_t        inv_md_map;     /* Which memory handles should be invalidated
+                                           when this handle is released */
+    ucp_mem_h           parent;         /* - NULL if entry was obtained via ucp_memh_get()
+                                           - pointer to rcache memh if entry is a user memh
+                                           - pointer to self if entry is a user memh
+                                             and rcache is disabled */
+    uint64_t            reg_id;         /* Registration ID */
     uct_mem_h           uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
 
@@ -69,7 +98,7 @@ typedef struct ucp_rndv_mpool_priv {
 
 typedef struct {
     ucp_mem_t memh;
-    uct_mem_h uct[UCP_MD_INDEX_BITS];
+    uct_mem_h uct[UCP_MAX_MDS];
 } ucp_mem_dummy_handle_t;
 
 
@@ -133,15 +162,35 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                size_t length, ucs_memory_type_t mem_type,
                                ucp_md_map_t reg_md_map, unsigned uct_flags,
-                               ucp_mem_h *memh_p);
+                               const char *alloc_name, ucp_mem_h *memh_p);
 
-void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh);
+ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
+                               ucp_md_map_t md_map, unsigned uct_flags,
+                               const char *alloc_name);
 
-ucs_status_t ucp_mem_rcache_init(ucp_context_h context);
+void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
+                         ucs_rcache_invalidate_comp_func_t cb, void *arg,
+                         ucp_md_map_t inv_md_map);
+
+void ucp_memh_put_slow(ucp_context_h context, ucp_mem_h memh);
+
+ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
+                                 const ucs_rcache_config_t *rcache_config);
 
 void ucp_mem_rcache_cleanup(ucp_context_h context);
 
-ucs_status_t ucp_mem_reg_md_map_update(ucp_context_h context);
+/**
+ * Get memory domain index that is used to allocate host memory type.
+ *
+ * @param [in]  context UCP context containing memory domain indexes to use for
+ *                      the memory allocation.
+ * @param [out] md_idx  Index of the memory domain that is used to allocate host
+ *                      memory.
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t
+ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)

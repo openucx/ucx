@@ -55,12 +55,9 @@ int ucp_listener_accept_cb_remove_filter(const ucs_callbackq_elem_t *elem,
 
 void ucp_listener_schedule_accept_cb(ucp_conn_request_h conn_request)
 {
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
-
-    uct_worker_progress_register_safe(conn_request->ep->worker->uct,
-                                      ucp_listener_accept_cb_progress,
-                                      conn_request,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+    ucs_callbackq_add_oneshot(&conn_request->ep->worker->uct->progress_q,
+                              conn_request, ucp_listener_accept_cb_progress,
+                              conn_request);
 }
 
 ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
@@ -359,14 +356,16 @@ out:
 
 void ucp_listener_destroy(ucp_listener_h listener)
 {
+    ucp_worker_h worker = listener->worker;
+
     ucs_debug("listener %p: destroying", listener);
 
-    UCS_ASYNC_BLOCK(&listener->worker->async);
+    UCS_ASYNC_BLOCK(&worker->async);
     ucs_vfs_obj_remove(listener);
-    ucs_callbackq_remove_if(&listener->worker->uct->progress_q,
-                            ucp_cm_server_conn_request_progress_cb_pred,
-                            listener);
-    UCS_ASYNC_UNBLOCK(&listener->worker->async);
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, listener,
+                                 ucp_cm_server_conn_request_progress_cb_pred,
+                                 listener);
+    UCS_ASYNC_UNBLOCK(&worker->async);
 
     if (listener->conn_reqs != 0) {
         ucs_warn("destroying listener %p with "

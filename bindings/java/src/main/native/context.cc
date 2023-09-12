@@ -103,6 +103,9 @@ Java_org_openucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls
         jucx_map_apply_config(env, config, &config_map);
     }
 
+    ucp_params.field_mask |= UCP_PARAM_FIELD_NAME;
+    ucp_params.name = "jucx";
+
     status = ucp_init(&ucp_params, config, &ucp_context);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
@@ -163,7 +166,12 @@ Java_org_openucx_jucx_ucp_UcpContext_memoryMapNative(JNIEnv *env, jobject ctx,
             static_cast<ucs_memory_type_t>(env->GetIntField(jucx_mmap_params, field));
     }
 
-    ucs_status_t status =  ucp_mem_map((ucp_context_h)ucp_context_ptr, &params, &memh);
+    if (params.field_mask & UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER) {
+        field = env->GetFieldID(jucx_mmap_class, "exportedMemh", "J");
+        params.exported_memh_buffer = (void *)env->GetLongField(jucx_mmap_params, field);
+    }
+
+    ucs_status_t status = ucp_mem_map((ucp_context_h)ucp_context_ptr, &params, &memh);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
     }

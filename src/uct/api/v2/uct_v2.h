@@ -254,7 +254,8 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR        = UCS_BIT(0), /**< device_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR         = UCS_BIT(1), /**< iface_addr field */
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING        = UCS_BIT(2), /**< info_string field */
-    UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3)  /**< info_string_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4) /**<  scope field */
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -274,23 +275,42 @@ typedef enum {
     /**
      * The flag is used indicate that remote access to a memory region
      * associated with the remote key must fail once the memory region is
-     * deregister using @ref uct_md_mem_dereg_v2 with
+     * deregistered using @ref uct_md_mem_dereg_v2 with
      * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set. Using
      * @ref uct_md_mem_dereg_v2 deregistration routine with
      * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set on an rkey that was
-     * generated without @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag will
-     * not function correctly, and may result in data corruption. In other words
-     * in order for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
-     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag must be set.
+     * generated without
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA and/or
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flags will not function
+     * correctly, and may result in data corruption. In other words, in order
+     * for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA and/or
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag must be set.
      */
-    UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0),
+    UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA = UCS_BIT(0),
+
+    /**
+     * The flag is used to indicate that the atomic operations must fail once
+     * the memory region is deregistered using @ref uct_md_mem_dereg_v2 with
+     * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set.
+     * Using @ref uct_md_mem_dereg_v2 deregistration routine with
+     * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set on an rkey that was
+     * generated without
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA and/or
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flags will not function
+     * correctly, and may result in data corruption. In other words, in order
+     * for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA and/or
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag must be set.
+     */
+    UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO = UCS_BIT(1),
 
     /**
      * The flag is used to indicate that the memory region should be packed in
      * order to be accessed by another process using the same device to perform
      * UCT operations.
      */
-    UCT_MD_MKEY_PACK_FLAG_EXPORT     = UCS_BIT(1)
+    UCT_MD_MKEY_PACK_FLAG_EXPORT         = UCS_BIT(2)
 } uct_md_mkey_pack_flags_t;
 
 
@@ -319,6 +339,25 @@ typedef enum {
     /** Endpoint address length */
     UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH     = UCS_BIT(1)
 } uct_ep_connect_to_ep_param_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief field mask of @ref uct_ep_is_connected_params_t
+ *
+ * The enumeration allows specifying which fields in @ref
+ * uct_ep_is_connected_params_t are present.
+ */
+typedef enum {
+    /** Device address */
+    UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR = UCS_BIT(0),
+
+    /** Interface address */
+    UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR  = UCS_BIT(1),
+
+    /** Endpoint address */
+    UCT_EP_IS_CONNECTED_FIELD_EP_ADDR     = UCS_BIT(2)
+} uct_ep_is_connected_field_mask_t;
 
 
 /**
@@ -377,7 +416,7 @@ typedef struct uct_md_mem_reg_params {
     uint64_t                     field_mask;
 
     /**
-     * Operation specific flags, using bits from @ref uct_md_mem_flags_t.
+     * Operation specific flags, using bits from @ref uct_md_mem_flags.
      */
     uint64_t                     flags;
 
@@ -498,6 +537,20 @@ extern const char *uct_ep_operation_names[];
 
 
 /**
+ * @ingroup UCS_RESOURCE
+ * @brief Reachability scope
+ *
+ * Reachability scope. Can be one of the following values:
+ * Device scope: Checks if addresses describe the same device.
+ * Network scope: Checks reachability between different devices.
+ */
+typedef enum {
+    UCT_IFACE_REACHABILITY_SCOPE_DEVICE, /**< Local device scope */
+    UCT_IFACE_REACHABILITY_SCOPE_NETWORK /**< Network scope */
+} uct_iface_reachability_scope_t;
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Operation parameters passed to @ref uct_iface_is_reachable_v2.
  */
@@ -508,19 +561,19 @@ typedef struct uct_iface_is_reachable_params {
      * mask will be ignored. Provides ABI compatibility with respect to adding
      * new fields.
      */
-    uint64_t                     field_mask;
+    uint64_t                       field_mask;
 
     /**
      * Device address to check for reachability.
      * This field must not be passed if iface_attr.dev_addr_len == 0.
      */
-    const uct_device_addr_t      *device_addr;
+    const uct_device_addr_t       *device_addr;
 
     /**
      * Interface address to check for reachability.
      * This field must not be passed if iface_attr.iface_addr_len == 0.
      */
-    const uct_iface_addr_t       *iface_addr;
+    const uct_iface_addr_t        *iface_addr;
 
     /**
      * User-provided pointer to a string buffer.
@@ -528,14 +581,58 @@ typedef struct uct_iface_is_reachable_params {
      * null-terminated information string explaining why the remote address is
      * not reachable if the return value is 0.
      */
-    char                         *info_string;
+    char                          *info_string;
 
     /**
      * The length of the @a info_string is provided in bytes.
      * This value must be specified in conjunction with @a info_string.
      */
-    size_t                        info_string_length;
+    size_t                         info_string_length;
+
+    /**
+     * Reachability scope.
+     */
+    uct_iface_reachability_scope_t scope;
 } uct_iface_is_reachable_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Operation parameters passed to @ref uct_ep_is_connected.
+ *
+ * This struct is used to pass the required arguments to
+ * @ref uct_ep_is_connected.
+ */
+typedef struct uct_ep_is_connected_params {
+    /**
+     * Mask of valid fields in this structure, using
+     * bits from @ref uct_ep_is_connected_field_mask_t. Fields not specified
+     * in this mask will be ignored. Provides ABI compatibility with respect to
+     * adding new fields.
+     */
+    uint64_t                 field_mask;
+
+    /**
+     * Device address to check for connectivity.
+     * This field must be passed if @ref uct_iface_query returned
+     * @ref uct_iface_attr_t::dev_addr_len > 0 on the remote side.
+     */
+    const uct_device_addr_t *device_addr;
+
+    /**
+     * Interface address to check for connectivity.
+     * This field must be passed if this endpoint was created by calling
+     * @ref uct_ep_create with @ref uct_ep_params_t::iface_addr.
+     */
+    const uct_iface_addr_t  *iface_addr;
+
+    /**
+     * Endpoint address to check for connectivity.
+     * This field must be passed if @ref uct_ep_connect_to_ep_v2 was
+     * called on this endpoint.
+     */
+    const uct_ep_addr_t     *ep_addr;
+} uct_ep_is_connected_params_t;
 
 
 /**
@@ -565,6 +662,19 @@ typedef struct uct_ep_connect_to_ep_params {
     size_t                        ep_addr_length;
 } uct_ep_connect_to_ep_params_t;
 
+
+/**
+ * @ingroup UCT_MD
+ * @brief Parameters for comparing remote keys using @ref uct_rkey_compare.
+ */
+typedef struct uct_rkey_compare_params {
+    /**
+     * Mask of valid fields in this structure. Must currently be equal to zero.
+     * Fields not specified in this mask will be ignored. Provides ABI
+     * compatibility with respect to adding new fields.
+     */
+    uint64_t                      field_mask;
+} uct_rkey_compare_params_t;
 
 /**
  * @ingroup UCT_RESOURCE
@@ -640,38 +750,41 @@ typedef enum uct_md_attr_field {
     /** Indicate memory types that the MD can register. */
     UCT_MD_ATTR_FIELD_REG_MEM_TYPES             = UCS_BIT(3),
 
+    /** Indicate memory types that are suitable for non-blocking registration. */
+    UCT_MD_ATTR_FIELD_REG_NONBLOCK_MEM_TYPES    = UCS_BIT(4),
+
     /** Indicate memory types that the MD can cache. */
-    UCT_MD_ATTR_FIELD_CACHE_MEM_TYPES           = UCS_BIT(4),
+    UCT_MD_ATTR_FIELD_CACHE_MEM_TYPES           = UCS_BIT(5),
 
     /** Indicate memory types that the MD can detect. */
-    UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES          = UCS_BIT(5),
+    UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES          = UCS_BIT(6),
 
     /** Indicate memory types that the MD can allocate. */
-    UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES           = UCS_BIT(6),
+    UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES           = UCS_BIT(7),
 
     /** Indicate memory types that the MD can access. */
-    UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES          = UCS_BIT(7),
+    UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES          = UCS_BIT(8),
 
     /** Indicate memory types for which the MD can return a dmabuf_fd. */
-    UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES          = UCS_BIT(8),
+    UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES          = UCS_BIT(9),
 
     /** Indicate registration cost. */
-    UCT_MD_ATTR_FIELD_REG_COST                  = UCS_BIT(9),
+    UCT_MD_ATTR_FIELD_REG_COST                  = UCS_BIT(10),
 
     /** Indicate component name. */
-    UCT_MD_ATTR_FIELD_COMPONENT_NAME            = UCS_BIT(10),
+    UCT_MD_ATTR_FIELD_COMPONENT_NAME            = UCS_BIT(11),
 
     /** Indicate size of buffer needed for packed rkey. */
-    UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE          = UCS_BIT(11),
+    UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE          = UCS_BIT(12),
 
     /** Indicate CPUs closest to the resource. */
-    UCT_MD_ATTR_FIELD_LOCAL_CPUS                = UCS_BIT(12),
+    UCT_MD_ATTR_FIELD_LOCAL_CPUS                = UCS_BIT(13),
 
     /** Indicate size of buffer needed for packed exported memory key. */
-    UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE = UCS_BIT(13),
+    UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE = UCS_BIT(14),
 
     /** Unique global identifier of the memory domain. */
-    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(14)
+    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15)
 } uct_md_attr_field_t;
 
 
@@ -712,6 +825,11 @@ typedef struct {
      * Bitmap of memory types which the Memory Domain can be register.
      */
     uint64_t          reg_mem_types;
+
+    /**
+     * Bitmap of memory types that are suitable for non-blocking registration
+     */
+    uint64_t          reg_nonblock_mem_types;
 
     /**
      * Bitmap of memory types that can be cached for this memory domain.
@@ -773,6 +891,31 @@ typedef struct {
      */
     char              global_id[UCT_MD_GLOBAL_ID_MAX];
 } uct_md_attr_v2_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief  Memory domain capability flags.
+ */
+typedef enum {
+    UCT_MD_FLAG_V2_FIRST       = UCT_MD_FLAG_LAST,
+
+    /**
+     * Memory domain supports invalidation of memory handle registered by
+     * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_RMA flag and packed
+     * key by @ref uct_md_mkey_pack_v2 with
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     */
+    UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
+
+    /**
+     * Memory domain supports invalidation of memory handle registered by
+     * @ref uct_md_mem_reg_v2 with @ref UCT_MD_MEM_ACCESS_REMOTE_ATOMIC flag and
+     * packed key by @ref uct_md_mkey_pack_v2 with
+     * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag.
+     */
+    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12)
+} uct_md_flags_v2_t;
 
 
 /**
@@ -890,6 +1033,43 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
                                      const uct_device_addr_t *device_addr,
                                      const uct_ep_addr_t *ep_addr,
                                      const uct_ep_connect_to_ep_params_t *params);
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Checks if an endpoint is connected to a remote address.
+ *
+ * This function checks if a local endpoint is connected to a remote address.
+ *
+ * @param [in] ep      Endpoint to check.
+ * @param [in] params  Parameters as defined in @ref
+ *                     uct_ep_is_connected_params_t.
+ *
+ * @return Nonzero if connected, 0 otherwise.
+ */
+int uct_ep_is_connected(uct_ep_h ep,
+                        const uct_ep_is_connected_params_t *params);
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief This routine compares two remote keys.
+ *
+ * It sets the @a result argument to < 0 if rkey1 is lower than rkey2, 0 if they
+ * are equal or > 0 if rkey1 is greater than rkey2. The result value can be used
+ * for sorting remote keys.
+ *
+ * @param[in]  component  Component to use for the comparison
+ * @param[in]  rkey1      First rkey to compare
+ * @param[in]  rkey2      Second rkey to compare
+ * @param[in]  params     Additional parameters for comparison
+ * @param[out] result     Result of the comparison
+ *
+ * @return UCS_OK         @a result contains the comparison result
+ *         Other          Error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t
+uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
+                 const uct_rkey_compare_params_t *params, int *result);
 
 END_C_DECLS
 

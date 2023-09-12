@@ -28,7 +28,6 @@ void ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
     if (worker->tm.offload.iface == NULL) {
         ucs_assert(worker->tm.offload.thresh       == SIZE_MAX);
         ucs_assert(worker->tm.offload.zcopy_thresh == SIZE_MAX);
-        ucs_assert(worker->tm.offload.iface        == NULL);
 
         worker->tm.offload.thresh       = ucs_max(context->config.ext.tm_thresh,
                                                   iface->attr.cap.tag.recv.min_recv);
@@ -73,7 +72,7 @@ ucp_tag_offload_release_buf(ucp_request_t *req)
     if (req->recv.tag.rdesc != NULL) {
         ucs_mpool_put_inline(req->recv.tag.rdesc);
     } else {
-        ucp_request_recv_buffer_dereg(req);
+        ucp_datatype_iter_mem_dereg(&req->recv.dt_iter, UCP_DT_MASK_ALL);
     }
 }
 
@@ -119,14 +118,16 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
     }
 
     if (ucs_unlikely(inline_data != NULL)) {
-        status = ucp_request_recv_data_unpack(req, inline_data, length, 0, 1);
+        status = ucp_request_recv_data_unpack(req, inline_data, length, 0, 1,
+                                              1);
         ucp_tag_offload_release_buf(req);
     } else if (req->recv.tag.rdesc != NULL) {
         status = ucp_request_recv_data_unpack(req, req->recv.tag.rdesc + 1,
-                                              length, 0, 1);
+                                              length, 0, 1, 1);
         ucs_mpool_put_inline(req->recv.tag.rdesc);
     } else {
-        ucp_request_recv_buffer_dereg(req);
+        ucp_datatype_iter_mem_dereg(&req->recv.dt_iter,
+                                    UCS_BIT(UCP_DATATYPE_CONTIG));
     }
 
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED);
@@ -155,7 +156,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
 
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
 
-    if (UCP_MEM_IS_HOST(req->recv.mem_type) ||
+    if (UCP_MEM_IS_HOST(req->recv.dt_iter.mem_info.type) ||
         (flags & UCT_TAG_RECV_CB_INLINE_DATA)) {
         ucp_tag_rndv_matched(req->recv.worker, req, header, header_length);
     } else {
@@ -164,7 +165,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
            it to the host memory staging buffer for further processing. */
         header_host_copy = ucs_alloca(header_length);
         ucp_mem_type_pack(req->recv.worker, header_host_copy, header,
-                          header_length, req->recv.mem_type);
+                          header_length, req->recv.dt_iter.mem_info.type);
         ucp_tag_rndv_matched(req->recv.worker, req, header_host_copy,
                              header_length);
     }
@@ -265,7 +266,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
 {
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
-    size_t length          = req->recv.length;
+    size_t length          = req->recv.dt_iter.length;
     ucp_mem_desc_t *rdesc  = NULL;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
@@ -283,7 +284,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
     /* Do not use bounce buffer for receives to GPU memory to avoid
      * cost of h2d transfers (i.e. cuda_copy from staging to dest memory). */
     if ((length >= worker->tm.offload.zcopy_thresh) ||
-        !UCP_MEM_IS_HOST(req->recv.mem_type)) {
+        !UCP_MEM_IS_HOST(req->recv.dt_iter.mem_info.type)) {
         if (length > wiface->attr.cap.tag.recv.max_zcopy) {
             /* Post maximum allowed length. If sender sends smaller message
              * (which is allowed per MPI standard), max recv should fit it.
@@ -294,20 +295,28 @@ ucp_tag_offload_do_post(ucp_request_t *req)
             length = wiface->attr.cap.tag.recv.max_zcopy;
         }
 
+        if (!(context->reg_md_map[req->recv.dt_iter.mem_info.type] &
+              UCS_BIT(mdi))) {
+            UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_MEM_REG);
+            return UCS_ERR_CANCELED;
+        }
+
         /* register the whole buffer to support SW RNDV fallback */
-        status = ucp_request_memory_reg(context, UCS_BIT(mdi), req->recv.buffer,
-                                        req->recv.length, req->recv.datatype,
-                                        &req->recv.state, req->recv.mem_type,
-                                        req, UCT_MD_MEM_FLAG_HIDE_ERRORS);
-        if ((status != UCS_OK) || !req->recv.state.dt.contig.md_map) {
-            /* Can't register this buffer on the offload iface */
+        status = ucp_datatype_iter_mem_reg(context, &req->recv.dt_iter,
+                                           UCS_BIT(mdi),
+                                           UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                           UCS_BIT(UCP_DATATYPE_CONTIG));
+        if (status != UCS_OK) {
             UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_MEM_REG);
             return status;
         }
 
         req->recv.tag.rdesc = NULL;
-        iov.buffer          = (void*)req->recv.buffer;
-        iov.memh            = req->recv.state.dt.contig.memh[0];
+        iov.buffer          = (void*)req->recv.dt_iter.type.contig.buffer;
+        iov.memh            = req->recv.dt_iter.type.contig.memh->uct[mdi];
+
+        ucp_trace_req(req, "tag-offload registered user buffer %p memh %p",
+                      iov.buffer, iov.memh);
     } else {
         rdesc = ucp_worker_mpool_get(&worker->reg_mp);
         if (rdesc == NULL) {
@@ -317,6 +326,9 @@ ucp_tag_offload_do_post(ucp_request_t *req)
         iov.memh            = rdesc->memh->uct[mdi];
         iov.buffer          = rdesc + 1;
         req->recv.tag.rdesc = rdesc;
+
+        ucp_trace_req(req, "tag-offload using bounce buffer rdesc %p buffer %p",
+                      rdesc, iov.buffer);
     }
 
     iov.length = length;
@@ -383,7 +395,8 @@ ucp_tag_offload_post_sw_reqs(ucp_request_t *req, ucp_request_queue_t *req_queue)
      *    (sender rank wildcard or non-contig type)
      * 3. Transport tag list is big enough to fit all unposted requests plus
      *    the one being posted */
-    if ((req->recv.length < worker->context->config.ext.tm_force_thresh) ||
+    if ((req->recv.dt_iter.length <
+         worker->context->config.ext.tm_force_thresh) ||
         req_queue->block_count) {
         return 0;
     }
@@ -422,7 +435,7 @@ UCS_PROFILE_FUNC(int, ucp_tag_offload_post, (req, req_queue),
     ucp_worker_t *worker   = req->recv.worker;
     ucp_context_t *context = worker->context;
 
-    if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
+    if (req->recv.dt_iter.dt_class != UCP_DATATYPE_CONTIG) {
         /* Non-contig buffers not supported yet. */
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_NON_CONTIG);
         return 0;
@@ -633,7 +646,10 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
         ucs_error("Failed to cancel tag rndv op %s", ucs_status_string(status));
     }
 
-    req->flags &= ~UCP_REQUEST_FLAG_OFFLOADED;
+    /* Rndv will be completed by SW, reinitialize the completed size needed for
+     * RTR, rkey_ptr, etc. This field is relevant for proto v2 only. */
+    req->send.state.completed_size = 0;
+    req->flags                    &= ~UCP_REQUEST_FLAG_OFFLOADED;
 }
 
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq,
@@ -657,7 +673,7 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq,
 
         /* Register send buffer with tag lane, because tag offload rndv
          * protocol will perform RDMA_READ on it (if it arrives expectedly) */
-        status = ucp_request_send_buffer_reg_lane(sreq, sreq->send.lane, 0);
+        status = ucp_request_send_reg_lane(sreq, sreq->send.lane);
         if (status != UCS_OK) {
             return status;
         }

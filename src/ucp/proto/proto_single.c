@@ -66,6 +66,10 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
 {
     ucs_status_t status;
 
+    if (!ucp_proto_common_init_check_err_handling(&params->super)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     status = ucp_proto_single_init_priv(params, params->super.super.priv);
     if (status != UCS_OK) {
         return status;
@@ -83,4 +87,5 @@ void ucp_proto_single_query(const ucp_proto_query_params_t *params,
 
     ucp_proto_default_query(params, attr);
     ucp_proto_common_lane_priv_str(params, &spriv->super, 1, 1, &config_strb);
+    attr->lane_map = UCS_BIT(spriv->super.lane);
 }

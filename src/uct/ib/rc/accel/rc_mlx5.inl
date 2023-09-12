@@ -174,7 +174,7 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
                 return &(_iface)->tm.mp.last_frag_ctx; \
             } \
             h_it = kh_put(_h_name, _h_ptr, _key, &ret); \
-            ucs_assert(ret != 0); \
+            ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT); \
             ctx  = &kh_value(_h_ptr, h_it); \
         } else { \
             ctx = &kh_value(_h_ptr, h_it); \
@@ -1072,12 +1072,12 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
     UCT_RC_MLX5_CHECK_TAG(iface);
 
     kh_put(uct_rc_mlx5_tag_addrs, &iface->tm.tag_addrs, iov->buffer, &ret);
-    if (ucs_unlikely(ret == 0)) {
+    if (ucs_unlikely(ret == UCS_KH_PUT_KEY_PRESENT)) {
         /* Do not post the same buffer more than once (even with different tags)
          * to avoid memory corruption. */
         return UCS_ERR_ALREADY_EXISTS;
     }
-    ucs_assert(ret > 0);
+    ucs_assert(ret != UCS_KH_PUT_FAILED);
 
     ctrl_size           = sizeof(struct mlx5_wqe_ctrl_seg) +
                           sizeof(uct_rc_mlx5_wqe_tm_seg_t);
@@ -1218,7 +1218,8 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
     uct_rc_mlx5_iface_tag_del_from_hash(iface, priv->buffer);
 
     if (is_inline) {
-        ucs_assert(byte_len <= priv->length);
+        ucs_assertv(byte_len <= priv->length, "byte_len=%u length=%u",
+                    byte_len, priv->length);
     } else {
         VALGRIND_MAKE_MEM_DEFINED(priv->buffer, byte_len);
     }
@@ -1396,7 +1397,6 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
                                  int poll_flags)
 {
-    uct_ib_mlx5_srq_seg_t UCS_V_UNUSED *seg;
     struct mlx5_cqe64 *cqe;
     unsigned byte_len;
     uint16_t max_batch;
@@ -1404,11 +1404,12 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     void *rc_hdr;
     unsigned flags;
 #if IBV_HW_TM
+    uct_ib_mlx5_srq_seg_t *seg;
     struct ibv_tmh *tmh;
     uct_rc_mlx5_tag_entry_t *tag;
     uct_tag_context_t *ctx;
     uct_rc_mlx5_ctx_priv_t *priv;
-    uct_rc_mlx5_mp_context_t UCS_V_UNUSED *dummy_ctx;
+    uct_rc_mlx5_mp_context_t *dummy_ctx;
 #endif
 
     ucs_assert((poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) ||

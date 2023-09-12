@@ -27,9 +27,6 @@
 #include <ucs/type/serialize.h>
 
 
-/* Instruction type */
-typedef uint32_t ucm_bistro_inst_t;
-
 /* Caller-saved registers are x9-x15 */
 #define UCM_AARCH64_TMP_REGS \
     (UCS_BIT(9) | UCS_BIT(10) | UCS_BIT(11) | UCS_BIT(12) | UCS_BIT(13) | \
@@ -92,6 +89,7 @@ typedef uint32_t ucm_bistro_inst_t;
 #define UCM_AARCH64_BR(_reg) \
     (((ucm_bistro_inst_t)0xd61f << 16) + ((_reg) << 5))
 
+#define UCM_AARCH64_B(_off) (((ucm_bistro_inst_t)0x14 << 24) | (_off))
 
 /* Indirect jump code sequence */
 typedef struct {
@@ -243,7 +241,7 @@ ucm_bistro_relocate_func(const void *func_ptr, size_t patch_len,
     max_code_len = (patch_len *
                     (sizeof(ucm_bistro_load64_t) / sizeof(ucm_bistro_inst_t))) +
                    sizeof(ucm_bistro_jmp_indirect_t);
-    orig_func    = ucm_bistro_allocate_code(sizeof(*orig_func) + max_code_len +
+    orig_func    = ucm_bistro_allocate_code(max_code_len +
                                             sizeof(ucm_bistro_jmp_indirect_t));
     if (orig_func == NULL) {
         return UCS_ERR_NO_MEMORY;
@@ -280,6 +278,15 @@ ucm_bistro_relocate_func(const void *func_ptr, size_t patch_len,
     return UCS_OK;
 }
 
+void ucm_bistro_patch_lock(void *dst)
+{
+    static const ucm_bistro_lock_t self_jmp = {
+        .b = UCM_AARCH64_B(0),
+    };
+
+    ucm_bistro_modify_code(dst, &self_jmp);
+}
+
 ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
                               void **orig_func_p,
                               ucm_bistro_restore_point_t **rp)
@@ -302,7 +309,7 @@ ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
         return status;
     }
 
-    return ucm_bistro_apply_patch(func_ptr, &patch, sizeof(patch));
+    return ucm_bistro_apply_patch_atomic(func_ptr, &patch, sizeof(patch));
 }
 
 #endif

@@ -37,6 +37,12 @@ data_type_desc_t::make(ucp_datatype_t datatype, const void *buf, size_t length,
         break;
     case UCP_DATATYPE_IOV:
     {
+        m_buf   = m_iov;
+        m_count = iov_cnt;
+        if (iov_cnt == 0) {
+            break;
+        }
+
         const size_t iov_length = (length > iov_cnt) ?
             ucs::rand() % (length / iov_cnt) : 0;
         size_t iov_length_it = 0;
@@ -50,8 +56,6 @@ data_type_desc_t::make(ucp_datatype_t datatype, const void *buf, size_t length,
         m_iov[iov_cnt - 1].buffer = (char *)(buf) + iov_length_it;
         m_iov[iov_cnt - 1].length = length - iov_length_it;
 
-        m_buf   = m_iov;
-        m_count = iov_cnt;
         break;
     }
     case UCP_DATATYPE_GENERIC:

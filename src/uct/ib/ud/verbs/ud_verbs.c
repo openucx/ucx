@@ -484,7 +484,7 @@ uct_ud_verbs_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     }
 
     ucs_for_each_bit(dir, dirs) {
-        ucs_assert(dir < UCT_IB_DIR_NUM);
+        ucs_assert(dir < UCT_IB_DIR_LAST);
         status = uct_ib_iface_arm_cq(&iface->super, dir, 0);
         if (status != UCS_OK) {
             goto out;
@@ -602,11 +602,13 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf = uct_ib_iface_estimate_perf,
-            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
-            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate       = uct_ud_ep_invalidate,
-            .ep_connect_to_ep_v2 = uct_ud_ep_connect_to_ep_v2
+            .iface_estimate_perf   = uct_ib_iface_estimate_perf,
+            .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
+            .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate         = uct_ud_ep_invalidate,
+            .ep_connect_to_ep_v2   = uct_ud_ep_connect_to_ep_v2,
+            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
+            .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,
@@ -652,7 +654,7 @@ static uct_iface_ops_t uct_ud_verbs_iface_tl_ops = {
     .iface_query              = uct_ud_verbs_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_get_address        = uct_ud_iface_get_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static UCS_F_NOINLINE void

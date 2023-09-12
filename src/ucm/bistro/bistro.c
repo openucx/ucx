@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -11,11 +12,14 @@
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include <ucm/bistro/bistro.h>
 #include <ucm/bistro/bistro_int.h>
 #include <ucs/type/serialize.h>
 #include <ucs/sys/math.h>
+#include <ucs/time/time.h>
+#include <ucs/arch/atomic.h>
 
 
 ucs_status_t ucm_bistro_remove_restore_point(ucm_bistro_restore_point_t *rp)
@@ -45,6 +49,59 @@ static ucs_status_t ucm_bistro_protect(void *addr, size_t len, int prot)
     return UCS_OK;
 }
 
+void ucm_bistro_modify_code(void *dst, const ucm_bistro_lock_t *bytes)
+{
+    uint16_t value16;
+    uint32_t value32;
+
+    UCS_STATIC_ASSERT((sizeof(*bytes) == sizeof(value16)) ||
+                      (sizeof(*bytes) == sizeof(value32)));
+
+    if (sizeof(*bytes) == sizeof(value16)) {
+        memcpy(&value16, bytes, sizeof(value16));
+        (void)ucs_atomic_swap16(dst, value16);
+    } else {
+        memcpy(&value32, bytes, sizeof(value32));
+        (void)ucs_atomic_swap32(dst, value32);
+    }
+}
+
+ucs_status_t
+ucm_bistro_apply_patch_atomic(void *dst, const void *patch, size_t len)
+{
+    size_t skip           = sizeof(ucm_bistro_lock_t);
+    double grace_duration = 5e-3;
+    double deadline;
+    ucs_status_t status;
+
+    status = ucm_bistro_protect(dst, len, UCM_PROT_READ_WRITE_EXEC);
+    if (UCS_STATUS_IS_ERR(status)) {
+        return status;
+    }
+
+    /* Lock the codepatch and wait for existing flows to complete */
+    ucm_bistro_patch_lock(dst);
+    ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
+
+    deadline = ucm_get_time() + grace_duration;
+    while (ucm_get_time() < deadline) {
+        sched_yield();
+    }
+
+    /* Copy the payload behind the lock */
+    memcpy(UCS_PTR_BYTE_OFFSET(dst, skip), UCS_PTR_BYTE_OFFSET(patch, skip),
+           len - skip);
+    ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
+
+    /* Unlock the codepath */
+    ucm_bistro_modify_code(dst, patch);
+
+    status = ucm_bistro_protect(dst, len, UCM_PROT_READ_EXEC);
+    ucs_clear_cache(dst, UCS_PTR_BYTE_OFFSET(dst, len));
+
+    return status;
+}
+
 ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len)
 {
     ucs_status_t status;
@@ -63,7 +120,7 @@ ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len)
     return status;
 }
 
-#if defined(__x86_64__) || defined (__aarch64__)
+#if defined(__x86_64__) || defined (__aarch64__) || defined (__riscv)
 struct ucm_bistro_restore_point {
     void               *addr;     /* address of function to restore */
     size_t             patch_len; /* patch length */

@@ -31,18 +31,22 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
 static ucs_status_t
 uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY |
-                                UCT_MD_FLAG_INVALIDATE;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->alloc_mem_types  = 0;
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->detect_mem_types = 0;
-    md_attr->dmabuf_mem_types = 0;
-    md_attr->max_alloc        = 0;
-    md_attr->max_reg          = ULONG_MAX;
-    md_attr->rkey_packed_size = sizeof(uct_cuda_ipc_key_t);
-    md_attr->reg_cost         = UCS_LINEAR_FUNC_ZERO;
+    md_attr->flags                  = UCT_MD_FLAG_REG |
+                                      UCT_MD_FLAG_NEED_RKEY |
+                                      UCT_MD_FLAG_INVALIDATE |
+                                      UCT_MD_FLAG_INVALIDATE_RMA |
+                                      UCT_MD_FLAG_INVALIDATE_AMO;
+    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->reg_nonblock_mem_types = 0;
+    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->alloc_mem_types        = 0;
+    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->detect_mem_types       = 0;
+    md_attr->dmabuf_mem_types       = 0;
+    md_attr->max_alloc              = 0;
+    md_attr->max_reg                = ULONG_MAX;
+    md_attr->rkey_packed_size       = sizeof(uct_cuda_ipc_key_t);
+    md_attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -148,10 +152,8 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
      * stream sequentialization */
     rkey->dev_num = peer_idx;
 
-    if ((CUDA_SUCCESS != cuCtxGetDevice(&this_device)) ||
-        (CUDA_SUCCESS != cuDeviceGetCount(&num_devices))) {
-        goto err;
-    }
+    UCT_CUDA_IPC_GET_DEVICE(this_device);
+    UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
 
     accessible = &mdc->md->peer_accessible_cache[peer_idx * num_devices + this_device];
     if (*accessible == UCS_TRY) { /* unchecked, add to cache */
@@ -300,21 +302,17 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                      const uct_md_config_t *config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close                  = uct_cuda_ipc_md_close,
-        .query                  = uct_cuda_ipc_md_query,
-        .mkey_pack              = uct_cuda_ipc_mkey_pack,
-        .mem_reg                = uct_cuda_ipc_mem_reg,
-        .mem_dereg              = uct_cuda_ipc_mem_dereg,
-        .mem_attach             = ucs_empty_function_return_unsupported,
-        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-        .detect_memory_type     = ucs_empty_function_return_unsupported
+        .close              = uct_cuda_ipc_md_close,
+        .query              = uct_cuda_ipc_md_query,
+        .mkey_pack          = uct_cuda_ipc_mkey_pack,
+        .mem_reg            = uct_cuda_ipc_mem_reg,
+        .mem_dereg          = uct_cuda_ipc_mem_dereg,
+        .mem_attach         = ucs_empty_function_return_unsupported,
+        .detect_memory_type = ucs_empty_function_return_unsupported
     };
 
-    int num_devices;
     uct_cuda_ipc_md_t* md;
     uct_cuda_ipc_component_t* com;
-
-    UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
 
     md = ucs_calloc(1, sizeof(uct_cuda_ipc_md_t), "uct_cuda_ipc_md");
     if (md == NULL) {
@@ -344,6 +342,7 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
         .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
         .rkey_ptr           = ucs_empty_function_return_unsupported,
         .rkey_release       = uct_cuda_ipc_rkey_release,
+        .rkey_compare       = ucs_empty_function_return_unsupported,
         .name               = "cuda_ipc",
         .md_config          = {
             .name           = "Cuda-IPC memory domain",

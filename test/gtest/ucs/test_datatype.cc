@@ -21,6 +21,7 @@ extern "C" {
 }
 
 #include <vector>
+#include <queue>
 #include <map>
 
 class test_datatype : public ucs::test {
@@ -107,10 +108,12 @@ UCS_TEST_F(test_datatype, hlist_basic) {
     /* initialize list, should be empty */
     ucs_hlist_head_init(&head);
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
+    EXPECT_EQ(0l, ucs_hlist_length(&head));
 
     /* add one element to head */
     ucs_hlist_add_head(&head, &elem1.hlist);
     EXPECT_FALSE(ucs_hlist_is_empty(&head));
+    EXPECT_EQ(1l, ucs_hlist_length(&head));
 
     EXPECT_EQ(&elem1, ucs_hlist_head_elem(&head, elem_t, hlist));
 
@@ -145,6 +148,7 @@ UCS_TEST_F(test_datatype, hlist_basic) {
     ucs_hlist_add_tail(&head, &elem2.hlist);
     ucs_hlist_add_head(&head, &elem1.hlist);
     ucs_hlist_add_tail(&head, &elem3.hlist);
+    EXPECT_EQ(3l, ucs_hlist_length(&head));
 
     /* iterate without extract */
     v.clear();
@@ -184,6 +188,11 @@ UCS_TEST_F(test_datatype, hlist_for_each_extract_if) {
     /* initialize list, should be empty */
     ucs_hlist_head_init(&head);
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
+
+    /* test empty list iteration */
+    ucs_hlist_for_each(elem, &head, hlist) {
+        FAIL() << "Iterating over an empty list";
+    }
 
     /* add one element to head */
     ucs_hlist_add_head(&head, &v_elems[0]->hlist);
@@ -259,6 +268,52 @@ UCS_TEST_F(test_datatype, hlist_for_each_extract_if) {
 
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
     EXPECT_TRUE(v_elems.empty());
+}
+
+UCS_TEST_F(test_datatype, hlist_foreach_safe) {
+    for (int length : {0, 1, 1, 2, 3, 4, 5, 10, 100, 1000}) {
+        /* Initialize list elements with random numbers */
+        std::vector<elem_t> v_elems;
+        for (int i = 0; i < length; ++i) {
+            v_elems.push_back({.i = ucs::rand()});
+        }
+
+        /* Add elements to the list */
+        ucs_hlist_head_t head;
+        ucs_hlist_head_init(&head);
+        for (elem_t &e : v_elems) {
+            ucs_hlist_add_tail(&head, &e.hlist);
+        }
+        EXPECT_EQ(length, ucs_hlist_length(&head));
+
+        /* Randomly remove elements from the list */
+        elem_t *elem, *tmp;
+        ucs_hlist_head_t thead;
+        size_t i = 0;
+        ucs_hlist_for_each_safe(elem, tmp, &head, &thead, hlist) {
+            EXPECT_EQ(&v_elems[i], elem);
+            ++i;
+        }
+
+        std::queue<int> remaining;
+        ucs_hlist_for_each_safe(elem, tmp, &head, &thead, hlist) {
+            if (ucs::rand_range(2) == 0) {
+                ucs_hlist_del(&head, &elem->hlist);
+                /* Invalidate memory */
+                memset(elem, 0xff, sizeof(*elem));
+            } else {
+                remaining.push(elem->i);
+            }
+        }
+
+        /* Check remaining elements */
+        ucs_hlist_for_each(elem, &head, hlist) {
+            ASSERT_FALSE(remaining.empty());
+            EXPECT_EQ(elem->i, remaining.front());
+            remaining.pop();
+        }
+        EXPECT_TRUE(remaining.empty());
+    }
 }
 
 UCS_TEST_F(test_datatype, queue) {

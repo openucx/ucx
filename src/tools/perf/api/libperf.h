@@ -88,7 +88,8 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_WAKEUP           = UCS_BIT(10), /* Create context with wakeup feature enabled */
     UCX_PERF_TEST_FLAG_ERR_HANDLING     = UCS_BIT(11), /* Create UCP eps with error handling support */
     UCX_PERF_TEST_FLAG_LOOPBACK         = UCS_BIT(12), /* Use loopback connection */
-    UCX_PERF_TEST_FLAG_PREREG           = UCS_BIT(13) /* Pass pre-registered memory handle */
+    UCX_PERF_TEST_FLAG_PREREG           = UCS_BIT(13), /* Pass pre-registered memory handle */
+    UCX_PERF_TEST_FLAG_AM_RECV_COPY     = UCS_BIT(14)  /* Do additional memcopy during AM receive */
 };
 
 
@@ -210,7 +211,7 @@ typedef struct ucx_perf_params {
         char                   tl_name[UCT_TL_NAME_MAX];      /* Transport to use */
         char                   md_name[UCT_MD_NAME_MAX];      /* Memory domain name to use */
         uct_perf_data_layout_t data_layout; /* Data layout to use */
-        unsigned               fc_window;   /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
+        unsigned               fc_window;   /* Window size for flow control <= UCT_PERF_TEST_MAX_FC_WINDOW */
         size_t                 am_hdr_size; /* UCT Active Message header size
                                                (included in message size) */
     } uct;

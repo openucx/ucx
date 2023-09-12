@@ -15,7 +15,9 @@
 static UCS_F_ALWAYS_INLINE khint_t
 ucp_rkey_config_hash_func(ucp_rkey_config_key_t rkey_config_key)
 {
-    return (khint_t)rkey_config_key.md_map ^
+    return kh_int64_hash_func(
+            rkey_config_key.md_map ^
+            (rkey_config_key.unreachable_md_map << 32)) ^
            (rkey_config_key.ep_cfg_index << 8) ^
            (rkey_config_key.sys_dev << 16) ^
            (rkey_config_key.mem_type << 24);
@@ -28,7 +30,9 @@ ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
     return (rkey_config_key1.md_map == rkey_config_key2.md_map) &&
            (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
            (rkey_config_key1.sys_dev == rkey_config_key2.sys_dev) &&
-           (rkey_config_key1.mem_type == rkey_config_key2.mem_type);
+           (rkey_config_key1.mem_type == rkey_config_key2.mem_type) &&
+           (rkey_config_key1.unreachable_md_map ==
+            rkey_config_key2.unreachable_md_map);
 }
 
 static UCS_F_ALWAYS_INLINE ucp_rkey_config_t *
@@ -53,7 +57,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
                              ucp_rkey_h *rkey_p)
 {
-    ucp_ep_config_t *config = &ep->worker->ep_config[ep->cfg_index];
+    ucp_ep_config_t *config = &ucs_array_elem(&ep->worker->ep_config,
+                                              ep->cfg_index);
     return ucp_ep_rkey_unpack_internal(ep, buffer, length,
                                        config->key.reachable_md_map, 0, rkey_p);
 }

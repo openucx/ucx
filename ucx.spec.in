@@ -31,11 +31,6 @@ Requires: %{?extra_deps}
 %endif
 
 BuildRequires: automake autoconf libtool gcc-c++
-%if "%{_vendor}" == "suse"
-BuildRequires: libnuma-devel
-%else
-BuildRequires: numactl-devel
-%endif
 %if %{with cma}
 BuildRequires: glibc-devel >= 2.15
 %endif
@@ -55,7 +50,7 @@ BuildRequires: librdmacm-devel
 BuildRequires: hsa-rocr-dev
 %endif
 %if %{with xpmem}
-BuildRequires: xpmem-devel
+BuildRequires: pkgconfig(cray-xpmem)
 %endif
 %if %{with vfs}
 BuildRequires: fuse3-devel
@@ -103,7 +98,6 @@ Provides header files and examples for developing with UCX.
            %{?debug:--enable-profiling} \
            %{?debug:--enable-frame-pointer} \
            %{?debug:--enable-stats} \
-           %{?debug:--enable-fault-injection} \
            %{?debug:--enable-debug-data} \
            %{?debug:--enable-mt} \
            --without-go \
@@ -266,7 +260,7 @@ for large messages.
 
 %if %{with rdmacm}
 %package rdmacm
-Requires: %{name}%{?_isa} = %{version}-%{release}
+Requires: %{name}-ib%{?_isa} = %{version}-%{release}
 Summary: UCX RDMA connection manager support
 Group: System Environment/Libraries
 
@@ -349,6 +343,8 @@ library internals, protocol objects, transports status, and more.
 %endif
 
 %changelog
+* Fri Apr 28 2023 Yossi Itigin <yosefe@nvidia.com> 1.16.0-1
+- Bump version to 1.16.0
 * Mon Oct 24 2022 Yossi Itigin <yosefe@mellanox.com> 1.15.0-1
 - Bump version to 1.15.0
 * Sat Apr 16 2022 Yossi Itigin <yosefe@mellanox.com> 1.14.0-1

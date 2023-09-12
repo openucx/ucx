@@ -7,6 +7,7 @@
 #define UCT_CUDA_IPC_IFACE_H
 
 #include <uct/base/uct_iface.h>
+#include <uct/cuda/base/cuda_iface.h>
 #include <ucs/arch/cpu.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
@@ -18,8 +19,9 @@
 
 #define UCT_CUDA_IPC_MAX_PEERS  16
 
+
 typedef struct uct_cuda_ipc_iface {
-    uct_base_iface_t super;
+    uct_cuda_iface_t super;
     ucs_mpool_t      event_desc;              /* cuda event desc */
     ucs_queue_head_t outstanding_d2d_event_q; /* stream for outstanding d2d */
     int              eventfd;              /* get event notifications */
@@ -35,6 +37,7 @@ typedef struct uct_cuda_ipc_iface {
         unsigned                max_cuda_ipc_events; /* max mpool entries */
         int                     enable_cache;        /* enable/disable ipc handle cache */
         ucs_on_off_auto_value_t enable_get_zcopy;    /* enable get_zcopy except for specific platorms */
+        double                  bandwidth;
     } config;
 } uct_cuda_ipc_iface_t;
 
@@ -46,6 +49,7 @@ typedef struct uct_cuda_ipc_iface_config {
     int                     enable_cache;
     ucs_on_off_auto_value_t enable_get_zcopy;
     unsigned                max_cuda_ipc_events;
+    double                  bandwidth;
 } uct_cuda_ipc_iface_config_t;
 
 

@@ -8,7 +8,7 @@
 
 
 AC_ARG_WITH([verbs],
-        [AC_HELP_STRING([--with-verbs(=DIR)],
+        [AS_HELP_STRING([--with-verbs(=DIR)],
             [Build OpenFabrics support, adding DIR/include, DIR/lib, and DIR/lib64 to the search path for headers and libraries])],
         [],
         [with_verbs=/usr])
@@ -23,7 +23,7 @@ AC_MSG_NOTICE([Compiling $str])
 # RC Support
 #
 AC_ARG_WITH([rc],
-            [AC_HELP_STRING([--with-rc], [Compile with IB Reliable Connection support])],
+            [AS_HELP_STRING([--with-rc], [Compile with IB Reliable Connection support])],
             [],
             [with_rc=yes])
 
@@ -32,7 +32,7 @@ AC_ARG_WITH([rc],
 # UD Support
 #
 AC_ARG_WITH([ud],
-            [AC_HELP_STRING([--with-ud], [Compile with IB Unreliable Datagram support])],
+            [AS_HELP_STRING([--with-ud], [Compile with IB Unreliable Datagram support])],
             [],
             [with_ud=yes])
 
@@ -41,7 +41,7 @@ AC_ARG_WITH([ud],
 # DC Support
 #
 AC_ARG_WITH([dc],
-            [AC_HELP_STRING([--with-dc], [Compile with IB Dynamic Connection support])],
+            [AS_HELP_STRING([--with-dc], [Compile with IB Dynamic Connection support])],
             [],
             [with_dc=yes])
 
@@ -50,7 +50,7 @@ AC_ARG_WITH([dc],
 # mlx5 DV support
 #
 AC_ARG_WITH([mlx5-dv],
-            [AC_HELP_STRING([--with-mlx5-dv], [Compile with mlx5 Direct Verbs
+            [AS_HELP_STRING([--with-mlx5-dv], [Compile with mlx5 Direct Verbs
                 support. Direct Verbs (DV) support provides additional
                 acceleration capabilities that are not available in a
                 regular mode.])])
@@ -59,7 +59,7 @@ AC_ARG_WITH([mlx5-dv],
 # TM (IB Tag Matching) Support
 #
 AC_ARG_WITH([ib-hw-tm],
-            [AC_HELP_STRING([--with-ib-hw-tm], [Compile with IB Tag Matching support])],
+            [AS_HELP_STRING([--with-ib-hw-tm], [Compile with IB Tag Matching support])],
             [],
             [with_ib_hw_tm=yes])
 
@@ -68,7 +68,7 @@ AC_ARG_WITH([ib-hw-tm],
 # DM Support
 #
 AC_ARG_WITH([dm],
-            [AC_HELP_STRING([--with-dm], [Compile with Device Memory support])],
+            [AS_HELP_STRING([--with-dm], [Compile with Device Memory support])],
             [],
             [with_dm=yes])
 
@@ -76,7 +76,7 @@ AC_ARG_WITH([dm],
 # DEVX Support
 #
 AC_ARG_WITH([devx],
-            [AC_HELP_STRING([--with-devx], [Compile with DEVX support])],
+            [AS_HELP_STRING([--with-devx], [Compile with DEVX support])],
             [],
             [with_devx=check])
 
@@ -213,28 +213,17 @@ AS_IF([test "x$with_ib" = "xyes"],
        # We shouldn't confuse upstream ibv_query_device_ex with
        # legacy MOFED one, distinguish by arguments number
        AC_CHECK_DECL(ibv_query_device_ex, [
-       AC_TRY_COMPILE([#include <infiniband/verbs.h>],
-                      [ibv_query_device_ex(NULL, NULL, NULL)],
-                      [AC_DEFINE([HAVE_DECL_IBV_QUERY_DEVICE_EX], 1,
-                          [have upstream ibv_query_device_ex])])],
-                          [], [[#include <infiniband/verbs.h>]])
+       AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <infiniband/verbs.h>]],
+                         [[ibv_query_device_ex(NULL, NULL, NULL)]])],
+                         [AC_DEFINE([HAVE_DECL_IBV_QUERY_DEVICE_EX], 1,
+                            [have upstream ibv_query_device_ex])])],
+                            [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps],
                         [], [], [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_DECLS(IBV_ACCESS_ON_DEMAND, [with_odp=yes], [],
-                      [[#include <infiniband/verbs.h>]])
-
-       AS_IF([test "x$with_odp" = "xyes" ], [
-           AC_DEFINE([HAVE_ODP], 1, [ODP support])
-
-           AC_CHECK_DECLS(IBV_ODP_SUPPORT_IMPLICIT, [with_odp_i=yes], [],
-                          [[#include <infiniband/verbs.h>]])
-
-           AS_IF([test "x$with_odp_i" = "xyes" ], [
-               AC_DEFINE([HAVE_ODP_IMPLICIT], 1, [Implicit ODP support])])])
-
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
+                       IBV_ACCESS_ON_DEMAND,
                        IBV_QPF_GRH_REQUIRED],
                       [], [], [[#include <infiniband/verbs.h>]])
 

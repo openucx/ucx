@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.h>
+#include <ucp/proto/proto_init.h>
 #include <ucp/dt/dt.inl>
 
 
@@ -87,10 +88,10 @@ void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t stat
 void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self);
 
 static UCS_F_ALWAYS_INLINE int
-ucp_proto_eager_check_op_id(const ucp_proto_init_params_t *init_params,
-                            ucp_operation_id_t op_id, int offload_enabled)
+ucp_tag_eager_check_op_id(const ucp_proto_init_params_t *init_params,
+                          ucp_operation_id_t op_id, int offload_enabled)
 {
-    return (init_params->select_param->op_id == op_id) &&
+    return ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) &&
            (offload_enabled ==
             ucp_ep_config_key_has_tag_lane(init_params->ep_config_key));
 }

@@ -122,7 +122,8 @@ ucp_rndv_is_put_pipeline_needed(uintptr_t remote_address, size_t length,
                                 const ucp_ep_rndv_zcopy_config_t *put_zcopy,
                                 int is_get_zcopy_failed)
 {
-    if (ucp_rkey_packed_mem_type(rkey_buf) == UCS_MEMORY_TYPE_HOST) {
+    if ((remote_address != 0) &&
+        (ucp_rkey_packed_mem_type(rkey_buf) == UCS_MEMORY_TYPE_HOST)) {
         return 0;
     }
 
@@ -156,11 +157,10 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
-        packed_rkey_size      = ucp_rkey_pack_uct(
-                worker->context, sreq->send.state.dt.dt.contig.md_map,
-                sreq->send.state.dt.dt.contig.memh, &mem_info, 0,
-                ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags, NULL,
-                rkey_buf);
+        packed_rkey_size      = ucp_rkey_pack_memh(
+                worker->context, sreq->send.rndv.md_map,
+                sreq->send.state.dt.dt.contig.memh, &mem_info, 0, NULL,
+                ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags, rkey_buf);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
                       ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -192,17 +192,17 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
     rndv_rtr_hdr->rreq_id = ucp_send_request_get_id(rndv_req);
 
     /* Pack remote keys (which can be empty list) */
-    if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
-        rndv_rtr_hdr->address = (uintptr_t)rreq->recv.buffer;
-        rndv_rtr_hdr->size    = rndv_req->send.rndv_rtr.length;
-        rndv_rtr_hdr->offset  = rndv_req->send.rndv_rtr.offset;
-        mem_info.type         = rreq->recv.mem_type;
+    if (rreq->recv.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
+        rndv_rtr_hdr->address = (uintptr_t)rreq->recv.dt_iter.type.contig.buffer;
+        rndv_rtr_hdr->size    = rndv_req->send.length;
+        rndv_rtr_hdr->offset  = rndv_req->send.rndv.rtr.offset;
+        mem_info.type         = rreq->recv.dt_iter.mem_info.type;
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
-        packed_rkey_size = ucp_rkey_pack_uct(
-                ep->worker->context, rreq->recv.state.dt.contig.md_map,
-                rreq->recv.state.dt.contig.memh, &mem_info, 0,
-                ucp_ep_config(ep)->uct_rkey_pack_flags, NULL, rndv_rtr_hdr + 1);
+        packed_rkey_size = ucp_rkey_pack_memh(
+                ep->worker->context, rndv_req->send.rndv.md_map,
+                rreq->recv.dt_iter.type.contig.memh, &mem_info, 0, NULL,
+                ucp_ep_config(ep)->uct_rkey_pack_flags, rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
         }
@@ -222,16 +222,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_request_t *rreq     = ucp_request_get_super(rndv_req);
-    ucp_md_map_t md_map     = UCP_DT_IS_CONTIG(rreq->recv.datatype) ?
-                              rreq->recv.state.dt.contig.md_map : 0;
     size_t packed_rkey_size;
     ucs_status_t status;
 
     /* Send the RTR. The pack_cb will pack all the necessary fields in the RTR */
     packed_rkey_size = ucp_rkey_packed_size(rndv_req->send.ep->worker->context,
-                                            md_map, UCS_SYS_DEVICE_ID_UNKNOWN,
-                                            0);
+                                            rndv_req->send.rndv.md_map,
+                                            UCS_SYS_DEVICE_ID_UNKNOWN, 0);
     status           = ucp_do_am_single(
                            self, UCP_AM_ID_RNDV_RTR, ucp_rndv_rtr_pack,
                            sizeof(ucp_rndv_rtr_hdr_t) + packed_rkey_size);
@@ -267,6 +264,11 @@ ucp_rndv_reg_send_buffer(ucp_request_t *sreq, const ucp_request_param_t *param)
         if (status != UCS_OK) {
             return status;
         }
+
+        sreq->send.rndv.md_map = sreq->send.state.dt.dt.contig.memh->md_map &
+                                 md_map;
+    } else {
+        sreq->send.rndv.md_map = 0;
     }
 
     return UCS_OK;
@@ -348,9 +350,10 @@ ucp_rndv_recv_req_complete(ucp_request_t *req, ucs_status_t status)
 }
 
 static void ucp_rndv_zcopy_recv_req_complete(ucp_request_t *req,
-                                             ucs_status_t status)
+                                             ucs_status_t status,
+                                             unsigned dt_mask)
 {
-    ucp_request_recv_buffer_dereg(req);
+    ucp_datatype_iter_cleanup(&req->recv.dt_iter, 1, dt_mask);
     ucp_rndv_recv_req_complete(req, status);
 }
 
@@ -416,8 +419,11 @@ ucs_status_t ucp_rndv_send_rts(ucp_request_t *sreq, uct_pack_callback_t pack_cb,
 
 static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                   ucs_ptr_map_key_t sender_req_id,
-                                  size_t recv_length, size_t offset)
+                                  size_t recv_length, size_t offset,
+                                  ucp_mem_desc_t *mdesc, ucp_md_map_t md_map)
 {
+    ucp_mem_h memh = rreq->recv.dt_iter.type.contig.memh;
+
     ucp_trace_req(rndv_req, "send rtr remote sreq_id 0x%"PRIxPTR" rreq %p",
                   sender_req_id, rreq);
 
@@ -431,8 +437,15 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     rreq->recv.remote_req_id       = sender_req_id;
     rndv_req->send.lane            = ucp_ep_get_am_lane(rndv_req->send.ep);
     rndv_req->send.uct.func        = ucp_proto_progress_rndv_rtr;
-    rndv_req->send.rndv_rtr.length = recv_length;
-    rndv_req->send.rndv_rtr.offset = offset;
+    rndv_req->send.length          = recv_length;
+    rndv_req->send.rndv.rtr.offset = offset;
+    rndv_req->send.rndv.mdesc      = mdesc;
+    if ((rreq->recv.dt_iter.dt_class == UCP_DATATYPE_CONTIG) &&
+        (memh != NULL)) {
+        rndv_req->send.rndv.md_map = memh->md_map & md_map;
+    } else {
+        rndv_req->send.rndv.md_map = 0;
+    }
 
     ucp_request_set_super(rndv_req, rreq);
     ucp_send_request_id_alloc(rndv_req);
@@ -480,7 +493,7 @@ static ucp_lane_index_t ucp_rndv_zcopy_get_lane(ucp_request_t *rndv_req,
     ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) ||
                (proto == UCP_REQUEST_SEND_PROTO_RNDV_PUT));
 
-    if (ucs_unlikely(!rndv_req->send.rndv.lanes_map_all)) {
+    if (ucs_unlikely(!rndv_req->send.rndv.zcopy.lanes_map_all)) {
         return UCP_NULL_LANE;
     }
 
@@ -501,7 +514,7 @@ static void ucp_rndv_zcopy_next_lane(ucp_request_t *rndv_req)
 {
     rndv_req->send.lanes_map_avail    &= rndv_req->send.lanes_map_avail - 1;
     if (!rndv_req->send.lanes_map_avail) {
-        rndv_req->send.lanes_map_avail = rndv_req->send.rndv.lanes_map_all;
+        rndv_req->send.lanes_map_avail = rndv_req->send.rndv.zcopy.lanes_map_all;
     }
 }
 
@@ -526,10 +539,10 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
     int pending_add_res;
 
     ucs_assert_always(req->send.lane != UCP_NULL_LANE);
-    ucs_assert_always(req->send.rndv.lanes_count > 0);
+    ucs_assert_always(req->send.rndv.zcopy.lanes_count > 0);
 
     if (req->send.rndv.mdesc == NULL) {
-        status = ucp_send_request_add_reg_lane(req, lane);
+        status = ucp_request_send_reg_lane(req, lane);
         ucs_assert_always(status == UCS_OK);
     }
 
@@ -557,7 +570,7 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
         length = ucp_mtu - remaining;
     } else {
         chunk  = ucs_align_up((size_t)(req->send.length /
-                                       req->send.rndv.lanes_count * scale),
+                                       req->send.rndv.zcopy.lanes_count * scale),
                               align);
         length = ucs_min(chunk, req->send.length - offset);
     }
@@ -621,6 +634,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t,
                                                send.state.uct_comp);
+    ucp_mem_h UCS_V_UNUSED memh;
     ucp_ep_h UCS_V_UNUSED ep;
     ucp_request_t *rreq;
     ucs_status_t status;
@@ -632,6 +646,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
     rreq   = ucp_request_get_super(rndv_req);
     status = rndv_req->send.state.uct_comp.status;
     ep     = rndv_req->send.ep;
+    memh   = rreq->recv.dt_iter.type.contig.memh;
 
     ucs_assertv(rndv_req->send.state.dt.offset == rndv_req->send.length,
                 "rndv_req=%p offset=%zu length=%zu", rndv_req,
@@ -656,8 +671,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
     /* Check for possible leak of memory registration: we should either not have
      * any memory registration, or not own it, or be called from the context of
      * ucp_request_send_state_ff() */
-    ucs_assert((rreq->recv.state.dt.contig.md_map == 0) ||
-               (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) ||
+    ucs_assert((memh == NULL) || ucp_memh_is_user_memh(memh) ||
                ((ep->flags & UCP_EP_FLAG_FAILED) && (status != UCS_OK)));
     ucp_rndv_recv_req_complete(rreq, status);
 }
@@ -673,9 +687,9 @@ static void ucp_rndv_req_init_lanes(ucp_request_t *req,
                                     ucp_lane_map_t lanes_map,
                                     uint8_t lanes_count)
 {
-    req->send.lanes_map_avail    = lanes_map;
-    req->send.rndv.lanes_map_all = lanes_map;
-    req->send.rndv.lanes_count   = lanes_count;
+    req->send.lanes_map_avail          = lanes_map;
+    req->send.rndv.zcopy.lanes_map_all = lanes_map;
+    req->send.rndv.zcopy.lanes_count   = lanes_count;
 }
 
 static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
@@ -809,7 +823,6 @@ ucp_rndv_rkey_ptr_get_mem_type(ucp_request_t *sreq, size_t length,
     ucp_worker_h worker      = sreq->send.ep->worker;
     ucp_request_t *freq;
     ucp_ep_h mem_type_ep;
-    ucp_md_index_t md_index;
     ucp_lane_index_t mem_type_rma_lane;
 
     /* GET fragment to remote stage buffer */
@@ -834,14 +847,12 @@ ucp_rndv_rkey_ptr_get_mem_type(ucp_request_t *sreq, size_t length,
 
     mem_type_ep             = worker->mem_type_ep[remote_mem_type];
     mem_type_rma_lane       = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
-    md_index                = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
 
     ucs_assert(mem_type_rma_lane != UCP_NULL_LANE);
 
     freq->send.lane                       = mem_type_rma_lane;
     freq->send.ep                         = mem_type_ep;
-    freq->send.state.dt.dt.contig.memh[0] = NULL;
-    freq->send.state.dt.dt.contig.md_map  = UCS_BIT(md_index);
+    freq->send.state.dt.dt.contig.memh    = NULL;
 
     ucp_rndv_req_init(freq, sreq, lanes_map, ucs_popcount(lanes_map), NULL,
                       remote_address);
@@ -860,8 +871,8 @@ ucp_rndv_req_init_remote_from_super_req(ucp_request_t *req,
     req->flags   = 0;
     req->send.ep = super_req->send.ep;
 
-    ucp_rndv_req_init(req, super_req, super_req->send.rndv.lanes_map_all,
-                      super_req->send.rndv.lanes_count,
+    ucp_rndv_req_init(req, super_req, super_req->send.rndv.zcopy.lanes_map_all,
+                      super_req->send.rndv.zcopy.lanes_count,
                       super_req->send.rndv.rkey,
                       super_req->send.rndv.remote_address +
                       remote_address_offset);
@@ -891,22 +902,22 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
                                               const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                                               const void *rkey_buf)
 {
-    ucp_ep_h ep = rndv_req->send.ep;
+    ucp_ep_h ep    = rndv_req->send.ep;
+    ucp_mem_h memh = rreq->recv.dt_iter.type.contig.memh;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    ucp_lane_index_t lane, lane_idx;
-    ucp_md_map_t md_map;
 
     ucp_trace_req(rndv_req, "start rma_get rreq %p", rreq);
 
     rndv_req->send.uct.func            = ucp_rndv_progress_rma_get_zcopy;
-    rndv_req->send.buffer              = rreq->recv.buffer;
-    rndv_req->send.mem_type            = rreq->recv.mem_type;
+    rndv_req->send.buffer              = rreq->recv.dt_iter.type.contig.buffer;
+    rndv_req->send.mem_type            = rreq->recv.dt_iter.mem_info.type;
     rndv_req->send.datatype            = ucp_dt_make_contig(1);
     rndv_req->send.length              = rndv_rts_hdr->size;
     rndv_req->send.rndv.remote_req_id  = rndv_rts_hdr->sreq.req_id;
     rndv_req->send.rndv.remote_address = rndv_rts_hdr->address;
     rndv_req->send.pending_lane        = UCP_NULL_LANE;
+    rndv_req->send.state.dt.dt.contig.memh = memh;
 
     ucp_request_set_super(rndv_req, rreq);
 
@@ -923,22 +934,6 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
     ucp_rndv_req_init_zcopy_lane_map(rndv_req, rndv_req->send.mem_type,
                                      rndv_req->send.length,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
-
-    /* Copy user registration from receive request to rndv send request */
-    if (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-        md_map = 0;
-        ucs_for_each_bit(lane_idx, rndv_req->send.rndv.lanes_map_all) {
-            ucs_assert(lane_idx < UCP_MAX_LANES);
-            lane = ucp_ep_config(ep)->rndv.get_zcopy.lanes[lane_idx];
-            ucs_assert(lane < UCP_MAX_LANES);
-
-            md_map |= UCS_BIT(ucp_ep_md_index(ep, lane));
-        }
-
-        ucp_request_init_dt_reg_from_memh(rndv_req, md_map,
-                                          rreq->recv.user_memh,
-                                          &rndv_req->send.state.dt.dt.contig);
-    }
 
     rndv_req->send.lane =
         ucp_rndv_zcopy_get_lane(rndv_req, &uct_rkey,
@@ -1016,7 +1011,6 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
                                 uct_pending_callback_t uct_func)
 {
     ucp_ep_h mem_type_ep;
-    ucp_md_index_t md_index;
     ucp_lane_index_t mem_type_rma_lane;
 
     ucp_request_send_state_init(freq, ucp_dt_make_contig(1), 0);
@@ -1034,13 +1028,11 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
     if (mem_type != UCS_MEMORY_TYPE_HOST) {
         mem_type_ep       = worker->mem_type_ep[mem_type];
         mem_type_rma_lane = ucp_ep_config(mem_type_ep)->key.rma_bw_lanes[0];
-        md_index          = ucp_ep_md_index(mem_type_ep, mem_type_rma_lane);
         ucs_assert(mem_type_rma_lane != UCP_NULL_LANE);
 
-        freq->send.lane                       = mem_type_rma_lane;
-        freq->send.ep                         = mem_type_ep;
-        freq->send.state.dt.dt.contig.memh[0] = mdesc->memh->uct[md_index];
-        freq->send.state.dt.dt.contig.md_map  = UCS_BIT(md_index);
+        freq->send.lane                    = mem_type_rma_lane;
+        freq->send.ep                      = mem_type_ep;
+        freq->send.state.dt.dt.contig.memh = mdesc->memh;
     }
 }
 
@@ -1049,8 +1041,7 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
                                 ucp_mem_desc_t *mdesc, size_t length,
                                 size_t offset)
 {
-
-    ucs_assert_always(!UCP_MEM_IS_HOST(rreq->recv.mem_type));
+    ucs_assert_always(!UCP_MEM_IS_HOST(rreq->recv.dt_iter.mem_info.type));
 
     /* PUT on memtype endpoint to stage from
      * frag recv buffer to memtype recv buffer
@@ -1059,12 +1050,12 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
     ucp_rndv_init_mem_type_frag_req(rreq->recv.worker, freq,
                                     UCP_REQUEST_SEND_PROTO_RNDV_PUT,
                                     ucp_rndv_recv_frag_put_completion, mdesc,
-                                    rreq->recv.mem_type, length,
+                                    rreq->recv.dt_iter.mem_info.type, length,
                                     ucp_rndv_progress_rma_put_zcopy);
 
     ucp_rndv_req_init(freq, rreq, 0, 0, NULL,
-                      (uintptr_t)UCS_PTR_BYTE_OFFSET(rreq->recv.buffer,
-                                                     offset));
+                      (uintptr_t)UCS_PTR_BYTE_OFFSET(
+                              rreq->recv.dt_iter.type.contig.buffer, offset));
 
     ucp_rndv_req_init_zcopy_lane_map(freq, freq->send.mem_type,
                                      freq->send.length,
@@ -1269,7 +1260,7 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
     rndv_req->send.rndv.remote_address = remote_address - base_offset;
     rndv_req->send.length              = size;
     rndv_req->send.state.dt.offset     = 0;
-    rndv_req->send.mem_type            = rreq->recv.mem_type;
+    rndv_req->send.mem_type            = rreq->recv.dt_iter.mem_info.type;
     rndv_req->send.pending_lane        = UCP_NULL_LANE;
 
     ucp_request_set_super(rndv_req, rreq);
@@ -1297,18 +1288,20 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
         goto err;
     }
 
+    ucp_rndv_recv_data_init(rreq, size);
+
     offset = 0;
     while (offset != size) {
         length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_frag_size, 0,
                                               size, offset, size - offset);
 
         /* GET remote fragment into HOST fragment buffer */
-        ucp_rndv_send_frag_get_mem_type(rndv_req, length,
-                                        remote_address + offset,
-                                        UCS_MEMORY_TYPE_HOST, /* TODO: find bounce buffer memory type */
-                                        rndv_req->send.rndv.rkey,
-                                        rndv_req->send.rndv.lanes_map_all, 0,
-                                        ucp_rndv_recv_frag_get_completion);
+        ucp_rndv_send_frag_get_mem_type(
+                rndv_req, length, remote_address + offset,
+                UCS_MEMORY_TYPE_HOST, /* TODO: find bounce buffer memory type */
+                rndv_req->send.rndv.rkey,
+                rndv_req->send.rndv.zcopy.lanes_map_all, 0,
+                ucp_rndv_recv_frag_get_completion);
 
         offset += length;
     }
@@ -1325,7 +1318,8 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
                                    ucp_request_t *rreq,
                                    const ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
-    ucp_context_h context = worker->context;
+    const uct_component_attr_t *cmpt_attr;
+    ucp_request_param_t param;
     size_t max_frag_size;
     ucs_memory_type_t frag_mem_type;
     int i, num_frags;
@@ -1334,10 +1328,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
     ucp_mem_desc_t *mdesc;
     ucp_request_t *freq;
     ucp_request_t *frndv_req;
-    unsigned md_index;
-    unsigned memh_index;
-    const uct_component_attr_t *cmpt_attr;
-    ucp_md_map_t alloc_md_map;
+    ucp_md_map_t md_map;
 
     ucp_trace_req(rreq, "using rndv pipeline protocol rndv_req %p", rndv_req);
 
@@ -1369,44 +1360,34 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
             ucs_fatal("failed to allocate fragment memory buffer");
         }
 
-        freq->recv.buffer                 = mdesc->ptr;
-        freq->recv.datatype               = ucp_dt_make_contig(1);
-        freq->recv.mem_type               = mdesc->memh->mem_type;
-        freq->recv.length                 = frag_size;
-        freq->recv.state.dt.contig.md_map = 0;
-        freq->recv.frag.offset            = offset;
-        freq->flags                       = UCP_REQUEST_FLAG_RNDV_FRAG;
+        /* Pass datatype to avoid Coverity warning */
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH |
+                             UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype     = ucp_dt_make_contig(1);
+        param.memh         = mdesc->memh;
+        ucp_datatype_iter_init_unpack(worker->context, mdesc->ptr, frag_size,
+                                      &freq->recv.dt_iter, &param);
+
+        freq->recv.frag.offset = offset;
+        freq->flags            = UCP_REQUEST_FLAG_RNDV_FRAG;
 
         ucp_request_set_super(freq, rreq);
 
-        alloc_md_map = 0;
-        /* TODO: Check if can avoid for inter-node eps */
-        ucs_for_each_bit(md_index, mdesc->memh->md_map) {
-            if (md_index == mdesc->memh->alloc_md_index) {
-                cmpt_attr = ucp_cmpt_attr_by_md_index(context, md_index);
-                if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
-                    alloc_md_map |= UCS_BIT(md_index);
-                }
-                break;
+        frndv_req->flags             = 0;
+        frndv_req->send.ep           = rndv_req->send.ep;
+        frndv_req->send.pending_lane = UCP_NULL_LANE;
+
+        md_map = ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map;
+        if (mdesc->memh->alloc_md_index != UCP_NULL_RESOURCE) {
+            cmpt_attr = ucp_cmpt_attr_by_md_index(worker->context,
+                                                  mdesc->memh->alloc_md_index);
+            if (cmpt_attr->flags & UCT_COMPONENT_FLAG_RKEY_PTR) {
+                md_map |= UCS_BIT(mdesc->memh->alloc_md_index);
             }
         }
 
-        memh_index = 0;
-        ucs_for_each_bit(md_index,
-                         (ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map &
-                          mdesc->memh->md_map) | alloc_md_map) {
-            freq->recv.state.dt.contig.memh[memh_index++] = mdesc->memh->uct[md_index];
-            freq->recv.state.dt.contig.md_map            |= UCS_BIT(md_index);
-        }
-        ucs_assert(memh_index <= UCP_MAX_OP_MDS);
-
-        frndv_req->flags             = 0;
-        frndv_req->send.ep           = rndv_req->send.ep;
-        frndv_req->send.rndv.mdesc   = mdesc;
-        frndv_req->send.pending_lane = UCP_NULL_LANE;
-
         ucp_rndv_req_send_rtr(frndv_req, freq, rndv_rts_hdr->sreq.req_id,
-                              freq->recv.length, offset);
+                              freq->recv.dt_iter.length, offset, mdesc, md_map);
         offset += frag_size;
     }
 
@@ -1441,19 +1422,18 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
                                                             ucp_request_t,
                                                             send.rkey_ptr.queue_elem);
     ucp_request_t *rreq     = ucp_request_get_super(rndv_req);
-    size_t seg_size         = ucs_min(worker->context->config.ext.rkey_ptr_seg_size,
-                                      rndv_req->send.length - rreq->recv.state.offset);
+    size_t offset, seg_size, new_offset;
     ucs_status_t status;
-    size_t offset, new_offset;
     int last;
 
-    offset     = rreq->recv.state.offset;
+    offset     = rreq->recv.dt_iter.offset;
+    seg_size   = ucs_min(worker->context->config.ext.rkey_ptr_seg_size,
+                         rndv_req->send.length - offset);
     new_offset = offset + seg_size;
     last       = new_offset == rndv_req->send.length;
-    status     = ucp_request_recv_data_unpack(rreq,
-                                              UCS_PTR_BYTE_OFFSET(rndv_req->send.buffer,
-                                                                  offset),
-                                              seg_size, offset, last);
+    status     = ucp_request_recv_data_unpack(
+            rreq, UCS_PTR_BYTE_OFFSET(rndv_req->send.buffer, offset), seg_size,
+            offset, 0, last);
     if (ucs_unlikely(status != UCS_OK) || last) {
         ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
         ucp_rndv_recv_req_complete(rreq, status);
@@ -1466,7 +1446,7 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
                                                 &worker->rkey_ptr_cb_id);
         }
     } else {
-        rreq->recv.state.offset = new_offset;
+        rreq->recv.dt_iter.offset = new_offset;
     }
 
     return 1;
@@ -1526,7 +1506,8 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
         return;
     }
 
-    rreq->recv.state.offset = 0;
+    ucs_assertv(rreq->recv.dt_iter.offset == 0, "rreq=%p offset=%zu", rreq,
+                rreq->recv.dt_iter.offset);
 
     ucp_trace_req(rndv_req, "obtained a local pointer to remote buffer: %p",
                   local_ptr);
@@ -1539,10 +1520,8 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     UCP_WORKER_STAT_RNDV(ep->worker, RKEY_PTR, 1);
 
     ucs_queue_push(&worker->rkey_ptr_reqs, &rndv_req->send.rkey_ptr.queue_elem);
-    uct_worker_progress_register_safe(worker->uct,
-                                      ucp_rndv_progress_rkey_ptr,
-                                      rreq->recv.worker,
-                                      UCS_CALLBACKQ_FLAG_FAST,
+    uct_worker_progress_register_safe(worker->uct, ucp_rndv_progress_rkey_ptr,
+                                      rreq->recv.worker, 0,
                                       &worker->rkey_ptr_cb_id);
 }
 
@@ -1609,6 +1588,9 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                       const void *rkey_buf)
 {
+    ucp_context_h context      = worker->context;
+    ucs_memory_type_t mem_type = rreq->recv.dt_iter.mem_info.type;
+    ucp_md_map_t rtr_md_map    = 0;
     ucp_rndv_mode_t rndv_mode;
     ucp_request_t *rndv_req;
     ucp_ep_h ep;
@@ -1619,8 +1601,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     ucp_ep_rndv_zcopy_config_t *get_zcopy;
     ucp_ep_rndv_zcopy_config_t *put_zcopy;
     ucs_memory_type_t src_mem_type;
-
-    UCS_ASYNC_BLOCK(&worker->async);
 
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_receive", 0);
 
@@ -1649,30 +1629,29 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
                   "0x%"PRIx64"} rndv_sreq %p", rndv_rts_hdr->address,
                   rndv_rts_hdr->size, rndv_rts_hdr->sreq.req_id, rndv_req);
 
-    if (ucs_unlikely(rreq->recv.length < rndv_rts_hdr->size)) {
+    if (ucs_unlikely(rreq->recv.dt_iter.length < rndv_rts_hdr->size)) {
         ucp_trace_req(rndv_req,
                       "rndv truncated remote size %zu local size %zu rreq %p",
-                      rndv_rts_hdr->size, rreq->recv.length, rreq);
+                      rndv_rts_hdr->size, rreq->recv.dt_iter.length, rreq);
         ucp_rndv_req_send_ack(rndv_req, rndv_rts_hdr->size,
                               rndv_rts_hdr->sreq.req_id, UCS_OK,
                               UCP_AM_ID_RNDV_ATS, "send_ats");
-        ucp_request_recv_generic_dt_finish(rreq);
-        ucp_rndv_zcopy_recv_req_complete(rreq, UCS_ERR_MESSAGE_TRUNCATED);
-        goto out;
+        ucp_rndv_zcopy_recv_req_complete(rreq, UCS_ERR_MESSAGE_TRUNCATED,
+                                         UCP_DT_MASK_ALL);
+        return;
     }
 
     /* if the receive side is not connected yet then the RTS was received on a stub ep */
     ep_config = ucp_ep_config(ep);
     get_zcopy = &ep_config->rndv.get_zcopy;
-    rndv_mode = worker->context->config.ext.rndv_mode;
+    rndv_mode = context->config.ext.rndv_mode;
 
-    if (ucp_rndv_is_rkey_ptr(rndv_rts_hdr, rkey_buf, ep, rreq->recv.mem_type,
-                             rndv_mode)) {
+    if (ucp_rndv_is_rkey_ptr(rndv_rts_hdr, rkey_buf, ep, mem_type, rndv_mode)) {
         ucp_rndv_do_rkey_ptr(rndv_req, rreq, rndv_rts_hdr, rkey_buf);
-        goto out;
+        return;
     }
 
-    if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
+    if (rreq->recv.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
         is_get_zcopy_supported =
                 (rndv_rts_hdr->address != 0) &&
                 ucp_rndv_test_zcopy_scheme_support(rndv_rts_hdr->size,
@@ -1682,7 +1661,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             status = ucp_rndv_req_send_rma_get(rndv_req, rreq, rndv_rts_hdr,
                                                rkey_buf);
             if (status == UCS_OK) {
-                goto out;
+                return;
             }
 
             /* fallback to non get zcopy protocol */
@@ -1691,20 +1670,18 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
         }
 
         /* Check if pipelined memtype staging is needed */
-        if ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
-            UCP_MEM_IS_GPU(rreq->recv.mem_type) &&
+        if ((rndv_mode == UCP_RNDV_MODE_AUTO) && UCP_MEM_IS_GPU(mem_type) &&
             ucp_rndv_is_recv_pipeline_needed(rndv_req, rndv_rts_hdr, rkey_buf,
-                                             rreq->recv.mem_type,
-                                             is_get_zcopy_failed)) {
+                                             mem_type, is_get_zcopy_failed)) {
             put_zcopy = &ep_config->rndv.put_zcopy;
-            ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
             if (ucp_rndv_is_put_pipeline_needed(rndv_rts_hdr->address,
                                                 rndv_rts_hdr->size, rkey_buf,
                                                 get_zcopy, put_zcopy,
                                                 is_get_zcopy_failed)) {
                 /* send FRAG RTR for sender to PUT the fragment. */
+                ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
                 ucp_rndv_send_frag_rtr(worker, rndv_req, rreq, rndv_rts_hdr);
-                goto out;
+                return;
             } else if (is_get_zcopy_supported) {
                 ucs_assert(is_get_zcopy_failed);
 
@@ -1713,26 +1690,22 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
                         worker, rndv_req, rreq, rndv_rts_hdr->sreq.req_id,
                         rkey_buf, rndv_rts_hdr->address, rndv_rts_hdr->size, 0);
                 if (status == UCS_OK) {
-                    goto out;
+                    return;
                 }
             }
         }
 
         if (!is_get_zcopy_failed || !UCP_MEM_IS_HOST(src_mem_type)) {
-            if (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-                /* At this point we know the datatype is contig */
-                ucp_request_init_dt_reg_from_memh(rreq,
-                                                  ep_config->key.rma_bw_md_map,
-                                                  rreq->recv.user_memh,
-                                                  &rreq->recv.state.dt.contig);
-            }
-
-            /* register receive buffer for
-             * put protocol (or) pipeline rndv for non-host memory type
+            /* Register receive buffer for put protocol (or) pipeline rndv for
+             * non-host memory type
              */
-            ucs_assert(rndv_rts_hdr->size <= rreq->recv.length);
-            ucp_request_recv_buffer_reg(rreq, ep_config->key.rma_bw_md_map,
-                                        rndv_rts_hdr->size);
+            ucs_assert(rndv_rts_hdr->size <= rreq->recv.dt_iter.length);
+            ucp_datatype_iter_mem_reg(context, &rreq->recv.dt_iter,
+                                      context->reg_md_map[mem_type] &
+                                              ep_config->key.rma_bw_md_map,
+                                      0, UCS_BIT(UCP_DATATYPE_CONTIG));
+
+            rtr_md_map = ep_config->key.rma_bw_md_map;
         }
     }
 
@@ -1741,15 +1714,12 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
      * the sender will send the data with active message or put_zcopy. */
     ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
     ucp_rndv_req_send_rtr(rndv_req, rreq, rndv_rts_hdr->sreq.req_id,
-                          rndv_rts_hdr->size, 0ul);
-
-out:
-    UCS_ASYNC_UNBLOCK(&worker->async);
+                          rndv_rts_hdr->size, 0ul, rndv_req->send.rndv.mdesc,
+                          rtr_md_map);
     return;
 
 err:
     ucp_rndv_recv_req_complete(rreq, status);
-    goto out;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
@@ -1871,7 +1841,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     uct_rkey_t uct_rkey;
 
-    ucs_assert_always(sreq->send.rndv.lanes_count > 0);
+    ucs_assert_always(sreq->send.rndv.zcopy.lanes_count > 0);
 
     /* Figure out which lane to use for put operation */
     sreq->send.lane = ucp_rndv_zcopy_get_lane(sreq, &uct_rkey,
@@ -2011,7 +1981,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_put_pipeline_frag_get_completion, (self),
 
     freq->send.uct.func                  = ucp_rndv_progress_rma_put_zcopy;
     freq->send.lane                      = fsreq->send.lane;
-    freq->send.state.dt.dt.contig.md_map = 0;
 
     ucp_request_send(freq);
 }
@@ -2245,16 +2214,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     ucs_assert(req != NULL);
     ucp_request_put(rtr_sreq);
 
-    VALGRIND_MAKE_MEM_DEFINED(req->recv.buffer, req->recv.length);
+    VALGRIND_MAKE_MEM_DEFINED(req->recv.dt_iter.type.contig.buffer,
+                              req->recv.dt_iter.length);
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_frag_atp_recv", 0);
         ucp_rndv_recv_frag_put_mem_type(ucp_request_get_super(req), req, mdesc,
-                                        req->recv.length,
+                                        req->recv.dt_iter.length,
                                         req->recv.frag.offset);
     } else {
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_atp_recv", 0);
-        ucp_rndv_zcopy_recv_req_complete(req, UCS_OK);
+        ucp_rndv_zcopy_recv_req_complete(req, UCS_OK,
+                                         UCS_BIT(UCP_DATATYPE_CONTIG));
     }
 
     return UCS_OK;
@@ -2286,7 +2257,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ep_config = ucp_ep_config(ep);
     put_zcopy = &ep_config->rndv.put_zcopy;
 
-    ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id"
+    ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id "
                   "0x%"PRIx64, rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_id);
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_rtr_recv", 0);
 
@@ -2358,7 +2329,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         (sreq->send.length >=
          ep_config->am.mem_type_zcopy_thresh[sreq->send.mem_type]))
     {
-        status = ucp_request_send_buffer_reg_lane(sreq, ucp_ep_get_am_lane(ep), 0);
+        status = ucp_request_send_reg_lane(sreq, ucp_ep_get_am_lane(ep));
         ucs_assert_always(status == UCS_OK);
 
         ucp_request_send_state_reset(sreq, ucp_rndv_am_zcopy_completion,
@@ -2491,8 +2462,10 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         break;
     case UCP_AM_ID_RNDV_DATA:
         ucs_string_buffer_appendf(&strb,
-                                  "RNDV_DATA rreq_id 0x%" PRIx64 " offset %zu",
-                                  rndv_data->req_id, rndv_data->offset);
+                                  "RNDV_DATA rreq_id 0x%" PRIx64
+                                  " offset %zu len %zu",
+                                  rndv_data->req_id, rndv_data->offset,
+                                  length - sizeof(*rndv_data));
         break;
     case UCP_AM_ID_RNDV_ATP:
         ucs_string_buffer_appendf(&strb,

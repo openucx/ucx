@@ -14,6 +14,7 @@
 
 #include "rma.inl"
 
+static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg);
 
 static void
 ucp_ep_flush_request_update_uct_comp(ucp_request_t *req, int diff,
@@ -184,22 +185,26 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     }
 }
 
-static void ucp_ep_flush_slow_path_remove(ucp_request_t *req)
+static int
+ucp_ep_flush_slow_path_remove_filter(const ucs_callbackq_elem_t *elem,
+                                     void *arg)
 {
-    ucp_ep_h ep = req->send.ep;
-    uct_worker_progress_unregister_safe(ep->worker->uct,
-                                        &req->send.flush.prog_id);
+    return (elem->cb == ucp_ep_flush_resume_slow_path_callback) &&
+           (elem->arg == arg);
 }
 
 static int ucp_flush_check_completion(ucp_request_t *req)
 {
+    ucp_worker_h worker = req->send.ep->worker;
+
     /* Check if flushed all lanes */
     if (!ucp_ep_flush_is_completed(req)) {
         return 0;
     }
 
     ucp_trace_req(req, "flush ep %p completed", req->send.ep);
-    ucp_ep_flush_slow_path_remove(req);
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, req,
+                                 ucp_ep_flush_slow_path_remove_filter, req);
     req->send.flushed_cb(req);
     return 1;
 }
@@ -211,7 +216,6 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
     ucp_trace_req(req, "resume slow path callback comp %d",
                   req->send.state.uct_comp.count);
 
-    ucp_ep_flush_slow_path_remove(req);
     ucp_ep_flush_progress(req);
     ucp_flush_check_completion(req);
     return 0;
@@ -222,7 +226,8 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {
         /* Request was detached from pending and should be scheduled again */
         if (ucp_ep_has_cm_lane(ep) ||
-            ep->worker->context->config.ext.proto_request_reset) {
+            (ucp_ep_config(ep)->p2p_lanes &&
+             ep->worker->context->config.ext.proto_request_reset)) {
             ucs_assertv(!req->send.flush.started_lanes,
                         "req=%p flush started_lanes=0x%x", req,
                         req->send.flush.started_lanes);
@@ -248,9 +253,8 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
 
     ucp_trace_req(req, "flush ep %p adding slow-path callback to resume flush",
                   ep);
-    uct_worker_progress_register_safe(ep->worker->uct,
-                                      ucp_ep_flush_resume_slow_path_callback,
-                                      req, 0, &req->send.flush.prog_id);
+    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, req,
+                              ucp_ep_flush_resume_slow_path_callback, req);
 }
 
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
@@ -391,7 +395,6 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->status                     = UCS_OK;
     req->send.ep                    = ep;
     req->send.flushed_cb            = flushed_cb;
-    req->send.flush.prog_id         = UCS_CALLBACKQ_ID_NULL;
     req->send.flush.uct_flags       = (worker_req != NULL) ?
                                       worker_req->flush_worker.uct_flags :
                                       UCT_FLUSH_FLAG_LOCAL;

@@ -36,9 +36,10 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
      * data, or a rendezvous receive which should ignore the data.
      * In either case, we just need to send an ATS.
      */
-    if (init_params->select_param->op_id == UCP_OP_ID_RNDV_RECV) {
+    if (ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
         range0->max_length = 0;
-    } else if (init_params->select_param->op_id == UCP_OP_ID_RNDV_RECV_DROP) {
+    } else if (ucp_proto_init_check_op(init_params,
+                                       UCS_BIT(UCP_OP_ID_RNDV_RECV_DROP))) {
         range0->max_length = SIZE_MAX;
     } else {
         return UCS_ERR_UNSUPPORTED;
@@ -52,13 +53,29 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
     return status;
 }
 
+static void
+ucp_proto_rndv_ats_abort(ucp_request_t *request, ucs_status_t status)
+{
+    ucp_request_get_super(request)->status = status;
+    ucp_proto_rndv_ats_complete(request);
+}
+
+static void ucp_proto_rndv_ats_query(const ucp_proto_query_params_t *params,
+                                     ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_ack_priv_t *apriv = params->priv;
+
+    ucp_proto_default_query(params, attr);
+    attr->lane_map |= UCS_BIT(apriv->lane);
+}
+
 ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
     .desc     = "no data fetch",
     .flags    = 0,
     .init     = ucp_proto_rndv_ats_init,
-    .query    = ucp_proto_default_query,
+    .query    = ucp_proto_rndv_ats_query,
     .progress = {ucp_proto_rndv_ats_progress},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function
+    .abort    = ucp_proto_rndv_ats_abort,
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_return_success
 };

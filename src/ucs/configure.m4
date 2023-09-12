@@ -2,6 +2,7 @@
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) ARM, Ltd. 2016. ALL RIGHTS RESERVED.
+# Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -27,6 +28,22 @@ AS_IF([test "x$enable_profiling" = xyes],
 )
 AM_CONDITIONAL([HAVE_PROFILING],[test "x$HAVE_PROFILING" = "xyes"])
 
+
+AC_DEFUN([CHECK_BFD_LIB],
+[
+   AS_IF([test "x$bfd_happy" = "xno"], [
+       unset ac_cv_lib_bfd_bfd_openr
+       LIBS="$LIBS $1"
+       BFD_CHECK_DEPLIBS="$BFD_CHECK_DEPLIBS $1"
+       BFD_CHECK_LIBS="$BFD_CHECK_LIBS $1"
+       AC_CHECK_LIB(bfd, bfd_openr,
+           [
+            bfd_happy="yes"
+           ],
+           [],
+           [$BFD_CHECK_DEPLIBS])
+   ])
+])
 
 #
 # Detailed backtrace with debug information.
@@ -56,7 +73,7 @@ AS_IF([test "x$with_bfd" != xno],
        # Check BFD properties with all flags pointing to the custom location
        CPPFLAGS="$CPPFLAGS $BFD_CHECK_CPPFLAGS"
        LIBS="$LIBS $BFD_CHECK_LIBS"
-       BFD_CHECK_DEPLIBS="-liberty -lz -ldl"
+       BFD_CHECK_DEPLIBS="-lz -ldl"
 
        # Link the test applications as a shared library, to fail if libbfd is
        # not a PIC object.
@@ -65,18 +82,11 @@ AS_IF([test "x$with_bfd" != xno],
        CFLAGS="$CFLAGS $BFD_CHECK_CFLAGS -fPIC"
        LDFLAGS="$LDFLAGS $BFD_CHECK_LDFLAGS -shared -Wl,--no-undefined"
 
-       bfd_happy="yes"
-       AC_CHECK_LIB(bfd, bfd_openr, [],
-                    [
-                     # If cannot link with bfd, try adding known dependency libs
-                     # unset the cached check result to force re-check
-                     unset ac_cv_lib_bfd_bfd_openr
-                     AC_CHECK_LIB(bfd, bfd_openr,
-                                  [BFD_CHECK_LIBS="$BFD_CHECK_LIBS $BFD_CHECK_DEPLIBS"
-                                   LIBS="$LIBS $BFD_CHECK_DEPLIBS"],
-                                  [bfd_happy="no"],
-                                  [$BFD_CHECK_DEPLIBS])
-                    ])
+       bfd_happy="no"
+       CHECK_BFD_LIB([""])
+       CHECK_BFD_LIB([-liberty])
+       CHECK_BFD_LIB([-lsframe])
+
        AC_CHECK_HEADER([bfd.h], [], [bfd_happy="no"])
        AC_CHECK_TYPES([struct dl_phdr_info], [], [bfd_happy=no],
                       [[#define _GNU_SOURCE 1
@@ -226,10 +236,10 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([static int rc = 1;
 # Manual configuration of cacheline size
 #
 AC_ARG_WITH([cache-line-size],
-        [AC_HELP_STRING([--with-cache-line-size=SIZE],
+        [AS_HELP_STRING([--with-cache-line-size=SIZE],
             [Build UCX with cache line size defined by user. This parameter
              overwrites default cache line sizes defines in
-             UCX (x86-64: 64, Power: 128, ARMv8: 64/128). The supported values are: 64, 128])],
+             UCX (x86-64: 64, Power: 128, ARMv8: 64/128, RISCV: 64). The supported values are: 64, 128])],
         [],
         [with_cache_line_size=no])
 

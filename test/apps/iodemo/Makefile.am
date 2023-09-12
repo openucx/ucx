@@ -12,7 +12,7 @@ noinst_HEADERS = \
 io_demo_LDFLAGS  = -ldl
 
 if IODEMO_CUDA
-io_demo_CUDA_LIBS     = $(CUDA_LIBS)
+io_demo_CUDA_LIBS     = $(CUDART_LIBS)
 io_demo_LDFLAGS      += $(CUDA_LDFLAGS)
 io_demo_CUDA_CPPFLAGS = $(CUDA_CPPFLAGS) -DHAVE_CUDA
 else

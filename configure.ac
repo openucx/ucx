@@ -9,7 +9,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 15) # Minor version. Increased for each release.
+define([ucx_ver_minor], 16) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -28,7 +28,6 @@ config_flags="$*"
 valgrind_libpath=""
 
 AC_USE_SYSTEM_EXTENSIONS
-AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
 
 AC_CHECK_PROG(GITBIN, git, yes)
@@ -80,8 +79,7 @@ AC_PROG_LN_S
 AC_PROG_MKDIR_P
 AC_PROG_SED
 AC_PROG_INSTALL
-AC_PROG_LIBTOOL
-AC_HEADER_STDC
+LT_INIT
 LT_LIB_M
 AC_C_RESTRICT
 AC_FUNC_STRERROR_R
@@ -221,7 +219,10 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
      AM_CONDITIONAL([HAVE_FUSE3], [false])
+     AM_CONDITIONAL([HAVE_MAD], [false])
      AM_CONDITIONAL([IODEMO_CUDA], [false])
+     AM_CONDITIONAL([HAVE_GCOV], [false])
+     AM_CONDITIONAL([HAVE_LCOV], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -229,13 +230,14 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/sysdep.m4])
      m4_include([config/m4/ucm.m4])
      m4_include([config/m4/mpi.m4])
-     m4_include([config/m4/rte.m4])
      m4_include([config/m4/fuse3.m4])
      m4_include([config/m4/go.m4])
      m4_include([config/m4/java.m4])
      m4_include([config/m4/cuda.m4])
      m4_include([config/m4/rocm.m4])
      m4_include([config/m4/gdrcopy.m4])
+     m4_include([config/m4/mad.m4])
+     m4_include([config/m4/lcov.m4])
      m4_include([src/ucm/configure.m4])
      m4_include([src/ucs/configure.m4])
      m4_include([src/uct/configure.m4])
@@ -243,20 +245,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([test/gtest/configure.m4])
      m4_include([test/apps/iodemo/configure.m4])
      m4_include([test/apps/uct_info/configure.m4])
-
-
-     #
-     # Enable fault injection code
-     #
-     AC_ARG_ENABLE([fault-injection],
-         AS_HELP_STRING([--enable-fault-injection],
-                        [Enable fault injection code, default: NO]),
-         [],
-         [enable_fault_injection=no])
-     AS_IF([test "x$enable_fault_injection" = xyes],
-        [AS_MESSAGE([enabling with fault injection code])
-         AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
-        [:])
 
 
      #
@@ -367,6 +355,7 @@ AC_CONFIG_FILES([
                  ucx.spec
                  ucx.pc
                  contrib/rpmdef.sh
+                 contrib/ucx
                  debian/rules
                  debian/control
                  debian/changelog
@@ -415,7 +404,6 @@ AC_MSG_NOTICE([  Preprocessor flags:   ${BASE_CPPFLAGS}])
 AC_MSG_NOTICE([          C compiler:   ${CC} ${BASE_CFLAGS}])
 AC_MSG_NOTICE([        C++ compiler:   ${CXX} ${BASE_CXXFLAGS}])
 AC_MSG_NOTICE([        Multi-thread:   ${mt_enable}])
-AC_MSG_NOTICE([        NUMA support:   ${numa_enable}])
 AC_MSG_NOTICE([           MPI tests:   ${mpi_enable}])
 AC_MSG_NOTICE([         VFS support:   ${vfs_enable}])
 AC_MSG_NOTICE([       Devel headers:   ${enable_devel_headers}])

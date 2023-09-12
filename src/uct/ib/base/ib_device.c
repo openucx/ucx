@@ -145,20 +145,20 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"BlueField 2", {0x15b3, 0xa2d6},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 61},
+  {"BlueField 3", {0x15b3, 0xa2dc},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 61},
   {"Generic HCA", {0, 0}, 0, 0},
   {NULL}
 };
 
-static void uct_ib_device_get_locality(const char *dev_name,
-                                       ucs_sys_cpuset_t *cpu_mask,
-                                       int *numa_node)
+static void
+uct_ib_device_get_locality(const char *dev_name, ucs_sys_cpuset_t *cpu_mask)
 {
     char *p, buf[ucs_max(CPU_SETSIZE, 10)];
-    ucs_status_t status;
     ssize_t nread;
     uint32_t word;
     int base, k;
-    long n;
 
     /* Read list of CPUs close to the device */
     CPU_ZERO(cpu_mask);
@@ -189,12 +189,6 @@ static void uct_ib_device_get_locality(const char *dev_name,
             CPU_SET(k, cpu_mask);
         }
     }
-
-    /* Read NUMA node number */
-    status = ucs_read_file_number(&n, 1,
-                                  "/sys/class/infiniband/%s/device/numa_node",
-                                  dev_name);
-    *numa_node = (status == UCS_OK) ? n : -1;
 }
 
 static void
@@ -204,7 +198,7 @@ uct_ib_device_async_event_schedule_callback(uct_ib_device_t *dev,
     ucs_assert(ucs_spinlock_is_held(&dev->async_event_lock));
     ucs_assert(wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
     wait_ctx->cb_id = ucs_callbackq_add_safe(wait_ctx->cbq, wait_ctx->cb,
-                                             wait_ctx, 0);
+                                             wait_ctx);
 }
 
 static void
@@ -474,88 +468,6 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
     ucs_log(level, "IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
 }
 
-static const char *
-uct_ib_device_get_sysfs_path(struct ibv_device *ib_device, char *path_buffer)
-{
-    const char *detected_type = NULL;
-    char device_file_path[PATH_MAX];
-    char *sysfs_realpath;
-    struct stat st_buf;
-    char *sysfs_path;
-    int ret;
-
-    /* PF: realpath name is of form /sys/devices/.../0000:03:00.0/infiniband/mlx5_0 */
-    /* SF: realpath name is of form /sys/devices/.../0000:03:00.0/<UUID>/infiniband/mlx5_0 */
-
-    sysfs_realpath = realpath(ib_device->ibdev_path, path_buffer);
-    if (sysfs_realpath == NULL) {
-        goto out_undetected;
-    }
-
-    /* Try PF: strip 2 components */
-    sysfs_path = ucs_dirname(sysfs_realpath, 2);
-    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
-                      sysfs_path);
-    ret = stat(device_file_path, &st_buf);
-    if (ret == 0) {
-        detected_type = "PF";
-        goto out_detected;
-    }
-
-    /* Try SF: strip 3 components (one more) */
-    sysfs_path = ucs_dirname(sysfs_path, 1);
-    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
-                      sysfs_path);
-    ret = stat(device_file_path, &st_buf);
-    if (ret == 0) {
-        detected_type = "SF";
-        goto out_detected;
-    }
-
-out_undetected:
-    ucs_debug("%s: sysfs path undetected", ibv_get_device_name(ib_device));
-    return NULL;
-
-out_detected:
-    ucs_debug("%s: %s sysfs path is '%s'", ibv_get_device_name(ib_device),
-              detected_type, sysfs_path);
-    return sysfs_path;
-}
-
-static void
-uct_ib_device_set_sys_dev(uct_ib_device_t *dev, const char *sysfs_path)
-{
-    const char *dev_name = uct_ib_device_name(dev);
-    const char *bdf_name;
-    ucs_status_t status;
-
-    if (sysfs_path == NULL) {
-        goto out_unknown;
-    }
-
-    bdf_name = strrchr(sysfs_path, '/');
-    if (bdf_name == NULL) {
-        goto out_unknown;
-    }
-
-    ++bdf_name; /* Move past '/' separator */
-
-    status = ucs_topo_find_device_by_bdf_name(bdf_name, &dev->sys_dev);
-    if (status != UCS_OK) {
-        goto out_unknown;
-    }
-
-    status = ucs_topo_sys_device_set_name(dev->sys_dev, dev_name);
-    ucs_assert_always(status == UCS_OK);
-
-    ucs_debug("%s: bdf_name %s sys_dev %d", dev_name, bdf_name, dev->sys_dev);
-    return;
-
-out_unknown:
-    dev->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    ucs_debug("%s: system device unknown", dev_name);
-}
-
 static void
 uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
 {
@@ -578,7 +490,9 @@ uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                  struct ibv_device *ibv_device)
 {
-    const char *dev_name = uct_ib_device_name(dev);
+    const char *dev_name               = uct_ib_device_name(dev);
+    const char *dev_path               = dev->ibv_context->device->ibdev_path;
+    const unsigned sys_device_priority = 20;
     char path_buffer[PATH_MAX];
     const char *sysfs_path;
     ucs_status_t status;
@@ -605,8 +519,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
 
     if (dev->num_ports > UCT_IB_DEV_MAX_PORTS) {
         ucs_debug("%s has %d ports, but only up to %d are supported",
-                  ibv_get_device_name(ibv_device), dev->num_ports,
-                  UCT_IB_DEV_MAX_PORTS);
+                  dev_name, dev->num_ports, UCT_IB_DEV_MAX_PORTS);
         dev->num_ports = UCT_IB_DEV_MAX_PORTS;
     }
 
@@ -620,9 +533,9 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         }
     }
 
-    sysfs_path = uct_ib_device_get_sysfs_path(dev->ibv_context->device,
-                                              path_buffer);
-    uct_ib_device_set_sys_dev(dev, sysfs_path);
+    sysfs_path   = ucs_topo_resolve_sysfs_path(dev_path, path_buffer);
+    dev->sys_dev = ucs_topo_get_sysfs_dev(dev_name, sysfs_path,
+                                          sys_device_priority);
     uct_ib_device_set_pci_id(dev, sysfs_path);
     dev->pci_bw = ucs_topo_get_pci_bw(dev_name, sysfs_path);
 
@@ -638,7 +551,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     dev->async_events = async_events;
 
     uct_ib_device_get_locality(ibv_get_device_name(ibv_device),
-                               &dev->local_cpus, &dev->numa_node);
+                               &dev->local_cpus);
 
     status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
                                   stats_parent, "device");
@@ -1391,7 +1304,8 @@ const char* uct_ib_ah_attr_str(char *buf, size_t max,
         p += strlen(p);
         uct_ib_gid_str(&ah_attr->grh.dgid, p, endp - p);
         p += strlen(p);
-        snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
+        snprintf(p, endp - p, " flow_label=0x%x sgid_index=%d "
+                 "traffic_class=%d", ah_attr->grh.flow_label,
                  ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
     }
 

@@ -4,6 +4,7 @@ parameters:
   demands: []
   name: subtest
   container:
+  proto_enable: yes
 
 jobs:
   - job: tests_${{ parameters.name }}
@@ -28,14 +29,10 @@ jobs:
 
       - bash: |
           source ./buildlib/az-helpers.sh
+          check_gpu ${{ parameters.name }}
           az_init_modules
           ./contrib/test_jenkins.sh
-          rc=$?
-          if [[ $rc != 0 && x'${{ parameters.proto_enable }}' == x'yes' ]]; then
-            azure_complete_with_issues "Test with PROTO_ENABLE=yes exit with expected error"
-          else
-            exit $rc
-          fi
+          exit $?
         displayName: Run ./contrib/test_jenkins.sh
         env:
           nworkers: ${{ parameters.num_workers }}

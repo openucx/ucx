@@ -22,6 +22,10 @@ KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t,
            ucp_worker_cfg_index_t, 1, ucp_rkey_config_hash_func,
            ucp_rkey_config_is_equal);
 
+/* EP configurations storage */
+UCS_ARRAY_IMPL(ep_config_arr, unsigned, ucp_ep_config_t,
+               static UCS_F_ALWAYS_INLINE);
+
 /**
  * Resolve remote key configuration key to a remote key configuration index.
  *
@@ -219,7 +223,8 @@ ucp_worker_common_address_pack_flags(ucp_worker_h worker)
 {
     unsigned pack_flags = 0;
 
-    if (worker->context->num_mem_type_detect_mds > 0) {
+    if ((worker->context->num_mem_type_detect_mds > 0) ||
+        worker->context->config.ext.proto_enable) {
         pack_flags |= UCP_ADDRESS_PACK_FLAG_SYS_DEVICE;
     }
 
@@ -232,6 +237,7 @@ ucp_worker_default_address_pack_flags(ucp_worker_h worker)
     return ucp_worker_common_address_pack_flags(worker) |
            UCP_ADDRESS_PACK_FLAG_WORKER_UUID |
            UCP_ADDRESS_PACK_FLAG_WORKER_NAME |
+           UCP_ADDRESS_PACK_FLAG_RELEASE_VER_V1 |
            UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
            UCP_ADDRESS_PACK_FLAG_IFACE_ADDR | UCP_ADDRESS_PACK_FLAG_EP_ADDR;
 }

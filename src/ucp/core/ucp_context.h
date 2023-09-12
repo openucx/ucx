@@ -29,13 +29,18 @@
 #include <ucs/type/param.h>
 
 
+/* Hash map of rcaches which contain imported memory handles got from peers */
+KHASH_TYPE(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*);
+typedef khash_t(ucp_context_imported_mem_hash) ucp_context_imported_mem_hash_t;
+
+KHASH_IMPL(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
+
 enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
-    UCP_TL_RSC_FLAG_AUX      = UCS_BIT(0),
-    /* The flag indicates that the resource may be used for client-server
-     * connection establishment with a sockaddr */
-    UCP_TL_RSC_FLAG_SOCKADDR = UCS_BIT(1)
+    UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
 
@@ -87,7 +92,7 @@ typedef struct ucp_context_config {
      *  preregistered bounce buffers. */
     size_t                                 tm_max_bb_size;
     /** Enabling SW rndv protocol with tag offload mode */
-    int                                    tm_sw_rndv;
+    ucs_ternary_auto_value_t               tm_sw_rndv;
     /** Pack debug information in worker address */
     int                                    address_debug_info;
     /** Maximal size of worker address name for debugging */
@@ -152,7 +157,7 @@ typedef struct ucp_context_config {
     /** Threshold for enabling RNDV data split alignment */
     size_t                                 rndv_align_thresh;
     /** Print protocols information */
-    int                                    proto_info;
+    char                                   *proto_info;
     /** MD to compare for transport selection scores */
     char                                   *select_distance_md;
     /** Directory to write protocol selection information */
@@ -162,6 +167,8 @@ typedef struct ucp_context_config {
      *  (1 / WS) * single_op_estimation + ((WS - 1) / WS) * multi_op_estimation
      */
     unsigned                               proto_window_size;
+    /** Memory types that perform non-blocking registration by default */
+    uint64_t                               reg_nb_mem_types;
 } ucp_context_config_t;
 
 
@@ -191,6 +198,8 @@ struct ucp_config {
     UCS_CONFIG_ARRAY_FIELD(size_t, memunits) mpool_sizes;
     /** Memory registration cache */
     ucs_ternary_auto_value_t               enable_rcache;
+    /* Registration cache configuration */
+    ucs_rcache_config_t                    rcache_config;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
     /** Save ucx configurations not listed in ucp_config_table **/
@@ -274,6 +283,7 @@ typedef struct ucp_context {
 
     /* Index of memory domain that is used to allocate memory of the given type
      * using ucp_memh_alloc(). */
+    int                           alloc_md_index_initialized;
     ucp_md_index_t                alloc_md_index[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration for given memory type,
@@ -282,6 +292,10 @@ typedef struct ucp_context {
 
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
+
+    /* Map of MDs that provide registration of a memory buffer for a given
+       memory type to be exported to other processes. */
+    ucp_md_map_t                  export_md_map;
 
     /* Map of MDs that support dmabuf registration */
     ucp_md_map_t                  dmabuf_reg_md_map;
@@ -306,6 +320,9 @@ typedef struct ucp_context {
 
     /* Mem handle registration cache */
     ucs_rcache_t                  *rcache;
+
+    /* Hash of rcaches which contain imported memory handles got from peers */
+    ucp_context_imported_mem_hash_t *imported_mem_hash;
 
     struct {
 
@@ -362,6 +379,12 @@ typedef struct ucp_context {
     ucp_mt_lock_t                 mt_lock;
 
     char                          name[UCP_ENTITY_NAME_MAX];
+
+    /* Global unique identifier */
+    uint64_t                      uuid;
+
+    /* Next memory handle registration identifier */
+    uint64_t                      next_memh_reg_id;
 
     /* Save cached uct configurations */
     ucs_list_link_t               cached_key_list;
@@ -640,7 +663,6 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
 }
-
 
 void
 ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,

@@ -25,12 +25,16 @@ doc_dir = $(pkgdatadir)/doc
 
 if !DOCS_ONLY
 perftest_dir = $(pkgdatadir)/perftest
-dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 \
-					  contrib/ucx_perftest_config/msg_pow2_large \
-					  contrib/ucx_perftest_config/README \
-					  contrib/ucx_perftest_config/test_types_uct \
-					  contrib/ucx_perftest_config/test_types_ucp \
-					  contrib/ucx_perftest_config/transports
+dist_perftest__DATA = \
+	contrib/ucx_perftest_config/msg_pow2 \
+	contrib/ucx_perftest_config/msg_pow2_large \
+	contrib/ucx_perftest_config/README \
+	contrib/ucx_perftest_config/test_types_uct \
+	contrib/ucx_perftest_config/test_types_ucp \
+	contrib/ucx_perftest_config/test_types_ucp_rma \
+	contrib/ucx_perftest_config/test_types_ucp_amo \
+	contrib/ucx_perftest_config/transports
+
 SUBDIRS = \
 	src/ucm \
 	src/ucs \
@@ -80,8 +84,28 @@ EXTRA_DIST += debian/rules
 EXTRA_DIST += debian/source/format
 EXTRA_DIST += ucx.pc.in
 EXTRA_DIST += LICENSE
+
 endif #!DOCS_ONLY
 EXTRA_DIST += docs/uml/uct.dot
+
+.PHONY: lcov lcov-clean
+
+if HAVE_LCOV
+distclean-local: lcov-clean
+	find . -name "*.gcno" -type f -exec rm -f {} \;
+
+LCOV_DIR = lcov_data
+LCOV_INFO = lcov.info
+
+lcov-clean:
+	$(RM) -r $(LCOV_DIR)
+	find . -name "*.gcda" -type f -exec rm -f {} \;
+
+lcov:
+	mkdir -p $(LCOV_DIR)
+	$(LCOVBIN) -c -d src -o $(LCOV_DIR)/$(LCOV_INFO)
+	$(GENHTMLBIN) -o $(LCOV_DIR) --legend $(LCOV_DIR)/$(LCOV_INFO)
+endif
 
 include $(srcdir)/docs/doxygen/doxygen.am
 

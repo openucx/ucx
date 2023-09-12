@@ -387,7 +387,8 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
     if (family == 0xf) {
         family += version.ext_family;
     }
-    if ((family == 0x6) || (family == 0x7) || (family == 0xf) || (family == 0x17)) {
+    if ((family == 0x6) || (family == 0x7) || (family == 0xf) ||
+        (family == 0x17) || (family == 0x19)) {
         model = (version.ext_model << 4) | model;
     }
 
@@ -453,6 +454,11 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
             case 0x55:
                 cpu_model = UCS_CPU_MODEL_INTEL_SKYLAKE;
                 break;
+            case 0x6a:
+            case 0x6c:
+            case 0x7e:
+                cpu_model = UCS_CPU_MODEL_INTEL_ICELAKE;
+                break;
             }
             break;
         /* AMD Zen2 */
@@ -472,6 +478,9 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
             case 0x00:
             case 0x01:
                 cpu_model = UCS_CPU_MODEL_AMD_MILAN;
+                break;
+            case 0x11:
+                cpu_model = UCS_CPU_MODEL_AMD_GENOA;
                 break;
             }
             break;

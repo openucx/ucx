@@ -82,9 +82,10 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
 static inline ucs_status_t
 uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
                            size_t iovcnt, size_t iov_total_length,
-                           uint64_t remote_addr, uct_rkey_t rkey,
-                           uct_completion_t *comp, uct_rc_send_handler_t handler,
-                           uint16_t op_flags, int opcode)
+                           uint64_t remote_addr, uint32_t rkey,
+                           uct_completion_t *comp,
+                           uct_rc_send_handler_t handler, uint16_t op_flags,
+                           int opcode)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
@@ -192,10 +193,9 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    uct_rc_verbs_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
-                                                              uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_t *ep                    = ucs_derived_of(tl_ep,
-                                                              uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
     UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge,
@@ -585,17 +585,12 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_verbs_ep_t *ep                 = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_ib_md_t *md                       = uct_ib_iface_md(&iface->super.super);
     uct_rc_verbs_ep_flush_addr_t *rc_addr = (uct_rc_verbs_ep_flush_addr_t*)addr;
-    uint8_t mr_id;
 
     rc_addr->super.flags = 0;
     uct_ib_pack_uint24(rc_addr->super.qp_num, ep->qp->qp_num);
-
-    if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
-        ucs_assertv(uct_ib_md_is_flush_rkey_valid(md->flush_rkey),
-                    "invalid flush_rkey %x for device %s", md->flush_rkey,
-                    uct_ib_device_name(&md->dev));
+    if (uct_ib_md_is_flush_rkey_valid(md->flush_rkey)) {
         rc_addr->super.flags  |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
-        rc_addr->atomic_mr_id  = mr_id;
+        rc_addr->atomic_mr_id  = uct_ib_md_get_atomic_mr_id(md);
         rc_addr->flush_rkey_hi = md->flush_rkey >> 16;
     }
     return UCS_OK;
@@ -660,24 +655,40 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 
     status = uct_rc_iface_qp_init(&iface->super, self->qp);
     if (status != UCS_OK) {
-        goto err_qp_cleanup;
+        goto err_destroy_qp;
     }
 
     status = uct_ib_device_async_event_register(&md->dev,
                                                 IBV_EVENT_QP_LAST_WQE_REACHED,
                                                 self->qp->qp_num);
     if (status != UCS_OK) {
-        goto err_qp_cleanup;
+        goto err_destroy_qp;
     }
 
-    uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
+    status = uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
+    if (status != UCS_OK) {
+        goto err_event_unreg;
+    }
+
+    status = uct_rc_verbs_iface_common_prepost_recvs(iface);
+    if (status != UCS_OK) {
+        goto err_remove_qp;
+    }
+
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
     uct_ib_fence_info_init(&self->fi);
 
     return UCS_OK;
 
-err_qp_cleanup:
+
+err_remove_qp:
+    uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
+err_event_unreg:
+    uct_ib_device_async_event_unregister(&md->dev,
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         self->qp->qp_num);
+err_destroy_qp:
     uct_ib_destroy_qp(self->qp);
 err:
     return status;

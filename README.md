@@ -48,8 +48,16 @@ Please review our ["Membership Voluntary Consensus Standard"](https://ucfconsort
 ### Release Builds
 
 Building UCX is typically a combination of running "configure" and "make".
-Execute the following commands to install the UCX system from within the
-directory at the top of the tree:
+If using a release tarball execute the following commands to install the
+UCX system from within the directory at the top of the tree:
+
+```sh
+$ ./contrib/configure-release --prefix=/where/to/install
+$ make -j8
+$ make install
+```
+
+If directly cloning the git repository use:
 
 ```sh
 $ ./autogen.sh
@@ -162,10 +170,10 @@ $ make -C test/gtest test
 * [CUDA](https://developer.nvidia.com/cuda-zone)
 * [ROCm](https://rocm.github.io/)
 * Shared Memory
-    * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](http://knem.gforge.inria.fr/), and [xpmem](https://github.com/hjelmn/xpmem)
+    * posix, sysv, [cma](https://dl.acm.org/citation.cfm?id=2616532), [knem](http://knem.gforge.inria.fr/), and [xpmem](https://github.com/openucx/xpmem)
 * TCP/IP
 
-  **NOTE:** UCX >= 1.12.0 requires rdma-core >= 28.0 or MLNX_OFED >= 5.0 for [Infiniband](https://www.infinibandta.org/) and [RoCE](http://www.roceinitiative.org/) transports support.
+**NOTE:** UCX >= 1.12.0 requires rdma-core >= 28.0 or MLNX_OFED >= 5.0 for [Infiniband](https://www.infinibandta.org/) and [RoCE](http://www.roceinitiative.org/) transports support.
 <hr>
 
 ## Supported CPU Architectures

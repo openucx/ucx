@@ -8,8 +8,10 @@ import org.openucx.jucx.*;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
+import java.net.InetSocketAddress;
 
 public class UcpEndpoint extends UcxNativeStruct implements Closeable {
+
     private String paramsString;
     // Keep a reference to errorHandler to prevent it from GC and have valid ref
     // from JNI error handler.
@@ -44,6 +46,14 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     public void close() {
         destroyEndpointNative(getNativeId());
         setNativeId(null);
+    }
+
+    public InetSocketAddress getLocalAddress() {
+        return queryLocalAddressNative(getNativeId());
+    }
+
+    public InetSocketAddress getRemoteAddress() {
+        return queryRemoteAddressNative(getNativeId());
     }
 
     /**
@@ -444,6 +454,10 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     private native long createEndpointNative(UcpEndpointParams params, long workerId);
 
     private static native void destroyEndpointNative(long epId);
+
+    private static native InetSocketAddress queryLocalAddressNative(long epId);
+
+    private static native InetSocketAddress queryRemoteAddressNative(long epId);
 
     private static native UcpRemoteKey unpackRemoteKey(long epId, long rkeyAddress);
 

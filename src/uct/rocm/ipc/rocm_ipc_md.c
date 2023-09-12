@@ -24,16 +24,17 @@ static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
 
 static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->rkey_packed_size = sizeof(uct_rocm_ipc_key_t);
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->alloc_mem_types  = 0;
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->detect_mem_types = 0;
-    md_attr->dmabuf_mem_types = 0;
-    md_attr->max_alloc        = 0;
-    md_attr->max_reg          = ULONG_MAX;
+    md_attr->rkey_packed_size       = sizeof(uct_rocm_ipc_key_t);
+    md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->reg_nonblock_mem_types = 0;
+    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->alloc_mem_types        = 0;
+    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->detect_mem_types       = 0;
+    md_attr->dmabuf_mem_types       = 0;
+    md_attr->max_alloc              = 0;
+    md_attr->max_reg                = ULONG_MAX;
 
     /* TODO: get accurate number */
     md_attr->reg_cost             = ucs_linear_func_make(9e-9, 0);
@@ -128,15 +129,14 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
                      const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close                  = (uct_md_close_func_t)ucs_empty_function,
-        .query                  = uct_rocm_ipc_md_query,
-        .mkey_pack              = uct_rocm_ipc_mkey_pack,
-        .mem_reg                = uct_rocm_ipc_mem_reg,
-        .mem_dereg              = uct_rocm_ipc_mem_dereg,
-        .mem_attach             = ucs_empty_function_return_unsupported,
-        .mem_query              = ucs_empty_function_return_unsupported,
-        .detect_memory_type     = ucs_empty_function_return_unsupported,
-        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+        .close              = (uct_md_close_func_t)ucs_empty_function,
+        .query              = uct_rocm_ipc_md_query,
+        .mkey_pack          = uct_rocm_ipc_mkey_pack,
+        .mem_reg            = uct_rocm_ipc_mem_reg,
+        .mem_dereg          = uct_rocm_ipc_mem_dereg,
+        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mem_query          = ucs_empty_function_return_unsupported,
+        .detect_memory_type = ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {
         .ops       = &md_ops,
@@ -182,6 +182,7 @@ uct_component_t uct_rocm_ipc_component = {
     .rkey_unpack        = uct_rocm_ipc_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_rocm_ipc_rkey_release,
+    .rkey_compare       = ucs_empty_function_return_unsupported,
     .name               = "rocm_ipc",
     .md_config          = {
         .name           = "ROCm-IPC memory domain",

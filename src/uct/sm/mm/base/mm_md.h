@@ -9,6 +9,7 @@
 #define UCT_MM_MD_H_
 
 #include <uct/base/uct_md.h>
+#include <uct/sm/base/sm_md.h>
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
@@ -168,8 +169,9 @@ typedef struct uct_mm_component {
             .md_open            = uct_mm_md_open, \
             .cm_open            = ucs_empty_function_return_unsupported, \
             .rkey_unpack        = _rkey_unpack, \
-            .rkey_ptr           = uct_mm_rkey_ptr, \
+            .rkey_ptr           = uct_sm_rkey_ptr, \
             .rkey_release       = _rkey_release, \
+            .rkey_compare       = ucs_empty_function_return_unsupported, \
             .name               = #_name, \
             .md_config          = { \
                 .name           = #_name " memory domain", \
@@ -199,9 +201,6 @@ ucs_status_t uct_mm_seg_new(void *address, size_t length, uct_mm_seg_t **seg_p);
 
 void uct_mm_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr,
                      uint64_t max_alloc);
-
-ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
-                             void *handle, uint64_t raddr, void **laddr_p);
 
 ucs_status_t uct_mm_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *config, uct_md_h *md_p);

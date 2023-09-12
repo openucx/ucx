@@ -17,8 +17,9 @@
 #include <common/test_helpers.h>
 
 #if HAVE_CUDA
-#  include <cuda.h>
-#  include <cuda_runtime.h>
+#include <cuda_runtime.h>
+#include <nvml.h>
+
 
 #define CUDA_CALL(_code, _details) \
     do { \
@@ -29,6 +30,22 @@
                     << _details); \
         } \
     } while (0)
+
+
+#define NVML_CALL(_code) \
+    ({ \
+        ucs_status_t _status = UCS_OK; \
+        do { \
+            nvmlReturn_t err = _code; \
+            if (err != NVML_SUCCESS) { \
+                UCS_TEST_MESSAGE << #_code \
+                                 << " failed: " << nvmlErrorString(err) \
+                                 << ", error code: " << err; \
+                _status = UCS_ERR_IO_ERROR; \
+            } \
+        } while (0); \
+        _status; \
+    })
 
 #endif
 
@@ -143,6 +160,40 @@ void mem_buffer::set_device_context()
 #endif
 
     device_set = true;
+}
+
+size_t mem_buffer::get_bar1_free_size()
+{
+    /* All gtest CUDA tests explicitly assume that all memory allocations are
+     * done on the device 0. The same assumption is followed here. */
+    size_t available_size = SIZE_MAX;
+
+#if HAVE_CUDA
+    nvmlDevice_t device;
+    nvmlBAR1Memory_t bar1mem;
+
+    if (NVML_CALL(nvmlInit_v2()) != UCS_OK) {
+        return available_size;
+    }
+
+    if (NVML_CALL(nvmlDeviceGetHandleByIndex(0, &device)) != UCS_OK) {
+        /* For whatever reason we cannot open device handle.
+         * As a result let's assume there is no limit on the size
+         * and in the worse case scenario gtest will fail in runtime */
+        return available_size;
+    }
+
+    if (NVML_CALL(nvmlDeviceGetBAR1MemoryInfo(device, &bar1mem)) != UCS_OK) {
+        /* Similarly let's assume there is no limit on the size */
+        return available_size;
+    }
+
+    available_size = (size_t)bar1mem.bar1Free;
+
+    NVML_CALL(nvmlShutdown());
+#endif
+
+    return available_size;
 }
 
 void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)

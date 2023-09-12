@@ -9,6 +9,7 @@
 
 #include "cuda_copy_ep.h"
 #include "cuda_copy_iface.h"
+#include "cuda_copy_md.h"
 
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
@@ -26,7 +27,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_ep_t, const uct_ep_params_t *params)
                                                   uct_cuda_copy_iface_t);
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     return UCS_OK;
 }
@@ -49,8 +50,8 @@ ucs_status_t uct_cuda_copy_init_stream(cudaStream_t *stream)
         return UCS_OK;
     }
 
-    return UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(stream,
-                                                           cudaStreamNonBlocking));
+    return UCT_CUDA_CALL_LOG_ERR(cudaStreamCreateWithFlags, stream,
+                                 cudaStreamNonBlocking);
 }
 
 static UCS_F_ALWAYS_INLINE cudaStream_t *
@@ -87,8 +88,8 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
 
     if ((status == UCS_ERR_UNSUPPORTED) ||
         (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN)) {
-        status = uct_cuda_base_detect_memory_type(md, address, length,
-                                                  &mem_info.type);
+        status = uct_cuda_copy_md_detect_memory_type(md, address, length,
+                                                     &mem_info.type);
         if (status != UCS_OK) {
             return UCS_MEMORY_TYPE_HOST;
         }
@@ -142,10 +143,10 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(dst, src, length, cudaMemcpyDefault,
-                                                   *stream));
+    status = UCT_CUDA_CALL_LOG_ERR(cudaMemcpyAsync, dst, src, length,
+                                   cudaMemcpyDefault, *stream);
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventRecord(cuda_event->event, *stream));
+    status = UCT_CUDA_CALL_LOG_ERR(cudaEventRecord, cuda_event->event, *stream);
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
@@ -219,9 +220,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
         return status;
     }
 
-    UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync((void*)remote_addr, buffer, length,
-                                          cudaMemcpyDefault, *stream));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(*stream));
+    UCT_CUDA_CALL_LOG_ERR(cudaMemcpyAsync, (void*)remote_addr, buffer, length,
+                          cudaMemcpyDefault, *stream);
+    status = UCT_CUDA_CALL_LOG_ERR(cudaStreamSynchronize, *stream);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
@@ -243,9 +244,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
         return status;
     }
 
-    UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(buffer, (void*)remote_addr, length,
-                                          cudaMemcpyDefault, *stream));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(*stream));
+    UCT_CUDA_CALL_LOG_ERR(cudaMemcpyAsync, buffer, (void*)remote_addr, length,
+                          cudaMemcpyDefault, *stream);
+    status = UCT_CUDA_CALL_LOG_ERR(cudaStreamSynchronize, *stream);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",

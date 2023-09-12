@@ -90,8 +90,7 @@ enum {
     UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
-    UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9),
-    UCT_IB_DEVICE_FAILED        = UCS_BIT(10)   /* Got fatal error */
+    UCT_IB_DEVICE_FAILED        = UCS_BIT(9)    /* Got fatal error */
 };
 
 
@@ -213,7 +212,6 @@ typedef struct uct_ib_device {
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     ucs_sys_cpuset_t            local_cpus;      /* CPUs local to device */
-    int                         numa_node;       /* NUMA node of the device */
     int                         async_events;    /* Whether async events are handled */
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
     UCS_STATS_NODE_DECLARE(stats)

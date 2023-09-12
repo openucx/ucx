@@ -143,6 +143,89 @@ UCS_TEST_P(test_rc_max_wr, send_limit)
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
 
+
+class test_rc_iface_address : public uct_test {
+protected:
+    entity *m_entity;
+    entity *m_entity_flush_rkey;
+
+public:
+    int rc_iface_flush_rkey_enabled(entity *e)
+    {
+        uct_rc_iface_t *rc_iface = ucs_derived_of(e->iface(), uct_rc_iface_t);
+        return uct_rc_iface_flush_rkey_enabled(rc_iface);
+    }
+
+    int rc_iface_mr_id(entity *e)
+    {
+        uct_rc_iface_t *rc_iface = ucs_derived_of(e->iface(), uct_rc_iface_t);
+        uct_ib_md_t *md          = uct_ib_iface_md(&rc_iface->super);
+        return uct_ib_md_get_atomic_mr_id(md);
+    }
+
+    static uct_iface_params_t iface_params()
+    {
+        uct_iface_params_t params = {};
+
+        params.field_mask |= UCT_IFACE_PARAM_FIELD_OPEN_MODE;
+        params.field_mask |= UCT_IFACE_PARAM_FIELD_FEATURES;
+
+        params.features  = UCT_IFACE_FEATURE_PUT;
+        params.open_mode = UCT_IFACE_OPEN_MODE_DEVICE;
+        return params;
+    }
+
+    void init()
+    {
+        uct_test::init();
+
+        uct_iface_params_t params = iface_params();
+        m_entity                  = uct_test::create_entity(params);
+
+        params.features    |= UCT_IFACE_FEATURE_FLUSH_REMOTE;
+        m_entity_flush_rkey = uct_test::create_entity(params);
+
+        m_entities.push_back(m_entity);
+        m_entities.push_back(m_entity_flush_rkey);
+    }
+
+    using map_size_t = std::map<std::string, std::pair<size_t, size_t>>;
+
+    void check_sizes(entity *e, const map_size_t &sizes)
+    {
+        auto it = sizes.find(GetParam()->tl_name);
+        ASSERT_NE(sizes.end(), it);
+
+        EXPECT_EQ(it->second.first, e->iface_attr().ep_addr_len);
+        EXPECT_EQ(it->second.second, e->iface_attr().iface_addr_len);
+    }
+};
+
+UCS_TEST_P(test_rc_iface_address, size_no_flush_remote)
+{
+    map_size_t sizes = {
+        {"rc_mlx5", {7, 1}},
+        {"dc_mlx5", {0, 5}},
+        {"rc_verbs", {7, 0}},
+    };
+    check_sizes(m_entity, sizes);
+}
+
+UCS_TEST_P(test_rc_iface_address, size_flush_remote)
+{
+    int flush_rkey_enabled = rc_iface_flush_rkey_enabled(m_entity_flush_rkey);
+    int mr_id              = rc_iface_mr_id(m_entity_flush_rkey);
+    map_size_t sizes = {
+        {"rc_mlx5", {flush_rkey_enabled ? 10 : 7, 1}},
+        {"dc_mlx5", {0, flush_rkey_enabled ? 7 : 5}},
+        {"rc_verbs", {flush_rkey_enabled || (mr_id != 0) ? 7 : 4, 0}},
+    };
+    check_sizes(m_entity_flush_rkey, sizes);
+}
+
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_iface_address)
+
+
 class test_rc_get_limit : public test_rc {
 public:
     struct am_completion_t {

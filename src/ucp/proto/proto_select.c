@@ -160,7 +160,8 @@ static ucs_status_t ucp_proto_thresholds_next_range(
     ucs_memunits_range_str(msg_length, max_length, range_str,
                            sizeof(range_str));
     ucs_trace("select best protocol for %s %s",
-              ucp_operation_names[select_param->op_id], range_str);
+              ucp_operation_names[ucp_proto_select_op_id(select_param)],
+              range_str);
 
     ucs_log_indent(1);
 
@@ -238,7 +239,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     init_params.select_param   = select_param;
     init_params.ep_cfg_index   = ep_cfg_index;
     init_params.rkey_cfg_index = rkey_cfg_index;
-    init_params.ep_config_key  = &worker->ep_config[ep_cfg_index].key;
+    init_params.ep_config_key  = &ucs_array_elem(&worker->ep_config,
+                                                 ep_cfg_index).key;
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         init_params.rkey_config_key = NULL;
@@ -286,6 +288,15 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
             }
             ucs_log_indent(-1);
             continue;
+        }
+
+        if (init_params.ep_config_key->err_mode != UCP_ERR_HANDLING_MODE_NONE) {
+            ucs_assertv(ucp_protocols[proto_id]->abort !=
+                        ucp_proto_abort_fatal_not_implemented,
+                        "selected protocol %s doesn't implement abort() "
+                        "function, but err handling mode is %d",
+                        ucp_protocols[proto_id]->name,
+                        init_params.ep_config_key->err_mode);
         }
 
         ucp_proto_select_init_trace_caps(proto_id, &init_params);
@@ -567,8 +578,59 @@ err:
     return status;
 }
 
+/**
+ * Get map of lanes used in the selected protocols.
+ */
+static ucp_lane_map_t
+ucp_proto_select_get_lane_map(ucp_worker_h worker,
+                              const ucp_proto_select_elem_t *select_elem)
+{
+    ucp_lane_map_t lane_map = 0;
+    size_t range_start, range_end;
+    ucp_proto_query_attr_t query_attr;
+
+    range_end = -1;
+    do {
+        range_start = range_end + 1;
+        ucp_proto_select_elem_query(worker, select_elem, range_start,
+                                    &query_attr);
+
+        range_end = query_attr.max_msg_length;
+        lane_map |= query_attr.lane_map;
+    } while (range_end != SIZE_MAX);
+
+    return lane_map;
+}
+
+/**
+ * Activate UCP worker interfaces corresponding to the resources of lanes used
+ * in the selected protocols.
+ */
+static void
+ucp_proto_select_wiface_activate(ucp_worker_h worker,
+                                 const ucp_proto_select_elem_t *select_elem,
+                                 ucp_worker_cfg_index_t ep_cfg_index)
+{
+    ucp_lane_map_t lane_map;
+    ucp_ep_config_key_t *ep_config_key;
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+
+    lane_map      = ucp_proto_select_get_lane_map(worker, select_elem);
+    ep_config_key = &ucs_array_elem(&worker->ep_config, ep_cfg_index).key;
+    ucs_for_each_bit(lane, lane_map) {
+        ucs_assertv(lane < UCP_MAX_LANES,
+                    "lane=%" PRIu8 ", lane_map=0x%" PRIx16, lane, lane_map);
+        rsc_index = ep_config_key->lanes[lane].rsc_index;
+        wiface    = ucp_worker_iface(worker, rsc_index);
+        ucp_worker_iface_progress_ep(wiface);
+        wiface->flags |= UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE;
+    }
+}
+
 static ucs_status_t
-ucp_proto_select_elem_init(ucp_worker_h worker,
+ucp_proto_select_elem_init(ucp_worker_h worker, int internal,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
                            const ucp_proto_select_param_t *select_param,
@@ -609,8 +671,13 @@ ucp_proto_select_elem_init(ucp_worker_h worker,
         goto out_cleanup_proto_init;
     }
 
-    ucp_proto_select_elem_trace(worker, ep_cfg_index, rkey_cfg_index,
-                                select_param, select_elem);
+    ucp_proto_select_wiface_activate(worker, select_elem, ep_cfg_index);
+
+    if (!internal) {
+        ucp_proto_select_elem_trace(worker, ep_cfg_index, rkey_cfg_index,
+                                    select_param, select_elem);
+    }
+
     status = UCS_OK;
 
 out_cleanup_proto_init:
@@ -644,7 +711,7 @@ static void ucp_proto_select_cache_reset(ucp_proto_select_t *proto_select)
 
 ucp_proto_select_elem_t *
 ucp_proto_select_lookup_slow(ucp_worker_h worker,
-                             ucp_proto_select_t *proto_select,
+                             ucp_proto_select_t *proto_select, int internal,
                              ucp_worker_cfg_index_t ep_cfg_index,
                              ucp_worker_cfg_index_t rkey_cfg_index,
                              const ucp_proto_select_param_t *select_param)
@@ -662,8 +729,9 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
         goto out;
     }
 
-    status = ucp_proto_select_elem_init(worker, ep_cfg_index, rkey_cfg_index,
-                                        select_param, &tmp_select_elem);
+    status = ucp_proto_select_elem_init(worker, internal, ep_cfg_index,
+                                        rkey_cfg_index, select_param,
+                                        &tmp_select_elem);
     if (status != UCS_OK) {
         return NULL;
     }
@@ -712,34 +780,35 @@ void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short)
     proto_short->rkey_index             = UCP_NULL_RESOURCE;
 }
 
-void
-ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_select,
-                            ucp_worker_cfg_index_t ep_cfg_index,
-                            ucp_worker_cfg_index_t rkey_cfg_index,
-                            ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                            unsigned proto_flags,
-                            ucp_proto_select_short_t *proto_short)
+void ucp_proto_select_short_init(ucp_worker_h worker,
+                                 ucp_proto_select_t *proto_select,
+                                 ucp_worker_cfg_index_t ep_cfg_index,
+                                 ucp_worker_cfg_index_t rkey_cfg_index,
+                                 ucp_operation_id_t op_id, unsigned proto_flags,
+                                 ucp_proto_select_short_t *proto_short)
 {
-    ucp_context_h context    = worker->context;
-    const ucp_proto_t *proto = NULL;
+    static const uint32_t op_attributes[] = {0, UCP_OP_ATTR_FLAG_FAST_CMPL,
+                                             UCP_OP_ATTR_FLAG_MULTI_SEND};
+    ucp_context_h context                 = worker->context;
+    const ucp_proto_t *proto              = NULL;
     const ucp_proto_threshold_elem_t *thresh;
     ucp_proto_select_param_t select_param;
     const ucp_proto_single_priv_t *spriv;
     ucp_memory_info_t mem_info;
     ssize_t max_short_signed;
-    uint32_t op_attr;
+    const uint32_t *op_attribute;
 
     ucp_memory_info_set_host(&mem_info);
 
     /*
-     * Find the minimal threshold among all protocols for all possible
-     * combinations of bits in 'op_attr_mask'. For example, we are allowed to
-     * use fast-path short protocol only if the message size fits short protocol
-     * in both regular mode and UCP_OP_ATTR_FLAG_FAST_CMPL mode.
+     * Find the minimal threshold for operation 'op_id' among all protocols
+     * with attribute from 'op_attributes'. Fast-path short protocol
+     * can be used only if the message size fits this minimal threshold.
      */
     ucs_log_indent(1);
-    ucs_for_each_submask(op_attr, op_attr_mask) {
-        ucp_proto_select_param_init(&select_param, op_id, op_attr, 0,
+    ucs_carray_for_each(op_attribute, op_attributes,
+                        ucs_static_array_size(op_attributes)) {
+        ucp_proto_select_param_init(&select_param, op_id, *op_attribute, 0,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
         thresh = ucp_proto_select_lookup(worker, proto_select, ep_cfg_index,
                                          rkey_cfg_index, &select_param, 0);
@@ -749,7 +818,8 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
         }
 
         ucs_assert(thresh->proto_config.proto != NULL);
-        if (!ucs_test_all_flags(thresh->proto_config.proto->flags, proto_flags)) {
+        if (!ucs_test_all_flags(thresh->proto_config.proto->flags,
+                                proto_flags)) {
             /* the protocol for smallest messages is not short */
             goto out_disable;
         }
@@ -843,7 +913,7 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-        return &worker->ep_config[ep_cfg_index].proto_select;
+        return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
     } else {
         rkey_config_key = worker->rkey_config[rkey_cfg_index].key;
 
@@ -869,7 +939,8 @@ void ucp_proto_config_query(ucp_worker_h worker,
         .priv          = proto_config->priv,
         .worker        = worker,
         .select_param  = &proto_config->select_param,
-        .ep_config_key = &worker->ep_config[proto_config->ep_cfg_index].key,
+        .ep_config_key = &ucs_array_elem(&worker->ep_config,
+                                         proto_config->ep_cfg_index).key,
         .msg_length    = msg_length
     };
 
@@ -881,11 +952,13 @@ int ucp_proto_select_elem_query(ucp_worker_h worker,
                                 size_t msg_length,
                                 ucp_proto_query_attr_t *proto_attr)
 {
-    const ucp_proto_threshold_elem_t *thresh_elem =
-            ucp_proto_select_thresholds_search(select_elem, msg_length);
+    const ucp_proto_threshold_elem_t *thresh_elem;
+    const ucp_proto_config_t *proto_config;
 
-    ucp_proto_config_query(worker, &thresh_elem->proto_config, msg_length,
-                           proto_attr);
+    thresh_elem  = ucp_proto_select_thresholds_search(select_elem, msg_length);
+    proto_config = &thresh_elem->proto_config;
+
+    ucp_proto_config_query(worker, proto_config, msg_length, proto_attr);
 
     proto_attr->max_msg_length = ucs_min(proto_attr->max_msg_length,
                                          thresh_elem->max_msg_length);

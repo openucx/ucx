@@ -39,6 +39,10 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucp_worker_h worker                          = init_params->worker;
     ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
+    ucp_proto_common_init_params_t err_params    = {
+        .super = *init_params,
+        .flags = 0
+    };
     const ucp_proto_threshold_elem_t *thresh_elem;
     const ucp_proto_select_elem_t *select_elem;
     const ucp_proto_perf_range_t *frag_range;
@@ -53,18 +57,18 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        ((select_param->op_id != UCP_OP_ID_RNDV_SEND) &&
-         (select_param->op_id != UCP_OP_ID_RNDV_RECV)) ||
+        !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
+        !ucp_proto_common_init_check_err_handling(&err_params) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     /* Select a protocol for rndv recv */
-    sel_param          = *select_param;
-    sel_param.op_flags = UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG |
-                         UCP_PROTO_SELECT_OP_FLAG_INTERNAL |
-                         ucp_proto_select_op_attr_to_flags(
-                                 UCP_OP_ATTR_FLAG_MULTI_SEND);
+    sel_param             = *select_param;
+    sel_param.op_id_flags = ucp_proto_select_op_id(select_param) |
+                            UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+    sel_param.op_attr     = ucp_proto_select_op_attr_pack(
+            UCP_OP_ATTR_FLAG_MULTI_SEND);
 
     proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
                                         init_params->rkey_cfg_index,
@@ -73,7 +77,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
         return UCS_OK;
     }
 
-    select_elem = ucp_proto_select_lookup_slow(worker, proto_select,
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
                                                init_params->ep_cfg_index,
                                                init_params->rkey_cfg_index,
                                                &sel_param);
@@ -139,10 +143,13 @@ static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
 
         attr->max_msg_length = SIZE_MAX;
         attr->is_estimation  = 0;
+        attr->lane_map       = frag_attr.lane_map;
         ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "pipeline %s",
                           frag_attr.desc);
         ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
     }
+
+    attr->lane_map |= UCS_BIT(rpriv->ack.lane);
 }
 
 static void
@@ -164,6 +171,8 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack, int abort,
         ucp_proto_rndv_rkey_destroy(req);
     }
 
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
+
     if ((req->send.rndv.ppln.ack_data_size > 0) && !abort) {
         ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_PPLN_STAGE_ACK);
         ucp_request_send(req);
@@ -179,11 +188,28 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
                                       "ppln_send");
 }
 
+static ucs_status_t ucp_proto_rndv_recv_ppln_reset(ucp_request_t *req)
+{
+    ucs_assert(req->send.rndv.ppln.ack_data_size == 0);
+
+    if (!ucp_proto_common_multi_frag_is_completed(req)) {
+        return UCS_OK;
+    }
+
+    req->status                    = UCS_OK;
+    req->send.state.dt_iter.offset = 0;
+    ucp_proto_request_restart(req);
+    return UCS_OK;
+}
+
 void ucp_proto_rndv_ppln_recv_frag_clean(ucp_request_t *freq)
 {
-    ucp_proto_rndv_ppln_frag_complete(
-            freq, 0, 0, (ucp_proto_complete_cb_t)ucs_empty_function,
-            "ppln_recv_clean");
+    ucp_send_request_id_release(freq);
+
+    /* abort freq since super request may change protocol */
+    ucp_proto_rndv_ppln_frag_complete(freq, 0, 1,
+                                      ucp_proto_rndv_recv_ppln_reset,
+                                      "ppln_recv_clean");
 }
 
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
@@ -239,8 +265,9 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         ucp_proto_request_select_proto(freq, &rpriv->frag_proto,
                                        freq->send.state.dt_iter.length);
 
-        ucp_trace_req(req, "send fragment request %p", freq);
-        ucp_request_send(freq);
+        ucp_trace_req(req, "send freq %p offset %zu size %zu", freq,
+                      freq->send.rndv.offset, freq->send.state.dt_iter.length);
+        UCS_PROFILE_CALL_VOID_ALWAYS(ucp_request_send, freq);
 
         ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
                                         UCS_BIT(UCP_DATATYPE_CONTIG));
@@ -261,7 +288,7 @@ static size_t ucp_proto_rndv_ppln_pack_ack(void *dest, void *arg)
 static ucs_status_t
 ucp_proto_rndv_send_ppln_init(const ucp_proto_init_params_t *init_params)
 {
-    if (init_params->select_param->op_id != UCP_OP_ID_RNDV_SEND) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -290,13 +317,13 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_send_ppln_atp_progress,
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
 static ucs_status_t
 ucp_proto_rndv_recv_ppln_init(const ucp_proto_init_params_t *init_params)
 {
-    if (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -315,6 +342,23 @@ ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
                                        ucp_proto_rndv_recv_complete);
 }
 
+ucs_status_t ucp_proto_rndv_ppln_reset(ucp_request_t *req)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        return UCS_OK;
+    }
+
+    ucs_assert(req->send.state.completed_size == 0);
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+
+    if ((req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_SEND) &&
+        (req->send.proto_stage != UCP_PROTO_RNDV_PPLN_STAGE_ACK)) {
+        ucp_proto_fatal_invalid_stage(req, "reset");
+    }
+
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_recv_ppln_proto = {
     .name     = "rndv/recv/ppln",
     .desc     = NULL,
@@ -326,5 +370,5 @@ ucp_proto_t ucp_rndv_recv_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_recv_ppln_ats_progress,
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_ppln_reset
 };

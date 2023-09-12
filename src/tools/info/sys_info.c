@@ -1,6 +1,7 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
+* Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -30,14 +31,19 @@ static const char *cpu_model_names[] = {
     [UCS_CPU_MODEL_INTEL_HASWELL]      = "Haswell",
     [UCS_CPU_MODEL_INTEL_BROADWELL]    = "Broadwell",
     [UCS_CPU_MODEL_INTEL_SKYLAKE]      = "Skylake",
+    [UCS_CPU_MODEL_INTEL_ICELAKE]      = "Icelake",
     [UCS_CPU_MODEL_ARM_AARCH64]        = "ARM 64-bit",
     [UCS_CPU_MODEL_AMD_NAPLES]         = "Naples",
     [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
     [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
+    [UCS_CPU_MODEL_AMD_GENOA]          = "Genoa",
     [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
     [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
-    [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui"
+    [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui",
+    [UCS_CPU_MODEL_RV64G]              = "RV64G",
 };
+
+
 
 static const char* cpu_vendor_names[] = {
     [UCS_CPU_VENDOR_UNKNOWN]          = "unknown",
@@ -45,6 +51,7 @@ static const char* cpu_vendor_names[] = {
     [UCS_CPU_VENDOR_AMD]              = "AMD",
     [UCS_CPU_VENDOR_GENERIC_ARM]      = "Generic ARM",
     [UCS_CPU_VENDOR_GENERIC_PPC]      = "Generic PPC",
+    [UCS_CPU_VENDOR_GENERIC_RV64G]    = "Generic RV64G",
     [UCS_CPU_VENDOR_FUJITSU_ARM]      = "Fujitsu ARM",
     [UCS_CPU_VENDOR_ZHAOXIN]          = "Zhaoxin"
 };
@@ -111,11 +118,40 @@ static void print_row_separator(int column_width, int first_column_width,
     printf("%c\n", separator_char);
 }
 
+static void print_table_header(const char *title, const char *distance_unit,
+                               int column_width, int first_column_width,
+                               int num_columns)
+{
+    int column;
+
+    printf("#\n");
+    printf("# %s\n", title);
+    printf("#\n");
+    print_row_separator(column_width, first_column_width, num_columns, '-',
+                        '+');
+    print_row_separator(column_width, first_column_width, num_columns, ' ',
+                        '|');
+    printf("# |%*s ", first_column_width - 1, distance_unit);
+    for (column = 0; column < num_columns; ++column) {
+        printf("|%*s ", column_width - 1,
+               ucs_topo_sys_device_get_name((ucs_sys_device_t)column));
+    }
+
+    printf("|\n");
+    print_row_separator(column_width, first_column_width, num_columns, ' ',
+                        '|');
+    print_row_separator(column_width, first_column_width, num_columns, '-',
+                        '+');
+}
+
 static void print_sys_topo()
 {
-    unsigned num_devices            = ucs_topo_num_devices();
-    static const int distance_width = 10;
-    const char *distance_unit       = "MB/s";
+    const unsigned num_devices              = ucs_topo_num_devices();
+    static const int distance_width         = 10;
+    static const char *system_topo_title    = "System topology";
+    static const char *distance_unit        = "MB/s";
+    static const char *memory_latency_title = "NUMA memory latency";
+    static const char *numa_distance_unit   = "nsec";
     ucs_sys_device_t sys_dev1, sys_dev2;
     ucs_sys_dev_distance_t distance;
     char distance_str[20];
@@ -129,22 +165,8 @@ static void print_sys_topo()
                 name_width, 2 + strlen(ucs_topo_sys_device_get_name(sys_dev1)));
     }
 
-    printf("#\n");
-    printf("# System topology:\n");
-    printf("#\n");
-
-    /* Print table header */
-    print_row_separator(distance_width, name_width, num_devices, '-', '+');
-    print_row_separator(distance_width, name_width, num_devices, ' ', '|');
-    printf("# |%*s ", name_width - 1, distance_unit);
-    for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
-        printf("|%*s ", distance_width - 1,
-               ucs_topo_sys_device_get_name(sys_dev2));
-    }
-    printf("|\n");
-
-    print_row_separator(distance_width, name_width, num_devices, ' ', '|');
-    print_row_separator(distance_width, name_width, num_devices, '-', '+');
+    print_table_header(system_topo_title, distance_unit, distance_width,
+                       name_width, num_devices);
 
     /* Print table content */
     for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
@@ -160,7 +182,7 @@ static void print_sys_topo()
                 status = ucs_topo_get_distance(sys_dev1, sys_dev2, &distance);
                 if (status != UCS_OK) {
                     ucs_snprintf_safe(distance_str, sizeof(distance_str),
-                                      "<error %d>", status);
+                                      "<%s>", ucs_status_string(status));
                 } else if (distance.bandwidth > UCS_PBYTE) {
                     ucs_snprintf_safe(distance_str, sizeof(distance_str),
                                       "inf");
@@ -176,7 +198,25 @@ static void print_sys_topo()
         print_row_separator(distance_width, name_width, num_devices, ' ', '|');
         print_row_separator(distance_width, name_width, num_devices, '-', '+');
     }
-    printf("#\n");
+
+    print_table_header(memory_latency_title, "device", distance_width,
+                       name_width, num_devices);
+    print_row_separator(distance_width, name_width, num_devices, ' ', '|');
+
+    printf("# |%*s ", name_width - 1, numa_distance_unit);
+    printf("|");
+    for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
+        ucs_topo_get_memory_distance(sys_dev1, &distance);
+        ucs_snprintf_safe(distance_str, sizeof(distance_str), "%.1f",
+                          distance.latency * UCS_NSEC_PER_SEC);
+        printf("%*s |", distance_width - 1, distance_str);
+    }
+
+    printf("\n");
+    print_row_separator(distance_width, name_width, num_devices, ' ', '|');
+    print_row_separator(distance_width, name_width, num_devices, '-', '+');
+
+    printf("# Memory latency is calculated according to the CPU affinity\n");
 }
 
 static double measure_timer_accuracy()

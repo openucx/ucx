@@ -12,6 +12,7 @@
 #include <uct/base/uct_worker.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/status.h>
@@ -186,6 +187,9 @@ enum {
     UCT_IB_MLX5_MD_FLAG_CQE128_ZIP           = UCS_BIT(11),
     /* Device performance is optimized when RDMA_WRITE is not used */
     UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED = UCS_BIT(12),
+    /* Device supports indirect xgvmi MR. This flag is removed if xgvmi access
+     * command fails */
+    UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI       = UCS_BIT(13),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
@@ -225,7 +229,35 @@ enum {
 
 
 #if HAVE_DEVX
-typedef struct uct_ib_mlx5_devx_umem {
+typedef struct {
+    struct mlx5dv_devx_obj *dvmr;
+    int                    mr_num;
+    size_t                 length;
+    struct ibv_mr          *mrs[];
+} uct_ib_mlx5_devx_ksm_data_t;
+
+
+typedef union {
+    uct_ib_mr_t                 super;
+    uct_ib_mlx5_devx_ksm_data_t *ksm_data;
+} uct_ib_mlx5_devx_mr_t;
+
+
+typedef struct {
+    uct_ib_mem_t            super;
+    void                    *address;
+    struct mlx5dv_devx_obj  *atomic_dvmr;
+    struct mlx5dv_devx_obj  *indirect_dvmr;
+    struct mlx5dv_devx_umem *umem;
+    struct mlx5dv_devx_obj  *cross_mr;
+    uint32_t                atomic_rkey;
+    uint32_t                indirect_rkey;
+    uint32_t                exported_lkey;
+    uct_ib_mlx5_devx_mr_t   mrs[];
+} uct_ib_mlx5_devx_mem_t;
+
+
+typedef struct {
     struct mlx5dv_devx_umem  *mem;
     size_t                   size;
 } uct_ib_mlx5_devx_umem_t;
@@ -268,10 +300,11 @@ KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
  * MLX5 IB memory domain.
  */
 typedef struct uct_ib_mlx5_md {
-    uct_ib_md_t              super;
-    uint32_t                 flags;
-    ucs_mpool_t              dbrec_pool;
-    ucs_recursive_spinlock_t dbrec_lock;
+    uct_ib_md_t               super;
+    uint32_t                  flags;
+    ucs_mpool_t               dbrec_pool;
+    ucs_recursive_spinlock_t  dbrec_lock;
+    uct_ib_port_select_mode_t port_select_mode;
 #if HAVE_DEVX
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;
@@ -322,7 +355,7 @@ typedef struct uct_ib_mlx5_iface_config {
 #endif
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
     ucs_ternary_auto_value_t ar_enable;
-    int                      cqe_zipping_enable;
+    int                      cqe_zip_enable[UCT_IB_DIR_LAST];
 } uct_ib_mlx5_iface_config_t;
 
 
@@ -610,7 +643,6 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
     uint64_t           filed_boundary;
 } UCS_S_PACKED;
 
-ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *md, uint8_t *mr_id);
 
 ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
                                               uct_ib_mlx5_qp_t *txwq);
@@ -865,7 +897,7 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     mem->mem  = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size,
                                      access_mode);
     if (mem->mem == NULL) {
-        ucs_log(level, "mlx5dv_devx_umem_reg() failed: %m");
+        uct_ib_check_memlock_limit_msg(level, "mlx5dv_devx_umem_reg()");
         status = UCS_ERR_NO_MEMORY;
         goto err_dofork;
     }

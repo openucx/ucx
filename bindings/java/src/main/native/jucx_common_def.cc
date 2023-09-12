@@ -393,12 +393,14 @@ jobject jucx_request_allocate(JNIEnv *env, const jobject callback,
     return jucx_request;
 }
 
-void process_request(JNIEnv *env, jobject jucx_request, ucs_status_ptr_t status)
+void process_request(JNIEnv *env, const ucp_request_param_t *request_params, ucs_status_ptr_t status)
 {
     // If status is error - throw an exception in java.
     if (UCS_PTR_IS_ERR(status)) {
         JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(status));
     }
+
+    jobject jucx_request = reinterpret_cast<jobject>(request_params->user_data);
 
     if (UCS_PTR_IS_PTR(status)) {
       env->CallVoidMethod(jucx_request, jucx_set_native_id, (native_ptr)status);
@@ -411,6 +413,8 @@ void process_request(JNIEnv *env, jobject jucx_request, ucs_status_ptr_t status)
             // Remove callback reference from request.
             env->SetObjectField(jucx_request, request_callback, NULL);
         }
+
+        env->DeleteGlobalRef(jucx_request);
     }
 }
 

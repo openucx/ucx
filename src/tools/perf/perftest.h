@@ -12,15 +12,13 @@
 
 #if defined (HAVE_MPI)
 #  include <mpi.h>
-#elif defined (HAVE_RTE)
-#   include<rte.h>
 #endif
 
 
 #define MAX_BATCH_FILES         32
 #define MAX_CPUS                1024
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:lz"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:lyz"
 #define TEST_ID_UNDEFINED       -1
 
 enum {
@@ -69,6 +67,7 @@ struct perftest_context {
     unsigned                     num_batch_files;
     char                         *batch_files[MAX_BATCH_FILES];
     char                         *test_names[MAX_BATCH_FILES];
+    const char                   *mad_port;
 
     sock_rte_group_t             sock_rte_group;
 };
@@ -90,5 +89,7 @@ void print_progress(char **test_names, unsigned num_names,
                     const ucx_perf_result_t *result, const char *extra_info,
                     unsigned flags, int final, int is_server,
                     int is_multi_thread);
+
+void release_msg_size_list(perftest_params_t *params);
 
 #endif /* UCX_PERFTEST_H */

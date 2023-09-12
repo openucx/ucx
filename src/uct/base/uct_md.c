@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017. ALL RIGHTS RESERVED.
+* Copyright (c) Triad National Security, LLC. 2023. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -41,40 +42,6 @@
 ucs_config_field_t uct_md_config_table[] = {
 
   {NULL}
-};
-
-ucs_config_field_t uct_md_config_rcache_table[] = {
-    {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
-     ucs_offsetof(uct_md_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
-
-    {"RCACHE_OVERHEAD", "auto", "Registration cache lookup overhead",
-     ucs_offsetof(uct_md_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME_UNITS},
-
-    {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
-     "Registration cache address alignment, must be power of 2\n"
-     "between " UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN) "and system page size",
-     ucs_offsetof(uct_md_rcache_config_t, alignment), UCS_CONFIG_TYPE_UINT},
-
-    {"RCACHE_MAX_REGIONS", "inf",
-     "Maximal number of regions in the registration cache",
-     ucs_offsetof(uct_md_rcache_config_t, max_regions),
-     UCS_CONFIG_TYPE_ULUNITS},
-
-    {"RCACHE_MAX_SIZE", "inf",
-     "Maximal total size of registration cache regions",
-     ucs_offsetof(uct_md_rcache_config_t, max_size), UCS_CONFIG_TYPE_MEMUNITS},
-
-    {"RCACHE_MAX_UNRELEASED", "512M",
-     "Maximal size of total memory regions in invalidate queue and garbage,\n"
-     "after which a cleanup is triggered.",
-     ucs_offsetof(uct_md_rcache_config_t, max_unreleased),
-     UCS_CONFIG_TYPE_MEMUNITS},
-
-    {"RCACHE_PURGE_ON_FORK", "y",
-     "Purge registration cache upon fork",
-     ucs_offsetof(uct_md_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
-
-    {NULL}
 };
 
 
@@ -394,6 +361,17 @@ ucs_status_t uct_rkey_release(uct_component_h component,
     return component->rkey_release(component, rkey_ob->rkey, rkey_ob->handle);
 }
 
+ucs_status_t
+uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
+                 const uct_rkey_compare_params_t *params, int *result)
+{
+    if ((params->field_mask != 0) || (result == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return component->rkey_compare(component, rkey1, rkey2, params, result);
+}
+
 static void uct_md_attr_from_v2(uct_md_attr_t *dst, const uct_md_attr_v2_t *src)
 {
     dst->cap.max_alloc        = src->max_alloc;
@@ -419,6 +397,8 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, flags, UCT_MD_ATTR_FIELD_FLAGS);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_mem_types,
                               UCT_MD_ATTR_FIELD_REG_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_nonblock_mem_types,
+                              UCT_MD_ATTR_FIELD_REG_NONBLOCK_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, cache_mem_types,
                               UCT_MD_ATTR_FIELD_CACHE_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, detect_mem_types,
@@ -493,28 +473,12 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_mem_check_flags(unsigned flags)
-{
-    if (!(flags & UCT_MD_MEM_ACCESS_ALL)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-    return UCS_OK;
-}
-
 ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         const uct_alloc_method_t *methods,
                                         unsigned num_methods,
                                         const uct_mem_alloc_params_t *params)
 {
-    ucs_status_t status;
-
     if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
-        status = uct_mem_check_flags(params->flags);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        /* assuming flags are valid */
         if (params->flags & UCT_MD_MEM_FLAG_FIXED) {
             if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS)) {
                 ucs_debug("UCT_MD_MEM_FLAG_FIXED requires setting of"
@@ -527,7 +491,7 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
                 ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
                 return UCS_ERR_INVALID_PARAM;
             }
-	    }
+        }
     }
 
     if (length == 0) {
@@ -554,7 +518,7 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)
 
 ucs_status_t
 uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr, size_t length,
-                  unsigned advice)
+                  uct_mem_advice_t advice)
 {
     if ((length == 0) || (addr == NULL)) {
         return UCS_ERR_INVALID_PARAM;
@@ -579,21 +543,12 @@ ucs_status_t uct_md_mem_reg_v2(uct_md_h md, void *address, size_t length,
                                uct_mem_h *memh_p)
 {
     uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
-    ucs_status_t status;
 
     if ((length == 0) || (address == NULL)) {
         uct_md_log_mem_reg_error(flags,
                                  "uct_md_mem_reg(address=%p length=%zu): "
                                  "invalid parameters", address, length);
         return UCS_ERR_INVALID_PARAM;
-    }
-
-    status = uct_mem_check_flags(flags);
-    if (status != UCS_OK) {
-        uct_md_log_mem_reg_error(flags,
-                                 "uct_md_mem_reg_v2(flags=0x%lx): invalid"
-                                 " flags", flags);
-        return status;
     }
 
     return md->ops->mem_reg(md, address, length, params, memh_p);
@@ -624,7 +579,7 @@ ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
 int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                   uct_sockaddr_accessibility_t mode)
 {
-    return md->ops->is_sockaddr_accessible(md, sockaddr, mode);
+    return 0; /* Retained for API backward compatibility */
 }
 
 ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr, size_t length,
@@ -652,19 +607,7 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
     return UCS_OK;
 }
 
-void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
-                              const uct_md_rcache_config_t *rcache_config)
-{
-    rcache_params->alignment          = rcache_config->alignment;
-    rcache_params->ucm_event_priority = rcache_config->event_prio;
-    rcache_params->max_regions        = rcache_config->max_regions;
-    rcache_params->max_size           = rcache_config->max_size;
-    rcache_params->max_unreleased     = rcache_config->max_unreleased;
-    rcache_params->flags              = !rcache_config->purge_on_fork ? 0 :
-                                        UCS_RCACHE_FLAG_PURGE_ON_FORK;
-}
-
-double uct_md_rcache_overhead(const uct_md_rcache_config_t *rcache_config)
+double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config)
 {
     if (rcache_config->overhead == UCS_TIME_AUTO) {
         if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {

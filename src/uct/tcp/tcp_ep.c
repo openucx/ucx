@@ -395,12 +395,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
         /* a failed EP callback can be still scheduled on the UCT worker,
          * remove it to prevent a callback is being invoked for the
          * destroyed EP */
-        ucs_callbackq_remove_if(&iface->super.worker->super.progress_q,
-                                uct_tcp_ep_failed_remove_filter, self);
+        ucs_callbackq_remove_oneshot(&iface->super.worker->super.progress_q,
+                                     self, uct_tcp_ep_failed_remove_filter,
+                                     self);
     }
 
-    ucs_callbackq_remove_if(&iface->super.worker->super.progress_q,
-                            uct_tcp_ep_progress_rx_remove_filter, self);
+    ucs_callbackq_remove_oneshot(&iface->super.worker->super.progress_q, self,
+                                 uct_tcp_ep_progress_rx_remove_filter, self);
 
     uct_tcp_ep_cleanup(self);
     uct_tcp_cm_change_conn_state(self, UCT_TCP_EP_CONN_STATE_CLOSED);
@@ -487,7 +488,6 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, ucs_status_t status)
 {
     uct_tcp_iface_t *iface   = ucs_derived_of(ep->super.super.iface,
                                               uct_tcp_iface_t);
-    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
 
     if (ep->flags & UCT_TCP_EP_FLAG_FAILED) {
         return;
@@ -508,9 +508,8 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep, ucs_status_t status)
                                 status);
     } else {
         ep->flags |= UCT_TCP_EP_FLAG_FAILED;
-        uct_worker_progress_register_safe(&iface->super.worker->super,
-                                          uct_tcp_ep_destroy_progress, ep,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+        ucs_callbackq_add_oneshot(&iface->super.worker->super.progress_q, ep,
+                                  uct_tcp_ep_destroy_progress, ep);
     }
 }
 
@@ -635,10 +634,9 @@ err:
 
 void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep)
 {
-    uct_tcp_iface_t *iface   = ucs_derived_of(to_ep->super.super.iface,
-                                              uct_tcp_iface_t);
-    int events               = from_ep->events;
-    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
+    uct_tcp_iface_t *iface = ucs_derived_of(to_ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    int events             = from_ep->events;
 
     uct_tcp_ep_mod_events(from_ep, 0, from_ep->events);
     to_ep->fd   = from_ep->fd;
@@ -661,9 +659,8 @@ void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep)
 
     if (uct_tcp_ep_ctx_buf_need_progress(&to_ep->rx)) {
         /* If some data was already read, we have to process it */
-        uct_worker_progress_register_safe(&iface->super.worker->super,
-                                          uct_tcp_ep_progress_data_rx, to_ep,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+        ucs_callbackq_add_oneshot(&iface->super.worker->super.progress_q, to_ep,
+                                  uct_tcp_ep_progress_data_rx, to_ep);
     }
 
     /* The internal EP is not needed anymore, start failed flow for the
@@ -840,10 +837,10 @@ uct_tcp_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                             const uct_ep_addr_t *ep_addr,
                             const uct_ep_connect_to_ep_params_t *param)
 {
-    uct_tcp_ep_t *ep                    = ucs_derived_of(tl_ep, uct_tcp_ep_t);
-    uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
-                                                         uct_tcp_iface_t);
-    uct_tcp_ep_addr_t *addr             = (uct_tcp_ep_addr_t*)ep_addr;
+    uct_tcp_ep_t *ep        = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    uct_tcp_iface_t  *iface = ucs_derived_of(ep->super.super.iface,
+                                             uct_tcp_iface_t);
+    uct_tcp_ep_addr_t *addr = (uct_tcp_ep_addr_t*)ep_addr;
     ucs_status_t status;
 
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);
@@ -2165,4 +2162,30 @@ uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     ucs_assert(hdr != NULL);
     hdr->length = 0;
     return uct_tcp_ep_am_send(ep, hdr);
+}
+
+int uct_tcp_ep_is_connected(uct_ep_h tl_ep,
+                            const uct_ep_is_connected_params_t *params)
+{
+    uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    ucs_status_t status;
+    struct sockaddr_storage dest_addr;
+    int is_connected;
+
+    UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(params);
+
+    status = uct_tcp_ep_set_dest_addr(params->device_addr, params->iface_addr,
+                                      (struct sockaddr*)&dest_addr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    is_connected = !ucs_sockaddr_cmp((const struct sockaddr*)&ep->peer_addr,
+                                     (const struct sockaddr*)&dest_addr,
+                                     &status);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return is_connected;
 }

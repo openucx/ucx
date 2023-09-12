@@ -12,13 +12,16 @@
 CUDA_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw cuda \
 	&& echo --with-cuda=/usr/local/cuda || echo --without-cuda)
 
+XPMEM_OPT = $(shell echo ${DEB_BUILD_PROFILES} | grep -qw xpmem \
+	&& echo --with-xpmem || echo --without-xpmem)
+
 %:
 	dh $@ 
 
 override_dh_auto_configure:
 	./contrib/configure-release-mt --prefix=/usr \
 		--enable-examples --with-java=no \
-		$(CUDA_OPT)
+		$(CUDA_OPT) $(XPMEM_OPT)
 	chmod +x debian/rules
 
 # We may have a single package or two packages. We can't tell in advance.

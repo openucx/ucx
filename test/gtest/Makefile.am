@@ -167,6 +167,7 @@ gtest_SOURCES = \
 	ucs/test_datatype.cc \
 	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
+        ucs/test_lru.cc \
 	ucs/test_memtrack.cc \
 	ucs/test_math.cc \
 	ucs/test_mpmc.cc \
@@ -239,7 +240,7 @@ gtest_CPPFLAGS += \
 gtest_LDFLAGS += \
 	$(CUDA_LDFLAGS)
 gtest_LDADD += \
-	$(CUDA_LIBS) \
+	$(CUDA_LIBS) $(CUDART_LIBS) $(NVML_LIBS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
 endif
 

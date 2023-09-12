@@ -87,6 +87,8 @@ UcxLog::~UcxLog()
 
 #define UCX_LOG UcxLog("[UCX]", true)
 
+ucp_request_param_t UcxContext::recv_param;
+
 UcxContext::UcxAcceptCallback::UcxAcceptCallback(UcxContext &context,
                                                  UcxConnection &connection) :
     _context(context), _connection(connection)
@@ -111,10 +113,10 @@ void UcxContext::UcxDisconnectCallback::operator()(ucs_status_t status)
 }
 
 UcxContext::UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
-                       bool use_epoll) :
+                       bool use_epoll, uint64_t client_id) :
     _context(NULL), _worker(NULL), _listener(NULL), _iomsg_recv_request(NULL),
     _iomsg_buffer(iomsg_size), _connect_timeout(connect_timeout),
-    _use_am(use_am), _worker_fd(-1), _epoll_fd(-1)
+    _use_am(use_am), _worker_fd(-1), _epoll_fd(-1), _client_id(client_id)
 {
     if (use_epoll) {
         _epoll_fd = epoll_create(1);
@@ -136,7 +138,7 @@ UcxContext::~UcxContext()
     }
 }
 
-bool UcxContext::init()
+bool UcxContext::init(const char *name)
 {
     if (_context && _worker) {
         UCX_LOG << "context is already initialized";
@@ -147,7 +149,8 @@ bool UcxContext::init()
     ucp_params_t ucp_params;
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                               UCP_PARAM_FIELD_REQUEST_INIT |
-                              UCP_PARAM_FIELD_REQUEST_SIZE;
+                              UCP_PARAM_FIELD_REQUEST_SIZE |
+                              UCP_PARAM_FIELD_NAME;
     ucp_params.features     = _use_am ? UCP_FEATURE_AM :
                                         UCP_FEATURE_TAG | UCP_FEATURE_STREAM;
     if (_epoll_fd != -1) {
@@ -155,6 +158,8 @@ bool UcxContext::init()
     }
     ucp_params.request_init = request_init;
     ucp_params.request_size = sizeof(ucx_request);
+    ucp_params.name         = name;
+
     ucs_status_t status = ucp_init(&ucp_params, NULL, &_context);
     if (status != UCS_OK) {
         UCX_LOG << "ucp_init() failed: " << ucs_status_string(status);
@@ -166,8 +171,11 @@ bool UcxContext::init()
 
     /* Create worker */
     ucp_worker_params_t worker_params;
-    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE |
+                                UCP_WORKER_PARAM_FIELD_CLIENT_ID;
     worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+    worker_params.client_id   = _client_id;
+
     status = ucp_worker_create(_context, &worker_params, &_worker);
     if (status != UCS_OK) {
         ucp_cleanup(_context);
@@ -185,6 +193,10 @@ bool UcxContext::init()
     }
 
     UCX_LOG << "created worker " << _worker;
+
+    recv_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    recv_param.cb.recv      = (ucp_tag_recv_nbx_callback_t)iomsg_recv_callback;
 
     if (_use_am) {
         set_am_handler(am_recv_callback, this);
@@ -267,13 +279,15 @@ void UcxContext::connect_callback(ucp_conn_request_h conn_req, void *arg)
     ucp_conn_request_attr_t conn_req_attr;
     conn_req_t conn_request;
 
-    conn_req_attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+    conn_req_attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR |
+                               UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
     ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
     if (status == UCS_OK) {
         UCX_LOG << "got new connection request " << conn_req << " from client "
-                << UcxContext::sockaddr_str((const struct sockaddr*)
-                                            &conn_req_attr.client_address,
-                                            sizeof(conn_req_attr.client_address));
+                << UcxContext::sockaddr_str(
+                           (const struct sockaddr*)&conn_req_attr.client_address,
+                           sizeof(conn_req_attr.client_address))
+                << " client_id " << conn_req_attr.client_id;
     } else {
         UCX_LOG << "got new connection request " << conn_req
                 << ", ucp_conn_request_query() failed ("
@@ -521,11 +535,10 @@ UcxContext::wait_completion(ucs_status_ptr_t status_ptr, const char *title,
 
 void UcxContext::recv_io_message()
 {
-    ucs_status_ptr_t status_ptr = ucp_tag_recv_nb(_worker, &_iomsg_buffer[0],
-                                                  _iomsg_buffer.size(),
-                                                  ucp_dt_make_contig(1),
-                                                  IOMSG_TAG, IOMSG_TAG,
-                                                  iomsg_recv_callback);
+    ucs_status_ptr_t status_ptr = ucp_tag_recv_nbx(_worker, &_iomsg_buffer[0],
+                                                   _iomsg_buffer.size(),
+                                                   IOMSG_TAG, IOMSG_TAG,
+                                                   &recv_param);
     assert(status_ptr != NULL);
     _iomsg_recv_request = reinterpret_cast<ucx_request*>(status_ptr);
 }
@@ -815,6 +828,9 @@ void UcxConnection::connect(const struct sockaddr *src_saddr,
         ep_params.local_sockaddr.addr    = src_saddr;
         ep_params.local_sockaddr.addrlen = addrlen;
     }
+    if (_context._client_id != UcxContext::CLIENT_ID_UNDEFINED) {
+        ep_params.flags |= UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID;
+    }
 
     char sockaddr_str[UCS_SOCKADDR_STRING_LEN];
     UCX_CONN_LOG << "Connecting to "
@@ -944,7 +960,7 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
     ucp_request_param_t param;
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
                          UCP_OP_ATTR_FIELD_FLAGS;
-    param.cb.send      = common_request_callback_nbx;
+    param.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;
     param.flags        = UCP_AM_SEND_FLAG_REPLY;
     param.datatype     = 0; // make coverity happy
     if (memh) {
@@ -1062,13 +1078,6 @@ void UcxConnection::data_recv_callback(void *request, ucs_status_t status,
     common_request_callback(request, status);
 }
 
-void UcxConnection::common_request_callback_nbx(void *request,
-                                                ucs_status_t status,
-                                                void *user_data)
-{
-    common_request_callback(request, status);
-}
-
 void UcxConnection::am_data_recv_callback(void *request, ucs_status_t status,
                                           size_t length, void *user_data)
 {
@@ -1097,13 +1106,20 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 
 void UcxConnection::connect_tag(UcxCallback *callback)
 {
-    const ucp_datatype_t dt_int = ucp_dt_make_contig(sizeof(uint32_t));
+    ucp_request_param_t param;
     size_t recv_len;
 
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                         UCP_OP_ATTR_FIELD_CALLBACK | UCP_OP_ATTR_FIELD_FLAGS;
+    param.datatype     = ucp_dt_make_contig(sizeof(uint32_t));
+
     // receive remote connection id
-    void *rreq = ucp_stream_recv_nb(_ep, &_remote_conn_id, 1, dt_int,
-                                    stream_recv_callback, &recv_len,
-                                    UCP_STREAM_RECV_FLAG_WAITALL);
+    param.cb.recv_stream = (ucp_stream_recv_nbx_callback_t)stream_recv_callback;
+    param.flags          = UCP_STREAM_RECV_FLAG_WAITALL;
+
+    void *rreq = ucp_stream_recv_nbx(_ep, &_remote_conn_id, 1, &recv_len,
+                                     &param);
+
     if (UCS_PTR_IS_PTR(rreq)) {
         process_request("conn_id receive", rreq, callback);
         _context._conns_in_progress.push_back(std::make_pair(
@@ -1120,8 +1136,11 @@ void UcxConnection::connect_tag(UcxCallback *callback)
     }
 
     // send local connection id
-    void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
-                                    common_request_callback, 0);
+    param.cb.send = (ucp_send_nbx_callback_t)common_request_callback;
+    param.flags   = 0;
+
+    void *sreq = ucp_stream_send_nbx(_ep, &_conn_id, 1, &param);
+
     // we do not have to check the status here, in case if the endpoint is
     // failed we should handle it in ep_params.err_handler.cb set above
     process_request("conn_id send", sreq, EmptyCallback::get());

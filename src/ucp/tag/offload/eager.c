@@ -32,7 +32,7 @@ ucp_proto_eager_tag_offload_short_progress(uct_pending_req_t *self)
         return status;
     }
 
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
 
     ucs_assert(status != UCS_INPROGRESS);
@@ -69,7 +69,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_SHORT
     };
 
-    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 1) ||
+    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 1) ||
         !ucp_proto_is_short_supported(select_param)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -134,7 +134,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_t),
         .super.send_op       = UCT_EP_OP_EAGER_BCOPY,
-        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
@@ -144,7 +144,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
     };
 
     /* offload proto can not be used if no tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, op_id, 1)) {
+    if (!ucp_tag_eager_check_op_id(init_params, op_id, 1)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -255,7 +255,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
     };
 
     /* offload proto can not be used if no tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, op_id, 1) ||
+    if (!ucp_tag_eager_check_op_id(init_params, op_id, 1) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -329,8 +329,7 @@ ucp_proto_eager_sync_tag_offload_zcopy_send_completion(uct_completion_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_proto_request_zcopy_clean(req, UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_proto_eager_sync_send_completed_common(req);
 }

@@ -12,6 +12,7 @@
 extern "C" {
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/iovec.inl>
 }
 #include <pthread.h>
 #include <string>
@@ -36,7 +37,8 @@ void test_perf::rte_comm::push(const void *data, size_t size) {
 void test_perf::rte_comm::pop(void *data, size_t size,
                               void (*progress)(void *arg), void *arg) {
     bool done = false;
-    do {
+
+    for (;;) {
         pthread_mutex_lock(&m_mutex);
         if (m_queue.length() >= size) {
             memcpy(data, &m_queue[0], size);
@@ -44,10 +46,18 @@ void test_perf::rte_comm::pop(void *data, size_t size,
             done = true;
         }
         pthread_mutex_unlock(&m_mutex);
-        if (!done) {
-            progress(arg);
+
+        if (done) {
+            break;
         }
-    } while (!done);
+
+        progress(arg);
+
+        /* Valgrind runs threads, but serializes them with one global lock */
+        if (RUNNING_ON_VALGRIND) {
+            sched_yield();
+        }
+    }
 }
 
 
@@ -90,13 +100,8 @@ void test_perf::rte::post_vec(void *rte_group, const struct iovec *iovec,
                               int iovcnt, void **req)
 {
     rte *self = reinterpret_cast<rte*>(rte_group);
-    size_t size;
+    size_t size = ucs_iovec_total_length(iovec, iovcnt);
     int i;
-
-    size = 0;
-    for (i = 0; i < iovcnt; ++i) {
-        size += iovec[i].iov_len;
-    }
 
     self->m_send.push(&size, sizeof(size));
     for (i = 0; i < iovcnt; ++i) {

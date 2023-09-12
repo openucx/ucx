@@ -610,6 +610,19 @@ ucs_status_t ucs_sockaddr_get_ip_local_port_range(ucs_range_spec_t *port_range);
 ucs_status_t
 ucs_sockaddr_get_ipstr(const struct sockaddr *addr, char *str, size_t max_size);
 
+
+/**
+ * Deep search to find the lowest device path of a given device name.
+ *
+ * @param [in]     if_name      Device name.
+ * @param [out]    path_buffer  Filled with the result path.
+ * @param [inout]  max          Length of the result path buffer.
+ *
+ * @return UCS_OK if found lowest device path, or error code otherwise.
+ */
+ucs_status_t ucs_netif_get_lowest_device_path(const char *if_name,
+                                              char *path_buffer, size_t max);
+
 END_C_DECLS
 
 #endif

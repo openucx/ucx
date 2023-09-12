@@ -99,11 +99,12 @@ static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     uct_mm_md_query(md, md_attr, 0);
 
-    md_attr->flags           |= UCT_MD_FLAG_REG;
-    md_attr->reg_cost         = ucs_linear_func_make(60.0e-9, 0);
-    md_attr->max_reg          = ULONG_MAX;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->rkey_packed_size = sizeof(uct_xpmem_packed_rkey_t);
+    md_attr->flags                 |= UCT_MD_FLAG_REG;
+    md_attr->reg_cost               = ucs_linear_func_make(60.0e-9, 0);
+    md_attr->max_reg                = ULONG_MAX;
+    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->rkey_packed_size       = sizeof(uct_xpmem_packed_rkey_t);
 
     return UCS_OK;
 }
@@ -267,7 +268,8 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
 
     khiter = kh_put(xpmem_remote_mem, &uct_xpmem_remote_mem_hash, xsegid,
                     &khret);
-    ucs_assertv_always((khret == 1) || (khret == 2), "khret=%d", khret);
+    ucs_assertv_always((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
+                       (khret == UCS_KH_PUT_BUCKET_CLEAR), "khret=%d", khret);
     ucs_assert_always (khiter != kh_end(&uct_xpmem_remote_mem_hash));
     kh_val(&uct_xpmem_remote_mem_hash, khiter) = rmem;
 
@@ -530,17 +532,16 @@ uct_xpmem_rkey_release(uct_component_t *component, uct_rkey_t rkey, void *handle
 
 static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
     .super = {
-        .close                  = uct_mm_md_close,
-        .query                  = uct_xpmem_md_query,
-        .mem_alloc              = ucs_empty_function_return_unsupported,
-        .mem_free               = ucs_empty_function_return_unsupported,
-        .mem_advise             = ucs_empty_function_return_unsupported,
-        .mem_reg                = uct_xmpem_mem_reg,
-        .mem_dereg              = uct_xmpem_mem_dereg,
-        .mem_attach             = ucs_empty_function_return_unsupported,
-        .mkey_pack              = uct_xpmem_mkey_pack,
-        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-        .detect_memory_type     = ucs_empty_function_return_unsupported
+        .close              = uct_mm_md_close,
+        .query              = uct_xpmem_md_query,
+        .mem_alloc          = ucs_empty_function_return_unsupported,
+        .mem_free           = ucs_empty_function_return_unsupported,
+        .mem_advise         = ucs_empty_function_return_unsupported,
+        .mem_reg            = uct_xmpem_mem_reg,
+        .mem_dereg          = uct_xmpem_mem_dereg,
+        .mem_attach         = ucs_empty_function_return_unsupported,
+        .mkey_pack          = uct_xpmem_mkey_pack,
+        .detect_memory_type = ucs_empty_function_return_unsupported
     },
     .query             = uct_xpmem_query,
     .iface_addr_length = uct_xpmem_iface_addr_length,

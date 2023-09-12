@@ -14,6 +14,7 @@
 #include <uct/base/uct_md.h>
 #include <ucs/async/async.h>
 #include <ucs/async/pipe.h>
+#include <ucs/sys/math.h>
 
 typedef void uct_ugni_udt_desc_t;
 

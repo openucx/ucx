@@ -51,6 +51,7 @@ uct_component_t uct_rdmacm_component = {
     .rkey_unpack        = ucs_empty_function_return_unsupported,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
+    .rkey_compare       = ucs_empty_function_return_unsupported,
     .name               = "rdmacm",
     .md_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .cm_config          = {

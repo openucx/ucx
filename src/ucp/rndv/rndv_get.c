@@ -97,8 +97,7 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter,
+    ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
     if (ucs_unlikely(uct_comp->status != UCS_OK)) {
         ucp_proto_rndv_rkey_destroy(req);
@@ -116,7 +115,8 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_rndv_get_common_init(init_params,
                                           UCS_BIT(UCP_RNDV_MODE_GET_ZCOPY),
                                           SIZE_MAX, UCT_EP_OP_LAST,
-                                          UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
+                                          UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
+                                          UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
                                           0, 0);
 }
 
@@ -177,8 +177,7 @@ ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
     ucp_request_t *req  = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter,
+    ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_proto_rndv_rkey_destroy(req);
     ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
@@ -187,7 +186,7 @@ ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
 static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
                                            ucs_status_t status)
 {
-    ucp_request_t *rreq UCS_V_UNUSED;
+    ucp_request_t *rreq;
 
     switch (request->send.proto_stage) {
     case UCP_PROTO_RNDV_GET_STAGE_FETCH:
@@ -198,8 +197,12 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
         break;
     case UCP_PROTO_RNDV_GET_STAGE_ATS:
         rreq = ucp_request_get_super(request);
-        /* Locally the data is received, can complete with OK */
-        ucs_assert(rreq->recv.length == rreq->recv.tag.info.length);
+        ucs_assert(rreq->recv.dt_iter.length == rreq->recv.tag.info.length);
+        /* Locally the data is received, can complete with OK, but memory
+         * invalidation is not implemented in DC, so need to fail request to
+         * avoid data corruption.
+         * FIXME: del next line when memory invalidation in DC is implemented */
+        rreq->status = status;
         ucp_proto_rndv_recv_complete(request);
         break;
     default:
@@ -209,26 +212,25 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
     }
 }
 
-static void ucp_rndv_get_zcopy_proto_reset(ucp_request_t *req)
+static ucs_status_t ucp_rndv_get_zcopy_proto_reset(ucp_request_t *req)
 {
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        return;
+        return UCS_OK;
     }
 
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
     switch (req->send.proto_stage) {
     case UCP_PROTO_RNDV_GET_STAGE_FETCH:
-        ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                    &req->send.state.dt_iter, UCP_DT_MASK_ALL);
+        ucp_datatype_iter_mem_dereg(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
         /* Fall through */
     case UCP_PROTO_RNDV_GET_STAGE_ATS:
         break;
     default:
-        ucs_fatal("req %p: %s has invalid stage %d", req,
-                  req->send.proto_config->proto->name, req->send.proto_stage);
-        break;
+        ucp_proto_fatal_invalid_stage(req, "reset");
     }
+
+    return UCS_OK;
 }
 
 ucp_proto_t ucp_rndv_get_zcopy_proto = {
@@ -284,7 +286,9 @@ ucp_proto_rndv_get_mtype_fetch_completion(uct_completion_t *uct_comp)
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_proto_rndv_mtype_copy(req, uct_ep_put_zcopy,
+    ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
+                              ucp_proto_rndv_mtype_get_req_memh(req),
+                              uct_ep_put_zcopy,
                               ucp_proto_rndv_get_mtype_unpack_completion,
                               "out to");
 }
@@ -343,6 +347,24 @@ ucp_proto_rndv_get_mtype_query(const ucp_proto_query_params_t *params,
     ucp_proto_rndv_mtype_query_desc(params, attr, UCP_PROTO_RNDV_GET_DESC);
 }
 
+static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        return UCS_OK;
+    }
+
+    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    req->send.rndv.mdesc = NULL;
+    req->flags          &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+
+    if ((req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_FETCH) &&
+        (req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_ATS)) {
+        ucp_proto_fatal_invalid_stage(req, "reset");
+    }
+
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
     .desc     = NULL,
@@ -351,8 +373,8 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
     .query    = ucp_proto_rndv_get_mtype_query,
     .progress = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
-        [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress,
+        [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_get_mtype_reset
 };

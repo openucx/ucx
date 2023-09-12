@@ -163,7 +163,6 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 mem->mem_type = mem_type;
                 mem->memh     = memh;
                 goto allocated;
-
             }
 
             if (mem_type != UCS_MEMORY_TYPE_HOST) {
@@ -386,7 +385,7 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
                              UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
                              UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
                              UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-    params.flags           = UCT_MD_MEM_ACCESS_ALL;
+    params.flags           = flags;
     params.name            = name;
     params.mem_type        = UCS_MEMORY_TYPE_HOST;
     params.address         = address;
@@ -452,7 +451,9 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_iface_mp_chunk_alloc,
 
     length = sizeof(*hdr) + *size_p;
     status = uct_iface_mem_alloc(&iface->super, length,
-                                 UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_LOCK,
+                                 UCT_MD_MEM_ACCESS_LOCAL_READ  |
+                                 UCT_MD_MEM_ACCESS_LOCAL_WRITE |
+                                 UCT_MD_MEM_FLAG_LOCK,
                                  ucs_mpool_name(mp), &mem);
     if (status != UCS_OK) {
         return status;

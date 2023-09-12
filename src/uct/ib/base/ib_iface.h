@@ -72,7 +72,7 @@ typedef enum uct_ib_mtu {
 typedef enum {
     UCT_IB_DIR_RX,
     UCT_IB_DIR_TX,
-    UCT_IB_DIR_NUM
+    UCT_IB_DIR_LAST
 } uct_ib_dir_t;
 
 enum {
@@ -149,7 +149,7 @@ struct uct_ib_iface_config {
     } rx;
 
     /* Inline space to reserve in CQ */
-    size_t                  inl[UCT_IB_DIR_NUM];
+    size_t                  inl[UCT_IB_DIR_LAST];
 
     /* Change the address type */
     int                     addr_type;
@@ -204,16 +204,16 @@ enum {
 
 
 typedef struct uct_ib_iface_init_attr {
-    unsigned    rx_priv_len;            /* Length of transport private data to reserve */
-    unsigned    rx_hdr_len;             /* Length of transport network header */
-    unsigned    cq_len[UCT_IB_DIR_NUM]; /* CQ length */
-    size_t      seg_size;               /* Transport segment size */
-    unsigned    fc_req_size;            /* Flow control request size */
-    int         qp_type;                /* IB QP type */
-    int         flags;                  /* Various flags (see enum) */
+    unsigned    rx_priv_len;             /* Length of transport private data to reserve */
+    unsigned    rx_hdr_len;              /* Length of transport network header */
+    unsigned    cq_len[UCT_IB_DIR_LAST]; /* CQ length */
+    size_t      seg_size;                /* Transport segment size */
+    unsigned    fc_req_size;             /* Flow control request size */
+    int         qp_type;                 /* IB QP type */
+    int         flags;                   /* Various flags (see enum) */
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
     unsigned    max_rd_atomic;
-    uint8_t     cqe_zip_sizes;
+    uint8_t     cqe_zip_sizes[UCT_IB_DIR_LAST];
 } uct_ib_iface_init_attr_t;
 
 
@@ -231,7 +231,7 @@ typedef struct uct_ib_qp_attr {
     struct ibv_srq              *srq;
     uint32_t                    srq_num;
     unsigned                    sq_sig_all;
-    unsigned                    max_inl_cqe[UCT_IB_DIR_NUM];
+    unsigned                    max_inl_cqe[UCT_IB_DIR_LAST];
     uct_ib_qp_init_attr_t       ibv;
 } uct_ib_qp_attr_t;
 
@@ -244,12 +244,6 @@ typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
 
 typedef void (*uct_ib_iface_destroy_cq_func_t)(uct_ib_iface_t *iface,
                                                uct_ib_dir_t dir);
-
-typedef ucs_status_t (*uct_ib_iface_arm_cq_func_t)(uct_ib_iface_t *iface,
-                                                   uct_ib_dir_t dir,
-                                                   int solicited_only);
-
-typedef ucs_status_t (*uct_ib_iface_pre_arm_func_t)(uct_ib_iface_t *iface);
 
 typedef void (*uct_ib_iface_event_cq_func_t)(uct_ib_iface_t *iface,
                                              uct_ib_dir_t dir);
@@ -273,7 +267,7 @@ struct uct_ib_iface_ops {
 struct uct_ib_iface {
     uct_base_iface_t          super;
 
-    struct ibv_cq             *cq[UCT_IB_DIR_NUM];
+    struct ibv_cq             *cq[UCT_IB_DIR_LAST];
     struct ibv_comp_channel   *comp_channel;
     uct_recv_desc_t           release_desc;
 
@@ -295,7 +289,7 @@ struct uct_ib_iface {
         unsigned              tx_max_poll;
         unsigned              seg_size;
         unsigned              roce_path_factor;
-        uint8_t               max_inl_cqe[UCT_IB_DIR_NUM];
+        uint8_t               max_inl_cqe[UCT_IB_DIR_LAST];
         uint8_t               port_num;
         uint8_t               sl;
         uint8_t               traffic_class;
@@ -480,8 +474,8 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);
 
-int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
-                              const uct_iface_addr_t *iface_addr);
+int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                 const uct_iface_is_reachable_params_t *params);
 
 /*
  * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
@@ -580,7 +574,6 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_qp_attr_t *attr);
 
 uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
-
 
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"

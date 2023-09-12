@@ -27,8 +27,10 @@ public:
         VARIANT_ERR_HANDLING,
         VARIANT_RNDV_PUT_ZCOPY,
         VARIANT_RNDV_GET_ZCOPY,
+        VARIANT_RNDV_AM_BCOPY,
+        VARIANT_RNDV_AM_ZCOPY,
         VARIANT_SEND_NBR,
-        VARIANT_PROTO
+        VARIANT_PROTO_V1
     };
 
     test_ucp_tag_xfer() {
@@ -50,8 +52,14 @@ public:
             modify_config("RNDV_SCHEME", "put_zcopy");
         } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
             modify_config("RNDV_SCHEME", "get_zcopy");
-        } else if (get_variant_value() == VARIANT_PROTO) {
-            modify_config("PROTO_ENABLE", "y");
+        } else if (get_variant_value() == VARIANT_RNDV_AM_BCOPY) {
+            modify_config("RNDV_SCHEME", "am");
+            modify_config("ZCOPY_THRESH", "inf");
+        } else if (get_variant_value() == VARIANT_RNDV_AM_ZCOPY) {
+            modify_config("RNDV_SCHEME", "am");
+            modify_config("ZCOPY_THRESH", "0");
+        } else if (get_variant_value() == VARIANT_PROTO_V1) {
+            modify_config("PROTO_ENABLE", "n");
         }
 
         /* Init number of lanes according to test requirement
@@ -80,9 +88,15 @@ public:
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_RNDV_GET_ZCOPY, "rndv_get_zcopy");
         add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_RNDV_AM_BCOPY, "rndv_am_bcopy");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_RNDV_AM_ZCOPY, "rndv_am_zcopy");
+        add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_SEND_NBR, "send_nbr");
-        add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO,
-                               "proto");
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO_V1,
+                                   "proto_v1");
+        }
     }
 
     virtual ucp_ep_params_t get_ep_params() {
@@ -128,6 +142,7 @@ protected:
                          bool expected, bool sync);
 
     void test_xfer_len_offset();
+    size_t get_msg_size();
 
     /* Init number of lanes which will be used */
     virtual unsigned num_lanes()
@@ -137,7 +152,6 @@ protected:
 
 private:
     request* do_send(const void *sendbuf, size_t count, ucp_datatype_t dt, bool sync);
-    size_t get_msg_size();
 
     static const uint64_t SENDER_TAG = 0x111337;
     static const uint64_t RECV_MASK  = 0xffff;
@@ -1091,8 +1105,8 @@ public:
                          << " rkey_ptr: " << rkey_ptr;
         EXPECT_EQ(1, get_zcopy + send_rtr + rkey_ptr);
 
-        if (has_xpmem()) {
-            /* rkey_ptr expected to be selected if xpmem is available */
+        if (has_xpmem() || is_self()) {
+            /* rkey_ptr expected to be selected if xpmem is available or self is being used */
             EXPECT_EQ(1u, rkey_ptr);
         } else if (has_get_zcopy() && !m_ucp_config->ctx.proto_enable) {
             /* if any transports supports get_zcopy, expect it to be used */
@@ -1210,6 +1224,10 @@ public:
 UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
+    if (m_ucp_config->ctx.proto_enable) {
+        UCS_TEST_SKIP_R("TM_SW_RNDV has no effect with proto v2");
+    }
+
     receiver().connect(&sender(), get_ep_params());
     test_run_xfer(true, true, true, true, false);
 
@@ -1217,12 +1235,21 @@ UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
     ASSERT_EQ(ucp_ep_num_lanes(receiver().ep()), num_lanes);
     ASSERT_EQ(num_lanes, max_lanes);
 
-    for (int i = 0; i < num_lanes; ++i) {
-        uint64_t bytes_sent = get_bytes_sent(sender().ep(), i) +
-                              get_bytes_sent(receiver().ep(), i);
+    size_t chunk_size = get_msg_size() / num_lanes;
 
-        /* Verify that each lane sent something */
-        ASSERT_GE(bytes_sent, 50000 / ucs::test_time_multiplier());
+    for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+        size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
+        size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
+        UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
+                         << "sender " << sender_tx << " receiver " << receiver_tx;
+
+        /* Verify that each lane sent something, except the active message lane
+           that could be used only for control messages */
+        if (lane == num_lanes - 1) {
+            EXPECT_GT(sender_tx + receiver_tx, 0); // last lane sends the rest
+        } else if (lane != ucp_ep_get_am_lane(sender().ep())) {
+            EXPECT_GE(sender_tx + receiver_tx, chunk_size);
+        }
     }
 }
 

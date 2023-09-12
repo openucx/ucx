@@ -728,6 +728,15 @@ const uct_test::entity& uct_test::ent(unsigned index) const {
     return m_entities.at(index);
 }
 
+unsigned uct_test::progress_mt() const
+{
+    if (RUNNING_ON_VALGRIND) {
+        sched_yield();
+    }
+
+    return progress();
+}
+
 unsigned uct_test::progress() const {
     unsigned count = 0;
     FOR_EACH_ENTITY(iter) {
@@ -821,10 +830,8 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
         params->mode.device.dev_name = resource.dev_name.c_str();
     }
 
-    params->field_mask |= UCT_IFACE_PARAM_FIELD_STATS_ROOT |
-                          UCT_IFACE_PARAM_FIELD_CPU_MASK;
+    params->field_mask |= UCT_IFACE_PARAM_FIELD_STATS_ROOT;
     params->stats_root  = ucs_stats_get_root();
-    UCS_CPU_ZERO(&params->cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
                            uct_worker_create, &m_async.m_async,
@@ -921,10 +928,10 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
     }
 }
 
-void uct_test::entity::mem_alloc_host(size_t length,
-                                      uct_allocated_memory_t *mem) const {
-
-    void *address = NULL;
+void uct_test::entity::mem_alloc_host(size_t length, unsigned mem_flags,
+                                      uct_allocated_memory_t *mem) const
+{
+    void *address             = NULL;
     ucs_status_t status;
     uct_mem_alloc_params_t params;
 
@@ -932,14 +939,14 @@ void uct_test::entity::mem_alloc_host(size_t length,
                              UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS   |
                              UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE  |
                              UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-    params.flags           = UCT_MD_MEM_ACCESS_ALL;
+    params.flags           = mem_flags;
     params.name            = "uct_test";
     params.mem_type        = UCS_MEMORY_TYPE_HOST;
     params.address         = address;
 
     if (md_attr().flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
-        status = uct_iface_mem_alloc(m_iface, length, UCT_MD_MEM_ACCESS_ALL,
-                                     "uct_test", mem);
+        status = uct_iface_mem_alloc(m_iface, length, mem_flags, "uct_test",
+                                     mem);
         ASSERT_UCS_OK(status);
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
@@ -956,10 +963,12 @@ void uct_test::entity::mem_free_host(const uct_allocated_memory_t *mem) const {
     }
 }
 
-void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem) const {
+void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem,
+                                    unsigned mem_flags) const
+{
     if (md_attr().reg_mem_types & UCS_BIT(mem->mem_type)) {
         ucs_status_t status = uct_md_mem_reg(m_md, mem->address, mem->length,
-                                             UCT_MD_MEM_ACCESS_ALL, &mem->memh);
+                                             mem_flags, &mem->memh);
         ASSERT_UCS_OK(status);
         mem->md = m_md;
     }
@@ -1359,14 +1368,15 @@ std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resourc
 }
 
 uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
-                                       const entity& entity, size_t offset,
-                                       ucs_memory_type_t mem_type) :
+                                       const entity &entity, size_t offset,
+                                       ucs_memory_type_t mem_type,
+                                       unsigned mem_flags) :
     m_entity(entity)
 {
     if (size > 0)  {
         size_t alloc_size = size + offset;
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            m_entity.mem_alloc_host(alloc_size, &m_mem);
+            m_entity.mem_alloc_host(alloc_size, mem_flags, &m_mem);
         } else {
             m_mem.method   = UCT_ALLOC_METHOD_LAST;
             m_mem.address  = mem_buffer::allocate(alloc_size, mem_type);
@@ -1374,7 +1384,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
             m_mem.mem_type = mem_type;
             m_mem.memh     = UCT_MEM_HANDLE_NULL;
             m_mem.md       = NULL;
-            m_entity.mem_type_reg(&m_mem);
+            m_entity.mem_type_reg(&m_mem, mem_flags);
         }
         m_buf = (char*)m_mem.address + offset;
         m_end = (char*)m_buf         + size;

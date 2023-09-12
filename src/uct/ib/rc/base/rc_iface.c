@@ -258,20 +258,25 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     return UCS_OK;
 }
 
-void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                         unsigned qp_num)
+ucs_status_t
+uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep, unsigned qp_num)
 {
     uct_rc_ep_t ***ptr, **memb;
 
     ptr = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER];
     if (*ptr == NULL) {
         *ptr = ucs_calloc(UCS_BIT(UCT_RC_QP_TABLE_MEMB_ORDER), sizeof(**ptr),
-                           "rc qp table");
+                          "rc qp table");
+        if (*ptr == NULL) {
+            ucs_error("failed to allocate memory for rc qp table");
+            return UCS_ERR_NO_MEMORY;
+        }
     }
 
-    memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
+    memb = &(*ptr)[qp_num & UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb == NULL);
     *memb = ep;
+    return UCS_OK;
 }
 
 void uct_rc_iface_remove_qp(uct_rc_iface_t *iface, unsigned qp_num)
@@ -505,8 +510,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     srq_init_attr.srq_context    = iface;
     srq                          = ibv_create_srq(pd, &srq_init_attr);
     if (srq == NULL) {
-        uct_ib_mem_lock_limit_msg("ibv_create_srq()", errno,
-                                  UCS_LOG_LEVEL_ERROR);
+        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR, "ibv_create_srq()");
         return UCS_ERR_IO_ERROR;
     }
     iface->rx.srq.quota          = srq_init_attr.attr.max_wr;
@@ -593,7 +597,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                                      "RETRY_COUNT",
                                                      config->tx.retry_count,
                                                      UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.ooo_rw         = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
     self->tx.in_pending         = 0;
 #endif
@@ -831,7 +834,6 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_srq *srq)
 {
     uct_rc_iface_fill_attr(iface, attr, max_send_wr, srq);
-    uct_ib_iface_fill_attr(&iface->super, attr);
 
     return uct_ib_iface_create_qp(&iface->super, attr, qp_p);
 }
@@ -966,7 +968,7 @@ uint64_t uct_rc_iface_arm_cq_check(uct_rc_iface_t *iface, unsigned events,
 ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-    int solicited[UCT_IB_DIR_NUM], dir;
+    int solicited[UCT_IB_DIR_LAST], dir;
     ucs_status_t status;
     uint64_t dirs;
 
@@ -977,7 +979,7 @@ ucs_status_t uct_rc_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 
     dirs = uct_rc_iface_arm_cq_check(iface, events, solicited);
     ucs_for_each_bit(dir, dirs) {
-        ucs_assert(dir < UCT_IB_DIR_NUM);
+        ucs_assert(dir < UCT_IB_DIR_LAST);
         status = uct_ib_iface_arm_cq(&iface->super, dir, solicited[dir]);
         if (status != UCS_OK) {
             return status;
@@ -1024,9 +1026,6 @@ ucs_status_t uct_rc_iface_estimate_perf(uct_iface_h tl_iface,
 void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface)
 {
     ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
-                            &iface->tx.cq_available, UCS_VFS_TYPE_INT,
-                            "cq_available");
-    ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
                             &iface->tx.reads_available, UCS_VFS_TYPE_SSIZET,
                             "reads_available");
     ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
@@ -1043,6 +1042,10 @@ void uct_rc_iface_vfs_refresh(uct_iface_h iface)
 
     /* Add iface resources */
     uct_rc_iface_vfs_populate(rc_iface);
+
+    ucs_vfs_obj_add_ro_file(rc_iface, ucs_vfs_show_primitive,
+                            &rc_iface->tx.cq_available, UCS_VFS_TYPE_INT,
+                            "cq_available");
 
     /* Add objects for EPs */
     ucs_list_for_each(ep, &rc_iface->ep_list, list) {

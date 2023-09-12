@@ -115,6 +115,30 @@ enum {
         return UCS_ERR_INVALID_PARAM; \
     }
 
+/**
+ * Returns 0 if @a _params field mask does not have the required flags set.
+ */
+#define UCT_PARAMS_CHECK_FIELD_MASK(_params, _required_fields, _err_message, \
+                                    ...) \
+    if (!ucs_test_all_flags((_params)->field_mask, _required_fields)) { \
+        ucs_error(_err_message, ##__VA_ARGS__); \
+        return 0; \
+    }
+
+/**
+ * Returns 0 if @a _params field mask does not have
+ * @ref UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR and @ref UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR
+ * flags set.
+ */
+#define UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(_params) \
+    UCT_PARAMS_CHECK_FIELD_MASK( \
+            _params, \
+            UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR | \
+                    UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR, \
+            "missing params (field_mask: %lu), both device_addr and " \
+            "iface_addr must be provided.", \
+            params->field_mask)
+
 
 /**
  * In release mode - do nothing.
@@ -255,13 +279,26 @@ typedef ucs_status_t (*uct_ep_connect_to_ep_v2_func_t)(
         const uct_ep_connect_to_ep_params_t *params);
 
 
+/* Check if remote iface address is reachable */
+typedef int (*uct_iface_is_reachable_v2_func_t)(
+        const uct_iface_h iface,
+        const uct_iface_is_reachable_params_t *params);
+
+
+/* Check if a remote endpoint is connected */
+typedef int (*uct_ep_is_connected_func_t)(
+        uct_ep_h ep, const uct_ep_is_connected_params_t *params);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
-    uct_iface_estimate_perf_func_t iface_estimate_perf;
-    uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
-    uct_ep_query_func_t            ep_query;
-    uct_ep_invalidate_func_t       ep_invalidate;
-    uct_ep_connect_to_ep_v2_func_t ep_connect_to_ep_v2;
+    uct_iface_estimate_perf_func_t   iface_estimate_perf;
+    uct_iface_vfs_refresh_func_t     iface_vfs_refresh;
+    uct_ep_query_func_t              ep_query;
+    uct_ep_invalidate_func_t         ep_invalidate;
+    uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
+    uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
+    uct_ep_is_connected_func_t       ep_is_connected;
 } uct_iface_internal_ops_t;
 
 
@@ -378,6 +415,36 @@ typedef struct uct_iface_local_addr_ns {
 } UCS_S_PACKED uct_iface_local_addr_ns_t;
 
 
+#define UCT_TL_NAME(_name) uct_##_name##_tl
+
+
+/**
+ * Transport registration routines
+ *
+ * @param _component      Component to add the transport to
+ * @param _name           Name of the transport (should be a token, not a string)
+ * @param _query_devices  Function to query the list of available devices
+ * @param _iface_class    Struct type defining the uct_iface class
+ * @param _cfg_prefix     Prefix for configuration variables
+ * @param _cfg_table      Transport configuration table
+ * @param _cfg_struct     Struct type defining transport configuration
+ */
+#define UCT_TL_DEFINE_ENTRY(_component, _name, _query_devices, _iface_class, \
+                            _cfg_prefix, _cfg_table, _cfg_struct) \
+    \
+    uct_tl_t UCT_TL_NAME(_name) = { \
+        .name               = #_name, \
+        .query_devices      = _query_devices, \
+        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
+        .config = { \
+            .name           = #_name" transport", \
+            .prefix         = _cfg_prefix, \
+            .table          = _cfg_table, \
+            .size           = sizeof(_cfg_struct), \
+         } \
+    };
+
+
 /**
  * Define a transport
  *
@@ -391,21 +458,12 @@ typedef struct uct_iface_local_addr_ns {
  */
 #define UCT_TL_DEFINE(_component, _name, _query_devices, _iface_class, \
                       _cfg_prefix, _cfg_table, _cfg_struct) \
+    UCT_TL_DEFINE_ENTRY(_component, _name, _query_devices, _iface_class, \
+                        _cfg_prefix, _cfg_table, _cfg_struct) \
     \
-    uct_tl_t uct_##_name##_tl = { \
-        .name               = #_name, \
-        .query_devices      = _query_devices, \
-        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
-        .config = { \
-            .name           = #_name" transport", \
-            .prefix         = _cfg_prefix, \
-            .table          = _cfg_table, \
-            .size           = sizeof(_cfg_struct), \
-         } \
-    }; \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(uct_##_name##_tl).config, &ucs_config_global_list); \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&UCT_TL_NAME(_name).config, &ucs_config_global_list) \
     UCS_STATIC_INIT { \
-        ucs_list_add_tail(&(_component)->tl_list, &(uct_##_name##_tl).list); \
+        ucs_list_add_tail(&(_component)->tl_list, &UCT_TL_NAME(_name).list); \
     }
 
 
@@ -460,36 +518,6 @@ typedef struct uct_iface_local_addr_ns {
     UCT_TL_INIT(_component, _name, _scope, \
                 {_init_code; uct_component_register(_component);}, \
                 {uct_component_unregister(_component); _cleanup_code;})
-
-
-#define UCT_TL_NAME(_name) uct_##_name##_tl
-
-
-/**
- * Transport registration routines
- *
- * @param _component      Component to add the transport to
- * @param _name           Name of the transport (should be a token, not a string)
- * @param _query_devices  Function to query the list of available devices
- * @param _iface_class    Struct type defining the uct_iface class
- * @param _cfg_prefix     Prefix for configuration variables
- * @param _cfg_table      Transport configuration table
- * @param _cfg_struct     Struct type defining transport configuration
- */
-#define UCT_TL_DEFINE_ENTRY(_component, _name, _query_devices, _iface_class, \
-                            _cfg_prefix, _cfg_table, _cfg_struct) \
-    \
-    uct_tl_t UCT_TL_NAME(_name) = { \
-        .name               = #_name, \
-        .query_devices      = _query_devices, \
-        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
-        .config = { \
-            .name           = #_name" transport", \
-            .prefix         = _cfg_prefix, \
-            .table          = _cfg_table, \
-            .size           = sizeof(_cfg_struct), \
-         } \
-    };
 
 
 /**
@@ -770,9 +798,6 @@ typedef struct {
 extern ucs_config_field_t uct_iface_config_table[];
 
 
-extern uct_iface_internal_ops_t uct_base_iface_internal_ops;
-
-
 /**
  * Initialize a memory pool for buffers used by TL interface.
  *
@@ -854,6 +879,13 @@ void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
 
+int uct_base_iface_is_reachable(const uct_iface_h tl_iface,
+                                const uct_device_addr_t *dev_addr,
+                                const uct_iface_addr_t *iface_addr);
+
+int uct_iface_scope_is_reachable(const uct_iface_h iface,
+                                 const uct_iface_is_reachable_params_t *params);
+
 ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                uct_completion_t *comp);
 
@@ -864,6 +896,12 @@ void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
 
 int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                                  ucs_sys_namespace_type_t sys_ns_type);
+
+int uct_iface_is_reachable_params_valid(
+        const uct_iface_is_reachable_params_t *params, uint64_t flags);
+
+int uct_iface_is_reachable_params_addrs_valid(
+        const uct_iface_is_reachable_params_t *params);
 
 /*
  * Invoke active message handler.

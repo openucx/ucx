@@ -21,9 +21,16 @@ noinst_PROGRAMS = \
 	test_link_map \
 	test_dlopen_cfg_print \
 	test_init_mt \
-	test_memtrack_limit
+	test_memtrack_limit \
+	test_hooks
 
 objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
+
+test_hooks_SOURCES  = test_hooks.c
+test_hooks_CPPFLAGS = $(BASE_CPPFLAGS) \
+                      -DLIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so
+test_hooks_CFLAGS   = $(BASE_CFLAGS)
+test_hooks_LDADD    = -ldl
 
 test_ucs_dlopen_SOURCES  = test_ucs_dlopen.c
 test_ucs_dlopen_CPPFLAGS = $(BASE_CPPFLAGS) \
@@ -73,7 +80,15 @@ test_cuda_hook_dynamic_CFLAGS   = $(BASE_CFLAGS)
 test_cuda_hook_dynamic_LDFLAGS  = $(CUDA_LDFLAGS)
 test_cuda_hook_dynamic_LDADD    = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
-                                  $(CUDA_LIBS)
+                                  $(CUDA_LIBS) $(CUDART_LIBS)
+
+noinst_PROGRAMS          += test_no_cuda_ctx
+test_no_cuda_ctx_SOURCES  = test_no_cuda_ctx.c
+test_no_cuda_ctx_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+test_no_cuda_ctx_CFLAGS   = $(BASE_CFLAGS)
+test_no_cuda_ctx_LDFLAGS  = $(CUDA_LDFLAGS)
+test_no_cuda_ctx_LDADD    = $(top_builddir)/src/ucp/libucp.la \
+                            $(CUDA_LIBS)
 
 if HAVE_CUDA_STATIC
 noinst_PROGRAMS                += test_cuda_hook_static
@@ -83,7 +98,7 @@ test_cuda_hook_static_CFLAGS    = $(BASE_CFLAGS)
 test_cuda_hook_static_LDFLAGS   = $(CUDA_LDFLAGS)
 test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
-                                  $(CUDA_STATIC_LIBS) -lcuda -lrt -ldl -lpthread
+                                  $(CUDART_STATIC_LIBS) $(CUDA_LIBS)
 endif
 
 endif

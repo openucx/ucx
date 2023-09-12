@@ -80,6 +80,20 @@ public class UcpMemory extends UcxNativeStruct implements Closeable {
         return result;
     }
 
+    public ByteBuffer getExportedMkeyBuffer() {
+        UcpMemPackParams params = new UcpMemPackParams().exported();
+        ByteBuffer mKeyBuffer = getMkeyBufferNative(getNativeId(), params);
+        // 1. Allocating java native ByteBuffer (managed by java's reference count cleaner).
+        ByteBuffer result = ByteBuffer.allocateDirect(mKeyBuffer.capacity());
+        // 2. Copy content of native ucp address to java's buffer.
+        result.put(mKeyBuffer);
+        result.clear();
+        // 3. Release an address of the UCX packed mkey object.
+        // Memory allocated in JNI must be freed by JNI.
+        releaseMkeyBufferNative(mKeyBuffer);
+        return result;
+    }
+
     /**
      * To keep reference to user's ByteBuffer so it won't be cleaned by refCount cleaner.
      * @param data
@@ -114,6 +128,10 @@ public class UcpMemory extends UcxNativeStruct implements Closeable {
     private static native ByteBuffer getRkeyBufferNative(long contextId, long memoryId);
 
     private static native void releaseRkeyBufferNative(ByteBuffer rkey);
+
+    private static native ByteBuffer getMkeyBufferNative(long memoryId, UcpMemPackParams params);
+
+    private static native void releaseMkeyBufferNative(ByteBuffer mkey);
 
     @Override
     public void close() {

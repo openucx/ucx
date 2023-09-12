@@ -267,8 +267,13 @@ ucp_proto_init_parallel_stages(const ucp_proto_common_init_params_t *params,
     ucs_array_for_each(elem, &concave) {
         range             = &caps->ranges[caps->num_ranges];
         range->max_length = elem->max_length;
-        range->node       = ucp_proto_perf_node_new_data(params->super.proto_name,
+        if (fabs(bias) > UCP_PROTO_PERF_EPSILON) {
+            range->node   = ucp_proto_perf_node_new_data(params->super.proto_name,
+                                                         "bias %f", bias);
+        } else {
+            range->node   = ucp_proto_perf_node_new_data(params->super.proto_name,
                                                          "");
+        }
 
         /* "single" performance estimation is sum of "stages" with the bias */
         range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
@@ -326,8 +331,8 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
                                 ucs_linear_func_t *memreg_time,
                                 ucp_proto_perf_node_t **perf_node_p)
 {
-    ucp_context_h context = params->super.worker->context;
-    ucp_proto_perf_node_t *perf_node;
+    ucp_context_h context            = params->super.worker->context;
+    ucp_proto_perf_node_t *perf_node = NULL;
     const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
     const char *md_name;
@@ -335,8 +340,17 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
     *memreg_time = UCS_LINEAR_FUNC_ZERO;
 
     if (reg_md_map == 0) {
-        *perf_node_p = NULL;
-        return;
+        goto out;
+    }
+
+    if (context->rcache != NULL) {
+        perf_node = ucp_proto_perf_node_new_data("rcache lookup", "");
+
+        *memreg_time = UCP_RCACHE_LOOKUP_FUNC;
+
+        ucp_proto_perf_node_add_data(perf_node, "lookup", *memreg_time);
+
+        goto out;
     }
 
     perf_node = ucp_proto_perf_node_new_data("mem reg", "");
@@ -357,6 +371,7 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
         ucp_proto_perf_node_add_data(perf_node, "total", *memreg_time);
     }
 
+out:
     *perf_node_p = perf_node;
 }
 
@@ -432,7 +447,7 @@ ucp_proto_init_buffer_copy_time(ucp_worker_h worker, const char *title,
 
     rsc_index = ep_config->key.lanes[lane].rsc_index;
     wiface    = ucp_worker_iface(worker, rsc_index);
-    status    = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    status    = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
         return status;
     }
@@ -530,7 +545,7 @@ ucp_proto_common_init_xfer_perf(const ucp_proto_common_init_params_t *params,
 
     xfer_perf->node = ucp_proto_perf_node_new_data("xfer", "");
 
-    op_attr_mask = ucp_proto_select_op_attr_from_flags(select_param->op_flags);
+    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
 
     if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
@@ -580,7 +595,7 @@ ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
 
     recv_perf->node = ucp_proto_perf_node_new_data("recv-ovrh", "");
 
-    op_attr_mask = ucp_proto_select_op_attr_from_flags(select_param->op_flags);
+    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
 
     if (/* Don't care about receiver time for one-sided remote access */
         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) ||
@@ -707,4 +722,10 @@ out_deref_send_perf:
 out_deref_xfer_perf:
     ucp_proto_perf_node_deref(&xfer_perf.node);
     return status;
+}
+
+int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
+                            uint64_t op_id_mask)
+{
+    return ucp_proto_select_check_op(init_params->select_param, op_id_mask);
 }

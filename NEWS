@@ -11,6 +11,310 @@
 ### Features:
 ### Bugfixes:
 
+## 1.14.1 (May 22, 2023)
+### Bugfixes:
+* Fixed ROCm to prevent the locking of host pinned memory
+* Added CUDA 12 based UCX builds to the release flow
+* Increased the maximal number of endpoint configurations
+* Fixed filter for a slow-lanes in selection logic
+* Fixed TCP transport bandwidth calculation
+* Fixed device detection for ROCM
+* Fixed compatibility with CUDA 12
+* Fixed rendezvous threshold for multi-path configurations
+* Fixed error message in case of static link
+* Fixed BlueField-3 detection
+* Multiple fixes for Azure CI pipeline
+
+## 1.14.0 (March 13, 2023)
+### Features:
+#### Core
+#### UCP
+* Added API for querying transport and device names on endpoint
+* Added API for querying datatype object
+* Added API for exporting and importing memory keys (no implementation yet)
+* Added support for non-persistent active message header
+* Added infrastructure to print protocols v2 performance
+* Multiple performance improvements for protocols v2
+* Added support for non-contiguous datatypes for rendezvous protocols v2
+* Added support for reset and abort request in protocols v2
+* Added support for user memory handles in RMA API
+* Added multi-rail support for RMA API in protocols v2
+* Added support for up to 16 different lanes per endpoint
+* Added support for dmabuf memory registration in protocols v2
+* Added strong fence mode for ucp_worker_fence() API
+#### UCT
+* Added new uct_md_mem_attach() API to support exported memory handles
+* Added remote completion mode for endpoint flush (via new flag)
+* Added support for dmabuf registration
+* Added new uct_ep_connect_to_ep_v2() API
+* Added new uct_mem_reg_v2() API
+* Added new uct_md_query_v2() API
+* Added support for IPv6 loopback address in TCP transport
+#### RDMA CORE (IB, ROCE, etc.)
+* Added ECE (enhanced connection establishment) support for RC and DC transports
+* Added support for hardware DCS in DC transport
+* Added UD interface and endpoint resource information to VFS
+* Added CQ creation via DEVX API
+* Removed support for accelerated IB transports over legacy experimental verbs
+#### UCS
+* Added support for auto-correction of user environment variables
+#### UCM
+* Implemented CUDA bistro hooks for aarch64 (to enable memory cache on this platform)
+* Added support for CUDA virtual/stream-ordered memory with cudaMallocAsync
+#### GPU (CUDA, ROCM)
+* Implemented uct_iface_estimate_perf() function for ROCM
+* Removed obsoleted ROCM gdr transport
+* Added support for hsa async_copy for short operations in ROCM
+* Added memory allocation functions in ROCM
+#### Java
+* Added methods for ucp_worker_arm() and ucp_worker_get_efd()
+#### Documentation
+* Added FAQ for using pkg-config tool to build applications with UCX
+#### Tests
+* Added prints of latency per connection in io_demo
+#### Tools
+* Added runtime library version to the 'ucx_info -v' output
+* Added support for memory types in ucx_info
+
+### Bugfixes
+#### UCP
+* Multiple fixes in keepalive protocol
+* Multiple fixes and improvements in UCP rcache flows
+* Fixed endpoints leak by disabling resolving remote endpoints in certain cases
+* Multiple fixes and cleanups in wireup protocol and lanes selection flows
+* Multiple fixes in protocols v2 infrastructure
+* Fixed worker interface initialization taking atomic caps into account
+* Fixed UCP AM max payload value calculation for protocols v2
+* Fixed deadlock in rcache when UCX_LOG_LEVEL set to debug
+* Fixed lanes weight calculation in rendezvous protocol v2
+* Fixed user memory handle support in rendezvous protocol
+* Fixed message split in rendezvous protocol to avoid having very small chunks
+* Improved performance estimations for protocols v2
+* Fixed receive descriptors leak in UCP AM rendezvous
+#### UCT
+* Fixed double free of server endpoint in TCP sockcm
+* Updated KNEM bandwidth to be dedicated resource rather than shared
+* Fixed race in CM when listener is destroyed during conn_req_cb invocation
+* Updated default bandwidth value for memory mapper transports
+* Disqualify posix transport if /dev/shm size is too small
+* Disqualify KNEM transport if memory registration fails with it
+* Fixed cuda detection (when cuda headers are not present, but nvml headers are)
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixed device error handling (prevent coredump when iface is down/up)
+* Multiple fixes in DC transport (error flows, flow control, etc)
+* Multiple fixes and cleanups in UD transport
+* Fixed MR registration (avoid atomic offset breaking region alignment)
+* Fixed indirect key registration (avoid creating atomic KSM on top of relaxed-order key)
+* Fixed thread domain usage for accelerated verbs transports
+* Added print of a particular syndrome on DEVX function failures
+* Fixed DEVX QP creation by setting proper ts_format attribute
+* Decreased size of DC endpoint
+* Fixed bandwidth calculation for RoCE LAGs
+* Fixed port counters setting for DEVX QPs
+* Fixed compile errors on SLES sp3
+* Removed errors during md open in case of strict memlock limit
+#### UCS
+* Removed async_max_events limit (e.g. to support many concurrent TCP connections)
+* Updated memory wc flush using DGH hint for ARM platform
+* Fixed deprecation warnings because of <sys/fcntl.h> includes
+* Added default bandwidth value for ZHAOXIN CPU
+#### UCM
+* Fixed segfault in malloc when compiled with -flto
+#### GPU (CUDA, ROCM)
+* Updated cuda_copy transport to use event fd instead of async callback
+* Fixed ROCM IPC transport (use remote agent if available)
+* Fixed clang compilation errors in CUDA copy transport
+* Fixed ROCM memtype detection
+* Improved performance estimation of CUDA copy transport
+* Fixed send to self flows in ROCM
+#### Documentation
+* Updated GPU memory support section in FAQ
+#### Tests
+* Multiple fixes and improvements in unit tests
+#### Tools
+* Fixed MPI RTE send deadlock in ucx_perftest
+#### Build
+* Build Debian package with multi-thread support
+* Fixed configure warning by using POSIX compliant sh syntax
+* Multiple fixes for Debian package build
+* Dropped support for Ubuntu16
+
+## 1.13.1 (September 7, 2022)
+#### Bugfixes
+* Fixed flow control protocol in DC transport
+* Fixed reordering of pending operations in DC transport
+* Fixed relaxed order detection in IB transports
+* Fixed build configuration and IB ops references
+* Fixed bandwidth calculation during wireup phase
+* Fixed TCP transport server port selection
+* Minor fixes in CI testing
+
+## 1.13.0 (July 7, 2022)
+#### Features
+##### Core
+* Added new objects to VFS: local and remote address of endpoint, statistics of ucp_ep_create success/failure, failed/destroyed endpoints
+* Added support for UCX static libraries
+* Added profiling for rkey management routines
+* PCIe relaxed order enabled by default for AMD CPUs
+#### UCP
+* Added API to pass pre-registered memory handle to UCP operations
+* Added implementation of AM rendezvous protocol
+* Added 2-stage pipeline rendezvous protocol for GPU
+* Added support for fragment mem_type for v1 pipeline proto, disabled by default
+* Added active message support for proto v2
+* Added UCP memory registration cache
+* Improved adaptive progress - deactivate iface when all p2p lanes are destroyed
+* Added support for user memh in proto_v1
+* Added support for selecting local address when creating a client endpoint
+* Added option to limit GPUDirectRDMA size in rendezvous protocol, UCX_RNDV_MEMTYPE_DIRECT_SIZE
+* Deprecated UCX_SOCKADDR_AUX_TLS configuration parameter
+#### UCT
+* Introduced API uct_md_mkey_pack_v2
+* Introduced UCT iface features API
+* Introduced max_inflight_eps parameter in perf_attr API
+* Introduced UCT_SEND_FLAG_PEER_CHECK flag that forces checking connectivity to a peer
+* Introduced UCX_RCACHE_PURGE_ON_FORK to enable/disable cleaning regions when application is forking
+#### RDMA CORE (IB, ROCE, etc.)
+* Introduced NDR autorecognition
+* Introduced CQE zipping support
+* Set the default MAX_RD_ATOMIC to maximum value supported by the hardware
+#### ROCM
+* Increased maximum number of HSA agents
+#### UCS
+* Added topo module infrastructure
+* Added memtrack and rcache information to VFS
+#### Tools
+* Added support for pre-registered memory in ucx_perftest
+* Added loopback transport support for UCT perf tests
+### Bugfixes
+#### Core
+* Fixed not deallocating memory from ucp_mem_unmap if no rcache
+* Fixed versioning infrastructure
+* Multiple code improvements: refactoring, debug prints and assertions, etc.
+* Multiple improvements in build, test and docs infrastructure
+#### UCP
+* Resolving remote EP ID when creating local EP disabled by default
+* Multiple fixes in keepalive protocol
+* Fixed initialization request send state if software RMA/AMO in use
+* Fixed error handling in RMA and BW lanes selection logic
+* Fixed CM wireup fallback
+* Fixed occasional crash in finalize
+* Fixed AM proto flags
+* Fixed single zcopy proto initialization for AM
+* Fixed proto v2 selection, take into account user header length
+* Fixed selecting auxiliary transports when creating EP for sending EP_REMOVED
+* Fixed printing invalid configuration
+* Fixed allocation of indirect remote ID for internal EP if connected EP supports PEER_FAILURE
+* Fixed memh allocation when no rcache
+* Fixed protocol selection logic for UCP AM send
+* Fixed error handling flow for EP discard requests from pending queue
+* Fixed EP destroy flow
+* Fixed rsc_index for prereg_md_map
+* Fixed wireup error handling flow Create EP which send WIREUP_MSG/EP_REMOVED with AM lane only
+* Fixed probe for multi-fragment eager
+* Fixed alignment for AM rdesc init
+* Fixed perf estimation for proto v2
+* Fixed CM wireup with proto v2
+* Fixed EP discard flow during fast-forward
+* Fixed datatype issue in TAG send
+* Fixed EP refcount overflow
+* Fixed EP error handling flow
+* Fixed wire compatibility in address unpacking
+* Fixed ucp_ep_close_nb for failed endpoint when related requests have registered memory that should be invalidated
+* Fixed fragmented proto v2
+* Fixed UCP address v2 packing/unpacking and usage of seg_size
+* Fixed purge requests on failed endpoint
+* Fixed error handling of connecting p2p lanes during WIREUP phase
+* Fixed UCP endpoint use after free
+#### UCT
+* Fixed ABI break of uct_ep_params_t
+* Fixed common intra-node keepalive protocol
+* Fixed a typo UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE -> UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE
+* Fixed potential crash on MD mem alloc
+* Disabled PEER_FAILURE capability for XPMEM
+* Updated TCP iface bandwidth calculation taking into account PCI bandwidth
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixed 2G aligned MR registration
+* Fixed FC_HARD_REQ resending
+* Fixed remote access to invalidated MR
+* Fixed max_rd_atomic_dc value for DV
+* Fixed DC handshake logic
+* Fixed error handling flows
+* Fixed flush(CANCEL) with UD and DC transports
+* Fixed multi-path handling for passive endpoint with UD transport
+* Fixed attributes for DV QP creation
+* Fixed device query
+* Fixed memory leak in case of disabling RDMA transport
+* Fixed dci->pool_index initialization
+* Fixed fallback if port speed not detected
+* Fixed tag offload recv for inlined data
+* Fixed PKEY index initialization
+* Disabled mlx5 ifaces on verbs MD
+#### TCP
+* Fixed flush(CANCEL)
+* Fixed close protocol when UCT EP pairs have only RX capability
+* Fixed query local/remote saddr
+#### GPU (CUDA, ROCM)
+* Fixed a bug in invalidating address range in CUDA_IPC
+* Fixed CUDA context caching and cleanup
+* Fixed ROCM initialization
+* Fixed ROCM components compilation
+* Fixed IPC tls reachability check
+* Fixed ROCM memory type detection
+* Use ROCM remote_agent if available
+* Fixed CUDA module compilation with clang 13
+* Fixes in ROCm memory detection and performance estimation
+#### KNEM
+* Fixed memory registration cost
+#### UCM
+* Fixed potential hang on init
+#### UCS
+* Fixed name shadow problem in CentOS6.x
+#### Tools
+* Print stream API limits and handle stream feature in ucx_info
+* Replaced ucp_ep_close_nb by ucp_ep_close_nbx in examples
+* Replaced completed field by checking UCS status in io_demo
+#### JAVA
+* Throw exception if ucp_mem_query failed
+#### GO
+* Disabled go bindings in rpmbuild
+* Fixed configure behavior if can't find go compiler
+* Standalone performance benchmark
+* Increased port range + make it dependent on agent_id
+* Check compiler minimum version
+* Set GOCACHE to a local directory that is cleared for each job in CI
+* Disabled module for goperftest
+* Fixed OOS build
+
+## 1.12.1 (March 21, 2022)
+#### Bugfixes
+* Fixed memory hooks for Cuda 11.5
+* Fixed memory type cache merge
+* Fixed continuously triggering wakeup fd when keepalive is used
+* Fixed memtype cache fallback when memory hooks are not installed
+* Fixed parsing header flags of worker address
+* Fixed pipeline protocol when sending from host memory to GPU memory
+* Fixed transport progress not deactivated when all transport's connections are closed
+* Fixed progress loop in io_demo application
+* Fixed ROCm segfault when using internal_ops functions
+* Fixed ROCm memory hooks
+* Fixed performance regression on A64FX
+* Fixed DCT create failure with rdma-core v22
+* Fixed golang bindings build
+* Fixed .deb package build on Ubuntu 22.04
+* Fixed build on archlinux
+
+#### Important changes
+* If Cuda memory hooks on driver API cannot be installed, memory type cache and
+  memory registration cache will be disabled. This may lead to lower performance
+  of some applications on setups with NVIDIA GPUs, even if Cuda memory is not
+  being used. Prior to this change, failing to install driver API hooks could
+  lead to runtime errors or data corruption when Cuda memory is used and linked
+  statically with cuda runtime.
+  In order to revert to previous behavior (when the application is linked
+  dynamically with cuda runtime), the user can set UCX_MEM_CUDA_HOOK_MODE=reloc.
+  See more info in https://github.com/openucx/ucx/pull/7865.
+
 ## 1.12.0 (January 12, 2022)
 ### Features:
 #### Core

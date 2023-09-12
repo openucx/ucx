@@ -68,7 +68,8 @@ public:
     virtual void init()
     {
         stats_activate();
-        modify_config("IB_CQE_ZIPPING_ENABLE", "y");
+        modify_config("IB_TX_CQE_ZIP_ENABLE", "yes");
+        modify_config("IB_RX_CQE_ZIP_ENABLE", "yes");
 
         test_uct_ib_with_specific_port::init();
         test_uct_ib::init();
@@ -93,7 +94,8 @@ public:
         FOR_EACH_ENTITY(entity) {
             md = ucs_derived_of((*entity)->md(), uct_ib_mlx5_md_t);
             if (!(ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_CQE64_ZIP |
-                                     UCT_IB_MLX5_MD_FLAG_CQE128_ZIP))) {
+                                     UCT_IB_MLX5_MD_FLAG_CQE128_ZIP |
+                                     UCT_IB_MLX5_MD_FLAG_DEVX_CQ))) {
                 return false;
             }
         }

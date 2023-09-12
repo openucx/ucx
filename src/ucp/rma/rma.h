@@ -18,6 +18,18 @@
 
 
 /**
+ * In current implementation a known bug exists in the process of
+ * flushing multiple lanes. The flush operation can be scheduled and
+ * completed while an RMA operation executed prior is still pending
+ * completion and scheduled on a different lane.
+ *
+ * To address this, we're using a single bcopy RMA lane to mitigate these
+ * issues.
+ */
+#define UCP_PROTO_RMA_MAX_BCOPY_LANES 1
+
+
+/**
  * Defines functions for RMA protocol
  */
 struct ucp_rma_proto {
@@ -96,13 +108,5 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
 void ucp_ep_flush_remote_completed(ucp_request_t *req);
 
 void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
-
-/*
- * Check RMA protocol requirements
- */
-#define UCP_RMA_PROTO_INIT_CHECK(_init_params, _op_id) \
-    if ((_init_params)->select_param->op_id != (_op_id)) { \
-        return UCS_ERR_UNSUPPORTED; \
-    }
 
 #endif

@@ -120,13 +120,13 @@ static UCS_F_ALWAYS_INLINE ucs_fp8_t ucs_fp8_pack(double value, uint64_t min,
         exponent                  = max_exponent - min_exponent;
         ieee_value.ieee.mantissa0 = 0;
         ieee_value.ieee.mantissa1 = 0;
-    } else if (ucs_unlikely(ieee_value.ieee.exponent <
+    } else if (ucs_unlikely(ieee_value.ieee.exponent <=
                             min_exponent + _UCS_FP8_EXPONENT_OFFSET)) {
         if (ucs_unlikely(value == 0)) {
             /* 0 maps to a special value for 0 */
             exponent = 0;
         } else {
-            /* A number below the max supported is rounded up */
+            /* A number below the min supported is rounded up */
             exponent                  = 1;
             ieee_value.ieee.mantissa0 = 0;
             ieee_value.ieee.mantissa1 = 0;

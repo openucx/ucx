@@ -129,9 +129,41 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_closeNonBlockingNative(JNIEnv *env, jclass
     param.cb.send       = jucx_request_callback;
 
     ucs_status_ptr_t status = ucp_ep_close_nbx((ucp_ep_h)ep_ptr, &param);
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
 
     return jucx_request;
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_queryLocalAddressNative(JNIEnv *env,
+                                                              jclass cls,
+                                                              jlong ep_ptr)
+{
+    ucp_ep_attr_t ep_attr;
+    ep_attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR;
+
+    ucs_status_t status = ucp_ep_query((ucp_ep_h)ep_ptr, &ep_attr);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    return c2jInetSockAddr(env, &ep_attr.local_sockaddr);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_queryRemoteAddressNative(JNIEnv *env,
+                                                               jclass cls,
+                                                               jlong ep_ptr)
+{
+    ucp_ep_attr_t ep_attr;
+    ep_attr.field_mask = UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+
+    ucs_status_t status = ucp_ep_query((ucp_ep_h)ep_ptr, &ep_attr);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    return c2jInetSockAddr(env, &ep_attr.remote_sockaddr);
 }
 
 JNIEXPORT jobject JNICALL
@@ -168,7 +200,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass c
     ucs_status_ptr_t status = ucp_put_nbx((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
                                           (ucp_rkey_h)rkey_ptr, &param);
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
 
     ucs_trace_req("JUCX: put_nb request %p, of size: %zu, raddr: %zu", status, size, raddr);
 
@@ -207,7 +239,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass c
     ucs_trace_req("JUCX: get_nb request %p, raddr: %zu, size: %zu, result address: %zu",
                   status, raddr, size, laddr);
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
     return jucx_request;
 }
 
@@ -241,7 +273,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, j
     ucs_status_ptr_t status = ucp_tag_send_nbx((ucp_ep_h)ep_ptr, (void *)addr, size, tag, &param);
     ucs_trace_req("JUCX: send_tag_nb request %p, size: %zu, tag: %ld", status, size, tag);
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
     return jucx_request;
 }
 
@@ -270,7 +302,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedIovNonBlockingNative(JNIEnv *env
     ucs_status_ptr_t status = ucp_tag_send_nbx((ucp_ep_h)ep_ptr, iovec, iovcnt, tag, &param);
     ucs_trace_req("JUCX: send_tag_iov_nb request %p, tag: %ld", status, tag);
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
 
     return jucx_request;
 }
@@ -290,7 +322,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, j
     ucs_status_ptr_t status = ucp_stream_send_nbx((ucp_ep_h)ep_ptr, (void *)addr, size, &param);
     ucs_trace_req("JUCX: send_stream_nb request %p, size: %zu", status, size);
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
     return jucx_request;
 }
 
@@ -318,7 +350,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamIovNonBlockingNative(JNIEnv *env
     ucs_status_ptr_t status = ucp_stream_send_nbx((ucp_ep_h)ep_ptr, iovec, iovcnt, &param);
     ucs_trace_req("JUCX: send_stream_iov_nb request %p", status);
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
     return jucx_request;
 }
 
@@ -345,7 +377,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamNonBlockingNative(JNIEnv *env, j
         jucx_request_update_recv_length(env, jucx_request, rlength);
     }
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
 
     return jucx_request;
 }
@@ -383,7 +415,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamIovNonBlockingNative(JNIEnv *env
         jucx_request_update_recv_length(env, jucx_request, rlength);
     }
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
 
     return jucx_request;
 }
@@ -401,7 +433,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_flushNonBlockingNative(JNIEnv *env, jclass
     ucs_status_ptr_t status = ucp_ep_flush_nbx((ucp_ep_h)ep_ptr, &param);
     ucs_trace_req("JUCX: ucp_ep_flush_nbx request %p", status);
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
 
     return jucx_request;
 }
@@ -426,6 +458,6 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendAmNonBlockingNative(JNIEnv *env, jclas
                                               (void*)data_address, data_length, &param);
     ucs_trace_req("JUCX: ucp_am_send_nbx request %p", status);
 
-    process_request(env, jucx_request, status);
+    process_request(env, &param, status);
     return jucx_request;
 }

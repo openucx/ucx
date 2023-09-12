@@ -16,7 +16,6 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
-#include <ucm/util/reloc.h>
 #include <ucm/mmap/mmap.h>
 #include <ucm/malloc/malloc_hook.h>
 #include <ucs/type/init_once.h>
@@ -47,7 +46,8 @@ ucm_global_config_t ucm_global_opts = {
                                   UCS_BIT(UCM_MMAP_HOOK_RELOC),
     .enable_dynamic_mmap_thresh = 1,
     .alloc_alignment            = 16,
-    .dlopen_process_rpath       = 1
+    .dlopen_process_rpath       = 1,
+    .bistro_force_far_jump      = 0,
 };
 
 size_t ucm_get_page_size()
@@ -135,7 +135,7 @@ void *ucm_sys_realloc(void *ptr, size_t size)
         return ptr;
     }
 
-    newptr = ucm_orig_mremap(oldptr, oldsize, sys_size, MREMAP_MAYMOVE);
+    newptr = ucm_orig_mremap(oldptr, oldsize, sys_size, MREMAP_MAYMOVE, NULL);
     if (newptr == MAP_FAILED) {
         ucm_error("mremap(oldptr=%p oldsize=%zu, newsize=%zu) failed: %m",
                   oldptr, oldsize, sys_size);
@@ -188,7 +188,7 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
         } else if (read_size == buffer_size - offset) {
             /* enlarge buffer */
             buffer = ucm_orig_mremap(buffer, buffer_size, buffer_size * 2,
-                                     MREMAP_MAYMOVE);
+                                     MREMAP_MAYMOVE, NULL);
             if (buffer == MAP_FAILED) {
                 ucm_fatal("failed to allocate maps buffer(size=%zu)", buffer_size);
             }
@@ -322,7 +322,7 @@ void ucm_prevent_dl_unload()
         (void)dlerror();
         dl = dlopen(info.dli_fname, flags);
         if (dl == NULL) {
-            ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
+            ucm_diag("failed to load '%s': %s", info.dli_fname, dlerror());
             continue;
         }
 

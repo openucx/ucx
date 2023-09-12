@@ -13,6 +13,7 @@
 #endif
 
 #include "perftest.h"
+#include "perftest_mad.h"
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
@@ -126,6 +127,10 @@ static int sock_io(int sock, ssize_t (*sock_call)(int, void *, size_t, int),
             ucs_assert(pfd.revents & poll_events);
 
             ret = sock_call(sock, (char*)data + total, size - total, 0);
+            if ((ret == 0) && (poll_events & POLLIN)) {
+                ucs_error("%s() remote closed connection", name);
+                return -1;
+            }
             if (ret < 0) {
                 ucs_error("%s() failed: %m", name);
                 return -1;
@@ -236,6 +241,9 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
 
         if (safe_recv(group->recvfd, &snc, sizeof(unsigned), progress, arg) == 0) {
             ucs_assert(snc == magic);
+        } else {
+            ucs_error("sock: rte barrier remote peer failure");
+            exit(EXIT_FAILURE);
         }
     }
   }
@@ -246,13 +254,8 @@ static void sock_rte_post_vec(void *rte_group, const struct iovec *iovec,
                               int iovcnt, void **req)
 {
     sock_rte_group_t *group = rte_group;
-    size_t size;
+    size_t size             = ucs_iovec_total_length(iovec, iovcnt);
     int i;
-
-    size = 0;
-    for (i = 0; i < iovcnt; ++i) {
-        size += iovec[i].iov_len;
-    }
 
     safe_send(group->sendfd, &size, sizeof(size), NULL, NULL);
     for (i = 0; i < iovcnt; ++i) {
@@ -265,15 +268,28 @@ static void sock_rte_recv(void *rte_group, unsigned src, void *buffer,
                           size_t max, void *req)
 {
     sock_rte_group_t *group = rte_group;
-    size_t size;
+    size_t size             = 0;
+    int ret;
 
     if (src != group->peer) {
         return;
     }
 
-    safe_recv(group->recvfd, &size, sizeof(size), NULL, NULL);
+    ret = safe_recv(group->recvfd, &size, sizeof(size), NULL, NULL);
+    if (ret != 0) {
+        goto err;
+    }
+
     ucs_assert_always(size <= max);
-    safe_recv(group->recvfd, buffer, size, NULL, NULL);
+    ret = safe_recv(group->recvfd, buffer, size, NULL, NULL);
+    if (ret != 0) {
+        goto err;
+    }
+
+    return;
+err:
+    ucs_error("sock: rte recv: remote peer failure");
+    exit(EXIT_FAILURE);
 }
 
 static void sock_rte_report(void *rte_group, const ucx_perf_result_t *result,
@@ -318,6 +334,12 @@ static ucs_status_t setup_sock_rte_loopback(struct perftest_context *ctx)
     return UCS_OK;
 }
 
+void release_msg_size_list(perftest_params_t *params)
+{
+    free(params->super.msg_size_list);
+    params->super.msg_size_list = NULL;
+}
+
 static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 {
     int optval = 1;
@@ -331,6 +353,7 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
     int ret;
     char service[8];
     char err_str[64];
+    unsigned needed_flags;
 
     ucs_snprintf_safe(service, sizeof(service), "%u", ctx->port);
     memset(&hints, 0, sizeof(hints));
@@ -412,14 +435,16 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
     if (ctx->server_addr == NULL) {
         /* release the memory for the list of the message sizes allocated
          * during the initialization of the default testing parameters */
-        free(ctx->params.super.msg_size_list);
-        ctx->params.super.msg_size_list = NULL;
+        release_msg_size_list(&ctx->params);
 
+        needed_flags = ctx->params.super.flags &
+                       UCX_PERF_TEST_FLAG_ERR_HANDLING;
         ret = safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
         if (ret) {
             status = UCS_ERR_IO_ERROR;
             goto err_close_connfd;
         }
+        ctx->params.super.flags |= needed_flags;
 
         if (ctx->params.super.msg_size_cnt != 0) {
             ctx->params.super.msg_size_list =
@@ -662,129 +687,6 @@ static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
                    ctx->flags, is_final, ctx->server_addr == NULL,
                    is_multi_thread);
 }
-#elif defined (HAVE_RTE)
-static unsigned ext_rte_group_size(void *rte_group)
-{
-    rte_group_t group = (rte_group_t)rte_group;
-    return rte_group_size(group);
-}
-
-static unsigned ext_rte_group_index(void *rte_group)
-{
-    rte_group_t group = (rte_group_t)rte_group;
-    return rte_group_rank(group);
-}
-
-static void ext_rte_barrier(void *rte_group, void (*progress)(void *arg),
-                            void *arg)
-{
-#pragma omp barrier
-
-#pragma omp master
-  {
-    rte_group_t group = (rte_group_t)rte_group;
-    int rc;
-
-    rc = rte_barrier(group);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_barrier");
-    }
-  }
-#pragma omp barrier
-}
-
-static void ext_rte_post_vec(void *rte_group, const struct iovec* iovec,
-                             int iovcnt, void **req)
-{
-    rte_group_t group = (rte_group_t)rte_group;
-    rte_srs_session_t session;
-    rte_iovec_t *r_vec;
-    int i, rc;
-
-    rc = rte_srs_session_create(group, 0, &session);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_session_create");
-    }
-
-    r_vec = calloc(iovcnt, sizeof(rte_iovec_t));
-    if (r_vec == NULL) {
-        return;
-    }
-    for (i = 0; i < iovcnt; ++i) {
-        r_vec[i].iov_base = iovec[i].iov_base;
-        r_vec[i].type     = rte_datatype_uint8_t;
-        r_vec[i].count    = iovec[i].iov_len;
-    }
-    rc = rte_srs_set_data(session, "KEY_PERF", r_vec, iovcnt);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_set_data");
-    }
-    *req = session;
-    free(r_vec);
-}
-
-static void ext_rte_recv(void *rte_group, unsigned src, void *buffer,
-                         size_t max, void *req)
-{
-    rte_group_t group         = (rte_group_t)rte_group;
-    rte_srs_session_t session = (rte_srs_session_t)req;
-    void *rte_buffer = NULL;
-    rte_iovec_t r_vec;
-    uint32_t offset;
-    int size;
-    int rc;
-
-    rc = rte_srs_get_data(session, rte_group_index_to_ec(group, src),
-                          "KEY_PERF", &rte_buffer, &size);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_get_data");
-        return;
-    }
-
-    r_vec.iov_base = buffer;
-    r_vec.type     = rte_datatype_uint8_t;
-    r_vec.count    = max;
-
-    offset = 0;
-    rte_unpack(&r_vec, rte_buffer, &offset);
-
-    rc = rte_srs_session_destroy(session);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_session_destroy");
-    }
-    free(rte_buffer);
-}
-
-static void ext_rte_exchange_vec(void *rte_group, void * req)
-{
-    rte_srs_session_t session = (rte_srs_session_t)req;
-    int rc;
-
-    rc = rte_srs_exchange_data(session);
-    if (RTE_SUCCESS != rc) {
-        ucs_error("Failed to rte_srs_exchange_data");
-    }
-}
-
-static void ext_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                           const char *extra_info, void *arg, int is_final,
-                           int is_multi_thread)
-{
-    struct perftest_context *ctx = arg;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, extra_info,
-                   ctx->flags, is_final, ctx->server_addr == NULL,
-                   is_multi_thread);
-}
-
-static ucx_perf_rte_t ext_rte = {
-    .group_size    = ext_rte_group_size,
-    .group_index   = ext_rte_group_index,
-    .barrier       = ext_rte_barrier,
-    .report        = ext_rte_report,
-    .post_vec      = ext_rte_post_vec,
-    .recv          = ext_rte_recv,
-    .exchange_vec  = ext_rte_exchange_vec,
-};
 #endif
 
 static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
@@ -838,20 +740,6 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.super.rte_group  = NULL;
     ctx->params.super.rte        = &mpi_rte;
     ctx->params.super.report_arg = ctx;
-#elif defined (HAVE_RTE)
-    rte_group_t group;
-
-    ucs_trace_func("");
-
-    rte_init(NULL, NULL, &group);
-    /* Let the last rank print the results */
-    if (rte_group_rank(group) == (rte_group_size(group) - 1)) {
-        ctx->flags |= TEST_FLAG_PRINT_RESULTS;
-    }
-
-    ctx->params.super.rte_group  = group;
-    ctx->params.super.rte        = &ext_rte;
-    ctx->params.super.report_arg = ctx;
 #endif
     return UCS_OK;
 }
@@ -866,8 +754,6 @@ static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
     ucs_assert(buffer != NULL);
     ucs_assertv(size == MPI_RTE_BSEND_BUFFER_SIZE, "size=%d", size);
     free(buffer);
-#elif defined (HAVE_RTE)
-    rte_finalize();
 #endif
     return UCS_OK;
 }
@@ -890,7 +776,8 @@ static ucs_status_t check_system(struct perftest_context *ctx)
     if (ctx->flags & TEST_FLAG_SET_AFFINITY) {
         for (i = 0; i < ctx->num_cpus; i++) {
             if (ctx->cpus[i] >= nr_cpus) {
-                ucs_error("cpu (%u) out of range (0..%u)", ctx->cpus[i], nr_cpus - 1);
+                ucs_error("cpu (%u) out of range [0..%u]", ctx->cpus[i],
+                          nr_cpus - 1);
                 return UCS_ERR_INVALID_PARAM;
             }
         }
@@ -926,12 +813,38 @@ static ucs_status_t check_system(struct perftest_context *ctx)
     return UCS_OK;
 }
 
+static void ctx_free(struct perftest_context *ctx)
+{
+    free(ctx->params.super.msg_size_list);
+}
+
+static ucs_status_t setup_rte(struct perftest_context *ctx)
+{
+    if (ctx->mad_port != NULL) {
+        return setup_mad_rte(ctx);
+    } else if (ctx->mpi) {
+        return setup_mpi_rte(ctx);
+    } else {
+        return setup_sock_rte(ctx);
+    }
+}
+
+static void cleanup_rte(struct perftest_context *ctx)
+{
+    if (ctx->mad_port != NULL) {
+        cleanup_mad_rte(ctx);
+    } else if (ctx->mpi) {
+        cleanup_mpi_rte(ctx);
+    } else {
+        cleanup_sock_rte(ctx);
+    }
+}
+
 int main(int argc, char **argv)
 {
     struct perftest_context ctx;
     ucs_status_t status;
     int mpi_initialized;
-    int mpi_rte;
     int ret;
 
 #ifdef HAVE_MPI
@@ -962,22 +875,7 @@ int main(int argc, char **argv)
     status = parse_opts(&ctx, mpi_initialized, argc, argv);
     if (status != UCS_OK) {
         ret = (status == UCS_ERR_CANCELED) ? 0 : -127;
-        goto out_msg_size_list;
-    }
-
-#ifdef __COVERITY__
-    /* coverity[dont_call] */
-    mpi_rte = rand(); /* Shut up deadcode error */
-#endif
-
-    if (ctx.mpi) {
-        mpi_rte = 1;
-    } else {
-#ifdef HAVE_RTE
-        mpi_rte = 1;
-#else
-        mpi_rte = 0;
-#endif
+        goto out;
     }
 
     status = check_system(&ctx);
@@ -986,9 +884,10 @@ int main(int argc, char **argv)
         goto out_msg_size_list;
     }
 
-    /* Create RTE */
-    status = (mpi_rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
+    status = setup_rte(&ctx);
     if (status != UCS_OK) {
+        ucs_error("failed to setup RTE transport: %s",
+                  ucs_status_string(status));
         ret = -1;
         goto out_msg_size_list;
     }
@@ -1003,12 +902,10 @@ int main(int argc, char **argv)
     ret = 0;
 
 out_cleanup_rte:
-    (mpi_rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
+    cleanup_rte(&ctx);
 out_msg_size_list:
-    free(ctx.params.super.msg_size_list);
-#if HAVE_MPI
+    ctx_free(&ctx);
 out:
-#endif
     if (mpi_initialized) {
 #ifdef HAVE_MPI
         MPI_Finalize();

@@ -337,32 +337,6 @@ typedef enum {
 
 /**
  * @ingroup UCP_ENDPOINT
- * @brief Close UCP endpoint modes.
- *
- * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
- */
-enum ucp_ep_close_mode {
-    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
-                                              the endpoint without any
-                                              confirmation from the peer. All
-                                              outstanding requests will be
-                                              completed with
-                                              @ref UCS_ERR_CANCELED error.
-                                              @note This mode may cause
-                                              transport level errors on remote
-                                              side, so it requires set
-                                              @ref UCP_ERR_HANDLING_MODE_PEER
-                                              for all endpoints created on
-                                              both (local and remote) sides to
-                                              avoid undefined behavior. */
-    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
-                                              flushes on all outstanding
-                                              operations. */
-};
-
-
-/**
- * @ingroup UCP_ENDPOINT
  * @brief UCP performance fields and flags
  *
  * The enumeration allows specifying which fields in @ref ucp_ep_evaluate_perf_param_t are
@@ -571,20 +545,29 @@ enum {
      * mapping up-front, and mapping them later when they are accessed by
      * communication routines.
      */
-    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0),
+    UCP_MEM_MAP_NONBLOCK       = UCS_BIT(0),
 
     /**
      * Identify requirement for allocation, if passed address is not a
      * null-pointer, then it will be used as a hint or direct address for
      * allocation.
      */
-    UCP_MEM_MAP_ALLOCATE = UCS_BIT(1),
+    UCP_MEM_MAP_ALLOCATE       = UCS_BIT(1),
 
     /**
      * Don't interpret address as a hint: place the mapping at exactly that
      * address. The address must be a multiple of the page size.
      */
-    UCP_MEM_MAP_FIXED    = UCS_BIT(2)
+    UCP_MEM_MAP_FIXED          = UCS_BIT(2),
+
+    /**
+     * Register the memory region so its remote access key would likely be
+     * equal to remote access keys received from other peers, when compared with
+     * @ref ucp_rkey_compare. This flag is a hint. When remote access keys
+     * received from different peers are compared equal, they can be used
+     * interchangeably, avoiding the need to keep all of them in memory.
+     */
+    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3)
 };
 
 
@@ -731,7 +714,12 @@ typedef enum {
     UCP_OP_ATTR_FIELD_RECV_INFO     = UCS_BIT(7),  /**< recv_info field */
     UCP_OP_ATTR_FIELD_MEMH          = UCS_BIT(8),  /**< memory handle field */
 
-    UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
+    UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< Deny immediate completion,
+                                                        i.e NULL cannot be returned.
+                                                        If a completion callback is
+                                                        provided, it can be called
+                                                        before the function
+                                                        returns. */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
                                                         even if it delays remote
                                                         data delivery. Note for
@@ -749,7 +737,9 @@ typedef enum {
     UCP_OP_ATTR_FLAG_MULTI_SEND     = UCS_BIT(19)  /**< optimize for bandwidth of
                                                         multiple in-flight operations,
                                                         rather than for the latency
-                                                        of a single operation */
+                                                        of a single operation.
+                                                        This flag and UCP_OP_ATTR_FLAG_FAST_CMPL
+                                                        are mutually exclusive. */
 } ucp_op_attr_t;
 
 
@@ -1273,6 +1263,24 @@ typedef struct ucp_worker_attr {
      */
     size_t                max_debug_string;
 } ucp_worker_attr_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Tuning parameters for the comparison function @ref ucp_rkey_compare
+ *
+ * The structure defines the parameters that can be used for UCP library remote
+ * keys comparison using @ref ucp_rkey_compare routine.
+ *
+ */
+typedef struct ucp_rkey_compare_params {
+    /**
+     * Mask of valid fields in this structure, must currently be zero. Fields
+     * not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+} ucp_rkey_compare_params_t;
 
 
 /**
@@ -2120,6 +2128,31 @@ ucs_status_t ucp_context_query(ucp_context_h context_p,
 
 
 /**
+ * @ingroup UCP_MEM
+ * @brief Compare two remote keys
+ *
+ * This routine compares two remote keys.
+ *
+ * It sets the @a result argument to < 0 if rkey1 is lower than rkey2, 0 if they
+ * are equal or > 0 if rkey1 is greater than rkey2. The result value can be used
+ * for sorting remote keys.
+ *
+ * @param [in]  context     Handle to @ref ucp_context_h
+ * @param [in]  rkey1       First rkey to compare
+ * @param [in]  rkey2       Second rkey to compare
+ * @param [in]  params      Additional parameters to the comparison
+ * @param [out] result      Result of the comparison
+ *
+ * @return UCS_OK                - @a result contains the comparison result
+ * @return UCS_ERR_INVALID_PARAM - The routine arguments are invalid
+ * @return Other                 - Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t
+ucp_rkey_compare(ucp_context_h context, ucp_rkey_h rkey1, ucp_rkey_h rkey2,
+                 const ucp_rkey_compare_params_t *params, int *result);
+
+
+/**
  * @ingroup UCP_CONTEXT
  * @brief Print context information.
  *
@@ -2220,8 +2253,8 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream);
  * @param [in]  worker            Worker object that is associated with the
  *                                address object.
  * @param [in] address            Address to release; the address object has to
- *                                be allocated using @ref ucp_worker_get_address
- *                                "ucp_worker_get_address()" routine.
+ *                                be allocated using @ref ucp_worker_query
+ *                                "ucp_worker_query()" routine.
  *
  * @todo We should consider to change it to return int so we can catch the
  * errors when worker != address

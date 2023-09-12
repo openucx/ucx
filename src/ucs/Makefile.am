@@ -2,6 +2,7 @@
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+# Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -15,13 +16,14 @@ libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) $(BFD_CPPFLAGS) \
                      -DUCX_MODULE_DIR=\"$(moduledir)\" \
                      -DUCX_CONFIG_DIR=\"$(ucx_config_dir)\"
 libucs_la_CFLAGS   = $(BASE_CFLAGS) $(BFD_CFLAGS)
-libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) $(BFD_LDFLAGS) -version-info $(SOVERSION)
+libucs_la_LDFLAGS  = -ldl $(BFD_LDFLAGS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la $(BFD_LIBS)
 
 nobase_dist_libucs_la_HEADERS = \
 	arch/aarch64/bitops.h \
 	arch/ppc64/bitops.h \
+	arch/rv64/bitops.h \
 	arch/x86_64/bitops.h \
 	arch/bitops.h \
 	algorithm/crc.h \
@@ -35,6 +37,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/array.h \
 	datastruct/array.inl \
 	datastruct/callbackq.h \
+	datastruct/callbackq_compat.h \
 	datastruct/hlist.h \
 	datastruct/khash.h \
 	datastruct/linear_func.h \
@@ -82,18 +85,21 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/aarch64/global_opts.h \
 	arch/generic/atomic.h \
 	arch/ppc64/global_opts.h \
+	arch/rv64/global_opts.h \
 	arch/global_opts.h
 
 noinst_HEADERS = \
 	arch/aarch64/cpu.h \
 	arch/generic/cpu.h \
 	arch/ppc64/cpu.h \
+	arch/rv64/cpu.h \
 	arch/x86_64/cpu.h \
 	arch/cpu.h \
 	config/ucm_opts.h \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
 	datastruct/frag_list.h \
+        datastruct/lru.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.inl \
 	datastruct/mpool_set.inl \
@@ -127,6 +133,7 @@ noinst_HEADERS = \
 	type/float8.h \
 	async/async.h \
 	async/pipe.h \
+	async/eventfd.h \
 	async/signal.h \
 	async/thread.h \
 	async/async_int.h
@@ -139,12 +146,15 @@ libucs_la_SOURCES = \
 	arch/aarch64/global_opts.c \
 	arch/ppc64/timebase.c \
 	arch/ppc64/global_opts.c \
+	arch/rv64/cpu.c \
+	arch/rv64/global_opts.c \
 	arch/x86_64/cpu.c \
 	arch/x86_64/global_opts.c \
 	arch/cpu.c \
 	async/async.c \
 	async/signal.c \
 	async/pipe.c \
+	async/eventfd.c \
 	async/thread.c \
 	config/global_opts.c \
 	config/ucm_opts.c \
@@ -154,6 +164,7 @@ libucs_la_SOURCES = \
 	datastruct/array.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
+	datastruct/lru.c \
 	datastruct/mpmc.c \
 	datastruct/mpool.c \
 	datastruct/mpool_set.c \

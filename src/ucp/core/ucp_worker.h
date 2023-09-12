@@ -23,6 +23,8 @@
 #include <ucs/datastruct/ptr_map.h>
 #include <ucs/arch/bitops.h>
 
+#include <ucs/datastruct/array.inl>
+
 
 /* The size of the private buffer in UCT descriptor headroom, which UCP may
  * use for its own needs. This size does not include ucp_recv_desc_t length,
@@ -119,9 +121,10 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
+    UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE       = UCS_BIT(3)  /**< Progress should be activated */
 };
 
 
@@ -221,6 +224,9 @@ typedef struct ucp_worker_mpool_key {
 KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t);
 typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
 
+/* EP configurations storage */
+UCS_ARRAY_DECLARE_TYPE(ep_config_arr, unsigned, ucp_ep_config_t);
+
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
  * some auxiliary info needed for tag matching offloads.
@@ -231,6 +237,7 @@ struct ucp_worker_iface {
     ucp_worker_h                  worker;        /* The parent worker */
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
+    ucs_sys_dev_distance_t        distance;      /* Distance from given MD */
     int                           event_fd;      /* Event FD, or -1 if undefined */
     unsigned                      activate_count;/* How many times this iface has
                                                     been activated */
@@ -309,6 +316,9 @@ typedef struct ucp_worker {
     ucp_tag_match_t                  tm;                  /* Tag-matching queues and offload info */
     ucp_am_info_t                    am;                  /* Array of AM callbacks and their data */
     uint64_t                         am_message_id;       /* For matching long AMs */
+    size_t                           max_am_header;       /* Maximum allowed
+                                                             header size used by
+                                                             UCP AM */
     ucp_ep_h                         mem_type_ep[UCS_MEMORY_TYPE_LAST]; /* Memory type EPs */
 
     UCS_STATS_NODE_DECLARE(stats)
@@ -324,8 +334,7 @@ typedef struct ucp_worker {
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
                                                              ptr mapping */
 
-    unsigned                         ep_config_count;     /* Current number of ep configurations */
-    ucp_ep_config_t                  ep_config[UCP_WORKER_MAX_EP_CONFIG];
+    ucs_array_t(ep_config_arr)       ep_config;           /* EP configurations storage */
 
     unsigned                         rkey_config_count;   /* Current number of rkey configurations */
     ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
@@ -367,7 +376,6 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                            ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
-                                   uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t **wiface);
 
 ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
@@ -405,6 +413,15 @@ void ucp_worker_vfs_refresh(void *obj);
 ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 
 unsigned ucp_worker_discard_uct_ep_progress(void *arg);
+
+
+ucs_status_t ucp_worker_iface_estimate_perf(const ucp_worker_iface_t *wiface,
+                                            uct_perf_attr_t *perf_attr);
+
+
+void ucp_worker_iface_add_bandwidth(uct_ppn_bandwidth_t *ppn_bandwidth,
+                                    double bandwidth);
+
 
 /* must be called with async lock held */
 static UCS_F_ALWAYS_INLINE void

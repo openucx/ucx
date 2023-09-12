@@ -45,9 +45,10 @@ static UCS_F_ALWAYS_INLINE void ucp_am_release_user_header(ucp_request_t *req)
 {
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USER_HEADER_COPIED)) {
         ucs_assert(req->send.msg_proto.am.flags & UCP_AM_SEND_FLAG_COPY_HEADER);
-        ucs_mpool_set_put_inline(req->send.msg_proto.am.header.user_ptr);
+        ucs_mpool_set_put_inline(req->send.msg_proto.am.header.ptr);
+        req->flags &= ~UCP_REQUEST_FLAG_USER_HEADER_COPIED;
 #if UCS_ENABLE_ASSERT
-        req->send.msg_proto.am.header.user_ptr = NULL;
+        req->send.msg_proto.am.header.ptr = NULL;
 #endif
     }
 }
@@ -204,7 +205,6 @@ size_t ucp_dt_iov_copy_iov_uct(uct_iov_t *iov, size_t *iovcnt,
 {
     size_t length_it = 0;
     size_t iov_offset, max_src_iov, src_it, dst_it;
-    ucp_md_index_t memh_index;
 
     iov_offset               = state->dt.iov.iov_offset;
     max_src_iov              = state->dt.iov.iovcnt;
@@ -218,12 +218,10 @@ size_t ucp_dt_iov_copy_iov_uct(uct_iov_t *iov, size_t *iovcnt,
                                                        iov_offset);
             iov[dst_it].length   = src_iov[src_it].length - iov_offset;
             if (md_flags & UCT_MD_FLAG_NEED_MEMH) {
-                ucs_assert(state->dt.iov.dt_reg != NULL);
-                memh_index       = ucs_bitmap2idx(state->dt.iov.dt_reg[src_it].md_map,
-                                                  md_index);
-                iov[dst_it].memh = state->dt.iov.dt_reg[src_it].memh[memh_index];
+                ucs_assert(state->dt.iov.memhs != NULL);
+                iov[dst_it].memh = state->dt.iov.memhs[src_it]->uct[md_index];
             } else {
-                ucs_assert(state->dt.iov.dt_reg == NULL);
+                ucs_assert(state->dt.iov.memhs == NULL);
                 iov[dst_it].memh = UCT_MEM_HANDLE_NULL;
             }
             iov[dst_it].stride   = 0;
@@ -257,7 +255,6 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
 {
     uint64_t md_flags = context->tl_mds[md_index].attr.flags;
     size_t length_it  = 0;
-    ucp_md_index_t memh_index;
 
     ucs_assert((context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG) ||
                !(md_flags & UCT_MD_FLAG_NEED_MEMH));
@@ -268,8 +265,7 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
             if (mdesc) {
                 iov[0].memh = mdesc->memh->uct[md_index];
             } else {
-                memh_index  = ucs_bitmap2idx(state->dt.contig.md_map, md_index);
-                iov[0].memh = state->dt.contig.memh[memh_index];
+                iov[0].memh = state->dt.contig.memh->uct[md_index];
             }
         } else {
             iov[0].memh = UCT_MEM_HANDLE_NULL;
@@ -365,7 +361,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     ucs_status_t status;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    ucp_send_request_add_reg_lane(req, req->send.lane);
+    ucp_request_send_reg_lane(req, req->send.lane);
 
     /* Cache datatype state only after registering the lane, since registering
        the lane can change the state */
@@ -428,11 +424,12 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     }
 
     if (enable_am_bw || (req->send.state.dt.offset == 0)) {
-        ucp_send_request_add_reg_lane(req, req->send.lane);
+        ucp_request_send_reg_lane(req, req->send.lane);
     }
 
     max_zcopy = ucp_ep_get_max_zcopy(ep, req->send.lane) - user_hdr_size;
-    max_iov   = ucp_ep_get_max_iov(ep, req->send.lane) - !!user_hdr_size;
+    max_iov   = ucs_min(ucp_ep_get_max_iov(ep, req->send.lane) - !!user_hdr_size,
+                        (UCS_ALLOCA_MAX_SIZE / sizeof(*iov)) - 1);
     iov       = ucs_alloca((max_iov + 1) * sizeof(uct_iov_t));
 
     for (;;) {
@@ -567,7 +564,7 @@ ucp_proto_get_zcopy_threshold(const ucp_request_t *req,
         } else {
             /* Calculate threshold */
             lane         = req->send.lane;
-            rsc_index    = ucp_ep_config(req->send.ep)->key.lanes[lane].rsc_index;
+            rsc_index    = ucp_ep_get_rsc_index(req->send.ep, lane);
             worker       = req->send.ep->worker;
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
                               &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,
@@ -596,11 +593,13 @@ ucp_proto_get_short_max(const ucp_request_t *req,
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
-                    ssize_t length)
+                    ssize_t length, const ucp_request_param_t *param)
 {
     return (ucs_likely(length <= max_eager_short->memtype_off) ||
-            (length <= max_eager_short->memtype_on &&
-             ucs_memtype_cache_is_empty()));
+            ((length <= max_eager_short->memtype_on) &&
+             (ucs_memtype_cache_is_empty() ||
+              ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) &&
+               (param->memory_type == UCS_MEMORY_TYPE_HOST)))));
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
@@ -673,9 +672,8 @@ ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
     hdr_state.offset = 0ul;
 
     ucp_dt_pack(req->send.ep->worker, ucp_dt_make_contig(1),
-                UCS_MEMORY_TYPE_HOST, buffer,
-                req->send.msg_proto.am.header.user_ptr, &hdr_state,
-                req->send.msg_proto.am.header.length);
+                UCS_MEMORY_TYPE_HOST, buffer, req->send.msg_proto.am.header.ptr,
+                &hdr_state, req->send.msg_proto.am.header.length);
 }
 
 #endif

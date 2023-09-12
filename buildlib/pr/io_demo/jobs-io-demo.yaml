@@ -47,7 +47,7 @@ jobs:
             test_name: ${{ test.Value.test_name }}
             test_args: ${{ test.Value.args }}
             test_time: ${{ parameters.duration }}
-            test_intefrafe: ${{ test.Value.interface }}
+            test_interface: ${{ test.Value.interface }}
             test_ucx_tls: ${{ test.Value.tls }}
             test_extra_run_args: ${{ test.Value.extra_run_args }}
             initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
@@ -77,7 +77,7 @@ jobs:
           name: $(test_name)
           iodemo_args: $(test_args)
           duration: $(test_time)
-          roce_iface: $(test_intefrafe)
+          roce_iface: $(test_interface)
           iodemo_tls: $(test_ucx_tls)
           initial_delay: $(initial_delay)
           interference: $(test_interference)

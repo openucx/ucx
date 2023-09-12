@@ -15,6 +15,8 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/arch/atomic.h>
+#include <ucs/memory/rcache.h>
+#include <ucs/memory/rcache_int.h>
 }
 
 #include <sys/mman.h>
@@ -440,7 +442,8 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_rndv_thresh_zero, "RNDV_THRESH=0
         // not send messages smaller than SW RNDV request size, because receiver
         // may temporarily store this request in the user buffer (which will
         // result in crash if the request does not fit user buffer).
-        size_t min_rndv = ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config(sender().ep()));
+        size_t min_rndv = ucp_ep_tag_offload_min_rndv_thresh(
+                           sender().ucph(), &ucp_ep_config(sender().ep())->key);
 
         EXPECT_GT(min_rndv, 0ul); // min_rndv should be RTS size at least
         EXPECT_LE(min_rndv,
@@ -464,16 +467,86 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits)
 
 class test_ucp_tag_nbx : public test_ucp_tag {
 public:
+    class completion_value {
+    public:
+        completion_value() : m_address(nullptr), m_value(0)
+        {
+        }
+
+        completion_value(uint32_t *address, uint32_t value) :
+            m_address(address), m_value(value)
+        {
+        }
+
+        bool empty() const
+        {
+            return (m_address == nullptr) && (m_value == 0);
+        }
+
+        uint32_t *m_address;
+        uint32_t  m_value;
+    };
+
+    test_ucp_tag_nbx()
+    {
+        if (disable_proto()) {
+            modify_config("PROTO_ENABLE", "n");
+        }
+    }
+
     void init() {
-        /* forbid zcopy access because it will always fail due to read-only
-         * memory pages (will fail to register memory) */
-        modify_config("ZCOPY_THRESH", "inf");
+        stats_activate();
         test_ucp_tag::init();
+    }
+
+    virtual void cleanup()
+    {
+        test_ucp_tag::cleanup();
+        stats_restore();
+    }
+
+    static void
+    get_test_variants_prereg(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "prereg");
+    }
+
+    static void get_test_variants_proto(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_test_variants_prereg, 0);
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_values(variants, get_test_variants_prereg, 1,
+                               "proto_v1");
+        }
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_test_variants_proto, 0);
+        add_variant_values(variants, get_test_variants_proto, 1, "iov");
     }
 
 protected:
     static const size_t MSG_SIZE;
     static const ucp_request_param_t null_param;
+    static const completion_value null_completion;
+    static const size_t iov_count;
+
+    bool prereg() const
+    {
+        return get_variant_value(0);
+    }
+
+    bool disable_proto() const
+    {
+        return get_variant_value(1);
+    }
+
+    bool is_iov() const
+    {
+        return get_variant_value(2);
+    }
 
     static void send_callback(void *req, ucs_status_t status,
                               void *user_data)
@@ -490,79 +563,143 @@ protected:
         ucs_atomic_add32((volatile uint32_t*)user_data, 1);
     }
 
-    void test_recv_send(size_t size, const void *send_buffer, void *recv_buffer,
-                        bool prereg = false,
-                        const ucp_request_param_t &sparam = null_param,
-                        const ucp_request_param_t &rparam = null_param)
+    void do_send_recv(const ucp::data_type_desc_t &send_dt,
+                      ucp::data_type_desc_t &recv_dt,
+                      const ucp_request_param_t &sparam,
+                      const ucp_request_param_t &rparam)
     {
-        ucp_request_param_t send_param = sparam;
-        ucp_request_param_t recv_param = rparam;
-
-        if (prereg) {
-            send_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
-            send_param.memh          = sender().mem_map(
-                                               const_cast<void*>(send_buffer),
-                                               size);
-
-            recv_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
-            recv_param.memh          = receiver().mem_map(recv_buffer, size);
-        }
+        const ssize_t recv_size = recv_dt.extent();
+        ucs_assert(recv_size > 0);
 
         ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
-                                                     recv_buffer, size, 0, 0,
-                                                     &recv_param);
+                                                     recv_dt.buf(), recv_size,
+                                                     0, 0, &rparam);
         ASSERT_UCS_PTR_OK(recv_req);
 
-        ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), send_buffer,
-                                                     size, 0, &send_param);
+        const ssize_t send_size = send_dt.extent();
+        ucs_assert(send_size > 0);
+        ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(),
+                                                     send_dt.buf(), send_size,
+                                                     0, &sparam);
         ASSERT_UCS_PTR_OK(send_req);
 
-        if (!(recv_param.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
+        if (!(rparam.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
             request_wait(recv_req);
         }
 
-        if (!(send_param.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
+        if (!(sparam.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
             request_wait(send_req);
         }
+    }
 
-        if (prereg) {
+    void test_prereg_rcache_stats(const ucp::data_type_desc_t &send_dt,
+                                  ucp::data_type_desc_t &recv_dt,
+                                  const ucp_request_param_t &sparam,
+                                  const ucp_request_param_t &rparam)
+    {
+        if (sparam.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST) {
+            /* Can't send multiple requests for a single user request memory
+               handle */
+            return;
+        }
+
+        int prev_rcache_get_count;
+        prev_rcache_get_count = UCS_STATS_GET_COUNTER(
+                sender().ucph()->rcache->stats, UCS_RCACHE_GETS);
+
+        for (int i = 0; i < 10; ++i) {
+            do_send_recv(send_dt, recv_dt, sparam, rparam);
+        }
+
+        int rcache_get_count;
+        rcache_get_count = UCS_STATS_GET_COUNTER(sender().ucph()->rcache->stats,
+                                                 UCS_RCACHE_GETS);
+
+        /* Compare counters before and after iterations */
+        EXPECT_EQ(prev_rcache_get_count, rcache_get_count);
+    }
+
+    void test_recv_send(size_t size, const void *send_buffer, void *recv_buffer,
+                        ucp_request_param_t send_param = null_param,
+                        ucp_request_param_t recv_param = null_param,
+                        completion_value completion = null_completion)
+    {
+        ucp_datatype_t datatype = is_iov() ? ucp_dt_make_iov() :
+                                             ucp_dt_make_contig(1);
+        ucp::data_type_desc_t send_dt(datatype, send_buffer, size, iov_count);
+
+        /* Currently recv side supports only contig datatype */
+        ucp::data_type_desc_t recv_dt(ucp_dt_make_contig(1), recv_buffer, size);
+
+        send_param.datatype      = datatype;
+        send_param.op_attr_mask |= UCP_OP_ATTR_FIELD_DATATYPE;
+
+        if (prereg()) {
+            send_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            recv_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            send_param.memh = sender().mem_map((void*)send_buffer, size);
+            recv_param.memh = receiver().mem_map(recv_buffer, size);
+        }
+
+        do_send_recv(send_dt, recv_dt, send_param, recv_param);
+
+        if (prereg() && !is_self() && (!is_iov() || m_ucp_config->ctx.proto_enable)) {
+            /* Not relevant for 'self' because both sender and receiver are the same entity.
+               Must be called before request is freed by free_callback (wait_for_value). */
+            /* User-provided memh on iov supported only with proto_v2 */
+            test_prereg_rcache_stats(send_dt, recv_dt, send_param, recv_param);
+        }
+
+        if (!completion.empty()) {
+            /* Wait for completion indication */
+            wait_for_value(completion.m_address, completion.m_value);
+        }
+
+        if (prereg()) {
             sender().mem_unmap(send_param.memh);
             receiver().mem_unmap(recv_param.memh);
         }
     }
 
-    void test_recv_send(size_t size = MSG_SIZE, bool prereg = false)
+    void test_recv_send(size_t size = MSG_SIZE)
     {
         std::vector<char> send_buffer(size);
         std::vector<char> recv_buffer(size);
-        test_recv_send(size, &send_buffer[0], &recv_buffer[0], prereg);
+        test_recv_send(size, &send_buffer[0], &recv_buffer[0]);
     }
 };
 
 const size_t test_ucp_tag_nbx::MSG_SIZE  = 4 * UCS_KBYTE * ucs_get_page_size();
 const ucp_request_param_t test_ucp_tag_nbx::null_param = {0};
-
+const test_ucp_tag_nbx::completion_value test_ucp_tag_nbx::null_completion =
+        {nullptr, 0};
+const size_t test_ucp_tag_nbx::iov_count               = 20;
 
 UCS_TEST_P(test_ucp_tag_nbx, basic)
 {
     test_recv_send();
 }
 
-UCS_TEST_P(test_ucp_tag_nbx, eager_zcopy_prereg, "ZCOPY_THRESH=0",
-           "RNDV_THRESH=inf")
+UCS_TEST_P(test_ucp_tag_nbx, eager_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
-    test_recv_send(4 * UCS_KBYTE, true);
+    test_recv_send(4 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_tag_nbx, rndv_prereg, "RNDV_THRESH=0")
+UCS_TEST_P(test_ucp_tag_nbx, rndv_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=0")
 {
-    test_recv_send(64 * UCS_KBYTE, true);
+    test_recv_send(64 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_tag_nbx, fallback)
+UCS_TEST_P(test_ucp_tag_nbx, rndv_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=0")
 {
-    if (m_ucp_config->ctx.proto_enable) {
-        UCS_TEST_SKIP_R("FIXME: fallback is not implemented in proto_v2");
+    test_recv_send(64 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_tag_nbx, fallback, "ZCOPY_THRESH=inf", "PROTO_ENABLE=n")
+{
+    if (!disable_proto() || prereg()) {
+        UCS_TEST_SKIP_R(
+                "protoV2/prereg are not supported for partial md reg failure");
     }
 
     /* allocate read-only pages - it force ibv_reg_mr() failure */
@@ -599,10 +736,10 @@ UCS_TEST_P(test_ucp_tag_nbx, external_request_free)
     std::vector<char> send_buffer(MSG_SIZE);
     std::vector<char> recv_buffer(MSG_SIZE);
 
-    test_recv_send(MSG_SIZE, &send_buffer[0], &recv_buffer[0], false,
-                   send_param, recv_param);
+    completion_value completion(&completed, 2u);
 
-    wait_for_value(&completed, 2u);
+    test_recv_send(MSG_SIZE, &send_buffer[0], &recv_buffer[0], send_param,
+                   recv_param, completion);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_nbx)

@@ -22,6 +22,7 @@
 
 #include <errno.h>
 #include <iostream>
+#include <fstream>
 #include <stdexcept>
 #include <sstream>
 #include <vector>
@@ -315,6 +316,15 @@ bool is_inet_addr(const struct sockaddr* ifa_addr);
  */
 bool is_interface_usable(struct ifaddrs *ifa);
 
+/**
+ * Return the value of the requested /proc/self/status parameter
+ */
+ssize_t get_proc_self_status_field(const std::string &parameter);
+
+/**
+ * Read directory contents and return a vector of file names.
+ */
+std::vector<std::string> read_dir(const std::string &path);
 
 /**
  * Return the name of the given network device if it is supported by rdmacm.
@@ -337,7 +347,7 @@ uint16_t get_port();
 /**
  * Address to use for mmap(FIXED)
  */
-void *mmap_fixed_address();
+void *mmap_fixed_address(size_t length);
 
 
 /*

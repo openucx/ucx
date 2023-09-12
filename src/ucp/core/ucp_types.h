@@ -34,8 +34,8 @@ typedef uint8_t                      ucp_rsc_index_t;
 /* MDs */
 #define UCP_MD_INDEX_BITS            64  /* How many bits are in MD index */
 typedef ucp_rsc_index_t              ucp_md_index_t;
-#define UCP_MAX_MDS                  ucs_min(UCP_MD_INDEX_BITS, UCP_MAX_RESOURCES)
-#define UCP_MAX_OP_MDS               4  /* maximal number of MDs per single op */
+#define UCP_MAX_MDS                  ((UCP_MD_INDEX_BITS < UCP_MAX_RESOURCES) ? \
+                                      UCP_MD_INDEX_BITS : UCP_MAX_RESOURCES)
 UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 
@@ -56,7 +56,7 @@ UCP_UINT_TYPE(UCP_MAX_SYS_DEVICES)   ucp_sys_dev_map_t;
 
 /* Worker configuration index for endpoint and rkey */
 typedef uint8_t                      ucp_worker_cfg_index_t;
-#define UCP_WORKER_MAX_EP_CONFIG     64
+#define UCP_WORKER_MAX_EP_CONFIG     UINT8_MAX
 #define UCP_WORKER_MAX_RKEY_CONFIG   128
 #define UCP_WORKER_CFG_INDEX_NULL    UINT8_MAX
 
@@ -137,6 +137,7 @@ typedef enum {
     UCP_OP_ID_TAG_SEND_SYNC,
     UCP_OP_ID_AM_SEND,
     UCP_OP_ID_AM_SEND_REPLY,
+    UCP_OP_ID_STREAM_SEND,
     UCP_OP_ID_PUT,
     UCP_OP_ID_GET,
     UCP_OP_ID_AMO_POST,

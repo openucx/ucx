@@ -17,6 +17,7 @@
 #include <sys/poll.h>
 #include <netinet/tcp.h>
 #include <dirent.h>
+#include <float.h>
 
 #define UCT_TCP_IFACE_NETDEV_DIR "/sys/class/net"
 
@@ -85,6 +86,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Generate a random TCP port number from that range. A value of zero means\n"
    "let the operating system select the port number.",
    ucs_offsetof(uct_tcp_iface_config_t, port_range), UCS_CONFIG_TYPE_RANGE_SPEC},
+
+   {"MAX_BW", "2200MBs",
+    "Upper bound to TCP iface bandwidth. 'auto' means BW is unlimited.",
+    ucs_offsetof(uct_tcp_iface_config_t, max_bw), UCS_CONFIG_TYPE_BW},
 
 #ifdef UCT_TCP_EP_KEEPALIVE
   {"KEEPIDLE", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE) "s",
@@ -182,15 +187,20 @@ uct_tcp_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
     return UCS_OK;
 }
 
-static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
-                                      const uct_device_addr_t *dev_addr,
-                                      const uct_iface_addr_t *iface_addr)
+static int
+uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                              const uct_iface_is_reachable_params_t *params)
 {
-    uct_tcp_iface_t *iface              = ucs_derived_of(tl_iface,
-                                                         uct_tcp_iface_t);
-    uct_tcp_device_addr_t *tcp_dev_addr = (uct_tcp_device_addr_t*)dev_addr;
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     uct_iface_local_addr_ns_t *local_addr_ns;
+    uct_tcp_device_addr_t *tcp_dev_addr;
 
+    if (!uct_iface_is_reachable_params_valid(
+                params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
+        return 0;
+    }
+
+    tcp_dev_addr = (uct_tcp_device_addr_t*)params->device_addr;
     if (iface->config.ifaddr.ss_family != tcp_dev_addr->sa_family) {
         return 0;
     }
@@ -204,13 +214,36 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
 
     if (tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) {
         local_addr_ns = (uct_iface_local_addr_ns_t*)(tcp_dev_addr + 1);
-        return uct_iface_local_is_reachable(local_addr_ns,
-                                            UCS_SYS_NS_TYPE_NET);
+        if (!uct_iface_local_is_reachable(local_addr_ns, UCS_SYS_NS_TYPE_NET)) {
+            return 0;
+        }
     }
 
-    /* We always report that a peer is reachable. connect() call will
-     * fail if the peer is unreachable when creating UCT/TCP EP */
-    return 1;
+    /* Later connect() call can still fail if the peer is actually unreachable
+     * at UCT/TCP EP creation time */
+    return uct_iface_scope_is_reachable(tl_iface, params);
+}
+
+static const char *
+uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
+{
+    ucs_status_t status;
+    const char *sysfs_path;
+    char lowest_path_buf[PATH_MAX];
+
+    /* Deep search to find the lowest device sysfs path:
+     * 1) For regular device, use regular sysfs form.
+     * 2) For virtual device (RoCE LAG/VLAN), search for symbolic link of the
+     *    form "lower_*" */
+    status = ucs_netif_get_lowest_device_path(dev_name, lowest_path_buf,
+                                              PATH_MAX);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    /* 'path_buffer' size is PATH_MAX */
+    sysfs_path = ucs_topo_resolve_sysfs_path(lowest_path_buf, path_buffer);
+    return sysfs_path;
 }
 
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
@@ -221,8 +254,9 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
                              sizeof(uct_tcp_am_hdr_t);
     ucs_status_t status;
     int is_default;
-    char sysfs_path[PATH_MAX];
-    double pci_bw, network_bw;
+    double pci_bw, network_bw, calculated_bw;
+    char path_buffer[PATH_MAX];
+    const char *sysfs_path;
 
     uct_base_iface_query(&iface->super, attr);
 
@@ -231,10 +265,12 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
         return status;
     }
 
-    ucs_snprintf_safe(sysfs_path, PATH_MAX, "%s/%s/device",
-                      UCT_TCP_IFACE_NETDEV_DIR, iface->if_name);
+    sysfs_path             = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
     pci_bw                 = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
-    attr->bandwidth.shared = ucs_min(pci_bw, network_bw);
+    calculated_bw          = ucs_min(pci_bw, network_bw);
+
+    /* Bandwidth is bounded by TCP stack computation time */
+    attr->bandwidth.shared = ucs_min(calculated_bw, iface->config.max_bw);
 
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_tcp_iface_addr_t);
@@ -451,7 +487,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,
     .iface_get_device_address = uct_tcp_iface_get_device_address,
-    .iface_is_reachable       = uct_tcp_iface_is_reachable
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
@@ -539,9 +575,11 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
         goto err_close_sock;
     }
 
-    ucs_debug("tcp_iface %p: listening for connections (fd=%d) on %s",
-              iface, iface->listen_fd, ucs_sockaddr_str((struct sockaddr *)&bind_addr,
-                                                       ip_port_str, sizeof(ip_port_str)));
+    ucs_debug("tcp_iface %p: listening for connections (fd=%d) on %s netif %s",
+              iface, iface->listen_fd,
+              ucs_sockaddr_str((struct sockaddr *)&iface->config.ifaddr,
+                              ip_port_str, sizeof(ip_port_str)),
+              iface->if_name);
     return UCS_OK;
 
 err_close_sock:
@@ -559,11 +597,13 @@ static ucs_mpool_ops_t uct_tcp_mpool_ops = {
 };
 
 static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2 = uct_tcp_ep_connect_to_ep_v2
+    .iface_estimate_perf   = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep_v2   = uct_tcp_ep_connect_to_ep_v2,
+    .iface_is_reachable_v2 = uct_tcp_iface_is_reachable_v2,
+    .ep_is_connected       = uct_tcp_ep_is_connected
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
@@ -664,6 +704,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         self->config.keepalive.idle =
             ucs_time_from_sec(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE);
     }
+
+    self->config.max_bw = UCS_CONFIG_DBL_IS_AUTO(config->max_bw) ?
+                                  DBL_MAX :
+                                  config->max_bw;
 
     if (self->config.tx_seg_size > self->config.rx_seg_size) {
         ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
@@ -822,13 +866,17 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
 {
-    uct_tcp_md_t *tcp_md = ucs_derived_of(md, uct_tcp_md_t);
+    uct_tcp_md_t *tcp_md               = ucs_derived_of(md, uct_tcp_md_t);
+    const unsigned sys_device_priority = 10;
     uct_tl_device_resource_t *devices, *tmp;
     struct dirent *entry;
     unsigned num_devices;
     int is_active, i;
     ucs_status_t status;
     DIR *dir;
+    const char *sysfs_path;
+    char path_buffer[PATH_MAX];
+    ucs_sys_device_t sys_dev;
 
     dir = opendir(UCT_TCP_IFACE_NETDEV_DIR);
     if (dir == NULL) {
@@ -884,11 +932,15 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         }
         devices = tmp;
 
+        sysfs_path = uct_tcp_iface_get_sysfs_path(entry->d_name, path_buffer);
+        sys_dev    = ucs_topo_get_sysfs_dev(entry->d_name, sysfs_path,
+                                            sys_device_priority);
+
         ucs_snprintf_zero(devices[num_devices].name,
                           sizeof(devices[num_devices].name),
                           "%s", entry->d_name);
         devices[num_devices].type       = UCT_DEVICE_TYPE_NET;
-        devices[num_devices].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        devices[num_devices].sys_device = sys_dev;
         ++num_devices;
     }
 

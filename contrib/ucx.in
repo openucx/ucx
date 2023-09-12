@@ -1,0 +1,30 @@
+#%Module1.0#####################################################################
+##
+## Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+##
+## See file LICENSE for terms.
+
+##
+## modulefiles/ucx
+##
+## Usage:
+## - module load ./contrib/ucx
+## - module unload ucx
+
+proc ModulesHelp { } {
+        puts stderr "\tThis is ucx generic module file\n"
+}
+
+set     root            "@prefix@"
+set     module_prefix   $root
+
+module-whatis   "ucx"
+prepend-path    PATH                    $root/bin
+prepend-path    LD_LIBRARY_PATH         $root/lib
+prepend-path    LIBRARY_PATH            $root/lib
+prepend-path    C_INCLUDE_PATH          $root/include
+prepend-path    CPLUS_INCLUDE_PATH      $root/include
+prepend-path    INCLUDE                 $root/include
+prepend-path    CPATH                   $root/include
+prepend-path    FPATH                   $root/include
+prepend-path    PKG_CONFIG_PATH         $root/lib/pkgconfig

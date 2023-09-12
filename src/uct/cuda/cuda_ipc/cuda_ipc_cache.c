@@ -99,7 +99,6 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
 static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_key_t *key,
                                                 CUdeviceptr *mapped_addr)
 {
-    const char *cu_err_str;
     CUresult cuerr;
     ucs_status_t status;
 
@@ -108,8 +107,8 @@ static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_key_t *key,
     if (cuerr == CUDA_SUCCESS) {
         status = UCS_OK;
     } else {
-        cuGetErrorString(cuerr, &cu_err_str);
-        ucs_debug("cuIpcOpenMemHandle() failed: %s", cu_err_str);
+        ucs_debug("cuIpcOpenMemHandle() failed: %s",
+                  uct_cuda_base_cu_get_error_string(cuerr));
         status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_ERR_ALREADY_EXISTS :
                                                         UCS_ERR_INVALID_PARAM;
     }
@@ -152,10 +151,11 @@ uct_cuda_ipc_get_remote_cache(pid_t pid, uct_cuda_ipc_cache_t **cache)
     khiter_t khiter;
     int khret;
 
+    UCT_CUDA_IPC_GET_DEVICE(key.cu_device);
+
     ucs_recursive_spin_lock(&uct_cuda_ipc_remote_cache.lock);
 
     key.pid = pid;
-    UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&key.cu_device));
 
     khiter = kh_put(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, key,
                     &khret);

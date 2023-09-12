@@ -66,7 +66,7 @@ void ucp_proto_select_init_trace_caps(
 void ucp_proto_select_info(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
-                           const ucp_proto_select_t *proto_select,
+                           const ucp_proto_select_t *proto_select, int show_all,
                            ucs_string_buffer_t *strb);
 
 

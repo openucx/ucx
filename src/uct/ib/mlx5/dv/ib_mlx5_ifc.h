@@ -102,10 +102,6 @@ enum {
     UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY = 0x100
 };
 
-enum {
-    UCT_IB_MLX5_PAGE_SHIFT = 12
-};
-
 struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    reserved_at_0[0x30];
     uint8_t    vhca_id[0x10];
@@ -495,13 +491,13 @@ struct uct_ib_mlx5_cmd_hca_cap_2_bits {
 
     uint8_t    multi_sl_qp[0x1];
     uint8_t    non_tunnel_reformat[0x1];
-    uint8_t    reserved_at_122[0x1];
+    uint8_t    reserved_at_c2[0x1];
     uint8_t    log_min_stride_wqe_sz[0x5];
-    uint8_t    reserved_at_128[0x3];
+    uint8_t    reserved_at_c8[0x3];
     uint8_t    log_conn_track_granularity[0x5];
-    uint8_t    reserved_at_130[0x3];
+    uint8_t    reserved_at_d0[0x3];
     uint8_t    log_conn_track_max_alloc[0x5];
-    uint8_t    reserved_at_138[0x3];
+    uint8_t    reserved_at_d8[0x3];
     uint8_t    log_max_conn_track_offload[0x5];
 
     uint8_t    cross_vhca_object_to_object_supported[0x20];
@@ -510,7 +506,7 @@ struct uct_ib_mlx5_cmd_hca_cap_2_bits {
 
     uint8_t    introspection_mkey[0x20];
 
-    uint8_t    reserved_at_220[0x6A0];
+    uint8_t    reserved_at_160[0x6a0];
 };
 
 struct uct_ib_mlx5_odp_per_transport_service_cap_bits {
@@ -523,7 +519,7 @@ struct uct_ib_mlx5_odp_per_transport_service_cap_bits {
     uint8_t         reserved_at_6[0x1a];
 };
 
-struct uct_ib_mlx5_odp_cap_bits {
+struct uct_ib_mlx5_odp_scheme_cap_bits {
     uint8_t         reserved_at_0[0x40];
 
     uint8_t         sig[0x1];
@@ -541,7 +537,20 @@ struct uct_ib_mlx5_odp_cap_bits {
 
     struct uct_ib_mlx5_odp_per_transport_service_cap_bits dc_odp_caps;
 
-    uint8_t         reserved_at_100[0x700];
+    uint8_t         reserved_at_120[0xe0];
+};
+
+struct uct_ib_mlx5_odp_cap_bits {
+    struct uct_ib_mlx5_odp_scheme_cap_bits transport_page_fault_scheme_cap;
+
+    struct uct_ib_mlx5_odp_scheme_cap_bits memory_page_fault_scheme_cap;
+
+    uint8_t         reserved_at_400[0x200];
+
+    uint8_t         mem_page_fault[0x1];
+    uint8_t         reserved_at_601[0x1f];
+
+    uint8_t         reserved_at_620[0x1e0];
 };
 
 union uct_ib_mlx5_hca_cap_union_bits {
@@ -573,8 +582,20 @@ struct uct_ib_mlx5_query_hca_cap_in_bits {
     uint8_t    reserved_at_40[0x40];
 };
 
+typedef enum {
+    /* QP are associated with port affinity */
+    UCT_IB_MLX5_LAG_QUEUE_AFFINITY = 0x0,
+    /* packets go to egress port through FT */
+    UCT_IB_MLX5_LAG_PORT_SELECT_FT = 0x1,
+    /* FDB select packet flow egress port */
+    UCT_IB_MLX5_LAG_MULTI_PORT_ESW = 0x2,
+    UCT_IB_MLX5_LAG_INVALID_MODE   = 0xFF
+} uct_ib_port_select_mode_t;
+
 struct uct_ib_mlx5_lag_context_bits {
-    uint8_t    reserved_at_0[0x1d];
+    uint8_t    reserved_at_0[0x15];
+    uint8_t    port_select_mode[0x3];
+    uint8_t    reserved_at_18[0x5];
     uint8_t    lag_state[0x3];
     uint8_t    reserved_at_20[0x20];
 };
@@ -633,22 +654,22 @@ struct uct_ib_mlx5_hca_vport_context_bits {
 
     uint8_t    ooo_sl_mask[0x10];
 
-    uint8_t    reserved_at_296[0x40];
+    uint8_t    reserved_at_2a0[0x40];
 
     uint8_t    lid[0x10];
-    uint8_t    reserved_at_310[0x4];
+    uint8_t    reserved_at_2f0[0x4];
     uint8_t    init_type_reply[0x4];
     uint8_t    lmc[0x3];
     uint8_t    subnet_timeout[0x5];
 
     uint8_t    sm_lid[0x10];
     uint8_t    sm_sl[0x4];
-    uint8_t    reserved_at_334[0xc];
+    uint8_t    reserved_at_314[0xc];
 
     uint8_t    qkey_violation_counter[0x10];
     uint8_t    pkey_violation_counter[0x10];
 
-    uint8_t    reserved_at_360[0xca0];
+    uint8_t    reserved_at_340[0xca0];
 };
 
 struct uct_ib_mlx5_query_hca_vport_context_out_bits {
@@ -1692,7 +1713,7 @@ struct uct_ib_mlx5_allow_other_vhca_access_in_bits {
 
     uint8_t         object_id_to_be_accessed[0x20];
 
-    uint8_t         reserved_at_a0[0x40];
+    uint8_t         reserved_at_c0[0x40];
 
     uint8_t         access_key[0x100];
 };
@@ -1789,7 +1810,7 @@ struct uct_ib_mlx5_cqc_bits {
     uint8_t         local_partition_id[0xc];
     uint8_t         process_id[0x14];
 
-    uint8_t         reserved_at_1A0[0x20];
+    uint8_t         reserved_at_1a0[0x20];
 
     uint8_t         dbr_addr[0x40];
 };

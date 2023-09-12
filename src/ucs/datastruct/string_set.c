@@ -43,15 +43,15 @@ static ucs_status_t ucs_string_set_add_ptr(ucs_string_set_t *sset, char *str)
     kh_put(ucs_string_set, sset, str, &ret);
 
     switch (ret) {
-    case -1:
+    case UCS_KH_PUT_FAILED:
         ucs_free(str);
         return UCS_ERR_NO_MEMORY;
-    case 0:
+    case UCS_KH_PUT_KEY_PRESENT:
         /* key already present */
         ucs_free(str);
         return UCS_OK;
-    case 1:
-    case 2:
+    case UCS_KH_PUT_BUCKET_EMPTY:
+    case UCS_KH_PUT_BUCKET_CLEAR:
         /* key inserted */
         return UCS_OK;
     default:

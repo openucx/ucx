@@ -348,7 +348,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_ib_mlx5_srq_t              srq;
         void                           *pref_ptr;
     } rx;
-    uct_ib_mlx5_cq_t                   cq[UCT_IB_DIR_NUM];
+    uct_ib_mlx5_cq_t                   cq[UCT_IB_DIR_LAST];
     struct {
         uct_rc_mlx5_cmd_wq_t           cmd_wq;
         uct_rc_mlx5_tag_entry_t        *head;
@@ -584,7 +584,16 @@ uct_rc_mlx5_iface_common_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
                                    const uct_ib_iface_init_attr_t *init_attr,
                                    int preferred_cpu, size_t inl);
 
-ucs_status_t uct_rc_mlx5_iface_devx_arm(uct_iface_h tl_iface, unsigned events);
+#if HAVE_DEVX
+ucs_status_t
+uct_rc_mlx5_iface_devx_arm(uct_rc_mlx5_iface_common_t *iface, unsigned events);
+#else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_iface_devx_arm(uct_rc_mlx5_iface_common_t *iface, unsigned events)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+#endif
 
 void uct_rc_mlx5_iface_common_event_cq(uct_ib_iface_t *ib_iface,
                                        uct_ib_dir_t dir);
@@ -705,10 +714,23 @@ ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(
         struct mlx5dv_devx_obj *obj, uint16_t event, uint64_t cookie,
         char *msg_arg);
 
+#if HAVE_DEVX
 ucs_status_t
 uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_devx_iface_free_events(uct_rc_mlx5_iface_common_t *iface);
+#else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_MAYBE_UNUSED void
+uct_rc_mlx5_devx_iface_free_events(uct_rc_mlx5_iface_common_t *iface)
+{
+}
+#endif
 
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_qp_attr_t *qp_attr,

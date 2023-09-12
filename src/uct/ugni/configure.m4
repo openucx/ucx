@@ -8,7 +8,7 @@
 cray_ugni_supported=no
 
 AC_ARG_WITH([ugni],
-            [AC_HELP_STRING([--with-ugni(=DIR)], [Build Cray UGNI support])], [], [])
+            [AS_HELP_STRING([--with-ugni(=DIR)], [Build Cray UGNI support])], [], [])
 
 AS_IF([test "x$with_ugni" != "xno"],
       [AC_MSG_CHECKING([cray-ugni])

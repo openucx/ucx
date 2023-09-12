@@ -1,6 +1,7 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
+* Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -16,10 +17,12 @@
 #include <ucs/sys/stubs.h>
 #include <ucs/type/init_once.h>
 
-#define UCS_CPU_CACHE_FILE_FMT   "/sys/devices/system/cpu/cpu%d/cache/index%d/%s"
+#define UCS_CPU_CACHE_FILE_FMT   UCS_SYS_FS_CPUS_PATH "/cpu%d/cache/index%d/%s"
 #define UCS_CPU_CACHE_LEVEL_FILE "level"
 #define UCS_CPU_CACHE_TYPE_FILE  "type"
 #define UCS_CPU_CACHE_SIZE_FILE  "size"
+
+#define UCS_CPU_EST_BCOPY_BW_DEFAULT (7000 * UCS_MBYTE)
 
 /* cache size array. index - cache type (ucs_cpu_cache_type_t), value - cache value,
  * 0 means cache is not supported */
@@ -68,17 +71,22 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_ZHAOXIN] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_GENERIC_RV64G] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
     }
 };
 
 const size_t ucs_cpu_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
-    [UCS_CPU_VENDOR_UNKNOWN]     = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_INTEL]       = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_AMD]         = 5008 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_GENERIC_ARM] = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_GENERIC_PPC] = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_FUJITSU_ARM] = 12000 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_ZHAOXIN]     = 5800 * UCS_MBYTE
+    [UCS_CPU_VENDOR_UNKNOWN]       = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_INTEL]         = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_AMD]           = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_GENERIC_ARM]   = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_GENERIC_PPC]   = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_GENERIC_RV64G] = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_FUJITSU_ARM]   = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,
+    [UCS_CPU_VENDOR_ZHAOXIN]       = UCS_CPU_EST_BCOPY_BW_DEFAULT
 };
 
 static void ucs_sysfs_get_cache_size()

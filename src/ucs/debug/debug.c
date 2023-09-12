@@ -12,6 +12,7 @@
 #include "log.h"
 
 #include <ucs/datastruct/khash.h>
+#include <ucs/memory/rcache_int.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
@@ -650,8 +651,13 @@ void ucs_debug_print_backtrace(FILE *stream, int strip)
     backtrace_h bckt;
     backtrace_line_h bckt_line;
     int i;
+    ucs_status_t status;
 
-    ucs_debug_backtrace_create(&bckt, strip);
+    status = ucs_debug_backtrace_create(&bckt, strip);
+    if (status != UCS_OK) {
+        return;
+    }
+
     fprintf(stream, "==== backtrace (tid:%7d) ====\n", ucs_get_tid());
     for (i = 0; ucs_debug_backtrace_next(bckt, &bckt_line); ++i) {
          fprintf(stream, UCS_DEBUG_BACKTRACE_LINE_FMT,
@@ -686,12 +692,12 @@ const char *ucs_debug_get_symbol_name(void *address)
     pthread_mutex_lock(&lock);
     hash_it = kh_put(ucs_debug_symbol, &ucs_debug_symbols_cache,
                      (uintptr_t)address, &hash_extra_status);
-    if (hash_extra_status == 0) {
+    if (hash_extra_status == UCS_KH_PUT_KEY_PRESENT) {
          sym = kh_value(&ucs_debug_symbols_cache, hash_it);
     } else {
         status = ucs_debug_lookup_address(address, &info);
         if (status == UCS_OK) {
-            if (hash_extra_status == -1) {
+            if (hash_extra_status == UCS_KH_PUT_FAILED) {
                 /* could not add to hash, return pointer to the static buffer */
                 sym = info.function;
                 goto out;
@@ -719,7 +725,7 @@ out:
 static void ucs_debugger_attach()
 {
     static const char *vg_cmds_fmt = "file %s\n"
-                                     "target remote | vgdb\n";
+                                     "target remote | vgdb --pid=%d\n";
     static const char *bt_cmds     = "bt\n"
                                      "list\n";
     static char pid_str[16];
@@ -730,6 +736,8 @@ static void ucs_debugger_attach()
     pid_t pid, debug_pid;
     int fd, ret, narg;
     char UCS_V_UNUSED *self_exe;
+
+    ucs_rcache_atfork_disable();
 
     /* Fork a process which will execute gdb and attach to the current process.
      * We must avoid trigerring calls to malloc/free, since the heap may be corrupted.
@@ -777,7 +785,7 @@ static void ucs_debugger_attach()
         if (fd >= 0) {
             if (RUNNING_ON_VALGRIND) {
                 vg_cmds = ucs_sys_realloc(NULL, 0, strlen(vg_cmds_fmt) + strlen(self_exe));
-                sprintf(vg_cmds, vg_cmds_fmt, self_exe);
+                sprintf(vg_cmds, vg_cmds_fmt, self_exe, debug_pid);
                 if (write(fd, vg_cmds, strlen(vg_cmds)) != strlen(vg_cmds)) {
                     ucs_log_fatal_error("Unable to write to command file: %m");
                 }

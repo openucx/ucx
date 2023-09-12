@@ -58,6 +58,10 @@ typedef uint64_t ucp_proto_id_mask_t;
 typedef struct ucp_proto_perf_node ucp_proto_perf_node_t;
 
 
+/* Key for selecting a protocol */
+typedef struct ucp_proto_select_param ucp_proto_select_param_t;
+
+
 /* Protocol stage ID */
 enum {
     /* Initial stage. All protocols start from this stage. */
@@ -78,23 +82,6 @@ enum {
                                               uct_ep_tag_eager_short() */
     UCP_PROTO_FLAG_INVALID   = UCS_BIT(3)  /* The protocol is a placeholder */
 };
-
-
-/**
- * Key for looking up protocol configuration by operation parameters
- */
-typedef struct {
-    uint8_t                 op_id;      /* Operation ID */
-    uint16_t                op_flags;   /* Operation flags */
-    uint8_t                 dt_class;   /* Datatype */
-    uint8_t                 mem_type;   /* Memory type */
-    uint8_t                 sys_dev;    /* System device */
-    uint8_t                 sg_count;   /* Number of non-contig scatter/gather
-                                           entries. If the actual number is larger
-                                           than UINT8_MAX, UINT8_MAX is used. */
-    uint8_t                 padding;    /* Make structure size be
-                                           sizeof(uint64_t) */
-} UCS_S_PACKED ucp_proto_select_param_t;
 
 
 /*
@@ -244,6 +231,9 @@ typedef struct {
 
     /* Protocol configuration in the range, such as devices and transports */
     char   config[UCP_PROTO_CONFIG_STR_MAX];
+
+    /* Map of used lanes */
+    ucp_lane_map_t lane_map;
 } ucp_proto_query_attr_t;
 
 
@@ -274,8 +264,14 @@ typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
  * the specific protocol. Used to switch a send request to a different protocol.
  *
  * @param [in]  request Request to reset.
+ *
+ * @return UCS_OK           - The request was reset successfully and can be used
+ *                            to resend the operation.
+ *         UCS_ERR_CANCELED - The request was canceled and released, since it's
+ *                            a part of a higher-level operation and should not
+ *                            be reused.
  */
-typedef void (*ucp_request_reset_func_t)(ucp_request_t *request);
+typedef ucs_status_t (*ucp_request_reset_func_t)(ucp_request_t *request);
 
 
 /**

@@ -120,6 +120,7 @@ typedef union ucm_event {
         size_t             old_size;
         size_t             new_size;
         int                flags;
+        void               *new_address;
     } mremap;
 
     /*
@@ -217,6 +218,7 @@ typedef struct ucm_global_config {
     size_t               alloc_alignment;             /* Alignment for memory allocations */
     int                  dlopen_process_rpath;        /* Process RPATH section in dlopen hook */
     int                  module_unload_prevent_mode;  /* Module unload prevention mode */
+    int                  bistro_force_far_jump;       /* Force far jump with bistro pathcing */
 } ucm_global_config_t;
 
 
@@ -387,7 +389,7 @@ int ucm_orig_munmap(void *addr, size_t length);
  * @brief Call the original implementation of @ref mremap without triggering events.
  */
 void *ucm_orig_mremap(void *old_address, size_t old_size, size_t new_size,
-                      int flags);
+                      int flags, void *new_address);
 
 
 /**
@@ -451,7 +453,8 @@ void ucm_vm_munmap(void *addr, size_t length);
  * @brief Call the original implementation of @ref mremap and all handlers
  * associated with it.
  */
-void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags);
+void *
+ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags, ...);
 
 
 /**

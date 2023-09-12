@@ -112,12 +112,16 @@ protected:
 public:
     typedef std::vector<uint8_t> iomsg_buffer_t;
 
+    static const uint64_t CLIENT_ID_UNDEFINED = 0;
+    static ucp_request_param_t recv_param;
+
     UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
-               bool use_epoll = false);
+               bool use_epoll = false,
+               uint64_t client_id = CLIENT_ID_UNDEFINED);
 
     virtual ~UcxContext();
 
-    bool init();
+    bool init(const char *name);
 
     bool listen(const struct sockaddr* saddr, size_t addrlen);
 
@@ -272,6 +276,7 @@ private:
     bool                        _use_am;
     int                         _worker_fd;
     int                         _epoll_fd;
+    uint64_t                    _client_id;
 };
 
 
@@ -352,15 +357,10 @@ private:
 
     static ucp_tag_t make_iomsg_tag(uint32_t conn_id, uint32_t sn);
 
-    static void stream_send_callback(void *request, ucs_status_t status);
-
     static void stream_recv_callback(void *request, ucs_status_t status,
                                      size_t recv_len);
 
     static void common_request_callback(void *request, ucs_status_t status);
-
-    static void common_request_callback_nbx(void *request, ucs_status_t status,
-                                            void *user_data);
 
     static void am_data_recv_callback(void *request, ucs_status_t status,
                                       size_t length, void *user_data);
