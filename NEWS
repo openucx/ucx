@@ -11,7 +11,7 @@
 ### Features:
 ### Bugfixes:
 
-## 1.15.0-rc5 (September 10, 2023)
+## 1.15.0-rc5 (September 12, 2023)
 ### Bugfixes:
 #### UCP
 * Fixed the data race on endpoint configurations.
