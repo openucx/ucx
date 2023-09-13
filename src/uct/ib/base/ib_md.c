@@ -1073,9 +1073,10 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     }
 
     /* cppcheck-suppress autoVariables */
-    *md_p         = &md->super;
-    md->fork_init = fork_init;
-    status        = UCS_OK;
+    *md_p                    = &md->super;
+    md->fork_init            = fork_init;
+    md->migratable_mem_types = md_config->migratable_mem_types;
+    status                   = UCS_OK;
 
 out_free_dev_list:
     ibv_free_device_list(ib_device_list);
@@ -1382,10 +1383,9 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    md->dev.flags            = uct_ib_device_spec(&md->dev)->flags;
-    md->name                 = UCT_IB_MD_NAME(verbs);
-    md->flush_rkey           = UCT_IB_MD_INVALID_FLUSH_RKEY;
-    md->migratable_mem_types = md_config->migratable_mem_types;
+    md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
+    md->name       = UCT_IB_MD_NAME(verbs);
+    md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     uct_ib_md_ece_check(md);
     uct_ib_md_parse_relaxed_order(md, md_config, 0);

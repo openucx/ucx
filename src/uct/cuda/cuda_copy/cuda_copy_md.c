@@ -61,7 +61,7 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      ucs_offsetof(uct_cuda_copy_md_config_t, enable_dmabuf),
                   UCS_CONFIG_TYPE_TERNARY},
 
-    {"MIGRTABLE_MEM_TYPES", "",
+    {"MIGRATABLE_MEM_TYPES", "",
      "List of memory types to be identified as migratable.",
      ucs_offsetof(uct_cuda_copy_md_config_t, migratable_mem_types),
      UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
