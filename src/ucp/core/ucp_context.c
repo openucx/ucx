@@ -449,11 +449,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "directory.",
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
 
-  {"REG_NONBLOCK_MEM_TYPES", "",
-   "Perform only non-blocking memory registration for these memory types:\n"
-   "page registration may be deferred until it is accessed by the CPU or a transport.",
-   ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
-   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+  {"REG_MIGRATABLE_MEM", "auto",
+   "Enable non-pinning registration on pages that can migrate b/w host and PCIe device memory\n"
+   "A value of 'auto' means automatically detect memory types fit for non-pinning registration.\n"
+   "A value of 'off' means do not use non-pinning registration for any memory types.\n"
+   "A value of 'on' means use non-pinning registration for all memory types possible.\n",
+   ucs_offsetof(ucp_context_config_t, reg_migratable_mem), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {NULL}
 };
@@ -1515,8 +1516,8 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             }
 
             ucs_memory_type_for_each(mem_type) {
-                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
+                if ((md_attr->migratable_mem_types & UCS_BIT(mem_type))) {
+                    context->config.reg_nb_mem_types |= UCS_BIT(mem_type);
                     continue;
                 }
 
@@ -2060,6 +2061,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
             (context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) ||
             ((context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) &&
              (context->config.ext.max_rma_lanes > 1));
+
+    context->config.reg_nb_mem_types = 0;
 
     return UCS_OK;
 

@@ -784,7 +784,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE = UCS_BIT(14),
 
     /** Unique global identifier of the memory domain. */
-    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15)
+    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
+
+    /** Indicate memory types whose pages can migrate. */
+    UCT_MD_ATTR_FIELD_MIGRATABLE_MEM_TYPES      = UCS_BIT(16)
 } uct_md_attr_field_t;
 
 
@@ -890,6 +893,12 @@ typedef struct {
      * Memory Domains belong to the same device.
      */
     char              global_id[UCT_MD_GLOBAL_ID_MAX];
+
+    /**
+     * Memory types whose pages can migrate and should not be pinned for
+     * registration purposes.
+     */
+    uint64_t          migratable_mem_types;
 } uct_md_attr_v2_t;
 
 

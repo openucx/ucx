@@ -399,6 +399,8 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_REG_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_nonblock_mem_types,
                               UCT_MD_ATTR_FIELD_REG_NONBLOCK_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, migratable_mem_types,
+                              UCT_MD_ATTR_FIELD_MIGRATABLE_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, cache_mem_types,
                               UCT_MD_ATTR_FIELD_CACHE_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, detect_mem_types,

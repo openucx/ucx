@@ -868,6 +868,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     ucs_debug("%s: ODP is supported, version %d",
               uct_ib_device_name(&md->super.dev), version);
     md->super.reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md->super.migratable_mem_types   = 0;
     return;
 
 no_odp:
