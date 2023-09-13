@@ -154,7 +154,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Enable relaxed ordering for PCIe transactions to improve performance on some systems.",
      ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order), UCS_CONFIG_TYPE_TERNARY_AUTO},
 
-    {"MIGRTABLE_MEM_TYPES", "",
+    {"MIGRATABLE_MEM_TYPES", "",
      "List of memory types to be identified as migratable.",
      ucs_offsetof(uct_ib_md_config_t, migratable_mem_types),
      UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
