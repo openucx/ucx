@@ -87,6 +87,16 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #define IBV_DEVICE_ATOMIC_HCA(dev)              (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_HCA)
 
 
+/*
+ * On-demand paging support
+ */
+#if HAVE_STRUCT_IBV_DEVICE_ATTR_EX_ODP_CAPS
+#  define IBV_DEVICE_HAS_ODP(_dev)                  ((_dev)->dev_attr.odp_caps.general_caps & IBV_ODP_SUPPORT)
+#else
+#  define IBV_DEVICE_HAS_ODP(_dev)                  0
+#endif
+
+
 /* Ethernet link layer */
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
 #  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    ((_attr)->link_layer == IBV_LINK_LAYER_ETHERNET)
