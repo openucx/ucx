@@ -291,7 +291,8 @@ public:
     }
 
     virtual void init() {
-        modify_config("REG_NONBLOCK_MEM_TYPES", "host");
+        modify_config("REG_MIGRATABLE_MEM", "on");
+        modify_config("IB_MIGRATABLE_MEM_TYPES", "host");
         if (get_variant_value() & NO_DEVX) {
             modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
         }

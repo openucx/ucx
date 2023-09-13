@@ -186,6 +186,7 @@ typedef struct uct_ib_md_config {
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
+    uint64_t                 migratable_mem_types; /**< Migratable memory types */
 } uct_ib_md_config_t;
 
 /**

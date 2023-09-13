@@ -154,6 +154,11 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Enable relaxed ordering for PCIe transactions to improve performance on some systems.",
      ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order), UCS_CONFIG_TYPE_TERNARY_AUTO},
 
+    {"MIGRTABLE_MEM_TYPES", "",
+     "List of memory types to be identified as migratable.",
+     ucs_offsetof(uct_ib_md_config_t, migratable_mem_types),
+     UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
     {"MAX_IDLE_RKEY_COUNT", "16",
      "Maximal number of invalidated memory keys that are kept idle before reuse.",
      ucs_offsetof(uct_ib_md_config_t, ext.max_idle_rkey_count), UCS_CONFIG_TYPE_UINT},
@@ -248,7 +253,7 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->dmabuf_mem_types          = 0;
     md_attr->reg_mem_types             = md->reg_mem_types;
     md_attr->reg_nonblock_mem_types    = md->reg_nonblock_mem_types;
-    md_attr->migratable_mem_types      = 0;
+    md_attr->migratable_mem_types      = md->migratable_mem_types;
     md_attr->cache_mem_types           = UCS_MASK(UCS_MEMORY_TYPE_LAST);
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost                  = md->reg_cost;
@@ -1377,9 +1382,10 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
-    md->name       = UCT_IB_MD_NAME(verbs);
-    md->flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
+    md->dev.flags            = uct_ib_device_spec(&md->dev)->flags;
+    md->name                 = UCT_IB_MD_NAME(verbs);
+    md->flush_rkey           = UCT_IB_MD_INVALID_FLUSH_RKEY;
+    md->migratable_mem_types = md_config->migratable_mem_types;
 
     uct_ib_md_ece_check(md);
     uct_ib_md_parse_relaxed_order(md, md_config, 0);
