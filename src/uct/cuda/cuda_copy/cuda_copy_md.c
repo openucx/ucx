@@ -165,10 +165,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
                                      (memType == CU_MEMORYTYPE_UNIFIED) ||
                                      (memType == CU_MEMORYTYPE_DEVICE))) {
         /* only host memory not allocated by cuda needs to be registered */
-        /* using deadbeef as VA to avoid gtest error */
-        UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_MEM_HANDLE_NULL);
-        *memh_p = (void *)0xdeadbeef;
-        return UCS_OK;
+        return uct_md_dummy_mem_reg(md, address, length, params, memh_p);
     }
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
