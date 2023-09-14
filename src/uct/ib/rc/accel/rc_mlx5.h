@@ -163,6 +163,9 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
                           uint8_t path_index);
 
+int uct_rc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
+                                const uct_ep_is_connected_params_t *params);
+
 ucs_status_t
 uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                 const uct_device_addr_t *device_addr,

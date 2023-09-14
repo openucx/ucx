@@ -596,6 +596,29 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     return UCS_OK;
 }
 
+int uct_rc_verbs_ep_is_connected(const uct_ep_h tl_ep,
+                                 const uct_ep_is_connected_params_t *params)
+{
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uint32_t addr_qp      = 0;
+    const uct_rc_verbs_ep_addr_t *rc_addr;
+    ucs_status_t status;
+    struct ibv_ah_attr ah_attr;
+    uint32_t qp_num;
+
+    status = uct_ib_query_qp_peer_info(ep->qp, &ah_attr, &qp_num);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    if (params->field_mask & UCT_EP_IS_CONNECTED_FIELD_EP_ADDR) {
+        rc_addr = (const uct_rc_verbs_ep_addr_t*)params->ep_addr;
+        addr_qp = uct_ib_unpack_uint24(rc_addr->qp_num);
+    }
+
+    return uct_rc_ep_is_connected(&ah_attr, params, qp_num, addr_qp);
+}
+
 ucs_status_t
 uct_rc_verbs_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                  const uct_device_addr_t *dev_addr,

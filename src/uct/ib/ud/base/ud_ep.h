@@ -337,6 +337,8 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
 
 void uct_ud_ep_vfs_populate(uct_ud_ep_t *ep);
 
+int uct_ud_ep_is_same_dest_ep(const uct_ud_ep_t *ep,
+                              const uct_ep_is_connected_params_t *params);
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_set_packet_type(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id,
@@ -393,6 +395,10 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
                !(ep->flags & UCT_UD_EP_FLAG_CONNECTED));
     return ep->flags & UCT_UD_EP_FLAG_CONNECTED;
 }
+
+int uct_ud_ep_is_connected_to_addr(const uct_ud_ep_t *ep,
+                                   const uct_ep_is_connected_params_t *params,
+                                   uint32_t dqpn);
 
 static UCS_F_ALWAYS_INLINE int
 uct_ud_ep_is_connected_and_no_pending(uct_ud_ep_t *ep)

@@ -282,6 +282,10 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 ucs_status_t
 uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
+int uct_rc_ep_is_connected(struct ibv_ah_attr *ah_attr,
+                           const uct_ep_is_connected_params_t *params,
+                           uint32_t qp_num, uint32_t addr_qp);
+
 void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
                           uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx,
                           uint32_t qp_num, uint16_t cq_credits);

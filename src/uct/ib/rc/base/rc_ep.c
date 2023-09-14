@@ -642,6 +642,24 @@ uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     return UCS_OK;
 }
 
+int uct_rc_ep_is_connected(struct ibv_ah_attr *ah_attr,
+                           const uct_ep_is_connected_params_t *params,
+                           uint32_t qp_num, uint32_t addr_qp)
+{
+    union ibv_gid *rgid;
+    const uct_ib_address_t *ib_addr;
+
+    UCT_EP_IS_CONNECTED_CHECK_DEV_ADDR(params);
+
+    if ((addr_qp != 0) && (qp_num != addr_qp)) {
+        return 0;
+    }
+
+    rgid    = (ah_attr->is_global) ? &ah_attr->grh.dgid : NULL;
+    ib_addr = (const uct_ib_address_t*)params->device_addr;
+    return uct_ib_iface_is_same_device(ib_addr, ah_attr->dlid, rgid);
+}
+
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
             (uct_rc_iface_send_op_t *op, const void *resp) \
