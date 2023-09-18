@@ -71,6 +71,21 @@ uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id,
     return UCS_OK;
 }
 
+int uct_mm_ep_is_connected(const uct_ep_h tl_ep,
+                           const uct_ep_is_connected_params_t *params)
+{
+    const uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
+    uct_mm_iface_addr_t *mm_addr;
+
+    if (!uct_base_ep_is_connected(tl_ep, params)) {
+        return 0;
+    }
+
+    mm_addr = (uct_mm_iface_addr_t*)params->iface_addr;
+    return kh_get(uct_mm_remote_seg, &ep->remote_segs, mm_addr->fifo_seg_id) !=
+           kh_end(&ep->remote_segs);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_mm_ep_get_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id, size_t length,
                          void **address_p)

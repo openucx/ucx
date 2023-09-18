@@ -30,4 +30,7 @@ ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
 ucs_status_t uct_cma_ep_check(const uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp);
 
+int uct_cma_ep_is_connected(const uct_ep_h tl_ep,
+                            const uct_ep_is_connected_params_t *params);
+
 #endif
