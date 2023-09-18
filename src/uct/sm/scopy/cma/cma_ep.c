@@ -37,14 +37,18 @@ const struct {
     }
 };
 
+static UCS_F_ALWAYS_INLINE pid_t
+uct_cma_ep_get_remote_pid(const uct_iface_addr_t *iface_addr)
+{
+    return *(const pid_t*)iface_addr & ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
 {
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_scopy_ep_t, params);
 
-    self->remote_pid           = *(const pid_t*)params->iface_addr &
-                                 ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
-
+    self->remote_pid = uct_cma_ep_get_remote_pid(params->iface_addr);
     return uct_ep_keepalive_init(&self->keepalive, self->remote_pid);
 }
 
@@ -82,6 +86,18 @@ uct_cma_ep_tx_error(uct_cma_ep_t *ep, const char *cma_call_name,
             ep->remote_pid, ucs_string_buffer_cstr(&local_iov_str),
             ucs_string_buffer_cstr(&remote_iov_str), cma_call_ret,
             strerror(cma_call_errno));
+}
+
+int uct_cma_ep_is_connected(const uct_ep_h tl_ep,
+                            const uct_ep_is_connected_params_t *params)
+{
+    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
+
+    if (!uct_base_ep_is_connected(tl_ep, params)) {
+        return 0;
+    }
+
+    return ep->remote_pid == uct_cma_ep_get_remote_pid(params->iface_addr);
 }
 
 ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
