@@ -12,7 +12,6 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack_int.h>
 
 
 ucs_status_t ucs_lru_create(size_t capacity, ucs_lru_h *lru_p)
@@ -33,29 +32,30 @@ ucs_status_t ucs_lru_create(size_t capacity, ucs_lru_h *lru_p)
     }
 
     kh_init_inplace(ucs_lru_hash, &lru->hash);
-
-    /* Resize the cache to the required capacity. Need to allocate extra space
-     * in order to avoid collisions in the hash table. */
-    if (kh_resize(ucs_lru_hash, &lru->hash, capacity * 2) < 0) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free;
-    }
-
     ucs_list_head_init(&lru->list);
 
     lru->capacity = capacity;
     *lru_p        = lru;
     return UCS_OK;
 
-err_free:
-    ucs_free(lru);
 err:
     return status;
 }
 
 void ucs_lru_destroy(ucs_lru_h lru)
 {
+    ucs_lru_reset(lru);
     kh_destroy_inplace(ucs_lru_hash, &lru->hash);
     ucs_free(lru);
 }
 
+void ucs_lru_reset(ucs_lru_h lru)
+{
+    ucs_lru_element_t *item;
+
+    kh_foreach_value(&lru->hash, item,
+        ucs_free(item);
+    )
+    ucs_list_head_init(&lru->list);
+    kh_clear(ucs_lru_hash, &lru->hash);
+}
