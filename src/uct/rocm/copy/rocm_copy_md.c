@@ -136,19 +136,20 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
 {
     void *dev_addr = NULL;
     hsa_status_t status;
-    ucs_status_t err;
-    ucs_memory_type_t mem_type;
+    hsa_amd_pointer_type_t mem_type;
 
     ucs_assert((address != NULL) && (length != 0));
 
-    err = uct_rocm_base_detect_memory_type(uct_md, address, length, &mem_type);
-    if (err != UCS_OK) {
+    status = uct_rocm_base_get_ptr_info(address, length, NULL, NULL, &mem_type,
+                                        NULL, NULL);
+    if (status != HSA_STATUS_SUCCESS) {
         ucs_error("failed to detect memory type for addr %p len %zu", address, length);
-        return err;
+        return UCS_ERR_IO_ERROR;
     }
 
-    if (mem_type == UCS_MEMORY_TYPE_ROCM) {
-        /* No need to register GPU memory */
+    if (mem_type == HSA_EXT_POINTER_TYPE_HSA) {
+        /* This covers device memory and memory allocated
+           with hipHostMalloc */
         dev_addr = address;
     } else {
         if (pg_align_addr) {
