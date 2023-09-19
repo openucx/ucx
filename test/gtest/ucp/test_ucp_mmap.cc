@@ -892,6 +892,168 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap)
 
 
+class test_ucp_rkey_compare : public test_ucp_mmap {
+public:
+    void init() override
+    {
+        const size_t count = 5;
+        test_ucp_mmap::init();
+
+        for (int i = 0; i < count; i++) {
+            m_chunks.emplace_back(new mem_chunk(sender().ucph()));
+        }
+    }
+
+    void cleanup() override
+    {
+        m_chunks.clear();
+
+        test_ucp_mmap::cleanup();
+    }
+
+protected:
+    struct mem_chunk {
+        ucp_context_h           context;
+        ucp_mem_h               memh;
+        std::vector<ucp_rkey_h> rkeys;
+
+        mem_chunk(ucp_context_h);
+        ~mem_chunk();
+        ucp_rkey_h              unpack(ucp_ep_h, ucp_md_map_t md_map = 0);
+    };
+
+    std::vector<std::unique_ptr<mem_chunk>> m_chunks;
+};
+
+test_ucp_rkey_compare::mem_chunk::mem_chunk(ucp_context_h ctx) : context(ctx)
+{
+    size_t size                 = 4096;
+    ucp_mem_map_params_t params = {
+        .field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                      UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                      UCP_MEM_MAP_PARAM_FIELD_FLAGS,
+        .address    = NULL,
+        .length     = size,
+        .flags      = UCP_MEM_MAP_ALLOCATE,
+    };
+    ucs_status_t status;
+
+    status  = ucp_mem_map(context, &params, &memh);
+    ASSERT_UCS_OK(status);
+}
+
+test_ucp_rkey_compare::mem_chunk::~mem_chunk()
+{
+    for (auto &rkey : rkeys) {
+        ucp_rkey_destroy(rkey);
+    }
+
+    EXPECT_UCS_OK(ucp_mem_unmap(context, memh));
+}
+
+ucp_rkey_h
+test_ucp_rkey_compare::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
+{
+    ucp_rkey_h rkey;
+    void *rkey_buffer;
+    size_t rkey_size;
+
+    ASSERT_UCS_OK(ucp_rkey_pack(context, memh, &rkey_buffer, &rkey_size));
+    if (md_map == 0) {
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey));
+    } else {
+        // Different MD map means different config index on proto v2
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
+                                                  md_map, 0, &rkey));
+    }
+
+    ucp_rkey_buffer_release(rkey_buffer);
+    rkeys.push_back(rkey);
+    return rkey;
+}
+
+UCS_TEST_P(test_ucp_rkey_compare, rkey_compare_errors)
+{
+    ucp_rkey_compare_params_t params = {};
+    ucp_rkey_h rkey = m_chunks.front()->unpack(receiver().ep());
+    ucs_status_t status;
+    int result;
+
+    scoped_log_handler err_handler(wrap_errors_logger);
+
+    status = ucp_rkey_compare(receiver().worker(), rkey, rkey, &params, NULL);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    params.field_mask = 1;
+    status = ucp_rkey_compare(receiver().worker(), rkey, rkey, &params,
+                              &result);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
+UCS_TEST_P(test_ucp_rkey_compare, rkey_compare_different_config)
+{
+    int result                       = 1;
+    ucp_rkey_compare_params_t params = {};
+    ucp_rkey_h rkey1, rkey2;
+    ucp_md_map_t md_map;
+
+    rkey1  = m_chunks.front()->unpack(receiver().ep());
+    md_map = rkey1->md_map & (rkey1->md_map - 1);
+
+    if (md_map == 0) {
+        UCS_TEST_SKIP_R("cannot remove last memory domain");
+    }
+
+    rkey2 = m_chunks.front()->unpack(receiver().ep(), md_map);
+    EXPECT_EQ(md_map, rkey2->md_map);
+
+    EXPECT_UCS_OK(ucp_rkey_compare(receiver().worker(), rkey1, rkey2, &params,
+                                   &result));
+    EXPECT_NE(0, result);
+}
+
+UCS_TEST_P(test_ucp_rkey_compare, rkey_compare)
+{
+    ucp_rkey_compare_params_t params = {};
+    ucp_worker_h worker              = receiver().worker();
+    std::vector<ucp_rkey_h> rkeys;
+    ucs_status_t status;
+    int result;
+
+    for (auto &c : m_chunks) {
+        rkeys.push_back(c->unpack(receiver().ep()));
+    }
+
+    std::sort(rkeys.begin(), rkeys.end(),
+              [worker](const ucp_rkey_h &rkey1, const ucp_rkey_h &rkey2) {
+                  ucp_rkey_compare_params_t params = {};
+                  int result;
+                  ucs_status_t status = ucp_rkey_compare(worker, rkey1, rkey2,
+                                                         &params, &result);
+                  ASSERT_UCS_OK(status);
+                  return result < 0;
+              });
+
+    for (int i = 0; i < rkeys.size(); i++) {
+        for (int j = 0; j < rkeys.size(); j++) {
+            status = ucp_rkey_compare(worker, rkeys[i], rkeys[j], &params,
+                                      &result);
+            ASSERT_UCS_OK(status);
+
+            if (i < j) {
+                ASSERT_GE(0, result);
+            } else if (i > j) {
+                ASSERT_LE(0, result);
+            } else {
+                ASSERT_EQ(0, result);
+            }
+        }
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rkey_compare)
+
+
 class test_ucp_mmap_export : public test_ucp_mmap {
 public:
     static void
