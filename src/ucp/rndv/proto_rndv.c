@@ -471,6 +471,12 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_am_release_user_header(req);
+
+    if (ucp_request_memh_invalidate(req, status)) {
+        ucp_proto_rndv_rts_reset(req);
+        return;
+    }
+
     ucp_proto_rndv_rts_reset(req);
     ucp_request_complete_send(req, status);
 }

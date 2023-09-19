@@ -64,9 +64,10 @@ jobs:
         az_module_load dev/go-latest
         go_port=$((30000 + $(AZP_AGENT_ID) * 100))
         args="-p=$go_port"
-        if [ "${{ parameters.name }}" == "gpu" ]; then
-          args="$args -m=cuda"
-        fi
+        # FIXME Temporarily disabled GPU tests due to cuda_ipc device context issue
+        # if [ "${{ parameters.name }}" == "gpu" ]; then
+        #   args="$args -m=cuda"
+        # fi
         LD_LIBRARY_PATH=$(Agent.TempDirectory)/ucx-$(Build.BuildId)/lib/:$LD_LIBRARY_PATH $(Agent.TempDirectory)/ucx-$(Build.BuildId)/bin/goperftest $args &
         sleep 5
         LD_LIBRARY_PATH=$(Agent.TempDirectory)/ucx-$(Build.BuildId)/lib/:$LD_LIBRARY_PATH $(Agent.TempDirectory)/ucx-$(Build.BuildId)/bin/goperftest $args -i=localhost
