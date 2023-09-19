@@ -917,6 +917,63 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
     ASSERT_UCS_OK(status);
 }
 
+UCS_TEST_P(test_md, rkey_compare_params_check)
+{
+    uct_rkey_compare_params_t params = {};
+    ucs_status_t status;
+    int result;
+
+    status = uct_rkey_compare(GetParam().component, 0, 0, &params, NULL);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    params.field_mask = UCS_BIT(0);
+    status = uct_rkey_compare(GetParam().component, 0, 0, &params, &result);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
+// SM case is covered by XPMEM which has registration capability
+UCS_TEST_SKIP_COND_P(test_md, rkey_compare, !check_caps(UCT_MD_FLAG_REG))
+{
+    size_t size                      = 4096;
+    void *address                    = NULL;
+    uct_rkey_compare_params_t params = {};
+    std::vector<uint8_t> rkey_buffer1(md_attr().rkey_packed_size + 1);
+    std::vector<uint8_t> rkey_buffer2(md_attr().rkey_packed_size + 1);
+    uct_rkey_bundle_t b1, b2;
+    uct_mem_h memh1, memh2;
+    int result1, result2;
+
+    if (GetParam().md_name == "cuda_ipc") {
+        UCS_TEST_SKIP_R("missing IPC capability for registration");
+    }
+
+    ASSERT_UCS_OK(
+            ucs_mmap_alloc(&size, &address, 0, "test_rkey_compare_equal"));
+    ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh1));
+    ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh2));
+    ASSERT_UCS_OK(uct_md_mkey_pack(md(), memh1, &rkey_buffer1[0]));
+    ASSERT_UCS_OK(uct_md_mkey_pack(md(), memh2, &rkey_buffer2[0]));
+
+    ASSERT_UCS_OK(uct_rkey_unpack(GetParam().component, &rkey_buffer1[0], &b1));
+    ASSERT_UCS_OK(uct_rkey_unpack(GetParam().component, &rkey_buffer2[0], &b2));
+
+    EXPECT_UCS_OK(uct_rkey_compare(GetParam().component, b1.rkey, b1.rkey,
+                                   &params, &result1));
+    EXPECT_EQ(0, result1);
+
+    EXPECT_UCS_OK(uct_rkey_compare(GetParam().component, b1.rkey, b2.rkey,
+                                   &params, &result1));
+    EXPECT_UCS_OK(uct_rkey_compare(GetParam().component, b2.rkey, b1.rkey,
+                                   &params, &result2));
+    EXPECT_EQ(0, result1 + result2);
+
+    uct_rkey_release(GetParam().component, &b1);
+    uct_rkey_release(GetParam().component, &b2);
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh2));
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh1));
+    EXPECT_UCS_OK(ucs_mmap_free(address, size));
+}
+
 UCT_MD_INSTANTIATE_TEST_CASE(test_md)
 
 class test_md_fork : private ucs::clear_dontcopy_regions, public test_md {

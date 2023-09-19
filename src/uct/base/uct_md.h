@@ -216,6 +216,11 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p);
 
+ucs_status_t uct_base_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                                   uct_rkey_t rkey2,
+                                   const uct_rkey_compare_params_t *params,
+                                   int *result);
+
 /**
  * Check allocation parameters and return an appropriate error if parameters
  * cannot be used for an allocation
