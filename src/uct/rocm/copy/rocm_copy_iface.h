@@ -35,6 +35,7 @@ typedef struct uct_rocm_copy_iface_config {
     size_t              h2d_thresh;
     int                 enable_async_zcopy;
     double              latency;
+    unsigned            sigpool_max_elems;
 } uct_rocm_copy_iface_config_t;
 
 #endif
