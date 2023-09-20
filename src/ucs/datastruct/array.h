@@ -45,10 +45,12 @@ BEGIN_C_DECLS
     \
     _scope ucs_status_t \
     UCS_ARRAY_IDENTIFIER(_name, _reserve)(ucs_array_t(_name) *array, \
-                                          _index_type min_capacity); \
+                                          _index_type min_capacity, \
+                                          void **old_buffer_p); \
     \
     _scope ucs_status_t \
-    UCS_ARRAY_IDENTIFIER(_name, _append)(ucs_array_t(_name) *array);
+    UCS_ARRAY_IDENTIFIER(_name, _append)(ucs_array_t(_name) *array, \
+                                         void **old_buffer_p);
 
 
 /**
@@ -195,7 +197,39 @@ BEGIN_C_DECLS
  * @return UCS_OK if successful, UCS_ERR_NO_MEMORY if cannot grow the array
  */
 #define ucs_array_reserve(_name, _array, _min_capacity) \
-    UCS_ARRAY_IDENTIFIER(_name, _reserve)(_array, _min_capacity)
+    UCS_ARRAY_IDENTIFIER(_name, _reserve)(_array, _min_capacity, NULL)
+
+
+/*
+ * Add an element to the end of the array possibly in a thread safe way.
+ *
+ * @param _name            Array name
+ * @param _array           Array to add element to
+ * @param _old_buffer_p    If the array was reallocated, the pointer to the
+ *                         previous backing buffer is stored in *_old_buffer_p,
+ *                         and the user is responsible for releasing it
+ *                         (for example, from a different thread). If this
+ *                         parameter is NULL, the last backing buffer is
+ *                         released internally by @a ucs_free.
+ * @param _failed_actions  Actions to perform if the append operation failed
+ *
+ * @return If successful returns a pointer to the added element, otherwise NULL.
+ */
+#define ucs_array_append_safe(_name, _array, _old_buffer_p, _failed_actions) \
+    ({ \
+        ucs_status_t __status = UCS_ARRAY_IDENTIFIER(_name, _append)( \
+                                                     _array, _old_buffer_p); \
+        UCS_ARRAY_IDENTIFIER(_name, _value_type_t) * __elem; \
+        \
+        if (__status != UCS_OK) { \
+            _failed_actions; \
+            __elem = NULL; \
+        } else { \
+            __elem = ucs_array_last(_array); \
+        } \
+        \
+        __elem; \
+    })
 
 
 /*
@@ -208,19 +242,7 @@ BEGIN_C_DECLS
  * @return If successful returns a pointer to the added element, otherwise NULL.
  */
 #define ucs_array_append(_name, _array, _failed_actions) \
-    ({ \
-        ucs_status_t __status = UCS_ARRAY_IDENTIFIER(_name, _append)(_array); \
-        UCS_ARRAY_IDENTIFIER(_name, _value_type_t) * __elem; \
-        \
-        if (__status != UCS_OK) { \
-            _failed_actions; \
-            __elem = NULL; \
-        } else { \
-            __elem = ucs_array_last(_array); \
-        } \
-        \
-        __elem; \
-    })
+    ucs_array_append_safe(_name, _array, NULL, _failed_actions)
 
 
 /**
