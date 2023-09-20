@@ -11,6 +11,11 @@
 ### Features:
 ### Bugfixes:
 
+## 1.15.0-rc6 (September 20, 2023)
+### Bugfixes:
+#### UCP
+* Fixed assertion when sending from noncontig GPU buffer to managed buffer.
+
 ## 1.15.0-rc5 (September 12, 2023)
 ### Bugfixes:
 #### UCP
