@@ -409,7 +409,7 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
             continue;
         }
 
-        status = ucp_wireup_ep_create(ep, NULL, &uct_ep);
+        status = ucp_wireup_ep_create(ep, &uct_ep);
         if (status != UCS_OK) {
             goto out;
         }
@@ -1412,17 +1412,12 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
     ucp_worker_h worker    = ep->worker;
     ucp_lane_index_t lane  = ucp_ep_get_cm_lane(ep);
     unsigned max_num_paths = 0;
-    ucp_rsc_index_t dst_rsc_indices[UCP_MAX_LANES];
     uct_ep_params_t uct_ep_params;
     const ucp_address_entry_t *ae;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
     ucs_assert(ucp_ep_get_lane(ep, lane) == NULL);
-
-    ucp_wireup_get_dst_rsc_indices(ep, &ucp_ep_config(ep)->key,
-                                   remote_address, addr_indices,
-                                   dst_rsc_indices);
 
     ucp_unpacked_address_for_each(ae, remote_address) {
         max_num_paths = ucs_max(max_num_paths, ae->dev_num_paths);
@@ -1434,7 +1429,7 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
     ucs_assert(max_num_paths > 0);
 
     /* TODO: split CM and wireup lanes */
-    status = ucp_wireup_ep_create(ep, dst_rsc_indices, &uct_ep);
+    status = ucp_wireup_ep_create(ep, &uct_ep);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to create wireup CM lane, status %s",
                  ep, ucs_status_string(status));

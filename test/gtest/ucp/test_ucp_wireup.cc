@@ -1707,6 +1707,128 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, rcv, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, ib, "ib")
 
+class test_ucp_wireup_reconfigure : public test_ucp_wireup {
+protected:
+    void verify_transport(const std::string &tl_name)
+    {
+        const ucp_ep_config_t *config = ucp_ep_config(sender().ep());
+        const auto tl_count           = count_resources(sender(), tl_name);
+        unsigned found_count          = 0;
+        size_t rma_bw_count           = 0;
+
+        for (int i = 0; i < config->key.num_lanes; ++i) {
+            const auto lane = config->key.rma_bw_lanes[i];
+
+            if ((lane == UCP_NULL_LANE) || (i >= tl_count)) {
+                break;
+            }
+
+            rma_bw_count++;
+            const char *transport =
+                    ucp_ep_get_tl_rsc(sender().ep(), lane)->tl_name;
+            if (tl_name == transport) {
+                found_count++;
+            }
+        }
+
+        EXPECT_GE(found_count, std::min(tl_count, rma_bw_count));
+    }
+
+    void send_before(const std::string &tl_name)
+    {
+        sender().connect(&receiver(), get_ep_params());
+        while (!(sender().ep()->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+            progress();
+        }
+
+        printf("Before\n");
+        printf("================\n");
+        ucp_ep_print_info(sender().ep(), stdout);
+        verify_transport(tl_name);
+    }
+
+    void send_after(const std::string &tl_name, bool reconfigure = true)
+    {
+        ucp_worker_cfg_index_t old_cfg_index = sender().ep()->cfg_index;
+
+        UCS_ASYNC_BLOCK(&sender().worker()->async);
+        ucp_wireup_send_pre_request(sender().ep());
+        UCS_ASYNC_UNBLOCK(&sender().worker()->async);
+
+        for (int i = 0; i < 100; ++i) {
+            progress();
+        }
+
+        if (reconfigure) {
+            while (sender().ep()->cfg_index == old_cfg_index) {
+                progress();
+            }
+        }
+
+        while (!(sender().ep()->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+            progress();
+        }
+
+        printf("After\n");
+        printf("================\n");
+        ucp_ep_print_info(sender().ep(), stdout);
+        verify_transport(tl_name);
+    }
+
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, race_all_reuse, is_self())
+{
+    sender().connect(&receiver(), get_ep_params());
+    receiver().connect(&sender(), get_ep_params());
+
+    printf("Before\n");
+    printf("================\n");
+    ucp_ep_print_info(sender().ep(), stdout);
+    verify_transport("rc_mlx5");
+
+    for (int i = 0; i < 10; ++i) {
+        send_recv(sender().ep(), receiver().worker(), receiver().ep(), 10000,
+                  1);
+    }
+
+    printf("After\n");
+    printf("================\n");
+    ucp_ep_print_info(sender().ep(), stdout);
+    verify_transport("rc_mlx5");
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_rc_to_dc,
+                     is_self())
+{
+    send_before("rc_mlx5");
+    sender().ucph()->config.est_num_eps   = 128;
+    receiver().ucph()->config.est_num_eps = 128;
+    send_after("dc_mlx5");
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_dc_to_rc,
+                     is_self(), "NUM_EPS=128", "RESOLVE_REMOTE_EP_ID=y")
+{
+    send_before("dc_mlx5");
+    sender().ucph()->config.est_num_eps   = 1;
+    receiver().ucph()->config.est_num_eps = 1;
+    send_after("rc_mlx5");
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_all_reuse, is_self())
+{
+    send_before("rc_mlx5");
+    send_after("rc_mlx5", false);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_reconfigure, ib, "ib")
+
 class test_ucp_wireup_keepalive : public test_ucp_wireup {
 public:
     test_ucp_wireup_keepalive() {
