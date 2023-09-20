@@ -1813,10 +1813,16 @@ static void ucp_ep_init_is_connect_params(uct_ep_is_connected_params_t *params,
     }
 }
 
-static int ucp_ep_is_lane_connected(const uct_ep_h uct_ep,
+static int ucp_ep_is_lane_connected(uct_ep_h uct_ep,
                                     const ucp_address_entry_t *addr_entry)
 {
     uct_ep_is_connected_params_t params;
+    ucp_wireup_ep_t *wireup_ep;
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    if (wireup_ep != NULL) {
+        uct_ep = wireup_ep->super.uct_ep;
+    }
 
     ucp_ep_init_is_connect_params(&params, addr_entry);
 
