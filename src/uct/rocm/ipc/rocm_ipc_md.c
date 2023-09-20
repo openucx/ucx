@@ -67,7 +67,7 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
 
     status = uct_rocm_base_get_ptr_info(address, length, &base_ptr, &size,
                                         &mem_type, &agent, NULL);
-    if ((status != HSA_STATUS_SUCCESS) || (size < length) ||
+    if ((status != HSA_STATUS_SUCCESS) ||
         (mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
         ucs_error("failed to get base ptr for %p/%lx, ROCm returned %p/%lx",
                    address, length, base_ptr, size);
