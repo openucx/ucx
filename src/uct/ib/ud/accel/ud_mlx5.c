@@ -755,11 +755,10 @@ static void uct_ud_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
 
 static void uct_ud_mlx5_qp_update_caps(struct ibv_qp_cap *qp_caps)
 {
-    /* Set minimal possible values for max_send_sge, max_recv_sge and
-     * max_inline_data to minimize WQE length */
+    /* Set minimal possible values for max_send_sge, max_recv_sge */
     qp_caps->max_recv_sge    = 1;
     qp_caps->max_send_sge    = 2; /* UD header + payload */
-    qp_caps->max_inline_data = 0;
+    qp_caps->max_inline_data = uct_ud_mlx5_max_inline();
 }
 
 int uct_ud_mlx5_ep_is_connected(const uct_ep_h tl_ep,
