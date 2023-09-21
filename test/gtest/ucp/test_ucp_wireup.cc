@@ -1807,6 +1807,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, race_all_reuse, is_self())
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_rc_to_dc,
                      !has_transport("ib"))
 {
+    if (!has_resource(sender(), "rc_mlx5")) {
+        UCS_TEST_SKIP_R("IB transport is not present");
+    }
+
     send_before("rc_mlx5");
     sender().ucph()->config.est_num_eps   = 128;
     receiver().ucph()->config.est_num_eps = 128;
@@ -1817,6 +1821,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_dc_to_rc,
                      !has_transport("ib"), "NUM_EPS=128",
                      "RESOLVE_REMOTE_EP_ID=y")
 {
+    if (!has_resource(sender(), "rc_mlx5")) {
+        UCS_TEST_SKIP_R("IB transport is not present");
+    }
+
     send_before("dc_mlx5");
     sender().ucph()->config.est_num_eps   = 1;
     receiver().ucph()->config.est_num_eps = 1;
@@ -1826,6 +1834,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_dc_to_rc,
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_all_reuse,
                      !has_transport("ib"))
 {
+    if (!has_resource(sender(), "rc_mlx5")) {
+        UCS_TEST_SKIP_R("IB transport is not present");
+    }
+
     send_before("rc_mlx5");
     ucp_worker_cfg_index_t old_cfg_index = sender().ep()->cfg_index;
 

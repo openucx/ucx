@@ -1580,7 +1580,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, str,
                             addr_indices, cm_idx, UCS_LOG_LEVEL_DEBUG);
 
-    if (connect_lane_bitmap) {
+    if (!ucp_ep_has_cm_lane(ep) && connect_lane_bitmap) {
         ucp_ep_update_flags(ep, 0,
                             UCP_EP_FLAG_LOCAL_CONNECTED |
                             UCP_EP_FLAG_REMOTE_CONNECTED);
