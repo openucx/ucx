@@ -1787,10 +1787,11 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, race_all_reuse, is_self())
     sender().connect(&receiver(), get_ep_params());
     receiver().connect(&sender(), get_ep_params());
 
+    ucp_worker_cfg_index_t old_cfg_index = sender().ep()->cfg_index;
+
     printf("Before\n");
     printf("================\n");
     ucp_ep_print_info(sender().ep(), stdout);
-    verify_transport("rc_mlx5");
 
     for (int i = 0; i < 10; ++i) {
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 10000,
@@ -1800,11 +1801,11 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, race_all_reuse, is_self())
     printf("After\n");
     printf("================\n");
     ucp_ep_print_info(sender().ep(), stdout);
-    verify_transport("rc_mlx5");
+    ASSERT_EQ(sender().ep()->cfg_index, old_cfg_index);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_rc_to_dc,
-                     is_self())
+                     !has_transport("ib"))
 {
     send_before("rc_mlx5");
     sender().ucph()->config.est_num_eps   = 128;
@@ -1813,7 +1814,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_rc_to_dc,
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_dc_to_rc,
-                     is_self(), "NUM_EPS=128", "RESOLVE_REMOTE_EP_ID=y")
+                     !has_transport("ib"), "NUM_EPS=128",
+                     "RESOLVE_REMOTE_EP_ID=y")
 {
     send_before("dc_mlx5");
     sender().ucph()->config.est_num_eps   = 1;
@@ -1821,13 +1823,17 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_dc_to_rc,
     send_after("rc_mlx5");
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_all_reuse, is_self())
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_all_reuse,
+                     !has_transport("ib"))
 {
     send_before("rc_mlx5");
+    ucp_worker_cfg_index_t old_cfg_index = sender().ep()->cfg_index;
+
     send_after("rc_mlx5", false);
+    ASSERT_EQ(sender().ep()->cfg_index, old_cfg_index);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_reconfigure, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_reconfigure)
 
 class test_ucp_wireup_keepalive : public test_ucp_wireup {
 public:
