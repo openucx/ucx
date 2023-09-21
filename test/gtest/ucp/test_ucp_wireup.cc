@@ -1845,7 +1845,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_all_reuse,
     ASSERT_EQ(sender().ep()->cfg_index, old_cfg_index);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_reconfigure)
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_reconfigure, ib, "ib")
 
 class test_ucp_wireup_keepalive : public test_ucp_wireup {
 public:
