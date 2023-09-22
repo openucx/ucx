@@ -302,6 +302,10 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
         if (params->flags & UCP_MEM_MAP_FIXED) {
             flags |= UCT_MD_MEM_FLAG_FIXED;
         }
+
+        if (params->flags & UCP_MEM_MAP_SYMMETRIC_RKEY) {
+            flags |= UCT_MD_MEM_SYMMETRIC_RKEY;
+        }
     }
 
     return flags;
