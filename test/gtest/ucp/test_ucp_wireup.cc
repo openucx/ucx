@@ -1719,7 +1719,7 @@ protected:
         for (int i = 0; i < config->key.num_lanes; ++i) {
             const auto lane = config->key.rma_bw_lanes[i];
 
-            if ((lane == UCP_NULL_LANE) || (i >= tl_count)) {
+            if (lane == UCP_NULL_LANE) {
                 break;
             }
 
