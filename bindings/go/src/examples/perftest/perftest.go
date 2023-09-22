@@ -136,7 +136,8 @@ func initWorker(i int) {
 
 func epErrorHandling(ep *UcpEp, status UcsStatus) {
 	if status != UCS_ERR_CONNECTION_RESET {
-		fmt.Printf("Endpoint error: %v \n", status.String())
+		errorString := fmt.Sprintf("Endpoint error: %v", status.String())
+		panic(errorString)
 	}
 }
 
@@ -287,6 +288,10 @@ func clientThreadDoIter(i int, t uint) {
 
 	for request.GetStatus() == UCS_INPROGRESS {
 		progressWorker(int(t))
+	}
+	if request.GetStatus() != UCS_OK {
+		errorString := fmt.Sprintf("Request completion error: %v", request.GetStatus().String())
+		panic(errorString)
 	}
 	perfTest.completionTime[t] = time.Since(start)
 	request.Close()
