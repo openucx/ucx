@@ -2499,6 +2499,10 @@ static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
 
 static void ucp_worker_destroy_usage_tracker(ucp_worker_h worker)
 {
+    if (!worker->context->config.ext.usage_tracker_enable) {
+        return;
+    }
+
     ucs_usage_tracker_destroy(worker->usage_tracker.handle);
     uct_worker_progress_unregister_safe(worker->uct,
                                         &worker->usage_tracker.cb_id);
