@@ -85,6 +85,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
  * Atomics support
  */
 #define IBV_DEVICE_ATOMIC_HCA(dev)              (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_HCA)
+#define IBV_DEVICE_ATOMIC_GLOB(dev)             (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_GLOB)
 
 
 /*
