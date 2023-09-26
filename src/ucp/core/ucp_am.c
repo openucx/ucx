@@ -881,6 +881,10 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
         return UCS_ERR_NO_RESOURCE;
     }
 
+    if (ucp_proto_is_progress_wrapper_enabled(ep->worker)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     if (ucp_proto_is_inline(ep, max_eager_short,
                             header_length + length, param)) {
         return ucp_am_send_short(ep, id, flags, header, header_length, buffer,

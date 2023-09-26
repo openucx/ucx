@@ -153,6 +153,10 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t length,
 {
     ucs_status_t status;
 
+    if (ucp_proto_is_progress_wrapper_enabled(ep->worker)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     if (ucp_proto_is_inline(ep, &ucp_ep_config(ep)->tag.max_eager_short,
                             length, param)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
