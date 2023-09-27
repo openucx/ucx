@@ -2464,7 +2464,7 @@ void ucp_worker_track_ep_usage(ucp_worker_h worker, ucp_ep_h ep)
 
 static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
 {
-    ucs_usage_tracker_params_t params;
+    ucs_usage_tracker_params_t params = {0};
     ucs_status_t status;
 
     if (!worker->context->config.ext.usage_tracker_enable) {
