@@ -259,21 +259,18 @@ func serverStart() error {
 		perfTest.perThreadWorkers[t+1].SetAmRecvHandler(t, UCP_AM_FLAG_WHOLE_MSG, serverAmRecvHandler)
 	}
 
-	for i := uint(0); i < perfTestParams.numIterations; i += 1 {
-		perfTest.numCompletedRequests = 0
-
-		perfTest.wg.Add(int(perfTestParams.numThreads + 1))
-		for t := uint(0); t < perfTestParams.numThreads+1; t += 1 {
-			go func(tid uint) {
-				for perfTest.numCompletedRequests < uint32(perfTestParams.numThreads) {
-					progressWorker(int(tid))
-				}
-				perfTest.wg.Done()
-			}(t)
-		}
-
-		perfTest.wg.Wait()
+	totalNumRequests := uint32((perfTestParams.warmUpIter + perfTestParams.numIterations) * perfTestParams.numThreads)
+	perfTest.wg.Add(int(perfTestParams.numThreads + 1))
+	for t := uint(0); t < perfTestParams.numThreads+1; t += 1 {
+		go func(tid uint) {
+			for atomic.LoadUint32(&perfTest.numCompletedRequests) < totalNumRequests {
+				progressWorker(int(tid))
+			}
+			perfTest.wg.Done()
+		}(t)
 	}
+	perfTest.wg.Wait()
+
 	close()
 	return nil
 }
