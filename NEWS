@@ -29,7 +29,7 @@
 * Added base implementation of is_reachable_v2 API using intra/inter flag
 * Introduced MD capability for non-blocking registration memory types
 #### RDMA CORE (IB, ROCE, etc.)
-* Implemented is_reachable_v2 for IB interfaces
+* Added format is_reachable_v2 for IB interfaces
 * Added option to control CQE zipping per CQ RX/TX direction
 * Added option to specify how DCI selects port under RoCE LAG
 * Added hw_dcs to the list of policies to select DCI by an endpoint
@@ -59,16 +59,16 @@
 * Added user-side memcpy option for AM benchmarks in ucx_perftest
 * Added wireshark LUA dissectors for some UCX protocols
 #### Build
-* Enabled build with binutils 2.40
+* Added support for binutils 2.40
 * Added versioned dependency to switch between packages with the same names
 * Added a separate xpmem deb subpackage
 * Added aarch64 support to the binary distribution pipeline
 * Removed dependency on libnuma
 ### Bugfixes:
 #### UCP
-* Fixed assertion when sending from noncontig GPU buffer to managed buffer
-* Fixed the data race on endpoint configurations
-* Fixed endpoint reconfiguration issues because of assymetrical selection
+* Fixed assertion when sending from non-contiguous GPU buffer to managed buffer
+* Fixed the race condition on endpoint configurations
+* Fixed endpoint reconfiguration issues due to assymetrical selection
 * Fixed endpoint reconfiguration error due to wrong locality detection
 * Fixed crash during connection manager cleanup
 * Fixed rkey index calculation for rendezvous protocol
@@ -83,23 +83,23 @@
 * Fixed CPU/device atomics selection in the new protocol infrastructure
 * Multiple fixes in the new protocol infrastructure information output
 #### UCT
-* Check dmabuf kernel support in ROCm memory domain
+* Added check for dmabuf kernel support in ROCm memory domain
 * Fixed exported memh packing
 * Fixed an error in checking return status of multi-threaded memory registration function
 #### RDMA CORE (IB, ROCE, etc.)
 * Fixed dma-buf based memory region registration
 * Fixed memory handle data corruption when PCIe relaxed ordering is enabled
 * Fixed performance degradation when indirect atomic key is not supported by the hardware
-* Fixed remote access error to strict-order key because of wrong offset
+* Fixed remote access error to strict-order keys because of wrong offset
 * Added check for UAR support to memory domain opening
 * Fixed updating port counters for devx qp
 * Fixed ibv_create_cq error message on node without Infiniband
 * Fixed performance degradation due to using 2 paths on NDR400 by default
 * Removed unnecessary async lock which otherwise would block UD progress
 #### GPU (CUDA, ROCM)
-* Fixed CUDA IPC performance degradation after libnuma removal
+* Fixed CUDA IPC performance degradation due to libnuma removal
 #### UCS
-* Fixed lane selection, adding bandwidth estimation for Sapphire Rapids family
+* Fixed lane selection and added bandwidth estimation for Sapphire Rapids family
 * Fixed displaying wrong environment variable suggestions
 * Fixed VFS warning output
 * Fixed SEGV in ucs_debug_backtrace_next(), upon previous SEGV handling, due to ENOMEM situation
