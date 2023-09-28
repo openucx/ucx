@@ -33,11 +33,9 @@ static int uct_cuda_ipc_md_check_mem_reg();
 static ucs_status_t
 uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->flags                  = UCT_MD_FLAG_NEED_RKEY |
-                                      UCT_MD_FLAG_INVALIDATE |
-                                      UCT_MD_FLAG_INVALIDATE_RMA |
-                                      UCT_MD_FLAG_INVALIDATE_AMO;
-    md_attr->reg_mem_types          = 0;
+    md_attr->flags         = UCT_MD_FLAG_NEED_RKEY | UCT_MD_FLAG_INVALIDATE |
+                             UCT_MD_FLAG_INVALIDATE_RMA | UCT_MD_FLAG_INVALIDATE_AMO;
+    md_attr->reg_mem_types = 0;
     if (uct_cuda_ipc_md_check_mem_reg()) {
         md_attr->flags         |= UCT_MD_FLAG_REG;
         md_attr->reg_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA);
@@ -227,9 +225,9 @@ static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_cuda_ipc_mem_reg_internal(void *addr, size_t length, unsigned flags,
-                              uct_cuda_ipc_key_t *key)
+static ucs_status_t uct_cuda_ipc_mem_reg_internal(void *addr, size_t length,
+                                                  unsigned flags,
+                                                  uct_cuda_ipc_key_t *key)
 {
     ucs_log_level_t log_level;
     CUdevice cu_device;
@@ -294,7 +292,7 @@ uct_cuda_ipc_mem_dereg(uct_md_h md,
 
 static int uct_cuda_ipc_md_check_mem_reg()
 {
-    int ret                    = 0;
+    int ret = 0;
 #if CUDA_VERSION >= 12000
     CUdevice dev;
     CUdevice_attribute attribute;
@@ -327,11 +325,11 @@ static int uct_cuda_ipc_md_check_mem_reg()
             goto out;
         }
 
-        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxCreate(&ctx, 0, dev))  != UCS_OK) {
-             goto out;
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxCreate(&ctx, 0, dev)) != UCS_OK) {
+            goto out;
         }
 
-        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxSetCurrent(ctx))  != UCS_OK) {
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxSetCurrent(ctx)) != UCS_OK) {
             goto destroy_ctx;
         }
     }
@@ -340,8 +338,9 @@ static int uct_cuda_ipc_md_check_mem_reg()
         goto destroy_ctx;
     }
 
-    ret = (uct_cuda_ipc_mem_reg_internal(
-            (void *)dptr, length, UCT_MD_MEM_FLAG_HIDE_ERRORS, &key) == UCS_OK);
+    ret = (uct_cuda_ipc_mem_reg_internal((void*)dptr, length,
+                                         UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                         &key) == UCS_OK);
 
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemFree(dptr));
 
