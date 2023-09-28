@@ -28,41 +28,7 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {NULL}
 };
 
-static int uct_cuda_ipc_md_check_mem_reg()
-{
-    CUdevice dev;
-    CUdevice_attribute attribute;
-    int value;
-    int ret;
-
-    if ((UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&dev)) != UCS_OK) &&
-        /* Context may be not set yet. Check attribute for 0 device, assuming
-         * support is uniform across all devices. */
-        (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&dev, 0)) != UCS_OK)) {
-        return 0;
-    }
-
-#if CUDA_VERSION >= 12000
-    attribute = CU_DEVICE_ATTRIBUTE_IPC_EVENT_SUPPORTED;
-#else
-    attribute = CU_DEVICE_ATTRIBUTE_INTEGRATED;
-#endif
-
-    if (UCT_CUDADRV_FUNC_LOG_DEBUG(
-                cuDeviceGetAttribute(&value, attribute, dev)) != UCS_OK) {
-        return 0;
-    }
-
-#if CUDA_VERSION >= 12000
-    ret = value;
-#else
-    ret = !value;
-#endif
-
-    ucs_debug("memory registration is%s supported on cuda device %d",
-              ret ? "" : " not", dev);
-    return ret;
-}
+static int uct_cuda_ipc_md_check_mem_reg();
 
 static ucs_status_t
 uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
@@ -262,8 +228,8 @@ static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
 }
 
 static ucs_status_t
-uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
-                              unsigned flags, uct_cuda_ipc_key_t *key)
+uct_cuda_ipc_mem_reg_internal(void *addr, size_t length, unsigned flags,
+                              uct_cuda_ipc_key_t *key)
 {
     ucs_log_level_t log_level;
     CUdevice cu_device;
@@ -306,7 +272,7 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_cuda_ipc_mem_reg_internal(md, address, length, 0, key);
+    status = uct_cuda_ipc_mem_reg_internal(address, length, 0, key);
     if (status != UCS_OK) {
         ucs_free(key);
         return status;
@@ -326,6 +292,69 @@ uct_cuda_ipc_mem_dereg(uct_md_h md,
     return UCS_OK;
 }
 
+static int uct_cuda_ipc_md_check_mem_reg()
+{
+    int ret                    = 0;
+#if CUDA_VERSION >= 12000
+    CUdevice dev;
+    CUdevice_attribute attribute;
+    int value;
+
+    if ((UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&dev)) != UCS_OK) &&
+        /* Context may be not set yet. Check attribute for 0 device, assuming
+         * support is uniform across all devices. */
+        (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(&dev, 0)) != UCS_OK)) {
+        return 0;
+    }
+
+    attribute = CU_DEVICE_ATTRIBUTE_IPC_EVENT_SUPPORTED;
+
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(
+                cuDeviceGetAttribute(&value, attribute, dev)) != UCS_OK) {
+        return 0;
+    }
+#else
+    static const size_t length = 1;
+    CUdevice dev               = 0;
+    int create_ctx;
+    CUcontext ctx;
+    CUdeviceptr dptr;
+    uct_cuda_ipc_key_t key;
+
+    create_ctx = !uct_cuda_base_is_context_active();
+    if (create_ctx) {
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(&dev, 0)) != UCS_OK) {
+            goto out;
+        }
+
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxCreate(&ctx, 0, dev))  != UCS_OK) {
+             goto out;
+        }
+
+        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxSetCurrent(ctx))  != UCS_OK) {
+            goto destroy_ctx;
+        }
+    }
+
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemAlloc(&dptr, length)) != UCS_OK) {
+        goto destroy_ctx;
+    }
+
+    ret = (uct_cuda_ipc_mem_reg_internal(
+            (void *)dptr, length, UCT_MD_MEM_FLAG_HIDE_ERRORS, &key) == UCS_OK);
+
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemFree(dptr));
+
+destroy_ctx:
+    if (create_ctx) {
+        UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxDestroy(ctx));
+    }
+out:
+#endif
+    ucs_debug("memory registration is%s supported on cuda device %d",
+              ret ? "" : " not", dev);
+    return ret;
+}
 
 static void uct_cuda_ipc_md_close(uct_md_h uct_md)
 {
