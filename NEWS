@@ -29,7 +29,7 @@
 * Added base implementation of is_reachable_v2 API using intra/inter flag
 * Introduced MD capability for non-blocking registration memory types
 #### RDMA CORE (IB, ROCE, etc.)
-* Added format is_reachable_v2 for IB interfaces
+* Added implementation of is_reachable_v2 routine to IB interface
 * Added option to control CQE zipping per CQ RX/TX direction
 * Added option to specify how DCI selects port under RoCE LAG
 * Added hw_dcs to the list of policies to select DCI by an endpoint
@@ -68,7 +68,7 @@
 #### UCP
 * Fixed assertion when sending from non-contiguous GPU buffer to managed buffer
 * Fixed the race condition on endpoint configurations
-* Fixed endpoint reconfiguration issues due to assymetrical selection
+* Fixed endpoint reconfiguration issues due to asymmetrical selection
 * Fixed endpoint reconfiguration error due to wrong locality detection
 * Fixed crash during connection manager cleanup
 * Fixed rkey index calculation for rendezvous protocol
