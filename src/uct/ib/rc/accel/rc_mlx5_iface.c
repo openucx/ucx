@@ -777,6 +777,14 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
     return status;
 }
 
+static uint8_t
+uct_rc_mlx5_iface_get_fence_flag(uct_rc_mlx5_iface_common_t *iface,
+                                 uint8_t base_flag)
+{
+    return iface->super.super.config.ar_enable ?
+           UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER : base_flag;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
@@ -857,7 +865,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         ((rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO) &&
          (uct_ib_device_has_pci_atomics(dev) || md->super.relaxed_order))) {
         if (uct_ib_device_has_pci_atomics(dev)) {
-            self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
+            self->config.atomic_fence_flag =
+                    uct_rc_mlx5_iface_get_fence_flag(self,
+                                                     UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE);
         } else {
             self->config.atomic_fence_flag = 0;
         }
@@ -872,6 +882,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         status = UCS_ERR_INVALID_PARAM;
         goto cleanup_tm;
     }
+
+    self->config.strong_fence_flag = uct_rc_mlx5_iface_get_fence_flag(self, 0);
 
     /* By default set to something that is always in cache */
     self->rx.pref_ptr = self;

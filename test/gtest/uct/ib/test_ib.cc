@@ -553,14 +553,14 @@ protected:
     ucs_status_t ib_select_sl(ucs_ternary_auto_value_t ar_enable,
                               uint64_t test_ooo_sl_mask,
                               const uct_ib_iface_config_t &config,
-                              uint8_t &sl) const {
+                              uint8_t &sl, uint8_t &sl_ar) const {
         uint16_t ooo_sl_mask = (test_ooo_sl_mask !=
                                 m_ooo_sl_mask_not_detected) ?
                                static_cast<uint16_t>(test_ooo_sl_mask) : 0;
         return uct_ib_mlx5_select_sl(&config, ar_enable, ooo_sl_mask,
                                      (test_ooo_sl_mask !=
                                       m_ooo_sl_mask_not_detected),
-                                     "mlx5_0", 1, &sl);
+                                     "mlx5_0", 1, &sl, &sl_ar);
     }
 
     ucs_status_t select_sl_ok(ucs_ternary_auto_value_t ar_enable,
@@ -570,6 +570,7 @@ protected:
         uint16_t sls_with_ar, sls_without_ar;
         ucs_status_t status;
         uint8_t sl;
+        uint8_t sl_ar;
 
         if (ooo_sl_mask != m_ooo_sl_mask_not_detected) {
             sls_with_ar    = static_cast<uint16_t>(ooo_sl_mask);
@@ -579,7 +580,7 @@ protected:
             sls_without_ar = 0;
         }
 
-        status = ib_select_sl(ar_enable, ooo_sl_mask, config, sl);
+        status = ib_select_sl(ar_enable, ooo_sl_mask, config, sl, sl_ar);
         if ((ooo_sl_mask == 0) || (ar_enable == UCS_AUTO)) {
             if (config_sl == UCS_ULUNITS_AUTO) {
                 EXPECT_EQ(m_default_sl, sl);
@@ -638,10 +639,11 @@ protected:
                                wrap_errors_check_sl_masks_logger :
                                wrap_errors_logger);
         uint8_t sl;
+        uint8_t sl_ar;
 
         EXPECT_NE(UCS_AUTO, ar_enable);
 
-        return ib_select_sl(ar_enable, ooo_sl_mask, config, sl);
+        return ib_select_sl(ar_enable, ooo_sl_mask, config, sl, sl_ar);
     }
 
     void select_sl(ucs_ternary_auto_value_t ar_enable, unsigned long config_sl,

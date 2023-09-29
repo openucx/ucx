@@ -671,6 +671,9 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         raddr = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
+        fm_ce_se |= uct_rc_mlx5_ep_fm_cq_update(iface, txwq,
+                                                iface->config.strong_fence_flag);
+
         /* Data segment */
         if (length == 0) {
             wqe_size     = ctrl_av_size + sizeof(*raddr);

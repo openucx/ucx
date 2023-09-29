@@ -121,7 +121,11 @@ struct mlx5_grh_av {
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
+/* The WQE will start execution only after all previous Read/Atomic WQEs
+ * complete */
 #define UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE        (2<<5)
+/* When set, the WQE will be executed only after all previous WQEs have been
+ * executed. Can be set for RC/DC WQEs only */
 #define UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER (3<<5)
 
 #define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
@@ -985,7 +989,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                       ucs_ternary_auto_value_t ar_enable,
                       uint16_t hw_sl_mask, int have_sl_mask_cap,
                       const char *dev_name, uint8_t port_num,
-                      uint8_t *sl_p);
+                      uint8_t *sl_p, uint8_t *sl_ar_p);
 
 ucs_status_t
 uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
