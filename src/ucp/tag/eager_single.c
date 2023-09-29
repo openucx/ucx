@@ -12,6 +12,7 @@
 
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_worker.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucs/sys/string.h>
 
 #include <ucp/core/ucp_request.inl>
@@ -88,6 +89,105 @@ ucp_proto_t ucp_eager_short_proto = {
     .query    = ucp_proto_single_query,
     .progress = {ucp_eager_short_progress},
     .abort    = ucp_proto_request_bcopy_abort,
+    .reset    = ucp_proto_request_bcopy_reset
+};
+
+static size_t ucp_eager_empty_pack(void *dest, void *arg)
+{
+    ucp_eager_hdr_t *hdr = dest;
+    ucp_request_t *req   = arg;
+
+    hdr->super.tag = req->send.msg_proto.tag;
+    return sizeof(*hdr);
+}
+
+static ucs_status_t ucp_eager_bcopy_empty_progress(uct_pending_req_t *self)
+{
+    ucp_request_t                   *req = ucs_container_of(self, ucp_request_t,
+                                                            send.uct);
+    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
+
+    return ucp_proto_am_bcopy_single_progress(
+            req, UCP_AM_ID_EAGER_ONLY, spriv->super.lane, ucp_eager_empty_pack,
+            req, SIZE_MAX, ucp_proto_request_complete_success, 1);
+}
+
+static ucs_status_t
+ucp_proto_eager_empty_init(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_caps_t *caps                = init_params->caps;
+    ucp_proto_single_priv_t *priv         = init_params->priv;
+    ucs_status_t status                   = UCS_OK;
+    ucp_proto_perf_range_t *range         = &caps->ranges[0];
+    ucp_proto_single_init_params_t params = {
+        .super.super         = *init_params,
+        .super.latency       = 0,
+        .super.overhead      = 0,
+        .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
+        .super.cfg_priority  = 0,
+        .super.min_length    = 0,
+        .super.max_length    = 0,
+        .super.min_iov       = 0,
+        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.hdr_size      = sizeof(ucp_tag_hdr_t),
+        .super.send_op       = UCT_EP_OP_AM_BCOPY,
+        .super.memtype_op    = UCT_EP_OP_GET_SHORT,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+        .lane_type           = UCP_LANE_TYPE_AM,
+        .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
+    };
+    ucp_proto_perf_node_t *tl_perf_node;
+    ucp_proto_common_tl_perf_t tl_perf;
+    ucp_lane_index_t lane;
+
+    /* AM based proto can not be used if tag offload lane configured */
+    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    *init_params->priv_size  = sizeof(ucp_proto_single_priv_t);
+    priv->reg_md             = UCP_NULL_RESOURCE;
+
+    /* Find lane to send the initial message */
+    lane = ucp_proto_common_find_am_bcopy_hdr_lane(init_params);
+    if (lane == UCP_NULL_LANE) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    ucp_proto_common_lane_priv_init(&params.super, 0, lane, &priv->super);
+    status = ucp_proto_common_get_lane_perf(&params.super, lane, &tl_perf,
+                                            &tl_perf_node);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    caps->cfg_thresh   = 0;
+    caps->cfg_priority = 1;
+    caps->min_length   = 0;
+    caps->num_ranges   = 1;
+    range->max_length  = 0;
+    range->node        = ucp_proto_perf_node_new_data(init_params->proto_name,
+                                                      "");
+    ucp_proto_perf_set(range->perf, ucs_linear_func_make(tl_perf.latency, 0));
+    ucp_proto_perf_range_add_data(range);
+
+    ucp_proto_perf_node_deref(&tl_perf_node);
+
+    return status;
+}
+
+ucp_proto_t ucp_eager_empty_proto = {
+    .name     = "egr/empty",
+    .desc     = "eager empty msg",
+    .flags    = 0,
+    .init     = ucp_proto_eager_empty_init,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_eager_bcopy_empty_progress},
+    .abort    = ucp_request_complete_send,
     .reset    = ucp_proto_request_bcopy_reset
 };
 

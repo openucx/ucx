@@ -34,6 +34,7 @@
     _macro(ucp_eager_zcopy_multi_proto) \
     _macro(ucp_eager_short_proto) \
     _macro(ucp_eager_bcopy_single_proto) \
+    _macro(ucp_eager_empty_proto) \
     _macro(ucp_eager_zcopy_single_proto) \
     _macro(ucp_tag_rndv_proto) \
     _macro(ucp_eager_tag_offload_short_proto) \
