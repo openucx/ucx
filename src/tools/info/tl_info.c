@@ -472,6 +472,10 @@ static void print_md_info(uct_component_h component,
             printf("#           memory invalidation is supported\n");
         }
 
+        if (md_attr.reg_alignment != 0) {
+            printf("#            alignment: %zx\n", md_attr.reg_alignment);
+        }
+
         ucs_memory_type_for_each(mem_type) {
             if (!(UCS_BIT(mem_type) &
                   (md_attr.reg_mem_types | md_attr.alloc_mem_types))) {
