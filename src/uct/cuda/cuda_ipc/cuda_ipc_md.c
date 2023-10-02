@@ -293,24 +293,25 @@ uct_cuda_ipc_mem_dereg(uct_md_h md,
 static int uct_cuda_ipc_md_check_mem_reg()
 {
     int ret = 0;
+
 #if CUDA_VERSION >= 12000
     CUdevice dev;
-    CUdevice_attribute attribute;
     int value;
 
     if ((UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&dev)) != UCS_OK) &&
         /* Context may be not set yet. Check attribute for 0 device, assuming
          * support is uniform across all devices. */
         (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGet(&dev, 0)) != UCS_OK)) {
-        return 0;
+        goto out;
     }
 
-    attribute = CU_DEVICE_ATTRIBUTE_IPC_EVENT_SUPPORTED;
-
-    if (UCT_CUDADRV_FUNC_LOG_DEBUG(
-                cuDeviceGetAttribute(&value, attribute, dev)) != UCS_OK) {
-        return 0;
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGetAttribute(
+            &value, CU_DEVICE_ATTRIBUTE_IPC_EVENT_SUPPORTED, dev)) != UCS_OK) {
+        goto out;
     }
+
+    ret = value;
+
 #else
     static const size_t length = 1;
     CUdevice dev               = 0;
@@ -348,8 +349,9 @@ destroy_ctx:
     if (create_ctx) {
         UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxDestroy(ctx));
     }
-out:
 #endif
+
+out:
     ucs_debug("memory registration is%s supported on cuda device %d",
               ret ? "" : " not", dev);
     return ret;
