@@ -11,7 +11,6 @@
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/spinlock.h>
-#include <ucs/datastruct/bitmap.h>
 #if HAVE_DEVX
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif

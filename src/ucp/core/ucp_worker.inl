@@ -113,8 +113,9 @@ ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
     }
 
     tl_bitmap = worker->context->tl_bitmap;
-    ucs_assert(UCS_BITMAP_GET(tl_bitmap, rsc_index));
-    return worker->ifaces[UCS_BITMAP_POPCOUNT_UPTO_INDEX(tl_bitmap, rsc_index)];
+    ucs_assert(UCS_STATIC_BITMAP_GET(tl_bitmap, rsc_index));
+    return worker->ifaces[UCS_STATIC_BITMAP_POPCOUNT_UPTO_INDEX(tl_bitmap,
+                                                                rsc_index)];
 }
 
 /**

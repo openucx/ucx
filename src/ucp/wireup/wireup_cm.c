@@ -146,16 +146,16 @@ static ucp_rsc_index_t
 ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
                              const ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_rsc_index_t rsc_index = UCS_BITMAP_FFS(*tl_bitmap);
+    ucp_rsc_index_t rsc_index = UCS_STATIC_BITMAP_FFS(*tl_bitmap);
     ucp_rsc_index_t dev_index;
 
-    ucs_assert(!UCS_BITMAP_IS_ZERO_INPLACE(tl_bitmap));
+    ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(*tl_bitmap));
     ucs_assert(rsc_index < context->num_tls);
 
     dev_index = context->tl_rscs[rsc_index].dev_index;
 
     /* check that all TL resources in the TL bitmap have the same dev_index */
-    UCS_BITMAP_FOR_EACH_BIT(*tl_bitmap, rsc_index) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
         ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
     }
 
@@ -398,7 +398,7 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
     uint8_t path_index;
     uct_ep_h uct_ep;
 
-    UCS_BITMAP_CLEAR(tl_bitmap);
+    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
         if (lane_idx == ucp_ep_get_cm_lane(ep)) {
             continue;
@@ -416,7 +416,7 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
 
         ucp_ep_set_lane(ep, lane_idx, uct_ep);
 
-        UCS_BITMAP_SET(*tl_bitmap, rsc_idx);
+        UCS_STATIC_BITMAP_SET(tl_bitmap, rsc_idx);
         if (ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane_idx)) {
             path_index = ucp_ep_get_path_index(ep, lane_idx);
             status     = ucp_wireup_ep_connect(ucp_ep_get_lane(ep, lane_idx), 0,
@@ -591,7 +591,7 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
     ucp_context_dev_tl_bitmap(worker->context, args->dev_name,
                               &cm_wireup_ep->cm_resolve_tl_bitmap);
 
-    if (UCS_BITMAP_IS_ZERO_INPLACE(&cm_wireup_ep->cm_resolve_tl_bitmap)) {
+    if (UCS_STATIC_BITMAP_IS_ZERO(cm_wireup_ep->cm_resolve_tl_bitmap)) {
         ucs_diag("client ep %p connect to %s failed: device %s is not enabled, "
                  "enable it in UCX_NET_DEVICES or use corresponding ip address",
                  ep,
@@ -1232,7 +1232,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 
     ucp_context_dev_tl_bitmap(worker->context, conn_request->dev_name,
                               &tl_bitmap);
-    if (UCS_BITMAP_IS_ZERO_INPLACE(&tl_bitmap)) {
+    if (UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap)) {
         ucs_error("listener %p: got connection request from %s on a device %s "
                   "which was not present during UCP initialization",
                   conn_request->listener,

@@ -222,7 +222,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
-    ucp_rsc_index_t amo_rsc_idx      = UCS_BITMAP_FFS(worker->atomic_tls);
+    ucp_rsc_index_t amo_rsc_idx      = UCS_STATIC_BITMAP_FFS(worker->atomic_tls);
     ucp_request_t *req;
     ucp_ep_h ep;
 
