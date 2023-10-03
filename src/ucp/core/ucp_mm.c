@@ -713,6 +713,28 @@ err:
     return status;
 }
 
+static void
+ucp_memh_reg_align(ucp_context_h context, void **address_p, size_t *length_p,
+                   ucp_md_map_t reg_md_map)
+{
+    size_t reg_align = UCS_RCACHE_MIN_ALIGNMENT;
+    const uct_md_attr_v2_t *md_attr;
+    ucp_md_index_t md_index;
+    void *start, *end;
+
+    ucs_for_each_bit(md_index, reg_md_map) {
+        md_attr   = &context->tl_mds[md_index].attr;
+        reg_align = ucs_max(md_attr->reg_alignment, reg_align);
+    }
+
+    start = ucs_align_down_pow2_ptr(*address_p, reg_align);
+    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(*address_p, *length_p),
+                                  reg_align);
+
+    *address_p = start;
+    *length_p  = UCS_PTR_BYTE_DIFF(start, end);
+}
+
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                size_t length, ucs_memory_type_t mem_type,
                                ucp_md_map_t reg_md_map, unsigned uct_flags,
@@ -732,6 +754,8 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
         reg_address = address;
         reg_length  = length;
     }
+
+    ucp_memh_reg_align(context, &reg_address, &reg_length, reg_md_map);
 
     ucs_trace(
             "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
