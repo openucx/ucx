@@ -9,15 +9,17 @@
 
 class uct_amo_add_xor_test : public uct_amo_test {
 public:
-
-    template <typename T, uct_atomic_op_t opcode>
-    void test_op(T (*op)(T, T)) {
+    template<typename T, uct_atomic_op_t opcode>
+    void test_op(T (*op)(T, T), unsigned flags = 0)
+    {
         /*
          * Method: Add/xor may random values from multiple workers running at the same
          * time. We expect the final result to be the sum/xor of all these values.
          */
 
-        mapped_buffer recvbuf(sizeof(T), 0, receiver());
+        mapped_buffer recvbuf(sizeof(T), flags, receiver(), 0,
+                              UCS_MEMORY_TYPE_HOST,
+                              UCT_MD_MEM_ACCESS_ALL | flags);
 
         T value = rand64();
         *(T*)recvbuf.ptr() = value;
@@ -45,6 +47,15 @@ public:
 UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, add32,
                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32)) {
     test_op<uint32_t, UCT_ATOMIC_OP_ADD>(add_op<uint32_t>);
+}
+
+// Make sure registration has atomic capability, and non supporting transports
+// perform anyways
+UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, addr32_symmetric_rkey,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32))
+{
+    test_op<uint32_t, UCT_ATOMIC_OP_ADD>(add_op<uint32_t>,
+                                         UCT_MD_MEM_SYMMETRIC_RKEY);
 }
 
 UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, add64,

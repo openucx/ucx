@@ -57,7 +57,7 @@ static ucs_status_t uct_ib_mlx5_alloc_mkey_inbox(int list_size, char **in_p)
 static ucs_status_t
 uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md, int atomic, uint64_t address,
                          size_t length, int list_size, size_t entity_size,
-                         char *in, const char *reason,
+                         char *in, uint32_t mkey_index, const char *reason,
                          struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_mkey_out)] = {};
@@ -65,6 +65,7 @@ uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md, int atomic, uint64_t address,
     void *mkc;
 
     UCT_IB_MLX5DV_SET(create_mkey_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_MKEY);
+    UCT_IB_MLX5DV_SET(create_mkey_in, in, input_mkey_index, mkey_index);
     mkc = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, memory_key_mkey_entry);
     UCT_IB_MLX5DV_SET(mkc, mkc, access_mode_1_0, UCT_IB_MLX5_MKC_ACCESS_MODE_KSM);
     UCT_IB_MLX5DV_SET(mkc, mkc, a, !!atomic);
@@ -87,9 +88,12 @@ uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md, int atomic, uint64_t address,
                                        uct_ib_mlx5_calc_mkey_inlen(list_size),
                                        out, sizeof(out));
     if (mr == NULL) {
-        ucs_debug("mlx5dv_devx_obj_create(CREATE_MKEY, mode=KSM) failed, "
-                  "syndrome 0x%x: %m",
-                  UCT_IB_MLX5DV_GET(create_mkey_out, out, syndrome));
+        if (reason != NULL) {
+            ucs_debug("mlx5dv_devx_obj_create(CREATE_MKEY, mode=KSM) failed, "
+                      "syndrome 0x%x: %m",
+                      UCT_IB_MLX5DV_GET(create_mkey_out, out, syndrome));
+        }
+
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -97,19 +101,23 @@ uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md, int atomic, uint64_t address,
     *mkey = (UCT_IB_MLX5DV_GET(create_mkey_out, out, mkey_index) << 8) |
             md->mkey_tag;
 
-    ucs_trace("%s: registered KSM%s for %s %lx..%lx with %d entries of %zu "
-              "bytes, mkey=0x%x mr=%p",
-              uct_ib_device_name(&md->super.dev), atomic ? " atomic" : "",
-              reason, address, address + length, list_size, entity_size, *mkey,
-              mr);
+    if (reason != NULL) {
+        ucs_trace("%s: registered KSM%s for %s %lx..%lx with %d entries of %zu "
+                  "bytes, mkey=0x%x mr=%p",
+                  uct_ib_device_name(&md->super.dev), atomic ? " atomic" : "",
+                  reason, address, address + length, list_size, entity_size,
+                  *mkey, mr);
+    }
+
     return UCS_OK;
 }
 
 static ucs_status_t
 uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md, int atomic, void *address,
                               uct_ib_mlx5_devx_ksm_data_t *ksm_data,
-                              size_t length, uint64_t iova, const char *reason,
-                              struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
+                              size_t length, uint64_t iova, uint32_t mkey_index,
+                              const char *reason, struct mlx5dv_devx_obj **mr_p,
+                              uint32_t *mkey)
 {
     void *mr_address = address;
     ucs_status_t status;
@@ -133,16 +141,19 @@ uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md, int atomic, void *address,
 
     status = uct_ib_mlx5_devx_reg_ksm(md, atomic, iova, length,
                                       ksm_data->mr_num,
-                                      ksm_data->mrs[0]->length, in, reason,
-                                      mr_p, mkey);
+                                      ksm_data->mrs[0]->length, in, mkey_index,
+                                      reason, mr_p, mkey);
     ucs_free(in);
     return status;
 }
 
-static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_addr(
-        uct_ib_mlx5_md_t *md, struct ibv_mr *mr, uint64_t address,
-        size_t length, uint64_t iova, int atomic, int list_size,
-        const char *reason, struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
+static ucs_status_t
+uct_ib_mlx5_devx_reg_ksm_data_addr(uct_ib_mlx5_md_t *md, struct ibv_mr *mr,
+                                   uint64_t address, size_t length,
+                                   uint64_t iova, int atomic, int list_size,
+                                   uint32_t mkey_index, const char *reason,
+                                   struct mlx5dv_devx_obj **mr_p,
+                                   uint32_t *mkey)
 {
     int i;
     char *in;
@@ -163,15 +174,15 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_addr(
     }
 
     status = uct_ib_mlx5_devx_reg_ksm(md, atomic, iova, length, list_size,
-                                      UCT_IB_MD_MAX_MR_SIZE, in, reason, mr_p,
-                                      mkey);
+                                      UCT_IB_MD_MAX_MR_SIZE, in, mkey_index,
+                                      reason, mr_p, mkey);
     ucs_free(in);
     return status;
 }
 
 static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_contig(
         uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr, void *address,
-        uint64_t iova, int atomic, const char *reason,
+        uint64_t iova, int atomic, uint32_t mkey_index, const char *reason,
         struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
 {
     size_t mr_length = mr->super.ib->length;
@@ -193,7 +204,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_contig(
 
     return uct_ib_mlx5_devx_reg_ksm_data_addr(md, mr->super.ib, ksm_address,
                                               ksm_length, ksm_iova, atomic,
-                                              list_size, reason, mr_p, mkey);
+                                              list_size, mkey_index, reason,
+                                              mr_p, mkey);
 }
 
 /**
@@ -350,7 +362,7 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_indirect_key,
     do {
         status = uct_ib_mlx5_devx_reg_ksm_data_contig(
                 md, &memh->mrs[UCT_IB_MR_DEFAULT], memh->address,
-                (uint64_t)memh->address, 0, "indirect key",
+                (uint64_t)memh->address, 0, 0, "indirect key",
                 &memh->indirect_dvmr, &memh->indirect_rkey);
         if (status != UCS_OK) {
             break;
@@ -373,6 +385,11 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_indirect_key,
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE uint32_t uct_ib_mlx5_mkey_index(uint32_t mkey)
+{
+    return mkey >> 8;
+}
+
 UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_atomic_key,
                         (md, memh), uct_ib_mlx5_md_t *md,
                         uct_ib_mlx5_devx_mem_t *memh)
@@ -381,9 +398,17 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_atomic_key,
     uct_ib_mlx5_devx_mr_t *mr = &memh->mrs[mr_type];
     uint8_t mr_id             = uct_ib_md_get_atomic_mr_id(&md->super);
     uint32_t atomic_offset    = uct_ib_md_atomic_offset(mr_id);
+    uint32_t mkey_index;
     uint64_t iova;
     ucs_status_t status;
     int is_atomic;
+
+    if (memh->smkey_mr != NULL) {
+        mkey_index = uct_ib_mlx5_mkey_index(memh->super.rkey) +
+                     md->super.mkey_by_name_reserve.size;
+    } else {
+        mkey_index = 0;
+    }
 
     is_atomic = memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
     iova      = (uint64_t)memh->address + atomic_offset;
@@ -391,13 +416,15 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_atomic_key,
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
         return uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, memh->address,
                                              mr->ksm_data, mr->ksm_data->length,
-                                             iova, "multi-thread atomic key",
+                                             iova, mkey_index,
+                                             "multi-thread atomic key",
                                              &memh->atomic_dvmr,
                                              &memh->atomic_rkey);
     }
 
     status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, mr, memh->address, iova,
-                                                  is_atomic, "atomic key",
+                                                  is_atomic, mkey_index,
+                                                  "atomic key",
                                                   &memh->atomic_dvmr,
                                                   &memh->atomic_rkey);
     if (status != UCS_OK) {
@@ -457,8 +484,9 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_mlx5_md_t *md, void *address, size_t length,
     }
 
     status = uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, address, ksm_data,
-                                           length, (uint64_t)address, "multi-thread key",
-                                           &ksm_data->dvmr, mkey_p);
+                                           length, (uint64_t)address, 0,
+                                           "multi-thread key", &ksm_data->dvmr,
+                                           mkey_p);
     if (status != UCS_OK) {
         goto err_dereg;
     }
@@ -507,6 +535,48 @@ uct_ib_mlx5_devx_dereg_mt(uct_ib_mlx5_md_t *md,
     ucs_free(ksm_data);
     return status;
 }
+
+static void uct_ib_mlx5_devx_reg_symmetric(uct_ib_mlx5_md_t *md,
+                                           uct_ib_mlx5_devx_mem_t *memh,
+                                           void *address)
+{
+    uint32_t start = md->smkey_index;
+    struct mlx5dv_devx_obj *smkey_mr;
+    uint32_t symmetric_rkey;
+    ucs_status_t status;
+
+    /* Best effort, only allocate in the range below the atomic keys. */
+    while (md->smkey_index < md->super.mkey_by_name_reserve.size) {
+        status = uct_ib_mlx5_devx_reg_ksm_data_contig(
+                md, &memh->mrs[UCT_IB_MR_DEFAULT], address, (uint64_t)address,
+                (memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC),
+                md->super.mkey_by_name_reserve.base + md->smkey_index, NULL,
+                &smkey_mr, &symmetric_rkey);
+        if (status == UCS_OK) {
+            ucs_trace("%s: symmetric rkey created for addr=%p "
+                      "mkey_index=0x%x smkey_mr=%p rkey=0x%x",
+                      uct_ib_device_name(&md->super.dev), address,
+                      md->super.mkey_by_name_reserve.base + start, smkey_mr,
+                      symmetric_rkey);
+
+            memh->smkey_mr   = smkey_mr;
+            memh->super.rkey = symmetric_rkey;
+            md->smkey_index++;
+            return;
+        }
+
+        /* Use blocks of 8 mkeys, first mkey creation gives block ownership.
+         * Try from the start of the next block if any failure.
+         */
+        md->smkey_index = ucs_align_up_pow2(md->smkey_index + 1,
+                                            md->super.config.smkey_block_size);
+    }
+
+    ucs_debug("%s: symmetric rkey create failed for addr=%p mkey_index=0x%x",
+              uct_ib_device_name(&md->super.dev), address,
+              md->super.mkey_by_name_reserve.base + start);
+}
+
 
 static ucs_status_t
 uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
@@ -567,15 +637,14 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                          uct_mem_h *memh_p)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    unsigned flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     uct_ib_mlx5_devx_mem_t *memh;
     uct_ib_mem_t *ib_memh;
     ucs_status_t status;
     uint32_t dummy_mkey;
 
-    status = uct_ib_memh_alloc(&md->super, length,
-                               UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
-                                                          FIELD_FLAGS, 0),
-                               sizeof(*memh), sizeof(memh->mrs[0]), &ib_memh);
+    status = uct_ib_memh_alloc(&md->super, length, flags, sizeof(*memh),
+                               sizeof(memh->mrs[0]), &ib_memh);
     if (status != UCS_OK) {
         goto err;
     }
@@ -590,6 +659,11 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                      &memh->super.lkey, &memh->super.rkey);
     if (status != UCS_OK) {
         goto err_memh_free;
+    }
+
+    if ((flags & UCT_MD_MEM_SYMMETRIC_RKEY) &&
+        (md->flags & UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE)) {
+        uct_ib_mlx5_devx_reg_symmetric(md, memh, address);
     }
 
     if (md->super.relaxed_order) {
@@ -702,6 +776,17 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
                   memh->indirect_rkey);
         status = uct_ib_mlx5_devx_obj_destroy(memh->indirect_dvmr,
                                               "MKEY, INDIRECT");
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (memh->smkey_mr != NULL) {
+        ucs_trace("%s: destroy smkey_mr %p with key %x",
+                  uct_ib_device_name(&md->super.dev), memh->smkey_mr,
+                  memh->super.rkey);
+        status = uct_ib_mlx5_devx_obj_destroy(memh->smkey_mr,
+                                              "MKEY, SYMMETRIC");
         if (status != UCS_OK) {
             return status;
         }
@@ -998,7 +1083,7 @@ static void uct_ib_mlx5_devx_init_flush_mr(uct_ib_mlx5_md_t *md)
     status = uct_ib_mlx5_devx_reg_ksm_data_addr(md, md->flush_mr,
                                                 (uintptr_t)md->zero_buf,
                                                 UCT_IB_MD_FLUSH_REMOTE_LENGTH,
-                                                0, 0, 1, "flush mr",
+                                                0, 0, 1, 0, "flush mr",
                                                 &md->flush_dvmr,
                                                 &md->super.flush_rkey);
     if (status != UCS_OK) {
@@ -1019,16 +1104,10 @@ err:
     md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
 }
 
-static int uct_ib_mlx5_is_xgvmi_alias_supported(struct ibv_context *ctx)
+static ucs_status_t
+uct_ib_mlx5_devx_query_cap_2(struct ibv_context *ctx, void *out, size_t size)
 {
-    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
-    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
-    uint64_t object_for_other_vhca;
-    uint32_t object_to_object;
-    void *cap;
-    ucs_status_t status;
-
-    cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)] = {};
 
     /* query HCA CAP 2 */
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode,
@@ -1036,21 +1115,69 @@ static int uct_ib_mlx5_is_xgvmi_alias_supported(struct ibv_context *ctx)
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod,
                       UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
                               (UCT_IB_MLX5_CAP_2_GENERAL << 1));
-    status = uct_ib_mlx5_devx_general_cmd(ctx, in, sizeof(in), out, sizeof(out),
-                                          "QUERY_HCA_CAP", 1);
-    if (status != UCS_OK) {
-        return 0;
+    return uct_ib_mlx5_devx_general_cmd(ctx, in, sizeof(in), out, size,
+                                        "QUERY_HCA_CAP, CAP2", 1);
+}
+
+static void uct_ib_mlx5_devx_check_xgvmi(uct_ib_mlx5_md_t *md, void *cap_2,
+                                         uct_ib_device_t *dev)
+{
+    uint64_t object_for_other_vhca;
+    uint32_t object_to_object;
+
+    object_to_object      = UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2,
+                                              cross_vhca_object_to_object_supported);
+    object_for_other_vhca = UCT_IB_MLX5DV_GET64(
+            cmd_hca_cap_2, cap_2, allowed_object_for_other_vhca_access);
+
+    if ((object_to_object &
+         UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY) &&
+        (object_for_other_vhca &
+         UCT_IB_MLX5_HCA_CAPS_2_ALLOWED_OBJ_FOR_OTHER_VHCA_ACCESS_MKEY)) {
+        md->flags           |= UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
+        md->super.cap_flags |= UCT_MD_FLAG_EXPORTED_MKEY;
+        ucs_debug("%s: cross gvmi alias mkey is supported",
+                  uct_ib_device_name(dev));
+    } else {
+        ucs_debug("%s: crossing_vhca_mkey is not supported",
+                  uct_ib_device_name(dev));
+    }
+}
+
+static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
+                                                void *cap_2,
+                                                uct_ib_device_t *dev)
+{
+    int log_size;
+
+    ucs_assertv(md->super.mkey_by_name_reserve.size == 0,
+                "mkey_by_name_reserve.size=%u",
+                md->super.mkey_by_name_reserve.size);
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2, mkey_by_name_reserve) == 0) {
+        ucs_debug("%s: mkey_by_name_reserve is not supported",
+                  uct_ib_device_name(dev));
+        return;
     }
 
-    object_to_object      = UCT_IB_MLX5DV_GET(
-            cmd_hca_cap_2, cap, cross_vhca_object_to_object_supported);
-    object_for_other_vhca = UCT_IB_MLX5DV_GET64(
-            cmd_hca_cap_2, cap, allowed_object_for_other_vhca_access);
+    log_size = UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2,
+                                 mkey_by_name_reserve_log_size);
 
-    return (object_to_object &
-            UCT_IB_MLX5_HCA_CAPS_2_CROSS_VHCA_OBJ_TO_OBJ_LOCAL_MKEY_TO_REMOTE_MKEY) &&
-           (object_for_other_vhca &
-            UCT_IB_MLX5_HCA_CAPS_2_ALLOWED_OBJ_FOR_OTHER_VHCA_ACCESS_MKEY);
+    md->super.mkey_by_name_reserve.base =
+            UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2, mkey_by_name_reserve_base);
+
+    /* The direct key and atomic key must have constant offset so that remote
+     * keys can eventually compare equal.
+     *
+     * So first half of the range is used for allocation of smallest mkey,
+     * other half will be used to create atomic key explicitly.
+     */
+    md->super.mkey_by_name_reserve.size = UCS_BIT(log_size) / 2;
+    md->flags           |= UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE;
+
+    ucs_debug("%s: mkey_by_name_reserve is supported, base=0x%x size=%u",
+              uct_ib_device_name(dev), md->super.mkey_by_name_reserve.base,
+              md->super.mkey_by_name_reserve.size);
 }
 
 static void uct_ib_mlx5_md_port_counter_set_id_init(uct_ib_mlx5_md_t *md)
@@ -1083,9 +1210,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
+    char cap_2_out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     ucs_status_t status                                    = UCS_OK;
     uint8_t lag_state                                      = 0;
-    uint64_t cap_flags                                     = 0;
+    void *cap_2;
     uint8_t log_max_qp;
     uint16_t vhca_id;
     struct ibv_context *ctx;
@@ -1254,14 +1382,12 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     vhca_id = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, vhca_id);
 
-    if (uct_ib_mlx5_is_xgvmi_alias_supported(ctx)) {
-        md->flags |= UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
-        cap_flags |= UCT_MD_FLAG_EXPORTED_MKEY;
-        ucs_debug("%s: cross gvmi alias mkey is supported",
-                  uct_ib_device_name(dev));
-    } else {
-        ucs_debug("%s: crossing_vhca_mkey is not supported",
-                  uct_ib_device_name(dev));
+    status = uct_ib_mlx5_devx_query_cap_2(ctx, cap_2_out, sizeof(cap_2_out));
+    if (status == UCS_OK) {
+        cap_2 = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, cap_2_out, capability);
+
+        uct_ib_mlx5_devx_check_xgvmi(md, cap_2, dev);
+        uct_ib_mlx5_devx_check_mkey_by_name(md, cap_2, dev);
     }
 
     uct_ib_mlx5_devx_check_odp(md, md_config, cap);
@@ -1344,7 +1470,6 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     md->flags           |= UCT_IB_MLX5_MD_FLAG_DEVX;
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
     md->super.name       = UCT_IB_MD_NAME(mlx5);
-    md->super.cap_flags |= cap_flags;
     md->super.vhca_id    = vhca_id;
 
     ksm_atomic = 0;
@@ -1545,7 +1670,7 @@ uct_ib_mlx5_devx_allow_xgvmi_access(uct_ib_mlx5_md_t *md,
     UCT_IB_MLX5DV_SET(allow_other_vhca_access_in, in,
                       object_type_to_be_accessed, UCT_IB_MLX5_OBJ_TYPE_MKEY);
     UCT_IB_MLX5DV_SET(allow_other_vhca_access_in, in, object_id_to_be_accessed,
-                      exported_lkey >> 8);
+                      uct_ib_mlx5_mkey_index(exported_lkey));
     access_key = UCT_IB_MLX5DV_ADDR_OF(allow_other_vhca_access_in, in,
                                        access_key);
     ucs_strncpy_zero(access_key, uct_ib_mkey_token,
@@ -1661,7 +1786,7 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     status = uct_ib_mlx5_devx_reg_ksm_data_contig(md,
                                                   &memh->mrs[UCT_IB_MR_DEFAULT],
                                                   memh->address,
-                                                  (uint64_t)memh->address, 0,
+                                                  (uint64_t)memh->address, 0, 0,
                                                   "exported key", &cross_mr,
                                                   &exported_lkey);
     if (status != UCS_OK) {
@@ -1818,7 +1943,7 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, vhca_id_to_be_accessed,
                       packed_mkey->vhca_id);
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, object_id_to_be_accessed,
-                      packed_mkey->lkey >> 8);
+                      uct_ib_mlx5_mkey_index(packed_mkey->lkey));
     UCT_IB_MLX5DV_SET(alias_context, alias_ctx, metadata_1,
                       uct_ib_mlx5_devx_md_get_pdn(md));
     access_key = UCT_IB_MLX5DV_ADDR_OF(alias_context, alias_ctx, access_key);

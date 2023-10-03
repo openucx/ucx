@@ -162,6 +162,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Number of memory registration attempts.",
      ucs_offsetof(uct_ib_md_config_t, ext.reg_retry_cnt), UCS_CONFIG_TYPE_UINT},
 
+    {"SMKEY_BLOCK_SIZE", "8",
+     "Number of indexes in a symmetric block. More can lead to less contention.",
+     ucs_offsetof(uct_ib_md_config_t, ext.smkey_block_size), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
