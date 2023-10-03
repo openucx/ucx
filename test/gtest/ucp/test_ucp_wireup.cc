@@ -1734,25 +1734,22 @@ protected:
         EXPECT_GE(found_count, std::min(tl_count, rma_bw_count));
     }
 
-    void send_before(const std::string &tl_name)
+    void connect(const std::string &tl_name)
     {
         sender().connect(&receiver(), get_ep_params());
         while (!(sender().ep()->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
             progress();
         }
 
-        printf("Before\n");
-        printf("================\n");
-        ucp_ep_print_info(sender().ep(), stdout);
         verify_transport(tl_name);
     }
 
-    void send_after(const std::string &tl_name, bool reconfigure = true)
+    void reconnect(const std::string &tl_name, bool reconfigure = true)
     {
-        ucp_worker_cfg_index_t old_cfg_index = sender().ep()->cfg_index;
+        const auto old_cfg_index = sender().ep()->cfg_index;
 
         UCS_ASYNC_BLOCK(&sender().worker()->async);
-        ucp_wireup_send_pre_request(sender().ep());
+        ASSERT_UCS_OK(ucp_wireup_send_pre_request(sender().ep()));
         UCS_ASYNC_UNBLOCK(&sender().worker()->async);
 
         for (int i = 0; i < 100; ++i) {
@@ -1769,9 +1766,6 @@ protected:
             progress();
         }
 
-        printf("After\n");
-        printf("================\n");
-        ucp_ep_print_info(sender().ep(), stdout);
         verify_transport(tl_name);
     }
 
@@ -1789,19 +1783,12 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, race_all_reuse, is_self())
 
     ucp_worker_cfg_index_t old_cfg_index = sender().ep()->cfg_index;
 
-    printf("Before\n");
-    printf("================\n");
-    ucp_ep_print_info(sender().ep(), stdout);
-
     for (int i = 0; i < 10; ++i) {
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 10000,
                   1);
     }
 
-    printf("After\n");
-    printf("================\n");
-    ucp_ep_print_info(sender().ep(), stdout);
-    ASSERT_EQ(sender().ep()->cfg_index, old_cfg_index);
+    EXPECT_EQ(sender().ep()->cfg_index, old_cfg_index);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_rc_to_dc,
@@ -1811,10 +1798,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_rc_to_dc,
         UCS_TEST_SKIP_R("IB transport is not present");
     }
 
-    send_before("rc_mlx5");
+    connect("rc_mlx5");
     sender().ucph()->config.est_num_eps   = 128;
     receiver().ucph()->config.est_num_eps = 128;
-    send_after("dc_mlx5");
+    reconnect("dc_mlx5");
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_dc_to_rc,
@@ -1825,10 +1812,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_no_reuse_dc_to_rc,
         UCS_TEST_SKIP_R("IB transport is not present");
     }
 
-    send_before("dc_mlx5");
+    connect("dc_mlx5");
     sender().ucph()->config.est_num_eps   = 1;
     receiver().ucph()->config.est_num_eps = 1;
-    send_after("rc_mlx5");
+    reconnect("rc_mlx5");
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_all_reuse,
@@ -1838,11 +1825,11 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_reconfigure, serial_all_reuse,
         UCS_TEST_SKIP_R("IB transport is not present");
     }
 
-    send_before("rc_mlx5");
+    connect("rc_mlx5");
     ucp_worker_cfg_index_t old_cfg_index = sender().ep()->cfg_index;
 
-    send_after("rc_mlx5", false);
-    ASSERT_EQ(sender().ep()->cfg_index, old_cfg_index);
+    reconnect("rc_mlx5", false);
+    EXPECT_EQ(sender().ep()->cfg_index, old_cfg_index);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_reconfigure, ib, "ib")

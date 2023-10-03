@@ -111,6 +111,7 @@ int uct_knem_ep_is_connected(const uct_ep_h tl_ep,
                              const uct_ep_is_connected_params_t *params)
 {
     UCT_EP_IS_CONNECTED_CHECK_DEV_ADDR(params);
+
     return uct_base_iface_is_reachable(tl_ep->iface, params->device_addr,
                                        params->iface_addr);
 }

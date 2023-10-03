@@ -178,8 +178,8 @@ UCS_TEST_P(test_uct_ep, is_connected)
     EXPECT_TRUE(uct_ep_is_connected(m_sender->ep(0), &params));
 
     if (!has_cma() && !has_transport("knem")) {
-        /* For knem,cma transports, is_connect will always return true if 
-           it's the same machine. */
+        /* For knem and cma transports, is_connect always returns true for
+           intra-node connection */
         EXPECT_FALSE(uct_ep_is_connected(e1->ep(0), &params));
     }
 }

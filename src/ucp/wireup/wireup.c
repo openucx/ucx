@@ -309,28 +309,26 @@ static int ucp_wireup_is_lane_reused(ucp_lane_index_t lane_idx,
 
 static unsigned
 ucp_wireup_get_next_ep_index(ucp_lane_index_t num_lanes,
-                             const ucp_address_entry_t *address,
+                             const ucp_address_entry_t *address_entry,
                              ucp_lane_index_t lane, unsigned address_index,
                              const ucp_lane_index_t *lanes2remote)
 {
     unsigned ep_index;
 
-    /* Select next remote ep address within the address_index as specified
-     * by addr_indices argument
-     */
-    for (ep_index = 0; ep_index < address->num_ep_addrs; ++ep_index) {
-        if (!ucp_wireup_is_lane_reused(address->ep_addrs[ep_index].lane,
+    /* Select next remote ep address within the specified address_entry */
+    for (ep_index = 0; ep_index < address_entry->num_ep_addrs; ++ep_index) {
+        if (!ucp_wireup_is_lane_reused(address_entry->ep_addrs[ep_index].lane,
                                        lanes2remote)) {
             /* EP address available */
             break;
         }
     }
 
-    ucs_assertv(ep_index < address->num_ep_addrs,
+    ucs_assertv(ep_index < address_entry->num_ep_addrs,
                 "lane=%d/%d tl_name_csum=0x%02x address_index=%u "
                 "ep_addr_index=%u num_ep_addrs=%u",
-                lane, num_lanes, address->tl_name_csum, address_index, ep_index,
-                address->num_ep_addrs);
+                lane, num_lanes, address_entry->tl_name_csum, address_index,
+                ep_index, address_entry->num_ep_addrs);
 
     return ep_index;
 }
