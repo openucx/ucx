@@ -39,7 +39,7 @@
 #include <time.h>
 
 
-#define UCP_WORKER_SLOW_CB_ITER_SKIP 32
+#define UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT 32
 
 #define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
 
@@ -2419,8 +2419,8 @@ static unsigned ucp_worker_progress_usage_tracker(void *arg)
     ucp_worker_h worker = (ucp_worker_h)arg;
     ucs_time_t now;
 
-    if ((worker->usage_tracker.iter_count++ % UCP_WORKER_SLOW_CB_ITER_SKIP) !=
-        0) {
+    if ((worker->usage_tracker.iter_count++ %
+         UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0) {
         return 0;
     }
 
@@ -2450,8 +2450,7 @@ void ucp_worker_track_ep_usage(ucp_worker_h worker, ucp_ep_h ep)
     ucs_usage_tracker_touch_key(worker->usage_tracker.handle, ep);
     worker->usage_tracker.samples_count++;
 
-    if ((worker->usage_tracker.samples_count %
-         UCS_USAGE_TRACKER_SAMPLES_COUNT_PER_RUN) == 0) {
+    if ((worker->usage_tracker.samples_count % 10000) == 0) {
         worker->usage_tracker.running    = 0;
         worker->usage_tracker.last_round = ucs_get_time();
 
@@ -2471,11 +2470,11 @@ static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
         return UCS_OK;
     }
 
-    params.promote_capacity = UCS_USAGE_TRACKER_PROMOTE_CAPACITY;
-    params.promote_thresh   = UCS_USAGE_TRACKER_PROMOTE_THRESH;
-    params.remove_thresh    = UCS_USAGE_TRACKER_REMOVE_THRESH;
-    params.exp_decay.m      = UCS_USAGE_TRACKER_EXP_DECAY_MULTIPLIER;
-    params.exp_decay.c      = UCS_USAGE_TRACKER_EXP_DECAY_CONST;
+    params.promote_capacity = 20;
+    params.promote_thresh   = 10;
+    params.remove_thresh    = 0.2;
+    params.exp_decay.m      = 0.8;
+    params.exp_decay.c      = 0.2;
     params.promote_cb       =
             (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
     params.demote_cb        =
@@ -3209,9 +3208,11 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
         /* Make sure not missing keepalive rounds after a long time without
          * calling UCP worker progress.
          */
-        UCS_STATIC_ASSERT(ucs_is_pow2_or_zero(UCP_WORKER_SLOW_CB_ITER_SKIP));
-        worker->keepalive.iter_count = ucs_align_up_pow2(
-                worker->keepalive.iter_count, UCP_WORKER_SLOW_CB_ITER_SKIP);
+        UCS_STATIC_ASSERT(
+                ucs_is_pow2_or_zero(UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT));
+        worker->keepalive.iter_count =
+                ucs_align_up_pow2(worker->keepalive.iter_count,
+                                  UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT);
     }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -3581,7 +3582,8 @@ static unsigned ucp_worker_keepalive_progress(void *arg)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
 
-    if ((worker->keepalive.iter_count++ % UCP_WORKER_SLOW_CB_ITER_SKIP) != 0) {
+    if ((worker->keepalive.iter_count++ %
+         UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0) {
         return 0;
     }
 
