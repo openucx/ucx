@@ -54,6 +54,9 @@ resources:
     - container: ubuntu1804
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: debian113
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: sles15sp2
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -219,6 +222,8 @@ stages:
               CONTAINER: ubuntu2204
             ubuntu2210:
               CONTAINER: ubuntu2210
+            debian113:
+              CONTAINER: debian113
             sles15sp2:
               CONTAINER: sles15sp2
             rhel82:
