@@ -2414,50 +2414,31 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
                             ucs_min(max_am_header, UINT32_MAX) : 0ul;
 }
 
-static unsigned ucp_worker_progress_usage_tracker(void *arg)
+void ucp_worker_track_ep_usage(ucp_request_t *req)
 {
-    ucp_worker_h worker = (ucp_worker_h)arg;
-    ucs_time_t now;
+    ucp_worker_h worker = req->send.ep->worker;
 
     if ((worker->usage_tracker.iter_count++ %
          UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0) {
-        return 0;
-    }
-
-    now = ucs_get_time();
-    if (ucs_likely((now - worker->usage_tracker.last_round) <
-                   worker->context->config.ext.usage_tracker_interval)) {
-        return 0;
-    }
-
-    UCS_ASYNC_BLOCK(&worker->async);
-
-    ucs_usage_tracker_progress(worker->usage_tracker.handle);
-    uct_worker_progress_unregister_safe(worker->uct,
-                                        &worker->usage_tracker.cb_id);
-    worker->usage_tracker.running = 1;
-
-    UCS_ASYNC_UNBLOCK(&worker->async);
-    return 1;
-}
-
-void ucp_worker_track_ep_usage(ucp_worker_h worker, ucp_ep_h ep)
-{
-    if (!worker->usage_tracker.running) {
         return;
     }
 
-    ucs_usage_tracker_touch_key(worker->usage_tracker.handle, ep);
+    if (ucs_likely((ucs_get_time() - worker->usage_tracker.last_round) <
+                   worker->context->config.ext.usage_tracker_interval)) {
+        return;
+    }
+
+    if (req->flags & UCP_REQUEST_FLAG_USAGE_TRACKED) {
+        return;
+    }
+
+    req->flags |= UCP_REQUEST_FLAG_USAGE_TRACKED;
+    ucs_usage_tracker_touch_key(worker->usage_tracker.handle, req->send.ep);
     worker->usage_tracker.samples_count++;
 
-    if ((worker->usage_tracker.samples_count % 10000) == 0) {
-        worker->usage_tracker.running    = 0;
+    if ((worker->usage_tracker.samples_count % 100000) == 0) {
+        ucs_usage_tracker_progress(worker->usage_tracker.handle);
         worker->usage_tracker.last_round = ucs_get_time();
-
-        uct_worker_progress_register_safe(worker->uct,
-                                          ucp_worker_progress_usage_tracker,
-                                          worker, 0,
-                                          &worker->usage_tracker.cb_id);
     }
 }
 
@@ -2485,14 +2466,9 @@ static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
         return status;
     }
 
-    worker->usage_tracker.running       = 0;
     worker->usage_tracker.iter_count    = 0;
     worker->usage_tracker.samples_count = 0;
     worker->usage_tracker.last_round    = ucs_get_time();
-
-    uct_worker_progress_register_safe(worker->uct,
-                                      ucp_worker_progress_usage_tracker, worker,
-                                      0, &worker->usage_tracker.cb_id);
     return UCS_OK;
 }
 

@@ -365,7 +365,6 @@ typedef struct ucp_worker {
     } counters;
 
     struct {
-        int                          running;
         ucs_usage_tracker_h          handle;
         unsigned                     iter_count;
         unsigned                     samples_count;
@@ -421,7 +420,7 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 void ucp_worker_vfs_refresh(void *obj);
 
-void ucp_worker_track_ep_usage(ucp_worker_h worker, ucp_ep_h ep);
+void ucp_worker_track_ep_usage(ucp_request_t *req);
 
 ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 
