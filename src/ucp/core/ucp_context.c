@@ -455,6 +455,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+  {"PREFER_OFFLOAD", "y",
+   "Prefer transports capable of remote memory access for RMA and AMO operations.\n"
+   "The value is interpreted as follows:\n"
+   " 'y' : Prefer transports with native RMA/AMO support (if available)\n"
+   " 'n' : Select RMA/AMO lanes according to performance charasteristics",
+   ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
