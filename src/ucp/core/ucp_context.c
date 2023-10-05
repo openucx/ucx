@@ -110,6 +110,7 @@ static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_CUDA_MANAGED] = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ROCM]         = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_RDMA]         = 0,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -119,6 +120,7 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_CUDA_MANAGED] = 128,
     [UCS_MEMORY_TYPE_ROCM]         = 128,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 128,
+    [UCS_MEMORY_TYPE_RDMA]         = 0,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 

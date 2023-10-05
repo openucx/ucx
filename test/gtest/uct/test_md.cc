@@ -354,10 +354,31 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
     uct_rkey_release(GetParam().component, &rkey_bundle);
 }
 
+static ucs_log_func_rc_t
+ignore_alloc_failure_log_handler(const char *file, unsigned line,
+                                 const char *function, ucs_log_level_t level,
+                                 const ucs_log_component_config_t *comp_conf,
+                                 const char *message, va_list ap)
+{
+    const std::vector<std::string> err_logs =
+            {"failed to allocate", "exceeds maximal supported size"};
+
+    for (const auto &err_log : err_logs) {
+        if (std::string(message).find(err_log) != std::string::npos) {
+            /* Ignore no resource errors */
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+    }
+
+    return UCS_LOG_FUNC_RC_CONTINUE;
+}
+
 UCS_TEST_SKIP_COND_P(test_md, alloc,
                      !check_caps(UCT_MD_FLAG_ALLOC)) {
-    uct_md_h md_ref           = md();
-    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
+    const unsigned iterations     = 300;
+    uct_md_h md_ref               = md();
+    uct_alloc_method_t method     = UCT_ALLOC_METHOD_MD;
+    unsigned num_alloc_failures   = 0;
     size_t size, orig_size;
     ucs_status_t status;
     void *address;
@@ -376,9 +397,11 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     params.mds.count       = 1;
 
     ucs_for_each_bit(mem_type, md_attr().alloc_mem_types) {
-        for (unsigned i = 0; i < 300; ++i) {
-            size = orig_size = ucs::rand() % 65536;
-            if (size == 0) {
+        for (unsigned i = 0; i < iterations; ++i) {
+            size = orig_size = ucs::rand() %
+                               ucs_min(65536, md_attr().max_alloc);
+            if ((size == 0) || (ucs_align_up_pow2(size, sizeof(size_t)) >
+                                md_attr().max_alloc)) {
                 continue;
             }
 
@@ -386,7 +409,14 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             params.address  = address;
             params.mem_type = (ucs_memory_type_t)mem_type;
 
+            ucs_log_push_handler(ignore_alloc_failure_log_handler);
             status = uct_mem_alloc(size, &method, 1, &params, &mem);
+            ucs_log_pop_handler();
+
+            if (status == UCS_ERR_NO_MEMORY) {
+                num_alloc_failures++;
+                continue;
+            }
 
             EXPECT_GT(mem.length, 0ul);
             address = mem.address;
@@ -402,6 +432,9 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             }
             uct_mem_free(&mem);
         }
+
+        EXPECT_LT((double)num_alloc_failures / iterations, 0.7)
+                << "Too many OUT_OF_RESOURCE failures";
     }
 }
 
@@ -670,33 +703,31 @@ UCS_TEST_SKIP_COND_P(test_md, reg_advise,
     test_reg_advise(128 * UCS_MBYTE, 32 * UCS_KBYTE, 7);
 }
 
-UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
-                     !check_caps(UCT_MD_FLAG_ALLOC |
-                                 UCT_MD_FLAG_ADVISE)) {
-    uct_md_h md_ref           = md();
-    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
-    void *address             = NULL;
-    size_t size, orig_size;
+void test_md::test_alloc_advise(ucs_memory_type_t mem_type)
+{
+    constexpr size_t orig_size          = 128 * UCS_MBYTE;
+    constexpr size_t advise_size        = 32 * UCS_KBYTE;
+    constexpr uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
+    void *address                       = NULL;
+    uct_md_h md_ref                     = md();
+    size_t size;
     ucs_status_t status;
     uct_allocated_memory_t mem;
     uct_mem_alloc_params_t params;
 
-    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
-                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
-                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
-                             UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
-                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-    params.flags           = UCT_MD_MEM_FLAG_NONBLOCK | UCT_MD_MEM_ACCESS_ALL;
-    params.name            = "test";
-    params.mem_type        = UCS_MEMORY_TYPE_HOST;
-    params.address         = address;
-    params.mds.mds         = &md_ref;
-    params.mds.count       = 1;
+    params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS |
+                        UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS |
+                        UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                        UCT_MEM_ALLOC_PARAM_FIELD_MDS |
+                        UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags      = UCT_MD_MEM_FLAG_NONBLOCK | UCT_MD_MEM_ACCESS_ALL;
+    params.name       = "test";
+    params.mem_type   = mem_type;
+    params.address    = address;
+    params.mds.mds    = &md_ref;
+    params.mds.count  = 1;
 
-    size          = 128 * UCS_MBYTE;
-    orig_size     = size;
-
-    status  = uct_mem_alloc(size, &method, 1, &params, &mem);
+    status  = uct_mem_alloc(orig_size, &method, 1, &params, &mem);
     address = mem.address;
     size    = mem.length;
     ASSERT_UCS_OK(status);
@@ -704,12 +735,23 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
     EXPECT_TRUE(address != NULL);
     EXPECT_TRUE(mem.memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(md(), mem.memh, (char *)address + 7,
-                               32 * UCS_KBYTE, UCT_MADV_WILLNEED);
+    status = uct_md_mem_advise(md(), mem.memh, (char*)address + 7, advise_size,
+                               UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
     memset(address, 0xBB, size);
     uct_mem_free(&mem);
+}
+
+UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
+                     !check_caps(UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_ADVISE))
+{
+    uint64_t mem_types = md_attr().alloc_mem_types & md_attr().access_mem_types;
+    uint32_t mem_type;
+
+    ucs_for_each_bit(mem_type, mem_types) {
+        test_alloc_advise(static_cast<ucs_memory_type_t>(mem_type));
+    }
 }
 
 /*
