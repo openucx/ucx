@@ -2,6 +2,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2023. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -15,6 +16,9 @@
 #include <uct/base/uct_iov.inl>
 #include <ucs/arch/atomic.h>
 
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+#include "mm_iface_amd.h"
+#endif
 
 /* send modes */
 typedef enum {
@@ -244,6 +248,10 @@ uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
         return UCS_ERR_NO_RESOURCE;
     }
 
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+    ucs_nt_write_prefetch(*elem);
+#endif
+
     return UCS_OK;
 }
 
@@ -320,7 +328,11 @@ retry:
     switch (send_op) {
     case UCT_MM_SEND_AM_SHORT:
         /* write to the remote FIFO */
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+        uct_amd_optimized_fifo_send((uint64_t *)(elem + 1), header, payload, length);
+#else
         uct_am_short_fill_data(elem + 1, header, payload, length);
+#endif
 
         elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);
@@ -340,7 +352,13 @@ retry:
         }
 
         desc_data    = UCS_PTR_BYTE_OFFSET(base_address, elem->desc.offset);
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+        ucs_global_opts.arch.mapped_addr = desc_data;
         length       = pack_cb(desc_data, arg);
+        ucs_global_opts.arch.mapped_addr = NULL;
+#else
+        length       = pack_cb(desc_data, arg);
+#endif
         elem_flags   = 0;
         elem->length = length;
 

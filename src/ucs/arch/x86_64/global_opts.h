@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2023. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -20,6 +21,9 @@ BEGIN_C_DECLS
 
 /* built-in memcpy config */
 typedef struct ucs_arch_global_opts {
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+    void *mapped_addr;
+#endif
     size_t builtin_memcpy_min;
     size_t builtin_memcpy_max;
 } ucs_arch_global_opts_t;

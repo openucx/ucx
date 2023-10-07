@@ -200,6 +200,10 @@
  * Prefetch cache line
  */
 #define ucs_prefetch(p)            __builtin_prefetch(p)
+#define ucs_write_prefetch(p)      __builtin_prefetch(p, 1, 3)
+
+#define ucs_nt_read_prefetch(p)    __builtin_prefetch(p, 0, 0)
+#define ucs_nt_write_prefetch(p)   __builtin_prefetch(p, 1, 0)
 
 /* Branch prediction */
 #define ucs_likely(x)              __builtin_expect(x, 1)

@@ -300,6 +300,23 @@ AS_IF([test "x$enable_builtin_memcpy" != xno],
 	  [AC_DEFINE([ENABLE_BUILTIN_MEMCPY], [0], [Enable builtin memcpy])]
   )
 
+#
+# Enable amd optimized buffer transfer
+#
+AC_ARG_ENABLE([amd-buffer-transfer],
+	AS_HELP_STRING([--enable-amd-buffer-transfer],
+	               [Enable amd optimized buffer transfer routine, default: NO]),
+	[],
+	[enable_amd_buffer_transfer=no])
+
+AS_IF([test "x$enable_amd_buffer_transfer" = xyes],
+	  [AS_MESSAGE([enabling amd optimized buffer transfer])
+	   AC_DEFINE([ENABLE_AMD_BUFFER_TRANSFER], [1], [Enable amd optimizedi buffer transfer])
+	   HAVE_AMD_BUFFER_TRANSFER=yes],
+	  [:]
+  )
+AM_CONDITIONAL([HAVE_AMD_BUFFER_TRANSFER],[test "x$HAVE_AMD_BUFFER_TRANSFER" = "xyes"])
+
 AC_CHECK_FUNCS([__clear_cache], [], [])
 AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])
 

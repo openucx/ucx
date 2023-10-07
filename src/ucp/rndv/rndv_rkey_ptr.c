@@ -1,5 +1,6 @@
 /**
  * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (C) 2023, Advanced Micro Devices, Inc. All rights reserved.
  *
  * See file LICENSE for terms.
  */
@@ -134,8 +135,15 @@ static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)
     ucp_trace_req(req, "rkey_ptr unpack %zd from %p at offset %zd/%zd",
                   seg_size, src, offset, length);
 
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+    ucs_global_opts.arch.mapped_addr = (void *)src;
     status = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,
                                       seg_size, offset, src);
+    ucs_global_opts.arch.mapped_addr = NULL;
+#else
+    status = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,
+                                      seg_size, offset, src);
+#endif
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_proto_request_abort(req, status);
         return 0;

@@ -1,6 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
-* Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2019-2023. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -706,6 +706,257 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 
     return cache_count == UCS_CPU_CACHE_LAST ? UCS_OK : UCS_ERR_UNSUPPORTED;
 }
+
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+
+#define SWITCH_TO_NTSTORE_SZ (1024)
+#define WORD_SZ     2
+#define DWORD_SZ    4
+#define QWORD_SZ    8
+#define YMM_SZ      32
+
+static UCS_F_ALWAYS_INLINE
+void* amd_copy_to_mapped_area(void *dst, const void *src, size_t len)
+{
+    __m256i y0, y1, y2, y3;
+    size_t offset;
+
+    ucs_nt_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 1 * 64));
+    offset = 128 - ((uintptr_t)dst & 0x3f);
+
+    /* copy the first misaligned bytes. 65 < offset < 128 */
+    y0 = _mm256_loadu_si256((__m256i_u const *)(char *)src);
+    y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + YMM_SZ));
+    y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset - (2 * YMM_SZ)));
+    y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset - YMM_SZ));
+    _mm256_storeu_si256((__m256i_u *)(char *)dst, y0);
+    _mm256_storeu_si256((__m256i_u *)((char *)dst + YMM_SZ), y1);
+    _mm256_storeu_si256((__m256i_u *)((char *)dst + offset - (2 * YMM_SZ)), y2);
+    _mm256_storeu_si256((__m256i_u *)((char *)dst + offset - YMM_SZ), y3);
+
+    len -= offset;
+
+    /* What is the perfect size for switching to streaming stores ? */
+    if (ucs_unlikely(len >= SWITCH_TO_NTSTORE_SZ)) {
+        if (ucs_likely(((size_t)((char *)src + offset)) & (YMM_SZ - 1))) {
+            while (len >= 128) {
+                y0 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset));
+                y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset + 32));
+                y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset + 2 * 32));
+                y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset + 3 * 32));
+                _mm256_stream_si256((__m256i *)((char *)dst + offset) , y0);
+                _mm256_stream_si256((__m256i *)((char *)dst + offset + 32), y1);
+                _mm256_stream_si256((__m256i *)((char *)dst + offset + 2 * 32), y2);
+                _mm256_stream_si256((__m256i *)((char *)dst + offset + 3 * 32), y3);
+
+                offset += 4 * 32;
+                len -= 128;
+            }
+        } else {
+            while (len >= 128) {
+                y0 = _mm256_load_si256((__m256i const *)((char *)src + offset));
+                y1 = _mm256_load_si256((__m256i const *)((char *)src + offset + 32));
+                y2 = _mm256_load_si256((__m256i const *)((char *)src + offset + 2 * 32));
+                y3 = _mm256_load_si256((__m256i const *)((char *)src + offset + 3 * 32));
+                _mm256_stream_si256((__m256i *)((char *)dst + offset) , y0);
+                _mm256_stream_si256((__m256i *)((char *)dst + offset + 32), y1);
+                _mm256_stream_si256((__m256i *)((char *)dst + offset + 2 * 32), y2);
+                _mm256_stream_si256((__m256i *)((char *)dst + offset + 3 * 32), y3);
+
+                offset += 4 * 32;
+                len -= 128;
+            }
+        }
+        /* make the writes visible to the other core */
+        _mm_sfence();
+    } else {
+        ucs_nt_write_prefetch((char *)dst + offset);
+        while (len >= 128) {
+            ucs_nt_write_prefetch((char *)dst + offset + 1 * 64);
+            ucs_nt_write_prefetch((char *)dst + offset + 2 * 64);
+
+            y0 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset));
+            y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset + 32));
+            y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset + 2 * 32));
+            y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset + 3 * 32));
+
+            _mm256_store_si256((__m256i *)((char *)dst + offset) , y0);
+            _mm256_store_si256((__m256i *)((char *)dst + offset + 32), y1);
+            _mm256_store_si256((__m256i *)((char *)dst + offset + 2 * 32), y2);
+            _mm256_store_si256((__m256i *)((char *)dst + offset + 3 * 32), y3);
+
+            offset += 4 * 32;
+            len -= 128;
+        }
+    }
+
+    /* Handle the remaining bytes <= 127 */
+    if (len) {
+        /* TODO: Is it better to replace this call to ucs_x86_amd_memcpy with
+         * a direct copy loop/swith case ? */
+        return ucs_x86_amd_memcpy(((char *)dst + offset), ((char *)src + offset), len);
+    } else {
+        return dst;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE
+void* amd_copy_from_mapped_area(void *dst, const void *src, size_t len)
+{
+    __m256i y0, y1, y2, y3;
+    size_t offset;
+
+    ucs_nt_read_prefetch((char *)(((uintptr_t)src & ~0x3f) + 1 * 64));
+    offset = 128 - ((uintptr_t)src & 0x3f);
+    ucs_nt_read_prefetch((char *)src + offset);
+    ucs_nt_read_prefetch((char *)src + offset + 1 * 64);
+
+    /* copy the first misaligned bytes. 65 < offset < 128 */
+    y0 = _mm256_loadu_si256((__m256i_u const *)(char *)src);
+    y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + YMM_SZ));
+    y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset - (2 * YMM_SZ)));
+    y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset - YMM_SZ));
+    _mm256_storeu_si256((__m256i_u *)(char *)dst, y0);
+    _mm256_storeu_si256((__m256i_u *)((char *)dst + YMM_SZ), y1);
+    _mm256_storeu_si256((__m256i_u *)((char *)dst + offset - (2 * YMM_SZ)), y2);
+    _mm256_storeu_si256((__m256i_u *)((char *)dst + offset - YMM_SZ), y3);
+
+    len -= offset;
+
+    if (ucs_likely(((size_t)((char *)dst + offset)) & (YMM_SZ - 1))) {
+        while (len >= 128) {
+            /* Can we use streaming loads on normal memory type? */
+            y0 = _mm256_load_si256((__m256i const *)((char *)src + offset));
+            y1 = _mm256_load_si256((__m256i const *)((char *)src + offset + 32));
+            y2 = _mm256_load_si256((__m256i const *)((char *)src + offset + 2 * 32));
+            y3 = _mm256_load_si256((__m256i const *)((char *)src + offset + 3 * 32));
+            _mm256_storeu_si256((__m256i_u *)((char *)dst + offset) , y0);
+            _mm256_storeu_si256((__m256i_u *)((char *)dst + offset + 32), y1);
+            _mm256_storeu_si256((__m256i_u *)((char *)dst + offset + 2 * 32), y2);
+            _mm256_storeu_si256((__m256i_u *)((char *)dst + offset + 3 * 32), y3);
+
+            if (!(((offset - 1) >> 7) & 1) && (len > 256)) {
+                ucs_nt_read_prefetch((char *)src + offset + 2 * 64);
+                ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
+                ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
+                ucs_nt_read_prefetch((char *)src + offset + 5 * 64);
+                ucs_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 2 * 64));
+                ucs_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 3 * 64));
+                ucs_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 4 * 64));
+                ucs_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 5 * 64));
+            }
+
+            offset += 4 * 32;
+            len -= 128;
+        }
+    } else {
+        while (len >= 128) {
+            /* Can we use streaming loads on normal memory type? */
+            y0 = _mm256_load_si256((__m256i const *)((char *)src + offset));
+            y1 = _mm256_load_si256((__m256i const *)((char *)src + offset + 32));
+            y2 = _mm256_load_si256((__m256i const *)((char *)src + offset + 2 * 32));
+            y3 = _mm256_load_si256((__m256i const *)((char *)src + offset + 3 * 32));
+            _mm256_store_si256((__m256i *)((char *)dst + offset) , y0);
+            _mm256_store_si256((__m256i *)((char *)dst + offset + 32), y1);
+            _mm256_store_si256((__m256i *)((char *)dst + offset + 2 * 32), y2);
+            _mm256_store_si256((__m256i *)((char *)dst + offset + 3 * 32), y3);
+
+            if (!(((offset - 1) >> 7) & 1) && (len > 256)) {
+                ucs_nt_read_prefetch((char *)src + offset + 2 * 64);
+                ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
+                ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
+                ucs_nt_read_prefetch((char *)src + offset + 5 * 64);
+                ucs_write_prefetch((char *)dst + offset + 2 * 64);
+                ucs_write_prefetch((char *)dst + offset + 3 * 64);
+                ucs_write_prefetch((char *)dst + offset + 4 * 64);
+                ucs_write_prefetch((char *)dst + offset + 5 * 64);
+            }
+
+            offset += 4 * 32;
+            len -= 128;
+        }
+    }
+
+    /* Handle the remaining bytes <= 127 */
+    if (len) {
+        /* TODO: Is it better to replace this call to ucs_x86_amd_memcpy with
+         * a direct copy loop/swith case ? */
+        return ucs_x86_amd_memcpy(((char *)dst + offset), ((char *)src + offset), len);
+    } else {
+        return dst;
+    }
+}
+
+/* This is an adaptation of the memcpy code from https://github.com/amd/aocl-libmem
+ * TODO: Provide an option to copy from backwards, in this way
+ * application can choose the cache hotness of the final buffer
+ */
+void* ucs_x86_amd_memcpy(void *dst, const void *src, size_t len)
+{
+    __m256i y0, y1, y2, y3;
+
+    /* First handle lengths that fall usually within eager short range */
+    if (ucs_likely(len <= 128)) {
+        switch (_lzcnt_u32(len))
+        {
+            case 32: /* 0 */
+                return dst;
+            case 31: /* 1 */
+                *((uint8_t *)dst) = *((uint8_t *)src);
+                return dst;
+            case 30: /* 2 - 3 */
+                *((uint16_t *)dst) = *((uint16_t *)src);
+                *((uint16_t *)((char *)dst + len - WORD_SZ)) = \
+                        *((uint16_t *)((char *)src + len - WORD_SZ));
+                return dst;
+            case 29: /* 4 - 7 */
+                *((uint32_t *)dst) = *((uint32_t *)src);
+                *((uint32_t *)((char *)dst + len - DWORD_SZ)) = \
+                        *((uint32_t *)((char *)src + len - DWORD_SZ));
+                return dst;
+            case 28: /* 8 - 15 */
+                *((uint64_t *)dst) = *((uint64_t *)src);
+                *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
+                        *((uint64_t *)((char *)src + len - QWORD_SZ));
+                return dst;
+            case 27: /* 16 - 31 */
+                *((uint64_t *)dst) = *((uint64_t *)src);
+                *((uint64_t *)((char *)dst + QWORD_SZ)) = \
+                        *((uint64_t *)((char *)src + QWORD_SZ));
+                *((uint64_t *)((char *)dst + len - 2 * QWORD_SZ)) = \
+                        *((uint64_t *)((char *)src + len - 2 * QWORD_SZ));
+                *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
+                        *((uint64_t *)((char *)src + len - QWORD_SZ));
+                return dst;
+            case 26: /* 32 - 63 */
+                y0 = _mm256_loadu_si256((__m256i_u const *)src);
+                y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
+                _mm256_storeu_si256((__m256i_u *)dst, y0);
+                _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y1);
+                return dst;
+            default: /* 64 - 128 */
+                y0 = _mm256_loadu_si256((__m256i_u const *)(char *)src);
+                y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + YMM_SZ));
+                y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - (2 * YMM_SZ)));
+                y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
+                _mm256_storeu_si256((__m256i_u *)(char *)dst, y0);
+                _mm256_storeu_si256((__m256i_u *)((char *)dst + YMM_SZ), y1);
+                _mm256_storeu_si256((__m256i_u *)((char *)dst + len - (2 * YMM_SZ)), y2);
+                _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y3);
+                return dst;
+        }
+    } else {
+        /* Compare after ignoring last 64 bytes of address to skip header bytes */
+        if (!(((uintptr_t)ucs_global_opts.arch.mapped_addr ^ (uintptr_t)dst) >> 6)) {
+            return amd_copy_to_mapped_area(dst, src, len);
+        } else if (!(((uintptr_t)ucs_global_opts.arch.mapped_addr ^ (uintptr_t)src) >> 6)) {
+            return amd_copy_from_mapped_area(dst, src, len);
+        } else {
+            return memcpy(dst, src, len);
+        }
+    }
+}
+#endif
 
 void ucs_x86_memcpy_sse_movntdqa(void *dst, const void *src, size_t len)
 {

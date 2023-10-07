@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2023. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -10,6 +11,11 @@
 
 #include <ucs/sys/iovec.h>
 #include <ucs/sys/math.h>
+
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+#include <ucs/config/global_opts.h>
+#include <ucs/arch/cpu.h>
+#endif
 
 #include <string.h>
 #include <sys/uio.h>
@@ -40,11 +46,29 @@ size_t ucs_iov_copy(const struct iovec *iov, size_t iov_cnt,
         len     -= iov_offset;
 
         len = ucs_min(len, max_copy);
+
+#ifdef ENABLE_AMD_BUFFER_TRANSFER
+        if (ucs_global_opts.arch.mapped_addr) {
+            if (dir == UCS_IOV_COPY_FROM_BUF) {
+                ucs_memcpy_relaxed(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len);
+            } else if (dir == UCS_IOV_COPY_TO_BUF) {
+                ucs_memcpy_relaxed(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len);
+            }
+            ucs_global_opts.arch.mapped_addr = (void *)((size_t)ucs_global_opts.arch.mapped_addr + len);
+        } else {
+            if (dir == UCS_IOV_COPY_FROM_BUF) {
+                memcpy(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len);
+            } else if (dir == UCS_IOV_COPY_TO_BUF) {
+                memcpy(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len);
+            }
+        }
+#else
         if (dir == UCS_IOV_COPY_FROM_BUF) {
             memcpy(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len);
         } else if (dir == UCS_IOV_COPY_TO_BUF) {
             memcpy(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len);
         }
+#endif
 
         iov_offset  = 0;
         max_copy   -= len;
