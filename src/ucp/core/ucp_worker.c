@@ -2416,38 +2416,41 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
 
 void ucp_worker_track_ep_usage(ucp_request_t *req)
 {
-    ucp_worker_h worker = req->send.ep->worker;
+    static unsigned sample_count_per_round = 100000;
+    ucp_worker_h worker;
 
-    if ((worker->usage_tracker.iter_count++ %
-         UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0) {
+    if (ucs_likely((req->send.ep->worker->usage_tracker.iter_count++ %
+                    UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0)) {
         return;
     }
 
+    worker = req->send.ep->worker;
     if (ucs_likely((ucs_get_time() - worker->usage_tracker.last_round) <
-                   worker->context->config.ext.usage_tracker_interval)) {
+                   worker->context->config.ext.dynamic_tl_switch_interval)) {
         return;
     }
 
-    if (req->flags & UCP_REQUEST_FLAG_USAGE_TRACKED) {
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_USAGE_TRACKED)) {
         return;
     }
 
     req->flags |= UCP_REQUEST_FLAG_USAGE_TRACKED;
     ucs_usage_tracker_touch_key(worker->usage_tracker.handle, req->send.ep);
-    worker->usage_tracker.samples_count++;
+    worker->usage_tracker.sample_count++;
 
-    if ((worker->usage_tracker.samples_count % 100000) == 0) {
+    if (ucs_unlikely((worker->usage_tracker.sample_count %
+                      sample_count_per_round) == 0)) {
         ucs_usage_tracker_progress(worker->usage_tracker.handle);
         worker->usage_tracker.last_round = ucs_get_time();
     }
 }
 
-static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
+static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
 {
     ucs_usage_tracker_params_t params = {0};
     ucs_status_t status;
 
-    if (!worker->context->config.ext.usage_tracker_enable) {
+    if (!worker->context->config.ext.dynamic_tl_switch_enable) {
         return UCS_OK;
     }
 
@@ -2466,21 +2469,19 @@ static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
         return status;
     }
 
-    worker->usage_tracker.iter_count    = 0;
-    worker->usage_tracker.samples_count = 0;
-    worker->usage_tracker.last_round    = ucs_get_time();
+    worker->usage_tracker.iter_count   = 0;
+    worker->usage_tracker.sample_count = 0;
+    worker->usage_tracker.last_round   = ucs_get_time();
     return UCS_OK;
 }
 
-static void ucp_worker_destroy_usage_tracker(ucp_worker_h worker)
+static void ucp_worker_usage_tracker_destroy(ucp_worker_h worker)
 {
-    if (!worker->context->config.ext.usage_tracker_enable) {
+    if (!worker->context->config.ext.dynamic_tl_switch_enable) {
         return;
     }
 
     ucs_usage_tracker_destroy(worker->usage_tracker.handle);
-    uct_worker_progress_unregister_safe(worker->uct,
-                                        &worker->usage_tracker.cb_id);
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,
@@ -2685,7 +2686,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
-    status = ucp_worker_create_usage_tracker(worker);
+    status = ucp_worker_usage_tracker_create(worker);
     if (status != UCS_OK) {
         goto err_am_cleanup;
     }
@@ -2924,7 +2925,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
-    ucp_worker_destroy_usage_tracker(worker);
+    ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");

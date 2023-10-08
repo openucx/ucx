@@ -365,11 +365,11 @@ typedef struct ucp_worker {
     } counters;
 
     struct {
-        ucs_usage_tracker_h          handle;
-        unsigned                     iter_count;
-        unsigned                     samples_count;
-        ucs_time_t                   last_round;
-        uct_worker_cb_id_t           cb_id;
+        ucs_usage_tracker_h          handle;              /* Usage tracker handle */
+        unsigned                     iter_count;          /* Number of progress iterations to skip,
+                                                           * used to minimize call of ucs_get_time */
+        unsigned                     sample_count;        /* Number of samples taken in each round */
+        ucs_time_t                   last_round;          /* Last round timestamp */
     } usage_tracker;
 } ucp_worker_t;
 

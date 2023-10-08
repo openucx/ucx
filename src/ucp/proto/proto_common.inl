@@ -160,7 +160,7 @@ static UCS_F_ALWAYS_INLINE int
 ucp_proto_is_progress_wrapper_enabled(ucp_worker_h worker)
 {
     return ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
-           worker->context->config.ext.usage_tracker_enable;
+           worker->context->config.ext.dynamic_tl_switch_enable;
 }
 
 static UCS_F_ALWAYS_INLINE void

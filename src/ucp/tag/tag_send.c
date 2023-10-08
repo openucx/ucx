@@ -153,7 +153,7 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t length,
 {
     ucs_status_t status;
 
-    if (ucp_proto_is_progress_wrapper_enabled(ep->worker)) {
+    if (ucs_unlikely(ucp_proto_is_progress_wrapper_enabled(ep->worker))) {
         return UCS_ERR_NO_RESOURCE;
     }
 

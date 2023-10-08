@@ -881,7 +881,7 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    if (ucp_proto_is_progress_wrapper_enabled(ep->worker)) {
+    if (ucs_unlikely(ucp_proto_is_progress_wrapper_enabled(ep->worker))) {
         return UCS_ERR_NO_RESOURCE;
     }
 
