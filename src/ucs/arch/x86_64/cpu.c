@@ -840,10 +840,10 @@ void* amd_copy_from_mapped_area(void *dst, const void *src, size_t len)
                 ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
                 ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
                 ucs_nt_read_prefetch((char *)src + offset + 5 * 64);
-                ucs_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 2 * 64));
-                ucs_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 3 * 64));
-                ucs_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 4 * 64));
-                ucs_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 5 * 64));
+                ucs_write_prefetch((char *)dst + offset + 2 * 64);
+                ucs_write_prefetch((char *)dst + offset + 3 * 64);
+                ucs_write_prefetch((char *)dst + offset + 4 * 64);
+                ucs_write_prefetch((char *)dst + offset + 5 * 64);
             }
 
             offset += 4 * 32;
