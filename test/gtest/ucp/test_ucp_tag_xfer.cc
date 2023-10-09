@@ -1072,6 +1072,10 @@ public:
         return e.worker()->stats;
     }
 
+    unsigned get_tx_stat(unsigned counter) {
+        return UCS_STATS_GET_COUNTER(worker_stats(sender()), counter);
+    }
+
     unsigned get_rx_stat(unsigned counter) {
         return UCS_STATS_GET_COUNTER(worker_stats(receiver()), counter);
     }
@@ -1088,7 +1092,7 @@ public:
         return ucp_context_find_tl_md(receiver().ucph(), "xpmem") != NULL;
     }
 
-    bool has_get_zcopy() {
+    bool has_rma_zcopy() {
         return has_transport("rc_v") || has_transport("rc_x") ||
                has_transport("dc_x") ||
                (ucp_context_find_tl_md(receiver().ucph(), "cma")  != NULL) ||
@@ -1096,30 +1100,42 @@ public:
     }
 
     void validate_rndv_counters() {
-        unsigned get_zcopy = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_GET_ZCOPY);
-        unsigned send_rtr  = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_SEND_RTR);
-        unsigned rkey_ptr  = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_RKEY_PTR);
+        unsigned get_zcopy = get_rx_stat(UCP_WORKER_STAT_RNDV_GET_ZCOPY);
+        unsigned put_zcopy = get_tx_stat(UCP_WORKER_STAT_RNDV_PUT_ZCOPY);
+        unsigned rtr       = get_rx_stat(UCP_WORKER_STAT_RNDV_RTR);
+        unsigned rkey_ptr  = get_rx_stat(UCP_WORKER_STAT_RNDV_RKEY_PTR);
 
-        UCS_TEST_MESSAGE << "get_zcopy: " << get_zcopy
-                         << " send_rtr: " << send_rtr
+        UCS_TEST_MESSAGE << "get_zcopy: " << get_zcopy << " rtr: " << rtr
                          << " rkey_ptr: " << rkey_ptr;
-        EXPECT_EQ(1, get_zcopy + send_rtr + rkey_ptr);
+        EXPECT_EQ(1, get_zcopy + rtr + rkey_ptr);
+        EXPECT_LE(put_zcopy, rtr);
 
-        if (has_xpmem() || is_self()) {
-            /* rkey_ptr expected to be selected if xpmem is available or self is being used */
-            EXPECT_EQ(1u, rkey_ptr);
-        } else if (has_get_zcopy() && !m_ucp_config->ctx.proto_enable) {
-            /* if any transports supports get_zcopy, expect it to be used */
-            EXPECT_EQ(1u, get_zcopy);
+        if (m_ucp_config->ctx.proto_enable) {
+            if (has_xpmem() || is_self() || has_rma_zcopy()) {
+                /* Expect one of the bulk transfer protocols */
+                EXPECT_EQ(1u, rkey_ptr + get_zcopy + put_zcopy);
+                return;
+            }
         } else {
-            /* Could be a transport which supports get_zcopy that wasn't
-             * accounted for, or fallback to RTR. In any case, rkey_ptr is not
-             * expected to be used.
-             */
-            EXPECT_EQ(1u, send_rtr + get_zcopy);
-        }
-    }
+            if (has_xpmem() || is_self()) {
+                /* rkey_ptr expected to be selected if xpmem is available or
+                   self is being used */
+                EXPECT_EQ(1u, rkey_ptr);
+                return;
+            }
 
+            if (has_rma_zcopy()) {
+                /* If any transports supports get_zcopy, expect it to be used */
+                EXPECT_EQ(1u, get_zcopy);
+                return;
+            }
+        }
+
+        /* Could be a transport which supports get_zcopy that wasn't accounted
+         * for, or fallback to RTR. Anyway, rkey_ptr is not expected to be used.
+         */
+        EXPECT_EQ(1u, rtr + get_zcopy);
+    }
 };
 
 
@@ -1174,16 +1190,14 @@ UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576") {
 UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000") {
     check_offload_support(false);
     test_run_xfer(true, true, true, false, false);
-    validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
-                      UCP_WORKER_STAT_TAG_RX_RNDV_EXP);
+    validate_counters(UCP_EP_STAT_TAG_TX_RNDV, UCP_WORKER_STAT_RNDV_RX_EXP);
     validate_rndv_counters();
 }
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
     check_offload_support(false);
     test_run_xfer(true, true, false, false, false);
-    validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
-                      UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);
+    validate_counters(UCP_EP_STAT_TAG_TX_RNDV, UCP_WORKER_STAT_RNDV_RX_UNEXP);
     validate_rndv_counters();
 }
 
