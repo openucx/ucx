@@ -8,8 +8,10 @@ pr:
     - '*'
 
 variables:
+- name: SharedDir
+  value: /hpc/scrap/azure/$(Build.DefinitionName)
 - name: WorkDir
-  value: /hpc/scrap/azure/$(Build.DefinitionName)/$(Build.BuildId)-$(Build.BuildNumber)
+  value: $(SharedDir)/$(Build.BuildId)-$(Build.BuildNumber)
 - name: threshold
   value: 5
 
@@ -31,6 +33,28 @@ stages:
           - ucx_perf
 
         steps:
+          - bash: |
+              set -xeE
+              lock_file="$(SharedDir)/on-air.lock"
+              total_wait=60
+
+              i=1
+              while [ $i -le $total_wait ]; do
+                if [ -f "${lock_file}" ]; then
+                  echo "Locked, wait $((total_wait - i)) min"
+                  sleep 1m
+                else
+                  touch "${lock_file}"
+                  exit 0
+                fi
+                ((i++))
+              done
+              
+              msg="Resources are locked for 1 hour or more"
+              echo "##vso[task.logissue type=error]${msg}"
+              echo "##vso[task.complete result=Failed;]"
+            displayName: Lock resources
+
           - checkout: self
             clean: true
             fetchDepth: 10
@@ -126,6 +150,12 @@ stages:
         steps:
           - checkout: none
             clean: true
+
+          - bash: |
+              set -x
+              rm -f "$(SharedDir)/on-air.lock"
+            displayName: Unlock
+
           - bash: |
               set -x
               rm -rf $(WorkDir)
