@@ -271,6 +271,12 @@ void test_md::dereg_cb(uct_completion_t *comp)
     md_comp->self->m_comp_count++;
 }
 
+bool test_md::is_gpu_ipc() const
+{
+    return (GetParam().md_name == "cuda_ipc") ||
+	   (GetParam().md_name == "rocm_ipc");
+}
+
 UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
                      !check_caps(UCT_MD_FLAG_ALLOC |
                                  UCT_MD_FLAG_RKEY_PTR)) {
@@ -819,7 +825,8 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
 /* This test registers region N times and later deregs it N/2 times and
  * invalidates N/2 times - mix multiple dereg and invalidate calls.
  * Guarantee that all packed keys are unique. */
-UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
+UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE) ||
+		                                                    is_gpu_ipc())
 {
     static const size_t size       = 1 * UCS_MBYTE;
     const int limit                = 64;
@@ -835,10 +842,6 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
     uct_md_mem_dereg_params_t dereg_params;
     uct_md_mkey_pack_params_t pack_params;
     uint64_t key;
-
-    if (GetParam().md_name == "cuda_ipc") {
-        UCS_TEST_SKIP_R("test not needed with cuda-ipc");
-    }
 
     comp().comp.func        = dereg_cb;
     comp().comp.status      = UCS_OK;
@@ -974,7 +977,8 @@ UCS_TEST_P(test_md, rkey_compare_params_check)
 }
 
 // SM case is covered by XPMEM which has registration capability
-UCS_TEST_SKIP_COND_P(test_md, rkey_compare, !check_caps(UCT_MD_FLAG_REG))
+UCS_TEST_SKIP_COND_P(test_md, rkey_compare, !check_caps(UCT_MD_FLAG_REG) ||
+		                                               is_gpu_ipc())
 {
     size_t size                      = 4096;
     void *address                    = NULL;
@@ -984,10 +988,6 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_compare, !check_caps(UCT_MD_FLAG_REG))
     uct_rkey_bundle_t b1, b2;
     uct_mem_h memh1, memh2;
     int result1, result2;
-
-    if (GetParam().md_name == "cuda_ipc") {
-        UCS_TEST_SKIP_R("missing IPC capability for registration");
-    }
 
     ASSERT_UCS_OK(
             ucs_mmap_alloc(&size, &address, 0, "test_rkey_compare_equal"));

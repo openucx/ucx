@@ -75,6 +75,8 @@ protected:
 
     static void dereg_cb(uct_completion_t *comp);
 
+    bool is_gpu_ipc() const;
+
     const unsigned md_flags_remote_rma = UCT_MD_MEM_ACCESS_REMOTE_PUT |
                                          UCT_MD_MEM_ACCESS_REMOTE_GET;
 
