@@ -84,7 +84,7 @@ void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_att
     iface_attr->latency                 = ucs_linear_func_make(80e-9, 0); /* 80 ns */
     iface_attr->overhead                = (ucs_arch_get_cpu_vendor() ==
                                            UCS_CPU_VENDOR_FUJITSU_ARM) ?
-                                          6e-6 : 2e-6;
+                                          6e-6 : 500e-9;
 }
 
 UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_iface_ops_t *ops,
