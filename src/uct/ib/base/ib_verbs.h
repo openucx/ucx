@@ -111,6 +111,11 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #  define uct_ib_grh_required(_attr)                0
 #endif
 
+/* Dummy structure declaration, when not present in verbs.h */
+#if !HAVE_IBV_DM
+    struct ibv_dm;
+#endif
+
 typedef uint8_t uct_ib_uint24_t[3];
 
 static inline void uct_ib_pack_uint24(uct_ib_uint24_t buf, uint32_t val)

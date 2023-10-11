@@ -159,7 +159,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV)) {
         ucp_tag_rndv_matched(worker, req, ucp_tag_rndv_rts_from_rdesc(rdesc),
                              rdesc->length);
-        UCP_WORKER_STAT_RNDV(worker, UNEXP, 1);
+        UCP_WORKER_STAT_RNDV(worker, RX_UNEXP, 1);
         ucp_recv_desc_release(rdesc);
     } else {
         ucp_tag_recv_eager_multi(worker, req, rdesc);

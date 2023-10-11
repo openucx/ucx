@@ -62,6 +62,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_put_common_complete(ucp_request_t *req)
 {
     ucp_trace_req(req, "rndv_put_common_complete");
+    UCP_WORKER_STAT_RNDV(req->send.ep->worker, PUT_ZCOPY, +1);
     ucp_proto_rndv_rkey_destroy(req);
     ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }

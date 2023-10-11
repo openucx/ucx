@@ -1,0 +1,44 @@
+parameters:
+  Name: ''
+
+steps:
+  - bash: |
+      set -eE -o pipefail
+      SHA_After=$(echo $(Build.SourceVersionMessage) | awk '{print $2}')
+      SHA_Before=$(echo $(Build.SourceVersionMessage) | awk '{print $4}')
+
+      module=""
+      perfxParams=""
+      perf_nodes="vulcan03:24,vulcan04:24"
+
+      case "${{ parameters.Name }}" in
+        "Build-UCX")
+          module="/hpc/local/etc/modulefiles/dev/cuda12.1"
+          perfxParams=(--skip-run --source-branch $(Build.SourceBranch) --omb-cuda)
+          ;;
+        "Perf-test-multi-node")
+          module="/hpc/local/etc/modulefiles/hpcx-gcc"
+          perfxParams=(--skip-update --skip-build --use-cache --filter "--extra-ompi-opts= -H $perf_nodes")
+          ;;
+        "Perf-test-single-node")
+          module="/hpc/local/etc/modulefiles/hpcx-gcc"
+          IFS=',' read -ra nodes <<< "$perf_nodes"
+          node=${nodes[RANDOM % 2]}
+          perfxParams=(--skip-update --skip-build --use-cache --filter --setup rdmz-intra "--extra-ompi-opts= -H $node,$node")
+          ;;
+      esac
+
+      python3 -m venv VENV
+      source VENV/bin/activate
+      cd $(WorkDir)/PerfX
+      pip3 install -q -r requirements.txt
+      module load $module
+
+      set -x
+      python3 -u perfx.py \
+        --before "$SHA_Before" \
+        --after "$SHA_After" \
+        --config ucx-rdmz.yml \
+        "${perfxParams[@]}" | tee $(WorkDir)/results-${{ parameters.Name }}.txt
+    displayName: ${{ parameters.Name }}
+    workingDirectory: $(WorkDir)
