@@ -897,53 +897,60 @@ void* ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len)
 
     /* First handle lengths that fall usually within eager short range */
     if (ucs_likely(len <= 128)) {
-        switch (_lzcnt_u32(len))
-        {
-            case 32: /* 0 */
-                return dst;
-            case 31: /* 1 */
-                *((uint8_t *)dst) = *((uint8_t *)src);
-                return dst;
-            case 30: /* 2 - 3 */
-                *((uint16_t *)dst) = *((uint16_t *)src);
-                *((uint16_t *)((char *)dst + len - WORD_SZ)) = \
-                        *((uint16_t *)((char *)src + len - WORD_SZ));
-                return dst;
-            case 29: /* 4 - 7 */
-                *((uint32_t *)dst) = *((uint32_t *)src);
-                *((uint32_t *)((char *)dst + len - DWORD_SZ)) = \
-                        *((uint32_t *)((char *)src + len - DWORD_SZ));
-                return dst;
-            case 28: /* 8 - 15 */
-                *((uint64_t *)dst) = *((uint64_t *)src);
-                *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
-                        *((uint64_t *)((char *)src + len - QWORD_SZ));
-                return dst;
-            case 27: /* 16 - 31 */
-                *((uint64_t *)dst) = *((uint64_t *)src);
-                *((uint64_t *)((char *)dst + QWORD_SZ)) = \
-                        *((uint64_t *)((char *)src + QWORD_SZ));
-                *((uint64_t *)((char *)dst + len - 2 * QWORD_SZ)) = \
-                        *((uint64_t *)((char *)src + len - 2 * QWORD_SZ));
-                *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
-                        *((uint64_t *)((char *)src + len - QWORD_SZ));
-                return dst;
-            case 26: /* 32 - 63 */
-                y0 = _mm256_loadu_si256((__m256i_u const *)src);
-                y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
-                _mm256_storeu_si256((__m256i_u *)dst, y0);
-                _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y1);
-                return dst;
-            default: /* 64 - 128 */
-                y0 = _mm256_loadu_si256((__m256i_u const *)(char *)src);
-                y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + YMM_SZ));
-                y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - (2 * YMM_SZ)));
-                y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
-                _mm256_storeu_si256((__m256i_u *)(char *)dst, y0);
-                _mm256_storeu_si256((__m256i_u *)((char *)dst + YMM_SZ), y1);
-                _mm256_storeu_si256((__m256i_u *)((char *)dst + len - (2 * YMM_SZ)), y2);
-                _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y3);
-                return dst;
+        switch (_lzcnt_u32(len)) {
+        /* 0 */
+        case 32:
+            return dst;
+        /* 1 */
+        case 31:
+            *((uint8_t *)dst) = *((uint8_t *)src);
+            return dst;
+        /* 2 - 3 */
+        case 30:
+            *((uint16_t *)dst) = *((uint16_t *)src);
+            *((uint16_t *)((char *)dst + len - WORD_SZ)) = \
+                    *((uint16_t *)((char *)src + len - WORD_SZ));
+            return dst;
+        /* 4 - 7 */
+        case 29:
+            *((uint32_t *)dst) = *((uint32_t *)src);
+            *((uint32_t *)((char *)dst + len - DWORD_SZ)) = \
+                    *((uint32_t *)((char *)src + len - DWORD_SZ));
+            return dst;
+        /* 8 - 15 */
+        case 28:
+            *((uint64_t *)dst) = *((uint64_t *)src);
+            *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
+                    *((uint64_t *)((char *)src + len - QWORD_SZ));
+            return dst;
+        /* 16 - 31 */
+        case 27:
+            *((uint64_t *)dst) = *((uint64_t *)src);
+            *((uint64_t *)((char *)dst + QWORD_SZ)) = \
+                    *((uint64_t *)((char *)src + QWORD_SZ));
+            *((uint64_t *)((char *)dst + len - 2 * QWORD_SZ)) = \
+                    *((uint64_t *)((char *)src + len - 2 * QWORD_SZ));
+            *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
+                    *((uint64_t *)((char *)src + len - QWORD_SZ));
+            return dst;
+        /* 32 - 63 */
+        case 26:
+            y0 = _mm256_loadu_si256((__m256i_u const *)src);
+            y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
+            _mm256_storeu_si256((__m256i_u *)dst, y0);
+            _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y1);
+            return dst;
+        /* 64 - 128 */
+        default:
+            y0 = _mm256_loadu_si256((__m256i_u const *)(char *)src);
+            y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + YMM_SZ));
+            y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - (2 * YMM_SZ)));
+            y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
+            _mm256_storeu_si256((__m256i_u *)(char *)dst, y0);
+            _mm256_storeu_si256((__m256i_u *)((char *)dst + YMM_SZ), y1);
+            _mm256_storeu_si256((__m256i_u *)((char *)dst + len - (2 * YMM_SZ)), y2);
+            _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y3);
+            return dst;
         }
     } else {
         /* Compare after ignoring last 64 bytes of address to skip header bytes */
