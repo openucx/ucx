@@ -12,7 +12,7 @@
 #include <ucs/sys/iovec.h>
 #include <ucs/sys/math.h>
 
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
+#ifdef ENABLE_NT_BUFFER_TRANSFER
 #include <ucs/config/global_opts.h>
 #include <ucs/arch/cpu.h>
 #endif
@@ -47,14 +47,14 @@ size_t ucs_iov_copy(const struct iovec *iov, size_t iov_cnt,
 
         len = ucs_min(len, max_copy);
 
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
-        if (ucs_global_opts.arch.mapped_addr) {
+#ifdef ENABLE_NT_BUFFER_TRANSFER
+        if (ucs_global_opts.arch.nt_buffer) {
             if (dir == UCS_IOV_COPY_FROM_BUF) {
                 ucs_memcpy_relaxed(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len);
             } else if (dir == UCS_IOV_COPY_TO_BUF) {
                 ucs_memcpy_relaxed(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len);
             }
-            ucs_global_opts.arch.mapped_addr = (void *)((size_t)ucs_global_opts.arch.mapped_addr + len);
+            ucs_global_opts.arch.nt_buffer = (void *)((size_t)ucs_global_opts.arch.nt_buffer + len);
         } else {
             if (dir == UCS_IOV_COPY_FROM_BUF) {
                 memcpy(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len);

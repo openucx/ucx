@@ -21,8 +21,8 @@ BEGIN_C_DECLS
 
 /* built-in memcpy config */
 typedef struct ucs_arch_global_opts {
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
-    void *mapped_addr;
+#ifdef ENABLE_NT_BUFFER_TRANSFER
+    void *nt_buffer;
 #endif
     size_t builtin_memcpy_min;
     size_t builtin_memcpy_max;

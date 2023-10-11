@@ -16,7 +16,7 @@
 #include <uct/base/uct_iov.inl>
 #include <ucs/arch/atomic.h>
 
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
+#ifdef ENABLE_NT_BUFFER_TRANSFER
 #include "mm_iface_amd.h"
 #endif
 
@@ -248,7 +248,7 @@ uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
         return UCS_ERR_NO_RESOURCE;
     }
 
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
+#ifdef ENABLE_NT_BUFFER_TRANSFER
     ucs_nt_write_prefetch(*elem);
 #endif
 
@@ -328,8 +328,8 @@ retry:
     switch (send_op) {
     case UCT_MM_SEND_AM_SHORT:
         /* write to the remote FIFO */
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
-        uct_amd_optimized_fifo_send((uint64_t *)(elem + 1), header, payload, length);
+#ifdef ENABLE_NT_BUFFER_TRANSFER
+        uct_am_short_fill_data_nt((uint64_t *)(elem + 1), header, payload, length);
 #else
         uct_am_short_fill_data(elem + 1, header, payload, length);
 #endif
@@ -352,10 +352,10 @@ retry:
         }
 
         desc_data    = UCS_PTR_BYTE_OFFSET(base_address, elem->desc.offset);
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
-        ucs_global_opts.arch.mapped_addr = desc_data;
+#ifdef ENABLE_NT_BUFFER_TRANSFER
+        ucs_global_opts.arch.nt_buffer = desc_data;
         length       = pack_cb(desc_data, arg);
-        ucs_global_opts.arch.mapped_addr = NULL;
+        ucs_global_opts.arch.nt_buffer = NULL;
 #else
         length       = pack_cb(desc_data, arg);
 #endif

@@ -299,7 +299,7 @@ static UCS_F_ALWAYS_INLINE void uct_mm_iface_process_recv(uct_mm_iface_t *iface)
     void *data;
 
     if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
+#ifdef ENABLE_NT_BUFFER_TRANSFER
         if (ucs_unlikely(elem->length > (UCS_SYS_CACHE_LINE_SIZE - sizeof(*elem)))) {
             ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(elem, 64));
         }
@@ -324,11 +324,11 @@ static UCS_F_ALWAYS_INLINE void uct_mm_iface_process_recv(uct_mm_iface_t *iface)
     uct_mm_iface_trace_am(iface, UCT_AM_TRACE_TYPE_RECV, elem->flags,
                           elem->am_id, data, elem->length, iface->read_index);
 
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
-    ucs_global_opts.arch.mapped_addr = data;
+#ifdef ENABLE_NT_BUFFER_TRANSFER
+    ucs_global_opts.arch.nt_buffer = data;
     status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
                                     UCT_CB_PARAM_FLAG_DESC);
-    ucs_global_opts.arch.mapped_addr = NULL;
+    ucs_global_opts.arch.nt_buffer = NULL;
 #else
     status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
                                     UCT_CB_PARAM_FLAG_DESC);

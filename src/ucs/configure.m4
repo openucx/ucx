@@ -301,21 +301,21 @@ AS_IF([test "x$enable_builtin_memcpy" != xno],
   )
 
 #
-# Enable amd optimized buffer transfer
+# Enable non temporal buffer transfer
 #
-AC_ARG_ENABLE([amd-buffer-transfer],
-	AS_HELP_STRING([--enable-amd-buffer-transfer],
-	               [Enable amd optimized buffer transfer routine, default: NO]),
+AC_ARG_ENABLE([nt-buffer-transfer],
+	AS_HELP_STRING([--enable-nt-buffer-transfer],
+	               [Enable non temporal buffer transfer routine, default: NO]),
 	[],
-	[enable_amd_buffer_transfer=no])
+	[enable_nt_buffer_transfer=no])
 
-AS_IF([test "x$enable_amd_buffer_transfer" = xyes],
-	  [AS_MESSAGE([enabling amd optimized buffer transfer])
-	   AC_DEFINE([ENABLE_AMD_BUFFER_TRANSFER], [1], [Enable amd optimizedi buffer transfer])
-	   HAVE_AMD_BUFFER_TRANSFER=yes],
+AS_IF([test "x$enable_nt_buffer_transfer" = xyes],
+	  [AS_MESSAGE([enabling non temporal buffer transfer])
+	   AC_DEFINE([ENABLE_NT_BUFFER_TRANSFER], [1], [Enable non temporal buffer transfer])
+	   HAVE_NT_BUFFER_TRANSFER=yes],
 	  [:]
   )
-AM_CONDITIONAL([HAVE_AMD_BUFFER_TRANSFER],[test "x$HAVE_AMD_BUFFER_TRANSFER" = "xyes"])
+AM_CONDITIONAL([HAVE_NT_BUFFER_TRANSFER],[test "x$HAVE_NT_BUFFER_TRANSFER" = "xyes"])
 
 AC_CHECK_FUNCS([__clear_cache], [], [])
 AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])

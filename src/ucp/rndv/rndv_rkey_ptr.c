@@ -135,11 +135,11 @@ static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)
     ucp_trace_req(req, "rkey_ptr unpack %zd from %p at offset %zd/%zd",
                   seg_size, src, offset, length);
 
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
-    ucs_global_opts.arch.mapped_addr = (void *)src;
+#ifdef ENABLE_NT_BUFFER_TRANSFER
+    ucs_global_opts.arch.nt_buffer = (void *)src;
     status = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,
                                       seg_size, offset, src);
-    ucs_global_opts.arch.mapped_addr = NULL;
+    ucs_global_opts.arch.nt_buffer = NULL;
 #else
     status = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,
                                       seg_size, offset, src);

@@ -707,7 +707,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
     return cache_count == UCS_CPU_CACHE_LAST ? UCS_OK : UCS_ERR_UNSUPPORTED;
 }
 
-#ifdef ENABLE_AMD_BUFFER_TRANSFER
+#ifdef ENABLE_NT_BUFFER_TRANSFER
 
 #define SWITCH_TO_NTSTORE_SZ (1024)
 #define WORD_SZ     2
@@ -716,7 +716,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 #define YMM_SZ      32
 
 static UCS_F_ALWAYS_INLINE
-void* amd_copy_to_mapped_area(void *dst, const void *src, size_t len)
+void* ucs_cpu_nt_buffer_transfer_to(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
@@ -792,16 +792,16 @@ void* amd_copy_to_mapped_area(void *dst, const void *src, size_t len)
 
     /* Handle the remaining bytes <= 127 */
     if (len) {
-        /* TODO: Is it better to replace this call to ucs_x86_amd_memcpy with
+        /* TODO: Is it better to replace this call to ucs_x86_nt_buffer_transfer with
          * a direct copy loop/swith case ? */
-        return ucs_x86_amd_memcpy(((char *)dst + offset), ((char *)src + offset), len);
+        return ucs_x86_nt_buffer_transfer(((char *)dst + offset), ((char *)src + offset), len);
     } else {
         return dst;
     }
 }
 
 static UCS_F_ALWAYS_INLINE
-void* amd_copy_from_mapped_area(void *dst, const void *src, size_t len)
+void* ucs_cpu_nt_buffer_transfer_from(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
@@ -879,9 +879,9 @@ void* amd_copy_from_mapped_area(void *dst, const void *src, size_t len)
 
     /* Handle the remaining bytes <= 127 */
     if (len) {
-        /* TODO: Is it better to replace this call to ucs_x86_amd_memcpy with
+        /* TODO: Is it better to replace this call to ucs_x86_nt_buffer_transfer with
          * a direct copy loop/swith case ? */
-        return ucs_x86_amd_memcpy(((char *)dst + offset), ((char *)src + offset), len);
+        return ucs_x86_nt_buffer_transfer(((char *)dst + offset), ((char *)src + offset), len);
     } else {
         return dst;
     }
@@ -891,7 +891,7 @@ void* amd_copy_from_mapped_area(void *dst, const void *src, size_t len)
  * TODO: Provide an option to copy from backwards, in this way
  * application can choose the cache hotness of the final buffer
  */
-void* ucs_x86_amd_memcpy(void *dst, const void *src, size_t len)
+void* ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
 
@@ -947,10 +947,10 @@ void* ucs_x86_amd_memcpy(void *dst, const void *src, size_t len)
         }
     } else {
         /* Compare after ignoring last 64 bytes of address to skip header bytes */
-        if (!(((uintptr_t)ucs_global_opts.arch.mapped_addr ^ (uintptr_t)dst) >> 6)) {
-            return amd_copy_to_mapped_area(dst, src, len);
-        } else if (!(((uintptr_t)ucs_global_opts.arch.mapped_addr ^ (uintptr_t)src) >> 6)) {
-            return amd_copy_from_mapped_area(dst, src, len);
+        if (!(((uintptr_t)ucs_global_opts.arch.nt_buffer ^ (uintptr_t)dst) >> 6)) {
+            return ucs_cpu_nt_buffer_transfer_to(dst, src, len);
+        } else if (!(((uintptr_t)ucs_global_opts.arch.nt_buffer ^ (uintptr_t)src) >> 6)) {
+            return ucs_cpu_nt_buffer_transfer_from(dst, src, len);
         } else {
             return memcpy(dst, src, len);
         }
