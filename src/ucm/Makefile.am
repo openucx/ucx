@@ -1,11 +1,12 @@
 #
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
+# Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
 
-SUBDIRS = . cuda rocm
+SUBDIRS = . cuda rocm ze
 
 lib_LTLIBRARIES    = libucm.la
 libucm_ladir       = $(includedir)/ucm

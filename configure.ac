@@ -4,6 +4,7 @@
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2019.  ALL RIGHTS RESERVED.
+# Copyright (C) Intel Corporation. 2023.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 AC_PREREQ([2.63])
@@ -224,6 +225,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([IODEMO_CUDA], [false])
      AM_CONDITIONAL([HAVE_GCOV], [false])
      AM_CONDITIONAL([HAVE_LCOV], [false])
+     AM_CONDITIONAL([HAVE_ZE], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -236,6 +238,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/java.m4])
      m4_include([config/m4/cuda.m4])
      m4_include([config/m4/rocm.m4])
+     m4_include([config/m4/ze.m4])
      m4_include([config/m4/gdrcopy.m4])
      m4_include([config/m4/mad.m4])
      m4_include([config/m4/lcov.m4])
