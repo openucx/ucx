@@ -22,8 +22,9 @@
 
 ucs_status_t ucs_array_grow(void **buffer_p, size_t *capacity_p,
                             size_t min_capacity, size_t value_size,
-                            const char *array_name, const char *value_name)
+                            void **old_buffer_p, const char *array_name)
 {
+    void *old_buffer = *buffer_p;
     size_t new_capacity, aligned_capacity, current_capacity;
     void *new_buffer;
 
@@ -33,8 +34,8 @@ ucs_status_t ucs_array_grow(void **buffer_p, size_t *capacity_p,
     aligned_capacity = (new_capacity + ~UCS_ARRAY_CAP_MASK) & UCS_ARRAY_CAP_MASK;
     new_buffer       = ucs_malloc(aligned_capacity * value_size, array_name);
     if (new_buffer == NULL) {
-        ucs_error("failed to grow %s from %zu to %zu elems of '%s'",
-                  array_name, *capacity_p, new_capacity, value_name);
+        ucs_error("failed to grow %s from %zu to %zu elems of %zu bytes",
+                  array_name, current_capacity, new_capacity, value_size);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -47,7 +48,17 @@ ucs_status_t ucs_array_grow(void **buffer_p, size_t *capacity_p,
     memcpy(new_buffer, *buffer_p, current_capacity * value_size);
 
 out:
+    if (old_buffer_p == NULL) {
+        ucs_array_buffer_free(old_buffer);
+    } else {
+        *old_buffer_p = old_buffer;
+    }
     *buffer_p   = new_buffer;
     *capacity_p = aligned_capacity;
     return UCS_OK;
+}
+
+void ucs_array_buffer_free(void *buffer)
+{
+    ucs_free(buffer);
 }

@@ -14,7 +14,7 @@
 #include "address.h"
 
 #include <ucs/algorithm/qsort_r.h>
-#include <ucs/datastruct/array.inl>
+#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/sock.h>
 #include <ucp/core/ucp_ep.inl>
@@ -97,7 +97,8 @@ typedef struct {
     ucp_tl_bitmap_t           tl_bitmap;                 /* TL bitmap of selected resources */
 } ucp_wireup_select_context_t;
 
-UCS_ARRAY_DEFINE_INLINE(select_info, unsigned, ucp_wireup_select_info_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_select_info_array_t, unsigned,
+                       ucp_wireup_select_info_t);
 
 static const char *ucp_wireup_cmpt_flags[] = {
     [ucs_ilog2(UCT_COMPONENT_FLAG_RKEY_PTR)]     = "obtain remote memory pointer",
@@ -1481,7 +1482,7 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
 static unsigned
 ucp_wireup_add_fast_lanes(ucp_worker_h worker,
                           const ucp_wireup_select_params_t *select_params,
-                          const ucs_array_t(select_info) *sinfo_array,
+                          const ucp_proto_select_info_array_t *sinfo_array,
                           ucp_lane_type_t lane_type,
                           ucp_wireup_select_context_t *select_ctx)
 {
@@ -1555,7 +1556,8 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_ep_h ep                          = select_params->ep;
     ucp_context_h context                = ep->worker->context;
     ucp_wireup_dev_usage_count dev_count = {};
-    UCS_ARRAY_DEFINE_ONSTACK(sinfo_array, select_info, UCP_MAX_LANES);
+    UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_select_info_array_t, sinfo_array,
+                             UCP_MAX_LANES);
     const uct_iface_attr_t *iface_attr;
     const ucp_address_entry_t *ae;
     ucs_status_t status;
@@ -1584,7 +1586,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * memory registration) */
     while (ucs_array_length(&sinfo_array) < max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
-            sinfo  = ucs_array_append_fixed(select_info, &sinfo_array);
+            sinfo  = ucs_array_append_fixed(&sinfo_array);
             status = ucp_wireup_select_transport(select_ctx, select_params,
                                                  &bw_info->criteria, tl_bitmap,
                                                  UINT64_MAX, local_dev_bitmap,

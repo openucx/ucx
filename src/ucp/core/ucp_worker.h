@@ -23,7 +23,7 @@
 #include <ucs/datastruct/ptr_map.h>
 #include <ucs/arch/bitops.h>
 
-#include <ucs/datastruct/array.inl>
+#include <ucs/datastruct/array.h>
 
 
 /* The size of the private buffer in UCT descriptor headroom, which UCP may
@@ -225,8 +225,10 @@ typedef struct ucp_worker_mpool_key {
 KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t);
 typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
 
+
 /* EP configurations storage */
-UCS_ARRAY_DECLARE_TYPE(ep_config_arr, unsigned, ucp_ep_config_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_ep_config_arr_t, unsigned, ucp_ep_config_t);
+
 
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
@@ -335,7 +337,7 @@ typedef struct ucp_worker {
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
                                                              ptr mapping */
 
-    ucs_array_t(ep_config_arr)       ep_config;           /* EP configurations storage */
+    ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 
     unsigned                         rkey_config_count;   /* Current number of rkey configurations */
     ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];

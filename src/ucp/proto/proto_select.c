@@ -15,9 +15,9 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/dt/dt.h>
+#include <ucs/datastruct/array.h>
 
 #include <ucp/core/ucp_worker.inl>
-#include <ucs/datastruct/array.inl>
 
 
 /* Parameters structure for initializing protocols for a selection parameter */
@@ -32,8 +32,9 @@ typedef struct {
 } ucp_proto_select_init_protocols_t;
 
 
-UCS_ARRAY_DEFINE_INLINE(ucp_proto_ranges, unsigned, ucp_proto_perf_range_t);
-UCS_ARRAY_DEFINE_INLINE(ucp_proto_thresh, unsigned, ucp_proto_threshold_elem_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_ranges_t, unsigned, ucp_proto_perf_range_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_thresh_t, unsigned,
+                       ucp_proto_threshold_elem_t);
 
 
 const ucp_proto_threshold_elem_t*
@@ -70,8 +71,8 @@ static ucs_status_t ucp_proto_thresholds_next_range(
         uint64_t *proto_mask_p)
 {
     const ucp_proto_select_param_t *select_param = proto_init->select_param;
-    ucs_linear_func_t proto_perf[UCP_PROTO_MAX_COUNT], *perf_elem;
     ucp_proto_id_mask_t valid_proto_mask, disabled_proto_mask;
+    ucs_linear_func_t proto_perf[UCP_PROTO_MAX_COUNT];
     char range_str[64], time_str[64], bw_str[64];
     const ucp_proto_perf_range_t *range;
     ucp_proto_id_t max_prio_proto_id;
@@ -180,10 +181,8 @@ static ucs_status_t ucp_proto_thresholds_next_range(
         ucs_trace("  %-20s %-20s %-18s",
                   ucp_proto_id_field(proto_id, name), time_str, bw_str);
 
-        perf_elem  = ucs_array_append(ucp_proto_perf_list, perf_list,
-                                      status = UCS_ERR_NO_MEMORY;
-                                      goto out_unindent);
-        *perf_elem = proto_perf[proto_id];
+        *ucs_array_append(perf_list, status = UCS_ERR_NO_MEMORY;
+                          goto out_unindent) = proto_perf[proto_id];
     }
 
     status        = UCS_OK;
@@ -328,6 +327,7 @@ ucp_proto_select_perf_ranges_cleanup(ucp_proto_perf_range_t *perf_ranges,
 {
     ucp_proto_perf_range_t *range;
 
+    ucs_assert(perf_ranges != NULL); /* For coverity */
     ucs_carray_for_each(range, perf_ranges, num_ranges) {
         ucp_proto_perf_node_deref(&range->node);
     }
@@ -358,9 +358,9 @@ ucp_proto_select_cleanup_protocols(ucp_proto_select_init_protocols_t *proto_init
     ucs_free(proto_init->priv_buf);
 }
 
-static int ucp_proto_select_thresholds_is_last_proto(
-        const ucs_array_t(ucp_proto_thresh) *thresholds,
-        ucp_proto_id_t proto_id)
+static int
+ucp_proto_select_thresholds_is_last_proto(const ucp_proto_thresh_t *thresholds,
+                                          ucp_proto_id_t proto_id)
 {
     const ucp_proto_t *proto = ucp_protocols[proto_id];
 
@@ -394,8 +394,7 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
         ucp_worker_cfg_index_t ep_cfg_index,
         ucp_worker_cfg_index_t rkey_cfg_index, size_t msg_length,
         const ucp_proto_perf_envelope_t *envelope, uint64_t proto_mask,
-        ucs_array_t(ucp_proto_thresh) *thresholds,
-        ucs_array_t(ucp_proto_ranges) *perf_ranges)
+        ucp_proto_thresh_t *thresholds, ucp_proto_ranges_t *perf_ranges)
 {
     const ucp_proto_perf_range_t *caps_range, *child_range;
     ucp_proto_perf_envelope_elem_t *envelope_elem;
@@ -426,7 +425,7 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
             thresh_elem                 = ucs_array_last(thresholds);
             thresh_elem->max_msg_length = envelope_elem->max_length;
         } else {
-            thresh_elem = ucs_array_append(ucp_proto_thresh, thresholds,
+            thresh_elem = ucs_array_append(thresholds,
                                            return UCS_ERR_NO_MEMORY);
 
             thresh_elem->max_msg_length  = envelope_elem->max_length;
@@ -443,8 +442,7 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
          * result but calculated differently. And we want to track the whole
          * calculation process.
          */
-        range = ucs_array_append(ucp_proto_ranges, perf_ranges,
-                                 return UCS_ERR_NO_MEMORY);
+        range = ucs_array_append(perf_ranges, return UCS_ERR_NO_MEMORY);
 
         caps_range = ucp_proto_caps_range_find(&proto_init->caps[proto_id],
                                                range_start);
@@ -481,8 +479,8 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
                                   ucp_worker_cfg_index_t ep_cfg_index,
                                   ucp_worker_cfg_index_t rkey_cfg_index)
 {
-    ucs_array_t(ucp_proto_thresh) thresholds  = UCS_ARRAY_DYNAMIC_INITIALIZER;
-    ucs_array_t(ucp_proto_ranges) perf_ranges = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_proto_thresh_t thresholds  = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_proto_ranges_t perf_ranges = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucp_proto_perf_envelope_t envelope;
     ucp_proto_perf_list_t perf_list;
     size_t msg_length, max_length;
@@ -537,10 +535,8 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
     /* Set pointer to priv buffer (to release it during cleanup) */
     select_elem->priv_buf    = proto_init->priv_buf;
     proto_init->priv_buf     = NULL;
-    select_elem->perf_ranges = ucs_array_extract_buffer(ucp_proto_ranges,
-                                                        &perf_ranges);
-    select_elem->thresholds  = ucs_array_extract_buffer(ucp_proto_thresh,
-                                                        &thresholds);
+    select_elem->perf_ranges = ucs_array_extract_buffer(&perf_ranges);
+    select_elem->thresholds  = ucs_array_extract_buffer(&thresholds);
 
     return UCS_OK;
 

@@ -14,7 +14,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/arch/bitops.h>
-#include <ucs/datastruct/array.inl>
+#include <ucs/datastruct/array.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/serialize.h>
 #include <ucs/type/float8.h>
@@ -172,10 +172,8 @@ typedef struct {
     ucs_sys_device_t sys_dev;
 } ucp_address_remote_device_t;
 
-UCS_ARRAY_DEFINE_INLINE(ucp_address_remote_device, unsigned,
-                        ucp_address_remote_device_t);
-
-typedef ucs_array_t(ucp_address_remote_device) ucp_address_remote_device_array_t;
+UCS_ARRAY_DECLARE_TYPE(ucp_address_remote_device_array_t, unsigned,
+                       ucp_address_remote_device_t);
 
 #define UCP_ADDRESS_V1_FLAG_ATOMIC32  UCS_BIT(30) /* 32bit atomic operations */
 #define UCP_ADDRESS_V1_FLAG_ATOMIC64  UCS_BIT(31) /* 64bit atomic operations */
@@ -1611,8 +1609,7 @@ static ucp_rsc_index_t ucp_address_get_remote_device_index(
         unique_dev_index++;
     }
 
-    device            = ucs_array_append_fixed(ucp_address_remote_device,
-                                               device_array);
+    device            = ucs_array_append_fixed(device_array);
     device->sys_dev   = sys_dev;
     device->dev_index = dev_index;
     return ucs_array_length(device_array) - 1;
@@ -1622,8 +1619,8 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                 unsigned unpack_flags,
                                 ucp_unpacked_address_t *unpacked_address)
 {
-    UCS_ARRAY_DEFINE_ONSTACK(remote_device_array, ucp_address_remote_device,
-                             UCP_MAX_RESOURCES);
+    UCS_ARRAY_DEFINE_ONSTACK(ucp_address_remote_device_array_t,
+                             remote_device_array, UCP_MAX_RESOURCES);
     ucp_address_entry_t *address_list, *address;
     uint8_t addr_flags;
     ucp_object_version_t addr_version;
