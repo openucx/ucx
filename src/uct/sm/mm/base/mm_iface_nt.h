@@ -2,8 +2,8 @@
  *
  * See file LICENSE for terms.
  */
-#ifndef _MM_IFACE_AMD_H
-#define _MM_IFACE_AMD_H
+#ifndef _MM_IFACE_NT_H
+#define _MM_IFACE_NT_H
 #include <stdbool.h>
 #include <stdint.h>
 

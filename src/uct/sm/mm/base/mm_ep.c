@@ -17,7 +17,7 @@
 #include <ucs/arch/atomic.h>
 
 #ifdef ENABLE_NT_BUFFER_TRANSFER
-#include "mm_iface_amd.h"
+#include "mm_iface_nt.h"
 #endif
 
 /* send modes */
