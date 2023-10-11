@@ -82,15 +82,16 @@ static ucs_stats_class_t ucp_worker_stats_class = {
     .num_counters   = UCP_WORKER_STAT_LAST,
     .class_id       = UCS_STATS_CLASS_ID_INVALID,
     .counter_names  = {
-        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]         = "rx_eager_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]    = "rx_sync_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "rx_eager_chunk_exp",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "rx_eager_chunk_unexp",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_EXP]          = "rx_rndv_rts_exp",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP]        = "rx_rndv_rts_unexp",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_GET_ZCOPY]    = "rx_rndv_get_zcopy",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_SEND_RTR]     = "rx_rndv_send_rtr",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_RKEY_PTR]     = "rx_rndv_rkey_ptr"
+        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]         = "tag_rx_eager_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]    = "tag_rx_sync_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "tag_rx_eager_chunk_exp",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "tag_rx_eager_chunk_unexp",
+        [UCP_WORKER_STAT_RNDV_RX_EXP]              = "rndv_rx_exp",
+        [UCP_WORKER_STAT_RNDV_RX_UNEXP]            = "rndv_rx_unexp",
+        [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]           = "rndv_put_zcopy",
+        [UCP_WORKER_STAT_RNDV_GET_ZCOPY]           = "rndv_get_zcopy",
+        [UCP_WORKER_STAT_RNDV_RTR]                 = "rndv_rtr",
+        [UCP_WORKER_STAT_RNDV_RKEY_PTR]            = "rndv_rkey_ptr"
     }
 };
 #endif

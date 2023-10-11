@@ -100,7 +100,7 @@ static ucs_status_t ucp_proto_rndv_rtr_common_send(ucp_request_t *req)
                                                       rpriv->pack_cb, req,
                                                       max_rtr_size, NULL, 0);
     if (status == UCS_OK) {
-        UCP_WORKER_STAT_RNDV(worker, SEND_RTR, +1);
+        UCP_WORKER_STAT_RNDV(worker, RTR, +1);
     }
 
     return status;

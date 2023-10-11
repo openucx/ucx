@@ -432,7 +432,7 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_request_reset_super(rndv_req);
     ucp_request_send_state_reset(rndv_req, NULL,
                                  UCP_REQUEST_SEND_PROTO_BCOPY_AM);
-    UCP_WORKER_STAT_RNDV(rndv_req->send.ep->worker, SEND_RTR, +1);
+    UCP_WORKER_STAT_RNDV(rndv_req->send.ep->worker, RTR, +1);
 
     rreq->recv.remote_req_id       = sender_req_id;
     rndv_req->send.lane            = ucp_ep_get_am_lane(rndv_req->send.ep);
