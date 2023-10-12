@@ -11,6 +11,7 @@ import (
 	"testing"
 	. "ucx"
 	"unsafe"
+	. "cuda"
 )
 
 var maxSize = flag.Uint64("s", 10_000_000, "Max size of memory to mmap. Default: 10M")
@@ -63,6 +64,9 @@ func BenchmarkUcpMmap(b *testing.B) {
 			var size uint64 = 1024
 			for size < *maxSize {
 				b.Run(fmt.Sprintf("Allocate GPU memory %d", size), func(b *testing.B) {
+					if err:= CudaSetDevice(); err != nil {
+						b.Fatalf("%v", err)
+					}
 					gpuMemory, err := memAlloc(context, size, UCS_MEMORY_TYPE_CUDA)
 
 					if err != nil {
@@ -114,6 +118,10 @@ func TestUcpMmap(t *testing.T) {
 	memTypeMask, _ := context.MemoryTypesMask()
 
 	if IsMemTypeSupported(UCS_MEMORY_TYPE_CUDA, memTypeMask) {
+		if err:= CudaSetDevice(); err != nil {
+			t.Fatalf("%v", err)
+		}
+
 		gpuMemory, err := memAlloc(context, testMemorySize, UCS_MEMORY_TYPE_CUDA)
 
 		if err != nil {
