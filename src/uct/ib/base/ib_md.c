@@ -1162,7 +1162,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     md->super.component = &uct_ib_component;
     md->config          = md_config->ext;
-    md->cap_flags       = UCT_MD_FLAG_REG |
+    md->cap_flags      |= UCT_MD_FLAG_REG |
                           UCT_MD_FLAG_NEED_MEMH |
                           UCT_MD_FLAG_NEED_RKEY |
                           UCT_MD_FLAG_ADVISE;
