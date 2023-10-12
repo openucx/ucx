@@ -230,9 +230,7 @@ ucp_datatype_iter_move(ucp_datatype_iter_t *dst_iter,
     }
 
     /* Invalidate source iterator */
-#if UCS_ENABLE_ASSERT
     src_iter->dt_class = UCP_DATATYPE_CLASS_MASK;
-#endif
 }
 
 static UCS_F_ALWAYS_INLINE void
