@@ -2450,7 +2450,8 @@ static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
     ucs_usage_tracker_params_t params = {0};
     ucs_status_t status;
 
-    if (!worker->context->config.ext.dynamic_tl_switch_enable) {
+    if (worker->context->config.ext.dynamic_tl_switch_interval ==
+        UCS_TIME_INFINITY) {
         return UCS_OK;
     }
 
@@ -2477,7 +2478,8 @@ static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
 
 static void ucp_worker_usage_tracker_destroy(ucp_worker_h worker)
 {
-    if (!worker->context->config.ext.dynamic_tl_switch_enable) {
+    if (worker->context->config.ext.dynamic_tl_switch_interval ==
+        UCS_TIME_INFINITY) {
         return;
     }
 

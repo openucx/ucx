@@ -394,12 +394,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_context_config_t, keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
-  {"DYNAMIC_TL_SWITCH_ENABLE", "n", "Enable dynamic transport switching",
-   ucs_offsetof(ucp_context_config_t, dynamic_tl_switch_enable), UCS_CONFIG_TYPE_BOOL},
-
   {"DYNAMIC_TL_SWITCH_INTERVAL", "3s",
    "Time interval between dynamic transport switching rounds. Must be\n"
-   "non-zero value.",
+   "non-zero value. use 'inf' to disable this feature.",
    ucs_offsetof(ucp_context_config_t, dynamic_tl_switch_interval),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
