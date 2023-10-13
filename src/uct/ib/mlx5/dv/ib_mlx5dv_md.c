@@ -2061,6 +2061,7 @@ uct_ib_mlx5_devx_mkey_pack_invalidate_param_check(unsigned flags)
 
 static ucs_status_t
 uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                           void *address, size_t length,
                            const uct_md_mkey_pack_params_t *params,
                            void *mkey_buffer)
 {

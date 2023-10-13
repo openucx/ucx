@@ -106,8 +106,7 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->reg_nonblock_mem_types = 0;
-    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->alloc_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
@@ -125,8 +124,8 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 }
 
 static ucs_status_t
-uct_cuda_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
-                        const uct_md_mkey_pack_params_t *params,
+uct_cuda_copy_mkey_pack(uct_md_h md, uct_mem_h memh, void *address,
+                        size_t length, const uct_md_mkey_pack_params_t *params,
                         void *mkey_buffer)
 {
     return UCS_OK;

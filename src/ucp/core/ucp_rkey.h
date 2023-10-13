@@ -201,7 +201,7 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 
 
 ssize_t ucp_rkey_pack_memh(ucp_context_h context, ucp_md_map_t md_map,
-                           const ucp_mem_h memh,
+                           const ucp_mem_h memh, void *address, size_t length,
                            const ucp_memory_info_t *mem_info,
                            ucp_sys_dev_map_t sys_dev_map,
                            const ucs_sys_dev_distance_t *sys_distance,
