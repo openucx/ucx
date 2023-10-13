@@ -696,6 +696,7 @@ uct_ib_verbs_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 }
 
 ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                                    void *address, size_t length,
                                     const uct_md_mkey_pack_params_t *params,
                                     void *mkey_buffer)
 {

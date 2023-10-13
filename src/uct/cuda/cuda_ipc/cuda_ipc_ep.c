@@ -64,7 +64,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                   uct_completion_t *comp, int direction)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_ipc_iface_t);
-    uct_cuda_ipc_key_t *key     = (uct_cuda_ipc_key_t *) rkey;
+    uct_cuda_ipc_rkey_t *key    = (uct_cuda_ipc_rkey_t *) rkey;
     void *mapped_rem_addr;
     void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;

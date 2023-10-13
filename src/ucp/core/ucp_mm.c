@@ -993,9 +993,10 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       ucp_md_index_t md_index, ucp_mem_h *memh_p,
                                       uct_rkey_bundle_t *rkey_bundle)
 {
-    ucp_context_h context           = worker->context;
-    const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
-    ucp_mem_h memh                  = NULL; /* To suppress compiler warning */
+    ucp_context_h context            = worker->context;
+    const uct_md_attr_v2_t *md_attr  = &context->tl_mds[md_index].attr;
+    ucp_mem_h memh                   = NULL; /* To suppress compiler warning */
+    uct_md_mkey_pack_params_t params = { .field_mask = 0 };
     uct_component_h cmpt;
     ucp_tl_md_t *tl_md;
     ucs_status_t status;
@@ -1019,7 +1020,9 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     }
 
     rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
-    status      = uct_md_mkey_pack(tl_md->md, memh->uct[md_index], rkey_buffer);
+    status      = uct_md_mkey_pack_v2(tl_md->md, memh->uct[md_index],
+                                      remote_addr, length, &params,
+                                      rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("failed to pack key from md[%d]: %s",
                   md_index, ucs_status_string(status));
