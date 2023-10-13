@@ -248,8 +248,6 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     }
 
     rcache_params.region_struct_size = sizeof(uct_xpmem_remote_region_t);
-    rcache_params.alignment          = ucs_get_page_size();
-    rcache_params.max_alignment      = ucs_get_page_size();
     rcache_params.ucm_events         = 0;
     rcache_params.ucm_event_priority = 0;
     rcache_params.ops                = &uct_xpmem_rcache_ops;
@@ -370,7 +368,8 @@ uct_xpmem_mem_attach_common(xpmem_segid_t xsegid, uintptr_t remote_address,
     end   = ucs_align_up_pow2  (remote_address + length, ucs_get_page_size());
 
     status = ucs_rcache_get(rmem->rcache, (void*)start, end - start,
-                            PROT_READ|PROT_WRITE, NULL, &rcache_region);
+			    ucs_get_page_size(), PROT_READ | PROT_WRITE, NULL,
+			    &rcache_region);
     if (status != UCS_OK) {
         goto err_rmem_put;
     }
