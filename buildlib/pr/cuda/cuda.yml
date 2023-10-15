@@ -43,14 +43,6 @@ jobs:
           CONTAINER: centos7_cuda_11_3
         centos7_cuda_11_4:
           CONTAINER: centos7_cuda_11_4
-        centos8_cuda_11_1:
-          CONTAINER: centos8_cuda_11_1
-        centos8_cuda_11_2:
-          CONTAINER: centos8_cuda_11_2
-        centos8_cuda_11_3:
-          CONTAINER: centos8_cuda_11_3
-        centos8_cuda_11_4:
-          CONTAINER: centos8_cuda_11_4
         ubi8_cuda_11_5:
           CONTAINER: ubi8_cuda_11_5
         ubi8_cuda_11_6:
