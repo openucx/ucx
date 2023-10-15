@@ -2053,7 +2053,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
 
     if (context->config.ext.dynamic_tl_switch_interval == 0) {
-        ucs_error("DYNAMIC_TL_SWITCH_INTERVAL value must be greater than 0");
+        ucs_error("UCX_DYNAMIC_TL_SWITCH_INTERVAL value must be greater than "
+                  "0");
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
     }
