@@ -700,9 +700,9 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     int khret;
 
     key.param = *select_param;
-    khiter    = kh_get(ucp_proto_select_hash, &proto_select->hash, key.u64);
-    if (khiter != kh_end(&proto_select->hash)) {
-        select_elem = &kh_value(&proto_select->hash, khiter);
+    khiter    = kh_get(ucp_proto_select_hash, proto_select->hash, key.u64);
+    if (khiter != kh_end(proto_select->hash)) {
+        select_elem = &kh_value(proto_select->hash, khiter);
         goto out;
     }
 
@@ -716,11 +716,11 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     /* add to hash after initializing the temp element, since calling
      * ucp_proto_select_elem_init() can recursively modify the hash
      */
-    khiter = kh_put(ucp_proto_select_hash, &proto_select->hash, key.u64,
+    khiter = kh_put(ucp_proto_select_hash, proto_select->hash, key.u64,
                     &khret);
     ucs_assert_always(khret == UCS_KH_PUT_BUCKET_EMPTY);
 
-    select_elem  = &kh_value(&proto_select->hash, khiter);
+    select_elem  = &kh_value(proto_select->hash, khiter);
     *select_elem = tmp_select_elem;
 
     /* Adding hash values may reallocate the array, so the cached pointer to
@@ -734,7 +734,11 @@ out:
 
 ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select)
 {
-    kh_init_inplace(ucp_proto_select_hash, &proto_select->hash);
+    proto_select->hash = kh_init(ucp_proto_select_hash);
+    if (proto_select->hash == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
     ucp_proto_select_cache_reset(proto_select);
     return UCS_OK;
 }
@@ -743,10 +747,10 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select)
 {
     ucp_proto_select_elem_t select_elem;
 
-    kh_foreach_value(&proto_select->hash, select_elem,
+    kh_foreach_value(proto_select->hash, select_elem,
          ucp_proto_select_elem_cleanup(&select_elem)
     )
-    kh_destroy_inplace(ucp_proto_select_hash, &proto_select->hash);
+    kh_destroy(ucp_proto_select_hash, proto_select->hash);
 }
 
 void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short)

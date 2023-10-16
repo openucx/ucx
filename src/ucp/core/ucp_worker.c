@@ -2517,6 +2517,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucs_array_init_dynamic(&worker->ep_config);
 
+    /* Reserve 32 elements for ep configs, which should be enough for most
+     * of the use-cases. Will be extended automatically otherwise. */
+    ucs_array_reserve(ep_config_arr, &worker->ep_config, 32);
+
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
                                   ucs_stats_get_root(), "-%p", worker);

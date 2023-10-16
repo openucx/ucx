@@ -128,7 +128,7 @@ KHASH_TYPE(ucp_proto_select_hash, khint64_t, ucp_proto_select_elem_t)
  */
 typedef struct {
     /* Lookup from protocol selection key to thresholds array */
-    khash_t(ucp_proto_select_hash)    hash;
+    khash_t(ucp_proto_select_hash)    *hash;
 
     /* cache the last used protocol, for fast lookup */
     struct {

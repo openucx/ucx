@@ -293,7 +293,7 @@ void ucp_proto_select_info(ucp_worker_h worker,
     ucp_proto_select_elem_t select_elem;
     ucp_proto_select_key_t key;
 
-    kh_foreach(&proto_select->hash, key.u64, select_elem,
+    kh_foreach(proto_select->hash, key.u64, select_elem,
                ucp_proto_select_elem_info(worker, ep_cfg_index, rkey_cfg_index,
                                           &key.param, &select_elem, show_all,
                                           strb);
