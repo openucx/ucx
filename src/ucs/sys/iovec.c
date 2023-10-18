@@ -47,9 +47,9 @@ size_t ucs_iov_copy(const struct iovec *iov, size_t iov_cnt,
         len = ucs_min(len, max_copy);
 
         if (dir == UCS_IOV_COPY_FROM_BUF) {
-            ucs_memcpy_relaxed(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len);
+            ucs_memcpy_relaxed(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len, BUFF_NT_RECV);
         } else if (dir == UCS_IOV_COPY_TO_BUF) {
-            ucs_memcpy_relaxed(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len);
+            ucs_memcpy_relaxed(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len, BUFF_NT_SEND);
         }
 
         iov_offset  = 0;

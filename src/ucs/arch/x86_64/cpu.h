@@ -95,7 +95,8 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 }
 #endif
 
-static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
+static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
+                                       buff_transfer_t transfer_type)
 {
 #if ENABLE_BUILTIN_MEMCPY
     if (ucs_unlikely((len > ucs_global_opts.arch.builtin_memcpy_min) &&

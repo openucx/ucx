@@ -11,6 +11,11 @@
 #include <sys/time.h>
 #include <stdint.h>
 
+typedef enum {
+    BUFF_NORMAL = 0,
+    BUFF_NT_SEND,
+    BUFF_NT_RECV
+} buff_transfer_t;
 
 static inline uint64_t ucs_arch_generic_read_hres_clock(void)
 {

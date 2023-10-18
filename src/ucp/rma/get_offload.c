@@ -20,7 +20,7 @@ static void ucp_proto_get_offload_bcopy_unpack(void *arg, const void *data,
                                                size_t length)
 {
     void *dest = arg;
-    ucs_memcpy_relaxed(dest, data, length);
+    ucs_memcpy_relaxed(dest, data, length, BUFF_NT_RECV);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

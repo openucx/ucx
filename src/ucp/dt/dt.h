@@ -68,11 +68,17 @@ void ucp_mem_type_unpack(ucp_worker_h worker, void *buffer,
 
 
 static UCS_F_ALWAYS_INLINE void
-ucp_memcpy_pack_unpack(void *buffer, const void *data, size_t length,
-                       const char *name)
+ucp_memcpy_pack(void *buffer, const void *data, size_t length,
+                const char *name)
 {
-    UCS_PROFILE_NAMED_CALL(name, ucs_memcpy_relaxed, buffer, data, length);
+    UCS_PROFILE_NAMED_CALL(name, ucs_memcpy_relaxed, buffer, data, length, BUFF_NT_SEND);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_memcpy_unpack(void *buffer, const void *data, size_t length,
+                       const char *name)
+{
+    UCS_PROFILE_NAMED_CALL(name, ucs_memcpy_relaxed, buffer, data, length, BUFF_NT_RECV);
+}
 
 #endif /* UCP_DT_H_ */

@@ -40,7 +40,7 @@ ucp_dt_contig_pack(ucp_worker_h worker, void *dest, const void *src,
                    size_t length, ucs_memory_type_t mem_type)
 {
     if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type))) {
-        ucp_memcpy_pack_unpack(dest, src, length, "memcpy_pack");
+        ucp_memcpy_pack(dest, src, length, "memcpy_pack");
     } else {
         ucp_mem_type_pack(worker, dest, src, length, mem_type);
     }
@@ -52,7 +52,7 @@ ucp_dt_contig_unpack(ucp_worker_h worker, void *dest, const void *src,
                      size_t length, ucs_memory_type_t mem_type)
 {
     if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type))) {
-        ucp_memcpy_pack_unpack(dest, src, length, "memcpy_unpack");
+        ucp_memcpy_unpack(dest, src, length, "memcpy_unpack");
     } else {
         ucp_mem_type_unpack(worker, dest, src, length, mem_type);
     }

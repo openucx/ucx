@@ -46,7 +46,7 @@ static double measure_memcpy_bandwidth(size_t size)
     iter = 0;
     start_time = ucs_get_time();
     do {
-        ucs_memcpy_relaxed(dst, src, size);
+        ucs_memcpy_relaxed(dst, src, size, BUFF_NORMAL);
         end_time = ucs_get_time();
         ++iter;
     } while (end_time < start_time + ucs_time_from_sec(0.5));
