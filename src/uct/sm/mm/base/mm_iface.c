@@ -319,15 +319,8 @@ static UCS_F_ALWAYS_INLINE void uct_mm_iface_process_recv(uct_mm_iface_t *iface)
     uct_mm_iface_trace_am(iface, UCT_AM_TRACE_TYPE_RECV, elem->flags,
                           elem->am_id, data, elem->length, iface->read_index);
 
-#ifdef ENABLE_NT_BUFFER_TRANSFER
-    ucs_global_opts.arch.nt_buffer = data;
     status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
                                     UCT_CB_PARAM_FLAG_DESC);
-    ucs_global_opts.arch.nt_buffer = NULL;
-#else
-    status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
-                                    UCT_CB_PARAM_FLAG_DESC);
-#endif
     if (status != UCS_OK) {
         /* assign a new receive descriptor to this FIFO element.*/
         uct_mm_assign_desc_to_fifo_elem(iface, elem, 0);

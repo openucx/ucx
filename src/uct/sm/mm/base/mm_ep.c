@@ -362,13 +362,7 @@ retry:
         }
 
         desc_data    = UCS_PTR_BYTE_OFFSET(base_address, elem->desc.offset);
-#ifdef ENABLE_NT_BUFFER_TRANSFER
-        ucs_global_opts.arch.nt_buffer = desc_data;
         length       = pack_cb(desc_data, arg);
-        ucs_global_opts.arch.nt_buffer = NULL;
-#else
-        length       = pack_cb(desc_data, arg);
-#endif
         elem_flags   = 0;
         elem->length = length;
 

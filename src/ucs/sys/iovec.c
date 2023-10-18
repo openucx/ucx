@@ -11,10 +11,7 @@
 
 #include <ucs/sys/iovec.h>
 #include <ucs/sys/math.h>
-
-#ifdef ENABLE_NT_BUFFER_TRANSFER
 #include <ucs/arch/cpu.h>
-#endif
 
 #include <string.h>
 #include <sys/uio.h>

@@ -716,7 +716,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 #define YMM_SZ      32
 
 static UCS_F_ALWAYS_INLINE
-void* ucs_cpu_nt_buffer_transfer_to(void *dst, const void *src, size_t len)
+void* ucs_cpu_nt_buffer_transfer_send(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
@@ -794,14 +794,15 @@ void* ucs_cpu_nt_buffer_transfer_to(void *dst, const void *src, size_t len)
     if (len) {
         /* TODO: Is it better to replace this call to ucs_x86_nt_buffer_transfer with
          * a direct copy loop/swith case ? */
-        return ucs_x86_nt_buffer_transfer(((char *)dst + offset), ((char *)src + offset), len);
+        return ucs_x86_nt_buffer_transfer(((char *)dst + offset), ((char *)src + offset),
+                                          len, BUFF_NT_SEND);
     } else {
         return dst;
     }
 }
 
 static UCS_F_ALWAYS_INLINE
-void* ucs_cpu_nt_buffer_transfer_from(void *dst, const void *src, size_t len)
+void* ucs_cpu_nt_buffer_transfer_recv(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
@@ -881,7 +882,8 @@ void* ucs_cpu_nt_buffer_transfer_from(void *dst, const void *src, size_t len)
     if (len) {
         /* TODO: Is it better to replace this call to ucs_x86_nt_buffer_transfer with
          * a direct copy loop/swith case ? */
-        return ucs_x86_nt_buffer_transfer(((char *)dst + offset), ((char *)src + offset), len);
+        return ucs_x86_nt_buffer_transfer(((char *)dst + offset), ((char *)src + offset),
+                                          len, BUFF_NT_RECV);
     } else {
         return dst;
     }
@@ -891,7 +893,8 @@ void* ucs_cpu_nt_buffer_transfer_from(void *dst, const void *src, size_t len)
  * TODO: Provide an option to copy from backwards, in this way
  * application can choose the cache hotness of the final buffer
  */
-void* ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len)
+void* ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
+                                 buff_transfer_t type)
 {
     __m256i y0, y1, y2, y3;
 
@@ -953,11 +956,10 @@ void* ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len)
             return dst;
         }
     } else {
-        /* Compare after ignoring last 64 bytes of address to skip header bytes */
-        if (!(((uintptr_t)ucs_global_opts.arch.nt_buffer ^ (uintptr_t)dst) >> 6)) {
-            return ucs_cpu_nt_buffer_transfer_to(dst, src, len);
-        } else if (!(((uintptr_t)ucs_global_opts.arch.nt_buffer ^ (uintptr_t)src) >> 6)) {
-            return ucs_cpu_nt_buffer_transfer_from(dst, src, len);
+        if (type == BUFF_NT_SEND) {
+            return ucs_cpu_nt_buffer_transfer_send(dst, src, len);
+        } else if (type == BUFF_NT_RECV) {
+            return ucs_cpu_nt_buffer_transfer_recv(dst, src, len);
         } else {
             return memcpy(dst, src, len);
         }
