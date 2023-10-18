@@ -244,10 +244,6 @@ uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
         return UCS_ERR_NO_RESOURCE;
     }
 
-#ifdef ENABLE_NT_BUFFER_TRANSFER
-    ucs_nt_write_prefetch(*elem);
-#endif
-
     return UCS_OK;
 }
 

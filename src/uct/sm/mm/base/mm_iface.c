@@ -299,11 +299,6 @@ static UCS_F_ALWAYS_INLINE void uct_mm_iface_process_recv(uct_mm_iface_t *iface)
     void *data;
 
     if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
-#ifdef ENABLE_NT_BUFFER_TRANSFER
-        if (ucs_unlikely(elem->length > (UCS_SYS_CACHE_LINE_SIZE - sizeof(*elem)))) {
-            ucs_nt_read_prefetch(UCS_PTR_BYTE_OFFSET(elem, 64));
-        }
-#endif
         /* read short (inline) messages from the FIFO elements */
         uct_mm_iface_trace_am(iface, UCT_AM_TRACE_TYPE_RECV, elem->flags,
                               elem->am_id, elem + 1, elem->length,
