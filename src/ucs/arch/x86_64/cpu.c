@@ -716,7 +716,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 #define YMM_SZ      32
 
 static UCS_F_ALWAYS_INLINE
-void* ucs_cpu_nt_buffer_transfer_send(void *dst, const void *src, size_t len)
+size_t ucs_cpu_nt_buffer_transfer_send(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
@@ -791,18 +791,11 @@ void* ucs_cpu_nt_buffer_transfer_send(void *dst, const void *src, size_t len)
     }
 
     /* Handle the remaining bytes <= 127 */
-    if (len) {
-        /* TODO: Is it better to replace this call to ucs_x86_nt_buffer_transfer with
-         * a direct copy loop/swith case ? */
-        return ucs_x86_nt_buffer_transfer(((char *)dst + offset), ((char *)src + offset),
-                                          len, BUFF_NT_SEND);
-    } else {
-        return dst;
-    }
+    return len;
 }
 
 static UCS_F_ALWAYS_INLINE
-void* ucs_cpu_nt_buffer_transfer_recv(void *dst, const void *src, size_t len)
+size_t ucs_cpu_nt_buffer_transfer_recv(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
@@ -879,90 +872,92 @@ void* ucs_cpu_nt_buffer_transfer_recv(void *dst, const void *src, size_t len)
     }
 
     /* Handle the remaining bytes <= 127 */
-    if (len) {
-        /* TODO: Is it better to replace this call to ucs_x86_nt_buffer_transfer with
-         * a direct copy loop/swith case ? */
-        return ucs_x86_nt_buffer_transfer(((char *)dst + offset), ((char *)src + offset),
-                                          len, BUFF_NT_RECV);
-    } else {
-        return dst;
-    }
+    return len;
 }
 
 /* This is an adaptation of the memcpy code from https://github.com/amd/aocl-libmem
  * TODO: Provide an option to copy from backwards, in this way
  * application can choose the cache hotness of the final buffer
  */
-void* ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
-                                 buff_transfer_t type)
+void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
+                                buff_transfer_t type)
 {
     __m256i y0, y1, y2, y3;
+    size_t tail_bytes;
 
-    /* First handle lengths that fall usually within eager short range */
     if (ucs_likely(len <= 128)) {
-        switch (_lzcnt_u32(len)) {
-        /* 0 */
-        case 32:
-            return dst;
-        /* 1 */
-        case 31:
-            *((uint8_t *)dst) = *((uint8_t *)src);
-            return dst;
-        /* 2 - 3 */
-        case 30:
-            *((uint16_t *)dst) = *((uint16_t *)src);
-            *((uint16_t *)((char *)dst + len - WORD_SZ)) = \
-                    *((uint16_t *)((char *)src + len - WORD_SZ));
-            return dst;
-        /* 4 - 7 */
-        case 29:
-            *((uint32_t *)dst) = *((uint32_t *)src);
-            *((uint32_t *)((char *)dst + len - DWORD_SZ)) = \
-                    *((uint32_t *)((char *)src + len - DWORD_SZ));
-            return dst;
-        /* 8 - 15 */
-        case 28:
-            *((uint64_t *)dst) = *((uint64_t *)src);
-            *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
-                    *((uint64_t *)((char *)src + len - QWORD_SZ));
-            return dst;
-        /* 16 - 31 */
-        case 27:
-            *((uint64_t *)dst) = *((uint64_t *)src);
-            *((uint64_t *)((char *)dst + QWORD_SZ)) = \
-                    *((uint64_t *)((char *)src + QWORD_SZ));
-            *((uint64_t *)((char *)dst + len - 2 * QWORD_SZ)) = \
-                    *((uint64_t *)((char *)src + len - 2 * QWORD_SZ));
-            *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
-                    *((uint64_t *)((char *)src + len - QWORD_SZ));
-            return dst;
-        /* 32 - 63 */
-        case 26:
-            y0 = _mm256_loadu_si256((__m256i_u const *)src);
-            y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
-            _mm256_storeu_si256((__m256i_u *)dst, y0);
-            _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y1);
-            return dst;
-        /* 64 - 128 */
-        default:
-            y0 = _mm256_loadu_si256((__m256i_u const *)(char *)src);
-            y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + YMM_SZ));
-            y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - (2 * YMM_SZ)));
-            y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
-            _mm256_storeu_si256((__m256i_u *)(char *)dst, y0);
-            _mm256_storeu_si256((__m256i_u *)((char *)dst + YMM_SZ), y1);
-            _mm256_storeu_si256((__m256i_u *)((char *)dst + len - (2 * YMM_SZ)), y2);
-            _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y3);
-            return dst;
-        }
+        goto copy_bytes_le_128;
     } else {
         if (type == BUFF_NT_SEND) {
-            return ucs_cpu_nt_buffer_transfer_send(dst, src, len);
+            tail_bytes = ucs_cpu_nt_buffer_transfer_send(dst, src, len);
         } else if (type == BUFF_NT_RECV) {
-            return ucs_cpu_nt_buffer_transfer_recv(dst, src, len);
+            tail_bytes = ucs_cpu_nt_buffer_transfer_recv(dst, src, len);
         } else {
-            return memcpy(dst, src, len);
+            memcpy(dst, src, len);
+            return;
         }
+
+        dst = (char *)dst + (len - tail_bytes);
+        src = (char *)src + (len - tail_bytes);
+        len = tail_bytes;
+    }
+
+copy_bytes_le_128:
+    /* Handle lengths that fall usually within eager short range */
+    switch (_lzcnt_u32(len)) {
+    /* 0 */
+    case 32:
+        break;
+    /* 1 */
+    case 31:
+        *((uint8_t *)dst) = *((uint8_t *)src);
+        break;
+    /* 2 - 3 */
+    case 30:
+        *((uint16_t *)dst) = *((uint16_t *)src);
+        *((uint16_t *)((char *)dst + len - WORD_SZ)) = \
+                *((uint16_t *)((char *)src + len - WORD_SZ));
+        break;
+    /* 4 - 7 */
+    case 29:
+        *((uint32_t *)dst) = *((uint32_t *)src);
+        *((uint32_t *)((char *)dst + len - DWORD_SZ)) = \
+                *((uint32_t *)((char *)src + len - DWORD_SZ));
+        break;
+    /* 8 - 15 */
+    case 28:
+        *((uint64_t *)dst) = *((uint64_t *)src);
+        *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
+                *((uint64_t *)((char *)src + len - QWORD_SZ));
+        break;
+    /* 16 - 31 */
+    case 27:
+        *((uint64_t *)dst) = *((uint64_t *)src);
+        *((uint64_t *)((char *)dst + QWORD_SZ)) = \
+                *((uint64_t *)((char *)src + QWORD_SZ));
+        *((uint64_t *)((char *)dst + len - 2 * QWORD_SZ)) = \
+                *((uint64_t *)((char *)src + len - 2 * QWORD_SZ));
+        *((uint64_t *)((char *)dst + len - QWORD_SZ)) = \
+                *((uint64_t *)((char *)src + len - QWORD_SZ));
+        break;
+    /* 32 - 63 */
+    case 26:
+        y0 = _mm256_loadu_si256((__m256i_u const *)src);
+        y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
+        _mm256_storeu_si256((__m256i_u *)dst, y0);
+        _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y1);
+        break;
+    /* 64 - 128 */
+    default:
+        y0 = _mm256_loadu_si256((__m256i_u const *)(char *)src);
+        y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + YMM_SZ));
+        y2 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - (2 * YMM_SZ)));
+        y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + len - YMM_SZ));
+        _mm256_storeu_si256((__m256i_u *)(char *)dst, y0);
+        _mm256_storeu_si256((__m256i_u *)((char *)dst + YMM_SZ), y1);
+        _mm256_storeu_si256((__m256i_u *)((char *)dst + len - (2 * YMM_SZ)), y2);
+        _mm256_storeu_si256((__m256i_u *)((char *)dst + len - YMM_SZ), y3);
+        break;
     }
 }
 #endif
