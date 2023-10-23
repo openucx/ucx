@@ -40,5 +40,13 @@ steps:
         --after "$SHA_After" \
         --config ucx-rdmz.yml \
         "${perfxParams[@]}" | tee $(WorkDir)/results-${{ parameters.Name }}.txt
+      mv $(WorkDir)/PerfX/perfx.log $(WorkDir)/PerfX/${{ parameters.Name }}.log
     displayName: ${{ parameters.Name }}
     workingDirectory: $(WorkDir)
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathToPublish: $(WorkDir)/PerfX/${{ parameters.Name }}.log
+      artifactName: perfx_logs
+    displayName: Publish log
+    condition: always()
