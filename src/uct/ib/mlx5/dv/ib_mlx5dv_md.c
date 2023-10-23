@@ -1384,7 +1384,7 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
     }
 
     /* Indicates we can allocate device memory */
-    md->super.cap_flags |= UCT_MD_FLAG_ALLOC;
+    /*TODO: md->super.cap_flags |= UCT_MD_FLAG_ALLOC; */
 #endif
 }
 
