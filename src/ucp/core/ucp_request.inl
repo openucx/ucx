@@ -141,13 +141,19 @@ UCS_PTR_MAP_IMPL(request, 0);
     }
 
 
-#define ucp_request_imm_cmpl_param(_param, _req, _cb, ...) \
-    if ((_param)->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) { \
+#define ucp_request_prevent_imm_cmpl(_param, _req, _cb, ...) \
+    ({ \
         ucp_request_cb_param(_param, _req, _cb, ##__VA_ARGS__); \
         ucs_trace_req("request %p completed, but immediate completion is " \
-                      "prohibited, status %s", _req, \
-                      ucs_status_string((_req)->status)); \
-        return (_req) + 1; \
+                      "prohibited, status %s", \
+                      _req, ucs_status_string((_req)->status)); \
+        (_req) + 1; \
+    })
+
+
+#define ucp_request_imm_cmpl_param(_param, _req, _cb, ...) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) { \
+        return ucp_request_prevent_imm_cmpl(_param, _req, _cb, ##__VA_ARGS__); \
     } \
     { \
         ucs_status_t _status = (_req)->status; \

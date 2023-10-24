@@ -82,29 +82,50 @@ protected:
         return get_variant_value() & DISABLE_PROTO;
     }
 
+    void send_recv_unexp(bool immediate);
     static ucs_status_t m_req_status;
 };
 
 ucs_status_t test_ucp_tag_match::m_req_status = UCS_OK;
 
-
-UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
+void test_ucp_tag_match::send_recv_unexp(bool immediate)
+{
+    ucp_tag_t tag        = 0x111337;
+    ucp_tag_t mask       = 0xffff;
+    ucp_tag_t masked_tag = tag & mask;
     ucp_tag_recv_info_t info;
     ucs_status_t        status;
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
 
-    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+    send_b(&send_data, sizeof(send_data), DATATYPE, tag);
 
     short_progress_loop(); /* Receive messages as unexpected */
 
-    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
-    ASSERT_UCS_OK(status);
+    if (immediate) {
+        status = recv_imm(&recv_data, sizeof(recv_data), DATATYPE, masked_tag,
+                          mask, &info);
+        ASSERT_UCS_OK(status);
+    } else {
+        status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, masked_tag,
+                        mask, &info);
+        ASSERT_UCS_OK(status);
+    }
 
-    EXPECT_EQ(sizeof(send_data),   info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+    EXPECT_EQ(sizeof(send_data), info.length);
+    EXPECT_EQ(tag,               info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
+}
+
+UCS_TEST_P(test_ucp_tag_match, send_recv_unexp)
+{
+    send_recv_unexp(false);
+}
+
+UCS_TEST_P(test_ucp_tag_match, send_recv_unexp_immediate)
+{
+    send_recv_unexp(true);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_tag_match, send_recv_unexp_rqfree,
