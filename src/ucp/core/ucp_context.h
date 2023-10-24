@@ -162,8 +162,8 @@ typedef struct ucp_context_config {
     char                                   *select_distance_md;
     /** Directory to write protocol selection information */
     char                                   *proto_info_dir;
-    /** Memory types that perform non-blocking registration by default */
-    uint64_t                               reg_nb_mem_types;
+    /** Enable non-pinning registration on migratable memory */
+    ucs_on_off_auto_value_t                reg_migratable_mem;
 } ucp_context_config_t;
 
 
@@ -363,6 +363,9 @@ typedef struct ucp_context {
 
         /* worker_fence implementation method */
         unsigned                  worker_strong_fence;
+
+        /** Memory types that perform non-blocking registration */
+        uint64_t                  reg_nb_mem_types;
 
         struct {
            unsigned               count;

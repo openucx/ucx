@@ -61,6 +61,12 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
      ucs_offsetof(uct_cuda_copy_md_config_t, enable_dmabuf),
                   UCS_CONFIG_TYPE_TERNARY},
 
+    {"MIGRATABLE_MEM_TYPES", "",
+     "List of memory types to be identified as migratable.",
+     ucs_offsetof(uct_cuda_copy_md_config_t, migratable_mem_types),
+     UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+
     {"PREF_LOC", "cpu",
      "System device designation of a CUDA managed memory buffer"
      " whose preferred location attribute is not set.\n"
@@ -116,10 +122,11 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->dmabuf_mem_types       = md->config.dmabuf_supported ?
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA) : 0;
-    md_attr->max_alloc        = SIZE_MAX;
-    md_attr->max_reg          = ULONG_MAX;
-    md_attr->rkey_packed_size = 0;
-    md_attr->reg_cost         = UCS_LINEAR_FUNC_ZERO;
+    md_attr->migratable_mem_types   = md->config.migratable_mem_types;
+    md_attr->max_alloc              = SIZE_MAX;
+    md_attr->max_reg                = ULONG_MAX;
+    md_attr->rkey_packed_size       = 0;
+    md_attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -576,12 +583,13 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
         goto err;
     }
 
-    md->super.ops               = &md_ops;
-    md->super.component         = &uct_cuda_copy_component;
-    md->config.alloc_whole_reg  = config->alloc_whole_reg;
-    md->config.max_reg_ratio    = config->max_reg_ratio;
-    md->config.pref_loc         = config->pref_loc;
-    md->config.dmabuf_supported = 0;
+    md->super.ops                   = &md_ops;
+    md->super.component             = &uct_cuda_copy_component;
+    md->config.alloc_whole_reg      = config->alloc_whole_reg;
+    md->config.max_reg_ratio        = config->max_reg_ratio;
+    md->config.pref_loc             = config->pref_loc;
+    md->config.dmabuf_supported     = 0;
+    md->config.migratable_mem_types = config->migratable_mem_types;
 
     dmabuf_supported = uct_cuda_copy_md_is_dmabuf_supported();
     if ((config->enable_dmabuf == UCS_YES) && !dmabuf_supported) {

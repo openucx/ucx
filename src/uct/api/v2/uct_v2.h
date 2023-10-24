@@ -787,7 +787,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
 
     /** Indicate registration alignment. */
-    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16),
+
+    /** Indicate memory types whose pages can migrate. */
+    UCT_MD_ATTR_FIELD_MIGRATABLE_MEM_TYPES      = UCS_BIT(17)
 } uct_md_attr_field_t;
 
 
@@ -898,6 +901,12 @@ typedef struct {
      * Registration alignment.
      */
     size_t            reg_alignment;
+
+    /**
+     * Memory types whose pages can migrate and should not be pinned for
+     * registration purposes.
+     */
+    uint64_t          migratable_mem_types;
 } uct_md_attr_v2_t;
 
 

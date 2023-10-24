@@ -54,6 +54,7 @@ uct_rocm_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                       UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->reg_nonblock_mem_types = 0;
+    md_attr->migratable_mem_types   = 0;
     md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                       UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->alloc_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_ROCM);

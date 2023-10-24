@@ -461,7 +461,7 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
     err_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
                                                             UCS_LOG_LEVEL_ERROR;
 
-    if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
+    if (context->config.reg_nb_mem_types & UCS_BIT(mem_type)) {
         uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
     }
 

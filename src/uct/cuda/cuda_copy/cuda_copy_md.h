@@ -30,6 +30,7 @@ typedef struct uct_cuda_copy_md {
                                                     GPUs*/
         double                  max_reg_ratio;
         int                     dmabuf_supported;
+        uint64_t                migratable_mem_types;
         uct_cuda_pref_loc_t     pref_loc;
     } config;
 } uct_cuda_copy_md_t;
@@ -42,6 +43,7 @@ typedef struct uct_cuda_copy_md_config {
     ucs_on_off_auto_value_t     alloc_whole_reg;
     double                      max_reg_ratio;
     ucs_ternary_auto_value_t    enable_dmabuf;
+    uint64_t                    migratable_mem_types;
     uct_cuda_pref_loc_t         pref_loc;
 } uct_cuda_copy_md_config_t;
 

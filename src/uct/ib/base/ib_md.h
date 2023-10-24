@@ -145,6 +145,7 @@ typedef struct uct_ib_md {
     int                      fork_init;
     uint64_t                 reg_mem_types;
     uint64_t                 reg_nonblock_mem_types;
+    uint64_t                 migratable_mem_types;
     uint64_t                 cap_flags;
     char                     *name;
     /* flush_remote rkey is used as atomic_mr_id value (8-16 bits of rkey)
@@ -190,6 +191,7 @@ typedef struct uct_ib_md_config {
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
+    uint64_t                 migratable_mem_types; /**< Migratable memory types */
 } uct_ib_md_config_t;
 
 /**
