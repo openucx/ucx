@@ -1074,7 +1074,7 @@ uct_netif_parse_virtual_dev(const struct dirent *entry, void *ctx)
 ucs_status_t ucs_netif_get_lowest_device_path(const char *if_name,
                                               char *path_buffer, size_t max)
 {
-    ucs_string_buffer_t dev_path = UCS_STRING_BUFFER_INITIALIZER;
+    UCS_STRING_BUFFER_FIXED(dev_path, path_buffer, max);
     const int max_depth          = 8;
     int depth;
     ucs_status_t status;
@@ -1084,15 +1084,15 @@ ucs_status_t ucs_netif_get_lowest_device_path(const char *if_name,
     for (depth = 0; depth < max_depth; ++depth) {
         status = ucs_sys_readdir(ucs_string_buffer_cstr(&dev_path),
                                  uct_netif_parse_virtual_dev, &dev_path);
-        if (status != UCS_ERR_CANCELED) {
-            break;
+        if (status == UCS_ERR_CANCELED) {
+            /* Found a lower_ device and added it to dev_path */
+            continue;
         }
+
+        /* Could not find another lower_* device; stop and return dev_path */
+        return UCS_OK;
     }
 
-    if (status == UCS_OK) {
-        ucs_strncpy_safe(path_buffer, ucs_string_buffer_cstr(&dev_path), max);
-    }
-
-    ucs_string_buffer_cleanup(&dev_path);
-    return status;
+    /* Found max_depth lower_* devices; possibly a symlink loop - return error */
+    return UCS_ERR_IO_ERROR;
 }
