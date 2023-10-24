@@ -925,6 +925,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
         select_ctx->ucp_ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     }
 
+    if (mem_type != UCS_MEMORY_TYPE_HOST) {
+        /* Select transports for allocated memory only for host mem, to keep
+           wire compatibility of lane selection */
+        return UCS_OK;
+    }
+
     /* Select additional transports which can access allocated memory, but
      * only if their scores are better. We need this because a remote memory
      * block can be potentially allocated using one of them, and we might get
