@@ -143,12 +143,13 @@ enum {
     UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP,
     UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP,
 
-    UCP_WORKER_STAT_TAG_RX_RNDV_EXP,
-    UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP,
+    UCP_WORKER_STAT_RNDV_RX_EXP,
+    UCP_WORKER_STAT_RNDV_RX_UNEXP,
 
-    UCP_WORKER_STAT_TAG_RX_RNDV_GET_ZCOPY,
-    UCP_WORKER_STAT_TAG_RX_RNDV_SEND_RTR,
-    UCP_WORKER_STAT_TAG_RX_RNDV_RKEY_PTR,
+    UCP_WORKER_STAT_RNDV_PUT_ZCOPY,
+    UCP_WORKER_STAT_RNDV_GET_ZCOPY,
+    UCP_WORKER_STAT_RNDV_RTR,
+    UCP_WORKER_STAT_RNDV_RKEY_PTR,
 
     UCP_WORKER_STAT_LAST
 };
@@ -186,8 +187,8 @@ enum {
                              UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_##_is_exp, 1);
 
 #define UCP_WORKER_STAT_RNDV(_worker, _is_exp, _value) \
-    UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
-                             UCP_WORKER_STAT_TAG_RX_RNDV_##_is_exp, _value);
+    UCS_STATS_UPDATE_COUNTER((_worker)->stats, UCP_WORKER_STAT_RNDV_##_is_exp, \
+                             _value);
 
 #define UCP_WORKER_STAT_TAG_OFFLOAD(_worker, _name) \
     UCS_STATS_UPDATE_COUNTER((_worker)->tm_offload_stats, \

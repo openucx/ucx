@@ -54,19 +54,19 @@ func NewRequest(request C.ucs_status_ptr_t, callbackId uint64, immidiateInfo int
 		ucpRequest.request = unsafe.Pointer(uintptr(request))
 		ucpRequest.Status = UCS_INPROGRESS
 	} else {
-		requestStatus := UcsStatus(int64(uintptr(request)))
+		ucpRequest.Status = UcsStatus(int64(uintptr(request)))
 		if callback, found := deregister(callbackId); found {
 			switch callback := callback.(type) {
 			case UcpSendCallback:
-				callback(ucpRequest, requestStatus)
+				callback(ucpRequest, ucpRequest.Status)
 			case UcpTagRecvCallback:
-				callback(ucpRequest, requestStatus, immidiateInfo.(*UcpTagRecvInfo))
+				callback(ucpRequest, ucpRequest.Status, immidiateInfo.(*UcpTagRecvInfo))
 			case UcpAmDataRecvCallback:
-				callback(ucpRequest, requestStatus, uint64(immidiateInfo.(C.size_t)))
+				callback(ucpRequest, ucpRequest.Status, uint64(immidiateInfo.(C.size_t)))
 			}
-			if requestStatus != C.UCS_OK {
-				return ucpRequest, NewUcxError(requestStatus)
-			}
+		}
+		if ucpRequest.Status != UCS_OK {
+			return ucpRequest, NewUcxError(ucpRequest.Status)
 		}
 	}
 

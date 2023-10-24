@@ -65,7 +65,7 @@ jobs:
         go_port=$((30000 + $(AZP_AGENT_ID) * 100))
         args="-p=$go_port"
         if [ "${{ parameters.name }}" == "gpu" ]; then
-          args="$args -m=cuda"
+           args="$args -m=cuda"
         fi
         LD_LIBRARY_PATH=$(Agent.TempDirectory)/ucx-$(Build.BuildId)/lib/:$LD_LIBRARY_PATH $(Agent.TempDirectory)/ucx-$(Build.BuildId)/bin/goperftest $args &
         sleep 5

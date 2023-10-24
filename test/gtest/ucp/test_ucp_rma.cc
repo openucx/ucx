@@ -285,9 +285,7 @@ class test_ucp_rma_reg_nb : public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
-        /* TODO pending MOFED 23.07 upgrade
         add_variant_with_value(variants, UCP_FEATURE_RMA, NO_DEVX, "no_devx");
-        */
     }
 
     virtual void init() {

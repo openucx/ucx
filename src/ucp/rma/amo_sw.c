@@ -38,7 +38,7 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
 
     if (worker->context->config.ext.proto_enable) {
         ucp_dt_contig_pack(worker, atomich + 1, &req->send.amo.value, size,
-                           req->send.state.dt_iter.mem_info.type);
+                           UCS_MEMORY_TYPE_HOST);
         if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
             ucp_dt_contig_pack(worker, cswaph, req->send.amo.reply_buffer, size,
                                ucp_amo_request_reply_mem_type(req));

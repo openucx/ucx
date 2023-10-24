@@ -186,6 +186,7 @@ gtest_SOURCES = \
 	ucs/test_sock.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
+	ucs/test_usage_tracker.cc \
 	ucs/test_frag_list.cc \
 	ucs/test_type.cc \
 	ucs/test_log.cc \

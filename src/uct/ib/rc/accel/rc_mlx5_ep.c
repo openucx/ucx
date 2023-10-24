@@ -753,6 +753,31 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 }
 
+int uct_rc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
+                                const uct_ep_is_connected_params_t *params)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uint32_t addr_qp = 0;
+    uct_rc_mlx5_ep_address_t *rc_addr;
+    ucs_status_t status;
+    struct ibv_ah_attr ah_attr;
+    uint32_t qp_num;
+
+    status = uct_ib_mlx5_query_qp_peer_info(&iface->super.super,
+                                            &ep->tx.wq.super, &ah_attr,
+                                            &qp_num);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    if (params->field_mask & UCT_EP_IS_CONNECTED_FIELD_EP_ADDR) {
+        rc_addr       = (uct_rc_mlx5_ep_address_t*)params->ep_addr;
+        addr_qp       = uct_ib_unpack_uint24(rc_addr->qp_num);
+    }
+
+    return uct_rc_ep_is_connected(&ah_attr, params, qp_num, addr_qp);
+}
+
 ucs_status_t
 uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                 const uct_device_addr_t *device_addr,

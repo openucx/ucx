@@ -361,14 +361,23 @@ ucs_status_t uct_rkey_release(uct_component_h component,
     return component->rkey_release(component, rkey_ob->rkey, rkey_ob->handle);
 }
 
-ucs_status_t
-uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
-                 const uct_rkey_compare_params_t *params, int *result)
+ucs_status_t uct_base_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                                   uct_rkey_t rkey2,
+                                   const uct_rkey_compare_params_t *params,
+                                   int *result)
 {
     if ((params->field_mask != 0) || (result == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
+    *result = (rkey1 > rkey2) ? 1 : (rkey1 < rkey2) ? -1 : 0;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
+                 const uct_rkey_compare_params_t *params, int *result)
+{
     return component->rkey_compare(component, rkey1, rkey2, params, result);
 }
 
@@ -422,6 +431,8 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, global_id,
                               UCT_MD_ATTR_FIELD_GLOBAL_ID);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_alignment,
+                              UCT_MD_ATTR_FIELD_REG_ALIGNMENT);
 }
 
 static ucs_status_t uct_md_attr_v2_init(uct_md_h md, uct_md_attr_v2_t *md_attr)

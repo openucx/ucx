@@ -97,6 +97,7 @@ typedef struct uct_ib_md_ext_config {
                                                        that are kept idle before
                                                        reuse*/
     unsigned                 reg_retry_cnt; /**< Memory registration retry count */
+    unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
 } uct_ib_md_ext_config_t;
 
 
@@ -154,6 +155,10 @@ typedef struct uct_ib_md {
      * be initiated.  */
     uint32_t                 flush_rkey;
     uint16_t                 vhca_id;
+    struct {
+        uint32_t             base;
+        uint32_t             size;
+    } mkey_by_name_reserve;
 } uct_ib_md_t;
 
 
@@ -355,7 +360,8 @@ void uct_ib_md_close(uct_md_h tl_md);
 
 ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
-                           uint64_t access_flags, struct ibv_mr **mr_p);
+                           uint64_t access_flags, struct ibv_dm *dm,
+                           struct ibv_mr **mr_p);
 
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 

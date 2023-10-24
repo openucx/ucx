@@ -1813,3 +1813,40 @@ uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     ep->flags |= UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED;
     return UCS_OK;
 }
+
+int uct_dc_mlx5_ep_is_connected(const uct_ep_h tl_ep,
+                                const uct_ep_is_connected_params_t *params)
+{
+    uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uct_dc_mlx5_iface_t *iface;
+    const uct_dc_mlx5_iface_addr_t *dc_addr;
+    uct_dc_mlx5_grh_ep_t *grh_ep;
+    union ibv_gid *rgid;
+    uint32_t dct;
+
+    UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(params);
+
+    dc_addr = (const uct_dc_mlx5_iface_addr_t*)params->iface_addr;
+    iface   = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
+
+    if (((dc_addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) !=
+         iface->version_flag) ||
+        (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(dc_addr) !=
+         UCT_RC_MLX5_TM_ENABLED(&iface->super))) {
+        return 0;
+    }
+
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_GRH) {
+        grh_ep = ucs_derived_of(tl_ep, uct_dc_mlx5_grh_ep_t);
+        rgid   = (union ibv_gid*)grh_ep->grh_av.rgid;
+    } else {
+        rgid = NULL;
+    }
+
+    dct = ntohl(ep->av.dqp_dct) & UCS_MASK(UCT_IB_QPN_ORDER);
+
+    return uct_ib_iface_is_same_device((const uct_ib_address_t*)
+                                               params->device_addr,
+                                       ntohs(ep->av.rlid), rgid) &&
+           (dct == uct_ib_unpack_uint24(dc_addr->qp_num));
+}

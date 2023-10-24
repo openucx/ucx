@@ -302,6 +302,10 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
         if (params->flags & UCP_MEM_MAP_FIXED) {
             flags |= UCT_MD_MEM_FLAG_FIXED;
         }
+
+        if (params->flags & UCP_MEM_MAP_SYMMETRIC_RKEY) {
+            flags |= UCT_MD_MEM_SYMMETRIC_RKEY;
+        }
     }
 
     return flags;
@@ -599,11 +603,29 @@ ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
     return UCS_OK;
 }
 
+static ucp_md_index_t ucp_mem_get_md_index(ucp_context_h context,
+                                           const uct_md_h md,
+                                           uct_alloc_method_t method)
+{
+    ucp_md_index_t md_index;
+
+    if (method != UCT_ALLOC_METHOD_MD) {
+        return UCP_NULL_RESOURCE;
+    }
+
+    for (md_index = 0; md_index < context->num_mds; md_index++) {
+        if (md == context->tl_mds[md_index].md) {
+            return md_index;
+        }
+    }
+
+    return UCP_NULL_RESOURCE;
+}
+
 static ucs_status_t ucp_memh_create_from_mem(ucp_context_h context,
                                              const uct_allocated_memory_t *mem,
                                              ucp_mem_h *memh_p)
 {
-    ucp_md_index_t md_index;
     ucs_status_t status;
     ucp_mem_h memh;
 
@@ -613,27 +635,16 @@ static ucs_status_t ucp_memh_create_from_mem(ucp_context_h context,
         return status;
     }
 
-    if (mem->method != UCT_ALLOC_METHOD_MD) {
-        goto out;
-    }
-
-    for (md_index = 0; md_index < context->num_mds; md_index++) {
-        if (mem->md != context->tl_mds[md_index].md) {
-            continue;
-        }
-
-        memh->alloc_md_index = md_index;
-        memh->uct[md_index]  = mem->memh;
-        memh->md_map        |= UCS_BIT(md_index);
+    memh->alloc_md_index = ucp_mem_get_md_index(context, mem->md, mem->method);
+    if (memh->alloc_md_index != UCP_NULL_RESOURCE) {
+        memh->uct[memh->alloc_md_index] = mem->memh;
+        memh->md_map                   |= UCS_BIT(memh->alloc_md_index);
         ucs_trace("allocated address %p length %zu on md[%d]=%s %p",
-                  mem->address, mem->length, md_index,
-                  context->tl_mds[md_index].rsc.md_name, memh->uct[md_index]);
-        break;
+                  mem->address, mem->length, memh->alloc_md_index,
+                  context->tl_mds[memh->alloc_md_index].rsc.md_name,
+                  memh->uct[memh->alloc_md_index]);
     }
 
-    ucs_assert(memh->alloc_md_index != UCP_NULL_RESOURCE);
-
-out:
     *memh_p = memh;
     return UCS_OK;
 }
@@ -702,6 +713,28 @@ err:
     return status;
 }
 
+static void
+ucp_memh_reg_align(ucp_context_h context, void **address_p, size_t *length_p,
+                   ucp_md_map_t reg_md_map)
+{
+    size_t reg_align = UCS_RCACHE_MIN_ALIGNMENT;
+    const uct_md_attr_v2_t *md_attr;
+    ucp_md_index_t md_index;
+    void *start, *end;
+
+    ucs_for_each_bit(md_index, reg_md_map) {
+        md_attr   = &context->tl_mds[md_index].attr;
+        reg_align = ucs_max(md_attr->reg_alignment, reg_align);
+    }
+
+    start = ucs_align_down_pow2_ptr(*address_p, reg_align);
+    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(*address_p, *length_p),
+                                  reg_align);
+
+    *address_p = start;
+    *length_p  = UCS_PTR_BYTE_DIFF(start, end);
+}
+
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                size_t length, ucs_memory_type_t mem_type,
                                ucp_md_map_t reg_md_map, unsigned uct_flags,
@@ -721,6 +754,8 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
         reg_address = address;
         reg_length  = length;
     }
+
+    ucp_memh_reg_align(context, &reg_address, &reg_length, reg_md_map);
 
     ucs_trace(
             "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
@@ -955,12 +990,12 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
-                                      ucp_md_index_t md_index, uct_mem_h *memh,
-                                      ucp_md_map_t *md_map,
+                                      ucp_md_index_t md_index, ucp_mem_h *memh_p,
                                       uct_rkey_bundle_t *rkey_bundle)
 {
     ucp_context_h context           = worker->context;
     const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
+    ucp_mem_h memh                  = NULL; /* To suppress compiler warning */
     uct_component_h cmpt;
     ucp_tl_md_t *tl_md;
     ucs_status_t status;
@@ -976,15 +1011,15 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     tl_md  = &context->tl_mds[md_index];
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
 
-    status = ucp_mem_rereg_mds(context, UCS_BIT(md_index), remote_addr, length,
-                               UCT_MD_MEM_ACCESS_ALL,
-                               NULL, mem_type, NULL, memh, md_map);
+    status = ucp_memh_get(context, remote_addr, length, mem_type,
+                          UCS_BIT(md_index), UCT_MD_MEM_ACCESS_ALL, "mem_type",
+                          &memh);
     if (status != UCS_OK) {
         goto out;
     }
 
     rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
-    status      = uct_md_mkey_pack(tl_md->md, memh[0], rkey_buffer);
+    status      = uct_md_mkey_pack(tl_md->md, memh->uct[md_index], rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("failed to pack key from md[%d]: %s",
                   md_index, ucs_status_string(status));
@@ -998,20 +1033,17 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
         goto out_dereg_mem;
     }
 
+    *memh_p = memh;
     return UCS_OK;
 
 out_dereg_mem:
-    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, mem_type, NULL,
-                      memh, md_map);
+    ucp_memh_put(memh);
 out:
-    *memh = UCT_MEM_HANDLE_NULL;
     return status;
 }
 
-void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
-                                ucp_md_index_t md_index, uct_mem_h *memh,
-                                ucp_md_map_t *md_map,
-                                uct_rkey_bundle_t *rkey_bundle)
+void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucp_md_index_t md_index,
+                                ucp_mem_h memh, uct_rkey_bundle_t *rkey_bundle)
 {
     ucp_context_h context = worker->context;
     ucp_rsc_index_t cmpt_index;
@@ -1019,10 +1051,8 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
     if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
         cmpt_index = context->tl_mds[md_index].cmpt_index;
         uct_rkey_release(context->tl_cmpts[cmpt_index].cmpt, rkey_bundle);
+        ucp_memh_put(memh);
     }
-
-    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, mem_type, NULL,
-                      memh, md_map);
 }
 
 ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
@@ -1467,22 +1497,23 @@ ucs_status_t
 ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx)
 {
     const ucs_memory_type_t alloc_mem_type = UCS_MEMORY_TYPE_HOST;
-    unsigned memh_reg_flags;
-    ucp_mem_h alloc_memh;
     ucs_status_t status;
+    uct_allocated_memory_t mem;
 
     if (!context->alloc_md_index_initialized) {
-        memh_reg_flags = UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_HIDE_ERRORS;
-        status         = ucp_memh_alloc(context, NULL, 1, alloc_mem_type,
-                                        memh_reg_flags, "get_alloc_md_id",
-                                        &alloc_memh);
+        status = ucp_mem_do_alloc(context, NULL, 1,
+                                  UCT_MD_MEM_ACCESS_RMA |
+                                          UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                  alloc_mem_type, "get_alloc_md_id",
+                                  &mem);
         if (status != UCS_OK) {
             return status;
         }
 
         context->alloc_md_index_initialized     = 1;
-        context->alloc_md_index[alloc_mem_type] = alloc_memh->alloc_md_index;
-        ucp_memh_cleanup(context, alloc_memh);
+        context->alloc_md_index[alloc_mem_type] =
+                ucp_mem_get_md_index(context, mem.md, mem.method);
+        uct_mem_free(&mem);
     }
 
     *md_idx = context->alloc_md_index[alloc_mem_type];

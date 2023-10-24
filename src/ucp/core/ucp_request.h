@@ -531,7 +531,15 @@ ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
 void ucp_request_memory_dereg(ucp_datatype_t datatype, ucp_dt_state_t *state,
                               ucp_request_t *req);
 
-void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status);
+/**
+ * @brief Invalidates the request associated memh if required.
+ *
+ * @param [in] req           Request that contains memh
+ * @param [in] status        Status of the error which caused abortion
+ *
+ * @return 1 if invalidation happened, 0 if invalidation isn't required/supported
+ */
+int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,

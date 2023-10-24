@@ -10,8 +10,6 @@ pr:
 variables:
 - name: WorkDir
   value: /hpc/scrap/azure/$(Build.DefinitionName)/$(Build.BuildId)-$(Build.BuildNumber)
-- name: perf_nodes
-  value: vulcan03,vulcan04
 - name: threshold
   value: 5
 
@@ -53,6 +51,7 @@ stages:
     jobs:
       - job: Perf
         displayName: Performance testing
+        timeoutInMinutes: 180
         pool:
           name: MLNX
           demands:
@@ -85,32 +84,19 @@ stages:
             displayName: Debug info
             workingDirectory: $(WorkDir)
 
-          - bash: |
-              set -eE
-              # Extract commit SHAs from the PR's merge message.
-              # SHA_After=$(Build.SourceVersion)
-              SHA_After=$(echo $(Build.SourceVersionMessage) | awk '{print $2}')
-              SHA_Before=$(echo $(Build.SourceVersionMessage) | awk '{print $4}')
+          - template: tools/perf-common.yml
+            parameters:
+              Name: Build-UCX
 
-              python3 -m venv VENV
-              source VENV/bin/activate
-              cd $(WorkDir)/PerfX
-              pip3 install -q -r requirements.txt
-              module load /hpc/local/etc/modulefiles/hpcx-gcc
+          - template: tools/perf-common.yml
+            parameters:
+              Name: Perf-test-multi-node
 
-              set -xeE -o pipefail
-              python3 -u perfx.py \
-                --source-branch $(Build.SourceBranch) \
-                --config ucx-rdmz.yml \
-                --before "$SHA_Before" \
-                --after "$SHA_After" \
-                --module hpcx-gcc \
-                --filter \
-                --extra-ompi-opts " -H $(perf_nodes)" | tee $(WorkDir)/results.txt
-            displayName: Perf test
-            workingDirectory: $(WorkDir)
+          - template: tools/perf-common.yml
+            parameters:
+              Name: Perf-test-single-node
 
-          - script: $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results.txt $(threshold)
+          - script: $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results-Perf\*.txt $(threshold)
             displayName: Results analyzer
             workingDirectory: $(WorkDir)
 
@@ -119,6 +105,7 @@ stages:
               cat perfx.log
             displayName: Print raw log
             workingDirectory: $(WorkDir)/PerfX
+            condition: always()
 
           - task: PublishBuildArtifacts@1
             inputs:

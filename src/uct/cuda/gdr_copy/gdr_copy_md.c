@@ -21,18 +21,9 @@
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_md.h>
 
-#define UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN 65536
-
 static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_gdr_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
-
-    {"RCACHE", "try", "Enable using memory registration cache",
-     ucs_offsetof(uct_gdr_copy_md_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
-
-    {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN), NULL,
-     ucs_offsetof(uct_gdr_copy_md_config_t, rcache),
-     UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
     {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
      ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.m), UCS_CONFIG_TYPE_TIME},
@@ -59,6 +50,7 @@ uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->max_reg                = ULONG_MAX;
     md_attr->rkey_packed_size       = sizeof(uct_gdr_copy_key_t);
     md_attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
+    md_attr->reg_alignment          = GPU_PAGE_SIZE;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -261,10 +253,6 @@ static void uct_gdr_copy_md_close(uct_md_h uct_md)
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     int ret;
 
-    if (md->rcache != NULL) {
-        ucs_rcache_destroy(md->rcache);
-    }
-
     ret = gdr_close(md->gdrcpy_ctx);
     if (ret) {
         ucs_warn("failed to close gdrcopy. ret:%d", ret);
@@ -283,107 +271,6 @@ static uct_md_ops_t md_ops = {
     .detect_memory_type = ucs_empty_function_return_unsupported
 };
 
-static inline uct_gdr_copy_rcache_region_t*
-uct_gdr_copy_rache_region_from_memh(uct_mem_h memh)
-{
-    return ucs_container_of(memh, uct_gdr_copy_rcache_region_t, memh);
-}
-
-static ucs_status_t
-uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
-                            const uct_md_mem_reg_params_t *params,
-                            uct_mem_h *memh_p)
-{
-    uint64_t flags        = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
-                                                       FIELD_FLAGS, 0);
-    uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    ucs_rcache_region_t *rregion;
-    ucs_status_t status;
-    uct_gdr_copy_mem_t *memh;
-
-    status = ucs_rcache_get(md->rcache, (void *)address, length, PROT_READ|PROT_WRITE,
-                            &flags, &rregion);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_assert(rregion->refcount > 0);
-    memh = &ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t)->memh;
-    *memh_p = memh;
-    return UCS_OK;
-}
-
-static ucs_status_t
-uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md,
-                              const uct_md_mem_dereg_params_t *params)
-
-{
-    uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    uct_gdr_copy_rcache_region_t *region;
-
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
-
-    region = uct_gdr_copy_rache_region_from_memh(params->memh);
-    ucs_rcache_region_put(md->rcache, &region->super);
-    return UCS_OK;
-}
-
-static uct_md_ops_t md_rcache_ops = {
-    .close               = uct_gdr_copy_md_close,
-    .query               = uct_gdr_copy_md_query,
-    .mkey_pack           = uct_gdr_copy_mkey_pack,
-    .mem_reg             = uct_gdr_copy_mem_rcache_reg,
-    .mem_dereg           = uct_gdr_copy_mem_rcache_dereg,
-    .detect_memory_type  = ucs_empty_function_return_unsupported,
-};
-
-static ucs_status_t
-uct_gdr_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                               void *arg, ucs_rcache_region_t *rregion,
-                               uint16_t rcache_mem_reg_flags)
-{
-    uct_gdr_copy_md_t *md = context;
-    int *flags            = arg;
-    uct_gdr_copy_rcache_region_t *region;
-
-    if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {
-        *flags |= UCT_MD_MEM_FLAG_HIDE_ERRORS;
-    }
-
-    region = ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t);
-    return uct_gdr_copy_mem_reg_internal(&md->super, (void*)region->super.super.start,
-                                         region->super.super.end -
-                                         region->super.super.start,
-                                         *flags, &region->memh);
-}
-
-static void uct_gdr_copy_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
-                                             ucs_rcache_region_t *rregion)
-{
-    uct_gdr_copy_md_t *md = context;
-    uct_gdr_copy_rcache_region_t *region;
-
-    region = ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t);
-    (void)uct_gdr_copy_mem_dereg_internal(&md->super, &region->memh);
-}
-
-static void uct_gdr_copy_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,
-                                               ucs_rcache_region_t *rregion, char *buf,
-                                               size_t max)
-{
-    uct_gdr_copy_rcache_region_t *region = ucs_derived_of(rregion,
-                                                          uct_gdr_copy_rcache_region_t);
-    uct_gdr_copy_mem_t *memh = &region->memh;
-
-    snprintf(buf, max, "bar ptr:%p", memh->bar_ptr);
-}
-
-static ucs_rcache_ops_t uct_gdr_copy_rcache_ops = {
-    .mem_reg     = uct_gdr_copy_rcache_mem_reg_cb,
-    .mem_dereg   = uct_gdr_copy_rcache_mem_dereg_cb,
-    .dump_region = uct_gdr_copy_rcache_dump_region_cb
-};
-
 static ucs_status_t
 uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
                      const uct_md_config_t *config, uct_md_h *md_p)
@@ -392,7 +279,6 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
                     ucs_derived_of(config, uct_gdr_copy_md_config_t);
     ucs_status_t status;
     uct_gdr_copy_md_t *md;
-    ucs_rcache_params_t rcache_params;
 
     md = ucs_malloc(sizeof(uct_gdr_copy_md_t), "uct_gdr_copy_md_t");
     if (NULL == md) {
@@ -402,7 +288,6 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops       = &md_ops;
     md->super.component = &uct_gdr_copy_component;
-    md->rcache          = NULL;
     md->reg_cost        = md_config->uc_reg_cost;
 
     md->gdrcpy_ctx = gdr_open();
@@ -412,40 +297,12 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
         goto err_free_md;
     }
 
-    if (md_config->enable_rcache != UCS_NO) {
-        ucs_rcache_set_params(&rcache_params, &md_config->rcache);
-        rcache_params.region_struct_size = sizeof(uct_gdr_copy_rcache_region_t);
-        rcache_params.max_alignment      = UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN;
-        rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
-        rcache_params.context            = md;
-        rcache_params.ops                = &uct_gdr_copy_rcache_ops;
-        rcache_params.flags              = 0;
-
-        status = ucs_rcache_create(&rcache_params, "gdr_copy", NULL, &md->rcache);
-        if (status == UCS_OK) {
-            md->super.ops = &md_rcache_ops;
-            md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
-        } else {
-            ucs_assert(md->rcache == NULL);
-            if (md_config->enable_rcache == UCS_YES) {
-                status = UCS_ERR_IO_ERROR;
-                goto err_close_gdr;
-            } else {
-                ucs_debug("could not create registration cache for: %s",
-                          ucs_status_string(status));
-            }
-        }
-    }
-
     *md_p = (uct_md_h) md;
-    status = UCS_OK;
-out:
-    return status;
-err_close_gdr:
-    gdr_close(md->gdrcpy_ctx);
+    return UCS_OK;
+
 err_free_md:
     ucs_free(md);
-    goto out;
+    return status;
 }
 
 uct_component_t uct_gdr_copy_component = {
@@ -455,7 +312,7 @@ uct_component_t uct_gdr_copy_component = {
     .rkey_unpack        = uct_gdr_copy_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_gdr_copy_rkey_release,
-    .rkey_compare       = ucs_empty_function_return_unsupported,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "gdr_copy",
     .md_config          = {
         .name           = "GDR-copy memory domain",

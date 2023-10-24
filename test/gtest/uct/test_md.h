@@ -54,6 +54,7 @@ protected:
 
     void test_reg_advise(size_t size, size_t advise_size,
                          size_t advice_offset, bool check_non_blocking = false);
+    void test_alloc_advise(ucs_memory_type_t mem_type);
 
     uct_md_h md() const {
         return m_md;
@@ -73,6 +74,8 @@ protected:
     }
 
     static void dereg_cb(uct_completion_t *comp);
+
+    bool is_gpu_ipc() const;
 
     const unsigned md_flags_remote_rma = UCT_MD_MEM_ACCESS_REMOTE_PUT |
                                          UCT_MD_MEM_ACCESS_REMOTE_GET;

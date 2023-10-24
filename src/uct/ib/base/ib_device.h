@@ -444,6 +444,10 @@ void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
                                           enum ibv_event_type event_type,
                                           uint32_t resource_id);
 
+ucs_status_t uct_ib_device_get_ah_cached(uct_ib_device_t *dev,
+                                         struct ibv_ah_attr *ah_attr,
+                                         struct ibv_ah **ah_p);
+
 int uct_ib_get_cqe_size(int cqe_size_min);
 
 const char* uct_ib_ah_attr_str(char *buf, size_t max,

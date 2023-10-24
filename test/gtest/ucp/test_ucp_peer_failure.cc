@@ -75,6 +75,7 @@ protected:
 
     void cleanup_rndv_descs();
 
+    void                    *m_sreq, *m_rreq;
     std::queue<void *>      m_am_rndv_descs;
     size_t                  m_am_rx_count;
     size_t                  m_err_count;
@@ -90,7 +91,11 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure, dc_mlx5, "dc_mlx5")
 
 
 test_ucp_peer_failure::test_ucp_peer_failure() :
-    m_am_rx_count(0), m_err_count(0), m_err_status(UCS_OK)
+    m_sreq(nullptr),
+    m_rreq(nullptr),
+    m_am_rx_count(0),
+    m_err_count(0),
+    m_err_status(UCS_OK)
 {
     ucs::fill_random(m_sbuf);
     configure_peer_failure_settings();
@@ -249,7 +254,7 @@ test_ucp_peer_failure::smoke_test(bool stable_pair)
     std::pair<ucs_status_t, ucs_status_t> result;
 
     // Send and wait for completion
-    void *sreq = send_nb(send_ep, stable_pair ? m_stable_rkey : m_failing_rkey);
+    m_sreq = send_nb(send_ep, stable_pair ? m_stable_rkey : m_failing_rkey);
 
     if (get_variant_value() & TEST_AM) {
         // Wait for active message to be received
@@ -258,17 +263,17 @@ test_ucp_peer_failure::smoke_test(bool stable_pair)
         }
 
         while (!m_am_rndv_descs.empty()) {
-            void* rreq    = ucp_am_recv_data_nbx(recv_entity.worker(),
+            m_rreq        = ucp_am_recv_data_nbx(recv_entity.worker(),
                                                  m_am_rndv_descs.front(),
                                                  &m_rbuf[0], m_rbuf.size(),
                                                  &req_param);
-            result.second = request_wait(rreq);
+            result.second = request_wait(m_rreq);
             m_am_rndv_descs.pop();
         }
     } else if (get_variant_value() & TEST_TAG) {
-        void* rreq    = ucp_tag_recv_nbx(recv_entity.worker(), &m_rbuf[0],
+        m_rreq        = ucp_tag_recv_nbx(recv_entity.worker(), &m_rbuf[0],
                                          m_rbuf.size(), 0, 0, &req_param);
-        result.second = request_wait(rreq);
+        result.second = request_wait(m_rreq);
     } else if (get_variant_value() & TEST_RMA) {
         // Flush the sender and expect data to arrive on receiver
         void *freq = ucp_ep_flush_nb(send_ep, 0,
@@ -278,7 +283,7 @@ test_ucp_peer_failure::smoke_test(bool stable_pair)
         result.second = UCS_OK;
     }
 
-    result.first = request_wait(sreq);
+    result.first = request_wait(m_sreq);
     return result;
 }
 
@@ -629,6 +634,11 @@ public:
     }
 
 protected:
+    enum class rndv_mode {
+        rndv_get,
+        rndv_put
+    };
+
     void init()
     {
         self = this;
@@ -680,7 +690,7 @@ protected:
         return UCS_ERR_CONNECTION_RESET;
     }
 
-    void replace_ep_put_zcopy(ucp_ep_h ep)
+    void replace_rndv_ops(ucp_ep_h ep)
     {
         for (auto lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
             if (lane == ucp_ep_get_cm_lane(ep)) {
@@ -691,41 +701,55 @@ protected:
             auto result = m_sender_uct_ops.emplace(iface, iface->ops);
             if (result.second) {
                 iface->ops.ep_put_zcopy = return_err_connection_reset;
+                iface->ops.ep_get_zcopy = return_err_connection_reset;
             }
         }
     }
 
-    void restore_ep_put_zcopy() {
+    void restore_rndv_ops()
+    {
         for (auto &elem : m_sender_uct_ops) {
             elem.first->ops = elem.second;
         }
     }
 
+    void close_peer()
+    {
+        if (m_is_peer_closed) {
+            return;
+        }
+
+        scoped_log_handler slh(wrap_errors_logger);
+        m_peer_to_close->close_all_eps(*self, 0, UCP_EP_CLOSE_FLAG_FORCE);
+
+        void *peer_req = (m_peer_to_close == &sender()) ? m_sreq : m_rreq;
+        while (ucp_request_check_status(peer_req) == UCS_INPROGRESS) {
+            progress({m_peer_to_close});
+        }
+
+        m_is_peer_closed = true;
+    }
+
     static ucs_status_t progress_wrapper(uct_pending_req_t *uct_req)
     {
-        auto *req       = ucs_container_of(uct_req, ucp_request_t, send.uct);
-        auto *proto     = req->send.proto_config->proto;
-        auto stage      = req->send.proto_stage;
-        auto proto_name = proto->name;
+        auto *req   = ucs_container_of(uct_req, ucp_request_t, send.uct);
+        auto stage  = req->send.proto_stage;
+        auto *proto = req->send.proto_config->proto;
 
-        if (std::string(proto_name) == "rndv/put/zcopy") {
+        if (proto->name == self->m_proto_name) {
+            if (self->m_replace_ops) {
+                self->replace_rndv_ops(req->send.ep);
+            }
+
             if (stage == UCP_PROTO_STAGE_START) {
-                if (!self->m_is_ep_closed) {
-                    scoped_log_handler slh(wrap_errors_logger);
-                    self->receiver().close_all_eps(*self, 0,
-                                                   UCP_EP_CLOSE_FLAG_FORCE);
-                    self->replace_ep_put_zcopy(req->send.ep);
-                    self->m_is_ep_closed = true;
-                }
-            } else {
-                EXPECT_TRUE(false) << "Unexpected proto stage";
+                self->close_peer();
             }
         }
 
         ucs_status_t status = self->m_progress_storage[proto][stage](uct_req);
 
-        if (self->m_is_ep_closed) {
-            self->restore_ep_put_zcopy();
+        if ((proto->name == self->m_proto_name) && self->m_replace_ops) {
+            self->restore_rndv_ops();
         }
 
         return status;
@@ -738,47 +762,110 @@ protected:
         self = nullptr;
     }
 
+    void define_test_settings(rndv_mode mode, bool replace_ops)
+    {
+        m_replace_ops = replace_ops;
+
+        switch (mode) {
+        case rndv_mode::rndv_get:
+            m_proto_name    = "rndv/get/zcopy";
+            m_peer_to_close = &self->sender();
+            break;
+        case rndv_mode::rndv_put:
+            m_proto_name    = "rndv/put/zcopy";
+            m_peer_to_close = &self->receiver();
+            break;
+        default:
+            EXPECT_TRUE(false) << "Wrong RNDV mode";
+        }
+    }
+
+    void rndv_progress_failure_test(rndv_mode mode, bool replace_ops)
+    {
+        ucp_ep_config_t *sender_config = ucp_ep_config(sender().ep());
+        if (sender_config->key.rma_bw_lanes[0] == UCP_NULL_LANE) {
+            UCS_TEST_SKIP_R("transport has no rma_bw lanes");
+        }
+
+        define_test_settings(mode, replace_ops);
+
+        smoke_test(true);
+
+        /* Replace progress functions for all protocols and do another
+         * send-receive loop to fail the certain proto progress call.
+         */
+        protos_replace_progress();
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+            auto result = smoke_test(true);
+            ASSERT_TRUE(UCS_STATUS_IS_ERR(result.first));
+            ASSERT_TRUE(UCS_STATUS_IS_ERR(result.second));
+        }
+
+        protos_restore_progress();
+
+        /* Check that certain progress was called and failed. */
+        ASSERT_TRUE(m_is_peer_closed);
+    }
+
     using progress_array =
             std::array<uct_pending_callback_t, UCP_PROTO_STAGE_LAST>;
     using progress_hash_map =
             std::unordered_map<const ucp_proto_t*, progress_array>;
+    using ops_map = std::map<uct_iface_h, uct_iface_ops_t>;
 
-    std::map<uct_iface_h, uct_iface_ops_t> m_sender_uct_ops{};
-    progress_hash_map                      m_progress_storage{};
-    bool                                   m_is_ep_closed{false};
+    progress_hash_map m_progress_storage{};
+    ops_map           m_sender_uct_ops{};
+    bool              m_is_peer_closed{false};
+    std::string       m_proto_name{};
+    entity            *m_peer_to_close{nullptr};
+    /* Even if we close peer EP with the force flag, the next proto progress call
+       probably would return UCS_OK. This option enables emulation of certain
+       progress call failure. */
+    bool              m_replace_ops{false};
 
     static test_ucp_peer_failure_rndv_abort *self;
 };
 
 test_ucp_peer_failure_rndv_abort *test_ucp_peer_failure_rndv_abort::self = nullptr;
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, put_zcopy,
-                     !m_ucp_config->ctx.proto_enable,
-                     "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy")
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, get_zcopy,
+                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
+                     "RNDV_SCHEME=get_zcopy")
 {
-    if (ucp_ep_config(sender().ep())->key.rma_bw_lanes[0] == UCP_NULL_LANE) {
-        UCS_TEST_SKIP_R("transport has no rma_bw lanes");
-    }
+    rndv_progress_failure_test(rndv_mode::rndv_get, true);
+}
 
-    smoke_test(true);
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, put_zcopy_force_flush,
+                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
+                     "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
+{
+    rndv_progress_failure_test(rndv_mode::rndv_put, true);
+}
 
-    /* Replace progress functions for all protocols and do another
-     * send-receive loop to close the ep during first rndv/put/zcopy call
-     * and replace put_zcopy to function that returns error. This should
-     * imitate network error.
-     */
-    protos_replace_progress();
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
+                     get_zcopy_memory_invalidation,
+                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
+                     "RNDV_SCHEME=get_zcopy")
+{
+    rndv_progress_failure_test(rndv_mode::rndv_get, false);
+}
 
-    {
-        scoped_log_handler slh(wrap_errors_logger);
-        auto result = smoke_test(true);
-        ASSERT_EQ(result.first, UCS_ERR_CONNECTION_RESET);
-    }
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
+                     put_zcopy_memory_invalidation,
+                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
+                     "RNDV_SCHEME=put_zcopy")
+{
+    rndv_progress_failure_test(rndv_mode::rndv_put, false);
+}
 
-    protos_restore_progress();
-
-    /* Check that rndv/put/zcopy progress was called and ep was closed. */
-    ASSERT_TRUE(m_is_ep_closed);
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
+                     put_zcopy_force_flush_memory_invalidation,
+                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
+                     "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
+{
+    rndv_progress_failure_test(rndv_mode::rndv_put, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_rndv_abort)

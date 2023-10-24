@@ -107,6 +107,11 @@ UCS_TEST_P(test_mem, md_alloc) {
         status = uct_md_query(md, &md_attr);
         ASSERT_UCS_OK(status);
 
+        if (md_attr.cap.max_alloc < min_length) {
+            uct_md_close(md);
+            continue;
+        }
+
         ucs_for_each_bit(mem_type, md_attr.cap.alloc_mem_types) {
             params.mem_type = (ucs_memory_type_t)mem_type;
             for (nonblock = 0; nonblock <= 1; ++nonblock) {

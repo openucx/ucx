@@ -219,7 +219,8 @@ AS_IF([test "x$with_ib" = "xyes"],
                             [have upstream ibv_query_device_ex])])],
                             [], [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps],
+       AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps,
+                         struct ibv_device_attr_ex.odp_caps],
                         [], [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,

@@ -47,4 +47,7 @@ UCS_CLASS_DECLARE(uct_ud_verbs_ep_t, const uct_ep_params_t *)
 ucs_status_t uct_ud_verbs_qp_max_send_sge(uct_ud_verbs_iface_t *iface,
                                           size_t *max_send_sge);
 
+int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
+                                 const uct_ep_is_connected_params_t *params);
+
 #endif
