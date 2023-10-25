@@ -872,7 +872,7 @@ static void ucp_wireup_unset_tl_by_md(const ucp_wireup_select_params_t *sparams,
 }
 
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
-        const ucp_wireup_select_params_t *select_params,
+        const ucp_wireup_select_params_t *select_params, unsigned ep_init_flags,
         const ucp_wireup_criteria_t *criteria, ucs_memory_type_t mem_type,
         ucp_tl_bitmap_t tl_bitmap, ucp_lane_type_t lane_type,
         ucp_wireup_select_context_t *select_ctx)
@@ -925,7 +925,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
         select_ctx->ucp_ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     }
 
-    if (mem_type != UCS_MEMORY_TYPE_HOST) {
+    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
+        (mem_type != UCS_MEMORY_TYPE_HOST)) {
         /* Select transports for allocated memory only for host mem, to keep
            wire compatibility of lane selection */
         return UCS_OK;
@@ -1139,8 +1140,8 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
 
     tl_bitmap = ucp_tl_bitmap_max;
     ucs_memory_type_for_each(mem_type) {
-        status = ucp_wireup_add_memaccess_lanes(select_params, &criteria,
-                                                mem_type, tl_bitmap,
+        status = ucp_wireup_add_memaccess_lanes(select_params, ep_init_flags,
+                                                &criteria, mem_type, tl_bitmap,
                                                 UCP_LANE_TYPE_RMA, select_ctx);
         if ((status != UCS_OK) && (mem_type == UCS_MEMORY_TYPE_HOST)) {
             return status;
@@ -1202,9 +1203,10 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    return ucp_wireup_add_memaccess_lanes(select_params, &criteria,
-                                          UCS_MEMORY_TYPE_HOST, tl_bitmap,
-                                          UCP_LANE_TYPE_AMO, select_ctx);
+    return ucp_wireup_add_memaccess_lanes(select_params, ep_init_flags,
+                                          &criteria, UCS_MEMORY_TYPE_HOST,
+                                          tl_bitmap, UCP_LANE_TYPE_AMO,
+                                          select_ctx);
 }
 
 static double
