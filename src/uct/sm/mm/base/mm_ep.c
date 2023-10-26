@@ -266,7 +266,8 @@ void uct_mm_ep_short_fill_data(void *buffer, uint64_t header, const void *payloa
     packet->header = header;
     /* suppress false positive diagnostic from uct_mm_ep_am_common_send call */
     /* cppcheck-suppress ctunullpointer */
-    ucs_memcpy_relaxed(packet->payload, payload, length, BUFF_NT_SEND);
+    ucs_memcpy_relaxed(packet->payload, payload, length,
+                       UCS_ARCH_MEMCPY_NT_DEST);
 }
 
 static inline void uct_mm_ep_update_cached_tail(uct_mm_ep_t *ep)

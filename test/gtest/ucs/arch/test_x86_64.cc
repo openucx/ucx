@@ -21,7 +21,8 @@ protected:
      * not be used as template argument */
     static inline void *memcpy_relaxed(void *dst, const void *src, size_t size)
     {
-        return ucs_memcpy_relaxed(dst, src, size, BUFF_NORMAL);
+        ucs_arch_memcpy_hint_t hint = 0;
+        return ucs_memcpy_relaxed(dst, src, size, hint);
     }
 
     template <void* (C)(void*, const void*, size_t)>

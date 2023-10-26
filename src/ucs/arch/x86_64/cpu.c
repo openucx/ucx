@@ -716,7 +716,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 #define YMM_SZ      32
 
 static UCS_F_ALWAYS_INLINE
-size_t ucs_cpu_nt_buffer_transfer_send(void *dst, const void *src, size_t len)
+size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
@@ -795,7 +795,7 @@ size_t ucs_cpu_nt_buffer_transfer_send(void *dst, const void *src, size_t len)
 }
 
 static UCS_F_ALWAYS_INLINE
-size_t ucs_cpu_nt_buffer_transfer_recv(void *dst, const void *src, size_t len)
+size_t ucs_cpu_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
@@ -880,27 +880,27 @@ size_t ucs_cpu_nt_buffer_transfer_recv(void *dst, const void *src, size_t len)
  * application can choose the cache hotness of the final buffer
  */
 void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
-                                buff_transfer_t type)
+                                ucs_arch_memcpy_hint_t hint)
 {
     __m256i y0, y1, y2, y3;
     size_t tail_bytes;
 
     if (ucs_likely(len <= 128)) {
         goto copy_bytes_le_128;
-    } else {
-        if (type == BUFF_NT_SEND) {
-            tail_bytes = ucs_cpu_nt_buffer_transfer_send(dst, src, len);
-        } else if (type == BUFF_NT_RECV) {
-            tail_bytes = ucs_cpu_nt_buffer_transfer_recv(dst, src, len);
-        } else {
-            memcpy(dst, src, len);
-            return;
-        }
-
-        dst = (char *)dst + (len - tail_bytes);
-        src = (char *)src + (len - tail_bytes);
-        len = tail_bytes;
     }
+
+    if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
+        tail_bytes = ucs_cpu_nt_dst_buffer_transfer(dst, src, len);
+    } else if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
+        tail_bytes = ucs_cpu_nt_src_buffer_transfer(dst, src, len);
+    } else {
+        memcpy(dst, src, len);
+        tail_bytes = 0;
+    }
+
+    dst = (char *)dst + (len - tail_bytes);
+    src = (char *)src + (len - tail_bytes);
+    len = tail_bytes;
 
 copy_bytes_le_128:
     /* Handle lengths that fall usually within eager short range */
