@@ -42,6 +42,8 @@ contrib/ucx
 bindings/java/pom.xml
 src/ucs/ucs_stats_parser
 test/gtest/gtest
+test/gtest/ucm/test_dlopen/.noinst/
+test/gtest/ucm/test_dlopen/rpath-subdir/.noinst/
 build-*
 ucx*tar.gz
 src/tools/info/build_config.h
@@ -99,6 +101,7 @@ test/apps/test_cuda_hook_dynamic
 test/apps/test_cuda_hook_static
 test/apps/test_ucp_config
 test/apps/test_memtrack_limit
+test/apps/test_no_cuda_ctx
 test/apps/test_tcmalloc
 test/apps/profiling/ucx_profiling
 test/apps/uct_info/uct_info
