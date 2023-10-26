@@ -556,6 +556,8 @@ static void uct_ib_mlx5_devx_reg_symmetric(uct_ib_mlx5_md_t *md,
     uint32_t symmetric_rkey;
     ucs_status_t status;
 
+    ucs_assert(!(memh->super.flags & UCT_IB_MEM_MULTITHREADED));
+
     /* Best effort, only allocate in the range below the atomic keys. */
     while (md->smkey_index < md->super.mkey_by_name_reserve.size) {
         status = uct_ib_mlx5_devx_reg_ksm_data_contig(
@@ -588,6 +590,12 @@ static void uct_ib_mlx5_devx_reg_symmetric(uct_ib_mlx5_md_t *md,
               md->super.mkey_by_name_reserve.base + start);
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_devx_symmetric_rkey(const uct_ib_mlx5_md_t *md, unsigned flags)
+{
+    return (flags & UCT_MD_MEM_SYMMETRIC_RKEY) &&
+           (md->flags & UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE);
+}
 
 static ucs_status_t
 uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
@@ -598,11 +606,14 @@ uct_ib_mlx5_devx_reg_mr(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh,
 {
     uint64_t access_flags = uct_ib_memh_access_flags(&md->super, &memh->super) &
                             access_mask;
+    unsigned flags        = UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
+                                                       FIELD_FLAGS, 0);
     ucs_status_t status;
     uint32_t mkey;
 
     if ((length >= md->super.config.min_mt_reg) &&
-        !(access_flags & IBV_ACCESS_ON_DEMAND)) {
+        !(access_flags & IBV_ACCESS_ON_DEMAND) &&
+        !uct_ib_mlx5_devx_symmetric_rkey(md, flags)) {
         /* Verbs transports can issue atomic operations to the default key */
         status = uct_ib_mlx5_devx_reg_mt(md, address, length,
                                          (memh->super.flags &
@@ -672,8 +683,7 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
         goto err_memh_free;
     }
 
-    if ((flags & UCT_MD_MEM_SYMMETRIC_RKEY) &&
-        (md->flags & UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE)) {
+    if (uct_ib_mlx5_devx_symmetric_rkey(md, flags)) {
         uct_ib_mlx5_devx_reg_symmetric(md, memh, address);
     }
 
