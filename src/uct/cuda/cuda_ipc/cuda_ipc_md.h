@@ -44,7 +44,6 @@ typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t          super;
     ucs_ternary_auto_value_t rcache_enable;
     ucs_rcache_config_t      rcache;
-    double                   rcache_max_ratio;
 } uct_cuda_ipc_md_config_t;
 
 
