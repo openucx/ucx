@@ -31,7 +31,7 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
 
     {"", "", NULL,
      ucs_offsetof(uct_cuda_ipc_md_config_t, rcache),
-     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
+     UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
     {NULL}
 };
