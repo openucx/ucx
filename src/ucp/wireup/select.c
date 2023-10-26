@@ -918,7 +918,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
 
     /* If could not find registered memory access lane, try to use emulation */
     if (status != UCS_OK) {
-        if (!select_params->allow_am) {
+        if (!allow_am) {
             return status;
         }
 
