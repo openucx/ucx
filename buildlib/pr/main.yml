@@ -75,21 +75,6 @@ resources:
     - container: centos7_cuda_11_4
       image: nvidia/cuda:11.4.3-devel-centos7
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_0
-      image: nvidia/cuda:11.0.3-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_1
-      image: nvidia/cuda:11.1.1-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_2
-      image: nvidia/cuda:11.2.2-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_3
-      image: nvidia/cuda:11.3.1-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_4
-      image: nvidia/cuda:11.4.3-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubi8_cuda_11_5
       image: nvidia/cuda:11.5.2-devel-ubi8
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
