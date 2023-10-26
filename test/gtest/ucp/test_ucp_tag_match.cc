@@ -55,8 +55,11 @@ public:
                                "req_int");
         add_variant_with_value(variants, get_ctx_params(), RECV_REQ_EXTERNAL,
                                "req_ext");
-        add_variant_with_value(variants, get_ctx_params(),
-                               RECV_REQ_INTERNAL | DISABLE_PROTO, "req_int_proto_v1");
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_with_value(variants, get_ctx_params(),
+                                   RECV_REQ_INTERNAL | DISABLE_PROTO,
+                                   "req_int_proto_v1");
+        }
     }
 
     virtual bool is_external_request()
@@ -782,7 +785,8 @@ UCS_TEST_P(test_ucp_tag_match_rndv, post_larger_recv)
         wait(my_recv_req);
 
         EXPECT_EQ(sendbuf.size(), my_recv_req->info.length);
-        EXPECT_EQ(recvbuf.size(), ((ucp_request_t*)my_recv_req - 1)->recv.length);
+        EXPECT_EQ(recvbuf.size(),
+                  ((ucp_request_t*)my_recv_req - 1)->recv.dt_iter.length);
         EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
         EXPECT_TRUE(my_recv_req->completed);
         EXPECT_NE(sendbuf, recvbuf);

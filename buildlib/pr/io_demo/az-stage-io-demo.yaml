@@ -48,7 +48,7 @@ steps:
     pgrep -u "$USER" -f 'network-corrupter'
     corrupter_pid=$(pgrep -u "$USER" -f 'network-corrupter')
     echo "corrupter_pid=$corrupter_pid"
-    azure_set_variable "corrupter_pid" "$corrupter_pid"
+    azure_set_variable "corrupter_pid" "${corrupter_pid}"
   displayName: Start network corrupter
   condition: eq(variables['interference'], 'Yes')
   timeoutInMinutes: 2
@@ -66,11 +66,11 @@ steps:
       net_devices="${net_devices} ${net_device}"
     done
     net_device_name=${net_device::-2}
-    azure_set_variable "net_device_name" "$net_device_name"
+    azure_set_variable "net_device_name" "${net_device_name}"
     net_device_port=${net_device: -1}
-    azure_set_variable "net_device_port" "$net_device_port"
+    azure_set_variable "net_device_port" "${net_device_port}"
     local_ack_t_err_counter_start=$(cat /sys/class/infiniband/${net_device_name}/ports/${net_device_port}/hw_counters/local_ack_timeout_err)
-    azure_set_variable "local_ack_t_err_counter_start" "$local_ack_t_err_counter_start"
+    azure_set_variable "local_ack_t_err_counter_start" "${local_ack_t_err_counter_start}"
 
     export UCX_NET_DEVICES=$(echo ${net_devices##*( )} | tr " ", ",")
     export UCX_TLS=${{ parameters.iodemo_tls }}

@@ -136,7 +136,7 @@ uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr)
 
     if (statvfs(posix_config->dir, &shm_statvfs) < 0) {
         ucs_error("could not stat shared memory device %s (%m)",
-                  UCT_POSIX_SHM_OPEN_DIR);
+                  posix_config->dir);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -363,26 +363,36 @@ static ucs_status_t uct_posix_munmap(void *address, size_t length)
 }
 
 static ucs_status_t
+uct_posix_mem_open(uct_mm_seg_id_t seg_id, const char *dir, int *fd_p)
+{
+    uint64_t mmid = seg_id & UCT_POSIX_SEG_MMID_MASK;
+    ucs_status_t status;
+    int pid, peer_fd;
+
+    if (seg_id & UCT_POSIX_SEG_FLAG_PROCFS) {
+        uct_posix_mmid_procfs_unpack(mmid, &pid, &peer_fd);
+        status = uct_posix_procfs_open(pid, peer_fd, fd_p);
+    } else if (seg_id & UCT_POSIX_SEG_FLAG_SHM_OPEN) {
+        status = uct_posix_shm_open(mmid, 0, fd_p);
+    } else {
+        ucs_assert(dir != NULL); /* for coverity */
+        status = uct_posix_file_open(dir, mmid, 0, fd_p);
+    }
+
+    return status;
+}
+
+static ucs_status_t
 uct_posix_mem_attach_common(uct_mm_seg_id_t seg_id, size_t length,
                             const char *dir, uct_mm_remote_seg_t *rseg)
 {
-    uint64_t mmid = seg_id & UCT_POSIX_SEG_MMID_MASK;
-    int pid, peer_fd, fd;
     ucs_status_t status;
-    int mmap_flags;
+    int mmap_flags, fd;
 
     ucs_assert(length > 0);
     rseg->cookie = (void*)length;
 
-    if (seg_id & UCT_POSIX_SEG_FLAG_PROCFS) {
-        uct_posix_mmid_procfs_unpack(mmid, &pid, &peer_fd);
-        status = uct_posix_procfs_open(pid, peer_fd, &fd);
-    } else if (seg_id & UCT_POSIX_SEG_FLAG_SHM_OPEN) {
-        status = uct_posix_shm_open(mmid, 0, &fd);
-    } else {
-        ucs_assert(dir != NULL); /* for coverity */
-        status = uct_posix_file_open(dir, mmid, 0, &fd);
-    }
+    status = uct_posix_mem_open(seg_id, dir, &fd);
     if (status != UCS_OK) {
         return status;
     }
@@ -403,11 +413,25 @@ static int
 uct_posix_is_reachable(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
                        const void *iface_addr)
 {
+    int fd;
+    ucs_status_t status;
+
     if (seg_id & UCT_POSIX_SEG_FLAG_PID_NS) {
-        return ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == *(const ucs_sys_ns_t*)iface_addr;
+        if (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) !=
+            *(const ucs_sys_ns_t*)iface_addr) {
+            return 0;
+        }
+    } else if (!ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID)) {
+        return 0;
     }
 
-    return ucs_sys_ns_is_default(UCS_SYS_NS_TYPE_PID);
+    status = uct_posix_mem_open(seg_id, (const char*)iface_addr, &fd);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    close(fd);
+    return 1;
 }
 
 static ucs_status_t uct_posix_mem_detach_common(const uct_mm_remote_seg_t *rseg)

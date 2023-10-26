@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -15,6 +16,8 @@
 #  include "ppc64/global_opts.h"
 #elif defined(__aarch64__)
 #  include "aarch64/global_opts.h"
+#elif defined(__riscv)
+#  include "rv64/global_opts.h"
 #else
 #  error "Unsupported architecture"
 #endif

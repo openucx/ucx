@@ -154,6 +154,9 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     rkey_config_key.ep_cfg_index = ep_cfg_index;
     rkey_config_key.sys_dev      = params->mem_info.sys_dev;
     rkey_config_key.mem_type     = params->mem_info.type;
+
+    rkey_config_key.unreachable_md_map = 0;
+
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
         ucp_proto_common_get_lane_distance(&params->super.super, lane,
                                            params->mem_info.sys_dev,
@@ -226,22 +229,27 @@ static ucs_status_t
 ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
                               ucp_lane_index_t lane)
 {
-    ucp_context_h context             = params->super.super.worker->context;
-    ucp_proto_rndv_ctrl_priv_t *rpriv = params->super.super.priv;
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_context_h context                      = init_params->worker->context;
+    ucp_proto_rndv_ctrl_priv_t *rpriv          = init_params->priv;
     const ucp_proto_select_param_t *select_param;
     ucp_proto_select_param_t remote_select_param;
     ucp_memory_info_t mem_info;
     uint32_t op_attr_mask;
 
-    select_param                   = params->super.super.select_param;
-    *params->super.super.priv_size = sizeof(ucp_proto_rndv_ctrl_priv_t);
-    rpriv->lane                    = lane;
+    select_param            = init_params->select_param;
+    *init_params->priv_size = sizeof(ucp_proto_rndv_ctrl_priv_t);
+    rpriv->lane             = lane;
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
                    UCP_OP_ATTR_FLAG_MULTI_SEND;
 
+    /* Initialize estimated memory registration map */
+    ucp_proto_rndv_ctrl_get_md_map(params, &rpriv->md_map, &rpriv->sys_dev_map,
+                                   rpriv->sys_dev_distance);
+
     /* Construct select parameter for the remote protocol */
-    if (params->super.super.rkey_config_key == NULL) {
+    if (init_params->rkey_config_key == NULL) {
         /* Remote buffer is unknown, assume same params as local */
         mem_info.type    = select_param->mem_type;
         mem_info.sys_dev = select_param->sys_dev;
@@ -252,16 +260,17 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
         /* If we know the remote buffer parameters, these are actually the local
          * parameters for the remote protocol
          */
-        mem_info.sys_dev = params->super.super.rkey_config_key->sys_dev;
-        mem_info.type    = params->super.super.rkey_config_key->mem_type;
+        mem_info.sys_dev = init_params->rkey_config_key->sys_dev;
+        mem_info.type    = init_params->rkey_config_key->mem_type;
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     op_attr_mask, 0, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);
+        /* Use only memory domains for which the unpacking of the remote key was
+         * successful
+         */
+        rpriv->md_map &= ~init_params->rkey_config_key->unreachable_md_map;
     }
 
-    /* Initialize estimated memory registration map */
-    ucp_proto_rndv_ctrl_get_md_map(params, &rpriv->md_map, &rpriv->sys_dev_map,
-                                   rpriv->sys_dev_distance);
     rpriv->packed_rkey_size = ucp_rkey_packed_size(context, rpriv->md_map,
                                                    select_param->sys_dev,
                                                    rpriv->sys_dev_map);
@@ -414,7 +423,7 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 350e-9,
+        .super.overhead      = 275e-9,
         .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
         .super.cfg_priority  = 60,
         .super.min_length    = 0,
@@ -462,6 +471,12 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_am_release_user_header(req);
+
+    if (ucp_request_memh_invalidate(req, status)) {
+        ucp_proto_rndv_rts_reset(req);
+        return;
+    }
+
     ucp_proto_rndv_rts_reset(req);
     ucp_request_complete_send(req, status);
 }
@@ -650,7 +665,6 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
     attr->max_msg_length = SIZE_MAX;
     attr->is_estimation  = 0;
     ucp_proto_multi_query_config(&multi_query_params, attr);
-    attr->lane_map |= UCS_BIT(rpriv->super.lane);
 }
 
 static ucs_status_t
@@ -747,7 +761,7 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     ucp_ep_h ep;
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id, {
-        ucp_proto_rndv_recv_super_complete_status(recv_req, UCS_ERR_CANCELED);
+        ucp_proto_rndv_recv_req_complete(recv_req, UCS_ERR_CANCELED);
         return;
     }, "RTS on non-existing endpoint");
 
@@ -764,24 +778,18 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.rndv.offset         = 0;
     ucp_request_set_super(req, recv_req);
 
-    if (ucs_likely(rts->size <= recv_req->recv.length)) {
+    if (ucs_likely(rts->size <= recv_req->recv.dt_iter.length)) {
         ucp_proto_rndv_check_rkey_length(rts->address, rkey_length, "rts");
         op_id            = UCP_OP_ID_RNDV_RECV;
         recv_req->status = UCS_OK;
-        status           = UCS_PROFILE_CALL(
-                              ucp_datatype_iter_init_from_dt_state,
-                              worker->context, recv_req->recv.buffer, rts->size,
-                              recv_req->recv.datatype, &recv_req->recv.state,
-                              &req->send.state.dt_iter, &sg_count);
-        if (status != UCS_OK) {
-            goto err;
-        }
+        UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move, &req->send.state.dt_iter,
+                              &recv_req->recv.dt_iter, rts->size, &sg_count);
     } else {
         /* Short receive: complete with error, and send reply to sender */
         rkey_length      = 0; /* Override rkey length to disable data fetch */
         op_id            = UCP_OP_ID_RNDV_RECV_DROP;
         recv_req->status = UCS_ERR_MESSAGE_TRUNCATED;
-        ucp_request_recv_generic_dt_finish(recv_req);
+        ucp_datatype_iter_cleanup(&recv_req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
         ucp_datatype_iter_init_null(&req->send.state.dt_iter, rts->size,
                                     &sg_count);
     }
@@ -790,8 +798,9 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                        recv_req->recv.op_attr, rts->size,
                                        rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
-        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
-        goto err;
+        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
+        ucs_mpool_put(req);
+        return;
     }
 
 #if ENABLE_DEBUG_DATA
@@ -799,11 +808,6 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
 #endif
 
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
-
-    return;
-
-err:
-    ucs_mpool_put(req);
 }
 
 static ucs_status_t
@@ -864,7 +868,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 0, return UCS_OK,
                                "RTR %p", rtr);
 
-    ucp_trace_req(req, "RTR offset %zu length %zu/%zu req %p", rtr->offset,
+    ucp_trace_req(req, "recv RTR offset %zu length %zu/%zu req %p", rtr->offset,
                   rtr->size, req->send.state.dt_iter.length, req);
 
     if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
@@ -883,7 +887,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         ucs_assert(rtr->offset == 0);
 
         ucp_send_request_id_release(req);
-        ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
+        ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+        req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
         sg_count = select_param->sg_count;
         status   = ucp_proto_rndv_send_start(worker, req, op_attr_mask, rtr,

@@ -54,6 +54,12 @@ resources:
     - container: ubuntu1804
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: debian113
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: debian109
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian10.9/builder:mofed-5.8-3.0.7.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: sles15sp2
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -74,21 +80,6 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_4
       image: nvidia/cuda:11.4.3-devel-centos7
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_0
-      image: nvidia/cuda:11.0.3-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_1
-      image: nvidia/cuda:11.1.1-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_2
-      image: nvidia/cuda:11.2.2-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_3
-      image: nvidia/cuda:11.3.1-devel-centos8
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
-    - container: centos8_cuda_11_4
-      image: nvidia/cuda:11.4.3-devel-centos8
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
     - container: ubi8_cuda_11_5
       image: nvidia/cuda:11.5.2-devel-ubi8
@@ -219,6 +210,10 @@ stages:
               CONTAINER: ubuntu2204
             ubuntu2210:
               CONTAINER: ubuntu2210
+            debian113:
+              CONTAINER: debian113
+            debian109:
+              CONTAINER: debian109
             sles15sp2:
               CONTAINER: sles15sp2
             rhel82:
@@ -248,10 +243,29 @@ stages:
               long_test: $(long_test)
               test_static: $(test_static)
 
-  - stage: Distro
+  - stage: WireCompat
     dependsOn: [Static_check]
     jobs:
-    - template: distro.yml
+    - template: wire_compat.yml
+      parameters:
+        name: althca
+        demands: ucx_althca -equals yes
+    - template: wire_compat.yml
+      parameters:
+        name: gpu
+        demands: ucx_gpu -equals yes
+        container: centos7_cuda11
+        ucx_targets:
+          ucx_1_15:
+            ucx_tag: v1.15.x
+    - template: wire_compat.yml
+      parameters:
+        name: new
+        demands: ucx_new -equals yes
+    - template: wire_compat.yml
+      parameters:
+        name: bond
+        demands: ucx_iodemo -equals yes
 
   - stage: Coverity
     dependsOn: [Static_check]
@@ -296,6 +310,14 @@ stages:
         name: BlueField
         demands: ucx_bf -equals yes
         test_perf: 0
+
+  - stage: Namespace_Tests
+    dependsOn: [Static_check]
+    jobs:
+    - template: namespace_tests.yml
+      parameters:
+        name: new_namespace
+        demands: ucx_new -equals yes
 
   - stage: io_demo
     dependsOn: [Static_check]

@@ -666,56 +666,35 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     return ret;
 }
 
-static int uct_ib_iface_is_same_device(uct_ib_iface_t *iface,
-                                       const uct_ib_address_t *ib_addr)
+int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
+                                const union ibv_gid *dgid)
 {
-    const union ibv_gid *gid = &iface->gid_info.gid;
     uct_ib_address_pack_params_t params;
 
     uct_ib_address_unpack(ib_addr, &params);
 
+    if (!(params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) &&
+        (dlid != params.lid)) {
+        return 0;
+    }
+
+    if (dgid == NULL) {
+        return !(params.flags & (UCT_IB_ADDRESS_PACK_FLAG_ETH |
+                                 UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID));
+    }
+
     if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
-        return !memcmp(gid->raw, params.gid.raw, sizeof(params.gid.raw));
+        return !memcmp(dgid->raw, params.gid.raw, sizeof(params.gid.raw));
     }
 
-    if (uct_ib_iface_port_attr(iface)->lid != params.lid) {
-        return 0;
-    }
-
-    if ((params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) &&
-        (params.gid.global.interface_id != gid->global.interface_id)) {
-        return 0;
-    }
-
-    return 1;
+    return !(params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) ||
+           (params.gid.global.interface_id == dgid->global.interface_id);
 }
 
-int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
-                                 const uct_iface_is_reachable_params_t *params)
+static int uct_ib_iface_dev_addr_is_reachable(uct_ib_iface_t *iface,
+                                              const uct_ib_address_t *ib_addr)
 {
-    uct_ib_iface_t *iface           = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    const uct_ib_address_t *ib_addr = (const void*)params->device_addr;
-    uct_iface_reachability_scope_t scope;
-
-    if (!uct_ib_iface_is_reachable(tl_iface, params->device_addr,
-                                   params->iface_addr)) {
-        return 0;
-    }
-
-    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
-                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
-
-    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
-           uct_ib_iface_is_same_device(iface, ib_addr);
-}
-
-int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
-                              const uct_device_addr_t *dev_addr,
-                              const uct_iface_addr_t *iface_addr)
-{
-    uct_ib_iface_t *iface           = ucs_derived_of(tl_iface, uct_ib_iface_t);
     int is_local_eth                = uct_ib_iface_is_roce(iface);
-    const uct_ib_address_t *ib_addr = (const void*)dev_addr;
     uct_ib_address_pack_params_t params;
 
     uct_ib_address_unpack(ib_addr, &params);
@@ -741,6 +720,37 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
         /* local and remote have different link layers and therefore are unreachable */
         return 0;
     }
+}
+
+int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                 const uct_iface_is_reachable_params_t *params)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    const uct_ib_address_t *device_addr;
+    uct_iface_reachability_scope_t scope;
+
+    if (!uct_iface_is_reachable_params_valid(
+                params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
+        return 0;
+    }
+
+    device_addr = (const uct_ib_address_t*)
+            UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, device_addr,
+                            DEVICE_ADDR, NULL);
+    if (device_addr == NULL) {
+        return 0;
+    }
+
+    if (!uct_ib_iface_dev_addr_is_reachable(iface, device_addr)) {
+        return 0;
+    }
+
+    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
+                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
+    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
+           uct_ib_iface_is_same_device(device_addr,
+                                       uct_ib_iface_port_attr(iface)->lid,
+                                       &iface->gid_info.gid);
 }
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
@@ -782,8 +792,10 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
         ah_attr->src_path_bits = path_bits;
     }
 
-    if (iface->config.force_global_addr ||
-        (iface->gid_info.gid.global.subnet_prefix != gid->global.subnet_prefix)) {
+    if ((gid != NULL) &&
+        (iface->config.force_global_addr ||
+         (iface->gid_info.gid.global.subnet_prefix !=
+          gid->global.subnet_prefix))) {
         ucs_assert_always(gid->global.interface_id != 0);
         ah_attr->is_global      = 1;
         ah_attr->grh.dgid       = *gid;
@@ -803,6 +815,7 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          struct ibv_ah_attr *ah_attr,
                                          enum ibv_mtu *path_mtu)
 {
+    union ibv_gid *gid = NULL;
     uct_ib_address_pack_params_t params;
 
     ucs_assert(!uct_ib_iface_is_roce(iface) ==
@@ -823,7 +836,14 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
         params.gid_index = iface->gid_info.gid_index;
     }
 
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, params.lid, &params.gid,
+    if (ucs_test_all_flags(params.flags,
+                           UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
+                           UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX) ||
+        params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
+        gid = &params.gid;
+    }
+
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, params.lid, gid,
                                            params.gid_index, path_index,
                                            ah_attr);
 }
@@ -1301,7 +1321,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     if (params->field_mask & UCT_IFACE_PARAM_FIELD_CPU_MASK) {
         cpu_mask = params->cpu_mask;
     } else {
-        memset(&cpu_mask, 0, sizeof(cpu_mask));
+        UCS_CPU_ZERO(&cpu_mask);
     }
 
     preferred_cpu = ucs_cpu_set_find_lcs(&cpu_mask);

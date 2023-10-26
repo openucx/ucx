@@ -170,6 +170,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->dst_md_cmpts     = NULL;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->flags            = 0;
+    key->dst_version      = UCP_API_MINOR;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -691,7 +692,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
 
         status = ucp_address_pack(worker, NULL, &mem_access_tls, pack_flags,
                                   context->config.ext.worker_addr_version, NULL,
-                                  &address_length, &address_buffer);
+                                  UINT_MAX, &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
@@ -1893,7 +1894,8 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->keepalive_lane != key2->keepalive_lane) ||
         (key1->rkey_ptr_lane != key2->rkey_ptr_lane) ||
         (key1->err_mode != key2->err_mode) ||
-        (key1->flags != key2->flags)) {
+        (key1->flags != key2->flags) ||
+        (key1->dst_version != key2->dst_version)) {
         return 0;
     }
 
@@ -3054,20 +3056,22 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     uct_tl_resource_desc_t *rsc;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t dst_md_index;
+    ucp_md_index_t md_index;
     ucp_rsc_index_t cmpt_index;
     unsigned path_index;
     int prio;
 
     rsc_index  = key->lanes[lane].rsc_index;
     rsc        = &context->tl_rscs[rsc_index].tl_rsc;
-
+    md_index   = context->tl_rscs[rsc_index].md_index;
     path_index = key->lanes[lane].path_index;
+
     ucs_string_buffer_appendf(strbuf,
-            "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
-            lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index,
-            context->tl_rscs[rsc_index].md_index,
-            20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)),
-            ' ');
+       "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
+       lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index, md_index,
+       20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name) +
+                       !!(md_index > 9)),
+       ' ');
 
     if (addr_indices != NULL) {
         ucs_string_buffer_appendf(strbuf, "addr[%d].", addr_indices[lane]);
@@ -3075,9 +3079,10 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 
     dst_md_index = key->lanes[lane].dst_md_index;
     cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
-    ucs_string_buffer_appendf(strbuf, "md[%d]/%s/sysdev[%d]", dst_md_index,
-                              context->tl_cmpts[cmpt_index].attr.name,
-                              key->lanes[lane].dst_sys_dev);
+    ucs_string_buffer_appendf(
+         strbuf, "md[%d]/%s/sysdev[%d] seg %zu", dst_md_index,
+         context->tl_cmpts[cmpt_index].attr.name, key->lanes[lane].dst_sys_dev,
+         key->lanes[lane].seg_size);
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane);
     if (prio != -1) {
@@ -3472,11 +3477,7 @@ static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
     ucs_assertv(UCS_STATUS_IS_ERR(status), "req %p: status %s", req,
                 ucs_status_string(status));
 
-    if ((ucp_ep_config(req->send.ep)->key.err_mode !=
-         UCP_ERR_HANDLING_MODE_NONE) &&
-        (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE) &&
-        !(req->flags & UCP_REQUEST_FLAG_USER_MEMH)) {
-        ucp_request_dt_invalidate(req, status);
+    if (ucp_request_memh_invalidate(req, status)) {
         return;
     }
 
@@ -3510,13 +3511,13 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
-        ucp_request_recv_buffer_dereg(req);
+        ucp_datatype_iter_cleanup(&req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
         ucp_request_complete_am_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RECV_TAG) {
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
-        ucp_request_recv_buffer_dereg(req);
+        ucp_datatype_iter_cleanup(&req->recv.dt_iter, 1, UCP_DT_MASK_ALL);
         ucp_request_complete_tag_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         ucs_assert(req->flags & UCP_REQUEST_FLAG_SUPER_VALID);
@@ -3526,7 +3527,7 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         /* It means that purging started from a request responsible for sending
          * RTR, so a request is responsible for copying data from staging buffer
          * and it uses a receive part of a request */
-        req->super_req->recv.remaining -= req->recv.length;
+        req->super_req->recv.remaining -= req->recv.dt_iter.length;
         if (req->super_req->recv.remaining == 0) {
             ucp_ep_req_purge(ucp_ep, ucp_request_get_super(req), status, 1);
         }

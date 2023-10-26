@@ -165,17 +165,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
                                      (memType == CU_MEMORYTYPE_UNIFIED) ||
                                      (memType == CU_MEMORYTYPE_DEVICE))) {
         /* only host memory not allocated by cuda needs to be registered */
-        /* using deadbeef as VA to avoid gtest error */
-        UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_MEM_HANDLE_NULL);
-        *memh_p = (void *)0xdeadbeef;
-        return UCS_OK;
+        return uct_md_dummy_mem_reg(md, address, length, params, memh_p);
     }
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
-    status    = UCT_CUDA_FUNC(cudaHostRegister(address, length,
-                                               cudaHostRegisterPortable),
-                              log_level);
+    status    = UCT_CUDA_CALL(log_level, cudaHostRegister, address, length,
+                              cudaHostRegisterPortable);
     if (status != UCS_OK) {
         return status;
     }
@@ -198,7 +194,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
         return UCS_OK;
     }
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaHostUnregister(address));
+    status = UCT_CUDA_CALL_LOG_ERR(cudaHostUnregister, address);
     if (status != UCS_OK) {
         return status;
     }
@@ -615,6 +611,7 @@ uct_component_t uct_cuda_copy_component = {
     .rkey_unpack        = uct_cuda_copy_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_cuda_copy_rkey_release,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "cuda_cpy",
     .md_config          = {
         .name           = "Cuda-copy memory domain",

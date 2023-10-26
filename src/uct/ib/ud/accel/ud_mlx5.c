@@ -762,6 +762,30 @@ static void uct_ud_mlx5_qp_update_caps(struct ibv_qp_cap *qp_caps)
     qp_caps->max_inline_data = 0;
 }
 
+int uct_ud_mlx5_ep_is_connected(const uct_ep_h tl_ep,
+                                const uct_ep_is_connected_params_t *params)
+{
+    uct_ud_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);
+    uct_ib_address_t *ib_addr;
+    union ibv_gid *rgid;
+    uint32_t dqpn;
+
+    dqpn = ntohl(ep->peer_address.av.dqp_dct) & UCS_MASK(UCT_IB_QPN_ORDER);
+    if (!uct_ud_ep_is_connected_to_addr(&ep->super, params, dqpn)) {
+        return 0;
+    }
+
+    ib_addr = (uct_ib_address_t*)params->device_addr;
+    if (ep->peer_address.is_global) {
+        rgid = (union ibv_gid*)ep->peer_address.grh_av.rgid;
+    } else {
+        rgid = NULL;
+    }
+
+    return uct_ib_iface_is_same_device(ib_addr, ntohs(ep->peer_address.av.rlid),
+                                       rgid);
+}
+
 static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 uct_ib_qp_attr_t *ib_attr,
                                                 struct ibv_qp **qp_p)
@@ -830,7 +854,8 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
             .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate         = uct_ud_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_ud_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2
+            .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
+            .ep_is_connected       = uct_ud_mlx5_ep_is_connected
         },
         .create_cq      = uct_ud_mlx5_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,
@@ -876,7 +901,7 @@ static uct_iface_ops_t uct_ud_mlx5_iface_tl_ops = {
     .iface_query              = uct_ud_mlx5_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_get_address        = uct_ud_iface_get_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)

@@ -193,6 +193,8 @@ struct ucp_config {
     UCS_CONFIG_ARRAY_FIELD(size_t, memunits) mpool_sizes;
     /** Memory registration cache */
     ucs_ternary_auto_value_t               enable_rcache;
+    /* Registration cache configuration */
+    ucs_rcache_config_t                    rcache_config;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
     /** Save ucx configurations not listed in ucp_config_table **/
@@ -656,21 +658,6 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
 }
-
-static UCS_F_ALWAYS_INLINE void
-ucp_memory_detect_param(ucp_context_h context, const void *address,
-                        size_t length, const ucp_request_param_t *param,
-                        ucp_memory_info_t *mem_info)
-{
-    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) {
-        ucs_assert(param->memh != NULL);
-        mem_info->sys_dev = param->memh->sys_dev;
-        mem_info->type    = param->memh->mem_type;
-    } else {
-        ucp_memory_detect(context, address, length, mem_info);
-    }
-}
-
 
 void
 ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,

@@ -27,6 +27,17 @@ protected:
         EXPECT_TRUE(check_pkey(m_e2->iface(), m_pkey[1], m_pkey_index[1]));
     }
 
+    int check_is_reachable(const uct_iface_h tl_iface,
+                           const uct_device_addr_t *dev_addr)
+    {
+        uct_iface_is_reachable_params_t params = {
+            .field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR,
+            .device_addr = dev_addr
+        };
+
+        return uct_iface_is_reachable_v2(tl_iface, &params);
+    }
+
     void cleanup_entities() {
         m_e1->destroy_eps();
         m_e2->destroy_eps();
@@ -207,12 +218,11 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
                     !((pkey1 | pkey2) & UCT_IB_PKEY_MEMBERSHIP_MASK) ||
                     /* the PKEYs are not equal */
                     ((pkey1 ^ pkey2) & UCT_IB_PKEY_PARTITION_MASK));
-        EXPECT_EQ(res, uct_ib_iface_is_reachable(m_e1->iface(),
-                                                 (uct_device_addr_t*)ib_addr2,
-                                                 NULL));
-        EXPECT_EQ(res, uct_ib_iface_is_reachable(m_e2->iface(),
-                                                 (uct_device_addr_t*)ib_addr1,
-                                                 NULL));
+
+        EXPECT_EQ(res, check_is_reachable(m_e1->iface(),
+                                          (uct_device_addr_t*)ib_addr2));
+        EXPECT_EQ(res, check_is_reachable(m_e2->iface(),
+                                          (uct_device_addr_t*)ib_addr1));
 
         if (res) {
             test_uct_ib::send_recv_short();

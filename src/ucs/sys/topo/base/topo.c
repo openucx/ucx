@@ -345,30 +345,34 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     /* If one of the devices is unknown, we assume near topology */
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
-        *distance = ucs_topo_default_distance;
-        return UCS_OK;
+        goto default_distance;
     }
 
     status = ucs_topo_sys_dev_to_sysfs_path(device1, path1, sizeof(path1));
     if (status != UCS_OK) {
-        return status;
+        ucs_debug("failed to get sysfs path for %s",
+                  ucs_topo_sys_device_get_name(device1));
+        goto default_distance;
     }
 
     status = ucs_topo_sys_dev_to_sysfs_path(device2, path2, sizeof(path2));
     if (status != UCS_OK) {
-        return status;
+        ucs_debug("failed to get sysfs path for %s",
+                  ucs_topo_sys_device_get_name(device2));
+        goto default_distance;
     }
 
     ucs_path_get_common_parent(path1, path2, common_path);
     if (ucs_topo_is_sys_root(common_path)) {
         ucs_topo_sys_root_distance(distance);
+        return UCS_OK;
     } else if (ucs_topo_is_pci_root(common_path)) {
         ucs_topo_pci_root_distance(path1, path2, distance);
-    } else {
-        *distance = ucs_topo_default_distance;
+        return UCS_OK;
     }
 
-    return UCS_OK;
+default_distance:
+    return ucs_topo_get_distance_default(device1, device2, distance);
 }
 
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,

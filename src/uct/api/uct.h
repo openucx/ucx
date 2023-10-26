@@ -827,6 +827,15 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_ACCESS_LOCAL_WRITE   = UCS_BIT(9),
 
     /**
+     * Register the memory region so its remote access key would likely be
+     * equal to remote access keys received from other peers, when compared
+     * with @a uct_rkey_compare. This flag is a hint. When remote access keys
+     * received from different peers are compared equal, they can be used
+     * interchangeably, avoiding the need to keep all of them in memory.
+     */
+    UCT_MD_MEM_SYMMETRIC_RKEY       = UCS_BIT(10),
+
+    /**
      * Enable local and remote access for all operations.
      */
     UCT_MD_MEM_ACCESS_ALL           = (UCT_MD_MEM_ACCESS_REMOTE_PUT |

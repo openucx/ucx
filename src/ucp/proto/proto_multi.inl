@@ -66,6 +66,9 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
     size_t max_frag = lpriv->max_frag - hdr_size;
     size_t max_payload;
 
+    ucs_assertv(lpriv->max_frag > hdr_size, "max_frag=%zu hdr_size=%zu",
+                lpriv->max_frag, hdr_size);
+
     /* Do not split very small sends to chunks, it's not worth it, and
        generic datatype may not be able to pack to a smaller buffer */
     if (length < UCP_MIN_BCOPY) {

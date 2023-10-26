@@ -37,7 +37,6 @@ enum {
     UCP_REQUEST_FLAG_COMPLETED             = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED              = UCS_BIT(1),
     UCP_REQUEST_FLAG_PROTO_SEND            = UCS_BIT(2),
-    UCP_REQUEST_FLAG_USER_MEMH             = UCS_BIT(3),
     UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED  = UCS_BIT(4),
     UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED = UCS_BIT(5),
     UCP_REQUEST_FLAG_CALLBACK              = UCS_BIT(6),
@@ -388,25 +387,17 @@ struct ucp_request {
 
         /* "receive" part - used for tag_recv, am_recv and stream_recv operations */
         struct {
-            ucs_queue_elem_t      queue;    /* Expected queue element */
-            void                  *buffer;  /* Buffer to receive data to */
-            ucp_datatype_t        datatype; /* Receive type */
-            size_t                length;   /* Total length, in bytes */
-            ucs_memory_type_t     mem_type; /* Memory type */
             uint32_t              op_attr;  /* Operation attributes */
-            ucp_dt_state_t        state;
+            ucp_datatype_iter_t   dt_iter;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
+
             union {
+                /* Expected queue element */
+                ucs_queue_elem_t queue;
+
                 /* How much more data to be received */
-                ssize_t   remaining;
-
-                /* Offset in recv buffer for multi fragment tag offload flow */
-                size_t    offset;
-
-                /* User-defined memory handle supplied to ucp_[tag|am)_recv_nbx,
-                   valid if UCP_REQUEST_FLAG_USER_MEMH is set */
-                ucp_mem_h user_memh;
+                ssize_t          remaining;
             };
 
             /* Remote request ID received from a peer */
@@ -446,7 +437,7 @@ struct ucp_request {
 
                 struct {
                     ucp_stream_recv_nbx_callback_t cb;     /* Completion callback */
-                    size_t                         offset; /* Receive data offset */
+                    size_t                         elem_size;
                     size_t                         length; /* Completion info to fill */
                 } stream;
 
@@ -540,7 +531,15 @@ ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
 void ucp_request_memory_dereg(ucp_datatype_t datatype, ucp_dt_state_t *state,
                               ucp_request_t *req);
 
-void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status);
+/**
+ * @brief Invalidates the request associated memh if required.
+ *
+ * @param [in] req           Request that contains memh
+ * @param [in] status        Status of the error which caused abortion
+ *
+ * @return 1 if invalidation happened, 0 if invalidation isn't required/supported
+ */
+int ucp_request_memh_invalidate(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,

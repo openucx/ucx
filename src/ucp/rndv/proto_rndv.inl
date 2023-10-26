@@ -345,16 +345,16 @@ ucp_proto_rndv_op_check(const ucp_proto_init_params_t *params,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_recv_super_complete_status(ucp_request_t *super_req,
-                                          ucs_status_t status)
+ucp_proto_rndv_recv_req_complete(ucp_request_t *recv_req, ucs_status_t status)
 {
-    ucp_trace_req(super_req, "rndv_recv_complete super_req=%p", super_req);
+    ucp_trace_req(recv_req, "rndv_recv_req_complete status '%s'",
+                  ucs_status_string(status));
 
-    if (super_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
-        ucp_request_complete_am_recv(super_req, status);
+    if (recv_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
+        ucp_request_complete_am_recv(recv_req, status);
     } else {
-        ucs_assert(super_req->flags & UCP_REQUEST_FLAG_RECV_TAG);
-        ucp_request_complete_tag_recv(super_req, status);
+        ucs_assert(recv_req->flags & UCP_REQUEST_FLAG_RECV_TAG);
+        ucp_request_complete_tag_recv(recv_req, status);
     }
 }
 
@@ -365,8 +365,7 @@ ucp_proto_rndv_recv_complete_status(ucp_request_t *req, ucs_status_t status)
     ucs_assert(req->send.rndv.rkey == NULL);
     ucs_assert(!ucp_proto_rndv_request_is_ppln_frag(req));
 
-    ucp_proto_rndv_recv_super_complete_status(ucp_request_get_super(req),
-                                              status);
+    ucp_proto_rndv_recv_req_complete(ucp_request_get_super(req), status);
     ucp_request_put(req);
     return UCS_OK;
 }

@@ -69,13 +69,12 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     const unsigned sys_device_priority = 10;
     ucs_sys_device_t sys_dev;
     CUdevice cuda_device;
-    cudaError_t cudaErr;
     ucs_status_t status;
     char device_name[10];
     int num_gpus;
 
-    cudaErr = cudaGetDeviceCount(&num_gpus);
-    if ((cudaErr != cudaSuccess) || (num_gpus == 0)) {
+    status = UCT_CUDA_CALL(UCS_LOG_LEVEL_DIAG, cudaGetDeviceCount, &num_gpus);
+    if ((status != UCS_OK) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 

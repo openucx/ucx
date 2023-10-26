@@ -85,6 +85,17 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
  * Atomics support
  */
 #define IBV_DEVICE_ATOMIC_HCA(dev)              (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_HCA)
+#define IBV_DEVICE_ATOMIC_GLOB(dev)             (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_GLOB)
+
+
+/*
+ * On-demand paging support
+ */
+#if HAVE_STRUCT_IBV_DEVICE_ATTR_EX_ODP_CAPS
+#  define IBV_DEVICE_HAS_ODP(_dev)                  ((_dev)->dev_attr.odp_caps.general_caps & IBV_ODP_SUPPORT)
+#else
+#  define IBV_DEVICE_HAS_ODP(_dev)                  0
+#endif
 
 
 /* Ethernet link layer */
@@ -100,8 +111,12 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #  define uct_ib_grh_required(_attr)                0
 #endif
 
+/* Dummy structure declaration, when not present in verbs.h */
+#if !HAVE_IBV_DM
+    struct ibv_dm;
+#endif
+
 typedef uint8_t uct_ib_uint24_t[3];
-typedef uint8_t uct_ib_uint128_t[0x10];
 
 static inline void uct_ib_pack_uint24(uct_ib_uint24_t buf, uint32_t val)
 {

@@ -135,6 +135,38 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_closeNonBlockingNative(JNIEnv *env, jclass
 }
 
 JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_queryLocalAddressNative(JNIEnv *env,
+                                                              jclass cls,
+                                                              jlong ep_ptr)
+{
+    ucp_ep_attr_t ep_attr;
+    ep_attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR;
+
+    ucs_status_t status = ucp_ep_query((ucp_ep_h)ep_ptr, &ep_attr);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    return c2jInetSockAddr(env, &ep_attr.local_sockaddr);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_queryRemoteAddressNative(JNIEnv *env,
+                                                               jclass cls,
+                                                               jlong ep_ptr)
+{
+    ucp_ep_attr_t ep_attr;
+    ep_attr.field_mask = UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+
+    ucs_status_t status = ucp_ep_query((ucp_ep_h)ep_ptr, &ep_attr);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    return c2jInetSockAddr(env, &ep_attr.remote_sockaddr);
+}
+
+JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
                                                       jlong ep_ptr, jlong addr)
 {

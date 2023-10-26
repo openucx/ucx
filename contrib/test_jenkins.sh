@@ -2,7 +2,7 @@
 #
 # Testing script for OpenUCX, to run from Jenkins CI
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2023. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
@@ -21,8 +21,9 @@
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
 #  - worker   : number of current parallel executor
-#  - COV_OPT  : command line options for Coverity static checker
 #
+
+source $(dirname $0)/../buildlib/tools/common.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
@@ -57,31 +58,8 @@ else
 	AFFINITY=""
 fi
 
-#
-# Parallel build command runs with 4 tasks, or number of cores on the system,
-# whichever is lowest
-#
-num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
-[ -z $num_cpus ] && num_cpus=1
-parallel_jobs=4
-[ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
-num_pinned_threads=$(nproc)
-[ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
-
-MAKE="make"
-MAKEP="make -j${parallel_jobs}"
-export AUTOMAKE_JOBS=$parallel_jobs
-
 have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 have_strace=$(strace -V || true)
-
-#
-# Set initial port number for client/server applications
-#
-server_port_range=1000
-server_port_min=$((10500 + EXECUTOR_NUMBER * server_port_range))
-server_port_max=$((server_port_min + server_port_range))
-server_port=${server_port_min}
 
 #
 # Override maven repository path, to cache the downloaded packages accross tests
@@ -108,84 +86,6 @@ log_warning() {
 log_error() {
 	msg=$1
 	test "x$RUNNING_IN_AZURE" = "xyes" && { azure_log_error "${msg}" ; set -x; } || echo "${msg}"
-}
-
-#
-# cleanup ucx
-#
-make_clean() {
-	rm -rf ${ucx_inst}
-	$MAKEP ${1:-clean}
-}
-
-#
-# Configure and build
-#   $1 - mode (devel|release)
-#
-build() {
-	mode=$1
-	shift
-
-	config_args="--prefix=$ucx_inst --without-java"
-	if [ "X$have_cuda" == "Xyes" ]
-	then
-		config_args+=" --with-iodemo-cuda"
-	fi
-
-	../contrib/configure-${mode} ${config_args} "$@"
-	make_clean
-	$MAKEP
-	$MAKEP install
-}
-
-#
-# Test if an environment module exists and load it if yes.
-# Otherwise, return error code.
-#
-module_load() {
-	set +x
-	module=$1
-	m_avail="$(module avail $module 2>&1)" || true
-
-	if module avail -t 2>&1 | grep -q "^$module\$"
-	then
-		module load $module
-		set -x
-		return 0
-	else
-		set -x
-		return 1
-	fi
-}
-
-#
-# Safe unload for env modules (even if it doesn't exist)
-#
-module_unload() {
-	module=$1
-	module unload "${module}" || true
-}
-
-#
-# try load cuda modules if nvidia driver is installed
-#
-try_load_cuda_env() {
-	num_gpus=0
-	have_cuda=no
-	have_gdrcopy=no
-	if [ -f "/proc/driver/nvidia/version" ]; then
-		have_cuda=yes
-		have_gdrcopy=yes
-		module_load $CUDA_MODULE    || have_cuda=no
-		module_load $GDRCOPY_MODULE || have_gdrcopy=no
-		num_gpus=$(nvidia-smi -L | wc -l)
-		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
-	fi
-}
-
-unload_cuda_env() {
-	module_unload $CUDA_MODULE
-	module_unload $GDRCOPY_MODULE
 }
 
 #
@@ -238,144 +138,6 @@ get_my_tasks() {
 }
 
 #
-# Get list IB devices
-#
-get_ib_devices() {
-	state=$1
-	device_list=$(ibv_devinfo -l | tail -n +2)
-	set +x
-	for ibdev in $device_list
-	do
-		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
-		for port in $(seq 1 $num_ports)
-		do
-			if [ -e "/sys/class/infiniband/${ibdev}/ports/${port}/gids/0" ] && \
-			   ibv_devinfo -d $ibdev -i $port | grep -q $state
-			then
-				echo "$ibdev:$port"
-			fi
-		done
-	done
-	set -x
-}
-
-#
-# Get IB devices on state Active
-#
-get_active_ib_devices() {
-	get_ib_devices PORT_ACTIVE
-}
-
-#
-# Check host state
-#
-check_machine() {
-	# Check IB devices on state INIT
-	init_dev=$(get_ib_devices PORT_INIT)
-	if [ -n "${init_dev}" ]
-	then
-		echo "${init_dev} have state PORT_INIT"
-		exit 1
-	fi
-
-	# Log machine status
-	lscpu
-	uname -a
-	free -m
-	ofed_info -s || true
-	ibv_devinfo -v || true
-	show_gids || true
-}
-
-#
-# Get list of active IP interfaces
-#
-get_active_ip_ifaces() {
-	device_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/:// | cut -f 1 -d '@')
-	for netdev in ${device_list}
-	do
-		(ip addr show ${netdev} | grep -q 'inet ') && echo ${netdev} || true
-	done
-}
-
-#
-# Get IP addr for a given IP iface
-# Argument is the IP iface
-#
-get_ifaddr() {
-	iface=$1
-	echo $(ip addr show ${iface} | awk '/inet /{print $2}' | awk -F '/' '{print $1}')
-}
-
-get_rdma_device_ip_addr() {
-	if [ ! -r /dev/infiniband/rdma_cm  ]
-	then
-		return
-	fi
-
-	if ! which ibdev2netdev >&/dev/null
-	then
-		return
-	fi
-
-	set +x
-	ibdev2netdev | grep Up | while read line
-	do
-		ibdev=$(echo "${line}" | awk '{print $1}')
-		port=$(echo "${line}" | awk '{print $3}')
-		netif=$(echo "${line}" | awk '{print $5}')
-		node_guid=`cat /sys/class/infiniband/${ibdev}/node_guid`
-
-		# skip devices that do not have proper gid (representors)
-		if [ -e "/sys/class/infiniband/${ibdev}/ports/${port}/gids/0" ] && \
-			[ ${node_guid} != "0000:0000:0000:0000" ]
-		then
-			get_ifaddr ${netif}
-			set -x
-			return
-		fi
-	done
-	set -x
-}
-
-get_non_rdma_ip_addr() {
-	if ! which ibdev2netdev >&/dev/null
-	then
-		return
-	fi
-
-	# get the interface of the ip address that is the default gateway (pure Ethernet IPv4 address).
-	eth_iface=$(ip route show| sed -n 's/default via \(\S*\) dev \(\S*\).*/\2/p')
-
-	# the pure Ethernet interface should not appear in the ibdev2netdev output. it should not be an IPoIB or
-	# RoCE interface.
-	if ibdev2netdev|grep -qw "${eth_iface}"
-	then
-		echo "Failed to retrieve an IP of a non IPoIB/RoCE interface"
-		exit 1
-	fi
-
-	get_ifaddr ${eth_iface}
-}
-
-#
-# Prepare build environment
-#
-prepare() {
-	echo " ==== Prepare ===="
-	env
-	cd ${WORKSPACE}
-	if [ -d build-test ]
-	then
-		chmod u+rwx build-test -R
-		rm -rf build-test
-	fi
-	./autogen.sh
-	mkdir -p build-test
-	cd build-test
-}
-
-#
 # Expands a CPU list such as "0-3,17" to "0 1 2 3 17" (each cpu in a new line)
 #
 expand_cpulist() {
@@ -419,12 +181,6 @@ run_loopback_app() {
 	pid=$!
 
 	wait ${pid} || true
-}
-
-step_server_port() {
-	# Cycle server_port between (server_port_min)..(server_port_max-1)
-	server_port=$((server_port + 1))
-	server_port=$((server_port >= server_port_max ? server_port_min : server_port))
 }
 
 run_client_server_app() {
@@ -1132,6 +888,17 @@ run_malloc_hook_gtest() {
 		MALLOC_MMAP_THRESHOLD_=16384 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 			make -C test/gtest test
+
+	echo "==== Running cuda hooks, $compiler_name compiler ===="
+	$AFFINITY $TIMEOUT env \
+		GTEST_FILTER='cuda_hooks.*' \
+			make -C test/gtest test
+
+	echo "==== Running cuda hooks with far jump, $compiler_name compiler ===="
+	$AFFINITY $TIMEOUT env \
+		UCM_BISTRO_FORCE_FAR_JUMP=y \
+		GTEST_FILTER='cuda_hooks.*' \
+			make -C test/gtest test
 }
 
 #
@@ -1147,14 +914,6 @@ run_gtest() {
 	export GTEST_UCT_TCP_FASTEST_DEV=1
 	export OMP_NUM_THREADS=4
 
-	GTEST_EXTRA_ARGS=""
-	if [ "$JENKINS_TEST_PERF" == 1 ]
-	then
-		# Check performance with 10 retries and 2 seconds interval
-		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
-	fi
-	export GTEST_EXTRA_ARGS
-
 	# Run specific tests
 	do_distributed_task 1 4 run_malloc_hook_gtest
 	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
@@ -1166,9 +925,19 @@ run_gtest() {
 	# Report TOP-20 longest test at the end of testing
 	export GTEST_REPORT_LONGEST_TESTS=20
 
+	GTEST_EXTRA_ARGS=""
+	if [ "$JENKINS_TEST_PERF" == 1 ]
+	then
+		# Check performance with 10 retries and 2 seconds interval
+		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
+	fi
+	export GTEST_EXTRA_ARGS
+
 	# Run all tests
 	echo "==== Running unit tests, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT make -C test/gtest test
+
+	unset GTEST_EXTRA_ARGS
 
 	# Run valgrind tests
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
@@ -1191,7 +960,6 @@ run_gtest() {
 	unset GTEST_REPORT_LONGEST_TESTS
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_SHARD_INDEX
-	unset GTEST_EXTRA_ARGS
 	unset OMP_NUM_THREADS
 	unset GTEST_UCT_TCP_FASTEST_DEV
 	unset GTEST_SHUFFLE

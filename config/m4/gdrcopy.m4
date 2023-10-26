@@ -48,10 +48,11 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
         AS_IF([test "x$gdrcopy_happy" = "xyes"],
             [
                 AC_SUBST(GDR_COPY_CPPFLAGS, "-I$ucx_check_gdrcopy_dir/include/ ")
+                AC_SUBST(GDR_COPY_LIBS, "-lgdrapi")
 
-                gdr_copy_ldflags="-lgdrapi"
+                gdr_copy_ldflags=""
                 AS_IF([test ! -z "$ucx_check_gdrcopy_libdir"],
-                    gdr_copy_ldflags="$gdr_copy_ldflags -L$ucx_check_gdrcopy_libdir")
+                    gdr_copy_ldflags="-L$ucx_check_gdrcopy_libdir")
                 AC_SUBST(GDR_COPY_LDFLAGS, "$gdr_copy_ldflags")
             ],
             [

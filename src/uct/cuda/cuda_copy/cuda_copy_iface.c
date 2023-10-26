@@ -58,14 +58,22 @@ static ucs_status_t uct_cuda_copy_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static int uct_cuda_copy_iface_is_reachable(const uct_iface_h tl_iface,
-                                            const uct_device_addr_t *dev_addr,
-                                            const uct_iface_addr_t *iface_addr)
+static int uct_cuda_copy_iface_is_reachable_v2(
+        const uct_iface_h tl_iface,
+        const uct_iface_is_reachable_params_t *params)
 {
-    uct_cuda_copy_iface_t  *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
-    uct_cuda_copy_iface_addr_t *addr = (uct_cuda_copy_iface_addr_t*)iface_addr;
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface,
+                                                  uct_cuda_copy_iface_t);
+    uct_cuda_copy_iface_addr_t *addr;
 
-    return (addr != NULL) && (iface->id == *addr);
+    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+        return 0;
+    }
+
+    addr = (uct_cuda_copy_iface_addr_t*)params->iface_addr;
+
+    return (addr != NULL) && (iface->id == *addr) &&
+           uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
@@ -282,7 +290,7 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .iface_query              = uct_cuda_copy_iface_query,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
     .iface_get_address        = uct_cuda_copy_iface_get_address,
-    .iface_is_reachable       = uct_cuda_copy_iface_is_reachable,
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
@@ -291,8 +299,8 @@ static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chun
     ucs_status_t status;
 
     memset(base, 0 , sizeof(*base));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventCreateWithFlags(&base->event,
-                                                            cudaEventDisableTiming));
+    status = UCT_CUDA_CALL_LOG_ERR(cudaEventCreateWithFlags, &base->event,
+                                   cudaEventDisableTiming);
     if (UCS_OK != status) {
         ucs_error("cudaEventCreateWithFlags Failed");
     }
@@ -308,7 +316,7 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 
     UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
     if (uct_cuda_base_context_match(cuda_context, iface->cuda_context)) {
-        UCT_CUDA_FUNC_LOG_ERR(cudaEventDestroy(base->event));
+        UCT_CUDA_CALL_LOG_ERR(cudaEventDestroy, base->event);
     }
 }
 
@@ -393,7 +401,8 @@ static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+    .iface_is_reachable_v2 = uct_cuda_copy_iface_is_reachable_v2,
+    .ep_is_connected       = uct_base_ep_is_connected
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h worker,
@@ -410,10 +419,9 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
                               &uct_cuda_copy_iface_internal_ops, md, worker,
                               params, tl_config, "cuda_copy");
 
-    if (strncmp(params->mode.device.dev_name,
-                UCT_CUDA_DEV_NAME, strlen(UCT_CUDA_DEV_NAME)) != 0) {
-        ucs_error("no device was found: %s", params->mode.device.dev_name);
-        return UCS_ERR_NO_DEVICE;
+    status = uct_cuda_base_check_device_name(params);
+    if (status != UCS_OK) {
+        return status;
     }
 
     self->id                     = ucs_generate_uuid((uintptr_t)self);
@@ -474,12 +482,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
                     continue;
                 }
 
-                UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(*stream));
+                UCT_CUDA_CALL_LOG_ERR(cudaStreamDestroy, *stream);
             }
         }
 
         if (self->short_stream) {
-            UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->short_stream));
+            UCT_CUDA_CALL_LOG_ERR(cudaStreamDestroy, self->short_stream);
         }
     }
 

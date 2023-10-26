@@ -545,20 +545,29 @@ enum {
      * mapping up-front, and mapping them later when they are accessed by
      * communication routines.
      */
-    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0),
+    UCP_MEM_MAP_NONBLOCK       = UCS_BIT(0),
 
     /**
      * Identify requirement for allocation, if passed address is not a
      * null-pointer, then it will be used as a hint or direct address for
      * allocation.
      */
-    UCP_MEM_MAP_ALLOCATE = UCS_BIT(1),
+    UCP_MEM_MAP_ALLOCATE       = UCS_BIT(1),
 
     /**
      * Don't interpret address as a hint: place the mapping at exactly that
      * address. The address must be a multiple of the page size.
      */
-    UCP_MEM_MAP_FIXED    = UCS_BIT(2)
+    UCP_MEM_MAP_FIXED          = UCS_BIT(2),
+
+    /**
+     * Register the memory region so its remote access key would likely be
+     * equal to remote access keys received from other peers, when compared with
+     * @ref ucp_rkey_compare. This flag is a hint. When remote access keys
+     * received from different peers are compared equal, they can be used
+     * interchangeably, avoiding the need to keep all of them in memory.
+     */
+    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3)
 };
 
 
@@ -1254,6 +1263,24 @@ typedef struct ucp_worker_attr {
      */
     size_t                max_debug_string;
 } ucp_worker_attr_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Tuning parameters for the comparison function @ref ucp_rkey_compare
+ *
+ * The structure defines the parameters that can be used for UCP library remote
+ * keys comparison using @ref ucp_rkey_compare routine.
+ *
+ */
+typedef struct ucp_rkey_compare_params {
+    /**
+     * Mask of valid fields in this structure, must currently be zero. Fields
+     * not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+} ucp_rkey_compare_params_t;
 
 
 /**
@@ -2098,6 +2125,31 @@ void ucp_cleanup(ucp_context_h context_p);
  */
 ucs_status_t ucp_context_query(ucp_context_h context_p,
                                ucp_context_attr_t *attr);
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Compare two remote keys
+ *
+ * This routine compares two remote keys. They must belong to the same worker.
+ *
+ * It sets the @a result argument to < 0 if rkey1 is lower than rkey2, 0 if they
+ * are equal or > 0 if rkey1 is greater than rkey2. The result value can be used
+ * for sorting remote keys.
+ *
+ * @param [in]  worker      Worker object both rkeys are referring to
+ * @param [in]  rkey1       First rkey to compare
+ * @param [in]  rkey2       Second rkey to compare
+ * @param [in]  params      Additional parameters to the comparison
+ * @param [out] result      Result of the comparison
+ *
+ * @return UCS_OK                - @a result contains the comparison result
+ * @return UCS_ERR_INVALID_PARAM - The routine arguments are invalid
+ * @return Other                 - Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t
+ucp_rkey_compare(ucp_worker_h worker, ucp_rkey_h rkey1, ucp_rkey_h rkey2,
+                 const ucp_rkey_compare_params_t *params, int *result);
 
 
 /**

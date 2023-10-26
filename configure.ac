@@ -355,6 +355,7 @@ AC_CONFIG_FILES([
                  ucx.spec
                  ucx.pc
                  contrib/rpmdef.sh
+                 contrib/ucx
                  debian/rules
                  debian/control
                  debian/changelog

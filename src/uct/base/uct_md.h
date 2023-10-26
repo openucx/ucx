@@ -59,18 +59,6 @@
     }
 
 
-typedef struct uct_md_rcache_config {
-    size_t        alignment;      /**< Force address alignment */
-    unsigned      event_prio;     /**< Memory events priority */
-    ucs_time_t    overhead;       /**< Lookup overhead estimation */
-    unsigned long max_regions;    /**< Maximal number of rcache regions */
-    size_t        max_size;       /**< Maximal size of mapped memory */
-    size_t        max_unreleased; /**< Threshold for triggering a cleanup */
-    int           purge_on_fork;  /**< Enable/disable rcache purge on fork */
-} uct_md_rcache_config_t;
-
-
-extern ucs_config_field_t uct_md_config_rcache_table[];
 extern const char *uct_device_type_names[];
 
 /**
@@ -228,6 +216,11 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p);
 
+ucs_status_t uct_base_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                                   uct_rkey_t rkey2,
+                                   const uct_rkey_compare_params_t *params,
+                                   int *result);
+
 /**
  * Check allocation parameters and return an appropriate error if parameters
  * cannot be used for an allocation
@@ -244,10 +237,7 @@ ucs_status_t uct_md_dummy_mem_reg(uct_md_h md, void *address, size_t length,
 ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
                                     const uct_md_mem_dereg_params_t *params);
 
-void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
-                              const uct_md_rcache_config_t *rcache_config);
-
-double uct_md_rcache_overhead(const uct_md_rcache_config_t *rcache_config);
+double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config);
 
 extern ucs_config_field_t uct_md_config_table[];
 

@@ -6,6 +6,7 @@ package goucxtests
 
 import (
 	. "ucx"
+	. "cuda"
 	"unsafe"
 )
 
@@ -14,6 +15,12 @@ const selfEpTag uint64 = ^uint64(0)
 func memoryAllocate(entity *TestEntity, size uint64, memoryType UcsMemoryType) unsafe.Pointer {
 	mmapParams := &UcpMmapParams{}
 	mmapParams.Allocate().SetLength(size).SetMemoryType(memoryType)
+
+	if memoryType == UCS_MEMORY_TYPE_CUDA {
+		if err := CudaSetDevice(); err != nil {
+			entity.t.Fatalf("%v", err)
+		}
+	}
 
 	result, err := entity.context.MemMap(mmapParams)
 	if err != nil {

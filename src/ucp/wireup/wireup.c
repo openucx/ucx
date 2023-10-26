@@ -210,7 +210,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     /* pack all addresses */
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, pack_flags,
                               context->config.ext.worker_addr_version,
-                              lanes2remote, address_length_p, address_p);
+                              lanes2remote, UINT_MAX, address_length_p,
+                              address_p);
     if (status != UCS_OK) {
         ucs_error("failed to pack address: %s", ucs_status_string(status));
     }
@@ -566,9 +567,10 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PRE_REQUEST);
     ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
-              " dst_ep_id 0x%"PRIx64" conn_sn %u",
+              " dst_ep_id 0x%"PRIx64" conn_sn %u address version %u/%u",
               remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
-              msg->conn_sn);
+              msg->conn_sn, remote_address->addr_version,
+              remote_address->dst_version);
 
     ucs_assert(ucp_ep_get_cm_wireup_ep(ep) != NULL);
     ucs_assert(ep->flags & UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ);
@@ -611,9 +613,11 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     int has_cm_lane;
 
     UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
-    ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64""
-              " dst_ep_id 0x%"PRIx64" conn_sn %d", remote_address->uuid,
-              msg->src_ep_id, msg->dst_ep_id, msg->conn_sn);
+    ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
+              " dst_ep_id 0x%"PRIx64" conn_sn %d address version %u/%u",
+              remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
+              msg->conn_sn, remote_address->addr_version,
+              remote_address->dst_version);
 
     if (ep != NULL) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
@@ -1252,12 +1256,18 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
 {
     ucp_context_h context      = ep->worker->context;
     ucp_worker_iface_t *wiface = ucp_worker_iface(ep->worker, rsc_index);
+    uct_iface_is_reachable_params_t params = {
+        .field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                       UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
+        .device_addr = ae->dev_addr,
+        .iface_addr  = ae->iface_addr,
+    };
 
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
            (/* assume reachability is checked by CM, if EP selects lanes
              * during CM phase */
             (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
-            uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr));
+            uct_iface_is_reachable_v2(wiface->iface, &params));
 }
 
 static void
@@ -1528,6 +1538,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
     ucp_ep_config_key_init_flags(&key, ep_init_flags);
     ucp_wireup_eps_pending_extract(ep, &replay_pending_queue);
+
+    key.dst_version = remote_address->dst_version;
 
     /* Allow to choose only the lanes that were already chosen for case
      * without CM to prevent reconfiguration error.

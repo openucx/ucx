@@ -242,19 +242,44 @@ static int uct_iface_is_same_device(const uct_iface_h iface,
     return !memcmp(device_addr, dev_addr, attr.device_addr_len);
 }
 
-int
-uct_base_iface_is_reachable_v2(const uct_iface_h iface,
-                               const uct_iface_is_reachable_params_t *params)
+int uct_iface_is_reachable_params_valid(
+        const uct_iface_is_reachable_params_t *params, uint64_t flags)
 {
-    uct_iface_reachability_scope_t scope;
-
-    if (!uct_iface_is_reachable(iface, params->device_addr,
-                                params->iface_addr)) {
+    if (!ucs_test_all_flags(params->field_mask, flags)) {
+        ucs_error("uct_iface_is_reachable: missing params "
+                  "(field_mask: %lu, expected: %lu)",
+                  params->field_mask, flags);
         return 0;
     }
 
-    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
-                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
+    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
+        if (params->info_string == NULL) {
+            ucs_error("uct_iface_is_reachable: null info_string passed");
+            return 0;
+        }
+
+        params->info_string[0] = '\0';
+    }
+
+    return 1;
+}
+
+int uct_iface_is_reachable_params_addrs_valid(
+        const uct_iface_is_reachable_params_t *params)
+{
+    return uct_iface_is_reachable_params_valid(
+            params, UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                            UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR);
+}
+
+int uct_iface_scope_is_reachable(const uct_iface_h iface,
+                                 const uct_iface_is_reachable_params_t *params)
+{
+    uct_iface_reachability_scope_t scope =
+        UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
+                        UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
+
+    ucs_assert(params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR);
 
     return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
            uct_iface_is_same_device(iface, params->device_addr);
@@ -265,19 +290,36 @@ int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
 {
     const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
-    if (!ucs_test_all_flags(params->field_mask,
-                            UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
-                            UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
-        ucs_error("missing params (field_mask: %lu), both device_addr and "
-                  "iface_addr should be supplied.", params->field_mask);
-        return 0;
-    }
-
-    if (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING) {
-        params->info_string[0] = '\0';
-    }
-
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
+}
+
+int uct_base_iface_is_reachable(const uct_iface_h tl_iface,
+                                const uct_device_addr_t *dev_addr,
+                                const uct_iface_addr_t *iface_addr)
+{
+    uct_iface_is_reachable_params_t params = {
+        .field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                       UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR,
+        .device_addr = dev_addr,
+        .iface_addr  = iface_addr
+    };
+
+    return uct_iface_is_reachable_v2(tl_iface, &params);
+}
+
+int uct_base_ep_is_connected(const uct_ep_h tl_ep,
+                             const uct_ep_is_connected_params_t *params)
+{
+    UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(params);
+    return uct_base_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                       params->iface_addr);
+}
+
+int uct_ep_is_connected(uct_ep_h ep, const uct_ep_is_connected_params_t *params)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_is_connected(ep, params);
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
@@ -508,15 +550,6 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     return UCS_OK;
 }
-
-uct_iface_internal_ops_t uct_base_iface_internal_ops = {
-    .iface_estimate_perf   = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
-};
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {

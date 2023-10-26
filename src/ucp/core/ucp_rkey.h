@@ -58,6 +58,9 @@ struct ucp_rkey_config_key {
 
     /* Remote memory type */
     ucs_memory_type_t      mem_type;
+
+    /* MDs for which rkey is not reachable */
+    ucp_md_map_t           unreachable_md_map;
 };
 
 

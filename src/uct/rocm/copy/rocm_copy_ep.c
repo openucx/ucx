@@ -196,6 +196,12 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
     }
 
     rocm_copy_signal = ucs_mpool_get(&iface->signal_pool);
+    if (rocm_copy_signal == NULL) {
+        ucs_error("increase the maximum number of signal pool elements with "
+                  "UCX_ROCM_COPY_SIGPOOL_MAX_ELEMS");
+        return UCS_ERR_IO_ERROR;
+    }
+
     hsa_signal_store_screlease(rocm_copy_signal->signal, 1);
 
     status = UCS_PROFILE_CALL_ALWAYS(hsa_amd_memory_async_copy, dst_addr, agent,

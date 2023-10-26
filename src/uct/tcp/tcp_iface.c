@@ -187,15 +187,20 @@ uct_tcp_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
     return UCS_OK;
 }
 
-static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
-                                      const uct_device_addr_t *dev_addr,
-                                      const uct_iface_addr_t *iface_addr)
+static int
+uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                              const uct_iface_is_reachable_params_t *params)
 {
-    uct_tcp_iface_t *iface              = ucs_derived_of(tl_iface,
-                                                         uct_tcp_iface_t);
-    uct_tcp_device_addr_t *tcp_dev_addr = (uct_tcp_device_addr_t*)dev_addr;
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     uct_iface_local_addr_ns_t *local_addr_ns;
+    uct_tcp_device_addr_t *tcp_dev_addr;
 
+    if (!uct_iface_is_reachable_params_valid(
+                params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR)) {
+        return 0;
+    }
+
+    tcp_dev_addr = (uct_tcp_device_addr_t*)params->device_addr;
     if (iface->config.ifaddr.ss_family != tcp_dev_addr->sa_family) {
         return 0;
     }
@@ -209,56 +214,35 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
 
     if (tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) {
         local_addr_ns = (uct_iface_local_addr_ns_t*)(tcp_dev_addr + 1);
-        return uct_iface_local_is_reachable(local_addr_ns,
-                                            UCS_SYS_NS_TYPE_NET);
+        if (!uct_iface_local_is_reachable(local_addr_ns, UCS_SYS_NS_TYPE_NET)) {
+            return 0;
+        }
     }
 
-    /* We always report that a peer is reachable. connect() call will
-     * fail if the peer is unreachable when creating UCT/TCP EP */
-    return 1;
-}
-
-static ucs_status_t
-uct_tcp_iface_parse_virtual_dev(const struct dirent *entry, void *ctx)
-{
-    static const char *low_level_dev_prefix = "lower_";
-    ucs_string_buffer_t *dev_path           = ctx;
-
-    if (!strncmp(entry->d_name, low_level_dev_prefix,
-                 strlen(low_level_dev_prefix))) {
-        ucs_string_buffer_appendf(dev_path, "/%s", entry->d_name);
-        return UCS_ERR_CANCELED;
-    }
-
-    return UCS_OK;
+    /* Later connect() call can still fail if the peer is actually unreachable
+     * at UCT/TCP EP creation time */
+    return uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static const char *
 uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
 {
-    ucs_string_buffer_t dev_path = UCS_STRING_BUFFER_INITIALIZER;
-    const char *sysfs_path;
     ucs_status_t status;
+    const char *sysfs_path;
+    char lowest_path_buf[PATH_MAX];
 
-    /* Find and return the correct device sysfs path:
+    /* Deep search to find the lowest device sysfs path:
      * 1) For regular device, use regular sysfs form.
      * 2) For virtual device (RoCE LAG/VLAN), search for symbolic link of the
      *    form "lower_*" */
-    ucs_string_buffer_appendf(&dev_path, "%s/%s", UCT_TCP_IFACE_NETDEV_DIR,
-                              dev_name);
-
-    status = ucs_sys_readdir(ucs_string_buffer_cstr(&dev_path),
-                             uct_tcp_iface_parse_virtual_dev, &dev_path);
-    if (status != UCS_ERR_CANCELED) {
-        ucs_string_buffer_cleanup(&dev_path);
+    status = ucs_netif_get_lowest_device_path(dev_name, lowest_path_buf,
+                                              PATH_MAX);
+    if (status != UCS_OK) {
         return NULL;
     }
 
     /* 'path_buffer' size is PATH_MAX */
-    sysfs_path = ucs_topo_resolve_sysfs_path(ucs_string_buffer_cstr(&dev_path),
-                                             path_buffer);
-
-    ucs_string_buffer_cleanup(&dev_path);
+    sysfs_path = ucs_topo_resolve_sysfs_path(lowest_path_buf, path_buffer);
     return sysfs_path;
 }
 
@@ -503,7 +487,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,
     .iface_get_device_address = uct_tcp_iface_get_device_address,
-    .iface_is_reachable       = uct_tcp_iface_is_reachable
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
@@ -618,7 +602,8 @@ static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = uct_tcp_ep_connect_to_ep_v2,
-    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+    .iface_is_reachable_v2 = uct_tcp_iface_is_reachable_v2,
+    .ep_is_connected       = uct_tcp_ep_is_connected
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,

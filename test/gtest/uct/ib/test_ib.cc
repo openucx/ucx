@@ -150,13 +150,17 @@ public:
     }
 
     void test_fill_ah_attr(uint64_t subnet_prefix) {
-        uct_ib_iface_t *iface     = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
-        static const uint16_t lid = 0x1ee7;
+        uct_ib_iface_t *iface      = ucs_derived_of(m_e1->iface(),
+                                                    uct_ib_iface_t);
+        static const uint16_t lid  = 0x1ee7;
+        const int config_is_global = ib_config()->is_global ||
+                                     /* compatibility UCT_IB_ADDRESS_TYPE_GLOBAL */
+                                     (ib_config()->addr_type == 2);
         union ibv_gid gid;
         struct ibv_ah_attr ah_attr;
 
         ASSERT_EQ(iface->config.force_global_addr,
-                  ib_config()->is_global || uct_ib_iface_is_roce(iface));
+                  config_is_global || uct_ib_iface_is_roce(iface));
 
         gid.global.subnet_prefix = subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
         gid.global.interface_id  = 0xdeadbeef;
@@ -168,7 +172,7 @@ public:
         if (uct_ib_iface_is_roce(iface)) {
             /* in case of roce, should be global */
             EXPECT_TRUE(ah_attr.is_global);
-        } else if (ib_config()->is_global) {
+        } else if (config_is_global) {
             /* in case of global address is forced - ah_attr should use GRH */
             EXPECT_TRUE(ah_attr.is_global);
         } else if (iface->gid_info.gid.global.subnet_prefix == gid.global.subnet_prefix) {

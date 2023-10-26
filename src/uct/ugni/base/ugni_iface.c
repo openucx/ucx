@@ -47,6 +47,14 @@ int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *d
     return 1;
 }
 
+int uct_ugni_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                   const uct_iface_is_reachable_params_t *params)
+{
+    return uct_iface_is_reachable_params_valid(
+                   params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR) &&
+           uct_iface_scope_is_reachable(tl_iface, params);
+}
+
 static ucs_mpool_ops_t uct_ugni_flush_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,

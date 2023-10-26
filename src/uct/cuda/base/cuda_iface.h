@@ -17,27 +17,6 @@
 
 const char *uct_cuda_base_cu_get_error_string(CUresult result);
 
-#define UCT_CUDA_DEV_NAME       "cuda"
-
-#define UCT_CUDAR_CALL(_log_level, _func, ...) \
-    ({ \
-        cudaError_t _result = UCS_PROFILE_CALL(_func, __VA_ARGS__); \
-        ucs_status_t _status; \
-        \
-        if (cudaSuccess != _result) { \
-            ucs_log((_log_level), "%s() failed: %s", \
-                    UCS_PP_MAKE_STRING(_func), cudaGetErrorString(_result)); \
-            _status = UCS_ERR_IO_ERROR; \
-        } else { \
-            _status = UCS_OK; \
-        } \
-        _status; \
-    })
-
-
-#define UCT_CUDAR_CALL_LOG_ERR(_func, ...) \
-    UCT_CUDAR_CALL(UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
-
 
 #if CUDART_VERSION >= 11010
 #define UCT_CUDA_FUNC_PTX_ERR(_result, _func, _err_str)         \
@@ -54,43 +33,45 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
 #endif
 
 
-#define UCT_CUDA_FUNC(_func, _log_level)                        \
-    ({                                                          \
-        ucs_status_t _status = UCS_OK;                          \
-        do {                                                    \
-            cudaError_t _result = (_func);                      \
-            if (cudaSuccess != _result) {                       \
-                if (_log_level != UCS_LOG_LEVEL_ERROR) {        \
-                    UCT_CUDA_FUNC_PTX_ERR(_result,  _func,      \
-                        cudaGetErrorString(_result));           \
-                }                                               \
-                ucs_log((_log_level), "%s() failed: %s",        \
-                        UCS_PP_MAKE_STRING(_func),              \
-                        cudaGetErrorString(_result));           \
-                _status = UCS_ERR_IO_ERROR;                     \
-            }                                                   \
-        } while (0);                                            \
-        _status;                                                \
+#define UCT_CUDA_CALL(_log_level, _func, ...) \
+    ({ \
+        ucs_status_t _status = UCS_OK; \
+        { \
+            cudaError_t _result = UCS_PROFILE_CALL_ALWAYS(_func, __VA_ARGS__); \
+            if (cudaSuccess != _result) { \
+                if ((_log_level) != UCS_LOG_LEVEL_ERROR) { \
+                    UCT_CUDA_FUNC_PTX_ERR(_result, _func, \
+                                          cudaGetErrorString(_result)); \
+                } \
+                ucs_log((_log_level), "%s() failed: %s", \
+                        UCS_PP_MAKE_STRING(_func), \
+                        cudaGetErrorString(_result)); \
+                _status = UCS_ERR_IO_ERROR; \
+            } \
+        } \
+        _status; \
     })
 
 
-#define UCT_CUDA_FUNC_LOG_ERR(_func) \
-    UCT_CUDA_FUNC(_func, UCS_LOG_LEVEL_ERROR)
+#define UCT_CUDA_CALL_LOG_ERR(_func, ...) \
+    UCT_CUDA_CALL(UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
 
 
-#define UCT_NVML_FUNC(_func, _log_level)                        \
-    ({                                                          \
-        ucs_status_t _status = UCS_OK;                          \
-        do {                                                    \
-            nvmlReturn_t _err = (_func);                        \
-            if (NVML_SUCCESS != _err) {                         \
-                ucs_log((_log_level), "%s failed: %s",          \
-                        UCS_PP_MAKE_STRING(_func),              \
-                        nvmlErrorString(_err));                 \
-                _status = UCS_ERR_IO_ERROR;                     \
-            }                                                   \
-        } while (0);                                            \
-        _status;                                                \
+#define UCT_NVML_FUNC(_func, _log_level) \
+    ({ \
+        ucs_status_t _status = UCS_OK; \
+        do { \
+            nvmlReturn_t _err = (_func); \
+            if (NVML_SUCCESS != _err) { \
+                ucs_log((_log_level), "%s failed: %s", \
+                        UCS_PP_MAKE_STRING(_func), \
+                        (NVML_ERROR_DRIVER_NOT_LOADED != _err) ? \
+                                nvmlErrorString(_err) : \
+                                "nvml is a stub library"); \
+                _status = UCS_ERR_IO_ERROR; \
+            } \
+        } while (0); \
+        _status; \
     })
 
 
@@ -105,7 +86,7 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
             if (CUDA_ERROR_NOT_READY == _result) { \
                 _status = UCS_INPROGRESS; \
             } else if (CUDA_SUCCESS != _result) { \
-                ucs_log((_log_level), "%s() failed: %s", \
+                ucs_log((_log_level), "%s failed: %s", \
                         UCS_PP_MAKE_STRING(_func), \
                         uct_cuda_base_cu_get_error_string(_result)); \
                 _status = UCS_ERR_IO_ERROR; \
@@ -155,11 +136,6 @@ ucs_status_t
 uct_cuda_base_query_devices_common(
         uct_md_h md, uct_device_type_t dev_type,
         uct_tl_device_resource_t **tl_devices_p, unsigned *num_tl_devices_p);
-
-ucs_status_t
-uct_cuda_base_query_devices(
-        uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
-        unsigned *num_tl_devices_p);
 
 void
 uct_cuda_base_get_sys_dev(CUdevice cuda_device,

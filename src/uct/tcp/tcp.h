@@ -673,4 +673,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p);
 
+int uct_tcp_ep_is_connected(uct_ep_h tl_ep,
+                            const uct_ep_is_connected_params_t *params);
+
 #endif

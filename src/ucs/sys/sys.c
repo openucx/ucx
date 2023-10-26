@@ -418,6 +418,8 @@ FILE *ucs_open_file(const char *mode, ucs_log_level_t err_log_level,
 static ssize_t ucs_read_file_vararg(char *buffer, size_t max, int silent,
                                     const char *filename_fmt, va_list ap)
 {
+    ucs_log_level_t err_level = silent ? UCS_LOG_LEVEL_DEBUG :
+                                         UCS_LOG_LEVEL_ERROR;
     char filename[MAXPATHLEN];
     ssize_t read_bytes;
     int fd;
@@ -426,18 +428,14 @@ static ssize_t ucs_read_file_vararg(char *buffer, size_t max, int silent,
 
     fd = open(filename, O_RDONLY);
     if (fd < 0) {
-        if (!silent) {
-            ucs_error("failed to open %s: %m", filename);
-        }
+        ucs_log(err_level, "failed to open %s: %m", filename);
         read_bytes = -1;
         goto out;
     }
 
     read_bytes = read(fd, buffer, max - 1);
     if (read_bytes < 0) {
-        if (!silent) {
-            ucs_error("failed to read from %s: %m", filename);
-        }
+        ucs_log(err_level, "failed to read from %s: %m", filename);
         goto out_close;
     }
 

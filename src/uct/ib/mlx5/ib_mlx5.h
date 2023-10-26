@@ -190,6 +190,8 @@ enum {
     /* Device supports indirect xgvmi MR. This flag is removed if xgvmi access
      * command fails */
     UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI       = UCS_BIT(13),
+    /* Device supports symmetric key creation */
+    UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(14),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
@@ -229,7 +231,40 @@ enum {
 
 
 #if HAVE_DEVX
-typedef struct uct_ib_mlx5_devx_umem {
+typedef struct {
+    struct mlx5dv_devx_obj *dvmr;
+    int                    mr_num;
+    size_t                 length;
+    struct ibv_mr          *mrs[];
+} uct_ib_mlx5_devx_ksm_data_t;
+
+
+typedef union {
+    uct_ib_mr_t                 super;
+    uct_ib_mlx5_devx_ksm_data_t *ksm_data;
+} uct_ib_mlx5_devx_mr_t;
+
+
+typedef struct {
+    uct_ib_mem_t            super;
+    void                    *address;
+    struct mlx5dv_devx_obj  *atomic_dvmr;
+    struct mlx5dv_devx_obj  *indirect_dvmr;
+    struct mlx5dv_devx_umem *umem;
+    struct mlx5dv_devx_obj  *cross_mr;
+    struct mlx5dv_devx_obj  *smkey_mr;
+    struct mlx5dv_devx_obj  *dm_addr_dvmr;
+#if HAVE_IBV_DM
+    struct ibv_dm           *dm;
+#endif
+    uint32_t                atomic_rkey;
+    uint32_t                indirect_rkey;
+    uint32_t                exported_lkey;
+    uct_ib_mlx5_devx_mr_t   mrs[];
+} uct_ib_mlx5_devx_mem_t;
+
+
+typedef struct {
     struct mlx5dv_devx_umem  *mem;
     size_t                   size;
 } uct_ib_mlx5_devx_umem_t;
@@ -301,6 +336,7 @@ typedef struct uct_ib_mlx5_md {
     /* The maximum number of outstanding RDMA Read/Atomic operations per DC QP. */
     uint8_t                  max_rd_atomic_dc;
     uint8_t                  log_max_dci_stream_channels;
+    uint32_t                 smkey_index;
 } uct_ib_mlx5_md_t;
 
 
@@ -615,7 +651,6 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
     uint64_t           filed_boundary;
 } UCS_S_PACKED;
 
-ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *md, uint8_t *mr_id);
 
 ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
                                               uct_ib_mlx5_qp_t *txwq);

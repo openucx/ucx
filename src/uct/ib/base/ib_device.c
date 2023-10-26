@@ -1171,6 +1171,30 @@ uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
     return UCS_OK;
 }
 
+ucs_status_t uct_ib_device_get_ah_cached(uct_ib_device_t *dev,
+                                         struct ibv_ah_attr *ah_attr,
+                                         struct ibv_ah **ah_p)
+{
+    ucs_status_t status = UCS_OK;
+    khiter_t iter;
+
+    ucs_recursive_spin_lock(&dev->ah_lock);
+
+    /* looking for existing AH with same attributes */
+    iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
+    if (iter == kh_end(&dev->ah_hash)) {
+        status = UCS_ERR_NO_ELEM;
+        goto unlock;
+    } else {
+        /* found existing AH */
+        *ah_p = kh_value(&dev->ah_hash, iter);
+    }
+
+unlock:
+    ucs_recursive_spin_unlock(&dev->ah_lock);
+    return status;
+}
+
 ucs_status_t
 uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
@@ -1304,7 +1328,8 @@ const char* uct_ib_ah_attr_str(char *buf, size_t max,
         p += strlen(p);
         uct_ib_gid_str(&ah_attr->grh.dgid, p, endp - p);
         p += strlen(p);
-        snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
+        snprintf(p, endp - p, " flow_label=0x%x sgid_index=%d "
+                 "traffic_class=%d", ah_attr->grh.flow_label,
                  ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
     }
 

@@ -875,7 +875,7 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .iface_query              = (uct_iface_query_func_t)ucs_empty_function_return_unsupported,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_unsupported,
     .iface_get_address        = (uct_iface_get_address_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable       = (uct_iface_is_reachable_func_t)ucs_empty_function_return_zero
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static uct_iface_internal_ops_t uct_rdmacm_cm_iface_internal_ops = {
@@ -884,7 +884,8 @@ static uct_iface_internal_ops_t uct_rdmacm_cm_iface_internal_ops = {
     .ep_query              = uct_rdmacm_ep_query,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
 };
 
 static ucs_status_t

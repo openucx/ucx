@@ -14,6 +14,7 @@
 #include <uct/ugni/base/ugni_md.h>
 #include <uct/ugni/base/ugni_device.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/sys/math.h>
 
 
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_ugni_smsg_iface_t);
@@ -248,7 +249,7 @@ static uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .iface_query              = uct_ugni_smsg_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
-    .iface_is_reachable       = uct_ugni_iface_is_reachable
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static ucs_mpool_ops_t uct_ugni_smsg_desc_mpool_ops = {
@@ -273,7 +274,8 @@ static uct_iface_internal_ops_t uct_ugni_smsg_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = uct_ugni_smsg_ep_connect_to_ep_v2,
-    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+    .iface_is_reachable_v2 = uct_ugni_iface_is_reachable_v2,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h worker,

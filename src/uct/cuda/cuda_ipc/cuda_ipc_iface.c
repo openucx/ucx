@@ -12,6 +12,7 @@
 #include "cuda_ipc_ep.h"
 
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_md.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>
@@ -68,12 +69,14 @@ static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
-                                           const uct_device_addr_t *dev_addr,
-                                           const uct_iface_addr_t *iface_addr)
+static int
+uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                   const uct_iface_is_reachable_params_t *params)
 {
-    return (ucs_get_system_id() == *((const uint64_t*)dev_addr)) &&
-           (getpid() != *(pid_t*)iface_addr);
+    return uct_iface_is_reachable_params_addrs_valid(params) &&
+           (ucs_get_system_id() == *((const uint64_t*)params->device_addr)) &&
+           (getpid() != *(pid_t*)params->iface_addr) &&
+           uct_iface_scope_is_reachable(tl_iface, params);
 }
 
 static double uct_cuda_ipc_iface_get_bw()
@@ -127,7 +130,7 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
         return num_nvlinks;
     }
 
-    status = UCT_NVML_FUNC_LOG_ERR(nvmlInit_v2());
+    status = UCT_NVML_FUNC(nvmlInit_v2(), UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
         goto err;
     }
@@ -362,7 +365,7 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .iface_query              = uct_cuda_ipc_iface_query,
     .iface_get_device_address = uct_cuda_ipc_iface_get_device_address,
     .iface_get_address        = uct_cuda_ipc_iface_get_address,
-    .iface_is_reachable       = uct_cuda_ipc_iface_is_reachable,
+    .iface_is_reachable       = uct_base_iface_is_reachable,
 };
 
 static void uct_cuda_ipc_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
@@ -383,7 +386,7 @@ static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 
     UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
     if (uct_cuda_base_context_match(cuda_context, iface->cuda_context)) {
-        UCT_CUDA_FUNC_LOG_ERR(cudaEventDestroy(base->event));
+        UCT_CUDA_CALL_LOG_ERR(cudaEventDestroy, base->event);
     }
 }
 
@@ -471,7 +474,8 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_base_iface_is_reachable_v2
+    .iface_is_reachable_v2 = uct_cuda_ipc_iface_is_reachable_v2,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
@@ -487,10 +491,9 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
                               &uct_cuda_ipc_iface_internal_ops, md, worker, params,
                               tl_config, "cuda_ipc");
 
-    if (strncmp(params->mode.device.dev_name,
-                UCT_CUDA_DEV_NAME, strlen(UCT_CUDA_DEV_NAME)) != 0) {
-        ucs_error("No device was found: %s", params->mode.device.dev_name);
-        return UCS_ERR_NO_DEVICE;
+    status = uct_cuda_base_check_device_name(params);
+    if (status != UCS_OK) {
+        return status;
     }
 
     self->config.max_poll            = config->max_poll;

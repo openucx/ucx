@@ -573,6 +573,11 @@ bool ucp_test::check_tls(const std::string& tls)
         return iter->second;
     }
 
+    if (RUNNING_ON_VALGRIND && (tls == "ud_v")) {
+        UCS_TEST_MESSAGE << "Skip UCP UD verbs tests with valgrind";
+        return cache[tls] = false;
+    }
+
     ucs::handle<ucp_config_t*> config;
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);

@@ -101,7 +101,8 @@ ForEachMacros: ['_UCS_BITMAP_FOR_EACH_WORD',
                 'UCT_RC_VERBS_IFACE_FOREACH_TXWQE',
                 'UCS_INIT_ONCE',
                 'UCS_TEST_F',
-                'UCX_PERF_TEST_FOREACH']
+                'UCX_PERF_TEST_FOREACH',
+		'ucs_lru_for_each']
 StatementMacros : []
 TypenameMacros: ['khash_t', 'ucs_array_t']
 WhitespaceSensitiveMacros: []

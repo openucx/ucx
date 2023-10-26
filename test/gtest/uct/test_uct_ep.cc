@@ -135,6 +135,51 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
     }
 }
 
+UCS_TEST_SKIP_COND_P(test_uct_ep, is_connected,
+                     !has_ib() && !has_transport("tcp"))
+{
+    uct_ep_is_connected_params_t params;
+    uct_iface_attr_t iface_attr;
+    std::string dev_addr, ep_addr, iface_addr;
+    entity *e1, *e2;
+
+    create_sender();
+    connect();
+
+    e1 = create_entity(0);
+    e2 = create_entity(0);
+    e1->connect(0, *e2, 0);
+
+    m_entities.push_back(e1);
+    m_entities.push_back(e2);
+
+    ASSERT_UCS_OK(uct_iface_query(m_receiver->iface(), &iface_attr));
+    dev_addr.resize(iface_attr.device_addr_len);
+    iface_addr.resize(iface_attr.iface_addr_len);
+
+    ASSERT_UCS_OK(uct_iface_get_address(m_receiver->iface(),
+                                        (uct_iface_addr_t*)iface_addr.data()));
+    ASSERT_UCS_OK(
+            uct_iface_get_device_address(m_receiver->iface(),
+                                         (uct_device_addr_t*)dev_addr.data()));
+
+    params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
+    params.device_addr = (uct_device_addr_t*)dev_addr.data();
+    params.field_mask  = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
+                         UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
+
+    if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        ep_addr.resize(iface_attr.ep_addr_len);
+        ASSERT_UCS_OK(uct_ep_get_address(m_receiver->ep(0),
+                                         (uct_ep_addr_t*)ep_addr.data()));
+        params.ep_addr     = (uct_ep_addr_t*)ep_addr.data();
+        params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
+    }
+
+    EXPECT_TRUE(uct_ep_is_connected(m_sender->ep(0), &params));
+    EXPECT_FALSE(uct_ep_is_connected(e1->ep(0), &params));
+}
+
 UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,
                      !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
 {

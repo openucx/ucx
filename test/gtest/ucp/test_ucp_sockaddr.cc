@@ -48,7 +48,7 @@ public:
         TEST_MODIFIER_MASK               = UCS_MASK(16),
         TEST_MODIFIER_MT                 = UCS_BIT(16),
         TEST_MODIFIER_CM_USE_ALL_DEVICES = UCS_BIT(17),
-        TEST_MODIFIER_SA_DATA_V2         = UCS_BIT(18)
+        TEST_MODIFIER_SA_DATA_V1         = UCS_BIT(18)
     };
 
     enum {
@@ -69,7 +69,7 @@ public:
         m_err_count = 0;
         modify_config("KEEPALIVE_INTERVAL", "5s");
         modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
-        modify_config("SA_DATA_VERSION", sa_data_version_v2() ? "v2" : "v1");
+        modify_config("SA_DATA_VERSION", sa_data_version_v1() ? "v1" : "v2");
         modify_config("RC_TIMEOUT", "100us", IGNORE_IF_NOT_EXIST);
         modify_config("RC_RETRY_COUNT", "3", IGNORE_IF_NOT_EXIST);
         modify_config("UD_TIMEOUT", "5s", IGNORE_IF_NOT_EXIST);
@@ -95,7 +95,7 @@ public:
                              modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES, name);
         get_test_variants_mt(variants, features,
                              modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES |
-                             TEST_MODIFIER_SA_DATA_V2, name + ",sa_data_v2");
+                             TEST_MODIFIER_SA_DATA_V1, name + ",sa_data_v1");
         get_test_variants_mt(variants, features, modifier, name + ",not_all_devs");
     }
 
@@ -881,8 +881,8 @@ protected:
         return get_variant_value() & TEST_MODIFIER_CM_USE_ALL_DEVICES;
     }
 
-    bool sa_data_version_v2() const {
-        return get_variant_value() & TEST_MODIFIER_SA_DATA_V2;
+    bool sa_data_version_v1() const {
+        return get_variant_value() & TEST_MODIFIER_SA_DATA_V1;
     }
 
     bool has_rndv_lanes(ucp_ep_h ep)
@@ -1208,6 +1208,13 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, force_close_during_rndv,
     do_force_close_during_rndv(false);
 }
 
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, force_close_during_rndv_put_zcopy,
+                     (send_recv_type() != SEND_RECV_TAG), "RNDV_THRESH=0",
+                     "RNDV_SCHEME=put_zcopy")
+{
+    do_force_close_during_rndv(false);
+}
+
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, fail_and_force_close_during_rndv,
                      (send_recv_type() != SEND_RECV_TAG), "RNDV_THRESH=0")
 {
@@ -1448,8 +1455,8 @@ UCS_TEST_SKIP_COND_P(test_max_lanes, 16_lanes_reconf, !cm_use_all_devices(),
     /* get configuration index for EP created through CM */
     listen_and_communicate(false, SEND_DIRECTION_C2S);
 
-    ASSERT_EQ(16, ucp_ep_num_lanes(sender().ep()));
-    ASSERT_EQ(16, ucp_ep_num_lanes(receiver().ep()));
+    ASSERT_EQ(16, (int)ucp_ep_num_lanes(sender().ep()));
+    ASSERT_EQ(16, (int)ucp_ep_num_lanes(receiver().ep()));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, ib, "ib")
@@ -2718,34 +2725,37 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
     test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, true, false);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols,
-           am_rndv_64k_prereg_proto_v1_single_rndv_put_zcopy_lane,
-           "RNDV_THRESH=0", "MAX_RNDV_LANES=1", "RNDV_SCHEME=put_zcopy",
-           "PROTO_ENABLE=n")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols,
+                     am_rndv_64k_prereg_proto_v1_single_rndv_put_zcopy_lane,
+                     RUNNING_ON_VALGRIND,
+                     "RNDV_THRESH=0", "MAX_RNDV_LANES=1",
+                     "RNDV_SCHEME=put_zcopy", "PROTO_ENABLE=n")
 {
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_short_reset, "PROTO_ENABLE=n",
-           "ZCOPY_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_short_reset,
+                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n", "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(16, 8, 1, false, false, UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_reset, "PROTO_ENABLE=n",
-           "ZCOPY_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_bcopy_reset,
+                     RUNNING_ON_VALGRIND,
+                     "PROTO_ENABLE=n", "ZCOPY_THRESH=inf")
 {
     test_am_send_recv(2 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_reset, "PROTO_ENABLE=n")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_zcopy_reset,
+                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_reset, "PROTO_ENABLE=n",
-           "RNDV_THRESH=0")
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_rndv_reset,
+                     RUNNING_ON_VALGRIND, "PROTO_ENABLE=n", "RNDV_THRESH=0")
 {
     test_am_send_recv(16 * UCS_KBYTE, 8, 1, false, false,
                       UCP_AM_SEND_FLAG_COPY_HEADER);
@@ -2797,9 +2807,15 @@ public:
         create_entity();
     }
 
-    void create_entities_and_connect(bool server_less_num_paths) {
+    void create_entities_and_connect(bool server_less_num_paths,
+                                     bool use_v2_addr = false) {
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv max_eager_lanes_env("UCX_MAX_EAGER_LANES", "2");
+
+        if (use_v2_addr) {
+            modify_config("SA_DATA_VERSION", "v2");
+            modify_config("ADDRESS_VERSION", "v2");
+        }
 
         if (server_less_num_paths) {
             // create the client
@@ -2837,6 +2853,13 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
            diff_num_paths_small_msg_server_more_lanes)
 {
     create_entities_and_connect(false);
+    test_tag_send_recv(4 * UCS_KBYTE, false, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
+           diff_num_paths_small_msg_server_more_lanes_v2)
+{
+    create_entities_and_connect(false, true);
     test_tag_send_recv(4 * UCS_KBYTE, false, false);
 }
 

@@ -82,9 +82,10 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
 static inline ucs_status_t
 uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
                            size_t iovcnt, size_t iov_total_length,
-                           uint64_t remote_addr, uct_rkey_t rkey,
-                           uct_completion_t *comp, uct_rc_send_handler_t handler,
-                           uint16_t op_flags, int opcode)
+                           uint64_t remote_addr, uint32_t rkey,
+                           uct_completion_t *comp,
+                           uct_rc_send_handler_t handler, uint16_t op_flags,
+                           int opcode)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
@@ -584,18 +585,38 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_verbs_ep_t *ep                 = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_ib_md_t *md                       = uct_ib_iface_md(&iface->super.super);
     uct_rc_verbs_ep_flush_addr_t *rc_addr = (uct_rc_verbs_ep_flush_addr_t*)addr;
-    uint8_t mr_id;
 
     rc_addr->super.flags = 0;
     uct_ib_pack_uint24(rc_addr->super.qp_num, ep->qp->qp_num);
-
-    uct_ib_md_ops(md)->get_atomic_mr_id(md, &mr_id);
-    if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
+    if (uct_ib_md_is_flush_rkey_valid(md->flush_rkey)) {
         rc_addr->super.flags  |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
-        rc_addr->atomic_mr_id  = mr_id;
+        rc_addr->atomic_mr_id  = uct_ib_md_get_atomic_mr_id(md);
         rc_addr->flush_rkey_hi = md->flush_rkey >> 16;
     }
     return UCS_OK;
+}
+
+int uct_rc_verbs_ep_is_connected(const uct_ep_h tl_ep,
+                                 const uct_ep_is_connected_params_t *params)
+{
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uint32_t addr_qp      = 0;
+    const uct_rc_verbs_ep_addr_t *rc_addr;
+    ucs_status_t status;
+    struct ibv_ah_attr ah_attr;
+    uint32_t qp_num;
+
+    status = uct_ib_query_qp_peer_info(ep->qp, &ah_attr, &qp_num);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    if (params->field_mask & UCT_EP_IS_CONNECTED_FIELD_EP_ADDR) {
+        rc_addr = (const uct_rc_verbs_ep_addr_t*)params->ep_addr;
+        addr_qp = uct_ib_unpack_uint24(rc_addr->qp_num);
+    }
+
+    return uct_rc_ep_is_connected(&ah_attr, params, qp_num, addr_qp);
 }
 
 ucs_status_t

@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucm/api/ucm.h>
 #include <ucs/type/class.h>
@@ -31,9 +32,9 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
      ucs_offsetof(uct_rocm_copy_md_config_t, enable_rcache),
      UCS_CONFIG_TYPE_TERNARY},
 
-    {"", "", NULL,
+    {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE), NULL,
      ucs_offsetof(uct_rocm_copy_md_config_t, rcache),
-     UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
+     UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
     {"DMABUF", "no",
      "Enable using cross-device dmabuf file descriptor",
@@ -135,19 +136,20 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
 {
     void *dev_addr = NULL;
     hsa_status_t status;
-    ucs_status_t err;
-    ucs_memory_type_t mem_type;
+    hsa_amd_pointer_type_t mem_type;
 
     ucs_assert((address != NULL) && (length != 0));
 
-    err = uct_rocm_base_detect_memory_type(uct_md, address, length, &mem_type);
-    if (err != UCS_OK) {
+    status = uct_rocm_base_get_ptr_info(address, length, NULL, NULL, &mem_type,
+                                        NULL, NULL);
+    if (status != HSA_STATUS_SUCCESS) {
         ucs_error("failed to detect memory type for addr %p len %zu", address, length);
-        return err;
+        return UCS_ERR_IO_ERROR;
     }
 
-    if (mem_type == UCS_MEMORY_TYPE_ROCM) {
-        /* No need to register GPU memory */
+    if (mem_type == HSA_EXT_POINTER_TYPE_HSA) {
+        /* This covers device memory and memory allocated
+           with hipHostMalloc */
         dev_addr = address;
     } else {
         if (pg_align_addr) {
@@ -427,7 +429,7 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
     }
 
     if (md_config->enable_rcache != UCS_NO) {
-        uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
+        ucs_rcache_set_params(&rcache_params, &md_config->rcache);
         rcache_params.region_struct_size = sizeof(uct_rocm_copy_rcache_region_t);
         rcache_params.alignment          = ucs_get_page_size();
         rcache_params.max_alignment      = ucs_get_page_size();
@@ -436,6 +438,7 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
         rcache_params.context            = md;
         rcache_params.ops                = &uct_rocm_copy_rcache_ops;
         rcache_params.flags              = 0;
+
         status = ucs_rcache_create(&rcache_params, "rocm_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
             md->super.ops = &md_rcache_ops;
@@ -468,6 +471,7 @@ uct_component_t uct_rocm_copy_component = {
     .rkey_unpack        = uct_rocm_copy_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_rocm_copy_rkey_release,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "rocm_cpy",
     .md_config          = {
         .name           = "ROCm-copy memory domain",

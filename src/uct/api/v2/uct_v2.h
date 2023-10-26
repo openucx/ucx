@@ -343,6 +343,25 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief field mask of @ref uct_ep_is_connected_params_t
+ *
+ * The enumeration allows specifying which fields in @ref
+ * uct_ep_is_connected_params_t are present.
+ */
+typedef enum {
+    /** Device address */
+    UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR = UCS_BIT(0),
+
+    /** Interface address */
+    UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR  = UCS_BIT(1),
+
+    /** Endpoint address */
+    UCT_EP_IS_CONNECTED_FIELD_EP_ADDR     = UCS_BIT(2)
+} uct_ep_is_connected_field_mask_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Endpoint attributes, capabilities and limitations.
  */
 struct uct_ep_attr {
@@ -579,6 +598,45 @@ typedef struct uct_iface_is_reachable_params {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Operation parameters passed to @ref uct_ep_is_connected.
+ *
+ * This struct is used to pass the required arguments to
+ * @ref uct_ep_is_connected.
+ */
+typedef struct uct_ep_is_connected_params {
+    /**
+     * Mask of valid fields in this structure, using
+     * bits from @ref uct_ep_is_connected_field_mask_t. Fields not specified
+     * in this mask will be ignored. Provides ABI compatibility with respect to
+     * adding new fields.
+     */
+    uint64_t                 field_mask;
+
+    /**
+     * Device address to check for connectivity.
+     * This field must be passed if @ref uct_iface_query returned
+     * @ref uct_iface_attr_t::dev_addr_len > 0 on the remote side.
+     */
+    const uct_device_addr_t *device_addr;
+
+    /**
+     * Interface address to check for connectivity.
+     * This field must be passed if this endpoint was created by calling
+     * @ref uct_ep_create with @ref uct_ep_params_t::iface_addr.
+     */
+    const uct_iface_addr_t  *iface_addr;
+
+    /**
+     * Endpoint address to check for connectivity.
+     * This field must be passed if @ref uct_ep_connect_to_ep_v2 was
+     * called on this endpoint.
+     */
+    const uct_ep_addr_t     *ep_addr;
+} uct_ep_is_connected_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Parameters for connecting a UCT endpoint by @ref
  * uct_ep_connect_to_ep_v2.
  */
@@ -604,6 +662,19 @@ typedef struct uct_ep_connect_to_ep_params {
     size_t                        ep_addr_length;
 } uct_ep_connect_to_ep_params_t;
 
+
+/**
+ * @ingroup UCT_MD
+ * @brief Parameters for comparing remote keys using @ref uct_rkey_compare.
+ */
+typedef struct uct_rkey_compare_params {
+    /**
+     * Mask of valid fields in this structure. Must currently be equal to zero.
+     * Fields not specified in this mask will be ignored. Provides ABI
+     * compatibility with respect to adding new fields.
+     */
+    uint64_t                      field_mask;
+} uct_rkey_compare_params_t;
 
 /**
  * @ingroup UCT_RESOURCE
@@ -713,7 +784,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE = UCS_BIT(14),
 
     /** Unique global identifier of the memory domain. */
-    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15)
+    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
+
+    /** Indicate registration alignment. */
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
 } uct_md_attr_field_t;
 
 
@@ -819,6 +893,11 @@ typedef struct {
      * Memory Domains belong to the same device.
      */
     char              global_id[UCT_MD_GLOBAL_ID_MAX];
+
+    /**
+     * Registration alignment.
+     */
+    size_t            reg_alignment;
 } uct_md_attr_v2_t;
 
 
@@ -962,6 +1041,43 @@ ucs_status_t uct_ep_connect_to_ep_v2(uct_ep_h ep,
                                      const uct_device_addr_t *device_addr,
                                      const uct_ep_addr_t *ep_addr,
                                      const uct_ep_connect_to_ep_params_t *params);
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Checks if an endpoint is connected to a remote address.
+ *
+ * This function checks if a local endpoint is connected to a remote address.
+ *
+ * @param [in] ep      Endpoint to check.
+ * @param [in] params  Parameters as defined in @ref
+ *                     uct_ep_is_connected_params_t.
+ *
+ * @return Nonzero if connected, 0 otherwise.
+ */
+int uct_ep_is_connected(uct_ep_h ep,
+                        const uct_ep_is_connected_params_t *params);
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief This routine compares two remote keys.
+ *
+ * It sets the @a result argument to < 0 if rkey1 is lower than rkey2, 0 if they
+ * are equal or > 0 if rkey1 is greater than rkey2. The result value can be used
+ * for sorting remote keys.
+ *
+ * @param[in]  component  Component to use for the comparison
+ * @param[in]  rkey1      First rkey to compare
+ * @param[in]  rkey2      Second rkey to compare
+ * @param[in]  params     Additional parameters for comparison
+ * @param[out] result     Result of the comparison
+ *
+ * @return UCS_OK         @a result contains the comparison result
+ *         Other          Error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t
+uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
+                 const uct_rkey_compare_params_t *params, int *result);
 
 END_C_DECLS
 

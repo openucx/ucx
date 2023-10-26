@@ -29,8 +29,11 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, test_ucp_tag::get_test_variants, 0);
-        add_variant_values(variants, test_ucp_tag::get_test_variants, 1,
-                           "proto_v1");
+
+        if (!RUNNING_ON_VALGRIND) {
+            add_variant_values(variants, test_ucp_tag::get_test_variants, 1,
+                               "proto_v1");
+        }
     }
 
     void init()
@@ -907,9 +910,9 @@ UCS_TEST_P(test_ucp_tag_offload_stats, sw_rndv, "RNDV_THRESH=1000")
     test_send_recv(size, true, {UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV});
 }
 
-UCS_TEST_P(test_ucp_tag_offload_stats, force_sw_rndv, "TM_SW_RNDV=y",
-                                                      "RNDV_THRESH=1000",
-                                                      "PROTO_ENABLE=n")
+UCS_TEST_SKIP_COND_P(test_ucp_tag_offload_stats, force_sw_rndv,
+                     RUNNING_ON_VALGRIND,
+                     "TM_SW_RNDV=y", "RNDV_THRESH=1000", "PROTO_ENABLE=n")
 {
     size_t size = 2048; // Size bigger than RNDV thresh
 

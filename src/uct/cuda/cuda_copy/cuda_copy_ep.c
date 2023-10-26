@@ -50,8 +50,8 @@ ucs_status_t uct_cuda_copy_init_stream(cudaStream_t *stream)
         return UCS_OK;
     }
 
-    return UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(stream,
-                                                           cudaStreamNonBlocking));
+    return UCT_CUDA_CALL_LOG_ERR(cudaStreamCreateWithFlags, stream,
+                                 cudaStreamNonBlocking);
 }
 
 static UCS_F_ALWAYS_INLINE cudaStream_t *
@@ -143,10 +143,10 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(dst, src, length, cudaMemcpyDefault,
-                                                   *stream));
+    status = UCT_CUDA_CALL_LOG_ERR(cudaMemcpyAsync, dst, src, length,
+                                   cudaMemcpyDefault, *stream);
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventRecord(cuda_event->event, *stream));
+    status = UCT_CUDA_CALL_LOG_ERR(cudaEventRecord, cuda_event->event, *stream);
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
@@ -220,9 +220,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
         return status;
     }
 
-    UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync((void*)remote_addr, buffer, length,
-                                          cudaMemcpyDefault, *stream));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(*stream));
+    UCT_CUDA_CALL_LOG_ERR(cudaMemcpyAsync, (void*)remote_addr, buffer, length,
+                          cudaMemcpyDefault, *stream);
+    status = UCT_CUDA_CALL_LOG_ERR(cudaStreamSynchronize, *stream);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
@@ -244,9 +244,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
         return status;
     }
 
-    UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(buffer, (void*)remote_addr, length,
-                                          cudaMemcpyDefault, *stream));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(*stream));
+    UCT_CUDA_CALL_LOG_ERR(cudaMemcpyAsync, buffer, (void*)remote_addr, length,
+                          cudaMemcpyDefault, *stream);
+    status = UCT_CUDA_CALL_LOG_ERR(cudaStreamSynchronize, *stream);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",

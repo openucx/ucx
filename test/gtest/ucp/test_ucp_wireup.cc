@@ -470,7 +470,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_max,
                               UCP_ADDRESS_PACK_FLAGS_ALL, addr_v,
-                              m_lanes2remote, &size, &buffer);
+                              m_lanes2remote, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -524,8 +524,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
 
     status = ucp_address_pack(sender().worker(), sender().ep(),
                               &ucp_tl_bitmap_max, UCP_ADDRESS_PACK_FLAGS_ALL,
-                              UCP_OBJECT_VERSION_V1, m_lanes2remote, &size,
-                              &buffer);
+                              UCP_OBJECT_VERSION_V1, m_lanes2remote, UINT_MAX,
+                              &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
 
@@ -551,7 +551,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_min,
                               UCP_ADDRESS_PACK_FLAGS_ALL, addr_v,
-                              m_lanes2remote, &size, &buffer);
+                              m_lanes2remote, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -942,6 +942,9 @@ UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_2sided)
+/* Test use tcp as AUX transport */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_2sided,
+                              tcp_aux, "tcp,rc_verbs")
 
 class test_ucp_wireup_errh_peer : public test_ucp_wireup_1sided
 {
@@ -1556,6 +1559,18 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback_amo,
  * create our own entities.
  */
 class test_ucp_wireup_asymmetric : public ucp_test {
+public:
+    test_ucp_wireup_asymmetric() {
+        if (get_variant_value()) {
+            modify_config("ADDRESS_VERSION", "v2");
+        }
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "addr_v2");
+    }
+
 protected:
     void tag_sendrecv(size_t size) {
         std::string send_data(size, 's');
@@ -1573,11 +1588,6 @@ protected:
         request_wait(rreq);
 
         EXPECT_EQ(send_data, recv_data);
-    }
-
-public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG);
     }
 };
 
@@ -1774,7 +1784,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
 
     status = ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
                               UCP_ADDRESS_PACK_FLAGS_ALL, UCP_OBJECT_VERSION_V2,
-                              NULL, &size, &buffer);
+                              NULL, UINT_MAX, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
 
@@ -1786,6 +1796,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         ASSERT_UCS_OK(status);
     }
 
+    EXPECT_EQ(UCP_OBJECT_VERSION_V2, unpacked_address.addr_version);
+
     const ucp_address_entry_t *ae;
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
         ucp_rsc_index_t rsc_idx = ae->iface_attr.dst_rsc_index;
@@ -1796,7 +1808,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
         // smaller than the original value by up to 64 bytes.
         EXPECT_LT(ucp_address_iface_seg_size(attr) - ae->iface_attr.seg_size,
                   UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR);
-        EXPECT_EQ(UCP_OBJECT_VERSION_V2, ae->iface_attr.addr_version);
         check_fp_values(ae->iface_attr.overhead, attr->overhead);
         check_fp_values(ae->iface_attr.lat_ovh,
                         ucp_tl_iface_latency(worker->context, &attr->latency));
