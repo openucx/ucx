@@ -247,29 +247,6 @@ uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
     return UCS_OK;
 }
 
-/**
- * Copy data to target am_short buffer
- */
-static UCS_F_ALWAYS_INLINE
-void uct_mm_ep_short_fill_data(void *buffer, uint64_t header, const void *payload,
-                               size_t length)
-{
-    /**
-     * Helper structure to fill send buffer of short messages for
-     * non-accelerated transports
-     */
-    struct uct_mm_short_packet {
-        uint64_t header;
-        char     payload[];
-    } UCS_S_PACKED *packet = (struct uct_mm_short_packet*)buffer;
-
-    packet->header = header;
-    /* suppress false positive diagnostic from uct_mm_ep_am_common_send call */
-    /* cppcheck-suppress ctunullpointer */
-    ucs_memcpy_relaxed(packet->payload, payload, length,
-                       UCS_ARCH_MEMCPY_NT_DEST);
-}
-
 static inline void uct_mm_ep_update_cached_tail(uct_mm_ep_t *ep)
 {
     ucs_memory_cpu_load_fence();
@@ -343,7 +320,8 @@ retry:
     switch (send_op) {
     case UCT_MM_SEND_AM_SHORT:
         /* write to the remote FIFO */
-        uct_mm_ep_short_fill_data(elem + 1, header, payload, length);
+        uct_am_short_fill_data(elem + 1, header, payload, length,
+                               UCS_ARCH_MEMCPY_NT_DEST);
 
         elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);

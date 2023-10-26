@@ -162,6 +162,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
                                uint8_t am_id, unsigned length, uint64_t header,
                                const void *payload, uct_pack_callback_t pack_cb, void *arg)
 {
+    ucs_arch_memcpy_hint_t hint = 0;
     gni_return_t ugni_rc;
     uint16_t msg_length;
     uct_ugni_udt_desc_t *desc;
@@ -187,7 +188,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
 
     if (is_short) {
         uct_am_short_fill_data(uct_ugni_udt_get_spayload(desc, iface),
-                               header, payload, length);
+                               header, payload, length, hint);
         sheader->length = length + sizeof(header);
         msg_length      = sheader->length + sizeof(*sheader);
         UCT_TL_EP_STAT_OP(ucs_derived_of(ep, uct_base_ep_t), AM, SHORT, sizeof(header) + length);
