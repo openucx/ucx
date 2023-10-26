@@ -61,6 +61,9 @@ typedef struct uct_scopy_iface_ops {
 
 void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_attr);
 
+ucs_status_t
+uct_scopy_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
+
 UCS_CLASS_DECLARE(uct_scopy_iface_t, uct_iface_ops_t*, uct_scopy_iface_ops_t*,
                   uct_md_h, uct_worker_h, const uct_iface_params_t*,
                   const uct_iface_config_t*);
