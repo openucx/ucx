@@ -21,7 +21,7 @@ protected:
      * not be used as template argument */
     static inline void *memcpy_relaxed(void *dst, const void *src, size_t size)
     {
-        ucs_arch_memcpy_hint_t hint = 0;
+        ucs_arch_memcpy_hint_t hint = UCS_ARCH_MEMCPY_NT_NONE;
         return ucs_memcpy_relaxed(dst, src, size, hint);
     }
 

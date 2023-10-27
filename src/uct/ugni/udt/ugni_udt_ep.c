@@ -162,7 +162,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
                                uint8_t am_id, unsigned length, uint64_t header,
                                const void *payload, uct_pack_callback_t pack_cb, void *arg)
 {
-    ucs_arch_memcpy_hint_t hint = 0;
+    ucs_arch_memcpy_hint_t hint = UCS_ARCH_MEMCPY_NT_NONE;
     gni_return_t ugni_rc;
     uint16_t msg_length;
     uct_ugni_udt_desc_t *desc;

@@ -25,7 +25,7 @@
 static double measure_memcpy_bandwidth(size_t size)
 {
     ucs_time_t start_time, end_time;
-    ucs_arch_memcpy_hint_t hint = 0;
+    ucs_arch_memcpy_hint_t hint = UCS_ARCH_MEMCPY_NT_NONE;
     void *src, *dst;
     double result = 0.0;
     int iter;

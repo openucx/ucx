@@ -233,7 +233,7 @@ exit_no_res:
 ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                        const void *payload, unsigned length)
 {
-    ucs_arch_memcpy_hint_t hint = 0;
+    ucs_arch_memcpy_hint_t hint = UCS_ARCH_MEMCPY_NT_NONE;
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t);
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_ugni_smsg_header_t *smsg_header;

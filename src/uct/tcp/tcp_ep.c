@@ -1763,7 +1763,7 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     struct iovec iov[UCT_TCP_EP_AM_SHORTV_IOV_COUNT];
     uint32_t UCS_V_UNUSED payload_length;
     ucs_status_t status;
-    ucs_arch_memcpy_hint_t hint = 0;
+    ucs_arch_memcpy_hint_t hint = UCS_ARCH_MEMCPY_NT_NONE;
 
     UCT_CHECK_LENGTH(length + sizeof(header), 0,
                      iface->config.tx_seg_size - sizeof(uct_tcp_am_hdr_t),

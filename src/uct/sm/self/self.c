@@ -302,7 +302,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
-    ucs_arch_memcpy_hint_t hint = 0;
+    ucs_arch_memcpy_hint_t hint = UCS_ARCH_MEMCPY_NT_NONE;
     uct_self_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_self_iface_t);
     uct_self_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_self_ep_t);
     size_t total_length;
