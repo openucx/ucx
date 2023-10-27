@@ -408,7 +408,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .super.super         = *init_params,
         .super.latency       = 1.2e-6,
         .super.overhead      = 40e-9,
-        .super.cfg_thresh    = 0,
+        .super.cfg_thresh    = ucp_proto_sw_rma_cfg_thresh(worker->context, 0),
         .super.cfg_priority  = 20,
         .super.min_length    = sizeof(uint32_t),
         .super.max_length    = sizeof(uint64_t),
