@@ -226,6 +226,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_GCOV], [false])
      AM_CONDITIONAL([HAVE_LCOV], [false])
      AM_CONDITIONAL([HAVE_ZE], [false])
+     AM_CONDITIONAL([HAVE_NT_BUFFER_TRANSFER], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
