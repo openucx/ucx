@@ -103,7 +103,18 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
         req->status = status;
         UCS_PROFILE_REQUEST_EVENT(req, "complete_imm_tag_recv", 0);
 
-        ucp_request_imm_cmpl_param(param, req, recv, &req->recv.tag.info);
+        if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
+            return ucp_request_prevent_imm_cmpl(param, req, recv,
+                                                &req->recv.tag.info);
+        }
+
+        if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_RECV_INFO) &&
+            (status == UCS_OK)) {
+            *param->recv_info.tag_info = req->recv.tag.info;
+        }
+
+        ucp_request_put_param(param, req);
+        return UCS_STATUS_PTR(status);
     }
 
     /* TODO: allocate request only in case if flag

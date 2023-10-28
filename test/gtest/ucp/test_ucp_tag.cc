@@ -306,6 +306,11 @@ test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
     param.datatype     = datatype;
 
     switch (type) {
+    case RECV_IMM:
+        param.op_attr_mask      &= ~UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        param.op_attr_mask      |= UCP_OP_ATTR_FIELD_RECV_INFO;
+        param.recv_info.tag_info = info;
+        // Fallthrough
     case RECV_B:
     case RECV_NB:
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
@@ -315,7 +320,11 @@ test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
         req                 = (request*)ucp_tag_recv_nbx(receiver.worker(worker_index),
                                                          buffer, count, tag, tag_mask,
                                                          &param);
-        if (type == RECV_NB) {
+        if (type == RECV_IMM) {
+            if (req != NULL) {
+                UCS_TEST_ABORT("ucp_tag_recv_nbx returned non-NULL");
+            }
+        } else if (type == RECV_NB) {
             if (UCS_PTR_IS_ERR(req)) {
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             } else if (req == NULL) {
@@ -388,6 +397,17 @@ test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
     recv_type_t type = is_external_request() ? RECV_BR : RECV_B;
     request* req = recv(receiver(), type, buffer, count, datatype,
                         tag, tag_mask, info, user_data, buf_index);
+    return UCS_PTR_STATUS(req);
+}
+
+ucs_status_t test_ucp_tag::recv_imm(void *buffer, size_t count,
+                                    ucp_datatype_t datatype, ucp_tag_t tag,
+                                    ucp_tag_t tag_mask,
+                                    ucp_tag_recv_info_t *info, void *user_data,
+                                    int buf_index)
+{
+    request *req = recv(receiver(), RECV_IMM, buffer, count, datatype, tag,
+                        tag_mask, info, user_data, buf_index);
     return UCS_PTR_STATUS(req);
 }
 
