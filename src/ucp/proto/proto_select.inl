@@ -109,10 +109,10 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
     if (ucs_likely(proto_select->cache.key == key.u64)) {
         select_elem = proto_select->cache.value;
     } else {
-        khiter = kh_get(ucp_proto_select_hash, &proto_select->hash, key.u64);
-        if (ucs_likely(khiter != kh_end(&proto_select->hash))) {
+        khiter = kh_get(ucp_proto_select_hash, proto_select->hash, key.u64);
+        if (ucs_likely(khiter != kh_end(proto_select->hash))) {
             /* key was found in hash - select by message size */
-            select_elem = &kh_value(&proto_select->hash, khiter);
+            select_elem = &kh_value(proto_select->hash, khiter);
         } else {
             select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 0,
                                                        ep_cfg_index,
