@@ -37,7 +37,8 @@
 #endif
 
 #if HAVE_ROCM
-#  include <hip_runtime.h>
+#include <hip_runtime.h>
+#include <hip_version.h>
 
 #define ROCM_CALL(_code) \
     do { \
@@ -95,7 +96,13 @@ bool mem_buffer::is_rocm_managed_supported()
     }
 
     hipFree(dptr);
+
+#if HIP_VERSION >= 50500000
+    return attr.type == hipMemoryTypeUnified;
+#else
     return attr.memoryType == hipMemoryTypeUnified;
+#endif
+
 #else
     return false;
 #endif
