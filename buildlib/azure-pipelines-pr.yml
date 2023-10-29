@@ -22,6 +22,7 @@ pr:
     - AUTHORS
     - buildlib/azure-pipelines-perf.yml
     - buildlib/tools/perf_results.py
+    - buildlib/tools/perf-common.yml
 
 extends:
   template: pr/main.yml
