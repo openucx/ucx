@@ -2119,7 +2119,8 @@ void ucs_config_parser_get_env_vars(ucs_string_buffer_t *env_strb,
     });
 }
 
-UCS_STATIC_CLEANUP {
+void ucs_config_parser_cleanup()
+{
     const char *key;
     char *value;
 
