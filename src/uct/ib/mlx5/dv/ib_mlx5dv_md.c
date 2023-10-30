@@ -407,10 +407,12 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_atomic_key,
                         (md, memh), uct_ib_mlx5_md_t *md,
                         uct_ib_mlx5_devx_mem_t *memh)
 {
-    uct_ib_mr_type_t mr_type  = uct_ib_md_get_atomic_mr_type(&md->super);
-    uct_ib_mlx5_devx_mr_t *mr = &memh->mrs[mr_type];
+    uct_ib_mr_type_t mr_type  = memh->dm != NULL ?
+                                         UCT_IB_MR_DEFAULT :
+                                         uct_ib_md_get_atomic_mr_type(&md->super);
     uint8_t mr_id             = uct_ib_md_get_atomic_mr_id(&md->super);
     uint32_t atomic_offset    = uct_ib_md_atomic_offset(mr_id);
+    uct_ib_mlx5_devx_mr_t *mr = &memh->mrs[mr_type];
     uint32_t mkey_index;
     uint64_t iova;
     ucs_status_t status;
@@ -2075,13 +2077,16 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         !(memh->super.flags & UCT_IB_MEM_IMPORTED) &&
         ucs_test_all_flags(md->flags,
                            UCT_IB_MLX5_MD_FLAG_KSM |
-                           UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS)) {
+                                   UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS) &&
+        ((md->flags & UCT_IB_MLX5_MD_FLAG_DM_INDIRECT_ATOMICS) ||
+         (memh->dm == NULL))) {
         status = uct_ib_mlx5_devx_reg_atomic_key(md, memh);
         if (status == UCS_OK) {
             ucs_assertv(memh->atomic_rkey != UCT_IB_INVALID_MKEY,
                         "dev=%s memh=%p", uct_ib_device_name(&md->super.dev),
                         memh);
         } else if (status != UCS_ERR_UNSUPPORTED) {
+            memh->atomic_rkey = UCT_IB_INVALID_MKEY;
             return status;
         }
     }
@@ -2187,10 +2192,46 @@ err:
     return status;
 }
 
+static void
+uct_ib_mlx5_devx_check_device_memory_atomics_support(uct_md_h uct_md,
+                                                     uct_md_attr_v2_t *md_attr)
+{
+#if HAVE_IBV_DM
+    size_t length        = 1;
+    uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    uct_ib_mlx5_devx_mem_t *devx_memh;
+    void *address;
+    uct_mem_h memh;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_device_mem_alloc(uct_md, &length, &address,
+                                               UCS_MEMORY_TYPE_RDMA, 0,
+                                               "check dm ksm atomics", &memh);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    devx_memh = ucs_derived_of(memh, uct_ib_mlx5_devx_mem_t);
+    status    = uct_ib_mlx5_devx_reg_atomic_key(md, devx_memh);
+    if (status == UCS_OK) {
+        md_attr->atomic_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_RDMA);
+        md->flags                 |= UCT_IB_MLX5_MD_FLAG_DM_INDIRECT_ATOMICS;
+        uct_ib_mlx5_devx_obj_destroy(devx_memh->atomic_dvmr,
+                                     "MKEY, ATOMIC-MD_QUERY");
+    } else {
+        ucs_warn("%s: Atomic KSM for device memory is not supported for %s",
+                 ucs_status_string(status),
+                 ibv_get_device_name(md->super.dev.ibv_context->device));
+    }
+
+    uct_ib_mlx5_devx_device_mem_free(uct_md, memh);
+#endif
+}
+
 static ucs_status_t
 uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
-    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_md_t *md      = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_status_t status;
 
     status = uct_ib_md_query(uct_md, md_attr);
@@ -2202,6 +2243,7 @@ uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     if (md->cap_flags & UCT_MD_FLAG_ALLOC) {
         md_attr->alloc_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_RDMA);
         md_attr->max_alloc        = md->dev.dev_attr.max_dm_size;
+        uct_ib_mlx5_devx_check_device_memory_atomics_support(uct_md, md_attr);
     }
 
 #endif

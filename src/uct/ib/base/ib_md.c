@@ -255,6 +255,7 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost                  = md->reg_cost;
     md_attr->exported_mkey_packed_size = sizeof(uct_ib_md_packed_mkey_t);
+    md_attr->atomic_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
 
     ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);
     UCS_STATIC_ASSERT(sizeof(guid) <=

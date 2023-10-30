@@ -390,6 +390,7 @@ static void uct_md_attr_from_v2(uct_md_attr_t *dst, const uct_md_attr_v2_t *src)
     dst->cap.detect_mem_types = src->detect_mem_types;
     dst->cap.alloc_mem_types  = src->alloc_mem_types;
     dst->cap.access_mem_types = src->access_mem_types;
+    dst->cap.atomic_mem_types = src->atomic_mem_types;
     dst->reg_cost             = src->reg_cost;
     dst->rkey_packed_size     = src->rkey_packed_size;
 
@@ -416,6 +417,8 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, access_mem_types,
                               UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, atomic_mem_types,
+                              UCT_MD_ATTR_FIELD_ATOMIC_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, dmabuf_mem_types,
                               UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_cost, UCT_MD_ATTR_FIELD_REG_COST);

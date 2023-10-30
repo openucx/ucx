@@ -33,6 +33,7 @@ static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr
     md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->detect_mem_types       = 0;
     md_attr->dmabuf_mem_types       = 0;
+    md_attr->atomic_mem_types       = 0;
     md_attr->max_alloc              = 0;
     md_attr->max_reg                = ULONG_MAX;
 

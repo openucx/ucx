@@ -43,6 +43,7 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->detect_mem_types       = 0;
     md_attr->dmabuf_mem_types       = 0;
+    md_attr->atomic_mem_types       = 0;
     md_attr->max_alloc              = 0;
     md_attr->max_reg                = ULONG_MAX;
     md_attr->rkey_packed_size       = sizeof(uct_cuda_ipc_key_t);

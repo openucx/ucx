@@ -46,6 +46,7 @@ static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->detect_mem_types       = 0;
     md_attr->dmabuf_mem_types       = 0;
+    md_attr->atomic_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->max_alloc              = 0;
     md_attr->max_reg                = ULONG_MAX;
     md_attr->reg_cost               = ucs_linear_func_make(1000.0e-9, 0.007e-9);

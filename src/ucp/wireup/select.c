@@ -510,6 +510,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             !ucp_wireup_check_flags(resource, md_attr->reg_mem_types,
                                     criteria->reg_mem_types, criteria->title,
                                     ucs_memory_type_names, p, endp - p) ||
+            !ucp_wireup_check_flags(resource, md_attr->atomic_mem_types,
+                                    criteria->atomic_mem_types, criteria->title,
+                                    ucs_memory_type_names, p, endp - p) ||
             !ucp_wireup_check_select_flags(resource, iface_attr->cap.flags,
                                            &local_iface_flags, criteria->title,
                                            ucp_wireup_iface_flags, p,
@@ -1055,6 +1058,7 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
     criteria->remote_event_flags = 0;
     criteria->alloc_mem_types    = 0;
     criteria->reg_mem_types      = 0;
+    criteria->atomic_mem_types   = 0;
     criteria->is_keepalive       = 0;
     criteria->calc_score         = NULL;
     criteria->tl_rsc_flags       = 0;
@@ -1175,6 +1179,8 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_criteria_t criteria = {};
     ucp_rsc_index_t rsc_index;
     ucp_tl_bitmap_t tl_bitmap;
+    ucs_status_t status;
+    ucs_memory_type_t mem_type;
 
     if (!ucs_test_flags(context->config.features, UCP_FEATURE_AMO32,
                         UCP_FEATURE_AMO64) ||
@@ -1203,10 +1209,16 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    return ucp_wireup_add_memaccess_lanes(select_params, ep_init_flags,
-                                          &criteria, UCS_MEMORY_TYPE_HOST,
-                                          tl_bitmap, UCP_LANE_TYPE_AMO,
-                                          select_ctx);
+     ucs_memory_type_for_each(mem_type) {
+        status = ucp_wireup_add_memaccess_lanes(select_params, ep_init_flags,
+                                                &criteria, mem_type, tl_bitmap,
+                                                UCP_LANE_TYPE_AMO, select_ctx);
+        if ((status != UCS_OK) && (mem_type == UCS_MEMORY_TYPE_HOST)) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
 }
 
 static double
