@@ -1370,6 +1370,7 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #if HAVE_IBV_DM
     size_t length   = 1;
     uct_md_h uct_md = (uct_md_h)&md->super;
+    uct_ib_mlx5_devx_mem_t *devx_memh;
     void *address;
     uct_mem_h memh;
     ucs_status_t status;
@@ -1388,15 +1389,20 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
         return;
     }
 
+    md->super.cap_flags |= UCT_MD_FLAG_ALLOC;
+
+    devx_memh = ucs_derived_of(memh, uct_ib_mlx5_devx_mem_t);
+    status    = uct_ib_mlx5_devx_reg_atomic_key(md, devx_memh);
+    if (status == UCS_OK) {
+        md->super.dev.flags |= UCT_IB_DEVICE_FLAG_DM_ATOMICS;
+        uct_ib_mlx5_devx_obj_destroy(devx_memh->atomic_dvmr, "DM-ATOMIC-KSM");
+    }
+
     status = uct_ib_mlx5_devx_device_mem_free(uct_md, memh);
     if (status != UCS_OK) {
         ucs_diag("%s: failed to free dm allocated in check_dm_ksm_reg",
                  ucs_status_string(status));
-        return;
     }
-
-    /* Indicates we can allocate device memory */
-    md->super.cap_flags |= UCT_MD_FLAG_ALLOC;
 #endif
 }
 
@@ -2078,7 +2084,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         ucs_test_all_flags(md->flags,
                            UCT_IB_MLX5_MD_FLAG_KSM |
                                    UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS) &&
-        ((md->flags & UCT_IB_MLX5_MD_FLAG_DM_INDIRECT_ATOMICS) ||
+        ((md->super.dev.flags & UCT_IB_DEVICE_FLAG_DM_ATOMICS) ||
          (memh->dm == NULL))) {
         status = uct_ib_mlx5_devx_reg_atomic_key(md, memh);
         if (status == UCS_OK) {
@@ -2192,6 +2198,7 @@ err:
     return status;
 }
 
+#if 0 
 static void
 uct_ib_mlx5_devx_check_device_memory_atomics_support(uct_md_h uct_md,
                                                      uct_md_attr_v2_t *md_attr)
@@ -2227,6 +2234,7 @@ uct_ib_mlx5_devx_check_device_memory_atomics_support(uct_md_h uct_md,
     uct_ib_mlx5_devx_device_mem_free(uct_md, memh);
 #endif
 }
+#endif
 
 static ucs_status_t
 uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
@@ -2241,9 +2249,10 @@ uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 
 #if HAVE_IBV_DM
     if (md->cap_flags & UCT_MD_FLAG_ALLOC) {
-        md_attr->alloc_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_RDMA);
+        md_attr->alloc_mem_types   |= UCS_BIT(UCS_MEMORY_TYPE_RDMA);
+        md_attr->atomic_mem_types |= (UCS_MEMORY_TYPE_RDMA);
         md_attr->max_alloc        = md->dev.dev_attr.max_dm_size;
-        uct_ib_mlx5_devx_check_device_memory_atomics_support(uct_md, md_attr);
+        // uct_ib_mlx5_devx_check_device_memory_atomics_support(uct_md, md_attr);
     }
 
 #endif

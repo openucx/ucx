@@ -192,8 +192,6 @@ enum {
     UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI       = UCS_BIT(13),
     /* Device supports symmetric key creation */
     UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(14),
-    /* Devuce supports device memory indirect atomics*/
-    UCT_IB_MLX5_MD_FLAG_DM_INDIRECT_ATOMICS  = UCS_BIT(15),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
