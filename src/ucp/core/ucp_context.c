@@ -2068,7 +2068,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.worker_strong_fence =
             (context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) ||
             ((context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) &&
-             (context->config.ext.max_rma_lanes > 1));
+             ((context->config.ext.max_rma_lanes > 1) ||
+              context->config.ext.proto_enable));
 
     return UCS_OK;
 

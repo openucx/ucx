@@ -364,3 +364,63 @@ UCS_TEST_P(test_ucp_rma_reg_nb, get_nonblocking) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_rma_reg_nb)
+
+
+class test_ucp_rma_order : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+
+    virtual void init() {
+        test_ucp_memheap::init();
+    }
+
+    void put_nbx(void *sbuf, size_t size, uint64_t target, ucp_rkey_h rkey,
+                 uint32_t flags) {
+        ucp_request_param_t param = { .op_attr_mask = flags };
+
+        ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), sbuf, size, target,
+                                            rkey, &param);
+        request_release(sptr);
+    }
+
+    void test_ordering(size_t size, uint32_t put_flags) {
+        mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(size, receiver());
+
+        rbuf.memset(0);
+        sbuf.memset(CHAR_MAX);
+
+        ucs::handle<ucp_rkey_h> rkey;
+        rbuf.rkey(sender(), rkey);
+
+        uint8_t *first = static_cast<uint8_t*>(rbuf.ptr());
+        uint8_t *last  = static_cast<uint8_t*>(rbuf.ptr()) + rbuf.size() - 1;
+
+        for (uint8_t iter = 0; iter < 50; ++iter) {
+            put_nbx(sbuf.ptr(), sbuf.size(), (uint64_t)rbuf.ptr(), rkey,
+                    put_flags);
+            sender().fence();
+            // Update first and last bytes of the target buffer and make sure
+            // it is not overwritten by the sender buffer (note fence() above)
+            put_nbx(&iter, sizeof(iter), (uint64_t)last, rkey, put_flags);
+            put_nbx(&iter, sizeof(iter), (uint64_t)first, rkey, put_flags);
+            flush_workers();
+            EXPECT_EQ(*first, iter) << "size is " << size;
+            EXPECT_EQ(*last, iter) << "size is " << size;
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_order, put_ordering) {
+    for (size_t size = 1000000; size >= 1; size /= 10) {
+        test_ordering(size, 0);
+        test_ordering(size, UCP_OP_ATTR_FLAG_FAST_CMPL);
+        test_ordering(size, UCP_OP_ATTR_FLAG_MULTI_SEND);
+    }
+}
+
+// TODO: Strong fence hangs with SW RMA emulation, because it requires progress
+// on both peers. Add other tls, when fence implementation revised
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_order, shm_rc_dc, "self,shm,rc,dc")
