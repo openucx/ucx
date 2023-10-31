@@ -71,6 +71,7 @@ typedef struct {
     ucs_sys_bus_id_t bus_id;
     char             *name;
     unsigned         name_priority;
+    ucs_numa_node_t  numa_node;
 } ucs_topo_sys_device_info_t;
 
 KHASH_MAP_INIT_INT64(bus_to_sys_dev, ucs_sys_device_t);
@@ -201,6 +202,41 @@ static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
     }
 }
 
+static ucs_status_t
+ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id, char *path,
+                              size_t max)
+{
+    const size_t prefix_length = strlen(UCS_TOPO_SYSFS_PCI_PREFIX);
+    char link_path[PATH_MAX];
+
+    if (max < PATH_MAX) {
+        return UCS_ERR_BUFFER_TOO_SMALL;
+    }
+
+    ucs_strncpy_safe(link_path, UCS_TOPO_SYSFS_PCI_PREFIX, sizeof(link_path));
+    ucs_topo_bus_id_str(bus_id, 0, link_path + prefix_length,
+                        PATH_MAX - prefix_length);
+    if (realpath(link_path, path) == NULL) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static int
+ucs_topo_read_device_numa_node(const ucs_sys_bus_id_t *bus_id)
+{
+    char path[PATH_MAX];
+    ucs_status_t status;
+
+    status = ucs_topo_bus_id_to_sysfs_path(bus_id, path, sizeof(path));
+    if (status != UCS_OK) {
+        return UCS_NUMA_NODE_UNDEFINED;
+    }
+
+    return ucs_numa_node_of_device(path);
+}
+
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
@@ -237,6 +273,8 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
         ucs_topo_global_ctx.devices[*sys_dev].bus_id        = *bus_id;
         ucs_topo_global_ctx.devices[*sys_dev].name          = name;
         ucs_topo_global_ctx.devices[*sys_dev].name_priority = 0;
+        ucs_topo_global_ctx.devices[*sys_dev].numa_node     =
+                ucs_topo_read_device_numa_node(bus_id);
         ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
@@ -258,14 +296,7 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 static ucs_status_t
 ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
 {
-    const size_t prefix_length = strlen(UCS_TOPO_SYSFS_PCI_PREFIX);
-    char link_path[PATH_MAX];
     ucs_status_t status;
-
-    if (max < PATH_MAX) {
-        status = UCS_ERR_BUFFER_TOO_SMALL;
-        goto out;
-    }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
@@ -276,11 +307,9 @@ ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
         goto out_unlock;
     }
 
-    ucs_strncpy_safe(link_path, UCS_TOPO_SYSFS_PCI_PREFIX, PATH_MAX);
-    ucs_topo_bus_id_str(&ucs_topo_global_ctx.devices[sys_dev].bus_id, 0,
-                        link_path + prefix_length, PATH_MAX - prefix_length);
-    if (realpath(link_path, path) == NULL) {
-        status = UCS_ERR_IO_ERROR;
+    status = ucs_topo_bus_id_to_sysfs_path(
+            &ucs_topo_global_ctx.devices[sys_dev].bus_id, path, max);
+    if (status != UCS_OK) {
         goto out_unlock;
     }
 
@@ -288,7 +317,6 @@ ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
 
 out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-out:
     return status;
 }
 
@@ -299,7 +327,7 @@ static int ucs_topo_is_sys_root(const char *path)
 
 static int ucs_topo_is_pci_root(const char *path)
 {
-    int count;
+    int count = -1;
     sscanf(path, UCS_TOPO_SYSFS_DEVICES_ROOT "/pci%*x:%*x%n", &count);
     return count == strlen(path);
 }
@@ -334,6 +362,22 @@ static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
                                   (19200.0 * UCS_MBYTE) / path_distance);
 }
 
+static void ucs_topo_common_numa_node_distance(ucs_sys_dev_distance_t *distance)
+{
+    distance->latency   = 300e-9;
+    distance->bandwidth = 17000 * UCS_MBYTE;
+}
+
+static int
+ucs_topo_is_same_numa_node(ucs_sys_device_t device1,
+                             ucs_sys_device_t device2)
+{
+    ucs_numa_node_t numa1 = ucs_topo_sys_device_get_numa_node(device1);
+    ucs_numa_node_t numa2 = ucs_topo_sys_device_get_numa_node(device2);
+
+    return (numa1 == numa2) && (numa1 != UCS_SYS_DEVICE_ID_UNKNOWN);
+}
+
 static ucs_status_t
 ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
                             ucs_sys_device_t device2,
@@ -363,11 +407,14 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     }
 
     ucs_path_get_common_parent(path1, path2, common_path);
-    if (ucs_topo_is_sys_root(common_path)) {
-        ucs_topo_sys_root_distance(distance);
-        return UCS_OK;
-    } else if (ucs_topo_is_pci_root(common_path)) {
+    if (ucs_topo_is_pci_root(common_path)) {
         ucs_topo_pci_root_distance(path1, path2, distance);
+        return UCS_OK;
+    } else if (ucs_topo_is_same_numa_node(device1, device2)) {
+        ucs_topo_common_numa_node_distance(distance);
+        return UCS_OK;
+    } else if (ucs_topo_is_sys_root(common_path)) {
+        ucs_topo_sys_root_distance(distance);
         return UCS_OK;
     }
 
@@ -382,18 +429,11 @@ static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
     int full_affinity     = 0;
     ucs_sys_cpuset_t thread_cpuset;
     unsigned cpu, num_cpus, cpuset_size;
-    char path[PATH_MAX];
     ucs_numa_node_t dev_node;
     ucs_status_t status;
 
     /* If the device is unknown, we assume min distance */
     if (device == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_topo_get_memory_distance_default(device, distance);
-        return;
-    }
-
-    status = ucs_topo_sys_dev_to_sysfs_path(device, path, sizeof(path));
-    if (status != UCS_OK) {
         ucs_topo_get_memory_distance_default(device, distance);
         return;
     }
@@ -405,7 +445,11 @@ static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
         full_affinity = 1;
     }
 
-    dev_node = ucs_numa_node_of_device(path);
+    dev_node = ucs_topo_sys_device_get_numa_node(device);
+    if (dev_node == UCS_NUMA_NODE_UNDEFINED) {
+        dev_node = UCS_NUMA_NODE_DEFAULT;
+    }
+
     num_cpus = ucs_numa_num_configured_cpus();
     for (cpu = 0; cpu < num_cpus; ++cpu) {
         if (!full_affinity && !CPU_ISSET(cpu, &thread_cpuset)) {
@@ -563,6 +607,25 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
     }
 
     return name;
+}
+
+ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
+{
+    int numa_node;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_NUMA_NODE_UNDEFINED;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev < ucs_topo_global_ctx.num_devices) {
+        numa_node = ucs_topo_global_ctx.devices[sys_dev].numa_node;
+    } else {
+        numa_node = UCS_NUMA_NODE_UNDEFINED;
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return numa_node;
 }
 
 void ucs_topo_print_info(FILE *stream)

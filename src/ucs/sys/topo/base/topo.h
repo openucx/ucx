@@ -9,6 +9,7 @@
 
 #include <ucs/type/status.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/memory/numa.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -224,6 +225,14 @@ ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer);
  */
 const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
 
+/**
+ * Get the closest NUMA node for a given system device.
+ *
+ * @param [in] sys_dev input system device.
+ *
+ * @return The number of NUMA node closest to given device.
+ */
+ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
 
 /**
  * Get the number of registered system devices.
