@@ -47,7 +47,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
 
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
                                      &caps, UCS_LINEAR_FUNC_ZERO,
-                                     init_params->priv);
+                                     init_params->priv, 0);
     ucp_proto_select_caps_cleanup(&caps);
 
     return status;

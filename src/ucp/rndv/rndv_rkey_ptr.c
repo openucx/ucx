@@ -88,7 +88,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
     *init_params->priv_size = sizeof(*rpriv);
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
                                      &rkey_ptr_caps, UCS_LINEAR_FUNC_ZERO,
-                                     &rpriv->ack);
+                                     &rpriv->ack, 0);
     ucp_proto_select_caps_cleanup(&rkey_ptr_caps);
 
     return status;
@@ -268,7 +268,7 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
     *init_params->priv_size = sizeof(*rpriv);
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_RKEY_PTR_DESC,
                                      &rkey_ptr_caps, UCS_LINEAR_FUNC_ZERO,
-                                     &rpriv->super.ack);
+                                     &rpriv->super.ack, 0);
 
     ucp_proto_select_caps_cleanup(&rkey_ptr_caps);
 

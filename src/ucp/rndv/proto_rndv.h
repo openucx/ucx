@@ -140,7 +140,8 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *params,
                                      const char *name,
                                      const ucp_proto_caps_t *bulk_caps,
                                      ucs_linear_func_t overhead,
-                                     ucp_proto_rndv_ack_priv_t *apriv);
+                                     ucp_proto_rndv_ack_priv_t *apriv,
+                                     unsigned flags);
 
 
 ucs_status_t

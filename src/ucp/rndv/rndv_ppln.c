@@ -118,7 +118,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ppln_overhead = ucs_linear_func_make(frag_overhead,
                                          frag_overhead / frag_max_length);
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &ppln_caps, ppln_overhead, &rpriv->ack);
+                                     &ppln_caps, ppln_overhead, &rpriv->ack, 0);
 
     ucp_proto_select_caps_cleanup(&ppln_caps);
 
