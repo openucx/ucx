@@ -390,17 +390,24 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     void *address;
     unsigned mem_type;
     uct_allocated_memory_t mem;
-    uct_mem_alloc_params_t params;
+    uct_mem_alloc_params_t alloc_params;
+    uct_md_mkey_pack_params_t pack_params;
+    uint64_t key;
 
-    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
-                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
-                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
-                             UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
-                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
-    params.flags           = UCT_MD_MEM_ACCESS_ALL;
-    params.name            = "test";
-    params.mds.mds         = &md_ref;
-    params.mds.count       = 1;
+    alloc_params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS |
+                              UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS |
+                              UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                              UCT_MEM_ALLOC_PARAM_FIELD_MDS |
+                              UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    alloc_params.flags      = UCT_MD_MEM_ACCESS_ALL;
+    alloc_params.name       = "test";
+    alloc_params.mds.mds    = &md_ref;
+    alloc_params.mds.count  = 1;
+
+    /* We want to test memory leak for both atomic_rkey and indirect_rkey */
+    pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+    pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
+                             UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO;
 
     ucs_for_each_bit(mem_type, md_attr().alloc_mem_types) {
         for (unsigned i = 0; i < iterations; ++i) {
@@ -411,12 +418,12 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
                 continue;
             }
 
-            address         = NULL;
-            params.address  = address;
-            params.mem_type = (ucs_memory_type_t)mem_type;
+            address               = NULL;
+            alloc_params.address  = address;
+            alloc_params.mem_type = (ucs_memory_type_t)mem_type;
 
             ucs_log_push_handler(ignore_alloc_failure_log_handler);
-            status = uct_mem_alloc(size, &method, 1, &params, &mem);
+            status = uct_mem_alloc(size, &method, 1, &alloc_params, &mem);
             ucs_log_pop_handler();
 
             if (status == UCS_ERR_NO_MEMORY) {
@@ -436,6 +443,10 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             if (mem_type == UCS_MEMORY_TYPE_HOST) {
                 memset(address, 0xBB, size);
             }
+
+            status = uct_md_mkey_pack_v2(md(), mem.memh, &pack_params, &key);
+            ASSERT_UCS_OK(status);
+
             uct_mem_free(&mem);
         }
 
