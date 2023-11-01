@@ -567,13 +567,7 @@ enum {
      * received from different peers are compared equal, they can be used
      * interchangeably, avoiding the need to keep all of them in memory.
      */
-    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3),
-
-    /**
-     * (?) Indicating that allocated memory type should support atomic operations
-     * only available when setting UCP_MEM_MAP_ALLOCATE
-    */
-    UCP_MEM_MAP_DEVICE_MEMORY_ATOMICS = UCS_BIT(4),
+    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3)
 };
 
 

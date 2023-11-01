@@ -510,40 +510,43 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
             if (((md_attr->flags & UCT_MD_FLAG_NEED_RKEY) ||
                  (flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) &&
                 (!(rkey_config_key->md_map &
-                   UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) &&
+                   UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) 
+                   &&
                 (!(md_attr->alloc_mem_types &
-                   UCS_BIT(rkey_config_key->mem_type)))) {
+                   UCS_BIT(rkey_config_key->mem_type)))
+                   ) {
                 /* If remote key required remote memory domain should be
                  * available */
-                ucs_trace("%s: no support of dst md map 0x%" PRIx64, lane_desc,
+                ucs_warn("%s: no support of dst md map 0x%" PRIx64, lane_desc,
                           rkey_config_key->md_map);
                 continue;
             }
 
             if (
-                //!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY) &&
-                !(md_attr->access_mem_types &
-                  UCS_BIT(rkey_config_key->mem_type)) &&
-                (!(md_attr->alloc_mem_types &
-                   UCS_BIT(rkey_config_key->mem_type)))) {
+                    !(md_attr->flags & UCT_MD_FLAG_NEED_RKEY) &&
+                    !(md_attr->access_mem_types &
+                      UCS_BIT(rkey_config_key->mem_type)) &&
+                    (!(md_attr->alloc_mem_types&
+                       UCS_BIT(rkey_config_key->mem_type)))) {
                 /* Remote memory domain without remote key must be able to
                  * access relevant memory type */
-                ucs_trace("%s: no access to remote mem type %s", lane_desc,
+                ucs_warn("%s: no access to remote mem type %s", lane_desc,
                           ucs_memory_type_names[rkey_config_key->mem_type]);
                 continue;
             }
 
-            if ((lane_type == UCP_LANE_TYPE_AMO) &&
-                !(md_attr->atomic_mem_types &
-                  UCS_BIT(rkey_config_key->mem_type))) {
-                ucs_warn("%s: no atomics to remote mem type %s, "
-                         "atomic_mem_types: %lu",
-                         lane_desc,
-                         ucs_memory_type_names[rkey_config_key->mem_type],
-                         md_attr->atomic_mem_types);
-                continue;
-            }
         }
+
+            // if ((lane_type == UCP_LANE_TYPE_AMO) &&
+            //     !(md_attr->atomic_mem_types &
+            //       UCS_BIT(rkey_config_key->mem_type))) {
+            //     ucs_warn("%s: no atomics to remote mem type %s, "
+            //              "atomic_mem_types: %lu",
+            //              lane_desc,
+            //              ucs_memory_type_names[rkey_config_key->mem_type],
+            //              md_attr->atomic_mem_types);
+            //     continue;
+            // }
 
         max_iov = ucp_proto_common_get_iface_attr_field(iface_attr,
                                                         max_iov_offs, SIZE_MAX);

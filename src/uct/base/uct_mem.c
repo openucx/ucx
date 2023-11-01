@@ -152,9 +152,11 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                                           mem_type, flags, alloc_name,
                                           &memh);
                 if (status != UCS_OK) {
-                    ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
-                              alloc_length, md->component->name,
-                              alloc_name, ucs_status_string(status));
+                    ucs_error("failed to allocate %zu bytes of %s using md %s "
+                              "for %s: %s",
+                              alloc_length, ucs_memory_type_names[mem_type],
+                              md->component->name, alloc_name,
+                              ucs_status_string(status));
                     goto out;
                 }
 
