@@ -340,9 +340,9 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         address            = &remote_address->address_list[address_index];
         ep_addr_index      = ep_addr_indexes[address_index]++;
         ucs_assertv(ep_addr_index < address->num_ep_addrs,
-                    "lane=%d/%d tl_name_csum=0x%02x address_index=%u "
+                    "ep=%p lane=%d/%d tl_name_csum=0x%02x address_index=%u "
                     "ep_addr_index=%u num_ep_addrs=%u",
-                    lane, num_lanes, address->tl_name_csum, address_index,
+                    ep, lane, num_lanes, address->tl_name_csum, address_index,
                     ep_addr_index, address->num_ep_addrs);
         remote_lane        = address->ep_addrs[ep_addr_index].lane;
         lanes2remote[lane] = remote_lane;

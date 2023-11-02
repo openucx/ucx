@@ -161,6 +161,12 @@ static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
 };
 
 
+static double
+ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
+                             const uct_md_attr_v2_t *md_attr,
+                             const ucp_unpacked_address_t *unpacked_addr,
+                             const ucp_address_entry_t *remote_addr, void *arg);
+
 static const char *
 ucp_wireup_get_missing_flag_desc(uint64_t flags, uint64_t required_flags,
                                  const char ** flag_descs)
@@ -977,22 +983,6 @@ static uint64_t ucp_ep_get_context_features(const ucp_ep_h ep)
     return ep->worker->context->config.features;
 }
 
-static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
-                                        const uct_md_attr_v2_t *md_attr,
-                                        const ucp_unpacked_address_t *unpacked_addr,
-                                        const ucp_address_entry_t *remote_addr,
-                                        void *arg)
-{
-    /* best for 4k messages */
-    return 1e-3 /
-           (ucp_wireup_tl_iface_latency(
-                wiface, unpacked_addr, &remote_addr->iface_attr) +
-            wiface->attr.overhead +
-            (4096.0 / ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
-                                                     &wiface->attr.bandwidth),
-                              remote_addr->iface_attr.bandwidth)));
-}
-
 static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
                                               unsigned ep_init_flags)
 {
@@ -1104,9 +1094,10 @@ static ucs_status_t
 ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
                          ucp_wireup_select_context_t *select_ctx)
 {
-    unsigned ep_init_flags         = ucp_wireup_ep_init_flags(select_params,
-                                                              select_ctx);
-    ucp_wireup_criteria_t criteria = {};
+    unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
+                                                      select_ctx);
+    ucp_wireup_dev_usage_count dev_count = {};
+    ucp_wireup_criteria_t criteria       = {};
     ucp_tl_bitmap_t tl_bitmap;
     ucs_memory_type_t mem_type;
     ucs_status_t status;
@@ -1135,7 +1126,8 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
                                      UCT_IFACE_FLAG_GET_BCOPY |
                                      UCT_IFACE_FLAG_PENDING, 0);
     }
-    criteria.calc_score             = ucp_wireup_rma_score_func;
+    criteria.calc_score = ucp_wireup_rma_bw_score_func;
+    criteria.arg        = &dev_count;
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     tl_bitmap = ucp_tl_bitmap_max;
