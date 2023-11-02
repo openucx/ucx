@@ -148,6 +148,21 @@ check_gpu() {
             azure_log_error "No GPU device found on $(hostname -s)"
             exit 1
         fi
+        check_nv_peer_mem
+    fi
+}
+
+check_nv_peer_mem() {
+    if [ -f /.dockerenv ]; then
+        echo "Skipping nv_peer_mem check on Docker."
+        return 0
+    fi
+
+    if ! lsmod | grep -q nv_peer_mem; then
+        lsmod | grep nv_peer_mem
+        systemctl status nv_peer_mem
+        azure_log_error "nv_peer_mem module not loaded on $(hostname -s)"
+        exit 1
     fi
 }
 
