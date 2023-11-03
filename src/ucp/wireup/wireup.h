@@ -82,6 +82,9 @@ typedef struct {
     /* Mandatory memory types for registration */
     uint64_t                    reg_mem_types;
 
+    /* Mandatory memory types for atomics */
+    uint64_t                    atomic_mem_types;
+
     /* Required support of keepalive mechanism */
     int                         is_keepalive;
 

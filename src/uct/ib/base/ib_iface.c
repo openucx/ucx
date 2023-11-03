@@ -1448,6 +1448,12 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     self->addr_size  = uct_ib_iface_address_size(self);
 
+    if (params->features &
+                (UCT_IFACE_FEATURE_AMO32 | UCT_IFACE_FEATURE_AMO64) &&
+        !(ib_md->dev.flags & UCT_IB_DEVICE_FLAG_DM_ATOMICS)) {
+        ib_md->cap_flags &= ~UCT_MD_FLAG_ALLOC;
+    }
+
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);

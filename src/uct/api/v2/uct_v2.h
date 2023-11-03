@@ -787,7 +787,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
 
     /** Indicate registration alignment. */
-    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16),
+
+    /** Indicate memory types that the MD can perform atomic operations on */
+    UCT_MD_ATTR_FIELD_ATOMIC_MEM_TYPES          = UCS_BIT(17)
 } uct_md_attr_field_t;
 
 
@@ -859,6 +862,11 @@ typedef struct {
      * Memory types for which MD can provide DMABUF fd.
      */
     uint64_t          dmabuf_mem_types;
+
+    /**
+     * Memory types for which MD can perform atomic operations on.
+     */
+    uint64_t          atomic_mem_types;
 
     /**
      * Memory registration cost estimation (time,seconds) as a linear function
