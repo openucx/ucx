@@ -7,15 +7,17 @@
 #ifndef UCS_NUMA_H_
 #define UCS_NUMA_H_
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <stdint.h>
 
-#define UCS_NUMA_NODE_DEFAULT    0
-#define UCS_NUMA_NODE_UNDEFINED -1
 
 typedef int ucs_numa_distance_t;
 
 
-typedef int16_t ucs_numa_node_t;
+typedef uint16_t ucs_numa_node_t;
 
 
 extern const char *ucs_numa_policy_names[];
