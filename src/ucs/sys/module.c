@@ -42,12 +42,10 @@
 
 static struct {
     ucs_init_once_t  init;
-    char             module_ext[NAME_MAX];
     unsigned         srchpath_cnt;
     char             *srch_path[UCS_MODULE_SRCH_PATH_MAX];
 } ucs_module_loader_state = {
     .init         = UCS_INIT_ONCE_INITIALIZER,
-    .module_ext   = ".so", /* default extension */
     .srchpath_cnt = 0,
     .srch_path    = { NULL, NULL}
 };
@@ -58,7 +56,6 @@ static void ucs_module_loader_add_dl_dir()
     char *dlpath_dup = NULL;
     size_t max_length;
     Dl_info dl_info;
-    const char *p;
     char *path;
     int ret;
 
@@ -70,21 +67,6 @@ static void ucs_module_loader_add_dl_dir()
     }
 
     ucs_module_debug("ucs library path: %s", dl_info.dli_fname);
-
-    /* copy extension */
-    dlpath_dup = ucs_strdup(dl_info.dli_fname,
-                            UCS_MODULE_PATH_MEMTRACK_NAME);
-    if (dlpath_dup == NULL) {
-        return;
-    }
-
-    p = ucs_basename(dlpath_dup);
-    p = strchr(p, '.');
-    if (p != NULL) {
-        strncpy(ucs_module_loader_state.module_ext, p,
-                sizeof(ucs_module_loader_state.module_ext) - 1);
-    }
-    ucs_free(dlpath_dup);
 
     /* copy directory component */
     dlpath_dup = ucs_strdup(dl_info.dli_fname,
@@ -244,7 +226,7 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
     for (i = 0; i < ucs_module_loader_state.srchpath_cnt; ++i) {
         snprintf(module_path, sizeof(module_path) - 1, "%s/lib%s_%s%s",
                  ucs_module_loader_state.srch_path[i], framework, module_name,
-                 ucs_module_loader_state.module_ext);
+                 ucs_global_opts.module_ext);
 
         /* Clear error state */
         (void)dlerror();

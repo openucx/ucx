@@ -130,6 +130,9 @@ typedef struct {
     /* directory for loadable modules */
     char                       *module_dir;
 
+    /* file extension for loadable modules */
+    char                       *module_ext;
+
     /* log level for module loader code */
     ucs_log_level_t            module_log_level;
 
