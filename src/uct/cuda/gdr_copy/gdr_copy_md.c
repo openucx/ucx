@@ -185,7 +185,6 @@ uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     uct_gdr_copy_mem_t *mem_hndl = NULL;
-    void *start, *end;
     ucs_status_t status;
 
     mem_hndl = ucs_malloc(sizeof(uct_gdr_copy_mem_t), "gdr_copy handle");
@@ -194,13 +193,10 @@ uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    start = ucs_align_down_pow2_ptr(address, GPU_PAGE_SIZE);
-    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(address, length), GPU_PAGE_SIZE);
-    ucs_assert_always(start <= end);
-
-    status = uct_gdr_copy_mem_reg_internal(uct_md, start,
-                                           UCS_PTR_BYTE_DIFF(start, end),
-                                           0, mem_hndl);
+    ucs_assert(ucs_padding((intptr_t)address, GPU_PAGE_SIZE) == 0);
+    ucs_assert(ucs_padding(length, GPU_PAGE_SIZE) == 0);
+    status = uct_gdr_copy_mem_reg_internal(uct_md, address, length, 0,
+                                           mem_hndl);
     if (status != UCS_OK) {
         ucs_free(mem_hndl);
         return status;

@@ -582,9 +582,10 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t
-ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
-                    ucs_memory_type_t mem_type, ucp_mem_h *memh_p)
+static ucs_status_t ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address,
+                                        size_t length,
+                                        ucs_memory_type_t mem_type,
+                                        size_t alignment, ucp_mem_h *memh_p)
 {
     ucp_mem_attr_t attr = {
         .mem_type = mem_type
@@ -592,8 +593,8 @@ ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
     ucs_rcache_region_t *rregion;
     ucs_status_t status;
 
-    status = ucs_rcache_get(rcache, address, length, PROT_READ | PROT_WRITE,
-                            &attr, &rregion);
+    status = ucs_rcache_get(rcache, address, length, alignment,
+                            PROT_READ | PROT_WRITE, &attr, &rregion);
     if (status != UCS_OK) {
         return status;
     }
@@ -713,26 +714,18 @@ err:
     return status;
 }
 
-static void
-ucp_memh_reg_align(ucp_context_h context, void **address_p, size_t *length_p,
-                   ucp_md_map_t reg_md_map)
+static size_t ucp_memh_reg_align(ucp_context_h context, ucp_md_map_t reg_md_map)
 {
     size_t reg_align = UCS_RCACHE_MIN_ALIGNMENT;
     const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
-    void *start, *end;
 
     ucs_for_each_bit(md_index, reg_md_map) {
         md_attr   = &context->tl_mds[md_index].attr;
         reg_align = ucs_max(md_attr->reg_alignment, reg_align);
     }
 
-    start = ucs_align_down_pow2_ptr(*address_p, reg_align);
-    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(*address_p, *length_p),
-                                  reg_align);
-
-    *address_p = start;
-    *length_p  = UCS_PTR_BYTE_DIFF(start, end);
+    return reg_align;
 }
 
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
@@ -745,6 +738,7 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
     size_t reg_length;
     ucs_status_t status;
     ucs_memory_info_t mem_info;
+    size_t reg_align;
 
     if (context->config.ext.reg_whole_alloc_bitmap & UCS_BIT(mem_type)) {
         ucp_memory_detect_internal(context, address, length, &mem_info);
@@ -755,13 +749,7 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
         reg_length  = length;
     }
 
-    ucp_memh_reg_align(context, &reg_address, &reg_length, reg_md_map);
-
-    ucs_trace(
-            "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
-            " flags 0x%x",
-            alloc_name, address, reg_address, length, reg_length,
-            ucs_memory_type_names[mem_type], reg_md_map, uct_flags);
+    reg_align = ucp_memh_reg_align(context, reg_md_map);
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     if (context->rcache == NULL) {
@@ -769,7 +757,7 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                  UCT_ALLOC_METHOD_LAST, 0, &memh);
     } else {
         status = ucp_memh_rcache_get(context->rcache, reg_address, reg_length,
-                                     mem_type, &memh);
+                                     mem_type, reg_align, &memh);
     }
 
     if (status != UCS_OK) {
@@ -777,6 +765,15 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
     }
 
     ucs_assert(memh->mem_type == mem_type);
+    ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
+    ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
+
+    ucs_trace(
+            "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
+            " flags 0x%x",
+            alloc_name, address, ucp_memh_address(memh), length,
+            ucp_memh_length(memh), ucs_memory_type_names[mem_type], reg_md_map,
+            uct_flags);
 
     status = ucp_memh_register(context, memh, reg_md_map, uct_flags,
                                alloc_name);
@@ -1617,7 +1614,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
 
         status = ucp_memh_rcache_get(rcache, unpacked->address,
                                      unpacked->length, unpacked->mem_type,
-                                     &memh);
+                                     UCS_RCACHE_MIN_ALIGNMENT, &memh);
         if (status != UCS_OK) {
             goto err_rcache_destroy;
         }
@@ -1697,7 +1694,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
             ucs_assert(rcache != NULL);
 
             rregion = ucs_rcache_lookup_unsafe(rcache, unpacked_memh.address,
-                                               unpacked_memh.length,
+                                               unpacked_memh.length, 1,
                                                PROT_READ | PROT_WRITE);
             if (rregion != NULL) {
                 rcache_memh = ucs_derived_of(rregion, ucp_mem_t);

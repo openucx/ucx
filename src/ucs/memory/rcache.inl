@@ -10,10 +10,11 @@
 #include "rcache_int.h"
 
 static UCS_F_ALWAYS_INLINE int
-ucs_rcache_region_test(ucs_rcache_region_t *region, int prot)
+ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
 {
     return (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) &&
-           ucs_test_all_flags(region->prot, prot);
+           ucs_test_all_flags(region->prot, prot) &&
+           ((alignment == 1) || (region->alignment >= alignment));
 }
 
 
@@ -47,7 +48,7 @@ ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 
 static UCS_F_ALWAYS_INLINE ucs_rcache_region_t *
 ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
-                         int prot)
+                         size_t alignment, int prot)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -68,7 +69,7 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
 
     region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
     if (((start + length) > region->super.end) ||
-        !ucs_rcache_region_test(region, prot))
+        !ucs_rcache_region_test(region, prot, alignment))
     {
         return NULL;
     }
