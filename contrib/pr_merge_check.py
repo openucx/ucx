@@ -15,14 +15,15 @@
 # Deps:
 #    $ pip install GitPython requests ydiff
 #
-from git import Repo # pip install GitPython
+from git import Repo  # pip install GitPython
 from optparse import OptionParser
 import subprocess
-import requests # pip install requests
+import requests  # pip install requests
 import getpass
 import shutil
 import sys
 import os
+
 
 class PRChecker(object):
     def __init__(self):
@@ -73,7 +74,7 @@ class PRChecker(object):
         Set self.commit_id to the hash of the PR commit to compare with.
         """
         if self.commit_id:
-            return;
+            return
         page = 1
         while True:
             data = self.github_api_call(req="/reviews", page=page)
@@ -126,7 +127,7 @@ class PRChecker(object):
                           help="Pull request number to check")
         parser.add_option("--approve-by", action="store", dest="approve_by",
                           metavar="USER",
-                          default = getpass.getuser(),
+                          default=getpass.getuser(),
                           help="GitHub user name of approving user [default: %default]")
         parser.add_option("--commit-id", action="store", dest="commit_id",
                           metavar="COMMIT", default=None,
@@ -187,8 +188,8 @@ class PRChecker(object):
 
         if self.verbose:
             print("comparing %s and %s when merged to %s" %
-                (self.commit_id[:7], self.head_commit[:7],
-                self.base_commit[:7]))
+                  (self.commit_id[:7], self.head_commit[:7],
+                   self.base_commit[:7]))
 
         merge_commit = self.merge(self.commit_id)
         merge_head = self.merge(self.head_commit)
@@ -201,7 +202,8 @@ class PRChecker(object):
         self.print_diff(diff)
 
         if self.review_diff:
-            print("https://github.com/%s/compare/%s..%s" % (self.repo_path, self.commit_id, self.head_commit))
+            print("https://github.com/%s/compare/%s..%s" %
+                  (self.repo_path, self.commit_id, self.head_commit))
 
         self.remove_temp_dir()
         return 1
