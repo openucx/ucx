@@ -14,6 +14,7 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/string_set.h>
@@ -1792,6 +1793,8 @@ err_free_resources:
 static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
                              ucp_mt_type_t mt_type)
 {
+    static uint64_t context_counter = 0;
+
     context->config.features = UCP_PARAM_FIELD_VALUE(params, features, FEATURES,
                                                      0);
     if (!context->config.features) {
@@ -1831,7 +1834,8 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
         ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "%s",
                           params->name);
     } else {
-        ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "%p", context);
+        ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "ucp_context_%lu",
+                          ucs_atomic_fadd64(&context_counter, 1));
     }
 }
 
