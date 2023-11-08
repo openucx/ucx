@@ -664,11 +664,12 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
     ucp_proto_multi_query_config(&multi_query_params, attr);
 }
 
-static ucs_status_t
-ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
-                          ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                          size_t length, const void *rkey_buffer,
-                          size_t rkey_length, uint8_t sg_count)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
+                 (worker, req, op_id, op_attr_mask, length, rkey_buffer,
+                  rkey_length, sg_count),
+                 ucp_worker_h worker, ucp_request_t *req,
+                 ucp_operation_id_t op_id, uint32_t op_attr_mask, size_t length,
+                 const void *rkey_buffer, size_t rkey_length, uint8_t sg_count)
 {
     ucp_ep_h ep                = req->send.ep;
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -747,9 +748,11 @@ ucp_proto_rndv_check_rkey_length(uint64_t address, size_t rkey_length,
                 rkey_length);
 }
 
-void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
-                                  const ucp_rndv_rts_hdr_t *rts,
-                                  const void *rkey_buffer, size_t rkey_length)
+UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
+                      (worker, recv_req, rts, rkey_buffer, rkey_length),
+                      ucp_worker_h worker, ucp_request_t *recv_req,
+                      const ucp_rndv_rts_hdr_t *rts, const void *rkey_buffer,
+                      size_t rkey_length)
 {
     ucp_operation_id_t op_id;
     ucs_status_t status;
@@ -807,10 +810,11 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
 }
 
-static ucs_status_t
-ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
-                          uint32_t op_attr_mask, const ucp_rndv_rtr_hdr_t *rtr,
-                          size_t header_length, uint8_t sg_count)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_start,
+                 (worker, req, op_attr_mask, rtr, header_length, sg_count),
+                 ucp_worker_h worker, ucp_request_t *req, uint32_t op_attr_mask,
+                 const ucp_rndv_rtr_hdr_t *rtr, size_t header_length,
+                 uint8_t sg_count)
 {
     ucs_status_t status;
     size_t rkey_length;
