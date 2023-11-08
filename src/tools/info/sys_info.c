@@ -41,6 +41,7 @@ static const char *cpu_model_names[] = {
     [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
     [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui",
     [UCS_CPU_MODEL_RV64G]              = "RV64G",
+    [UCS_CPU_MODEL_NVIDIA_GRACE]       = "Grace"
 };
 
 
@@ -53,7 +54,8 @@ static const char* cpu_vendor_names[] = {
     [UCS_CPU_VENDOR_GENERIC_PPC]      = "Generic PPC",
     [UCS_CPU_VENDOR_GENERIC_RV64G]    = "Generic RV64G",
     [UCS_CPU_VENDOR_FUJITSU_ARM]      = "Fujitsu ARM",
-    [UCS_CPU_VENDOR_ZHAOXIN]          = "Zhaoxin"
+    [UCS_CPU_VENDOR_ZHAOXIN]          = "Zhaoxin",
+    [UCS_CPU_VENDOR_NVIDIA]           = "Nvidia"
 };
 
 static double measure_memcpy_bandwidth(size_t size)
