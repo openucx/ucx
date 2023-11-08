@@ -10,6 +10,8 @@ pr:
 variables:
 - name: WorkDir
   value: /hpc/scrap/azure/$(Build.DefinitionName)/$(Build.BuildId)-$(Build.BuildNumber)
+- name: warning
+  value: Attention! CI testing is in progress. Please refrain from any manual action on this machine.
 - name: threshold
   value: 5
 
@@ -24,11 +26,11 @@ resources:
 stages:
   - stage: Prepare
     jobs:
-      - job: Prepare
+      - job: PrepareWorkdir
         pool:
           name: MLNX
           demands:
-          - ucx_perf
+          - ucx_perf_master
 
         steps:
           - checkout: self
@@ -45,6 +47,39 @@ stages:
               mv $(Build.SourcesDirectory)/* $(WorkDir)    
             displayName: Prepare WorkDir with code
 
+      - job: UserHandling
+        strategy:
+          matrix:
+            node1:
+              name: vulcan03
+            node2:
+              name: vulcan04
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: none
+          - bash: |
+              set -xeE
+              # Send a warning
+              sudo usermod -aG tty `whoami`  # add user to the tty group
+              sudo chmod g+rw /dev/pts/*  # set permissions for terminals
+              wall 'CI test is starting. Connections will terminate soon!'
+              sleep 30
+
+              # Disconnect SSH users
+              pgrep -f 'sshd:' | xargs -r sudo kill -HUP || true
+
+              # Add nagging reminder
+              crontab <<EOL
+              * * * * * /usr/bin/mesg y
+              * * * * * sudo chmod g+rw /dev/pts/*
+              * * * * * wall "$(warning)"
+              EOL
+            displayName: Warn and disconnect users
+
 
   - stage: Performance
     dependsOn: Prepare
@@ -55,7 +90,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_perf
+          - ucx_perf_master
 
         steps:
           - checkout: none
@@ -116,7 +151,7 @@ stages:
     dependsOn: Performance
     condition: always()
     jobs:
-      - job: Cleanup
+      - job: CleanupWorkDir
         displayName: Cleanup WorkDir
         pool:
           name: MLNX
@@ -127,3 +162,22 @@ stages:
               set -x
               rm -rf $(WorkDir)
             displayName: Cleanup WorkDir
+
+      - job: RemoveWarning
+        strategy:
+          matrix:
+            node1:
+              name: vulcan03
+            node2:
+              name: vulcan04
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: none
+          - bash: |
+              set -xeE
+              crontab -r
+            displayName: remove warning
