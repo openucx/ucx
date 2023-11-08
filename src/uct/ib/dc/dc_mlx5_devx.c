@@ -184,8 +184,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
     }
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, mtu, iface->super.super.super.config.path_mtu);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, sl, iface->super.super.super.config.sl);
-    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, reverse_sl, iface->super.super.super.config.sl);
-    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, cnak_reverse_sl, iface->super.super.super.config.sl);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, reverse_sl,
+                      iface->super.super.super.config.reverse_sl);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, cnak_reverse_sl,
+                      iface->super.super.super.config.reverse_sl);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, ack_timeout, iface->super.super.config.timeout);
     UCT_IB_MLX5DV_SET64(set_xrq_dc_params_entry_in, in, dc_access_key, UCT_IB_KEY);
     ucs_assert(iface->super.rx.srq.srq_num != 0);

@@ -826,6 +826,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     status = uct_ib_mlx5_iface_select_sl(&self->super.super,
                                          &mlx5_config->super,
                                          &rc_config->super);
+    self->super.super.config.reverse_sl = (rc_config->super.reverse_sl ==
+                                           UCS_ULUNITS_AUTO) ?
+                                                  self->super.super.config.sl :
+                                                  rc_config->super.reverse_sl;
+
     if (status != UCS_OK) {
         return status;
     }

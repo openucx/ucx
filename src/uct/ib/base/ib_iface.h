@@ -189,6 +189,9 @@ struct uct_ib_iface_config {
 
     /* QP counter set ID */
     unsigned long           counter_set_id;
+
+    /* IB reverse SL (default: AUTO - same value as sl) */
+    unsigned long           reverse_sl;
 };
 
 
@@ -292,6 +295,7 @@ struct uct_ib_iface {
         uint8_t               max_inl_cqe[UCT_IB_DIR_LAST];
         uint8_t               port_num;
         uint8_t               sl;
+        uint8_t               reverse_sl;
         uint8_t               traffic_class;
         uint8_t               hop_limit;
         uint8_t               qp_type;
@@ -577,6 +581,9 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_qp_attr_t *attr);
 
 uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
+
+uint8_t
+uct_ib_iface_config_select_reverse_sl(const uct_ib_iface_config_t *ib_config);
 
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"

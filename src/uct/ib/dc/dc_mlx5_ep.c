@@ -14,6 +14,9 @@
 #include <ucs/time/time.h>
 
 
+#define REVERSE_SL_MASK   UCS_MASK(4)
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_add_flush_remote(uct_dc_mlx5_ep_t *ep)
 {
@@ -35,6 +38,11 @@ uct_dc_mlx5_set_dgram_seg(uct_ib_mlx5_txwq_t *txwq,
     to_av->stat_rate_sl = iface->super.super.super.config.sl;
     to_av->fl_mlid      = iface->tx.av_fl_mlid;
     to_av->rlid         = av->rlid;
+
+    /* Setting reverse_sl */
+    to_av->dqp_dct &= ~(REVERSE_SL_MASK);
+    to_av->dqp_dct |= (iface->super.super.super.config.reverse_sl &
+                       REVERSE_SL_MASK);
 
     return uct_ib_mlx5_set_dgram_seg_grh(seg, grh_av);
 }
