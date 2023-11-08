@@ -131,7 +131,9 @@ stages:
             parameters:
               Name: Perf-test-single-node
 
-          - script: $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results-Perf\*.txt $(threshold)
+          - bash: |
+              $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results-Perf\*.txt $(threshold)
+              echo "Manual repro environment: $(WorkDir)"
             displayName: Results analyzer
             workingDirectory: $(WorkDir)
 
@@ -160,7 +162,12 @@ stages:
             clean: true
           - bash: |
               set -x
-              rm -rf $(WorkDir)
+              echo 'Retain 3 latest workdirs for manual repro; clean the rest'
+              wrk_dirs="/hpc/scrap/azure/$(Build.DefinitionName)/"
+              for dir in $(ls -lt "$wrk_dirs" | tail -n +4 | awk '{print $NF}'); do
+                  echo "Removing old workdir: ${wrk_dirs}${dir}"
+                  rm -rf "${wrk_dirs}${dir}"
+              done
             displayName: Cleanup WorkDir
 
       - job: RemoveWarning
