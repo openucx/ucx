@@ -984,13 +984,20 @@ static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
                                         void *arg)
 {
     /* best for 4k messages */
+    double local_bw;
+
+    if (unpacked_addr->dst_version < 17) {
+        local_bw = ucp_tl_iface_bandwidth(wiface->worker->context,
+                                          &wiface->attr.bandwidth);
+    } else {
+        local_bw = ucp_wireup_iface_bw_distance(wiface);
+    }
+
     return 1e-3 /
            (ucp_wireup_tl_iface_latency(
                 wiface, unpacked_addr, &remote_addr->iface_attr) +
             wiface->attr.overhead +
-            (4096.0 / ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
-                                                     &wiface->attr.bandwidth),
-                              remote_addr->iface_attr.bandwidth)));
+            (4096.0 / ucs_min(local_bw, remote_addr->iface_attr.bandwidth)));
 }
 
 static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
