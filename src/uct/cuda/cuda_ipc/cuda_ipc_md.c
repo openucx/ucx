@@ -29,7 +29,12 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"CACHE", "try", "Enable using memory registration cache",
      ucs_offsetof(uct_cuda_ipc_md_config_t, rcache_enable), UCS_CONFIG_TYPE_TERNARY},
 
-    {"", "", NULL,
+    {"RCACHE_MAX_RATIO", "0.2",
+     "Fraction of GPU memory that can be used for mapping remote regions\n"
+     "If this fraction is negative, rcache_max_size is used else rcache_max_size is ignored",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, rcache_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
+
+    {"", "RCACHE_MAX_REGIONS=64", NULL,
      ucs_offsetof(uct_cuda_ipc_md_config_t, rcache),
      UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
@@ -342,6 +347,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_IO_ERROR;
     }
 
+    total_bytes        *= md_cfg->rcache_max_ratio;
     md->super.ops       = &md_ops;
     md->super.component = &uct_cuda_ipc_component.super;
 
@@ -351,7 +357,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->uuid_map              = NULL;
     md->peer_accessible_cache = NULL;
     md->rcache_enable         = md_cfg->rcache_enable;
-    md->rcache_max_size       = md_cfg->rcache.max_size;
+    md->rcache_max_size       = (total_bytes >= 0) ?
+                                total_bytes : md_cfg->rcache.max_size;
     md->rcache_max_regions    = md_cfg->rcache.max_regions;
 
     com     = ucs_derived_of(md->super.component, uct_cuda_ipc_component_t);
