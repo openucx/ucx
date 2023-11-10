@@ -108,6 +108,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Port GID index to use.",
      ucs_offsetof(uct_ib_md_config_t, ext.gid_index), UCS_CONFIG_TYPE_ULUNITS},
 
+    {"GID_NDEV", "",
+     "Port GID network device to use, empty means let ucx choose automatically.",
+     ucs_offsetof(uct_ib_md_config_t, gid_ndev), UCS_CONFIG_TYPE_STRING},
+
     {"SUBNET_PREFIX", "",
      "Infiniband subnet prefix to filter ports by, empty means no filter. "
      "Relevant for IB link layer only\n"
@@ -1168,6 +1172,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                           UCT_MD_FLAG_ADVISE;
     md->reg_cost        = md_config->reg_cost;
     md->relaxed_order   = 0;
+    ucs_strncpy_zero(md->config.gid_ndev, md_config->gid_ndev,
+                     sizeof(md->config.gid_ndev));
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,

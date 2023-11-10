@@ -832,6 +832,10 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
         info->roce_info.addr_family =
                         uct_ib_device_get_addr_family(&info->gid, gid_index);
         info->gid_index            = gid_index;
+        ucs_read_file_str(info->ndev_name, sizeof(info->ndev_name), 1,
+                          UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
+                          dev_name, port_num, gid_index);
+        ucs_strtrim(info->ndev_name);
         return UCS_OK;
     }
 
@@ -867,8 +871,10 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
     return 1;
 }
 
-ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
-                                      uct_ib_device_gid_info_t *gid_info)
+ucs_status_t 
+uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,
+                                 char* ndev_name,
+                                 uct_ib_device_gid_info_t *gid_info)
 {
     static const uct_ib_roce_version_info_t roce_prio[] = {
         {UCT_IB_DEVICE_ROCE_V2, AF_INET},
@@ -884,6 +890,7 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
 
     ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
 
+    memset(&gid_info_tmp, 0, sizeof(gid_info_tmp));
     /* search for matching GID table entries, according to the order defined
      * in priorities array
      */
@@ -896,7 +903,9 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
                 goto out;
             }
 
-            if ((roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
+            if (((ndev_name == NULL) ||
+                    (strncmp(ndev_name, gid_info_tmp.ndev_name, IFNAMSIZ) == 0)) &&
+                (roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
                 (roce_prio[prio_idx].addr_family == gid_info_tmp.roce_info.addr_family) &&
                 uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info_tmp.gid, i)) {
 
@@ -916,6 +925,12 @@ out_print:
               gid_info->gid_index);
 out:
     return status;
+}
+
+ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                      uct_ib_device_gid_info_t *gid_info)
+{
+    return uct_ib_device_select_gid_by_ndev(dev, port_num, NULL, gid_info);
 }
 
 int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num)

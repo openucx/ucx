@@ -1133,20 +1133,26 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
 }
 
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             unsigned long cfg_gid_index)
+                                             unsigned long cfg_gid_index,
+                                             char* cfg_gid_ndev)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
 
     ucs_assert(uct_ib_iface_is_roce(iface));
 
-    if (cfg_gid_index == UCS_ULUNITS_AUTO) {
-        return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
+    if (cfg_gid_index != UCS_ULUNITS_AUTO) {
+        return uct_ib_device_query_gid_info(dev->ibv_context,
+                                            uct_ib_device_name(dev), port_num,
+                                            cfg_gid_index, &iface->gid_info);
     }
 
-    return uct_ib_device_query_gid_info(dev->ibv_context,
-                                        uct_ib_device_name(dev), port_num,
-                                        cfg_gid_index, &iface->gid_info);
+    if (strnlen(cfg_gid_ndev, 1) != 0) {
+        return uct_ib_device_select_gid_by_ndev(dev, port_num, cfg_gid_ndev,
+                                                &iface->gid_info);
+    }
+
+    return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
 }
 
 static ucs_status_t
@@ -1229,12 +1235,14 @@ uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
 {
     uct_ib_md_t *md                    = uct_ib_iface_md(iface);
     unsigned long cfg_gid_index        = md->config.gid_index;
+    char* cfg_gid_ndev                 = md->config.gid_ndev;
     uct_ib_device_gid_info_t *gid_info = &iface->gid_info;
     ucs_status_t status;
 
     /* Fill the gid index and the RoCE version */
     if (uct_ib_iface_is_roce(iface)) {
-        status = uct_ib_iface_init_roce_gid_info(iface, cfg_gid_index);
+        status = uct_ib_iface_init_roce_gid_info(iface, cfg_gid_index,
+                                                 cfg_gid_ndev);
         if (status != UCS_OK) {
             goto out;
         }

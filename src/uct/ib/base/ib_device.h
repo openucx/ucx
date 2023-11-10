@@ -252,6 +252,7 @@ typedef struct {
     union ibv_gid              gid;
     uint8_t                    gid_index;    /* IB/RoCE GID index to use */
     uct_ib_roce_version_info_t roce_info;    /* For a RoCE port */
+    char                       ndev_name[IFNAMSIZ];
 } uct_ib_device_gid_info_t;
 
 
@@ -318,6 +319,22 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev);
 ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
                                       uint8_t port_num,
                                       uct_ib_device_gid_info_t *gid_info);
+
+
+/**
+ * Select the best gid to use and set its information on the RoCE port -
+ * gid index, RoCE version and address family.
+ *
+ * @param [in]  dev             IB device.
+ * @param [in]  port_num        Port number.
+ * @param [in]  ndev_name       Network device name.
+ * @param [out] gid_info        Filled with the selected gid index and the
+ *                              port's RoCE version and address family.
+ */
+ucs_status_t 
+uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,
+                                 char* ndev_name,
+                                 uct_ib_device_gid_info_t *gid_info);
 
 
 /**
