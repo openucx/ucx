@@ -31,7 +31,9 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
 
     {"RCACHE_MAX_RATIO", "0.2",
      "Fraction of GPU memory that can be used for mapping remote regions\n"
-     "If this fraction is negative, rcache_max_size is used else rcache_max_size is ignored",
+     "If this fraction is negative, rcache_max_size is used otherwise the\n"
+     "fraction is used. Note that this assumes that the same GPU device type\n"
+     "is used at all processes",
      ucs_offsetof(uct_cuda_ipc_md_config_t, rcache_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
 
     {"", "RCACHE_MAX_REGIONS=64", NULL,

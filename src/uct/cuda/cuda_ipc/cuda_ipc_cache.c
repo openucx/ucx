@@ -62,7 +62,8 @@ ucs_status_t uct_cuda_ipc_check_rcache(ucs_rcache_t *rcache,
     end   = (uintptr_t)key->d_bptr + key->b_len;
 
     status = ucs_rcache_get(rcache, (void*)start, end - start,
-                            PROT_READ|PROT_WRITE, (void*)key, &rcache_region);
+                            ucs_get_page_size(), PROT_READ|PROT_WRITE,
+                            (void*)key, &rcache_region);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
@@ -84,8 +85,8 @@ ucs_status_t uct_cuda_ipc_check_rcache(ucs_rcache_t *rcache,
                                  NULL);
 
     status = ucs_rcache_get(rcache, (void*)start, end - start,
-                            PROT_READ|PROT_WRITE, (void*)key,
-                            &rcache_region);
+                            ucs_get_page_size(), PROT_READ|PROT_WRITE,
+                            (void*)key, &rcache_region);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
@@ -270,8 +271,6 @@ uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md, ucs_rcache_t **cache,
     }
 
     rcache_params.region_struct_size = sizeof(uct_cuda_ipc_rcache_region_t);
-    rcache_params.alignment          = ucs_get_page_size();
-    rcache_params.max_alignment      = ucs_get_page_size();
     rcache_params.ucm_events         = 0;
     rcache_params.ucm_event_priority = 0;
     rcache_params.ops                = &uct_cuda_ipc_rcache_ops;
