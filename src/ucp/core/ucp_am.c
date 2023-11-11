@@ -21,10 +21,6 @@
 #include <ucp/dt/dt.h>
 #include <ucp/dt/dt.inl>
 
-#include <ucs/datastruct/array.inl>
-
-
-UCS_ARRAY_IMPL(ucp_am_cbs, unsigned, ucp_am_entry_t, static)
 
 ucs_status_t ucp_am_init(ucp_worker_h worker)
 {
@@ -188,8 +184,11 @@ static ucs_status_t ucp_worker_set_am_handler_common(ucp_worker_h worker,
                                                      uint16_t id,
                                                      unsigned flags)
 {
-    ucs_status_t status;
-    unsigned i, capacity;
+    static const ucp_am_entry_t empty_am_handler = {
+        .cb      = NULL,
+        .context = NULL,
+        .flags   = 0
+    };
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_ERR_INVALID_PARAM);
@@ -200,21 +199,8 @@ static ucs_status_t ucp_worker_set_am_handler_common(ucp_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (id >= ucs_array_length(&worker->am.cbs)) {
-        status = ucs_array_reserve(ucp_am_cbs, &worker->am.cbs, id + 1);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        capacity = ucs_array_capacity(&worker->am.cbs);
-
-        for (i = ucs_array_length(&worker->am.cbs); i < capacity; ++i) {
-            ucp_worker_am_init_handler(worker, id, NULL, 0, NULL, NULL);
-        }
-
-        ucs_array_set_length(&worker->am.cbs, capacity);
-    }
-
+    ucs_array_resize(&worker->am.cbs, id + 1, empty_am_handler,
+                     return UCS_ERR_NO_MEMORY);
     return UCS_OK;
 }
 
