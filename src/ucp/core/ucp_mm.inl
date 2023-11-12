@@ -50,8 +50,8 @@ ucp_memh_get(ucp_context_h context, void *address, size_t length,
 
     if (ucs_likely(context->rcache != NULL)) {
         UCP_THREAD_CS_ENTER(&context->mt_lock);
-        rregion   = ucs_rcache_lookup_unsafe(context->rcache, address, length,
-                                             1, PROT_READ | PROT_WRITE);
+        rregion = UCS_PROFILE_CALL(ucs_rcache_lookup_unsafe, context->rcache,
+                                   address, length, 1, PROT_READ | PROT_WRITE);
         if (rregion == NULL) {
             goto not_found;
         }

@@ -71,9 +71,9 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
 
     ucp_proto_completion_init(&req->send.state.uct_comp, comp_func);
 
-    return ucp_datatype_iter_mem_reg(ep->worker->context,
-                                     &req->send.state.dt_iter,
-                                     md_map, uct_reg_flags, dt_mask);
+    return UCS_PROFILE_CALL(ucp_datatype_iter_mem_reg, ep->worker->context,
+                            &req->send.state.dt_iter, md_map, uct_reg_flags,
+                            dt_mask);
 }
 
 static UCS_F_ALWAYS_INLINE void
