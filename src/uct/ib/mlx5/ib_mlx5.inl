@@ -507,7 +507,7 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
 #if defined( __SSE4_2__)
     UCS_WORD_COPY(__m128i, dst, __m128i, src, MLX5_SEND_WQE_BB);
 #elif defined(__ARM_NEON)
-    UCS_WORD_COPY(int16x8_t, dst, int16x8_t, src, MLX5_SEND_WQE_BB);
+    vst4q_u64(dst, vld4q_u64(src));
 #else /* NO SIMD support */
     UCS_WORD_COPY(uint64_t, dst, uint64_t, src, MLX5_SEND_WQE_BB);
 #endif
