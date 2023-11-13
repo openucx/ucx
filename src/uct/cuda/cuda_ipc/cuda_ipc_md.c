@@ -292,10 +292,10 @@ uct_cuda_ipc_mem_dereg(uct_md_h md,
 
 static int uct_cuda_ipc_md_check_mem_reg()
 {
-    int ret = 0;
+    int ret      = 0;
+    CUdevice dev = 0;
 
 #if CUDA_VERSION >= 12000
-    CUdevice dev;
     int value;
 
     if ((UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&dev)) != UCS_OK) &&
@@ -314,11 +314,10 @@ static int uct_cuda_ipc_md_check_mem_reg()
 
 #else
     static const size_t length = 1;
-    CUdevice dev               = 0;
     int create_ctx;
     CUcontext ctx;
     CUdeviceptr dptr;
-    uct_cuda_ipc_key_t key;
+    CUipcMemHandle handle;
 
     create_ctx = !uct_cuda_base_is_context_active();
     if (create_ctx) {
@@ -329,19 +328,14 @@ static int uct_cuda_ipc_md_check_mem_reg()
         if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxCreate(&ctx, 0, dev)) != UCS_OK) {
             goto out;
         }
-
-        if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxSetCurrent(ctx)) != UCS_OK) {
-            goto destroy_ctx;
-        }
     }
 
     if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemAlloc(&dptr, length)) != UCS_OK) {
         goto destroy_ctx;
     }
 
-    ret = (uct_cuda_ipc_mem_reg_internal((void*)dptr, length,
-                                         UCT_MD_MEM_FLAG_HIDE_ERRORS,
-                                         &key) == UCS_OK);
+    ret = (UCT_CUDADRV_FUNC_LOG_DEBUG(cuIpcGetMemHandle(&handle, dptr)) ==
+           UCS_OK);
 
     UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemFree(dptr));
 
