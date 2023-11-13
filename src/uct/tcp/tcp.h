@@ -465,6 +465,7 @@ typedef struct uct_tcp_md {
     struct {
         int         af_prio_count;
         sa_family_t af_prio_list[2];
+        uint8_t     bridge_enable;
     } config;
 } uct_tcp_md_t;
 
@@ -475,6 +476,7 @@ typedef struct uct_tcp_md {
 typedef struct uct_tcp_md_config {
     uct_md_config_t                   super;
     UCS_CONFIG_STRING_ARRAY_FIELD(af) af_prio;
+    int                               bridge_enable;
 } uct_tcp_md_config_t;
 
 
