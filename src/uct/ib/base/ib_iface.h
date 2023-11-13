@@ -502,7 +502,7 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface);
  */
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
                                              unsigned long cfg_gid_index,
-                                             char* cfg_gid_ndev);
+                                             char *cfg_gid_ndev);
 
 
 static inline uct_ib_md_t* uct_ib_iface_md(uct_ib_iface_t *iface)

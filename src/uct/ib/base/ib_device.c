@@ -832,10 +832,17 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
         info->roce_info.addr_family =
                         uct_ib_device_get_addr_family(&info->gid, gid_index);
         info->gid_index            = gid_index;
-        ucs_read_file_str(info->ndev_name, sizeof(info->ndev_name), 1,
-                          UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
-                          dev_name, port_num, gid_index);
-        ucs_strtrim(info->ndev_name);
+        ret = ucs_read_file_str(info->ndev_name, sizeof(info->ndev_name), 1,
+                                UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT, dev_name,
+                                port_num, gid_index);
+        if (ret > 0) {
+            if (ret == sizeof(info->ndev_name)) {
+                info->ndev_name[ret - 1] = '\0';
+            }
+            ucs_strtrim(info->ndev_name);
+        } else {
+            info->ndev_name[0] = '\0';
+        }
         return UCS_OK;
     }
 
@@ -871,9 +878,9 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
     return 1;
 }
 
-ucs_status_t 
+ucs_status_t
 uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,
-                                 char* ndev_name,
+                                 char *ndev_name,
                                  uct_ib_device_gid_info_t *gid_info)
 {
     static const uct_ib_roce_version_info_t roce_prio[] = {

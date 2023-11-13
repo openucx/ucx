@@ -1134,7 +1134,7 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
 
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
                                              unsigned long cfg_gid_index,
-                                             char* cfg_gid_ndev)
+                                             char *cfg_gid_ndev)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
@@ -1235,7 +1235,7 @@ uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
 {
     uct_ib_md_t *md                    = uct_ib_iface_md(iface);
     unsigned long cfg_gid_index        = md->config.gid_index;
-    char* cfg_gid_ndev                 = md->config.gid_ndev;
+    char *cfg_gid_ndev                 = md->config.gid_ndev;
     uct_ib_device_gid_info_t *gid_info = &iface->gid_info;
     ucs_status_t status;
 

@@ -179,7 +179,7 @@ typedef struct uct_ib_md_config {
     int                      async_events; /**< Whether async events should be delivered */
 
     uct_ib_md_ext_config_t   ext;          /**< External configuration */
-    char*                    gid_ndev;     /**< IB GID network device to use */
+    char                     *gid_ndev;    /**< IB GID network device to use */
 
     UCS_CONFIG_STRING_ARRAY_FIELD(spec) custom_devices; /**< Custom device specifications */
 

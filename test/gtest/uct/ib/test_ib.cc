@@ -433,18 +433,19 @@ public:
         }
 
         union ibv_gid gid;
-        uct_ib_md_config_t *md_config =
-            ucs_derived_of(m_md_config, uct_ib_md_config_t);
+        uct_ib_md_config_t *md_config = ucs_derived_of(m_md_config,
+                                                       uct_ib_md_config_t);
         ucs::handle<uct_md_h> uct_md;
         uct_ib_iface_t dummy_ib_iface;
         uct_ib_md_t *ib_md;
         ucs_status_t status;
-        char* gid_ndev;
+        char *gid_ndev;
         uint8_t gid_index;
 
         UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
                                &uct_ib_component,
-                               ibv_get_device_name(m_ibctx->device), m_md_config);
+                               ibv_get_device_name(m_ibctx->device),
+                               m_md_config);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
 
@@ -461,7 +462,7 @@ public:
                                                  md_config->gid_ndev);
         ASSERT_UCS_OK(status);
 
-        gid_ndev = dummy_ib_iface.gid_info.ndev_name;
+        gid_ndev  = dummy_ib_iface.gid_info.ndev_name;
         gid_index = dummy_ib_iface.gid_info.gid_index;
         device_str << " gid ndev " << gid_ndev;
 
