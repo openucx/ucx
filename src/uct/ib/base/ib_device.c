@@ -890,7 +890,6 @@ uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,
 
     ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
 
-    memset(&gid_info_tmp, 0, sizeof(gid_info_tmp));
     /* search for matching GID table entries, according to the order defined
      * in priorities array
      */
@@ -911,6 +910,8 @@ uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,
 
                 gid_info->gid_index = i;
                 gid_info->roce_info = gid_info_tmp.roce_info;
+                ucs_strncpy_zero(gid_info->ndev_name, gid_info_tmp.ndev_name,
+                                 sizeof(gid_info->ndev_name));
                 goto out_print;
             }
         }
@@ -919,6 +920,7 @@ uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,
     gid_info->gid_index             = UCT_IB_MD_DEFAULT_GID_INDEX;
     gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
     gid_info->roce_info.addr_family = AF_INET;
+    gid_info->ndev_name[0]          = '\0';
 
 out_print:
     ucs_debug("%s:%d using gid_index %d", uct_ib_device_name(dev), port_num,
