@@ -333,8 +333,8 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem)
     }
 }
 
-static int uct_iface_is_allowed_alloc_method(uct_base_iface_t *iface,
-                                             uct_alloc_method_t method)
+int uct_iface_is_allowed_alloc_method(uct_base_iface_t *iface,
+                                      uct_alloc_method_t method)
 {
     unsigned i;
 

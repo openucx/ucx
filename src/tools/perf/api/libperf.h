@@ -227,17 +227,6 @@ typedef struct ucx_perf_params {
 } ucx_perf_params_t;
 
 
-/* Allocators for each memory type */
-typedef struct ucx_perf_allocator ucx_perf_allocator_t;
-extern const ucx_perf_allocator_t* ucx_perf_mem_type_allocators[];
-
-
-/**
- * Initialize performance testing framework. May be called multiple times.
- */
-void ucx_perf_global_init();
-
-
 /**
  * Run a UCT performance test.
  */
