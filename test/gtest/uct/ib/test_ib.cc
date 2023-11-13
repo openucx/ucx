@@ -380,7 +380,8 @@ public:
          * ib_iface so we can use a dummy one here.
          * this function will set the gid_index in the dummy ib_iface. */
         status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
-                                                 md_config->ext.gid_index);
+                                                 md_config->ext.gid_index,
+                                                 md_config->gid_ndev);
         ASSERT_UCS_OK(status);
 
         gid_index = dummy_ib_iface.gid_info.gid_index;
@@ -409,6 +410,89 @@ UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "GID_INDEX=1") {
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_gid_idx);
+
+
+class test_uct_ib_gid_ndev : public test_uct_ib_with_specific_port {
+public:
+    void init() {
+        test_uct_ib_with_specific_port::init();
+        test_uct_ib::init();
+    }
+
+    void cleanup() {
+        test_uct_ib::cleanup();
+        test_uct_ib_with_specific_port::cleanup();
+    }
+
+    void check_port_attr() {
+        std::stringstream device_str;
+        device_str << ibv_get_device_name(m_ibctx->device) << ":" << m_port;
+
+        if (!IBV_PORT_IS_LINK_LAYER_ETHERNET(&m_port_attr)) {
+            UCS_TEST_SKIP_R(device_str.str() + " is not Ethernet");
+        }
+
+        union ibv_gid gid;
+        uct_ib_md_config_t *md_config =
+            ucs_derived_of(m_md_config, uct_ib_md_config_t);
+        ucs::handle<uct_md_h> uct_md;
+        uct_ib_iface_t dummy_ib_iface;
+        uct_ib_md_t *ib_md;
+        ucs_status_t status;
+        char* gid_ndev;
+        uint8_t gid_index;
+
+        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
+                               &uct_ib_component,
+                               ibv_get_device_name(m_ibctx->device), m_md_config);
+
+        ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
+
+        dummy_ib_iface.config.port_num = m_port;
+        dummy_ib_iface.super.md        = &ib_md->super;
+
+        ASSERT_EQ(&ib_md->dev, uct_ib_iface_device(&dummy_ib_iface));
+
+        /* uct_ib_iface_init_roce_gid_info() requires only the port from the
+         * ib_iface so we can use a dummy one here.
+         * this function will set the gid_index in the dummy ib_iface. */
+        status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
+                                                 md_config->ext.gid_index,
+                                                 md_config->gid_ndev);
+        ASSERT_UCS_OK(status);
+
+        gid_ndev = dummy_ib_iface.gid_info.ndev_name;
+        gid_index = dummy_ib_iface.gid_info.gid_index;
+        device_str << " gid ndev " << gid_ndev;
+
+        /* check the gid ndev */
+        if (strncmp(gid_ndev, md_config->gid_ndev, IFNAMSIZ) != 0) {
+            UCS_TEST_SKIP_R("failed to init " + device_str.str());
+        }
+
+        /* check the gid index */
+        if (ibv_query_gid(m_ibctx, m_port, gid_index, &gid) != 0) {
+            UCS_TEST_SKIP_R("failed to query " + device_str.str());
+        }
+
+        /* check if the gid is valid to use */
+        if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
+            UCS_TEST_SKIP_R(device_str.str() + " is empty");
+        }
+
+        if (!uct_ib_device_test_roce_gid_index(&ib_md->dev, m_port, &gid,
+                                               gid_index)) {
+            UCS_TEST_SKIP_R("failed to create address handle on " +
+                            device_str.str());
+        }
+    }
+};
+
+UCS_TEST_P(test_uct_ib_gid_ndev, non_default_gid_idx, "GID_NDEV=bond0") {
+    send_recv_short();
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_gid_ndev);
 
 
 #if HAVE_DEVX
