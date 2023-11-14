@@ -14,12 +14,15 @@
 
 
 static ucs_config_field_t uct_tcp_md_config_table[] = {
-    {"", "", NULL,
-     ucs_offsetof(uct_tcp_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+    {"", "", NULL, ucs_offsetof(uct_tcp_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
     {"AF_PRIO", "inet,inet6",
      "Priority of address families used for socket connections",
      ucs_offsetof(uct_tcp_md_config_t, af_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+    {"BRIDGE_ENABLE", "n", "Enable using bridge devices",
+     ucs_offsetof(uct_tcp_md_config_t, bridge_enable), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -79,6 +82,7 @@ uct_tcp_md_open(uct_component_t *component, const char *md_name,
     tcp_md->super.ops            = &uct_tcp_md_ops;
     tcp_md->super.component      = &uct_tcp_component;
     tcp_md->config.af_prio_count = ucs_min(md_config->af_prio.count, 2);
+    tcp_md->config.bridge_enable = md_config->bridge_enable;
 
     for (i = 0; i < tcp_md->config.af_prio_count; i++) {
         if (!strcasecmp(md_config->af_prio.af[i], "inet")) {
