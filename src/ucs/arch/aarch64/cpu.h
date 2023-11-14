@@ -120,11 +120,6 @@ static inline double ucs_arch_get_clocks_per_sec()
 
 #endif
 
-static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
-{
-    return UCS_CPU_MODEL_ARM_AARCH64;
-}
-
 static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
 {
     ucs_aarch64_cpuid_t cpuid;
@@ -134,7 +129,24 @@ static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
         return UCS_CPU_VENDOR_FUJITSU_ARM;
     }
 
+    if ((cpuid.implementer == 0x41) && (cpuid.architecture == 8)) {
+        return UCS_CPU_VENDOR_NVIDIA;
+    }
+
     return UCS_CPU_VENDOR_GENERIC_ARM;
+}
+
+static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
+{
+    ucs_aarch64_cpuid_t cpuid;
+    ucs_aarch64_cpuid(&cpuid);
+
+    if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_NVIDIA) &&
+        (cpuid.part == 0xd4f)) {
+        return UCS_CPU_MODEL_NVIDIA_GRACE;
+    }
+
+    return UCS_CPU_MODEL_ARM_AARCH64;
 }
 
 static inline int ucs_arch_get_cpu_flag()
