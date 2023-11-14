@@ -328,8 +328,9 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
  * @param [in]  dev             IB device.
  * @param [in]  port_num        Port number.
  * @param [in]  ndev_name       Network device name.
- * @param [out] gid_info        Filled with the selected gid index and the
- *                              port's RoCE version and address family.
+ * @param [out] gid_info        Filled with the selected gid index, the port's
+ *                              RoCE version and address family and the network
+ *                              device name.
  */
 ucs_status_t 
 uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,

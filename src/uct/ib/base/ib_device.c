@@ -930,8 +930,8 @@ uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,
     gid_info->ndev_name[0]          = '\0';
 
 out_print:
-    ucs_debug("%s:%d using gid_index %d", uct_ib_device_name(dev), port_num,
-              gid_info->gid_index);
+    ucs_debug("%s:%d using gid_index %d ndev %s", uct_ib_device_name(dev),
+              port_num, gid_info->gid_index, gid_info->ndev_name);
 out:
     return status;
 }
