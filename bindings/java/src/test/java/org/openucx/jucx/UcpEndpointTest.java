@@ -12,6 +12,7 @@ import org.junit.experimental.theories.Theory;
 import org.junit.runner.RunWith;
 import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.ucs.UcsConstants;
+import ai.rapids.cudf.Cuda;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -118,6 +119,8 @@ public class UcpEndpointTest extends UcxTest {
             .setName("testGetNB").setUcpAddress(worker2.getAddress());
         UcpEndpoint endpoint = worker1.newEndpoint(epParams);
 
+        cudaSetDevice(memType);
+
         // Allocate 2 source and 2 destination buffers, to perform 2 RDMA Read operations
         MemoryBlock src1 = allocateMemory(context2, worker2, memType, UcpMemoryTest.MEM_SIZE);
         MemoryBlock src2 = allocateMemory(context2, worker2, memType, UcpMemoryTest.MEM_SIZE);
@@ -211,6 +214,8 @@ public class UcpEndpointTest extends UcxTest {
         UcpContext context2 = new UcpContext(params);
         UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
+
+        cudaSetDevice(memType);
 
         MemoryBlock src1 = allocateMemory(context1, worker1, memType, UcpMemoryTest.MEM_SIZE);
         MemoryBlock src2 = allocateMemory(context1, worker1, memType, UcpMemoryTest.MEM_SIZE);
@@ -691,6 +696,8 @@ public class UcpEndpointTest extends UcxTest {
 
         header.rewind();
 
+        cudaSetDevice(memType);
+
         MemoryBlock sendData = allocateMemory(context2, worker2, memType, dataSize);
         sendData.setData(dataString);
 
@@ -812,5 +819,12 @@ public class UcpEndpointTest extends UcxTest {
             cachedEp.iterator().next(), sendData, recvData, recvEagerData);
         closeResources();
         cachedEp.clear();
+    }
+
+    private void cudaSetDevice(int memType) {
+        if (memType == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
+            Cuda.setDevice(0);
+            Cuda.deviceSynchronize();
+        }
     }
 }
