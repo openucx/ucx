@@ -332,7 +332,7 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
  *                              RoCE version and address family and the network
  *                              device name.
  */
-ucs_status_t 
+ucs_status_t
 uct_ib_device_select_gid_by_ndev(uct_ib_device_t *dev, uint8_t port_num,
                                  char *ndev_name,
                                  uct_ib_device_gid_info_t *gid_info);
