@@ -1424,10 +1424,38 @@ static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
     ucs_string_buffer_rtrim(&strb, NULL);
 }
 
+static void ucp_mem_rcache_release_region_cb(void *rcontext,
+                                             ucs_rcache_t *rcache,
+                                             ucs_rcache_region_t *rregion)
+{
+    ucp_context_h context = rcontext;
+    ucp_mem_h memh        = ucs_derived_of(rregion, ucp_mem_t);
+    ucp_md_map_t md_map   = context->stack_md_map[memh->mem_type];
+    ucp_md_index_t md_index;
+    ucs_status_t status;
+
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+
+    ucs_for_each_bit(md_index, memh->md_map & ~md_map) {
+        status = uct_md_mem_dereg(context->tl_mds[md_index].md,
+                                  memh->uct[md_index]);
+        if (status != UCS_OK) {
+            ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
+                     context->tl_mds[md_index].rsc.md_name,
+                     ucs_status_string(status));
+        } else {
+            memh->md_map &= ~UCS_BIT(md_index);
+        }
+    }
+
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+}
+
 static ucs_rcache_ops_t ucp_mem_rcache_ops = {
-    .mem_reg     = ucp_mem_rcache_mem_reg_cb,
-    .mem_dereg   = ucp_mem_rcache_mem_dereg_cb,
-    .dump_region = ucp_mem_rcache_dump_region_cb
+    .mem_reg        = ucp_mem_rcache_mem_reg_cb,
+    .mem_dereg      = ucp_mem_rcache_mem_dereg_cb,
+    .dump_region    = ucp_mem_rcache_dump_region_cb,
+    .release_region = ucp_mem_rcache_release_region_cb
 };
 
 static ucs_status_t
@@ -1447,10 +1475,18 @@ ucp_mem_rcache_create(ucp_context_h context, const char *name,
 ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
                                  const ucs_rcache_config_t *rcache_config)
 {
+    ucs_memory_type_t mem_type;
     ucs_status_t status;
     ucs_rcache_params_t rcache_params;
 
     ucs_rcache_set_params(&rcache_params, rcache_config);
+
+    ucs_memory_type_for_each(mem_type) {
+        if (context->stack_md_map[mem_type] !=
+            context->cache_md_map[mem_type]) {
+            rcache_params.flags |= UCS_RCACHE_FLAG_SYNC_EVENTS;
+        }
+    }
 
     status = ucp_mem_rcache_create(context, "ucp_rcache", &context->rcache,
                                    &rcache_params);

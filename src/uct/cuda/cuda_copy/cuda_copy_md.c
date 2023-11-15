@@ -116,6 +116,7 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->dmabuf_mem_types       = md->config.dmabuf_supported ?
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA) : 0;
+    md_attr->stack_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->max_alloc        = SIZE_MAX;
     md_attr->max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size = 0;

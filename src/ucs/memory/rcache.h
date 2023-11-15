@@ -60,6 +60,7 @@ enum {
 enum {
     UCS_RCACHE_FLAG_NO_PFN_CHECK  = UCS_BIT(0), /**< PFN check not supported for this rcache */
     UCS_RCACHE_FLAG_PURGE_ON_FORK = UCS_BIT(1), /**< purge rcache on fork */
+    UCS_RCACHE_FLAG_SYNC_EVENTS   = UCS_BIT(2), /**< Synchronize memory events handling */
 };
 
 /*
@@ -123,6 +124,17 @@ struct ucs_rcache_ops {
     void                   (*dump_region)(void *context, ucs_rcache_t *rcache,
                                           ucs_rcache_region_t *region,
                                           char *buf, size_t max);
+    /**
+     * Release memory region.
+     * New operations should not start on this region.
+     * In-flight operations are still possible.
+     *
+     * @param [in]  context   User context, as passed to @ref ucs_rcache_create
+     * @param [in]  rcache    Pointer to the registration cache.
+     * @param [in]  region    Memory region to release.
+     */
+    void                (*release_region)(void *context, ucs_rcache_t *rcache,
+                                          ucs_rcache_region_t *region);
 };
 
 

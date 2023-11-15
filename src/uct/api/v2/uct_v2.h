@@ -756,38 +756,41 @@ typedef enum uct_md_attr_field {
     /** Indicate memory types that the MD can cache. */
     UCT_MD_ATTR_FIELD_CACHE_MEM_TYPES           = UCS_BIT(5),
 
+    /** Indicate memory types which may be registered multiple times */
+    UCT_MD_ATTR_FIELD_STACK_MEM_TYPES           = UCS_BIT(6),
+
     /** Indicate memory types that the MD can detect. */
-    UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES          = UCS_BIT(6),
+    UCT_MD_ATTR_FIELD_DETECT_MEM_TYPES          = UCS_BIT(7),
 
     /** Indicate memory types that the MD can allocate. */
-    UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES           = UCS_BIT(7),
+    UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES           = UCS_BIT(8),
 
     /** Indicate memory types that the MD can access. */
-    UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES          = UCS_BIT(8),
+    UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES          = UCS_BIT(9),
 
     /** Indicate memory types for which the MD can return a dmabuf_fd. */
-    UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES          = UCS_BIT(9),
+    UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES          = UCS_BIT(10),
 
     /** Indicate registration cost. */
-    UCT_MD_ATTR_FIELD_REG_COST                  = UCS_BIT(10),
+    UCT_MD_ATTR_FIELD_REG_COST                  = UCS_BIT(11),
 
     /** Indicate component name. */
-    UCT_MD_ATTR_FIELD_COMPONENT_NAME            = UCS_BIT(11),
+    UCT_MD_ATTR_FIELD_COMPONENT_NAME            = UCS_BIT(12),
 
     /** Indicate size of buffer needed for packed rkey. */
-    UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE          = UCS_BIT(12),
+    UCT_MD_ATTR_FIELD_RKEY_PACKED_SIZE          = UCS_BIT(13),
 
     /** Indicate CPUs closest to the resource. */
-    UCT_MD_ATTR_FIELD_LOCAL_CPUS                = UCS_BIT(13),
+    UCT_MD_ATTR_FIELD_LOCAL_CPUS                = UCS_BIT(14),
 
     /** Indicate size of buffer needed for packed exported memory key. */
-    UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE = UCS_BIT(14),
+    UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE = UCS_BIT(15),
 
     /** Unique global identifier of the memory domain. */
-    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
+    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(16),
 
     /** Indicate registration alignment. */
-    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(17)
 } uct_md_attr_field_t;
 
 
@@ -859,6 +862,11 @@ typedef struct {
      * Memory types for which MD can provide DMABUF fd.
      */
     uint64_t          dmabuf_mem_types;
+
+    /**
+     * Memory types for which region may be registered multiple times.
+     */
+    uint64_t          stack_mem_types;
 
     /**
      * Memory registration cost estimation (time,seconds) as a linear function

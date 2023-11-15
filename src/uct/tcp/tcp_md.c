@@ -36,6 +36,7 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
     attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->stack_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->alloc_mem_types        = 0;
     attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->detect_mem_types       = 0;

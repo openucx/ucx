@@ -290,6 +290,9 @@ typedef struct ucp_context {
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
 
+    /* Map of MDs that may register memory multiple times. */
+    ucp_md_map_t                  stack_md_map[UCS_MEMORY_TYPE_LAST];
+
     /* Map of MDs that provide registration of a memory buffer for a given
        memory type to be exported to other processes. */
     ucp_md_map_t                  export_md_map;

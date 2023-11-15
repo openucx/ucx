@@ -467,16 +467,16 @@ void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
     /* coverity[missing_unlock] */
 }
 
-static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
-                                                  ucs_rcache_region_t *region,
-                                                  unsigned flags)
+static inline int ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
+                                                 ucs_rcache_region_t *region,
+                                                 unsigned flags)
 {
     ucs_rcache_region_trace(rcache, region, "put region, flags 0x%x", flags);
 
     ucs_assert(region->refcount > 0);
     if (ucs_likely(ucs_atomic_fsub32(&region->refcount, 1) != 1)) {
         ucs_assert(!(flags & UCS_RCACHE_REGION_PUT_FLAG_MUST_DESTROY));
-        return;
+        return 0;
     }
 
     if (flags & UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC) {
@@ -488,7 +488,7 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
         rcache->unreleased_size += (region->super.end - region->super.start);
         ucs_list_add_tail(&rcache->gc_list, &region->tmp_list);
         ucs_spin_unlock(&rcache->lock);
-        return;
+        return 1;
     }
 
     /* Destroy region and de-register memory */
@@ -502,6 +502,8 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
     if (flags & UCS_RCACHE_REGION_PUT_FLAG_TAKE_PGLOCK) {
         pthread_rwlock_unlock(&rcache->pgt_lock);
     }
+
+    return 1;
 }
 
 /* Lock must be held in write mode */
@@ -510,6 +512,7 @@ static void ucs_rcache_region_invalidate_internal(ucs_rcache_t *rcache,
                                                   unsigned flags)
 {
     ucs_status_t status;
+    int released;
 
     ucs_rcache_region_trace(rcache, region, "invalidate");
 
@@ -523,7 +526,12 @@ static void ucs_rcache_region_invalidate_internal(ucs_rcache_t *rcache,
                                    ucs_status_string(status));
         }
         region->flags &= ~UCS_RCACHE_REGION_FLAG_PGTABLE;
-        ucs_rcache_region_put_internal(rcache, region, flags);
+        released = ucs_rcache_region_put_internal(rcache, region, flags);
+        if (!released) {
+            UCS_PROFILE_NAMED_CALL_VOID_ALWAYS(
+                    "release", rcache->params.ops->release_region,
+                    rcache->params.context, rcache, region);
+        }
     } else {
         ucs_assert(!(flags & UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE));
     }
@@ -646,7 +654,8 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
      * This way we avoid queuing endless events on the invalidation queue when
      * no rcache operations are performed to clean it.
      */
-    if (!pthread_rwlock_trywrlock(&rcache->pgt_lock)) {
+    if (!(rcache->params.flags & UCS_RCACHE_FLAG_SYNC_EVENTS) &&
+        !pthread_rwlock_trywrlock(&rcache->pgt_lock)) {
         /* coverity[double_lock] */
         ucs_rcache_invalidate_range(rcache, start, end,
                                     UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC);
