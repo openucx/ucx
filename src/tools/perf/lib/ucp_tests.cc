@@ -366,33 +366,60 @@ public:
         return UCS_PTR_BYTE_OFFSET(buffer, length - sizeof(psn_t));
     }
 
+    void request_wait(ucs_status_ptr_t request, ucs_memory_type_t mem_type,
+                      const char *operation_name)
+    {
+        ucs_status_t status;
+
+        if (UCS_PTR_IS_PTR(request)) {
+            do {
+                ucp_worker_progress(m_perf.ucp.worker);
+                status = ucp_request_check_status(request);
+            } while (status == UCS_INPROGRESS);
+            ucp_request_free(request);
+        } else {
+            status = UCS_PTR_STATUS(request);
+        }
+
+        if (status != UCS_OK) {
+            ucs_warn("failed to %s(memory_type=%s): %s", operation_name,
+                     ucs_memory_type_names[mem_type],
+                     ucs_status_string(status));
+        }
+    }
+
     UCS_F_ALWAYS_INLINE psn_t read_sn(void *buffer, size_t length)
     {
         ucs_memory_type_t mem_type = m_perf.params.recv_mem_type;
         const void *ptr            = sn_ptr(buffer, length);
+        ucp_request_param_t param  = {0};
+        ucs_status_ptr_t request;
         psn_t sn;
 
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
             return *(const volatile psn_t*)ptr;
         } else {
-            m_perf.recv_allocator->memcpy(&sn, UCS_MEMORY_TYPE_HOST, ptr,
-                                          mem_type, sizeof(sn));
+            request = ucp_get_nbx(m_perf.ucp.self_ep, &sn, sizeof(sn),
+                                  (uint64_t)ptr, m_perf.ucp.self_recv_rkey,
+                                  &param);
+            request_wait(request, mem_type, "read_sn");
             return sn;
         }
     }
 
-    UCS_F_ALWAYS_INLINE void
-    write_sn(void *buffer, ucs_memory_type_t mem_type,
-             size_t length, psn_t sn,
-             const ucx_perf_allocator_t *allocator)
+    UCS_F_ALWAYS_INLINE void write_sn(void *buffer, ucs_memory_type_t mem_type,
+                                      size_t length, psn_t sn, ucp_rkey_h rkey)
     {
-        void *ptr = sn_ptr(buffer, length);
+        void *ptr                 = sn_ptr(buffer, length);
+        ucp_request_param_t param = {0};
+        ucs_status_ptr_t request;
 
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
             *(volatile psn_t*)ptr = sn;
         } else {
-            allocator->memcpy(ptr, mem_type, &sn, UCS_MEMORY_TYPE_HOST,
-                              sizeof(sn));
+            request = ucp_put_nbx(m_perf.ucp.self_ep, &sn, sizeof(sn),
+                                  (uint64_t)ptr, rkey, &param);
+            request_wait(request, mem_type, "write_sn");
         }
     }
 
@@ -429,7 +456,7 @@ public:
             case UCX_PERF_TEST_TYPE_PINGPONG:
             case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
                 write_sn(buffer, m_perf.params.send_mem_type, length, sn,
-                         m_perf.send_allocator);
+                         m_perf.ucp.self_send_rkey);
                 break;
             case UCX_PERF_TEST_TYPE_STREAM_UNI:
                 break;
@@ -568,7 +595,7 @@ public:
            the remote buffer */
         if (CMD == UCX_PERF_CMD_PUT) {
             write_sn(buffer, m_perf.params.send_mem_type, size, LAST_ITER_SN,
-                     m_perf.send_allocator);
+                     m_perf.ucp.self_send_rkey);
         } else if (is_atomic()) {
             atomic_value = 0;
             write_sn(&atomic_value, UCS_MEMORY_TYPE_HOST, size, LAST_ITER_SN,
@@ -650,9 +677,9 @@ public:
         }
 
         write_sn(m_perf.send_buffer, m_perf.params.send_mem_type, length, sn,
-                 m_perf.send_allocator);
+                 m_perf.ucp.self_send_rkey);
         write_sn(m_perf.recv_buffer, m_perf.params.recv_mem_type, length, sn,
-                 m_perf.recv_allocator);
+                 m_perf.ucp.self_recv_rkey);
     }
 
     ucs_status_t run_pingpong()
