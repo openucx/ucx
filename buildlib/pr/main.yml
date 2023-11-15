@@ -344,8 +344,8 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
-        name: LG40
-        demands: ucx_lg40
+        name: L40G
+        demands: ucx_l40g
         test_perf: 0
 
   - stage: Namespace_Tests
