@@ -689,23 +689,6 @@ out_deref_xfer_perf:
     return status;
 }
 
-static int
-ucp_proto_common_check_mem_access(const ucp_proto_common_init_params_t *params)
-{
-    uint8_t mem_type = params->super.select_param->mem_type;
-
-    /*
-     * - HDR_ONLY protocols don't need access to payload memory
-     * - ZCOPY protocols don't need to copy payload memory
-     * - CPU accessible memory doesn't require memtype_op
-     * - memtype_op should be defined to valid op if memory is CPU inaccessible
-     */
-    return (params->flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY) ||
-           (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) ||
-           UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
-           (params->memtype_op != UCT_EP_OP_LAST);
-}
-
 ucs_status_t
 ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
@@ -741,7 +724,8 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     ucs_assert(tl_perf->max_frag >= params->hdr_size);
     frag_size = ucs_min(params->max_length,
                         tl_perf->max_frag - params->hdr_size);
-    if ((frag_size == 0) || !ucp_proto_common_check_mem_access(params)) {
+    if ((frag_size == 0) || !ucp_proto_common_check_mem_access(params) ||
+        !ucp_proto_common_check_datatype(params)) {
         /* Return UNSUPPORTED if protocol cannot be used on any range */
         return (caps->min_length == 0) ? UCS_OK : UCS_ERR_UNSUPPORTED;
     }

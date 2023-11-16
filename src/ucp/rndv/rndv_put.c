@@ -240,6 +240,8 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_ZCOPY,
@@ -256,8 +258,7 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     size_t bulk_priv_size;
     ucs_status_t status;
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
                                  support_ppln) ||
         !ucp_proto_common_init_check_err_handling(&params.super)) {
         return UCS_ERR_UNSUPPORTED;

@@ -96,6 +96,7 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = 0,
         .max_lanes           = 1,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,

@@ -23,6 +23,44 @@ int ucp_proto_common_init_check_err_handling(
             UCP_ERR_HANDLING_MODE_NONE);
 }
 
+int ucp_proto_common_check_datatype(
+        const ucp_proto_common_init_params_t *init_params)
+{
+    uint8_t dt_class = init_params->super.select_param->dt_class;
+
+    return !(UCS_BIT(dt_class) & init_params->inv_datatypes);
+}
+
+int ucp_proto_common_check_mem_access(
+        const ucp_proto_common_init_params_t *init_params)
+{
+    uint8_t mem_type = init_params->super.select_param->mem_type;
+
+    /*
+     * - HDR_ONLY protocols don't need access to payload memory
+     * - ZCOPY protocols don't need to copy payload memory
+     * - CPU accessible memory doesn't require memtype_op
+     * - memtype_op should be defined to valid op if memory is CPU inaccessible
+     */
+    return (init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY) ||
+           (init_params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) ||
+           UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
+           (init_params->memtype_op != UCT_EP_OP_LAST);
+}
+
+int ucp_proto_common_check_range(
+        const ucp_proto_common_init_params_t *init_params)
+{
+    /*
+     * - if min_length == 0, empty messages supported
+     * - for non-empty messages protocol should fit memory access and datatype
+     *   requirements
+     */
+    return (init_params->min_length == 0) ||
+           (ucp_proto_common_check_mem_access(init_params) &&
+            ucp_proto_common_check_datatype(init_params));
+}
+
 ucp_rsc_index_t
 ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
                                ucp_lane_index_t lane)
@@ -414,14 +452,6 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
               ep_config_key->num_lanes, params->proto_name,
               ucs_string_buffer_cstr(&sel_param_strb));
     ucs_log_indent(1);
-
-    if ((flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
-        (select_param->dt_class == UCP_DATATYPE_GENERIC)) {
-        /* Generic/IOV datatype cannot be used with zero-copy send */
-        ucs_trace("datatype %s cannot be used with zcopy",
-                  ucp_datatype_class_names[select_param->dt_class]);
-        goto out;
-    }
 
     lane_map = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
     ucs_for_each_bit(lane, lane_map) {

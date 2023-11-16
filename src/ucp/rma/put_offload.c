@@ -70,12 +70,13 @@ ucp_proto_put_offload_short_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .lane_type           = UCP_LANE_TYPE_RMA,
         .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
     };
 
-    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
-        !ucp_proto_is_short_supported(init_params->select_param)) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -166,6 +167,7 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = 0,
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_BCOPY,
@@ -255,6 +257,7 @@ ucp_proto_put_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_GENERIC),
         .max_lanes           = context->config.ext.max_rma_lanes,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_ZCOPY,

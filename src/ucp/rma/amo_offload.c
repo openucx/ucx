@@ -169,12 +169,13 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .lane_type           = UCP_LANE_TYPE_AMO,
         .tl_cap_flags        = 0
     };
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
         return UCS_ERR_UNSUPPORTED;
     }
 

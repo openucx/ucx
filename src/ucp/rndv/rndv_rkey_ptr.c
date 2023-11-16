@@ -68,6 +68,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = 0,
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };
@@ -230,6 +231,7 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = (rkey_ptr_lane == UCP_NULL_LANE) ?
                                0 : UCS_BIT(rkey_ptr_lane),
+        .super.inv_datatypes = 0,
         .lane_type           = UCP_LANE_TYPE_LAST,
         .tl_cap_flags        = 0
     };

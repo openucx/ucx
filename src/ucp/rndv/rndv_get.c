@@ -50,6 +50,8 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
@@ -60,8 +62,7 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
                                             cap.get.opt_zcopy_align),
     };
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
                                  support_ppln)) {
         return UCS_ERR_UNSUPPORTED;
     }

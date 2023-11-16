@@ -117,6 +117,9 @@ typedef struct {
 
     /* Map of unsuitable lanes */
     ucp_lane_map_t          exclude_map;
+
+    /* Unsupported data types (supported only for empty messages) */
+    uint8_t                 inv_datatypes;
 } ucp_proto_common_init_params_t;
 
 
@@ -187,6 +190,42 @@ typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
  * @return Nonzero if protocol can be used.
  */
 int ucp_proto_common_init_check_err_handling(
+        const ucp_proto_common_init_params_t *init_params);
+
+
+/**
+ * Check if protocol supports required datatype.
+ *
+ * @param [in] init_params      Protocol initialization parameters.
+ *
+ * @return Nonzero if protocol supports datatype.
+ */
+int ucp_proto_common_check_datatype(
+        const ucp_proto_common_init_params_t *init_params);
+
+
+/**
+ * 
+ * Check if protocol comply memory access requirements
+ *
+ * @param [in] init_params      Protocol initialization parameters.
+ *
+ * @return Nonzero if protocol complies memory access requirements.
+ */
+int ucp_proto_common_check_mem_access(
+        const ucp_proto_common_init_params_t *init_params);
+
+
+/**
+ * 
+ * Check whether protocol can initialize at least one valid range for the
+ * requested selection parameters.
+ *
+ * @param [in] init_params      Protocol initialization parameters.
+ *
+ * @return Nonzero if protocol can initialize at list one range.
+ */
+int ucp_proto_common_check_range(
         const ucp_proto_common_init_params_t *init_params);
 
 
