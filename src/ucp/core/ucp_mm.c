@@ -453,6 +453,9 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
     ucs_log_level_t err_level;
     ucp_md_index_t md_index;
     ucs_status_t status;
+    void *reg_address;
+    size_t reg_length;
+    size_t reg_align;
 
     if (reg_md_map == 0) {
         return UCS_OK;
@@ -505,12 +508,20 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                      UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
         }
 
-        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, address,
-                                   length, &reg_params, &memh->uct[md_index]);
+        reg_address = address;
+        reg_length  = length;
+
+        if (context->rcache == NULL) {
+            reg_align = ucs_max(context->tl_mds[md_index].attr.reg_alignment, 1);
+            ucs_align_ptr_range(&reg_address, &reg_length, reg_align);
+        }
+
+        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,
+                                   reg_length, &reg_params, &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
-            ucp_memh_register_log_fail(err_level, address, length, mem_type,
-                                       reg_params.dmabuf_fd, md_index, context,
-                                       status);
+            ucp_memh_register_log_fail(err_level, reg_address, reg_length,
+                                       mem_type, reg_params.dmabuf_fd, md_index,
+                                       context, status);
             if (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) {
                 continue;
             }
@@ -521,7 +532,7 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
 
         ucs_trace("register address %p length %zu dmabuf-fd %d flags %ld "
                   "on md[%d]=%s %p",
-                  address, length,
+                  reg_address, reg_length,
                   (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
                                                         UCT_DMABUF_FD_INVALID,
                   reg_params.flags,
@@ -758,15 +769,15 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
     } else {
         status = ucp_memh_rcache_get(context->rcache, reg_address, reg_length,
                                      mem_type, reg_align, &memh);
+
+        ucs_assert(memh->mem_type == mem_type);
+        ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
+        ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
     }
 
     if (status != UCS_OK) {
         goto out;
     }
-
-    ucs_assert(memh->mem_type == mem_type);
-    ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
-    ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
 
     ucs_trace(
             "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
