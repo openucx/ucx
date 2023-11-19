@@ -170,6 +170,8 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane, size_t *min_frag_p,
                                size_t *max_frag_p)
 {
+    ucp_context_h context = params->super.worker->context;
+
     *min_frag_p = ucp_proto_common_get_iface_attr_field(iface_attr,
                                                         params->min_frag_offs,
                                                         0);
@@ -181,6 +183,14 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
        sending more than the remote side supports. */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE) {
         *max_frag_p = ucs_min(ucp_proto_common_get_seg_size(params, lane),
+                              *max_frag_p);
+    }
+
+    if (ucs_test_all_flags(params->flags,
+                           UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                                   UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
+        (context->config.ext.rma_zcopy_seg_size != UCS_MEMUNITS_AUTO)) {
+        *max_frag_p = ucs_min(context->config.ext.rma_zcopy_seg_size,
                               *max_frag_p);
     }
 }
@@ -744,33 +754,23 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
             &req->send.proto_config->select_param, msg_length);
 }
 
-/**
- * Current implementation of @ref ucp_proto_t::reset supports only the case
- * that no data was sent yet.
- *
- * @param req   request to check
- */
-void ucp_proto_request_check_reset_state(const ucp_request_t *req)
-{
-    ucs_assertv_always(
-            ucp_datatype_iter_is_begin(&req->send.state.dt_iter),
-            "request %p: cannot reset the state after sending %zu bytes", req,
-            req->send.state.dt_iter.offset);
-}
-
 void ucp_proto_request_restart(ucp_request_t *req)
 {
     ucs_status_t status;
+    ucp_proto_config_t *proto_config;
 
     ucp_trace_req(req, "proto %s at stage %d restarting",
                   req->send.proto_config->proto->name, req->send.proto_stage);
 
-    ucp_proto_request_check_reset_state(req);
-    status = req->send.proto_config->proto->reset(req);
+    proto_config = (ucp_proto_config_t*)req->send.proto_config;
+    status       = proto_config->proto->reset(req);
     if (status != UCS_OK) {
         ucs_assert_always(status == UCS_ERR_CANCELED);
         return;
     }
+
+    /* Select a protocol with resume request support */
+    proto_config->select_param.op_id_flags |= UCP_PROTO_SELECT_OP_FLAG_RESUME;
 
     status = ucp_proto_request_init(req);
     if (status == UCS_OK) {

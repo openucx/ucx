@@ -1393,6 +1393,50 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
     ucp_ep_release_discard_arg(arg);
 }
 
+static void
+ucp_ep_restart_finish_cb(void *request, ucs_status_t status, void *user_data)
+{
+    ucs_queue_head_t *tmp_q = user_data;
+    uct_pending_req_t *uct_req;
+    ucp_request_t *ucp_req;
+
+    ucs_queue_for_each_extract(uct_req, tmp_q, priv, 1) {
+        ucp_req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+        ucp_proto_request_restart(ucp_req);
+    }
+
+    ucs_free(tmp_q);
+    ucp_request_release(request);
+}
+
+ucs_status_t ucp_ep_restart_nb(ucp_ep_h ep)
+{
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FIELD_USER_DATA,
+        .cb.send      = ucp_ep_restart_finish_cb
+    };
+    ucs_queue_head_t *tmp_q;
+    void *request;
+
+    tmp_q = ucs_malloc(sizeof(*tmp_q), "ep_restart");
+    if (tmp_q == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    param.user_data = tmp_q;
+    ucs_queue_head_init(tmp_q);
+    ucp_ep_purge_lanes(ep, ucp_request_purge_enqueue_cb, tmp_q);
+
+    request = ucp_ep_flush_nbx(ep, &param);
+    if (UCS_PTR_IS_ERR(request)) {
+        ucs_free(tmp_q);
+        return UCS_PTR_STATUS(request);
+    }
+
+    return UCS_OK;
+}
+
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
 {
     unsigned ep_flush_flags         = (ucp_ep_config(ep)->key.err_mode ==

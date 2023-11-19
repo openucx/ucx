@@ -885,4 +885,14 @@ ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
  */
 ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
 
+/**
+ * @brief Restarts all pending requests by selecting a new protocol for each
+ *        one and reset old protocol.
+ *
+ * @param [in] ucp_ep           Endpoint object.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_restart_nb(ucp_ep_h ep);
+
 #endif

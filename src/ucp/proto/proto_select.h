@@ -23,16 +23,18 @@
 /* Operation flags start bit */
 #define UCP_PROTO_SELECT_OP_FLAGS_BASE UCS_BIT(4)
 
+/* Select protocol which supports resume request after reset. */
+#define UCP_PROTO_SELECT_OP_FLAG_RESUME (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
 
 /* Select a protocol for sending one fragment of a rendezvous pipeline.
  * Relevant for UCP_OP_ID_RNDV_SEND and UCP_OP_ID_RNDV_RECV. */
-#define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
+#define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
 
 
 /* Select eager/rendezvous protocol for Active Message sends.
  * Relevant for UCP_OP_ID_AM_SEND and UCP_OP_ID_AM_SEND_REPLY. */
-#define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
-#define UCP_PROTO_SELECT_OP_FLAG_AM_RNDV  (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
+#define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
+#define UCP_PROTO_SELECT_OP_FLAG_AM_RNDV  (UCP_PROTO_SELECT_OP_FLAGS_BASE << 2)
 
 
 /** Maximal length of ucp_proto_select_param_str() */
