@@ -276,10 +276,17 @@ char *ucs_strtrim(char *str)
     return start;
 }
 
-const char * ucs_str_dump_hex(const void* data, size_t length, char *buf,
+const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,
                               size_t max, size_t per_line)
 {
-    static const char hexchars[] = "0123456789abcdef";
+    return ucs_str_dump_hex_bulk(data, length, buf, max, per_line, 4, NULL);
+}
+
+const char *ucs_str_dump_hex_bulk(const void* data, size_t length, char *buf,
+                                  size_t max, size_t per_line, size_t word_size,
+                                  const char* prefix)
+{
+    size_t prefix_len = 0;
     char *p, *endp;
     uint8_t value;
     size_t i;
@@ -287,24 +294,32 @@ const char * ucs_str_dump_hex(const void* data, size_t length, char *buf,
     p     = buf;
     endp  = buf + max - 2;
     i     = 0;
-    while ((p < endp) && (i < length)) {
-        if (i > 0) {
-            if ((i % per_line) == 0) {
-                *(p++) = '\n';
-            } else if ((i % 4) == 0) {
-                *(p++) = ':';
-            }
 
-            if (p == endp) {
+    if (prefix != NULL) {
+        prefix_len = strlen(prefix) + 5;
+    }
+
+    while ((p < endp) && (i < length)) {
+        if ((i % per_line) == 0) {
+            if (p + prefix_len >= endp) {
                 break;
             }
+            if (i > 0) {
+                *(p++) = '\n';
+            }
+            if (prefix) {
+                p += sprintf(p, "%s %02zx: ", prefix, i);
+            }
+         } else if ((i % word_size) == 0) {
+            *(p++) = ':';
         }
 
-        value = *(const uint8_t*)(UCS_PTR_BYTE_OFFSET(data, i));
-        p[0]  = hexchars[value / 16];
-        p[1]  = hexchars[value % 16];
-        p    += 2;
-        ++i;
+        if (p >= endp) {
+            break;
+        }
+
+        value = *(const uint8_t*)(UCS_PTR_BYTE_OFFSET(data, i++));
+        p += sprintf(p, "%02x", value);
     }
     *p = 0;
     return buf;

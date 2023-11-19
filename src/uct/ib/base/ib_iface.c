@@ -197,6 +197,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "detect the default value by creating a dummy QP." ,
    ucs_offsetof(uct_ib_iface_config_t, counter_set_id), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"LOG_QE", "n",
+   "Enable hex dump of WQE/CQE. This option is intended for use by the library developers.\n",
+   ucs_offsetof(uct_ib_iface_config_t, log_print_queues), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -1364,6 +1368,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;
+    self->config.log_print_queues   = config->log_print_queues;
     uct_ib_iface_set_path_mtu(self, config);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {

@@ -83,7 +83,6 @@ BEGIN_C_DECLS
         } \
     } while(0)
 
-
 typedef enum {
     UCS_LOG_FUNC_RC_STOP,
     UCS_LOG_FUNC_RC_CONTINUE
@@ -176,6 +175,10 @@ void ucs_log_cleanup();
 
 
 const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
+
+void __ucs_log_wqe(const char *file, unsigned line, const char *function,
+                   ucs_log_level_t level, ucs_log_component_config_t *comp_conf,
+                   const char *prefix, const void *data, size_t length);
 
 /**
  * Add/remove logging handlers

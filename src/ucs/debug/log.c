@@ -485,6 +485,20 @@ overflow:
     return buf;
 }
 
+void __ucs_log_wqe(const char *file, unsigned line,
+                   const char *function, ucs_log_level_t level,
+                   ucs_log_component_config_t *comp_conf, const char *prefix,
+                   const void* buff, size_t len)
+{
+    /* PFX xx: xxxxxxxx:xxxxxxxx:xxxxxxxx:xxxxxxxx\n
+     *     |-------------------42------------------| */
+    size_t buflen = (strlen(prefix) + 42) * ucs_div_round_up(len, 16);
+    char *out     = ucs_alloca(buflen);
+
+    ucs_str_dump_hex_bulk(buff, len, out, buflen, 16, 4, prefix);
+    ucs_log_dispatch(file, line, function, level, comp_conf, "%s", out);
+}
+
 void ucs_log_early_init()
 {
     ucs_log_initialized   = 0;

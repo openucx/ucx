@@ -151,6 +151,8 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
 
     if ((txwq != NULL) && ((ecqe->op_own >> 4) == MLX5_CQE_REQ_ERR)) {
         wqe = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
+        UCT_IB_LOG_WQE(iface, "ERR WQE", wqe,
+                       (((struct mlx5_wqe_ctrl_seg *)wqe)->qpn_ds >> 24) * 0x10);
         uct_ib_mlx5_wqe_dump(iface, wqe, txwq->qstart, txwq->qend, INT_MAX, 0,
                              NULL, wqe_info, sizeof(wqe_info) - 1, NULL);
 

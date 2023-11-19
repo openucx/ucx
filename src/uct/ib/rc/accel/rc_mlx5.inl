@@ -459,7 +459,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                        ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
                        uct_rc_mlx5_common_packet_dump : NULL);
 
-    res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
+    res_count = uct_ib_mlx5_post_send(&iface->super.super, txwq, ctrl, wqe_size, 1);
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
         txwq->sig_pi = txwq->prev_sw_pi;
     }
@@ -1029,7 +1029,8 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_wq_t *cmd_wq,
+uct_rc_mlx5_iface_common_post_srq_op(uct_ib_iface_t *iface,
+                                     uct_rc_mlx5_cmd_wq_t *cmd_wq,
                                      unsigned extra_wqe_size, unsigned op_code,
                                      uint16_t next_idx, unsigned unexp_cnt,
                                      uct_tag_t tag, uct_tag_t tag_mask,
@@ -1050,7 +1051,7 @@ uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_wq_t *cmd_wq,
     uct_rc_mlx5_set_tm_seg(txwq, tm, op_code, next_idx, unexp_cnt,
                            tag, tag_mask, tm_flags);
 
-    uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 0);
+    uct_ib_mlx5_post_send(iface, txwq, ctrl, wqe_size, 0);
 }
 
 
@@ -1100,7 +1101,8 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_mlx5_set_data_seg(dptr, iov->buffer, iov->length,
                              uct_ib_memh_get_lkey(iov->memh));
 
-    uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, sizeof(*dptr),
+    uct_rc_mlx5_iface_common_post_srq_op(&iface->super.super,
+                                         &iface->tm.cmd_wq, sizeof(*dptr),
                                          UCT_RC_MLX5_TM_OPCODE_APPEND, next_idx,
                                          iface->tm.unexpected_cnt, tag,
                                          tag_mask,
@@ -1143,7 +1145,8 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
         uct_rc_mlx5_add_cmd_wq_op(iface, tag_entry);
     }
 
-    uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, 0,
+    uct_rc_mlx5_iface_common_post_srq_op(&iface->super.super,
+                                         &iface->tm.cmd_wq, 0,
                                          UCT_RC_MLX5_TM_OPCODE_REMOVE, idx,
                                          iface->tm.unexpected_cnt, 0ul, 0ul,
                                          flags);
@@ -1257,7 +1260,8 @@ uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
                                       status, offset, release_desc, poll_flags);
 
     if (ucs_unlikely(!(iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
-        uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, 0,
+        uct_rc_mlx5_iface_common_post_srq_op(&iface->super.super,
+                                             &iface->tm.cmd_wq, 0,
                                              UCT_RC_MLX5_TM_OPCODE_NOP, 0,
                                              iface->tm.unexpected_cnt, 0ul, 0ul,
                                              UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT);

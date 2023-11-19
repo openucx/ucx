@@ -416,3 +416,25 @@ UCS_TEST_F(test_string_set, add) {
 
     ucs_string_set_cleanup(&sset);
 }
+
+class test_string_dump_hex : public ucs::test {
+};
+
+UCS_TEST_F(test_string_dump_hex, bulk) {
+    char buff[33];
+    char string[90];
+    int i;
+
+    for (i = 0; i < sizeof(buff); i++) {
+        buff[i] = i;
+    }
+
+    ucs_str_dump_hex_bulk(buff, sizeof(buff), string, sizeof(string), 16, 4, "PFX");
+    UCS_TEST_MESSAGE << string;
+    EXPECT_STREQ("PFX 00: 00010203:04050607:08090a0b:0c0d0e0f\nPFX 10: 10111213:14151617:18191a1b:1c1d1e1f", string);
+
+    ucs_str_dump_hex(buff, 16, string, sizeof(string), SIZE_MAX);
+    UCS_TEST_MESSAGE << string;
+    EXPECT_STREQ("00010203:04050607:08090a0b:0c0d0e0f", string);
+
+}

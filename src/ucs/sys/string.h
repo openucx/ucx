@@ -222,10 +222,28 @@ static UCS_F_ALWAYS_INLINE const char* ucs_basename(const char *path)
  *
  * @return address of destination buffer
  */
-const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,
-                             size_t max, size_t per_line);
+const char * ucs_str_dump_hex(const void* data, size_t length, char *buf,
+                              size_t max, size_t per_line);
 
-
+/**
+ * Dump big binary array into string in hex format. Destination string is
+ * always ended by '\0'.
+ *
+ * @param data      Source array to dump.
+ * @param length    Length of source array in bytes.
+ * @param buf       Destination string.
+ * @param max       Max length of destination string including terminating
+ *                  '\0' byte.
+ * @param per_line  Number of bytes in source array to print per line
+ *                  or SIZE_MAX for single line.
+ * @param word_size Number of bytes in source array to be separated by colon
+ * @param prefix    Line prefix or NULL
+ *
+ * @return address of destination buffer
+ */
+const char *ucs_str_dump_hex_bulk(const void* data, size_t length, char *buf,
+                                  size_t max, size_t per_line, size_t word_size,
+                                  const char* prefix);
 /**
  * Convert the given flags to a string that represents them.
  *

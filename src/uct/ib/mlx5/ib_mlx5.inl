@@ -151,6 +151,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
         cq->cq_unzip.title_cqe_valid = 0;
     }
 
+    UCT_IB_LOG_WQE(iface, "CQE", cqe, sizeof(struct mlx5_cqe64));
     cq->cq_ci = idx + 1;
     return cqe; /* TODO optimize - let complier know cqe is not null */
 }
@@ -531,8 +532,9 @@ void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
 }
 
 static UCS_F_ALWAYS_INLINE uint16_t
-uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
-                      unsigned wqe_size, int hw_ci_updated)
+uct_ib_mlx5_post_send(uct_ib_iface_t *iface, uct_ib_mlx5_txwq_t *wq,
+                      struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size,
+                      int hw_ci_updated)
 {
     uint16_t sw_pi, num_bb, res_count;
     void *src, *dst;
@@ -556,6 +558,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
     dst = wq->reg->addr.ptr;
     src = ctrl;
 
+    UCT_IB_LOG_WQE(iface, "WQE", src, wqe_size);
     ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
     if (ucs_likely(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_POST)) {
