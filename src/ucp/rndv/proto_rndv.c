@@ -462,7 +462,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
                                 params->msg_length, &remote_attr);
 
     attr->is_estimation  = 1;
-    attr->max_msg_length = SIZE_MAX;
+    attr->max_msg_length = remote_attr.max_msg_length;
     attr->lane_map       = UCS_BIT(rpriv->lane);
 
     ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "rendezvous %s",
