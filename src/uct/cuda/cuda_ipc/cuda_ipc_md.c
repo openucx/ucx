@@ -349,7 +349,6 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_IO_ERROR;
     }
 
-    total_bytes        *= md_cfg->rcache_max_ratio;
     md->super.ops       = &md_ops;
     md->super.component = &uct_cuda_ipc_component.super;
 
@@ -359,8 +358,9 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->uuid_map              = NULL;
     md->peer_accessible_cache = NULL;
     md->rcache_enable         = md_cfg->rcache_enable;
-    md->rcache_max_size       = (total_bytes >= 0) ?
-                                total_bytes : md_cfg->rcache.max_size;
+    md->rcache_max_size       = (md_cfg->rcache_max_ratio >= 0) ?
+                                total_bytes * md_cfg->rcache_max_ratio :
+                                md_cfg->rcache.max_size;
     md->rcache_max_regions    = md_cfg->rcache.max_regions;
 
     com     = ucs_derived_of(md->super.component, uct_cuda_ipc_component_t);
