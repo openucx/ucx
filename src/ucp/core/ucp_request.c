@@ -747,6 +747,8 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
                   req->send.state.dt_iter.length);
 
     ucs_log_indent(1);
+    ucp_worker_track_ep_usage(req);
+
     status = progress_cb(self);
     if (UCS_STATUS_IS_ERR(status)) {
         ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
@@ -754,7 +756,6 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
     } else {
         ucp_trace_req(req, "progress protocol %s returned: %s", proto->name,
                       ucs_status_string(status));
-        ucp_worker_track_ep_usage(req);
     }
     ucs_log_indent(-1);
     return status;
