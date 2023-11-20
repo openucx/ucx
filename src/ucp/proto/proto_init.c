@@ -220,7 +220,8 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
             /* For multi-fragment protocols, we need to apply the fragment
              * size to the performance function linear factor.
              */
-            if (!(flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
+            if (!(flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG) &&
+                (frag_size > 0)) {
                 perf[perf_type].m += perf[perf_type].c / frag_size;
             }
         }
@@ -478,7 +479,7 @@ ucp_proto_init_buffer_copy_time(ucp_worker_h worker, const char *title,
 static ucs_status_t
 ucp_proto_common_init_send_perf(const ucp_proto_common_init_params_t *params,
                                 const ucp_proto_common_tl_perf_t *tl_perf,
-                                ucp_md_map_t reg_md_map,
+                                ucp_md_map_t reg_md_map, int empty_msg,
                                 ucp_proto_perf_range_t *send_perf)
 {
     ucp_proto_perf_node_t *child_perf_node;
@@ -497,7 +498,8 @@ ucp_proto_common_init_send_perf(const ucp_proto_common_init_params_t *params,
         ucp_proto_init_memreg_time(params, reg_md_map, &send_overhead,
                                    &child_perf_node);
         ucp_proto_perf_node_own_child(send_perf->node, &child_perf_node);
-    } else if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) {
+    } else if ((params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) ||
+               empty_msg) {
         send_overhead = UCS_LINEAR_FUNC_ZERO;
     } else {
         ucs_assert(reg_md_map == 0);
@@ -575,7 +577,7 @@ ucp_proto_common_init_xfer_perf(const ucp_proto_common_init_params_t *params,
 static ucs_status_t
 ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
                                 const ucp_proto_common_tl_perf_t *tl_perf,
-                                ucp_md_map_t reg_md_map,
+                                ucp_md_map_t reg_md_map, int empty_msg,
                                 ucp_proto_perf_range_t *recv_perf)
 {
     const ucp_proto_select_param_t *select_param = params->super.select_param;
@@ -593,7 +595,8 @@ ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) ||
         /* Count only send completion time without waiting for a response */
         ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE))) {
+         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE)) ||
+        empty_msg) {
         recv_overhead = UCS_LINEAR_FUNC_ZERO;
     } else {
         if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
@@ -640,6 +643,69 @@ ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
     return UCS_OK;
 }
 
+static ucs_status_t
+ucp_proto_init_single_frag_ranges(const ucp_proto_common_init_params_t *params,
+                                  const ucp_proto_common_tl_perf_t *tl_perf,
+                                  ucp_proto_perf_node_t *const tl_perf_node,
+                                  ucp_md_map_t reg_md_map, size_t range_start,
+                                  size_t frag_size)
+{
+    int empty_msg = (frag_size == 0);
+    ucp_proto_perf_range_t xfer_perf, send_perf, recv_perf;
+    const ucp_proto_perf_range_t *parallel_stages[3];
+    ucs_status_t status;
+
+    /* Network transfer time */
+    ucp_proto_common_init_xfer_perf(params, tl_perf, tl_perf_node, &xfer_perf);
+
+    /* Sender overhead */
+    status = ucp_proto_common_init_send_perf(params, tl_perf, reg_md_map,
+                                             empty_msg, &send_perf);
+    if (status != UCS_OK) {
+        goto out_deref_xfer_perf;
+    }
+
+    /* Receiver overhead */
+    status = ucp_proto_common_init_recv_perf(params, tl_perf, reg_md_map,
+                                             empty_msg, &recv_perf);
+    if (status != UCS_OK) {
+        goto out_deref_send_perf;
+    }
+
+    parallel_stages[0] = &send_perf;
+    parallel_stages[1] = &xfer_perf;
+    parallel_stages[2] = &recv_perf;
+
+    /* Add ranges representing sending single fragment */
+    status = ucp_proto_init_parallel_stages(&params->super, range_start, frag_size,
+                                            frag_size, 0.0, parallel_stages, 3,
+                                            params->flags);
+
+    ucp_proto_perf_node_deref(&recv_perf.node);
+out_deref_send_perf:
+    ucp_proto_perf_node_deref(&send_perf.node);
+out_deref_xfer_perf:
+    ucp_proto_perf_node_deref(&xfer_perf.node);
+    return status;
+}
+
+static int
+ucp_proto_common_check_mem_access(const ucp_proto_common_init_params_t *params)
+{
+    uint8_t mem_type = params->super.select_param->mem_type;
+
+    /*
+     * - HDR_ONLY protocols don't need access to payload memory
+     * - ZCOPY protocols don't need to copy payload memory
+     * - CPU accessible memory doesn't require memtype_op
+     * - memtype_op should be defined to valid op if memory is CPU inaccessible
+     */
+    return (params->flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY) ||
+           (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) ||
+           UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
+           (params->memtype_op != UCT_EP_OP_LAST);
+}
+
 ucs_status_t
 ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
@@ -647,10 +713,8 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            ucp_md_map_t reg_md_map)
 {
     ucp_proto_caps_t *caps = params->super.caps;
-    ucp_proto_perf_range_t xfer_perf, send_perf, recv_perf;
-    const ucp_proto_perf_range_t *parallel_stages[3];
-    ucs_status_t status;
     size_t frag_size;
+    ucs_status_t status;
 
     ucs_trace("caps" UCP_PROTO_TIME_FMT(send_pre_overhead)
               UCP_PROTO_TIME_FMT(send_post_overhead)
@@ -660,40 +724,38 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
               UCP_PROTO_TIME_ARG(tl_perf->recv_overhead),
               UCP_PROTO_TIME_ARG(tl_perf->latency));
 
-    /* Network transfer time */
-    ucp_proto_common_init_xfer_perf(params, tl_perf, tl_perf_node, &xfer_perf);
+    /* Initialize capabilities */
+    ucp_proto_common_init_base_caps(params, tl_perf->min_length);
 
-    /* Sender overhead */
-    status = ucp_proto_common_init_send_perf(params, tl_perf, reg_md_map,
-                                             &send_perf);
-    if (status != UCS_OK) {
-        goto out_deref_xfer_perf;
-    }
-
-    /* Receiver overhead */
-    status = ucp_proto_common_init_recv_perf(params, tl_perf, reg_md_map,
-                                             &recv_perf);
-    if (status != UCS_OK) {
-        goto out_deref_send_perf;
+    /* Add range representing sending empty message */
+    if (caps->min_length == 0) {
+        status = ucp_proto_init_single_frag_ranges(params, tl_perf,
+                                                   tl_perf_node, reg_md_map,
+                                                   0, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     /* Get fragment size */
     ucs_assert(tl_perf->max_frag >= params->hdr_size);
     frag_size = ucs_min(params->max_length,
                         tl_perf->max_frag - params->hdr_size);
+    if ((frag_size == 0) || !ucp_proto_common_check_mem_access(params)) {
+        /* Return UNSUPPORTED if protocol cannot be used on any range */
+        return (caps->min_length == 0) ? UCS_OK : UCS_ERR_UNSUPPORTED;
+    }
 
-    /* Initialize capabilities */
-    ucp_proto_common_init_base_caps(params, tl_perf->min_length);
-
-    parallel_stages[0] = &send_perf;
-    parallel_stages[1] = &xfer_perf;
-    parallel_stages[2] = &recv_perf;
+    ucs_assertv_always(frag_size >= caps->min_length,
+                       "frag_size=%zu caps->min_length=%zu",
+                       frag_size, caps->min_length);
 
     /* Add ranges representing sending single fragment */
-    status = ucp_proto_init_parallel_stages(&params->super, 0, frag_size, frag_size,
-                                            0.0, parallel_stages, 3, params->flags);
+    status = ucp_proto_init_single_frag_ranges(params, tl_perf, tl_perf_node,
+                                               reg_md_map, caps->min_length,
+                                               frag_size);
     if (status != UCS_OK) {
-        goto out_deref_recv_perf;
+        return status;
     }
 
     /* Append range representing sending rest of the fragments, if frag_size is
@@ -705,15 +767,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                                         params->max_length);
     }
 
-    status = UCS_OK;
-
-out_deref_recv_perf:
-    ucp_proto_perf_node_deref(&recv_perf.node);
-out_deref_send_perf:
-    ucp_proto_perf_node_deref(&send_perf.node);
-out_deref_xfer_perf:
-    ucp_proto_perf_node_deref(&xfer_perf.node);
-    return status;
+    return UCS_OK;
 }
 
 int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,
