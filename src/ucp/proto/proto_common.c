@@ -186,12 +186,19 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                               *max_frag_p);
     }
 
+    /* Truncate maximum fragment size according to user configuration. */
     if (ucs_test_all_flags(params->flags,
                            UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                                   UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
+                           UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
         (context->config.ext.rma_zcopy_seg_size != UCS_MEMUNITS_AUTO)) {
         *max_frag_p = ucs_min(context->config.ext.rma_zcopy_seg_size,
                               *max_frag_p);
+    }
+
+    if (*max_frag_p < *min_frag_p) {
+        ucs_warn("max tl fragment size (%lu) cannot be smaller than (%lu), "
+                 "using min value supported by transport",
+                 *max_frag_p, *min_frag_p);
     }
 }
 

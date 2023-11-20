@@ -76,6 +76,15 @@ typedef struct ucp_ep_discard_lanes_arg {
     ucp_ep_h     ucp_ep; /* UCP endpoint which should be discarded */
 } ucp_ep_discard_lanes_arg_t;
 
+/**
+ * Internal struct used for ep restart.
+ */
+typedef struct ucp_ep_restart_data {
+    ucs_queue_head_t pending;          /* pending queue extracted from ep */
+    ucp_ep_restart_completion_cb_t cb; /* user callback which is called after
+                                          completion */
+    void *arg;                         /* argument to pass to callback */
+} ucp_ep_restart_data_t;
 
 extern const ucp_request_send_proto_t ucp_stream_am_proto;
 extern const ucp_request_send_proto_t ucp_am_proto;
@@ -1396,41 +1405,49 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
 static void
 ucp_ep_restart_finish_cb(void *request, ucs_status_t status, void *user_data)
 {
-    ucs_queue_head_t *tmp_q = user_data;
+    ucp_ep_restart_data_t *restart_data = user_data;
     uct_pending_req_t *uct_req;
-    ucp_request_t *ucp_req;
+    ucp_request_t *ucp_req, *flush_req;
 
-    ucs_queue_for_each_extract(uct_req, tmp_q, priv, 1) {
+    ucs_queue_for_each_extract(uct_req, &restart_data->pending, priv, 1) {
         ucp_req = ucs_container_of(uct_req, ucp_request_t, send.uct);
         ucp_proto_request_restart(ucp_req);
     }
 
-    ucs_free(tmp_q);
+    flush_req = (ucp_request_t*)request - 1;
+    restart_data->cb(flush_req->send.ep, restart_data->arg);
+    ucs_free(restart_data);
     ucp_request_release(request);
 }
 
-ucs_status_t ucp_ep_restart_nb(ucp_ep_h ep)
+ucs_status_t ucp_ep_pending_schedule_restart(ucp_ep_h ep,
+                                             ucp_ep_restart_completion_cb_t cb,
+                                             void *arg)
 {
     ucp_request_param_t param = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                         UCP_OP_ATTR_FIELD_USER_DATA,
         .cb.send      = ucp_ep_restart_finish_cb
     };
-    ucs_queue_head_t *tmp_q;
+    ucp_ep_restart_data_t *restart_data;
     void *request;
 
-    tmp_q = ucs_malloc(sizeof(*tmp_q), "ep_restart");
-    if (tmp_q == NULL) {
+    restart_data = ucs_malloc(sizeof(*restart_data), "ep_restart");
+    if (restart_data == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    param.user_data = tmp_q;
-    ucs_queue_head_init(tmp_q);
-    ucp_ep_purge_lanes(ep, ucp_request_purge_enqueue_cb, tmp_q);
+    ucs_queue_head_init(&restart_data->pending);
+    ucp_ep_purge_lanes(ep, ucp_request_purge_enqueue_cb,
+                       &restart_data->pending);
+    restart_data->cb  = cb;
+    restart_data->arg = arg;
+    param.user_data   = restart_data;
 
-    request = ucp_ep_flush_nbx(ep, &param);
+    request = ucp_ep_flush_internal(ep, 0, &param, NULL,
+                                    ucp_ep_flushed_callback, "ep_restart");
     if (UCS_PTR_IS_ERR(request)) {
-        ucs_free(tmp_q);
+        ucs_free(restart_data);
         return UCS_PTR_STATUS(request);
     }
 

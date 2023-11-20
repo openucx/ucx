@@ -115,7 +115,10 @@ public:
     };
 
     test_proto_reset() :
-        m_msg_size(mb_to_bytes * 10), m_sbuf(m_msg_size), m_rbuf(m_msg_size)
+        m_msg_size(UCS_MBYTE * 10),
+        m_sbuf(m_msg_size),
+        m_rbuf(m_msg_size),
+        m_completed(0)
     {
     }
 
@@ -276,6 +279,12 @@ public:
         EXPECT_EQ(m_sbuf, m_rbuf);
     }
 
+    static void restart_completed(ucp_ep_h ep, void *arg)
+    {
+        unsigned *completed_p = (unsigned*)arg;
+        *completed_p          = 1;
+    }
+
     virtual void
     wait_and_restart(void *sreq, void *rreq, const std::string &expected_proto)
     {
@@ -287,12 +296,11 @@ public:
         }
 
         EXPECT_LT(dt_iter->offset, dt_iter->length);
-        ASSERT_UCS_OK(ucp_ep_restart_nb(sender().ep()));
+        ASSERT_UCS_OK(ucp_ep_pending_schedule_restart(sender().ep(),
+                                                      restart_completed,
+                                                      &m_completed));
 
-        uint8_t *op_id_flags =
-                (uint8_t*)&req->send.proto_config->select_param.op_id_flags;
-        wait_for_value(op_id_flags, (uint8_t)(*op_id_flags |
-                                              UCP_PROTO_SELECT_OP_FLAG_RESUME));
+        wait_for_value(&m_completed, (unsigned)1);
         EXPECT_STREQ(expected_proto.c_str(),
                      req->send.proto_config->proto->name);
     }
@@ -321,19 +329,18 @@ public:
     {
         add_variant_with_value(variants,
                                UCP_FEATURE_TAG | UCP_FEATURE_RMA |
-                                       UCP_FEATURE_STREAM | UCP_FEATURE_AM,
+                               UCP_FEATURE_STREAM | UCP_FEATURE_AM,
                                0, "");
     }
 
-    static const size_t mb_to_bytes = 1048576;
     size_t m_msg_size;
     ucp_mem_h m_memh;
     ucp_rkey_h m_rkey;
     std::vector<char> m_sbuf;
     std::vector<char> m_rbuf;
+    unsigned m_completed;
 };
 
-#ifdef ENABLE_DEBUG_DATA
 UCS_TEST_P(test_proto_reset, eager_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
     reset_protocol(TAG, "egr/multi/bcopy");
@@ -411,10 +418,11 @@ UCS_TEST_P(test_proto_reset, rndv_put, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
     reset_protocol(TAG, "rndv/am/bcopy");
 }
 
-#endif
-
 UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset, ib, "ib")
 
+/* The following tests require ENABLE_DEBUG_DATA flag in order to access
+ * req->recv.proto_rndv_request, which is only present with this flag. */
+#ifdef ENABLE_DEBUG_DATA
 class test_proto_reset_rndv_get : public test_proto_reset {
 protected:
     void wait_and_restart(void *sreq, void *rreq,
@@ -431,12 +439,11 @@ protected:
         ASSERT_LT(rndv_req->send.state.dt_iter.offset,
                   rndv_req->send.state.dt_iter.length);
 
-        ASSERT_UCS_OK(ucp_ep_restart_nb(receiver().ep()));
+        ASSERT_UCS_OK(ucp_ep_pending_schedule_restart(receiver().ep(),
+                                                      restart_completed,
+                                                      &m_completed));
 
-        uint8_t *op_id_flags =
-                (uint8_t*)&rndv_req->send.proto_config->select_param.op_id_flags;
-        wait_for_value(op_id_flags, (uint8_t)(*op_id_flags |
-                                              UCP_PROTO_SELECT_OP_FLAG_RESUME));
+        wait_for_value(&m_completed, (unsigned)1);
         EXPECT_STREQ(expected_proto.c_str(),
                      rndv_req->send.proto_config->proto->name);
     }
@@ -456,8 +463,7 @@ public:
     void init()
     {
         test_proto_reset::init();
-        static const size_t kb_to_bytes = 1024;
-        m_msg_size                      = 50 * kb_to_bytes;
+        m_msg_size = 50 * UCS_KBYTE;
     }
 
     void cleanup()
@@ -555,12 +561,10 @@ protected:
 
         m_req = req;
         hook_uct_cbs();
-        ASSERT_UCS_OK(ucp_ep_restart_nb(ep));
+        ASSERT_UCS_OK(ucp_ep_pending_schedule_restart(ep, restart_completed,
+                                                      &m_completed));
 
-        uint8_t *op_id_flags =
-                (uint8_t*)&req->send.proto_config->select_param.op_id_flags;
-        wait_for_value(op_id_flags, (uint8_t)(*op_id_flags |
-                                              UCP_PROTO_SELECT_OP_FLAG_RESUME));
+        wait_for_value(&m_completed, (unsigned)1);
         EXPECT_STREQ(expected_proto.c_str(),
                      req->send.proto_config->proto->name);
     }
@@ -578,3 +582,5 @@ UCS_TEST_P(test_proto_reset_atp, atp, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_atp, ib, "ib")
+
+#endif

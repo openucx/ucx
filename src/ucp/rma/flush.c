@@ -424,7 +424,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     return req + 1;
 }
 
-static void ucp_ep_flushed_callback(ucp_request_t *req)
+void ucp_ep_flushed_callback(ucp_request_t *req)
 {
     ucp_request_complete_send(req, req->status);
 }
