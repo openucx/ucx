@@ -190,29 +190,36 @@ enum {
 
 /* TODO: optimize endpoint memory footprint */
 enum {
-    UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(0),  /* EP was disconnected */
-    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1),  /* EP was created as internal */
-    UCT_UD_EP_FLAG_HAS_PENDING       = UCS_BIT(2),  /* EP has some pending requests */
-    UCT_UD_EP_FLAG_CONNECTED         = UCS_BIT(3),  /* EP was connected to the peer */
-    UCT_UD_EP_FLAG_ON_CEP            = UCS_BIT(4),  /* EP was inserted to connection
-                                                       matching context */
-    UCT_UD_EP_FLAG_CONNECT_TO_EP     = UCS_BIT(5),  /* EP was connected to peer's EP */
+    UCT_UD_EP_FLAG_DISCONNECTED  = UCS_BIT(0), /* EP was disconnected */
+    UCT_UD_EP_FLAG_PRIVATE       = UCS_BIT(1), /* EP was created as internal */
+    UCT_UD_EP_FLAG_HAS_PENDING   = UCS_BIT(2), /* EP has some pending requests
+                                                  */
+    UCT_UD_EP_FLAG_CONNECTED     = UCS_BIT(3), /* EP was connected to the peer
+                                                  */
+    UCT_UD_EP_FLAG_ON_CEP        = UCS_BIT(4), /* EP was inserted to connection
+                                                  matching context */
+    UCT_UD_EP_FLAG_CONNECT_TO_EP = UCS_BIT(5), /* EP was connected to peer's EP
+                                                  */
+    UCT_UD_EP_FLAG_AM_POSTED     = UCS_BIT(6), /* AM send operation was posted
+                                                  on EP */
 
     /* debug flags */
-    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(6),  /* CREQ message was received */
-    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(7),  /* CREP message was received */
-    UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(8),  /* CREQ message was sent */
-    UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(9),  /* CREP message was sent */
-    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(10),  /* CREQ message is NOT sent, because
-                                                       connection establishment process
-                                                       is driven by remote side. */
-    UCT_UD_EP_FLAG_TX_NACKED         = UCS_BIT(11), /* Last psn was acked with NACK */
+    UCT_UD_EP_FLAG_CREQ_RCVD     = UCS_BIT(7), /* CREQ message was received */
+    UCT_UD_EP_FLAG_CREP_RCVD     = UCS_BIT(8), /* CREP message was received */
+    UCT_UD_EP_FLAG_CREQ_SENT     = UCS_BIT(9), /* CREQ message was sent */
+    UCT_UD_EP_FLAG_CREP_SENT     = UCS_BIT(10), /* CREP message was sent */
+    UCT_UD_EP_FLAG_CREQ_NOTSENT  = UCS_BIT(11), /* CREQ message is NOT sent,
+                                                   because connection
+                                                   establishment process is
+                                                   driven by remote side. */
+    UCT_UD_EP_FLAG_TX_NACKED     = UCS_BIT(12), /* Last psn was acked with NACK
+                                                   */
 
     /* Endpoint is currently executing the pending queue */
 #if UCS_ENABLE_ASSERT
-    UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(12)
+    UCT_UD_EP_FLAG_IN_PENDING = UCS_BIT(13)
 #else
-    UCT_UD_EP_FLAG_IN_PENDING        = 0
+    UCT_UD_EP_FLAG_IN_PENDING = 0
 #endif
 };
 

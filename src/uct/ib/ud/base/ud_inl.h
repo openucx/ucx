@@ -276,3 +276,11 @@ uct_ud_iface_async_progress(uct_ud_iface_t *iface)
         uct_ud_iface_raise_pending_async_ev(iface);
     }
 }
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_ep_set_am_flag(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+{
+    if (neth->packet_type & UCT_UD_PACKET_FLAG_AM) {
+        ep->flags |= UCT_UD_EP_FLAG_AM_POSTED;
+    }
+}

@@ -91,6 +91,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
     ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
 
+    uct_ud_ep_set_am_flag(&ep->super, neth);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
 
     uct_ib_mlx5_set_ctrl_seg(ctrl, iface->tx.wq.sw_pi, MLX5_OPCODE_SEND, 0,
