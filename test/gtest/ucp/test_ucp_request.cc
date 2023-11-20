@@ -17,7 +17,7 @@ extern "C" {
 
 class test_ucp_request : public ucp_test {
 public:
-    virtual void init()
+    virtual void init() override
     {
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
@@ -122,7 +122,7 @@ public:
     {
     }
 
-    void init()
+    void init() override
     {
         if (!m_ucp_config->ctx.proto_enable) {
             UCS_TEST_SKIP_R("reset is not supported for proto v1");
@@ -133,7 +133,7 @@ public:
         init_rkey();
     }
 
-    void cleanup()
+    void cleanup() override
     {
         ucp_rkey_destroy(m_rkey);
         ucp_mem_unmap(receiver().ucph(), m_memh);
@@ -460,13 +460,13 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_rndv_get, ib, "ib")
 
 class test_proto_reset_atp : public test_proto_reset {
 public:
-    void init()
+    void init() override
     {
         test_proto_reset::init();
         m_msg_size = 50 * UCS_KBYTE;
     }
 
-    void cleanup()
+    void cleanup() override
     {
         restore_uct_cbs();
         test_proto_reset::cleanup();

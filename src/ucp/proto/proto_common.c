@@ -192,13 +192,13 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                            UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
         (context->config.ext.rma_zcopy_seg_size != UCS_MEMUNITS_AUTO)) {
         *max_frag_p = ucs_min(context->config.ext.rma_zcopy_seg_size,
-                              *max_frag_p);
-    }
-
-    if (*max_frag_p < *min_frag_p) {
-        ucs_warn("max tl fragment size (%lu) cannot be smaller than (%lu), "
-                 "using min value supported by transport",
-                 *max_frag_p, *min_frag_p);
+                                 *max_frag_p);
+        if (*max_frag_p < *min_frag_p) {
+            ucs_warn("max tl fragment size (%lu) cannot be smaller than (%lu),"
+                     " using min value supported by transport",
+                     *max_frag_p, *min_frag_p);
+            *max_frag_p = *min_frag_p;
+        }
     }
 }
 
