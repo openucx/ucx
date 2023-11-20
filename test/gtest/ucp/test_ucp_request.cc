@@ -220,7 +220,7 @@ public:
     {
         ucp_request_param_t param = {0};
         void *rreq                = NULL;
-        void *sreq;
+        void *sreq                = NULL;
 
         ucs::fill_random(m_sbuf);
         ucs::fill_random(m_rbuf);
