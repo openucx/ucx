@@ -588,6 +588,30 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 }
 #endif
 
+#if ENABLE_NT_BUFFER_TRANSFER
+static size_t ucs_cpu_ntbt_thresh_min(size_t user_val)
+{
+    if (user_val != UCS_MEMUNITS_AUTO) {
+        return user_val;
+    }
+
+    if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD)) {
+        return ((ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) >> 5) * 29);
+    } else {
+        return UCS_MEMUNITS_INF;
+    }
+}
+
+static size_t ucs_cpu_ntbt_thresh_max(size_t user_val)
+{
+    if (user_val != UCS_MEMUNITS_AUTO) {
+        return user_val;
+    } else {
+        return UCS_MEMUNITS_INF;
+    }
+}
+#endif
+
 void ucs_cpu_init()
 {
 #if ENABLE_BUILTIN_MEMCPY
@@ -597,6 +621,12 @@ void ucs_cpu_init()
     ucs_global_opts.arch.builtin_memcpy_max =
         ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_max,
                               ucs_cpu_builtin_memcpy[ucs_arch_get_cpu_vendor()].max);
+#endif
+#if ENABLE_NT_BUFFER_TRANSFER
+    ucs_global_opts.arch.nt_buffer_transfer_min =
+        ucs_cpu_ntbt_thresh_min(ucs_global_opts.arch.nt_buffer_transfer_min);
+    ucs_global_opts.arch.nt_buffer_transfer_max =
+        ucs_cpu_ntbt_thresh_max(ucs_global_opts.arch.nt_buffer_transfer_max);
 #endif
 }
 
