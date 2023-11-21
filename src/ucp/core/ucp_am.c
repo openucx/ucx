@@ -1350,7 +1350,7 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
 {
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
-                           data, length, UCS_ARCH_MEMCPY_NT_SOURCE);
+                           data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
     first_rdesc->am_first.remaining -= length;
 }
 
@@ -1508,11 +1508,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
      * for middle fragments processing. */
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            first_rdesc + 1, first_ftr, sizeof(*first_ftr),
-                           UCS_ARCH_MEMCPY_NT_SOURCE);
+                           UCS_ARCH_MEMCPY_NT_SOURCE, sizeof(*first_ftr));
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
                                                sizeof(*first_ftr)),
-                           hdr, sizeof(*hdr), UCS_ARCH_MEMCPY_NT_SOURCE);
+                           hdr, sizeof(*hdr), UCS_ARCH_MEMCPY_NT_SOURCE,
+                           sizeof(*hdr));
 
     /* Copy user header to the end of message */
     user_hdr = UCS_PTR_BYTE_OFFSET(first_ftr, -user_hdr_length);
@@ -1521,7 +1522,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                                                first_rdesc->payload_offset +
                                                        first_ftr->total_size),
                            user_hdr, user_hdr_length,
-                           UCS_ARCH_MEMCPY_NT_SOURCE);
+                           UCS_ARCH_MEMCPY_NT_SOURCE, user_hdr_length);
 
     /* Copy all already arrived middle fragments to the data buffer */
     ucs_queue_for_each_safe(mid_rdesc, iter, &ep_ext->am.mid_rdesc_q,

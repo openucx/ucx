@@ -993,7 +993,7 @@ void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
     packet->header = header;
     /* suppress false positive diagnostic from uct_mm_ep_am_common_send call */
     /* cppcheck-suppress ctunullpointer */
-    ucs_memcpy_relaxed(packet->payload, payload, length, hint);
+    ucs_memcpy_relaxed(packet->payload, payload, length, hint, length);
 }
 
 

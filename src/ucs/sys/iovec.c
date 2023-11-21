@@ -45,10 +45,10 @@ size_t ucs_iov_copy(const struct iovec *iov, size_t iov_cnt,
 
         if (dir == UCS_IOV_COPY_FROM_BUF) {
             ucs_memcpy_relaxed(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len,
-                               UCS_ARCH_MEMCPY_NT_SOURCE);
+                               UCS_ARCH_MEMCPY_NT_SOURCE, len);
         } else if (dir == UCS_IOV_COPY_TO_BUF) {
             ucs_memcpy_relaxed(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len,
-                               UCS_ARCH_MEMCPY_NT_DEST);
+                               UCS_ARCH_MEMCPY_NT_DEST, len);
         }
 
         iov_offset  = 0;

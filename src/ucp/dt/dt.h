@@ -72,7 +72,7 @@ ucp_memcpy_pack(void *buffer, const void *data, size_t length,
                 const char *name)
 {
     UCS_PROFILE_NAMED_CALL(name, ucs_memcpy_relaxed, buffer, data, length,
-                           UCS_ARCH_MEMCPY_NT_DEST);
+                           UCS_ARCH_MEMCPY_NT_DEST, length);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -80,7 +80,7 @@ ucp_memcpy_unpack(void *buffer, const void *data, size_t length,
                        const char *name)
 {
     UCS_PROFILE_NAMED_CALL(name, ucs_memcpy_relaxed, buffer, data, length,
-                           UCS_ARCH_MEMCPY_NT_SOURCE);
+                           UCS_ARCH_MEMCPY_NT_SOURCE, length);
 }
 
 #endif /* UCP_DT_H_ */
