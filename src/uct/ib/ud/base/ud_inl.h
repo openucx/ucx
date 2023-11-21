@@ -186,6 +186,11 @@ uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     uct_ud_iface_complete_tx_skb(iface, ep, skb);
 }
 
+static UCS_F_ALWAYS_INLINE void uct_ud_ep_set_am_flag(uct_ud_ep_t *ep)
+{
+    ep->flags |= UCT_UD_EP_FLAG_AM_POSTED;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
                      uct_ud_send_skb_t **skb_p)
@@ -195,6 +200,7 @@ uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
 
     UCT_CHECK_AM_ID(id);
 
+    uct_ud_ep_set_am_flag(ep);
     skb = uct_ud_ep_get_tx_skb(iface, ep);
     if (!skb) {
         return UCS_ERR_NO_RESOURCE;
@@ -274,13 +280,5 @@ uct_ud_iface_async_progress(uct_ud_iface_t *iface)
     ev_count = ops->async_progress(iface);
     if (ev_count > 0) {
         uct_ud_iface_raise_pending_async_ev(iface);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_ud_ep_set_am_flag(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    if (neth->packet_type & UCT_UD_PACKET_FLAG_AM) {
-        ep->flags |= UCT_UD_EP_FLAG_AM_POSTED;
     }
 }

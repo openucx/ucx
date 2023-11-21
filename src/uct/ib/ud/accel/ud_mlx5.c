@@ -91,7 +91,6 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
     ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
 
-    uct_ud_ep_set_am_flag(&ep->super, neth);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
 
     uct_ib_mlx5_set_ctrl_seg(ctrl, iface->tx.wq.sw_pi, MLX5_OPCODE_SEND, 0,
@@ -271,6 +270,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ud_mlx5_max_am_iov(), func_name);
 
     uct_ud_enter(&iface->super);
+
+    if (packet_flags & UCT_UD_PACKET_FLAG_AM) {
+        uct_ud_ep_set_am_flag(&ep->super);
+    }
 
     skb = uct_ud_ep_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {

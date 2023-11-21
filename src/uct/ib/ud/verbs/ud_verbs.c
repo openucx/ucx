@@ -70,7 +70,6 @@ uct_ud_verbs_post_send(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
                        unsigned max_log_sge)
 {
     struct ibv_send_wr *bad_wr;
-    uct_ud_neth_t *neth;
     int UCS_V_UNUSED ret;
 
     if ((send_flags & IBV_SEND_SIGNALED) ||
@@ -89,9 +88,7 @@ uct_ud_verbs_post_send(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
     wr->wr.ud.remote_qpn = ep->peer_address.dest_qpn;
     wr->wr.ud.ah         = ep->peer_address.ah;
 
-    neth = (uct_ud_neth_t*)iface->tx.sge[0].addr;
-    uct_ud_ep_set_am_flag(&ep->super, neth);
-    UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
+    UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t*)iface->tx.sge[0].addr);
     ret = ibv_post_send(iface->super.qp, wr, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
 
