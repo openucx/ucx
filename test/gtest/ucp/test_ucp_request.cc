@@ -118,7 +118,9 @@ public:
         m_msg_size(UCS_MBYTE * 10),
         m_sbuf(m_msg_size),
         m_rbuf(m_msg_size),
-        m_completed(0)
+        m_completed(0),
+        m_memh(NULL),
+        m_rkey(NULL)
     {
     }
 
@@ -136,7 +138,7 @@ public:
     void cleanup() override
     {
         ucp_rkey_destroy(m_rkey);
-        ucp_mem_unmap(receiver().ucph(), m_memh);
+        ASSERT_UCS_OK(ucp_mem_unmap(receiver().ucph(), m_memh));
         ucp_test::cleanup();
     }
 
@@ -334,11 +336,11 @@ public:
     }
 
     size_t m_msg_size;
-    ucp_mem_h m_memh;
-    ucp_rkey_h m_rkey;
     std::vector<char> m_sbuf;
     std::vector<char> m_rbuf;
     unsigned m_completed;
+    ucp_mem_h m_memh;
+    ucp_rkey_h m_rkey;
 };
 
 UCS_TEST_P(test_proto_reset, eager_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
