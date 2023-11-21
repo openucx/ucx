@@ -112,7 +112,7 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
     case UCP_DATATYPE_CONTIG:
         ucp_dt_contig_pack(worker, dest,
                            UCS_PTR_BYTE_OFFSET(src, state->offset),
-                           length, mem_type);
+                           length, mem_type, length);
         result_len = length;
         break;
 

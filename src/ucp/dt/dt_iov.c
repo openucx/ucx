@@ -39,7 +39,7 @@ void ucp_dt_iov_gather(ucp_worker_h worker, void *dest, const ucp_dt_iov_t *iov,
         ucp_dt_contig_pack(worker, UCS_PTR_BYTE_OFFSET(dest, length_it),
                            UCS_PTR_BYTE_OFFSET(iov[*iovcnt_offset].buffer,
                                                *iov_offset),
-                           item_len_to_copy, mem_type);
+                           item_len_to_copy, mem_type, item_len);
         length_it += item_len_to_copy;
 
         ucs_assert(length_it <= length);
@@ -70,7 +70,7 @@ size_t ucp_dt_iov_scatter(ucp_worker_h worker, const ucp_dt_iov_t *iov,
                              UCS_PTR_BYTE_OFFSET(iov[*iovcnt_offset].buffer,
                                                  *iov_offset),
                              UCS_PTR_BYTE_OFFSET(src, length_it),
-                             item_len_to_copy, mem_type);
+                             item_len_to_copy, mem_type, item_len);
         length_it += item_len_to_copy;
 
         ucs_assert(length_it <= length);
