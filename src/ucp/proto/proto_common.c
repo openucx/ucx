@@ -191,9 +191,11 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                            UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                            UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
         (context->config.ext.rma_zcopy_seg_size != UCS_MEMUNITS_AUTO)) {
-        if (*max_frag_p < context->config.ext.rma_zcopy_seg_size) {
-            ucs_warn("max tl fragment size (%lu) cannot be smaller than (%lu)",
-                     *max_frag_p, *min_frag_p);
+        if (context->config.ext.rma_zcopy_seg_size < *min_frag_p) {
+            ucs_warn("requested fragment size is smaller than minimum allowed "
+                     "(%lu), adjusting it",
+                     *min_frag_p);
+            *max_frag_p = *min_frag_p;
         } else {
             *max_frag_p = ucs_min(context->config.ext.rma_zcopy_seg_size,
                                      *max_frag_p);
