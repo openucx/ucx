@@ -753,11 +753,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    if (worker->context->config.worker_strong_fence) {
+    /* TODO: need to fix remote flush to ensure ordering in case of relaxed
+     * ordering, then calling weak fence is not needed in strong mode. */
+    status = ucp_worker_fence_weak(worker);
+
+    if (worker->context->config.worker_strong_fence &&
+        !UCS_STATUS_IS_ERR(status)) {
         /* force using flush on EPs */
         status = ucp_worker_fence_strong(worker);
-    } else {
-        status = ucp_worker_fence_weak(worker);
     }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
