@@ -14,11 +14,11 @@
 
 BEGIN_C_DECLS
 
-#define UCS_ARCH_GLOBAL_OPTS_INITALIZER {   \
-    .builtin_memcpy_min = UCS_MEMUNITS_AUTO, \
-    .builtin_memcpy_max = UCS_MEMUNITS_AUTO, \
+#define UCS_ARCH_GLOBAL_OPTS_INITALIZER { \
+    .builtin_memcpy_min     = UCS_MEMUNITS_AUTO, \
+    .builtin_memcpy_max     = UCS_MEMUNITS_AUTO, \
     .nt_buffer_transfer_min = UCS_MEMUNITS_AUTO, \
-    .nt_buffer_transfer_max = UCS_MEMUNITS_AUTO \
+    .nt_buffer_transfer_max = UCS_MEMUNITS_AUTO  \
 }
 
 /* built-in memcpy & nt-buffer-transfer config */

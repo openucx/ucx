@@ -97,7 +97,8 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 #endif
 
 static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
-                                       ucs_arch_memcpy_hint_t hint, size_t total_len)
+                                       ucs_arch_memcpy_hint_t hint,
+                                       size_t total_len)
 {
 #if ENABLE_BUILTIN_MEMCPY
     if (ucs_unlikely((len > ucs_global_opts.arch.builtin_memcpy_min) &&
@@ -115,11 +116,13 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
 #endif
 
 #ifdef ENABLE_NT_BUFFER_TRANSFER
-    ucs_x86_nt_buffer_transfer(dst, src, len, hint);
-    return dst;
-#else
-    return memcpy(dst, src, len);
+    if (ucs_unlikely((total_len > ucs_global_opts.arch.nt_buffer_transfer_min) &&
+                     (total_len < ucs_global_opts.arch.nt_buffer_transfer_max))) {
+        ucs_x86_nt_buffer_transfer(dst, src, len, hint);
+        return dst;
+    }
 #endif
+    return memcpy(dst, src, len);
 }
 
 static UCS_F_ALWAYS_INLINE void
