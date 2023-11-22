@@ -529,7 +529,7 @@ static void ucs_rcache_region_invalidate_internal(ucs_rcache_t *rcache,
         released = ucs_rcache_region_put_internal(rcache, region, flags);
         if (!released) {
             UCS_PROFILE_NAMED_CALL_VOID_ALWAYS(
-                    "release", rcache->params.ops->release_region,
+                    "unstack", rcache->params.ops->unstack_region,
                     rcache->params.context, rcache, region);
         }
     } else {
@@ -654,8 +654,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
      * This way we avoid queuing endless events on the invalidation queue when
      * no rcache operations are performed to clean it.
      */
-    if (!(rcache->params.flags & UCS_RCACHE_FLAG_SYNC_EVENTS) &&
-        !pthread_rwlock_trywrlock(&rcache->pgt_lock)) {
+    if (!pthread_rwlock_trywrlock(&rcache->pgt_lock)) {
         /* coverity[double_lock] */
         ucs_rcache_invalidate_range(rcache, start, end,
                                     UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC);

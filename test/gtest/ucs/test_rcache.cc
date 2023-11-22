@@ -94,7 +94,7 @@ protected:
     virtual ucs_rcache_params_t rcache_params()
     {
         static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb,
-                                             dump_region_cb, release_region_cb};
+                                             dump_region_cb, unstack_region_cb};
         ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
         params.region_struct_size         = sizeof(region);
         return params;
@@ -215,7 +215,7 @@ private:
                         ucs_derived_of(r, struct region), buf, max);
     }
 
-    static void release_region_cb(void *context, ucs_rcache_t *rcache,
+    static void unstack_region_cb(void *context, ucs_rcache_t *rcache,
                                   ucs_rcache_region_t *r)
     {
     }

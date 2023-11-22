@@ -182,7 +182,7 @@ static ucs_rcache_ops_t uct_xpmem_rcache_ops = {
     .mem_reg        = uct_xpmem_rcache_mem_reg,
     .mem_dereg      = uct_xpmem_rcache_mem_dereg,
     .dump_region    = uct_xpmem_rcache_dump_region,
-    .release_region = ucs_empty_function
+    .unstack_region = ucs_empty_function
 };
 
 static UCS_F_NOINLINE ucs_status_t

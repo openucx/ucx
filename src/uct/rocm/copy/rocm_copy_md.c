@@ -394,7 +394,7 @@ static ucs_rcache_ops_t uct_rocm_copy_rcache_ops = {
     .mem_reg        = uct_rocm_copy_rcache_mem_reg_cb,
     .mem_dereg      = uct_rocm_copy_rcache_mem_dereg_cb,
     .dump_region    = uct_rocm_copy_rcache_dump_region_cb,
-    .release_region = ucs_empty_function
+    .unstack_region = ucs_empty_function
 };
 
 static ucs_status_t
