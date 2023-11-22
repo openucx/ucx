@@ -610,6 +610,15 @@ static size_t ucs_cpu_nt_bt_thresh_max(size_t user_val)
         return UCS_MEMUNITS_INF;
     }
 }
+
+static size_t ucs_cpu_nt_dest_thresh()
+{
+    if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD)) {
+        return ((ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) >> 5) * 29);
+    } else {
+        return UCS_MEMUNITS_INF;
+    }
+}
 #endif
 
 void ucs_cpu_init()
@@ -627,6 +636,7 @@ void ucs_cpu_init()
         ucs_cpu_nt_bt_thresh_min(ucs_global_opts.arch.nt_buffer_transfer_min);
     ucs_global_opts.arch.nt_buffer_transfer_max =
         ucs_cpu_nt_bt_thresh_max(ucs_global_opts.arch.nt_buffer_transfer_max);
+    ucs_global_opts.arch.nt_dest_threshold = ucs_cpu_nt_dest_thresh();
 #endif
 }
 
@@ -746,12 +756,12 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 #define YMM_SZ      32
 
 static UCS_F_ALWAYS_INLINE
-size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len)
+size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len, int hint)
 {
     __m256i y0, y1, y2, y3;
     size_t offset;
 
-    ucs_nt_write_prefetch((char *)(((uintptr_t)dst & ~0x3f) + 1 * 64));
+    ucs_nt_write_prefetch((char *)dst + 1 * 64);
     offset = 128 - ((uintptr_t)dst & 0x3f);
 
     /* copy the first misaligned bytes. 65 < offset < 128 */
@@ -779,6 +789,11 @@ size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len)
                 _mm256_stream_si256((__m256i *)((char *)dst + offset + 2 * 32), y2);
                 _mm256_stream_si256((__m256i *)((char *)dst + offset + 3 * 32), y3);
 
+                if ((hint & UCS_ARCH_MEMCPY_NT_SOURCE) && (len > 256)) {
+                    ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
+                    ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
+                }
+
                 offset += 4 * 32;
                 len -= 128;
             }
@@ -792,6 +807,11 @@ size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len)
                 _mm256_stream_si256((__m256i *)((char *)dst + offset + 32), y1);
                 _mm256_stream_si256((__m256i *)((char *)dst + offset + 2 * 32), y2);
                 _mm256_stream_si256((__m256i *)((char *)dst + offset + 3 * 32), y3);
+
+                if ((hint & UCS_ARCH_MEMCPY_NT_SOURCE) && (len > 256)) {
+                    ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
+                    ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
+                }
 
                 offset += 4 * 32;
                 len -= 128;
@@ -830,7 +850,7 @@ size_t ucs_cpu_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
     __m256i y0, y1, y2, y3;
     size_t offset;
 
-    ucs_nt_read_prefetch((char *)(((uintptr_t)src & ~0x3f) + 1 * 64));
+    ucs_nt_read_prefetch((char *)src + 1 * 64);
     offset = 128 - ((uintptr_t)src & 0x3f);
     ucs_nt_read_prefetch((char *)src + offset);
     ucs_nt_read_prefetch((char *)src + offset + 1 * 64);
@@ -859,15 +879,11 @@ size_t ucs_cpu_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
             _mm256_storeu_si256((__m256i_u *)((char *)dst + offset + 2 * 32), y2);
             _mm256_storeu_si256((__m256i_u *)((char *)dst + offset + 3 * 32), y3);
 
-            if (!(((offset - 1) >> 7) & 1) && (len > 256)) {
-                ucs_nt_read_prefetch((char *)src + offset + 2 * 64);
+            if (len > 256) {
                 ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
                 ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
-                ucs_nt_read_prefetch((char *)src + offset + 5 * 64);
-                ucs_write_prefetch((char *)dst + offset + 2 * 64);
                 ucs_write_prefetch((char *)dst + offset + 3 * 64);
                 ucs_write_prefetch((char *)dst + offset + 4 * 64);
-                ucs_write_prefetch((char *)dst + offset + 5 * 64);
             }
 
             offset += 4 * 32;
@@ -885,15 +901,11 @@ size_t ucs_cpu_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
             _mm256_store_si256((__m256i *)((char *)dst + offset + 2 * 32), y2);
             _mm256_store_si256((__m256i *)((char *)dst + offset + 3 * 32), y3);
 
-            if (!(((offset - 1) >> 7) & 1) && (len > 256)) {
-                ucs_nt_read_prefetch((char *)src + offset + 2 * 64);
+            if (len > 256) {
                 ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
                 ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
-                ucs_nt_read_prefetch((char *)src + offset + 5 * 64);
-                ucs_write_prefetch((char *)dst + offset + 2 * 64);
                 ucs_write_prefetch((char *)dst + offset + 3 * 64);
                 ucs_write_prefetch((char *)dst + offset + 4 * 64);
-                ucs_write_prefetch((char *)dst + offset + 5 * 64);
             }
 
             offset += 4 * 32;
@@ -910,7 +922,7 @@ size_t ucs_cpu_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
  * application can choose the cache hotness of the final buffer
  */
 void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
-                                ucs_arch_memcpy_hint_t hint)
+                                ucs_arch_memcpy_hint_t hint, size_t total_len)
 {
     __m256i y0, y1, y2, y3;
     size_t tail_bytes;
@@ -919,8 +931,13 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
         goto copy_bytes_le_128;
     }
 
+    /* Give precedence to non temporal destination */
+    if (ucs_unlikely(total_len > ucs_global_opts.arch.nt_dest_threshold)) {
+        hint |= UCS_ARCH_MEMCPY_NT_DEST;
+    }
+
     if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
-        tail_bytes = ucs_cpu_nt_dst_buffer_transfer(dst, src, len);
+        tail_bytes = ucs_cpu_nt_dst_buffer_transfer(dst, src, len, hint);
     } else if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
         tail_bytes = ucs_cpu_nt_src_buffer_transfer(dst, src, len);
     } else {

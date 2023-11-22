@@ -27,6 +27,7 @@ typedef struct ucs_arch_global_opts {
     size_t builtin_memcpy_max;
     size_t nt_buffer_transfer_min;
     size_t nt_buffer_transfer_max;
+    size_t nt_dest_threshold;
 } ucs_arch_global_opts_t;
 
 END_C_DECLS
