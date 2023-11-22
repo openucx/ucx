@@ -734,12 +734,13 @@ typedef enum {
                                                         operation, fail if the
                                                         operation cannot be
                                                         completed immediately */
-    UCP_OP_ATTR_FLAG_MULTI_SEND     = UCS_BIT(19)  /**< optimize for bandwidth of
+    UCP_OP_ATTR_FLAG_MULTI_SEND     = UCS_BIT(19),  /**< optimize for bandwidth of
                                                         multiple in-flight operations,
                                                         rather than for the latency
                                                         of a single operation.
                                                         This flag and UCP_OP_ATTR_FLAG_FAST_CMPL
                                                         are mutually exclusive. */
+    UCP_OP_ATTR_FIELD_PRIORITY      = UCS_BIT(20)   /**< priority field*/
 } ucp_op_attr_t;
 
 
@@ -814,6 +815,19 @@ enum ucp_am_handler_param_field {
      */
     UCP_AM_HANDLER_PARAM_FIELD_ARG     = UCS_BIT(3)
 };
+
+/**
+ * @ingroup UCP_COMM
+ * @brief UCP request priority level
+ * 
+ * The enumeration lists available priority levels which are set per request, 
+ * Message priority is an optional attribute of @ref ucp_request_param_t, 
+ * value will be propogated to transports which are capable of prioritizing messages.
+*/
+typedef enum {
+    UCP_PRIORITY_DEFAULT = UCS_BIT(0),
+    UCP_PRIORITY_HIGH    = UCS_BIT(1)
+} ucp_priority_t;
 
 
 /**
@@ -1819,6 +1833,11 @@ typedef struct {
      */
     ucp_mem_h memh;
 
+    /**
+     * Enumerated value, indicates message priority, priority is not guaranteed 
+     * and depends on the capabilities of the selected transport.
+     */
+    ucp_priority_t priority;
 } ucp_request_param_t;
 
 
