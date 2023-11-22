@@ -10,51 +10,11 @@
 #include <ucs/sys/preprocessor.h>
 #include <ucs/profile/profile.h>
 #include <ucs/async/eventfd.h>
-#include <cuda_runtime.h>
 #include <cuda.h>
 #include <nvml.h>
 
 
 const char *uct_cuda_base_cu_get_error_string(CUresult result);
-
-
-#if CUDART_VERSION >= 11010
-#define UCT_CUDA_FUNC_PTX_ERR(_result, _func, _err_str)         \
-    do {                                                        \
-        if (_result == cudaErrorUnsupportedPtxVersion) {        \
-            ucs_error("%s() failed: %s",                        \
-                      UCS_PP_MAKE_STRING(_func), _err_str);     \
-        }                                                       \
-    } while (0);
-#else
-#define UCT_CUDA_FUNC_PTX_ERR(_result, _func, _err_str)         \
-    do {                                                        \
-    } while (0);
-#endif
-
-
-#define UCT_CUDA_CALL(_log_level, _func, ...) \
-    ({ \
-        ucs_status_t _status = UCS_OK; \
-        { \
-            cudaError_t _result = UCS_PROFILE_CALL_ALWAYS(_func, __VA_ARGS__); \
-            if (cudaSuccess != _result) { \
-                if ((_log_level) != UCS_LOG_LEVEL_ERROR) { \
-                    UCT_CUDA_FUNC_PTX_ERR(_result, _func, \
-                                          cudaGetErrorString(_result)); \
-                } \
-                ucs_log((_log_level), "%s() failed: %s", \
-                        UCS_PP_MAKE_STRING(_func), \
-                        cudaGetErrorString(_result)); \
-                _status = UCS_ERR_IO_ERROR; \
-            } \
-        } \
-        _status; \
-    })
-
-
-#define UCT_CUDA_CALL_LOG_ERR(_func, ...) \
-    UCT_CUDA_CALL(UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
 
 
 #define UCT_NVML_FUNC(_func, _log_level) \
