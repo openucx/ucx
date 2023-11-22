@@ -778,7 +778,10 @@ void ucp_proto_request_restart(ucp_request_t *req)
     }
 
     /* Select a protocol with resume request support */
-    proto_config->select_param.op_id_flags |= UCP_PROTO_SELECT_OP_FLAG_RESUME;
+    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
+        proto_config->select_param.op_id_flags |=
+                UCP_PROTO_SELECT_OP_FLAG_RESUME;
+    }
 
     status = ucp_proto_request_init(req);
     if (status == UCS_OK) {

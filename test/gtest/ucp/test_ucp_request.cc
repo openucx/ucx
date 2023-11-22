@@ -353,12 +353,14 @@ UCS_TEST_P(test_proto_reset, eager_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
     reset_protocol(TAG, "egr/multi/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, get_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, get_bcopy, !has_transport("ib"),
+                     "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     reset_protocol(RMA_GET, "get/am/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, put_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, put_bcopy, !has_transport("ib"),
+                     "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     reset_protocol(RMA_PUT, "put/am/bcopy");
 }
@@ -386,8 +388,9 @@ UCS_TEST_P(test_proto_reset, ucp_am_bcopy, "ZCOPY_THRESH=inf",
     reset_protocol(AM, "am/egr/multi/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, get_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf",
-           "RMA_ZCOPY_SEG_SIZE=1024")
+UCS_TEST_SKIP_COND_P(test_proto_reset, get_zcopy, !has_transport("ib"),
+                     "ZCOPY_THRESH=0", "RNDV_THRESH=inf",
+                     "RMA_ZCOPY_SEG_SIZE=1024")
 {
     reset_protocol(RMA_GET, "get/am/bcopy");
 }
@@ -417,10 +420,11 @@ UCS_TEST_P(test_proto_reset, ucp_am_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 UCS_TEST_P(test_proto_reset, rndv_put, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
            "RMA_ZCOPY_SEG_SIZE=1024")
 {
-    reset_protocol(TAG, "rndv/am/bcopy");
+    reset_protocol(TAG, "rndv/put/zcopy");
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset, tcp, "tcp")
 
 /* The following tests require ENABLE_DEBUG_DATA flag in order to access
  * req->recv.proto_rndv_request, which is only present with this flag. */
@@ -458,7 +462,6 @@ UCS_TEST_P(test_proto_reset_rndv_get, rndv_get, "RNDV_THRESH=0",
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_rndv_get, ib, "ib")
-
 
 class test_proto_reset_atp : public test_proto_reset {
 public:
