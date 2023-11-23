@@ -740,7 +740,7 @@ typedef enum {
                                                         of a single operation.
                                                         This flag and UCP_OP_ATTR_FLAG_FAST_CMPL
                                                         are mutually exclusive. */
-    UCP_OP_ATTR_FIELD_PRIORITY      = UCS_BIT(20)   /**< priority field*/
+    UCP_OP_ATTR_FIELD_PRIORITY      = UCS_BIT(20)   /**< priority field */
 } ucp_op_attr_t;
 
 
@@ -825,8 +825,8 @@ enum ucp_am_handler_param_field {
  * value will be propogated to transports which are capable of prioritizing messages.
 */
 typedef enum {
-    UCP_PRIORITY_DEFAULT = UCS_BIT(0),
-    UCP_PRIORITY_HIGH    = UCS_BIT(1)
+    UCP_PRIORITY_DEFAULT,
+    UCP_PRIORITY_HIGH
 } ucp_priority_t;
 
 
