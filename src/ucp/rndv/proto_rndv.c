@@ -393,6 +393,19 @@ static size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     const ucp_context_config_t *cfg = &init_params->worker->context->config.ext;
 
+    /* Explicit configuration for rendezvous threshold (either fine-grained or
+     * coarse-grained) has precedence over rndv_send_nbr_thresh
+     */
+    if (ucp_ep_config_key_is_inter_node(init_params->ep_config_key)) {
+        if (cfg->rndv_inter_thresh != UCS_MEMUNITS_AUTO) {
+            return cfg->rndv_inter_thresh;
+        }
+    } else {
+        if (cfg->rndv_intra_thresh != UCS_MEMUNITS_AUTO) {
+            return cfg->rndv_intra_thresh;
+        }
+    }
+
     if ((cfg->rndv_thresh == UCS_MEMUNITS_AUTO) &&
         (ucp_proto_select_op_attr_unpack(select_param->op_attr) &
          UCP_OP_ATTR_FLAG_FAST_CMPL) &&

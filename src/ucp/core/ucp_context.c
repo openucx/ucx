@@ -169,9 +169,26 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Threshold for switching from eager to rendezvous protocol",
    ucs_offsetof(ucp_context_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"RNDV_INTRA_THRESH", UCS_VALUE_AUTO_STR,
+   "Threshold for switching from eager to rendezvous protocol for intra-node\n"
+   "communication.\n"
+   " auto   - Threshold is defined by UCX_RNDV_THRESH\n"
+   " 0..inf - Explicit threshold for intra-node communication, has precedence\n"
+   "          over UCX_RNDV_THRESH config",
+   ucs_offsetof(ucp_context_config_t, rndv_intra_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_INTER_THRESH", UCS_VALUE_AUTO_STR,
+   "Threshold for switching from eager to rendezvous protocol for inter-node\n"
+   "communication.\n"
+   " auto   - Threshold is defined by UCX_RNDV_THRESH\n"
+   " 0..inf - Explicit threshold for inter-node communication, has precedence\n"
+   "          over UCX_RNDV_THRESH config",
+   ucs_offsetof(ucp_context_config_t, rndv_inter_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"RNDV_SEND_NBR_THRESH", "256k",
    "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"
-   "Relevant only if UCX_RNDV_THRESH is set to \"auto\".",
+   "Relevant only if UCX_RNDV_THRESH (or corresponding fine-grained config\n"
+   "UCX_RNDV_INTRA_THRESH/UCX_RNDV_INTER_THRESH) is set to \"auto\".",
    ucs_offsetof(ucp_context_config_t, rndv_send_nbr_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_THRESH_FALLBACK", "inf",

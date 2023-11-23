@@ -17,6 +17,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/memory/rcache_int.h>
+#include <ucp/proto/proto_select.inl>
 }
 
 #include <sys/mman.h>
@@ -484,6 +485,95 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits)
 
+class test_ucp_tag_limits_v2 : public test_ucp_tag {
+public:
+    void init()
+    {
+        /* TODO: Currently all the tests are for intra-node communication only.
+         * Find a way to create inter-node endpoint on a single node
+         */
+        test_ucp_tag::init();
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_AM);
+    }
+
+protected:
+    void check_rndv_startup_config(size_t exp_rndv_thresh,
+                                   size_t exp_rndv_intra_thresh,
+                                   size_t exp_rndv_inter_thresh)
+    {
+        ucp_context_config_t *cfg = &sender().worker()->context->config.ext;
+
+        EXPECT_EQ(exp_rndv_thresh, cfg->rndv_thresh);
+        EXPECT_EQ(exp_rndv_intra_thresh, cfg->rndv_intra_thresh);
+        EXPECT_EQ(exp_rndv_inter_thresh, cfg->rndv_inter_thresh);
+    }
+
+    void check_ep_proto_thresholds(size_t msg_length, bool expect_rndv)
+    {
+        ucp_proto_select_t *proto_select;
+        ucp_proto_select_elem_t value;
+
+        proto_select = &ucp_ep_config(sender().ep())->proto_select;
+
+        kh_foreach_value(proto_select->hash, value, {
+            /* Find index of the corresponding ucp_proto_threshold_elem_t
+             * to handle the given message size
+             */
+            unsigned idx = 0;
+            for (; msg_length > value.thresholds[idx].max_msg_length; ++idx);
+            const ucp_proto_threshold_elem_t *th = &value.thresholds[idx];
+
+            if (expect_rndv) {
+                EXPECT_EQ(th->proto_config.cfg_thresh, msg_length);
+                EXPECT_NE(nullptr, strstr(th->proto_config.proto->name, "rndv"));
+            } else {
+                EXPECT_NE(th->proto_config.cfg_thresh, msg_length);
+                EXPECT_EQ(nullptr, strstr(th->proto_config.proto->name, "rndv"));
+            }
+        });
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_limits_v2, check_common_rndv_thresh,
+           "RNDV_THRESH=100")
+{
+    check_rndv_startup_config(100, UCS_MEMUNITS_AUTO, UCS_MEMUNITS_AUTO);
+    check_ep_proto_thresholds(100, true);
+}
+
+UCS_TEST_P(test_ucp_tag_limits_v2, check_rndv_intra_thresh,
+           "RNDV_INTRA_THRESH=200")
+{
+    check_rndv_startup_config(UCS_MEMUNITS_AUTO, 200, UCS_MEMUNITS_AUTO);
+    check_ep_proto_thresholds(200, true);
+}
+
+UCS_TEST_P(test_ucp_tag_limits_v2, check_rndv_intra_thresh_common,
+           "RNDV_THRESH=100", "RNDV_INTRA_THRESH=200")
+{
+    check_rndv_startup_config(100, 200, UCS_MEMUNITS_AUTO);
+    check_ep_proto_thresholds(200, true);
+}
+
+UCS_TEST_P(test_ucp_tag_limits_v2, check_rndv_inter_thresh,
+           "RNDV_INTER_THRESH=300")
+{
+    check_rndv_startup_config(UCS_MEMUNITS_AUTO, UCS_MEMUNITS_AUTO, 300);
+    check_ep_proto_thresholds(300, false);
+}
+
+UCS_TEST_P(test_ucp_tag_limits_v2, check_rndv_inter_thresh_common,
+           "RNDV_THRESH=100", "RNDV_INTER_THRESH=300")
+{
+    check_rndv_startup_config(100, UCS_MEMUNITS_AUTO, 300);
+    check_ep_proto_thresholds(100, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits_v2)
 
 class test_ucp_tag_nbx : public test_ucp_tag {
 public:
