@@ -32,7 +32,7 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
      ucs_offsetof(uct_rocm_copy_md_config_t, enable_rcache),
      UCS_CONFIG_TYPE_TERNARY},
 
-    {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE), NULL,
+    {"", "", NULL,
      ucs_offsetof(uct_rocm_copy_md_config_t, rcache),
      UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
