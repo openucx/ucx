@@ -428,7 +428,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset, tcp, "tcp")
 
 /* The following tests require ENABLE_DEBUG_DATA flag in order to access
  * req->recv.proto_rndv_request, which is only present with this flag. */
-#ifdef ENABLE_DEBUG_DATA
+#if ENABLE_DEBUG_DATA
 class test_proto_reset_rndv_get : public test_proto_reset {
 protected:
     void wait_and_restart(void *sreq, void *rreq,
