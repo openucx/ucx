@@ -10,6 +10,7 @@ import (
 	"testing"
 	. "ucx"
 	"unsafe"
+	. "cuda"
 )
 
 type TestEntity struct {
@@ -216,6 +217,12 @@ func TestUcpEpAm(t *testing.T) {
 			data *UcpAmData, replyEp *UcpEp) UcsStatus {
 			if replyEp == nil {
 				threadErr <- errors.New("Reply endpoint is not set")
+			}
+
+			if memType.recvMemType == UCS_MEMORY_TYPE_CUDA {
+				if err := CudaSetDevice(); err != nil {
+					threadErr <- fmt.Errorf("%v", err)
+				}
 			}
 
 			recvRequest, _ := data.Receive(receiveMem, data.Length(), (&UcpRequestParams{}).SetMemType(memType.recvMemType))
