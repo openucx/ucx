@@ -27,7 +27,7 @@ static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,
                                                          ucp_lane_index_t lane_index)
 {
     ucs_assertv(lane_index < UCP_MAX_FAST_PATH_LANES, "lane=%d", lane_index);
-    return ep->uct_eps[lane_index];
+    return ep->uct_eps[lane_index];	
 }
 
 static UCS_F_ALWAYS_INLINE uct_ep_h
@@ -254,8 +254,8 @@ ucp_ep_config_key_has_cm_lane(const ucp_ep_config_key_t *config_key)
 static UCS_F_ALWAYS_INLINE int
 ucp_ep_config_key_is_inter_node(const ucp_ep_config_key_t *config_key)
 {
-    return (!(config_key->flags & (UCP_EP_CONFIG_KEY_FLAG_SELF |
-                                   UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE)));
+    return !(config_key->flags & (UCP_EP_CONFIG_KEY_FLAG_SELF |
+                                  UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE));
 }
 
 static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
