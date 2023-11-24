@@ -15,10 +15,20 @@
 #include <ucp/proto/proto_multi.inl>
 
 
+static size_t ucp_am_eager_multi_max_first_hdr_size(ucp_worker_h worker)
+{
+    /* First fragment must fit UCP AM hdr length + customer user header +
+     * at least 1 byte of data (see max_am_header initialization
+     * in ucp_worker_set_max_am_header).
+     */
+    return worker->max_am_header + UCP_AM_FIRST_FRAG_META_LEN + 1;
+}
+
 static ucs_status_t
 ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_t *context               = init_params->worker->context;
+    ucp_worker_h worker                  = init_params->worker;
+    ucp_context_t *context               = worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -38,6 +48,7 @@ ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
+        .first_min_size      = ucp_am_eager_multi_max_first_hdr_size(worker),
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
@@ -177,7 +188,8 @@ ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
 static ucs_status_t
 ucp_am_eager_multi_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
 {
-    ucp_context_t *context               = init_params->worker->context;
+    ucp_worker_h worker                  = init_params->worker;
+    ucp_context_t *context               = worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -200,6 +212,7 @@ ucp_am_eager_multi_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .first_min_size      = ucp_am_eager_multi_max_first_hdr_size(worker),
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,

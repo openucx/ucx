@@ -10,6 +10,7 @@
 
 #include "proto_init.h"
 #include "proto_debug.h"
+#include "proto_common.h"
 #include "proto_common.inl"
 #include "proto_debug.h"
 #include "proto_multi.inl"
@@ -150,6 +151,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
            Due to floating-point accuracy, max_frag may be too large. */
         max_frag = ucs_double_to_sizet(lane_perf->bandwidth / max_frag_ratio,
                                        lane_perf->max_frag);
+        if (mpriv->num_lanes == 1) {
+            max_frag = ucs_max(max_frag, params->first_min_size);
+            ucs_assertv(max_frag <= lane_perf->max_frag,
+                        "max_frag=%zu lane->max_frag=%zu",
+                        max_frag, lane_perf->max_frag);
+        }
 
         /* Make sure fragment is not zero */
         ucs_assert(max_frag > 0);

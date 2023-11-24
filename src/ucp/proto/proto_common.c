@@ -254,7 +254,7 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
     *perf_node_p = perf_node;
 }
 
-static void ucp_proto_common_tl_perf_reset(ucp_proto_common_tl_perf_t *tl_perf)
+void ucp_proto_common_tl_perf_reset(ucp_proto_common_tl_perf_t *tl_perf)
 {
     tl_perf->send_pre_overhead  = 0;
     tl_perf->send_post_overhead = 0;

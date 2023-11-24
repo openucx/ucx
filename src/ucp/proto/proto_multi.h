@@ -87,6 +87,11 @@ typedef struct {
      * by this protocol */
     ptrdiff_t                      opt_align_offs;
 
+    /* Minimal size of the first fragment (e.g. with AM API user may send a
+     * custom header in the first fragment which may consume the whole
+     * fragment) */
+    size_t                         first_min_size;
+
     struct {
         /* Required iface capabilities */
         uint64_t        tl_cap_flags;
