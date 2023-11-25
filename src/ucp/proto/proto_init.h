@@ -79,7 +79,7 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
                                size_t range_start, size_t range_end,
                                size_t frag_size, double bias,
                                const ucp_proto_perf_range_t **stages,
-                               unsigned num_stages, unsigned flags);
+                               unsigned num_stages);
 
 
 void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
