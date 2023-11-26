@@ -1303,15 +1303,16 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config)
     return (uint8_t)ib_config->sl;
 }
 
-uint8_t
-uct_ib_iface_config_select_reverse_sl(const uct_ib_iface_config_t *ib_config)
+void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
+                                 const uct_ib_iface_config_t *ib_config)
 {
     if (ib_config->reverse_sl == UCS_ULUNITS_AUTO) {
-        return ib_config->sl;
+        ib_iface->config.reverse_sl = ib_iface->config.sl;
+        return;
     }
 
     ucs_assert(ib_config->reverse_sl < UCT_IB_SL_NUM);
-    return (uint8_t)ib_config->reverse_sl;
+    ib_iface->config.reverse_sl = (uint8_t)ib_config->reverse_sl;
 }
 
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
