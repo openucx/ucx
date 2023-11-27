@@ -56,7 +56,7 @@ run-perftest:
 	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} ${GOTMPDIR}/goperftest ${ARGS}
 
-install-exec-hook:
+install-exec-hook: goperftest
 	$(INSTALL) ${GOTMPDIR}/goperftest $(DESTDIR)$(bindir)
 
 all: goperftest build
