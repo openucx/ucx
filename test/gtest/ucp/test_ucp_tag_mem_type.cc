@@ -70,7 +70,7 @@ public:
 
         if (variant_flags & VARIANT_CUDA_IPC_LIMITED_CACHE) {
             if (!has_any_transport({"cuda_ipc"})) {
-                UCS_TEST_SKIP_R("No cuda_ipc");
+                UCS_TEST_SKIP_R("No cuda_ipc transport for cuda ipc limited cache variant");
             }
 
             m_env.push_back(

@@ -31,14 +31,6 @@ typedef struct uct_cuda_ipc_rcache_region {
 
 
 ucs_status_t
-uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md, ucs_rcache_t **cache,
-                          const char *name);
-
-
-void uct_cuda_ipc_destroy_cache(ucs_rcache_t *cache);
-
-
-ucs_status_t
 uct_cuda_ipc_map_memhandle(uct_cuda_ipc_md_t *md,
                            uct_cuda_ipc_key_t *key,
                            void **mapped_addr,
