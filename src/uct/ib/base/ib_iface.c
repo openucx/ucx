@@ -1148,11 +1148,11 @@ ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
     }
 
     if (strnlen(cfg_gid_ndev, 1) != 0) {
-        return uct_ib_device_select_gid_by_ndev(dev, port_num, cfg_gid_ndev,
-                                                &iface->gid_info);
+        return uct_ib_device_select_gid(dev, port_num, cfg_gid_ndev,
+                                        &iface->gid_info);
     }
 
-    return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
+    return uct_ib_device_select_gid(dev, port_num, NULL, &iface->gid_info);
 }
 
 static ucs_status_t
