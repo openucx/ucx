@@ -97,36 +97,6 @@ ucs_status_t uct_cuda_ipc_check_rcache(ucs_rcache_t *rcache,
     return UCS_OK;
 }
 
-ucs_status_t
-uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md, ucs_rcache_t **cache,
-                          const char *name)
-{
-    ucs_status_t status;
-    ucs_rcache_params_t rcache_params;
-
-    rcache_params.region_struct_size = sizeof(uct_cuda_ipc_rcache_region_t);
-    rcache_params.ucm_events         = 0;
-    rcache_params.ucm_event_priority = 0;
-    rcache_params.ops                = &uct_cuda_ipc_rcache_ops;
-    rcache_params.context            = NULL;
-    rcache_params.flags              = 0;
-    rcache_params.max_regions        = md->rcache_max_regions;
-    rcache_params.max_size           = md->rcache_max_size;
-
-    status = ucs_rcache_create(&rcache_params, name,
-                               ucs_stats_get_root(), cache);
-    if (status != UCS_OK) {
-        ucs_error("failed to create cuda_ipc remote cache: %s",
-                  ucs_status_string(status));
-        goto err;
-    }
-
-    return UCS_OK;
-
-err:
-    return status;
-}
-
 static ucs_status_t
 uct_cuda_ipc_get_remote_cache(uct_cuda_ipc_md_t *md,
                               pid_t pid, ucs_rcache_t **cache)
@@ -286,6 +256,36 @@ static ucs_rcache_ops_t uct_cuda_ipc_rcache_ops = {
     .mem_dereg   = uct_cuda_ipc_rcache_mem_dereg,
     .dump_region = uct_cuda_ipc_rcache_dump_region
 };
+
+static ucs_status_t
+uct_cuda_ipc_create_cache(uct_cuda_ipc_md_t *md, ucs_rcache_t **cache,
+                          const char *name)
+{
+    ucs_status_t status;
+    ucs_rcache_params_t rcache_params;
+
+    rcache_params.region_struct_size = sizeof(uct_cuda_ipc_rcache_region_t);
+    rcache_params.ucm_events         = 0;
+    rcache_params.ucm_event_priority = 0;
+    rcache_params.ops                = &uct_cuda_ipc_rcache_ops;
+    rcache_params.context            = NULL;
+    rcache_params.flags              = 0;
+    rcache_params.max_regions        = md->rcache_max_regions;
+    rcache_params.max_size           = md->rcache_max_size;
+
+    status = ucs_rcache_create(&rcache_params, name,
+                               ucs_stats_get_root(), cache);
+    if (status != UCS_OK) {
+        ucs_error("failed to create cuda_ipc remote cache: %s",
+                  ucs_status_string(status));
+        goto err;
+    }
+
+    return UCS_OK;
+
+err:
+    return status;
+}
 
 UCS_STATIC_INIT {
     ucs_recursive_spinlock_init(&uct_cuda_ipc_remote_cache.lock, 0);
