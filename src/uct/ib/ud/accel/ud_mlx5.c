@@ -271,9 +271,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
 
     uct_ud_enter(&iface->super);
 
-    if (packet_flags & UCT_UD_PACKET_FLAG_AM) {
-        uct_ud_ep_set_am_flag(&ep->super);
-    }
+    uct_ud_ep_set_am_flag(&ep->super);
 
     skb = uct_ud_ep_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {
