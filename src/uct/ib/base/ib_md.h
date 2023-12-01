@@ -88,8 +88,7 @@ typedef struct uct_ib_md_ext_config {
     } odp;
 
     unsigned long            gid_index;    /**< IB GID index to use */
-    char                     *gid_ndev;    /**< IB GID network device to use */
-    char                     ndev_name[IFNAMSIZ]; /**< IB GID network device to use */
+    char                     gid_ndev[IFNAMSIZ]; /**< IB GID network device to use */
 
     size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
     size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */

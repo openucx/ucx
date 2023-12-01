@@ -832,8 +832,6 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
         info->roce_info.addr_family =
                         uct_ib_device_get_addr_family(&info->gid, gid_index);
         info->gid_index            = gid_index;
-        uct_ib_device_get_ndev_name(dev_name, port_num, gid_index,
-                                    info->ndev_name, sizeof(info->ndev_name));
         return UCS_OK;
     }
 
@@ -883,6 +881,7 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
     ucs_status_t status     = UCS_OK;
     int priorities_arr_len  = ucs_static_array_size(roce_prio);
     uct_ib_device_gid_info_t gid_info_tmp;
+    char ndev_name_tmp[IFNAMSIZ];
     int i, prio_idx;
 
     ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
@@ -892,6 +891,14 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
      */
     for (prio_idx = 0; prio_idx < priorities_arr_len; prio_idx++) {
         for (i = 0; i < gid_tbl_len; i++) {
+            if (!ucs_string_is_empty(ndev_name)) {
+                status = uct_ib_device_get_roce_ndev_name(
+                    dev, port_num, i, ndev_name_tmp, sizeof(ndev_name_tmp));
+                if ((status != UCS_OK) || (strcmp(ndev_name, ndev_name_tmp) != 0)) {
+                    continue;
+                }
+            }
+
             status = uct_ib_device_query_gid_info(dev->ibv_context,
                                                   uct_ib_device_name(dev),
                                                   port_num, i, &gid_info_tmp);
@@ -899,16 +906,12 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
                 goto out;
             }
 
-            if (((ndev_name == NULL) ||
-                    (strncmp(ndev_name, gid_info_tmp.ndev_name, IFNAMSIZ) == 0)) &&
-                (roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
+            if ((roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
                 (roce_prio[prio_idx].addr_family == gid_info_tmp.roce_info.addr_family) &&
                 uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info_tmp.gid, i)) {
 
                 gid_info->gid_index = i;
                 gid_info->roce_info = gid_info_tmp.roce_info;
-                ucs_strncpy_zero(gid_info->ndev_name, gid_info_tmp.ndev_name,
-                                 sizeof(gid_info->ndev_name));
                 goto out_print;
             }
         }
@@ -917,11 +920,10 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
     gid_info->gid_index             = UCT_IB_MD_DEFAULT_GID_INDEX;
     gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
     gid_info->roce_info.addr_family = AF_INET;
-    gid_info->ndev_name[0]          = '\0';
 
 out_print:
-    ucs_debug("%s:%d using gid_index %d ndev %s", uct_ib_device_name(dev),
-              port_num, gid_info->gid_index, gid_info->ndev_name);
+    ucs_debug("%s:%d using gid_index %d", uct_ib_device_name(dev), port_num,
+              gid_info->gid_index);
 out:
     return status;
 }
@@ -1279,44 +1281,26 @@ int uct_ib_get_cqe_size(int cqe_size_min)
     return cqe_size;
 }
 
-ucs_status_t uct_ib_device_get_ndev_name(const char *dev_name, uint8_t port_num,
-                                         uint8_t gid_index, char *ndev_name,
-                                         size_t max)
-{
-    ssize_t nread;
-    nread = ucs_read_file_str(ndev_name, max, 1,
-                              UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT, dev_name,
-                              port_num, gid_index);
-    if (nread < 0) {
-        ndev_name[0] = '\0';
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    if (nread == max) {
-        ndev_name[nread - 1] = '\0';
-    }
-    ucs_strtrim(ndev_name);
-    return UCS_OK;
-}
-
 ucs_status_t
 uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
                                  uint8_t gid_index, char *ndev_name, size_t max)
 {
-    ucs_status_t ret;
+    ssize_t nread;
 
     ucs_assert_always(uct_ib_device_is_port_roce(dev, port_num));
 
     /* get the network device name which corresponds to a RoCE port */
-    ret = uct_ib_device_get_ndev_name(uct_ib_device_name(dev), port_num,
-                                      gid_index, ndev_name, max);
-    if (ret != UCS_OK) {
+    nread = ucs_read_file_str(ndev_name, max, 1,
+                              UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
+                              uct_ib_device_name(dev), port_num, gid_index);
+    if (nread < 0) {
         ucs_diag("failed to read " UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT": %m",
                  uct_ib_device_name(dev), port_num, 0);
-        return ret;
+        return UCS_ERR_NO_DEVICE;
     }
 
-    return ret;
+    ucs_strtrim(ndev_name);
+    return UCS_OK;
 }
 
 unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num,

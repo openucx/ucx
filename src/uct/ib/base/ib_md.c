@@ -1173,13 +1173,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     md->reg_cost        = md_config->reg_cost;
     md->relaxed_order   = 0;
 
-    if (strnlen(md_config->gid_ndev, 1) == 0) {
-        md->config.gid_ndev = NULL;
-    } else {
-        ucs_strncpy_zero(md->config.ndev_name, md_config->gid_ndev,
-                         sizeof(md->config.ndev_name));
-        md->config.gid_ndev = md->config.ndev_name;
-    }
+    ucs_strncpy_zero(md->config.gid_ndev, md_config->gid_ndev,
+	                 sizeof(md->config.gid_ndev));
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
