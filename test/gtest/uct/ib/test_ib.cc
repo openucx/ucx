@@ -439,7 +439,7 @@ public:
         uct_ib_iface_t dummy_ib_iface;
         uct_ib_md_t *ib_md;
         ucs_status_t status;
-        char *gid_ndev;
+        char gid_ndev[IFNAMSIZ];
         uint8_t gid_index;
 
         UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
@@ -460,16 +460,22 @@ public:
         status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
                                                  md_config->ext.gid_index,
                                                  md_config->gid_ndev);
-        ASSERT_UCS_OK(status);
 
-        gid_ndev  = dummy_ib_iface.gid_info.ndev_name;
+        device_str << " gid_ndev " << md_config->gid_ndev;
+        if (status != UCS_OK) {
+            UCS_TEST_SKIP_R("failed to init on " + device_str.str());
+        }
+
         gid_index = dummy_ib_iface.gid_info.gid_index;
-        device_str << " gid ndev " << gid_ndev;
 
         /* check the gid ndev */
-        if (strncmp(gid_ndev, md_config->gid_ndev, IFNAMSIZ) != 0) {
-            UCS_TEST_SKIP_R("failed to init " + device_str.str());
-        }
+        status = uct_ib_device_get_roce_ndev_name(
+            uct_ib_iface_device(&dummy_ib_iface),
+            dummy_ib_iface.config.port_num, gid_index, gid_ndev,
+            sizeof(gid_ndev));
+
+        ASSERT_UCS_OK(status);
+        EXPECT_STREQ(md_config->gid_ndev, gid_ndev);
 
         /* check the gid index */
         if (ibv_query_gid(m_ibctx, m_port, gid_index, &gid) != 0) {
