@@ -1141,14 +1141,14 @@ ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
 
     ucs_assert(uct_ib_iface_is_roce(iface));
 
-    if (cfg_gid_index != UCS_ULUNITS_AUTO) {
-        return uct_ib_device_query_gid_info(dev->ibv_context,
-                                            uct_ib_device_name(dev), port_num,
-                                            cfg_gid_index, &iface->gid_info);
+    if (cfg_gid_index == UCS_ULUNITS_AUTO) {
+        return uct_ib_device_select_gid(dev, port_num, cfg_gid_ndev,
+                                        &iface->gid_info);
     }
 
-    return uct_ib_device_select_gid(dev, port_num, cfg_gid_ndev,
-                                    &iface->gid_info);
+    return uct_ib_device_query_gid_info(dev->ibv_context,
+                                        uct_ib_device_name(dev), port_num,
+                                        cfg_gid_index, &iface->gid_info);
 }
 
 static ucs_status_t
