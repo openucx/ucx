@@ -196,9 +196,12 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                      "(%lu), adjusting it",
                      *min_frag_p);
             *max_frag_p = *min_frag_p;
+        } else if (context->config.ext.rma_zcopy_seg_size > *max_frag_p) {
+            ucs_warn("requested fragment size is larger than maximum allowed "
+                     "(%lu), adjusting it",
+                     *max_frag_p);
         } else {
-            *max_frag_p = ucs_min(context->config.ext.rma_zcopy_seg_size,
-                                     *max_frag_p);
+            *max_frag_p = context->config.ext.rma_zcopy_seg_size;
         }
     }
 }

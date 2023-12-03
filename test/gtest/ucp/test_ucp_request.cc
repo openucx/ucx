@@ -540,8 +540,8 @@ protected:
         hook_uct_cbs();
 
         /* Wait for rndv_put initialization */
-        while (std::string(req->send.proto_config->proto->name) !=
-               "rndv/put/zcopy") {
+        std::string rndv_put_zcopy_name("rndv/put/zcopy");
+        while (rndv_put_zcopy_name != req->send.proto_config->proto->name) {
             progress();
         }
 
