@@ -324,6 +324,17 @@ UCS_TEST_P(test_ucp_am, set_am_handler_realloc)
     do_set_am_handler_realloc_test();
 }
 
+UCS_TEST_P(test_ucp_am, set_am_handler_out_of_order)
+{
+    set_handlers(UCP_SEND_ID + 20);
+    set_handlers(UCP_SEND_ID);
+    set_handlers(UCP_SEND_ID + 10);
+
+    do_send_process_data_test(0, UCP_SEND_ID, 0);
+    do_send_process_data_test(0, UCP_SEND_ID + 10, 0);
+    do_send_process_data_test(0, UCP_SEND_ID + 20, 0);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 
