@@ -1174,7 +1174,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     md->relaxed_order   = 0;
 
     ucs_strncpy_zero(md->config.gid_ndev, md_config->gid_ndev,
-	                 sizeof(md->config.gid_ndev));
+                     sizeof(md->config.gid_ndev));
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,

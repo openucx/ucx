@@ -89,6 +89,8 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                    ep->dci_channel_index,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
 
+    ucs_info("@I if %p dci %d qp %x cnt %lu len %lu", iface, (int)ep->dci,
+              iface->tx.dcis[ep->dci].txwq.super.qp_num, iovcnt, iov_total_length);
     uct_rc_txqp_add_send_comp(&iface->super.super, txqp, handler, comp, sn,
                               op_flags | UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, iov,
                               iovcnt, iov_total_length);
