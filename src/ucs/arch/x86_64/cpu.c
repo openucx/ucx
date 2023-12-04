@@ -747,7 +747,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
     return cache_count == UCS_CPU_CACHE_LAST ? UCS_OK : UCS_ERR_UNSUPPORTED;
 }
 
-#ifdef ENABLE_NT_BUFFER_TRANSFER
+#if ENABLE_NT_BUFFER_TRANSFER
 
 #define SWITCH_TO_NTSTORE_SZ (1024)
 #define WORD_SZ     2

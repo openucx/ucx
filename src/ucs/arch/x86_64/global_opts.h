@@ -14,20 +14,30 @@
 
 BEGIN_C_DECLS
 
+#if ENABLE_NT_BUFFER_TRANSFER
 #define UCS_ARCH_GLOBAL_OPTS_INITALIZER { \
     .builtin_memcpy_min     = UCS_MEMUNITS_AUTO, \
     .builtin_memcpy_max     = UCS_MEMUNITS_AUTO, \
     .nt_buffer_transfer_min = UCS_MEMUNITS_AUTO, \
-    .nt_buffer_transfer_max = UCS_MEMUNITS_AUTO  \
+    .nt_buffer_transfer_max = UCS_MEMUNITS_AUTO, \
+    .nt_dest_threshold      = UCS_MEMUNITS_AUTO  \
 }
+#else
+#define UCS_ARCH_GLOBAL_OPTS_INITALIZER { \
+    .builtin_memcpy_min     = UCS_MEMUNITS_AUTO, \
+    .builtin_memcpy_max     = UCS_MEMUNITS_AUTO  \
+}
+#endif
 
 /* built-in memcpy & nt-buffer-transfer config */
 typedef struct ucs_arch_global_opts {
     size_t builtin_memcpy_min;
     size_t builtin_memcpy_max;
+#if ENABLE_NT_BUFFER_TRANSFER
     size_t nt_buffer_transfer_min;
     size_t nt_buffer_transfer_max;
     size_t nt_dest_threshold;
+#endif
 } ucs_arch_global_opts_t;
 
 END_C_DECLS
