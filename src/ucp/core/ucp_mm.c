@@ -370,6 +370,8 @@ void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
 
     ucs_assert(memh->parent == NULL);
     ucs_assert(!(memh->flags & UCP_MEMH_FLAG_IMPORTED));
+    ucs_assertv_always(context->rcache != NULL,
+                       "rcache is required for memory invalidation");
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     memh->inv_md_map |= inv_md_map;
