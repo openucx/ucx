@@ -103,7 +103,7 @@ set-version:
 repack-jar: $(jarfile)
 	$(RM) -r $(java_build_dir)/repack_dir
 	unzip -o $(jarfile) -d $(java_build_dir)/repack_dir
-	\cp $(topdir)/libjucx_*.so/libjucx_*.so $(java_build_dir)/repack_dir
+	\cp -v $(topdir)/libjucx_*.so/libjucx_*.so $(java_build_dir)/repack_dir
 	jar -cf $(jarfile) -C $(java_build_dir)/repack_dir .
 	jar tf $(jarfile)
 
