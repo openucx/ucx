@@ -174,6 +174,10 @@ uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         ucs_wtimer_add(&iface->tx.timer, &ep->timer,
                        now - ucs_twheel_get_time(&iface->tx.timer) + ep->tx.tick);
     }
+
+    if (!(skb->neth->packet_type & UCT_UD_PACKET_FLAG_CTL)) {
+        ep->flags |= UCT_UD_EP_FLAG_AM_POSTED;
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -186,11 +190,6 @@ uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     uct_ud_iface_complete_tx_skb(iface, ep, skb);
 }
 
-static UCS_F_ALWAYS_INLINE void uct_ud_ep_set_am_flag(uct_ud_ep_t *ep)
-{
-    ep->flags |= UCT_UD_EP_FLAG_AM_POSTED;
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
                      uct_ud_send_skb_t **skb_p)
@@ -200,7 +199,6 @@ uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
 
     UCT_CHECK_AM_ID(id);
 
-    uct_ud_ep_set_am_flag(ep);
     skb = uct_ud_ep_get_tx_skb(iface, ep);
     if (!skb) {
         return UCS_ERR_NO_RESOURCE;

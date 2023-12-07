@@ -325,7 +325,6 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
 
     uct_ud_enter(&iface->super);
 
-    uct_ud_ep_set_am_flag(&ep->super);
     skb = uct_ud_ep_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {
         uct_ud_leave(&iface->super);
