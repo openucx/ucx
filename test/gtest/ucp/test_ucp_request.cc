@@ -9,7 +9,7 @@
 #include <common/mem_buffer.h>
 extern "C" {
 #include <ucp/core/ucp_worker.h>
-#include <ucp/core/ucp_request.h>
+#include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/proto/proto_common.h>
 }
@@ -220,6 +220,40 @@ public:
         }
     }
 
+    static void flushed_cb(ucp_request_t *request)
+    {
+        test_proto_reset *self = (test_proto_reset*)request->user_data;
+        uct_pending_req_t *uct_req;
+        ucp_request_t *ucp_req;
+
+        ucs_queue_for_each_extract(uct_req, &self->m_pending, priv, 1) {
+            ucp_req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+            ucp_proto_request_restart(ucp_req);
+        }
+
+        self->m_completed = 1;
+        ucp_request_complete_send(request, request->status);
+    }
+
+    void restart(ucp_ep_h ep)
+    {
+        ucp_request_param_t param;
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_USER_DATA |
+                             UCP_OP_ATTR_FIELD_CALLBACK,
+        param.user_data = this;
+        param.cb.send   = (ucp_send_nbx_callback_t)ucs_empty_function;
+
+        ucs_queue_head_init(&m_pending);
+        ucp_ep_purge_lanes(ep, ucp_request_purge_enqueue_cb, &m_pending);
+
+        void *request = ucp_ep_flush_internal(ep, 0, &param, NULL, flushed_cb,
+                                              "ep_restart");
+
+        ASSERT_FALSE(UCS_PTR_IS_ERR(request));
+        wait_for_value(&m_completed, (unsigned)1);
+        ucp_request_release(request);
+    }
+
     void reset_protocol(operation_e op, const std::string &output_proto,
                         bool sync = false)
     {
@@ -281,12 +315,6 @@ public:
         EXPECT_EQ(m_sbuf, m_rbuf);
     }
 
-    static void restart_completed(ucp_ep_h ep, void *arg)
-    {
-        unsigned *completed_p = (unsigned*)arg;
-        *completed_p          = 1;
-    }
-
     virtual void
     wait_and_restart(void *sreq, void *rreq, const std::string &expected_proto)
     {
@@ -298,11 +326,8 @@ public:
         }
 
         EXPECT_LT(dt_iter->offset, dt_iter->length);
-        ASSERT_UCS_OK(ucp_ep_pending_schedule_restart(sender().ep(),
-                                                      restart_completed,
-                                                      &m_completed));
+        restart(sender().ep());
 
-        wait_for_value(&m_completed, (unsigned)1);
         EXPECT_STREQ(expected_proto.c_str(),
                      req->send.proto_config->proto->name);
     }
@@ -341,6 +366,7 @@ public:
     unsigned m_completed;
     ucp_mem_h m_memh;
     ucp_rkey_h m_rkey;
+    ucs_queue_head_t m_pending;
 };
 
 UCS_TEST_P(test_proto_reset, eager_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
@@ -445,11 +471,8 @@ protected:
         ASSERT_LT(rndv_req->send.state.dt_iter.offset,
                   rndv_req->send.state.dt_iter.length);
 
-        ASSERT_UCS_OK(ucp_ep_pending_schedule_restart(receiver().ep(),
-                                                      restart_completed,
-                                                      &m_completed));
+        restart(receiver().ep());
 
-        wait_for_value(&m_completed, (unsigned)1);
         EXPECT_STREQ(expected_proto.c_str(),
                      rndv_req->send.proto_config->proto->name);
     }
@@ -566,10 +589,8 @@ protected:
 
         m_req = req;
         hook_uct_cbs();
-        ASSERT_UCS_OK(ucp_ep_pending_schedule_restart(ep, restart_completed,
-                                                      &m_completed));
+        restart(ep);
 
-        wait_for_value(&m_completed, (unsigned)1);
         EXPECT_STREQ(expected_proto.c_str(),
                      req->send.proto_config->proto->name);
     }

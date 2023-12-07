@@ -1402,58 +1402,6 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
     ucp_ep_release_discard_arg(arg);
 }
 
-static void
-ucp_ep_restart_finish_cb(void *request, ucs_status_t status, void *user_data)
-{
-    ucp_ep_restart_data_t *restart_data = user_data;
-    uct_pending_req_t *uct_req;
-    ucp_request_t *ucp_req, *flush_req;
-
-    ucs_queue_for_each_extract(uct_req, &restart_data->pending, priv, 1) {
-        ucp_req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-        ucp_proto_request_restart(ucp_req);
-    }
-
-    flush_req = (ucp_request_t*)request - 1;
-    restart_data->cb(flush_req->send.ep, restart_data->arg);
-    ucs_free(restart_data);
-    ucp_request_release(request);
-}
-
-ucs_status_t ucp_ep_pending_schedule_restart(ucp_ep_h ep,
-                                             ucp_ep_restart_completion_cb_t cb,
-                                             void *arg)
-{
-    ucp_request_param_t param = {
-        .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
-                        UCP_OP_ATTR_FIELD_USER_DATA,
-        .cb.send      = ucp_ep_restart_finish_cb
-    };
-    ucp_ep_restart_data_t *restart_data;
-    void *request;
-
-    restart_data = ucs_malloc(sizeof(*restart_data), "ep_restart");
-    if (restart_data == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    ucs_queue_head_init(&restart_data->pending);
-    ucp_ep_purge_lanes(ep, ucp_request_purge_enqueue_cb,
-                       &restart_data->pending);
-    restart_data->cb  = cb;
-    restart_data->arg = arg;
-    param.user_data   = restart_data;
-
-    request = ucp_ep_flush_internal(ep, 0, &param, NULL,
-                                    ucp_ep_flushed_callback, "ep_restart");
-    if (UCS_PTR_IS_ERR(request)) {
-        ucs_free(restart_data);
-        return UCS_PTR_STATUS(request);
-    }
-
-    return UCS_OK;
-}
-
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
 {
     unsigned ep_flush_flags         = (ucp_ep_config(ep)->key.err_mode ==
