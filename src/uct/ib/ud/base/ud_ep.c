@@ -1215,8 +1215,7 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
         goto out;
     }
 
-    if ((ep->flags & UCT_UD_EP_FLAG_AM_POSTED) == 0) {
-        ucs_trace("ep %p: not a single active message was posted", ep);
+    if (!(ep->flags & UCT_UD_EP_FLAG_AM_POSTED)) {
         status = UCS_OK;
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         goto out;
