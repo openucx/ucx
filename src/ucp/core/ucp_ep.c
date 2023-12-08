@@ -2503,14 +2503,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     if (status != UCS_OK) {
         goto err;
     }
-
-    if ((key->err_mode == UCP_ERR_HANDLING_MODE_PEER) &&
-        (context->rcache == NULL)) {
-        ucs_warn("worker %p: memory invalidation is requested but not supported"
-                 " since rcache isn't initialized. Invalidation case will cause"
-                 " runtime failure.", worker);
-    }
-
     if (config->key.flags & UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE) {
         short_am_cap_flag  = 0;
         short_tag_cap_flag = 0;
