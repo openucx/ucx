@@ -2503,6 +2503,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     if (status != UCS_OK) {
         goto err;
     }
+
     if (config->key.flags & UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE) {
         short_am_cap_flag  = 0;
         short_tag_cap_flag = 0;
