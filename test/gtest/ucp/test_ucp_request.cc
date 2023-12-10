@@ -240,8 +240,8 @@ public:
         ucp_request_param_t param;
         param.op_attr_mask = UCP_OP_ATTR_FIELD_USER_DATA |
                              UCP_OP_ATTR_FIELD_CALLBACK,
-        param.user_data = this;
-        param.cb.send   = (ucp_send_nbx_callback_t)ucs_empty_function;
+        param.user_data    = this;
+        param.cb.send      = (ucp_send_nbx_callback_t)ucs_empty_function;
 
         ucs_queue_head_init(&m_pending);
         ucp_ep_purge_lanes(ep, ucp_request_purge_enqueue_cb, &m_pending);
@@ -604,6 +604,10 @@ ucp_request_t *test_proto_reset_atp::m_req;
 UCS_TEST_P(test_proto_reset_atp, atp, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
            "RMA_ZCOPY_SEG_SIZE=1024")
 {
+    if (count_resources(sender(), "rc_mlx5") <= 1) {
+        UCS_TEST_SKIP_R("Less than 2 RC resources are found");
+    }
+
     reset_protocol(TAG, "rndv/am/bcopy");
 }
 

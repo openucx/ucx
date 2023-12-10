@@ -250,6 +250,8 @@ protected:
     void disconnect(entity& entity);
     void check_events(const std::vector<entity*> &entities, bool wakeup,
                       int worker_index = 0);
+    size_t count_resources(const ucp_test_base::entity &e,
+                           const std::string &tl_name) const;
     ucs_status_t
     request_progress(void *req, const std::vector<entity*> &entities,
                      double timeout = 10.0, int worker_index = 0);
