@@ -202,8 +202,9 @@ public:
         param.cb         = am_data_cb;
         param.arg        = &m_rbuf;
 
-        ASSERT_UCS_OK(
-                ucp_worker_set_am_recv_handler(receiver().worker(), &param));
+        ucs_status_t status;
+        status = ucp_worker_set_am_recv_handler(receiver().worker(), &param);
+        ASSERT_UCS_OK(status);
         sreq = ucp_am_send_nbx(sender().ep(), 0, NULL, 0, m_sbuf.data(),
                                m_msg_size, &req_param);
         return sreq;
@@ -211,12 +212,16 @@ public:
 
     void wait_receive(operation_e op)
     {
+        const double timeout      = 10;
+        const ucs_time_t deadline = ucs::get_deadline(timeout);
+
         if (op == STREAM) {
             get_stream_data();
         } else if (op == AM) {
-            while (m_rbuf != m_sbuf) {
+            while ((ucs_get_time() < deadline) && (m_rbuf != m_sbuf)) {
                 progress();
             }
+            EXPECT_EQ(m_rbuf, m_sbuf);
         }
     }
 
@@ -369,29 +374,27 @@ public:
     ucs_queue_head_t m_pending;
 };
 
-UCS_TEST_P(test_proto_reset, eager_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, tag_eager_multi_bcopy, "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(TAG, "egr/multi/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, eager_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
-{
-    reset_protocol(TAG, "egr/multi/bcopy");
-}
-
-UCS_TEST_SKIP_COND_P(test_proto_reset, get_bcopy, !has_transport("ib"),
-                     "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_bcopy_to_get_am_bcopy,
+                     !has_transport("ib"), "ZCOPY_THRESH=inf",
+                     "RNDV_THRESH=inf")
 {
     reset_protocol(RMA_GET, "get/am/bcopy");
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, put_bcopy, !has_transport("ib"),
-                     "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, put_offload_bcopy_to_put_am_bcopy,
+                     !has_transport("ib"), "ZCOPY_THRESH=inf",
+                     "RNDV_THRESH=inf")
 {
     reset_protocol(RMA_PUT, "put/am/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, stream_bcopy, "ZCOPY_THRESH=inf",
+UCS_TEST_P(test_proto_reset, stream_multi_bcopy, "ZCOPY_THRESH=inf",
            "RNDV_THRESH=inf")
 {
     reset_protocol(STREAM, "stream/multi/bcopy");
@@ -403,42 +406,51 @@ UCS_TEST_P(test_proto_reset, rndv_am_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=0",
     reset_protocol(TAG, "rndv/am/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, sync_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, eager_sync_multi_bcopy, "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(TAG, "egrsnc/multi/bcopy", true);
 }
 
-UCS_TEST_P(test_proto_reset, ucp_am_bcopy, "ZCOPY_THRESH=inf",
+UCS_TEST_P(test_proto_reset, am_eager_multi_bcopy, "ZCOPY_THRESH=inf",
            "RNDV_THRESH=inf")
 {
     reset_protocol(AM, "am/egr/multi/bcopy");
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, get_zcopy, !has_transport("ib"),
-                     "ZCOPY_THRESH=0", "RNDV_THRESH=inf",
+UCS_TEST_P(test_proto_reset, tag_eager_multi_zcopy_to_bcopy, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf")
+{
+    reset_protocol(TAG, "egr/multi/bcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_zcopy_to_get_am_bcopy,
+                     !has_transport("ib"), "ZCOPY_THRESH=0", "RNDV_THRESH=inf",
                      "RMA_ZCOPY_SEG_SIZE=1024")
 {
     reset_protocol(RMA_GET, "get/am/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, put_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf",
-           "RMA_ZCOPY_SEG_SIZE=1024")
+UCS_TEST_P(test_proto_reset, put_offload_zcopy_to_put_am_bcopy,
+           "ZCOPY_THRESH=0", "RNDV_THRESH=inf", "RMA_ZCOPY_SEG_SIZE=1024")
 {
     reset_protocol(RMA_PUT, "put/am/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, stream_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, stream_multi_zcopy_to_bcopy, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(STREAM, "stream/multi/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, rndv_am_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=0",
-           "RNDV_SCHEME=am")
+UCS_TEST_P(test_proto_reset, rndv_am_zcopy_to_bcopy, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=0", "RNDV_SCHEME=am")
 {
     reset_protocol(TAG, "rndv/am/bcopy");
 }
 
-UCS_TEST_P(test_proto_reset, ucp_am_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, am_eager_multi_zcopy_to_bcopy, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(AM, "am/egr/multi/bcopy");
 }
@@ -478,7 +490,7 @@ protected:
     }
 };
 
-UCS_TEST_P(test_proto_reset_rndv_get, rndv_get, "RNDV_THRESH=0",
+UCS_TEST_P(test_proto_reset_rndv_get, rndv_get_to_rtr, "RNDV_THRESH=0",
            "RNDV_SCHEME=get_zcopy", "RMA_ZCOPY_SEG_SIZE=1024")
 {
     reset_protocol(TAG, "rndv/rtr");
@@ -510,7 +522,8 @@ private:
         for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
             uct_ep                = ucp_ep_get_lane(ep, lane);
             ops                   = &uct_ep->iface->ops;
-            ops->ep_put_zcopy     = zcopy_no_resource;
+            ops->ep_put_zcopy     = (uct_ep_put_zcopy_func_t)
+                                    ucs_empty_function_return_no_resource;
             ops->ep_pending_add   = add_pending;
             ops->ep_pending_purge = purge_pending;
         }
@@ -530,14 +543,6 @@ private:
     add_pending(uct_ep_h tl_ep, uct_pending_req_t *n, unsigned flag)
     {
         return UCS_OK;
-    }
-
-    static ucs_status_t zcopy_no_resource(uct_ep_h ep, const uct_iov_t *iov,
-                                          size_t iovcnt, uint64_t remote_addr,
-                                          uct_rkey_t rkey,
-                                          uct_completion_t *comp)
-    {
-        return UCS_ERR_NO_RESOURCE;
     }
 
     static void
@@ -602,8 +607,8 @@ protected:
 
 ucp_request_t *test_proto_reset_atp::m_req;
 
-UCS_TEST_P(test_proto_reset_atp, atp, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
-           "RMA_ZCOPY_SEG_SIZE=1024")
+UCS_TEST_P(test_proto_reset_atp, rndv_put_to_rndv_am, "RNDV_THRESH=0",
+           "RNDV_SCHEME=put_zcopy", "RMA_ZCOPY_SEG_SIZE=1024")
 {
     if (count_resources(sender(), "rc_mlx5") <= 1) {
         UCS_TEST_SKIP_R("Less than 2 RC resources are found");
