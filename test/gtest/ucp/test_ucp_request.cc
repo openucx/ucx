@@ -496,7 +496,6 @@ public:
 
     void cleanup() override
     {
-        restore_uct_cbs();
         test_proto_reset::cleanup();
     }
 
@@ -593,6 +592,8 @@ protected:
 
         EXPECT_STREQ(expected_proto.c_str(),
                      req->send.proto_config->proto->name);
+
+        restore_uct_cbs();
     }
 
     static ucp_request_t *m_req;
