@@ -50,6 +50,45 @@ typedef struct uct_cuda_ipc_remote_cache {
 
 uct_cuda_ipc_remote_cache_t uct_cuda_ipc_remote_cache;
 
+static void uct_cuda_ipc_close_memhandle(void *mapped_addr)
+{
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuIpcCloseMemHandle((CUdeviceptr)mapped_addr));
+}
+
+static ucs_status_t
+uct_cuda_ipc_open_memhandle(void **mapped_addr, const uct_cuda_ipc_key_t *key)
+{
+    CUresult cuerr;
+    ucs_status_t status;
+
+    cuerr = cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr, key->ph,
+                               CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
+    if (cuerr == CUDA_SUCCESS) {
+        status = UCS_OK;
+    } else {
+        ucs_debug("cuIpcOpenMemHandle() failed: %s",
+                  uct_cuda_base_cu_get_error_string(cuerr));
+        status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_ERR_ALREADY_EXISTS :
+                                                        UCS_ERR_INVALID_PARAM;
+    }
+
+    return status;
+}
+
+static ucs_status_t
+uct_cuda_ipc_rcache_mem_reg(void *context, ucs_rcache_t *rcache, void *arg,
+                            ucs_rcache_region_t *region, uint16_t flags)
+{
+    uct_cuda_ipc_key_t *key                       = (uct_cuda_ipc_key_t*)arg;
+    uct_cuda_ipc_rcache_region_t *cuda_ipc_region =
+                    ucs_derived_of(region, uct_cuda_ipc_rcache_region_t);
+
+    cuda_ipc_region->ipc_handle = key->ph;
+
+    return uct_cuda_ipc_open_memhandle(&cuda_ipc_region->mapping_start, key);
+
+}
+
 static void uct_cuda_ipc_rcache_mem_dereg(void *context, ucs_rcache_t *rcache,
                                           ucs_rcache_region_t *region)
 {
@@ -194,11 +233,6 @@ err_unlock:
     return status;
 }
 
-static void uct_cuda_ipc_close_memhandle(void *mapped_addr)
-{
-    UCT_CUDADRV_FUNC_LOG_DEBUG(cuIpcCloseMemHandle((CUdeviceptr)mapped_addr));
-}
-
 ucs_status_t
 uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
                              pid_t pid,
@@ -223,26 +257,6 @@ uct_cuda_ipc_unmap_memhandle(uct_cuda_ipc_md_t *md,
     }
 
     return UCS_OK;
-}
-
-static ucs_status_t
-uct_cuda_ipc_open_memhandle(void **mapped_addr, const uct_cuda_ipc_key_t *key)
-{
-    CUresult cuerr;
-    ucs_status_t status;
-
-    cuerr = cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr, key->ph,
-                               CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
-    if (cuerr == CUDA_SUCCESS) {
-        status = UCS_OK;
-    } else {
-        ucs_debug("cuIpcOpenMemHandle() failed: %s",
-                  uct_cuda_base_cu_get_error_string(cuerr));
-        status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_ERR_ALREADY_EXISTS :
-                                                        UCS_ERR_INVALID_PARAM;
-    }
-
-    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
@@ -271,20 +285,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     }
 
     return status;
-}
-
-static ucs_status_t
-uct_cuda_ipc_rcache_mem_reg(void *context, ucs_rcache_t *rcache, void *arg,
-                            ucs_rcache_region_t *region, uint16_t flags)
-{
-    uct_cuda_ipc_key_t *key                       = (uct_cuda_ipc_key_t*)arg;
-    uct_cuda_ipc_rcache_region_t *cuda_ipc_region =
-                    ucs_derived_of(region, uct_cuda_ipc_rcache_region_t);
-
-    cuda_ipc_region->ipc_handle = key->ph;
-
-    return uct_cuda_ipc_open_memhandle(&cuda_ipc_region->mapping_start, key);
-
 }
 
 UCS_STATIC_INIT {
