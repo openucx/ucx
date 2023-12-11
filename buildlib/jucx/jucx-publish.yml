@@ -9,7 +9,9 @@ jobs:
     dependsOn:
     - jucx_build_amd64
     - jucx_build_aarch64
-    condition: succeeded()
+    # Do not run if a GH tag contains 'rc':
+    condition: and(succeeded(), not(contains(variables['Build.SourceBranch'], 'rc')))
+
 
     pool:
       name: MLNX
