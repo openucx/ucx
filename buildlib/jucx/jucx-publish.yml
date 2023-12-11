@@ -41,6 +41,7 @@ jobs:
         displayName: Build ucx
 
       - bash: |
+          set -exE
           source buildlib/az-helpers.sh
           az_init_modules
           az_module_load dev/mvn
@@ -77,6 +78,7 @@ jobs:
         name: publicKey
 
       - bash: |
+          set -exE
           source buildlib/az-helpers.sh
           az_init_modules
           az_module_load dev/mvn
