@@ -63,6 +63,16 @@ static int ucp_ep_flush_is_completed(ucp_request_t *req)
     return (req->send.state.uct_comp.count == 0) && req->send.flush.sw_done;
 }
 
+static int uct_ep_flush_is_needed(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_worker_h worker = ep->worker;
+    ucp_worker_iface_t *wiface;
+
+    wiface = ucp_worker_iface(worker, ucp_ep_get_rsc_index(ep, lane));
+    return !worker->context->config.ext.proto_enable ||
+           (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
+}
+
 static void ucp_ep_flush_progress(ucp_request_t *req)
 {
     ucp_ep_h ep              = req->send.ep;
@@ -118,6 +128,12 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
                                  UCS_STATUS_PTR(UCS_ERR_CANCELED));
         }
+
+        if (!uct_ep_flush_is_needed(ep, lane)) {
+            ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
+            continue;
+        }
+
         status = uct_ep_flush(uct_ep, req->send.flush.uct_flags,
                               &req->send.state.uct_comp);
         ucp_trace_req(req, "ep %p flush lane[%d]=%p flags 0x%x: %s",
