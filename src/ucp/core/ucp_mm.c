@@ -1446,6 +1446,7 @@ ucp_mem_rcache_create(ucp_context_h context, const char *name,
                       ucs_rcache_t **rcache_p, ucs_rcache_params_t *rcache_params)
 {
     rcache_params->region_struct_size = ucp_memh_size(context);
+    rcache_params->flags             |= UCS_RCACHE_FLAG_SYNC_EVENTS;
     rcache_params->ucm_events         = UCM_EVENT_VM_UNMAPPED |
                                         UCM_EVENT_MEM_TYPE_FREE;
     rcache_params->context            = context;
@@ -1727,13 +1728,12 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                  * exists in the RCACHE of imported regions, it means that
                  * an exported memory handle has already been destroyed for a
                  * given address, but an imported memory handle hasn't been
-                 * retrieved from the RCACHE yet. So, it should have reference
-                 * counter == 1, since ucp_mem_unmap() should be invoked for
-                 * unused imported memory handles and then - for corresponding
-                 * exported ones */
-                ucs_assertv(rregion->refcount == 1, "%u", rregion->refcount);
+                 * removed from the RCACHE yet. So, it had refcount == 1 and
+                 * now it should be 2. */
+                ucs_assertv(rregion->refcount == 2, "%u", rregion->refcount);
                 ucs_rcache_region_invalidate(rcache, rregion,
                                              ucs_empty_function, NULL);
+                ucs_rcache_region_put_unsafe(rcache, rregion);
             }
         }
 

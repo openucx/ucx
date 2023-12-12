@@ -882,10 +882,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size = (i + 1) * ((i % 2) ? 1000 : 1);
-        void *ptr   = ucs::mmap_fixed_address(size);
-        if (ptr == nullptr) {
-            UCS_TEST_ABORT("mmap failed to allocate memory region");
-        }
+        ucs::mmap_fixed_address ptr(size);
 
         ucp_mem_h memh;
         ucp_mem_map_params_t params;
@@ -893,13 +890,13 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-        params.address    = ptr;
+        params.address    = *ptr;
         params.length     = size;
         params.flags      = UCP_MEM_MAP_FIXED | UCP_MEM_MAP_ALLOCATE;
 
         status = ucp_mem_map(sender().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
-        EXPECT_EQ(ucp_memh_address(memh), ptr);
+        EXPECT_EQ(ucp_memh_address(memh), *ptr);
         EXPECT_GE(ucp_memh_length(memh), size);
 
         is_dummy = (size == 0);
