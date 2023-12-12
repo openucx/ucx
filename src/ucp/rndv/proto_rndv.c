@@ -635,7 +635,7 @@ size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg)
 
 ucs_status_t ucp_proto_rndv_ats_complete(ucp_request_t *req)
 {
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
     return ucp_proto_rndv_recv_complete(req);
 }
 
