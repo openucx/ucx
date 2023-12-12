@@ -1,6 +1,7 @@
 parameters:
   temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/tmp-settings.xml
   gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg
+  target:
 
 jobs:
   - job: jucx_publish
@@ -20,7 +21,7 @@ jobs:
     steps:
       - checkout: self
         clean: true
-        fetchDepth: 100
+        fetchDepth: 300
         path: "we/need/to/go/deeper"
         # ^workaround agent issue with container in root path
 
@@ -62,7 +63,6 @@ jobs:
             echo -e "</server></servers></settings>"
           } > ${{ parameters.temp_cfg }}
         displayName: Generate temporary config
-        condition: eq(variables['Build.Reason'], 'IndividualCI')
 
       - task: DownloadSecureFile@1
         displayName: Download Secure file
@@ -93,10 +93,9 @@ jobs:
           # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
           # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
           MAVEN_VERSION=${TAG:1}
-          make -C bindings/java/src/main/native/ publish-release \
+          make -C bindings/java/src/main/native/ ${{ parameters.target }} \
               ARGS="--settings ${{ parameters.temp_cfg }}" JUCX_VERSION=${MAVEN_VERSION}
         displayName: Publish JUCX jar to maven central
-        condition: eq(variables['Build.Reason'], 'IndividualCI')
         env:
           GPG_PASSPHRASE: $(GPG_PASSPHRASE)
           SONATYPE_PASSWORD: $(SONATYPE_PASSWORD)

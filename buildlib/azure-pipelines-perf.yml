@@ -185,6 +185,6 @@ stages:
         steps:
           - checkout: none
           - bash: |
-              set -xeE
-              crontab -r
+              set -x
+              crontab -r || true
             displayName: remove warning

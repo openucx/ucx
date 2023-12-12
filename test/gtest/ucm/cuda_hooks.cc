@@ -3,6 +3,7 @@
 * See file LICENSE for terms.
 */
 #include <ucm/api/ucm.h>
+#include <ucs/debug/assert.h>
 #include <common/test.h>
 #include <cuda.h>
 #include <cuda_runtime.h>

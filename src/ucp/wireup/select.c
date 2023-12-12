@@ -108,6 +108,7 @@ static const char *ucp_wireup_md_flags[] = {
     [ucs_ilog2(UCT_MD_FLAG_ALLOC)]               = "memory allocation",
     [ucs_ilog2(UCT_MD_FLAG_REG)]                 = "memory registration",
     [ucs_ilog2(UCT_MD_FLAG_INVALIDATE)]          = "memory invalidation",
+    [ucs_ilog2(UCT_MD_FLAG_INVALIDATE_RMA)]      = "RMA memory invalidation"
 };
 
 static const char *ucp_wireup_iface_flags[] = {
