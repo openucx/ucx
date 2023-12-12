@@ -895,18 +895,4 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
  */
 typedef void (*ucp_ep_restart_completion_cb_t)(ucp_ep_h ep, void *arg);
 
-/**
- * @brief Restarts all pending requests by selecting a new protocol for each
- *        one and reset old protocol.
- *
- * @param [in] ep   Endpoint object.
- * @param [in] cb   Callback to be called upon completion.
- * @param [in] arg  Argument to be passed to callback.
- *
- * @return Error code as defined by @ref ucs_status_t
- */
-ucs_status_t ucp_ep_pending_schedule_restart(ucp_ep_h ep,
-                                             ucp_ep_restart_completion_cb_t cb,
-                                             void *arg);
-
 #endif

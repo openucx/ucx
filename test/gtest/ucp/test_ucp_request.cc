@@ -122,6 +122,8 @@ public:
         m_memh(NULL),
         m_rkey(NULL)
     {
+        m_pending.head  = NULL;
+        m_pending.ptail = NULL;
     }
 
     void init() override
@@ -163,9 +165,12 @@ public:
 
     void get_stream_data()
     {
-        size_t roffset = 0;
+        size_t roffset            = 0;
+        const double timeout      = 10;
+        const ucs_time_t deadline = ucs::get_deadline(timeout);
         ucs_status_ptr_t rdata;
         size_t length;
+
         do {
             progress();
             rdata = ucp_stream_recv_data_nb(receiver().ep(), &length);
@@ -176,7 +181,7 @@ public:
             memcpy(&m_rbuf[roffset], rdata, length);
             roffset += length;
             ucp_stream_data_release(receiver().ep(), rdata);
-        } while (roffset < m_rbuf.size());
+        } while ((ucs_get_time() < deadline) && (roffset < m_rbuf.size()));
     }
 
     static ucs_status_t
@@ -212,15 +217,10 @@ public:
 
     void wait_receive(operation_e op)
     {
-        const double timeout      = 10;
-        const ucs_time_t deadline = ucs::get_deadline(timeout);
-
         if (op == STREAM) {
             get_stream_data();
         } else if (op == AM) {
-            while ((ucs_get_time() < deadline) && (m_rbuf != m_sbuf)) {
-                progress();
-            }
+            wait_for_condition([this]() { return m_rbuf == m_sbuf; });
             EXPECT_EQ(m_rbuf, m_sbuf);
         }
     }
@@ -324,12 +324,9 @@ public:
     wait_and_restart(void *sreq, void *rreq, const std::string &expected_proto)
     {
         ucp_request_t *req                 = (ucp_request_t*)sreq - 1;
-        const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
+        ucp_datatype_iter_t *dt_iter       = &req->send.state.dt_iter;
 
-        while (dt_iter->offset == 0) {
-            progress();
-        }
-
+        wait_for_condition([dt_iter]() { return dt_iter->offset > 0; });
         EXPECT_LT(dt_iter->offset, dt_iter->length);
         restart(sender().ep());
 
@@ -355,6 +352,18 @@ public:
 
         ASSERT_UCS_OK(ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &m_rkey));
         ucp_rkey_buffer_release(rkey_buffer);
+    }
+
+    typedef std::function<bool()> predicate_t;
+
+    void wait_for_condition(const predicate_t &predicate)
+    {
+        const double timeout      = 10;
+        const ucs_time_t deadline = ucs::get_deadline(timeout);
+
+        while (!predicate() && (ucs_get_time() < deadline)) {
+            progress();
+        }
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -474,12 +483,15 @@ protected:
     {
         ucp_request_t *req = (ucp_request_t*)rreq - 1;
 
-        while (req->recv.proto_rndv_request == NULL ||
-               req->recv.proto_rndv_request->send.state.dt_iter.offset == 0) {
-            progress();
-        }
+        wait_for_condition(
+                [req]() { return req->recv.proto_rndv_request != NULL; });
 
         const ucp_request_t *rndv_req = req->recv.proto_rndv_request;
+
+        wait_for_condition([rndv_req]() {
+            return rndv_req->send.state.dt_iter.offset > 0;
+        });
+
         ASSERT_LT(rndv_req->send.state.dt_iter.offset,
                   rndv_req->send.state.dt_iter.length);
 
@@ -567,16 +579,20 @@ protected:
         hook_uct_cbs();
 
         /* Wait for rndv_put initialization */
-        std::string rndv_put_zcopy_name("rndv/put/zcopy");
-        while (rndv_put_zcopy_name != req->send.proto_config->proto->name) {
-            progress();
-        }
+        wait_for_condition([req]() {
+            std::string rndv_put_zcopy_name("rndv/put/zcopy");
+            return rndv_put_zcopy_name == req->send.proto_config->proto->name;
+        });
 
         restore_uct_cbs();
 
         /* Wait until ATP stage starts */
         static const unsigned send_stage = 0;
-        while (req->send.proto_stage == send_stage) {
+        const double timeout             = 10;
+        ucs_time_t deadline              = ucs::get_deadline(timeout);
+
+        while ((req->send.proto_stage == send_stage) &&
+               (ucs_get_time() < deadline)) {
             req->send.uct.func(&req->send.uct);
         }
 
@@ -586,8 +602,11 @@ protected:
         ucp_request_t *ucp_rreq       = (ucp_request_t*)rreq - 1;
         const ucp_request_t *rndv_req = ucp_rreq->recv.proto_rndv_request;
 
+        deadline = ucs::get_deadline(timeout);
+
         /* Wait until receiver gets the ATP message */
-        while (rndv_req->send.state.completed_size == 0) {
+        while (rndv_req->send.state.completed_size == 0 &&
+               (ucs_get_time() < deadline)) {
             receiver().progress();
         }
 
