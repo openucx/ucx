@@ -22,6 +22,9 @@ typedef struct uct_cuda_ipc_md {
     ucs_ternary_auto_value_t *peer_accessible_cache;
     int                      uuid_map_size;
     int                      uuid_map_capacity;
+    ucs_ternary_auto_value_t rcache_enable;
+    size_t                   rcache_max_size;
+    unsigned long            rcache_max_regions;
 } uct_cuda_ipc_md_t;
 
 /**
@@ -38,7 +41,10 @@ extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
  * @brief cuda ipc domain configuration.
  */
 typedef struct uct_cuda_ipc_md_config {
-    uct_md_config_t super;
+    uct_md_config_t          super;
+    ucs_ternary_auto_value_t rcache_enable;
+    ucs_rcache_config_t      rcache;
+    double                   rcache_max_ratio;
 } uct_cuda_ipc_md_config_t;
 
 

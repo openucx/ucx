@@ -21,10 +21,11 @@ extern "C" {
 class test_ucp_tag_mem_type: public test_ucp_tag {
 public:
     enum {
-        VARIANT_GDR_OFF     = UCS_BIT(0),
-        VARIANT_TAG_OFFLOAD = UCS_BIT(1),
-        VARIANT_PROTO_V1    = UCS_BIT(2),
-        VARIANT_MAX         = UCS_BIT(3)
+        VARIANT_GDR_OFF                = UCS_BIT(0),
+        VARIANT_TAG_OFFLOAD            = UCS_BIT(1),
+        VARIANT_PROTO_V1               = UCS_BIT(2),
+        VARIANT_CUDA_IPC_LIMITED_CACHE = UCS_BIT(3),
+        VARIANT_MAX                    = UCS_BIT(4)
     };
 
     void init()
@@ -65,6 +66,15 @@ public:
             modify_config("PROTO_ENABLE", "n");
         } else {
             modify_config("PROTO_REQUEST_RESET", "y");
+        }
+
+        if (variant_flags & VARIANT_CUDA_IPC_LIMITED_CACHE) {
+            if (!has_any_transport({"cuda_ipc"})) {
+                UCS_TEST_SKIP_R("No cuda_ipc transport for cuda ipc limited cache variant");
+            }
+
+            m_env.push_back(
+                    new ucs::scoped_setenv("CUDA_IPC_RCACHE_MAX_REGIONS", "1"));
         }
 
         int mem_type_pair_index = get_variant_value() % m_mem_type_pairs.size();

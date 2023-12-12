@@ -64,7 +64,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                   uct_completion_t *comp, int direction)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_ipc_iface_t);
-    uct_cuda_ipc_key_t *key     = (uct_cuda_ipc_key_t *) rkey;
+    uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md, uct_cuda_ipc_md_t);
+    uct_cuda_ipc_key_t *key     = (uct_cuda_ipc_key_t*)rkey;
     void *mapped_rem_addr;
     void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
@@ -73,13 +74,14 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     CUdeviceptr dst, src;
     CUstream stream;
     size_t offset;
+    uct_cuda_ipc_rcache_region_t *cuda_ipc_region;
 
     if (0 == iov[0].length) {
         ucs_trace_data("Zero length request: skip it");
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_map_memhandle(key, &mapped_addr);
+    status = uct_cuda_ipc_map_memhandle(md, key, &mapped_addr, &cuda_ipc_region);
     if (status != UCS_OK) {
         return UCS_ERR_IO_ERROR;
     }
@@ -128,7 +130,10 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     }
 
     iface->stream_refcount[key->dev_num]++;
-    cuda_ipc_event->stream_id = key->dev_num;
+    cuda_ipc_event->stream_id       = key->dev_num;
+    cuda_ipc_event->pid             = key->pid;
+    cuda_ipc_event->mapped_addr     = mapped_addr;
+    cuda_ipc_event->cuda_ipc_region = cuda_ipc_region;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->event,
                                                     stream));
@@ -140,8 +145,6 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     ucs_queue_push(outstanding_queue, &cuda_ipc_event->queue);
     cuda_ipc_event->comp        = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;
-    cuda_ipc_event->d_bptr      = (uintptr_t)key->d_bptr;
-    cuda_ipc_event->pid         = key->pid;
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     return UCS_INPROGRESS;
