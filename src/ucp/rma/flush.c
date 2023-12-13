@@ -68,8 +68,12 @@ static int uct_ep_flush_is_needed(ucp_ep_h ep, ucp_lane_index_t lane)
     ucp_worker_h worker = ep->worker;
     ucp_worker_iface_t *wiface;
 
+    if (!worker->context->config.ext.proto_enable) {
+        return 1;
+    }
+
     wiface = ucp_worker_iface(worker, ucp_ep_get_rsc_index(ep, lane));
-    return !worker->context->config.ext.proto_enable ||
+    return (wiface == NULL) ||
            (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
 }
 
