@@ -72,6 +72,10 @@ static int uct_ep_flush_is_needed(ucp_ep_h ep, ucp_lane_index_t lane)
         return 1;
     }
 
+    if (ep->flags & UCP_EP_FLAG_INTERNAL) {
+        return 1;
+    }
+
     wiface = ucp_worker_iface(worker, ucp_ep_get_rsc_index(ep, lane));
     return (wiface == NULL) ||
            (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
