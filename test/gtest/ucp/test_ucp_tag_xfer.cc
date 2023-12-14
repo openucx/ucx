@@ -247,8 +247,7 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
 size_t test_ucp_tag_xfer::get_msg_size()
 {
     size_t raw_size = 1148544 / ucs::test_time_multiplier();
-
-    return ucs_align_up(raw_size, ucs_get_page_size()) * num_lanes();
+    return ucs_align_up(raw_size, ucs_get_page_size() * num_lanes());
 }
 
 void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
