@@ -117,8 +117,7 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
 #endif
 
 #if ENABLE_NT_BUFFER_TRANSFER
-    if (ucs_unlikely((total_len > ucs_global_opts.arch.nt_buffer_transfer_min) &&
-                     (total_len < ucs_global_opts.arch.nt_buffer_transfer_max))) {
+    if (ucs_unlikely(total_len >= ucs_global_opts.arch.nt_buffer_transfer_min)) {
         ucs_x86_nt_buffer_transfer(dst, src, len, hint, total_len);
         return dst;
     }

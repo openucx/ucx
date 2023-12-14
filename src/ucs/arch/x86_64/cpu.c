@@ -602,15 +602,6 @@ static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
     }
 }
 
-static size_t ucs_cpu_nt_bt_thresh_max(size_t user_val)
-{
-    if (user_val != UCS_MEMUNITS_AUTO) {
-        return user_val;
-    } else {
-        return UCS_MEMUNITS_INF;
-    }
-}
-
 static size_t ucs_cpu_nt_dest_thresh()
 {
     if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD)) {
@@ -634,8 +625,6 @@ void ucs_cpu_init()
 #if ENABLE_NT_BUFFER_TRANSFER
     ucs_global_opts.arch.nt_buffer_transfer_min =
         ucs_cpu_nt_bt_thresh_min(ucs_global_opts.arch.nt_buffer_transfer_min);
-    ucs_global_opts.arch.nt_buffer_transfer_max =
-        ucs_cpu_nt_bt_thresh_max(ucs_global_opts.arch.nt_buffer_transfer_max);
     ucs_global_opts.arch.nt_dest_threshold = ucs_cpu_nt_dest_thresh();
 #endif
 }

@@ -30,11 +30,6 @@ ucs_config_field_t ucs_arch_global_opts_table[] = {
    "Minimal threshold of buffer length for using nt-buffer-transfer.",
    ucs_offsetof(ucs_arch_global_opts_t, nt_buffer_transfer_min),
    UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"NT_BUFFER_TRANSFER_MAX", "auto",
-   "Maximal threshold of buffer length for using nt-buffer-transfer.",
-   ucs_offsetof(ucs_arch_global_opts_t, nt_buffer_transfer_max),
-   UCS_CONFIG_TYPE_MEMUNITS},
 #endif
   {NULL}
 };
@@ -44,10 +39,10 @@ void ucs_arch_print_memcpy_limits(ucs_arch_global_opts_t *config)
 {
 #if ENABLE_BUILTIN_MEMCPY || ENABLE_NT_BUFFER_TRANSFER
     char min_thresh_str[32];
-    char max_thresh_str[32];
 #endif
 
 #if ENABLE_BUILTIN_MEMCPY
+    char max_thresh_str[32];
     ucs_config_sprintf_memunits(min_thresh_str, sizeof(min_thresh_str),
                                 &config->builtin_memcpy_min, NULL);
     ucs_config_sprintf_memunits(max_thresh_str, sizeof(max_thresh_str),
@@ -59,10 +54,8 @@ void ucs_arch_print_memcpy_limits(ucs_arch_global_opts_t *config)
 #if ENABLE_NT_BUFFER_TRANSFER
     ucs_config_sprintf_memunits(min_thresh_str, sizeof(min_thresh_str),
                                 &config->nt_buffer_transfer_min, NULL);
-    ucs_config_sprintf_memunits(max_thresh_str, sizeof(max_thresh_str),
-                                &config->nt_buffer_transfer_max, NULL);
-    printf("# Using nt-buffer-transfer for size %s..%s\n",
-           min_thresh_str, max_thresh_str);
+    printf("# Using nt-buffer-transfer for sizes from %s\n",
+           min_thresh_str);
 #endif
 }
 

@@ -19,7 +19,6 @@ BEGIN_C_DECLS
     .builtin_memcpy_min     = UCS_MEMUNITS_AUTO, \
     .builtin_memcpy_max     = UCS_MEMUNITS_AUTO, \
     .nt_buffer_transfer_min = UCS_MEMUNITS_AUTO, \
-    .nt_buffer_transfer_max = UCS_MEMUNITS_AUTO, \
     .nt_dest_threshold      = UCS_MEMUNITS_AUTO  \
 }
 #else
@@ -35,7 +34,6 @@ typedef struct ucs_arch_global_opts {
     size_t builtin_memcpy_max;
 #if ENABLE_NT_BUFFER_TRANSFER
     size_t nt_buffer_transfer_min;
-    size_t nt_buffer_transfer_max;
     size_t nt_dest_threshold;
 #endif
 } ucs_arch_global_opts_t;
