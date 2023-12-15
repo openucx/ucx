@@ -11,6 +11,7 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.inl>
+#include <ucp/wireup/wireup_ep.h>
 
 #include "rma.inl"
 
@@ -73,6 +74,10 @@ static int uct_ep_flush_is_needed(ucp_ep_h ep, ucp_lane_index_t lane)
     }
 
     if (ep->flags & UCP_EP_FLAG_INTERNAL) {
+        return 1;
+    }
+
+    if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
         return 1;
     }
 
