@@ -157,6 +157,9 @@ struct uct_ib_iface_config {
     /* Force global routing */
     int                     is_global;
 
+    /* Use FLID based routing */
+    int                     flid_enabled;
+
     /* IB SL to use (default: AUTO) */
     unsigned long           sl;
 
@@ -300,6 +303,7 @@ struct uct_ib_iface {
         uint8_t               hop_limit;
         uint8_t               qp_type;
         uint8_t               force_global_addr;
+        uint8_t               flid_enabled;
         enum ibv_mtu          path_mtu;
         uint8_t               counter_set_id;
     } config;
@@ -584,6 +588,8 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
 
 uint8_t
 uct_ib_iface_config_select_reverse_sl(const uct_ib_iface_config_t *ib_config);
+
+uint16_t uct_ib_iface_flid_from_gid(uct_ib_iface_t *iface, union ibv_gid *gid);
 
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"
