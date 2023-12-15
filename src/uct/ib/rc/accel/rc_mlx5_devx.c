@@ -445,6 +445,8 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                           iface->super.super.config.sl);
 
         if (ah_attr->is_global) {
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index,
+                              ah_attr->grh.sgid_index);
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit,
                               ah_attr->grh.hop_limit);
             memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
