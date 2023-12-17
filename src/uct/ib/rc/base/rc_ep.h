@@ -221,6 +221,7 @@ struct uct_rc_ep {
     uint16_t            atomic_mr_offset;
     uint8_t             path_index;
     uint8_t             flags;
+    uint8_t             sl;
 };
 
 

@@ -147,8 +147,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
         return status;
     }
 
+
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->flags      = 0;
+    self->sl         = uct_ib_iface_get_ep_sl(&iface->super, params);
+
+    ucs_warn("EP PRIORITY: %u, SELECTED_SL: %u", params->priority, self->sl);
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {

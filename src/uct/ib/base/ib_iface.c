@@ -205,6 +205,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Reverse Service level. 'auto' will set the same value of sl\n",
    ucs_offsetof(uct_ib_iface_config_t, reverse_sl), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"HIGH_PRIORITY_SL", "auto",
+   "High priority service level. 'auto' will set the same value of sl\n",
+   ucs_offsetof(uct_ib_iface_config_t, priority_sl), UCS_CONFIG_TYPE_ULUNITS},
+
   {NULL}
 };
 
@@ -1437,6 +1441,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     /* initialize to invalid value */
     self->config.sl                 = UCT_IB_SL_NUM;
     self->config.reverse_sl         = UCT_IB_SL_NUM;
+    self->config.priority_sl        = UCT_IB_SL_NUM;
     self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;
@@ -1838,4 +1843,12 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
     return UCS_OK;
+}
+
+uint8_t uct_ib_iface_get_ep_sl(const uct_ib_iface_t *iface, const uct_ep_params_t *params)
+{
+    return (params->field_mask & UCT_EP_PARAM_FIELD_PRIORITY) &&
+                           (params->priority > 0) ?
+                   iface->config.priority_sl :
+                   iface->config.sl;
 }

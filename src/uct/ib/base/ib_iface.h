@@ -195,6 +195,9 @@ struct uct_ib_iface_config {
 
     /* IB reverse SL (default: AUTO - same value as sl) */
     unsigned long           reverse_sl;
+
+    /* IB high priority SL (default: AUTO - same value as sl) */
+    unsigned long           priority_sl;
 };
 
 
@@ -299,6 +302,7 @@ struct uct_ib_iface {
         uint8_t               port_num;
         uint8_t               sl;
         uint8_t               reverse_sl;
+        uint8_t               priority_sl;
         uint8_t               traffic_class;
         uint8_t               hop_limit;
         uint8_t               qp_type;
@@ -591,6 +595,8 @@ void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
 
 uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
                                           const union ibv_gid *gid);
+
+uint8_t uct_ib_iface_get_ep_sl(const uct_ib_iface_t *iface, const uct_ep_params_t *params);
 
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"

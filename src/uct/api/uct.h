@@ -969,7 +969,10 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15),
 
     /** Enables @ref uct_ep_params::local_sockaddr */
-    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16)
+    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16),
+
+    /** Enables @ref uct_ep_params::priority */
+    UCT_EP_PARAM_FIELD_PRIORITY                   = UCS_BIT(17)
 };
 
 
@@ -1420,6 +1423,10 @@ struct uct_ep_params {
      * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
      */
     const ucs_sock_addr_t             *local_sockaddr;
+    /**
+     * Message Priority
+     */
+    unsigned                                 priority;
 };
 
 
