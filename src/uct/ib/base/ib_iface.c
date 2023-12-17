@@ -742,8 +742,8 @@ static int uct_ib_iface_dev_addr_is_reachable(uct_ib_iface_t *iface,
     }
 
     if (!is_local_eth && !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
-        if ((params.gid.global.subnet_prefix ==
-             iface->gid_info.gid.global.subnet_prefix)) {
+        if (params.gid.global.subnet_prefix ==
+            iface->gid_info.gid.global.subnet_prefix) {
             return 1;
         }
 
