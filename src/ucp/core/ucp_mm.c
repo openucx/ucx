@@ -1443,14 +1443,18 @@ static ucs_rcache_ops_t ucp_mem_rcache_ops = {
 
 static ucs_status_t
 ucp_mem_rcache_create(ucp_context_h context, const char *name,
-                      ucs_rcache_t **rcache_p, ucs_rcache_params_t *rcache_params)
+                      ucs_rcache_t **rcache_p, int events,
+                      ucs_rcache_params_t *rcache_params)
 {
     rcache_params->region_struct_size = ucp_memh_size(context);
-    rcache_params->flags             |= UCS_RCACHE_FLAG_SYNC_EVENTS;
-    rcache_params->ucm_events         = UCM_EVENT_VM_UNMAPPED |
-                                        UCM_EVENT_MEM_TYPE_FREE;
     rcache_params->context            = context;
     rcache_params->ops                = &ucp_mem_rcache_ops;
+
+    if (events) {
+        rcache_params->flags         |= UCS_RCACHE_FLAG_SYNC_EVENTS;
+        rcache_params->ucm_events     = UCM_EVENT_VM_UNMAPPED |
+                                        UCM_EVENT_MEM_TYPE_FREE;
+    }
 
     return ucs_rcache_create(rcache_params, name, ucs_stats_get_root(),
                              rcache_p);
@@ -1464,7 +1468,7 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
 
     ucs_rcache_set_params(&rcache_params, rcache_config);
 
-    status = ucp_mem_rcache_create(context, "ucp_rcache", &context->rcache,
+    status = ucp_mem_rcache_create(context, "ucp_rcache", &context->rcache, 1,
                                    &rcache_params);
     if (status != UCS_OK) {
         goto err;
@@ -1607,7 +1611,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
 
             ucs_rcache_set_default_params(&rcache_params);
 
-            status = ucp_mem_rcache_create(context, rcache_name, &rcache,
+            status = ucp_mem_rcache_create(context, rcache_name, &rcache, 0,
                                            &rcache_params);
             if (status != UCS_OK) {
                 goto out;
