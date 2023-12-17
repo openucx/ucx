@@ -758,8 +758,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
                               worker, params, config, &init_attr);
 
     self->super.super.config.sl = uct_ib_iface_config_select_sl(&config->super);
-    self->super.super.config.reverse_sl = uct_ib_iface_config_select_reverse_sl(
-            &config->super);
+    uct_ib_iface_set_reverse_sl(&self->super.super, &config->super);
 
     memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
     self->tx.wr_inl.opcode            = IBV_WR_SEND;

@@ -988,12 +988,11 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
 
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);
 
-ucs_status_t
-uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
-                      ucs_ternary_auto_value_t ar_enable,
-                      uint16_t hw_sl_mask, int have_sl_mask_cap,
-                      const char *dev_name, uint8_t port_num,
-                      uint8_t *sl_p);
+ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
+                                   ucs_ternary_auto_value_t ar_enable,
+                                   uint16_t hw_sl_mask, int have_sl_mask_cap,
+                                   const char *dev_name, uint8_t port_num,
+                                   uint8_t *sl_p);
 
 ucs_status_t
 uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
