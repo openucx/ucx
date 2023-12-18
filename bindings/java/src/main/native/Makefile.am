@@ -103,7 +103,8 @@ set-version:
 repack-jar: $(jarfile)
 	$(RM) -r $(java_build_dir)/repack_dir
 	unzip -o $(jarfile) -d $(java_build_dir)/repack_dir
-	\cp $(topdir)/libjucx_*.so/libjucx_*.so $(java_build_dir)/repack_dir
+	\cp -v $(topdir)/libjucx_*.so/libjucx_*.so $(topdir)/bindings/java/resources
+	\cp -v $(topdir)/libjucx_*.so/libjucx_*.so $(java_build_dir)/repack_dir
 	jar -cf $(jarfile) -C $(java_build_dir)/repack_dir .
 	jar tf $(jarfile)
 
@@ -111,14 +112,21 @@ multi-arch:
 	@make set-version JUCX_VERSION=${JUCX_VERSION}
 	@make repack-jar
 
+check-jar:
+	@test $(shell jar tf $(jarfile) | grep -q libjucx_amd64.so)
+	@test $(shell jar tf $(jarfile) | grep -q libjucx_aarch64.so)
+
 # Publish JUCX jar to maven central
 publish-snapshot:
 	@make set-version JUCX_VERSION=@VERSION@-SNAPSHOT
+	@make repack-jar
+	@make check-jar
 	@make publish
 
 publish-release:
 	@make set-version JUCX_VERSION=${JUCX_VERSION}
 	@make repack-jar
+	@make check-jar
 	@make publish
 
 publish:
