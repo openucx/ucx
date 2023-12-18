@@ -76,16 +76,6 @@ typedef struct ucp_ep_discard_lanes_arg {
     ucp_ep_h     ucp_ep; /* UCP endpoint which should be discarded */
 } ucp_ep_discard_lanes_arg_t;
 
-/**
- * Internal struct used for ep restart.
- */
-typedef struct ucp_ep_restart_data {
-    ucs_queue_head_t pending;          /* pending queue extracted from ep */
-    ucp_ep_restart_completion_cb_t cb; /* user callback which is called after
-                                          completion */
-    void *arg;                         /* argument to pass to callback */
-} ucp_ep_restart_data_t;
-
 extern const ucp_request_send_proto_t ucp_stream_am_proto;
 extern const ucp_request_send_proto_t ucp_am_proto;
 extern const ucp_request_send_proto_t ucp_am_reply_proto;

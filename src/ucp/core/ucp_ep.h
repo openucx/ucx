@@ -694,8 +694,6 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          const ucp_conn_request_h conn_request,
                                          ucp_ep_h *ep_p);
 
-void ucp_ep_flushed_callback(ucp_request_t *req);
-
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const ucp_request_param_t *param,
                                        ucp_request_t *worker_req,
@@ -886,13 +884,5 @@ ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
-
-/**
- * @brief Callback to notify about ep restart completion.
- *
- * @param [in]  ep       Endpoint which completed restart operation.
- * @param [in]  arg      User argument to be passed to the callback.
- */
-typedef void (*ucp_ep_restart_completion_cb_t)(ucp_ep_h ep, void *arg);
 
 #endif

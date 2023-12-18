@@ -113,12 +113,17 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
                                 init_params->priv_size);
 }
 
-static ucs_status_t ucp_proto_get_offload_bcopy_reset(ucp_request_t *req)
+static ucs_status_t ucp_proto_get_offload_reset(ucp_request_t *req)
 {
     /* get_am protocol will use this field after reset, so it must be
      * initialized */
     req->send.state.completed_size = 0;
-    return ucp_proto_request_bcopy_reset(req);
+    return ucp_proto_request_zcopy_reset(req);
+}
+
+static ucs_status_t ucp_proto_get_offload_bcopy_reset(ucp_request_t *req)
+{
+    return ucp_proto_get_offload_reset(req);
 }
 
 ucp_proto_t ucp_get_offload_bcopy_proto = {
@@ -216,10 +221,7 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
 
 static ucs_status_t ucp_proto_get_offload_zcopy_reset(ucp_request_t *req)
 {
-    /* get_am protocol will use this field after reset, so it must be
-     * initialized */
-    req->send.state.completed_size = 0;
-    return ucp_proto_request_zcopy_reset(req);
+    return ucp_proto_get_offload_reset(req);
 }
 
 ucp_proto_t ucp_get_offload_zcopy_proto = {

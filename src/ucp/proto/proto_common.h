@@ -59,7 +59,7 @@ typedef enum {
     /* Supports error handling */
     UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9),
 
-    /* Supports resuming request after reset */
+    /* Supports starting the request when its datatype iterator offset is > 0 */
     UCP_PROTO_COMMON_INIT_FLAG_RESUME        = UCS_BIT(10),
 } ucp_proto_common_init_flags_t;
 
