@@ -831,38 +831,36 @@ protected:
 test_ucp_peer_failure_rndv_abort *test_ucp_peer_failure_rndv_abort::self = nullptr;
 
 UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, get_zcopy,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
+                     !is_proto_enabled(), "RNDV_THRESH=0",
                      "RNDV_SCHEME=get_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_get, true);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort, put_zcopy_force_flush,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
+                     !is_proto_enabled(), "RNDV_THRESH=0",
                      "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, true);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
-                     get_zcopy_memory_invalidation,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
-                     "RNDV_SCHEME=get_zcopy")
+                     get_zcopy_memory_invalidation, !is_proto_enabled(),
+                     "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_get, false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
-                     put_zcopy_memory_invalidation,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
-                     "RNDV_SCHEME=put_zcopy")
+                     put_zcopy_memory_invalidation, !is_proto_enabled(),
+                     "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rndv_abort,
                      put_zcopy_force_flush_memory_invalidation,
-                     !m_ucp_config->ctx.proto_enable, "RNDV_THRESH=0",
+                     !is_proto_enabled(), "RNDV_THRESH=0",
                      "RNDV_SCHEME=put_zcopy", "RNDV_PUT_FORCE_FLUSH=y")
 {
     rndv_progress_failure_test(rndv_mode::rndv_put, false);
