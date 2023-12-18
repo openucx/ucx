@@ -170,6 +170,7 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane, size_t *min_frag_p,
                                size_t *max_frag_p)
 {
+    ucp_context_h context = params->super.worker->context;
     *min_frag_p = ucp_proto_common_get_iface_attr_field(iface_attr,
                                                         params->min_frag_offs,
                                                         0);
@@ -182,6 +183,15 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE) {
         *max_frag_p = ucs_min(ucp_proto_common_get_seg_size(params, lane),
                               *max_frag_p);
+    }
+
+    /* Force upper bound on fragment size according to user configuration. */
+    if (ucs_test_all_flags(params->flags,
+                           UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                           UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
+        (context->config.ext.rma_zcopy_max_seg_size != UCS_MEMUNITS_AUTO)) {
+        *max_frag_p = ucs_min(*max_frag_p,
+                              context->config.ext.rma_zcopy_max_seg_size);
     }
 }
 
