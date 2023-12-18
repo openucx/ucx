@@ -17,8 +17,7 @@ class test_ucp_atomic : public test_ucp_memheap {
 public:
     /* Test variants */
     enum {
-        ATOMIC_MODE   = UCS_MASK(2),
-        DISABLE_PROTO = UCS_BIT(2)
+        ATOMIC_MODE = UCS_MASK(2)
     };
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants,
@@ -34,9 +33,6 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         get_test_variants(variants, 0, "");
-        if (!RUNNING_ON_VALGRIND) {
-            get_test_variants(variants, DISABLE_PROTO, "/proto_v1");
-        }
     }
 
     struct send_func_data {
@@ -134,11 +130,6 @@ protected:
                         (atomic_mode == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
                         "";
         modify_config("ATOMIC_MODE", atomic_mode_cfg);
-
-        if (get_variant_value() & DISABLE_PROTO) {
-            modify_config("PROTO_ENABLE", "n");
-        }
-
         test_ucp_memheap::init();
     }
 
@@ -216,7 +207,7 @@ private:
             ucs_memory_type_t send_mem_type = pairs[i][0], recv_mem_type = pairs[i][1];
             if (!UCP_MEM_IS_HOST(send_mem_type) || !UCP_MEM_IS_HOST(recv_mem_type)) {
                 /* Memory type atomics are fully supported only with new protocols */
-                if (get_variant_value() & DISABLE_PROTO) {
+                if (!is_proto_enabled()) {
                     continue;
                 }
 

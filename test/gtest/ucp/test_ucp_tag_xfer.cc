@@ -1110,7 +1110,7 @@ public:
         EXPECT_EQ(1, get_zcopy + rtr + rkey_ptr);
         EXPECT_LE(put_zcopy, rtr);
 
-        if (m_ucp_config->ctx.proto_enable) {
+        if (is_proto_enabled()) {
             if (has_xpmem() || is_self() || has_rma_zcopy()) {
                 /* Expect one of the bulk transfer protocols */
                 EXPECT_EQ(1u, rkey_ptr + get_zcopy + put_zcopy);
@@ -1238,7 +1238,7 @@ public:
 UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
-    if (m_ucp_config->ctx.proto_enable) {
+    if (is_proto_enabled()) {
         UCS_TEST_SKIP_R("TM_SW_RNDV has no effect with proto v2");
     }
 

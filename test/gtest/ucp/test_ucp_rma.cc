@@ -33,13 +33,13 @@ public:
                                "user_memh");
     }
 
-    virtual void init() {
-        if (disable_proto()) {
+    test_ucp_rma()
+    {
+        if (get_variant_value() & DISABLE_PROTO) {
             modify_config("PROTO_ENABLE", "n");
         } else {
             modify_config("MAX_RMA_LANES", "2");
         }
-        test_ucp_memheap::init();
     }
 
     void do_nbi_iov(iov_op_t op, size_t size, void *expected_data,
@@ -120,9 +120,8 @@ protected:
         for (size_t i = 0; i < pairs.size(); ++i) {
 
             /* Memory type put/get is fully supported only with new protocols */
-            if (!m_ucp_config->ctx.proto_enable &&
-                (!UCP_MEM_IS_HOST(pairs[i][0]) ||
-                 !UCP_MEM_IS_HOST(pairs[i][1]))) {
+            if (!is_proto_enabled() && (!UCP_MEM_IS_HOST(pairs[i][0]) ||
+                                        !UCP_MEM_IS_HOST(pairs[i][1]))) {
                 continue;
             }
 
@@ -138,10 +137,6 @@ protected:
     void test_message_sizes(send_func_t send_func) {
         test_message_sizes(send_func, 128, default_max_size(),
                            UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST, 0);
-    }
-
-    bool disable_proto() {
-        return !m_ucp_config->ctx.proto_enable;
     }
 
     bool user_memh()
@@ -310,8 +305,9 @@ UCS_TEST_P(test_ucp_rma, put_nonblocking) {
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma, put_nonblocking_iov_zcopy, disable_proto(),
-                     "ZCOPY_THRESH=0") {
+UCS_TEST_SKIP_COND_P(test_ucp_rma, put_nonblocking_iov_zcopy,
+                     !is_proto_enabled(), "ZCOPY_THRESH=0")
+{
     if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
         UCS_TEST_SKIP_R("put_zcopy is not supported");
     }
@@ -329,8 +325,9 @@ UCS_TEST_P(test_ucp_rma, get_nonblocking) {
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma, get_nonblocking_iov_zcopy, disable_proto(),
-                     "ZCOPY_THRESH=0") {
+UCS_TEST_SKIP_COND_P(test_ucp_rma, get_nonblocking_iov_zcopy,
+                     !is_proto_enabled(), "ZCOPY_THRESH=0")
+{
     if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
         UCS_TEST_SKIP_R("get_zcopy is not supported");
     }
