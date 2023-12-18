@@ -76,6 +76,7 @@ typedef struct ucp_ep_discard_lanes_arg {
     ucp_ep_h     ucp_ep; /* UCP endpoint which should be discarded */
 } ucp_ep_discard_lanes_arg_t;
 
+
 extern const ucp_request_send_proto_t ucp_stream_am_proto;
 extern const ucp_request_send_proto_t ucp_am_proto;
 extern const ucp_request_send_proto_t ucp_am_reply_proto;
