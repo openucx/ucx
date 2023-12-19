@@ -1153,9 +1153,10 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
     uint8_t fc_hdr             = uct_rc_fc_get_fc_hdr(hdr->am_id);
+    const union ibv_gid *gid;
     uct_dc_fc_sender_data_t *sender;
     uct_dc_fc_request_t *dc_req;
-    int16_t cur_wnd;
+    int16_t cur_wnd, flid;
     ucs_status_t status;
     uct_dc_mlx5_ep_t *ep;
     ucs_arbiter_t *waitq;
@@ -1178,8 +1179,11 @@ uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
         dc_req->super.super.func = uct_dc_mlx5_iface_fc_grant;
         dc_req->super.ep         = &ep->super.super;
         dc_req->dct_num          = imm_data;
-        dc_req->lid              = lid;
         dc_req->sender           = *((uct_dc_fc_sender_data_t*)(hdr + 1));
+
+        gid         = ucs_unaligned_ptr(&dc_req->sender.payload.gid);
+        flid        = uct_ib_iface_resolve_remote_flid(&rc_iface->super, gid);
+        dc_req->lid = (flid == 0) ? lid : htons(flid); /* dc_req->lid is BE */
 
         status = uct_dc_mlx5_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){
