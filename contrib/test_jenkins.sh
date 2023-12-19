@@ -475,9 +475,11 @@ run_ucx_perftest() {
 		if [ $with_mpi -eq 1 ]
 		then
 			# Run UCP performance test
+			which mpirun
 			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
 
 			# Run UCP loopback performance test
+			which mpirun
 			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args "-l"
 		else
 			export UCX_NET_DEVICES=$dev
@@ -579,6 +581,7 @@ test_malloc_hooks_mpi() {
 		for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
 		do
 			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
+			which mpirun
 			$MPIRUN -np 1 $AFFINITY \
 				./test/mpi/test_memhooks -t $tname -m ${mode}
 		done
@@ -586,6 +589,7 @@ test_malloc_hooks_mpi() {
 		echo "==== Running memory hook (malloc_hooks mode ${mode}) on MPI with LD_PRELOAD ===="
 		ucm_lib=$PWD/src/ucm/.libs/libucm.so
 		ls -l $ucm_lib
+		which mpirun
 		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
 			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
 	done
