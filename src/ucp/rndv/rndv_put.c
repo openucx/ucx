@@ -129,33 +129,26 @@ static size_t ucp_proto_rndv_put_common_pack_atp(void *dest, void *arg)
     return ucp_proto_rndv_pack_ack(pack_ctx->req, dest, pack_ctx->ack_size);
 }
 
-static size_t
-ucp_proto_rndv_put_common_ack_size(ucp_request_t *req, ucp_lane_map_t atp_map)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
+
+    pack_ctx.req = req;
 
     /* When we need to send multiple ATP messages: each will acknowledge 1 byte,
        except the last ATP which will acknowledge the remaining payload size.
        This is simpler than keeping track of how much was sent on each lane */
-    ucs_assert(atp_map != 0);
-    if (ucs_is_pow2(atp_map)) {
-        return req->send.state.dt_iter.length - rpriv->atp_num_lanes + 1;
-    }
-
-    return 1;
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
-{
-    ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
-
-    pack_ctx.req = req;
-    pack_ctx.ack_size =
-            ucp_proto_rndv_put_common_ack_size(req, req->send.rndv.put.atp_map);
-
-    if (pack_ctx.ack_size == 0) {
-        return UCS_OK; /* Skip sending 0-length ATP */
+    ucs_assert(req->send.rndv.put.atp_map != 0);
+    if (ucs_is_pow2(req->send.rndv.put.atp_map)) {
+        pack_ctx.ack_size = req->send.state.dt_iter.length -
+                            rpriv->atp_num_lanes + 1;
+        if (pack_ctx.ack_size == 0) {
+            return UCS_OK; /* Skip sending 0-length ATP */
+        }
+    } else {
+        pack_ctx.ack_size = 1;
     }
 
     return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
@@ -424,16 +417,17 @@ ucp_proto_rndv_put_zcopy_query(const ucp_proto_query_params_t *params,
 static ucs_status_t ucp_proto_rndv_put_zcopy_reset(ucp_request_t *request)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = request->send.proto_config->priv;
-    ucp_lane_map_t acked_map               = rpriv->atp_map;
-    size_t acked_size                      = 0;
+    ucp_datatype_iter_t *dt_iter           = &request->send.state.dt_iter;
+    ucp_lane_map_t acked_map;
 
-    while (acked_map != request->send.rndv.put.atp_map) {
-        acked_size += ucp_proto_rndv_put_common_ack_size(request, acked_map);
-        acked_map  &= ~UCS_BIT(ucs_ffs32(acked_map));
+    if (request->send.rndv.put.atp_map != 0) {
+        acked_map       = request->send.rndv.put.atp_map ^ rpriv->atp_map;
+        dt_iter->offset = ucs_popcount(acked_map);
+    } else {
+        dt_iter->offset = dt_iter->length;
     }
 
-    request->flags                    &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
-    request->send.state.dt_iter.offset = acked_size;
+    request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     return UCS_OK;
 }
 
