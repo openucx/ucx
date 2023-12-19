@@ -287,7 +287,9 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
-ucs_status_t ucp_proto_request_init(ucp_request_t *req);
+ucs_status_t
+ucp_proto_request_init(ucp_request_t *req,
+                       const ucp_proto_select_param_t *select_param);
 
 void ucp_proto_request_check_reset_state(const ucp_request_t *req);
 

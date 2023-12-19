@@ -739,7 +739,9 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
     }
 }
 
-ucs_status_t ucp_proto_request_init(ucp_request_t *req)
+ucs_status_t
+ucp_proto_request_init(ucp_request_t *req,
+                       const ucp_proto_select_param_t *select_param)
 {
     ucp_ep_h ep         = req->send.ep;
     ucp_worker_h worker = ep->worker;
@@ -760,21 +762,21 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
     }
 
     /* Select from protocol hash according to saved request parameters */
-    return ucp_proto_request_lookup_proto(
-            worker, ep, req, proto_select, rkey_cfg_index,
-            &req->send.proto_config->select_param, msg_length);
+    return ucp_proto_request_lookup_proto(worker, ep, req, proto_select,
+                                          rkey_cfg_index, select_param,
+                                          msg_length);
 }
 
 void ucp_proto_request_restart(ucp_request_t *req)
 {
+    const ucp_proto_config_t *proto_config = req->send.proto_config;
+    ucp_proto_select_param_t select_param  = proto_config->select_param;
     ucs_status_t status;
-    ucp_proto_config_t *proto_config;
 
     ucp_trace_req(req, "proto %s at stage %d restarting",
-                  req->send.proto_config->proto->name, req->send.proto_stage);
+                  proto_config->proto->name, req->send.proto_stage);
 
-    proto_config = (ucp_proto_config_t*)req->send.proto_config;
-    status       = proto_config->proto->reset(req);
+    status = proto_config->proto->reset(req);
     if (status != UCS_OK) {
         ucs_assert_always(status == UCS_ERR_CANCELED);
         return;
@@ -782,11 +784,10 @@ void ucp_proto_request_restart(ucp_request_t *req)
 
     /* Select a protocol with resume request support */
     if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
-        proto_config->select_param.op_id_flags |=
-                UCP_PROTO_SELECT_OP_FLAG_RESUME;
+        select_param.op_id_flags |= UCP_PROTO_SELECT_OP_FLAG_RESUME;
     }
 
-    status = ucp_proto_request_init(req);
+    status = ucp_proto_request_init(req, &select_param);
     if (status == UCS_OK) {
         ucp_request_send(req);
     } else {
