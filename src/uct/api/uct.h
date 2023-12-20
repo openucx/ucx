@@ -1438,7 +1438,7 @@ struct uct_ep_params {
      * @ref UCT_IFACE_FLAG_MESSAGE_PRIORITY capability.
      * 
     */
-    ucs_priority_t                           priority;
+    unsigned                                 priority;
 };
 
 

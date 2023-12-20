@@ -149,19 +149,4 @@ typedef struct ucs_log_component_config {
     const char      *file_filter; /* glob pattern of source files */
 } ucs_log_component_config_t;
 
-
-/**
- * @brief request priority level
- * 
- * The enumeration lists available priority levels which are set per request, 
- * Message priority is an optional attribute of @ref ucp_request_param_t, 
- * value will be propogated to transports which are capable of prioritizing messages.
- * 
- * Ordering is not guarenteed across messages with different priorities
-*/
-typedef enum {
-    UCS_PRIORITY_DEFAULT,
-    UCS_PRIORITY_HIGH
-} ucs_priority_t;
-
 #endif /* TYPES_H_ */
