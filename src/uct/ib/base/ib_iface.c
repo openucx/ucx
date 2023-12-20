@@ -1378,6 +1378,25 @@ void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
     ib_iface->config.reverse_sl = (uint8_t)ib_config->reverse_sl;
 }
 
+void uct_ib_iface_set_priority_sl(uct_ib_iface_t *ib_iface,
+                                  const uct_ib_iface_config_t *ib_config)
+{
+    if (ib_config->priority_sl == UCS_ULUNITS_AUTO) {
+        ib_iface->config.priority_sl = ib_iface->config.sl;
+        return;
+    }
+
+    ucs_assert(ib_config->priority_sl < UCT_IB_SL_NUM);
+    ib_iface->config.priority_sl = (uint8_t)ib_config->priority_sl;
+}
+
+void uct_ib_iface_set_configured_sls(uct_ib_iface_t *ib_iface,
+                                     const uct_ib_iface_config_t *ib_config)
+{
+    uct_ib_iface_set_reverse_sl(ib_iface, ib_config);
+    uct_ib_iface_set_priority_sl(ib_iface, ib_config);
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_ops_t *ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,

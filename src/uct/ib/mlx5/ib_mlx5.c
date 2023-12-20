@@ -1065,7 +1065,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
             goto out;
         }
 
-        uct_ib_iface_set_reverse_sl(iface, ib_config);
+        uct_ib_iface_set_configured_sls(iface, ib_config);
         return status;
     }
 
@@ -1086,7 +1086,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
         goto out;
     }
 
-    uct_ib_iface_set_reverse_sl(iface, ib_config);
+    uct_ib_iface_set_configured_sls(iface, ib_config);
 
 out:
     return status;
