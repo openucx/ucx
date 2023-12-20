@@ -948,8 +948,9 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
  *
  * @param [in]  md          Handle to memory domain.
  * @param [in]  memh        Pack a remote key for this memory handle.
- * @param [in]  address     Memory to expose.
- * @param [in]  length      Size of memory to expose.
+ * @param [in]  address     Memory address to expose for remote access.
+ * @param [in]  length      The size (in bytes) of memory that will be exposed
+ *                          for remote access.
  * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mkey_pack_params_t.
  * @param [out] mkey_buffer Pointer to a buffer to hold the packed memory key.
