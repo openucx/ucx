@@ -108,6 +108,7 @@ static const char *ucp_wireup_md_flags[] = {
     [ucs_ilog2(UCT_MD_FLAG_ALLOC)]               = "memory allocation",
     [ucs_ilog2(UCT_MD_FLAG_REG)]                 = "memory registration",
     [ucs_ilog2(UCT_MD_FLAG_INVALIDATE)]          = "memory invalidation",
+    [ucs_ilog2(UCT_MD_FLAG_INVALIDATE_RMA)]      = "RMA memory invalidation"
 };
 
 static const char *ucp_wireup_iface_flags[] = {
@@ -1469,12 +1470,18 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
                                      const ucp_wireup_select_info_t *sinfo,
                                      const ucp_unpacked_address_t *address)
 {
-    ucp_context_h context = worker->context;
-    const uct_iface_attr_t *iface_attr;
+    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, sinfo->rsc_index);
     double bw_local, bw_remote;
 
-    iface_attr = ucp_worker_iface_get_attr(worker, sinfo->rsc_index);
-    bw_local   = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+    if (address->dst_version < 17) {
+        bw_local = ucp_tl_iface_bandwidth(worker->context,
+                                          &wiface->attr.bandwidth);
+    } else {
+        /* Compare BW including local distance to prevent EP reconfiguration
+         * since remote distance is included to remote_addr*/
+        bw_local = ucp_wireup_iface_bw_distance(wiface);
+    }
+
     bw_remote  = address->address_list[sinfo->addr_index].iface_attr.bandwidth;
 
     if (address->addr_version == UCP_OBJECT_VERSION_V2) {

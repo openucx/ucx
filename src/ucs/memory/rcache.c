@@ -646,7 +646,8 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
      * This way we avoid queuing endless events on the invalidation queue when
      * no rcache operations are performed to clean it.
      */
-    if (!pthread_rwlock_trywrlock(&rcache->pgt_lock)) {
+    if (!(rcache->params.flags & UCS_RCACHE_FLAG_SYNC_EVENTS) &&
+        !pthread_rwlock_trywrlock(&rcache->pgt_lock)) {
         /* coverity[double_lock] */
         ucs_rcache_invalidate_range(rcache, start, end,
                                     UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC);

@@ -197,6 +197,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "detect the default value by creating a dummy QP." ,
    ucs_offsetof(uct_ib_iface_config_t, counter_set_id), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"REVERSE_SL", "auto",
+   "Reverse Service level. 'auto' will set the same value of sl\n",
+   ucs_offsetof(uct_ib_iface_config_t, reverse_sl), UCS_CONFIG_TYPE_ULUNITS},
+
   {NULL}
 };
 
@@ -1299,6 +1303,18 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config)
     return (uint8_t)ib_config->sl;
 }
 
+void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
+                                 const uct_ib_iface_config_t *ib_config)
+{
+    if (ib_config->reverse_sl == UCS_ULUNITS_AUTO) {
+        ib_iface->config.reverse_sl = ib_iface->config.sl;
+        return;
+    }
+
+    ucs_assert(ib_config->reverse_sl < UCT_IB_SL_NUM);
+    ib_iface->config.reverse_sl = (uint8_t)ib_config->reverse_sl;
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_ops_t *ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
@@ -1361,6 +1377,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.port_num           = port_num;
     /* initialize to invalid value */
     self->config.sl                 = UCT_IB_SL_NUM;
+    self->config.reverse_sl         = UCT_IB_SL_NUM;
     self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;

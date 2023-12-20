@@ -369,8 +369,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
                                                 min_length,
                                                 range_max_length, SIZE_MAX,
                                                 params->perf_bias,
-                                                parallel_stages, 2,
-                                                params->super.flags);
+                                                parallel_stages, 2);
         if (status != UCS_OK) {
             goto out_deref_perf_node;
         }
@@ -462,7 +461,7 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
                                 params->msg_length, &remote_attr);
 
     attr->is_estimation  = 1;
-    attr->max_msg_length = SIZE_MAX;
+    attr->max_msg_length = remote_attr.max_msg_length;
     attr->lane_map       = UCS_BIT(rpriv->lane);
 
     ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "rendezvous %s",
@@ -570,7 +569,7 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
 
         status = ucp_proto_init_parallel_stages(init_params, min_length,
                                                 ack_range.max_length, SIZE_MAX,
-                                                0, parallel_stages, 2, flags);
+                                                0, parallel_stages, 2);
         if (status != UCS_OK) {
             break;
         }

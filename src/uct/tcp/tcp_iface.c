@@ -862,6 +862,17 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
 
+static int uct_tcp_is_bridge(const char *if_name)
+{
+    char path[PATH_MAX];
+    struct stat st;
+
+    ucs_snprintf_safe(path, PATH_MAX, UCT_TCP_IFACE_NETDEV_DIR "/%s/bridge",
+                      if_name);
+
+    return (stat(path, &st) == 0) && S_ISDIR(st.st_mode);
+}
+
 ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
@@ -907,6 +918,12 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         }
 
         if (!is_active) {
+            continue;
+        }
+
+        if (!tcp_md->config.bridge_enable &&
+            uct_tcp_is_bridge((*entry)->d_name)) {
+            ucs_debug("filtered out bridge device %s", (*entry)->d_name);
             continue;
         }
 

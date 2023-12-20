@@ -415,21 +415,10 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
               ucs_string_buffer_cstr(&sel_param_strb));
     ucs_log_indent(1);
 
-    if (flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY) {
-        /* Skip send payload check */
-    } else if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        if ((select_param->dt_class == UCP_DATATYPE_GENERIC)) {
-            /* Generic/IOV datatype cannot be used with zero-copy send */
-            ucs_trace("datatype %s cannot be used with zcopy",
-                      ucp_datatype_class_names[select_param->dt_class]);
-            goto out;
-        }
-    } else if (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(select_param->mem_type) &&
-               (memtype_op == UCT_EP_OP_LAST)) {
-        /* If zero-copy is off, the memory must be host-accessible for
-         * non-generic type (for generic type there is no buffer to access) */
-        ucs_trace("memory type %s with datatype %s is not supported",
-                  ucs_memory_type_names[select_param->mem_type],
+    if ((flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
+        (select_param->dt_class == UCP_DATATYPE_GENERIC)) {
+        /* Generic/IOV datatype cannot be used with zero-copy send */
+        ucs_trace("datatype %s cannot be used with zcopy",
                   ucp_datatype_class_names[select_param->dt_class]);
         goto out;
     }
@@ -661,9 +650,7 @@ void ucp_proto_request_zcopy_completion(uct_completion_t *self)
 
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
 {
-    /* Short protocol requires contig/host */
-    return (select_param->dt_class == UCP_DATATYPE_CONTIG) &&
-           UCP_MEM_IS_HOST(select_param->mem_type);
+    return (select_param->dt_class == UCP_DATATYPE_CONTIG);
 }
 
 void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)

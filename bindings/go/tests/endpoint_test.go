@@ -10,6 +10,7 @@ import (
 	"testing"
 	. "ucx"
 	"unsafe"
+	. "cuda"
 )
 
 type TestEntity struct {
@@ -74,6 +75,9 @@ func get_mem_types() []memTypePair {
 	memTypePairs := []memTypePair{memTypePair{UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST}}
 
 	if IsMemTypeSupported(UCS_MEMORY_TYPE_CUDA, memTypeMask) {
+		if err := CudaSetDevice(); err != nil {
+			fmt.Errorf("%v", err)
+		}
 		memTypePairs = append(memTypePairs, memTypePair{UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA})
 		memTypePairs = append(memTypePairs, memTypePair{UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_HOST})
 		memTypePairs = append(memTypePairs, memTypePair{UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_CUDA})
@@ -227,10 +231,6 @@ func TestUcpEpAm(t *testing.T) {
 			return UCS_OK
 		})
 
-		// To notify progress thread to exit
-		quit := make(chan bool)
-		go progressThread(quit, receiver.worker)
-
 		headerMem := CBytes([]byte(sendData))
 		sendChan := make(chan bool, 1)
 		sender.worker.SetAmRecvHandler(3, UCP_AM_FLAG_WHOLE_MSG, func(header unsafe.Pointer, headerSize uint64,
@@ -258,6 +258,7 @@ func TestUcpEpAm(t *testing.T) {
 				break senderProgress
 			default:
 				sender.worker.Progress()
+				receiver.worker.Progress()
 			}
 		}
 
@@ -267,6 +268,7 @@ func TestUcpEpAm(t *testing.T) {
 		for req := range requests {
 			for req.GetStatus() == UCS_INPROGRESS {
 				sender.worker.Progress()
+				receiver.worker.Progress()
 			}
 			req.Close()
 		}
@@ -285,7 +287,6 @@ func TestUcpEpAm(t *testing.T) {
 		}
 
 		amData.Close()
-		quit <- true
 
 		sender.Close()
 		receiver.Close()

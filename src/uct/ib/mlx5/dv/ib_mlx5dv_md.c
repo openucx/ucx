@@ -2138,7 +2138,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) {
+    if ((flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) || (memh->dm != NULL)) {
         if (ucs_unlikely(memh->indirect_dvmr == NULL)) {
             status = uct_ib_mlx5_devx_reg_indirect_key(md, memh);
             if (status != UCS_OK) {

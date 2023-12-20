@@ -107,6 +107,19 @@ static UCS_F_ALWAYS_INLINE size_t ucs_double_to_sizet(double value, size_t max)
     return (round_value < (double)max) ? ((size_t)round_value) : max;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucs_align_ptr_range(void **address_p, size_t *length_p, size_t alignment)
+{
+    void *start, *end;
+
+    start = ucs_align_down_pow2_ptr(*address_p, alignment);
+    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(*address_p, *length_p),
+                                  alignment);
+
+    *address_p = start;
+    *length_p  = UCS_PTR_BYTE_DIFF(start, end);
+}
+
 /**
  * Convert flags without a branch
  * @return '_newflag' if '_oldflag' is set in '_value', otherwise - 0

@@ -387,6 +387,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     uct_md_h md_ref               = md();
     uct_alloc_method_t method     = UCT_ALLOC_METHOD_MD;
     unsigned num_alloc_failures   = 0;
+    std::vector<char> key(md_attr().rkey_packed_size);
     size_t size, orig_size;
     ucs_status_t status;
     void *address;
@@ -394,7 +395,6 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     uct_allocated_memory_t mem;
     uct_mem_alloc_params_t alloc_params;
     uct_md_mkey_pack_params_t pack_params;
-    uint64_t key;
 
     alloc_params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS |
                               UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS |
@@ -446,9 +446,11 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
                 memset(address, 0xBB, size);
             }
 
-            status = uct_md_mkey_pack_v2(md(), mem.memh, address, size,
-                                         &pack_params, &key);
-            ASSERT_UCS_OK(status);
+            if (md_attr().rkey_packed_size != 0) {
+                status = uct_md_mkey_pack_v2(md(), mem.memh, address, size,
+                                             &pack_params, key.data());
+                ASSERT_UCS_OK(status);
+            }
 
             uct_mem_free(&mem);
         }
