@@ -91,7 +91,7 @@ public:
 
     virtual void init() {
         ucs::skip_on_address_sanitizer();
-        if (disable_proto()) {
+        if (get_variant_value() == VARIANT_PROTO_DISABLE) {
             modify_config("PROTO_ENABLE", "n");
         }
 
@@ -167,7 +167,6 @@ protected:
                     bool import_mem = false);
     void test_rkey_management(ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
-    bool disable_proto() const;
 
 private:
     void check_distance_precision(double rkey_value, double topo_value,
@@ -297,7 +296,7 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     EXPECT_TRUE(ucs_test_all_flags(memh->md_map, rkey->md_map));
 
     /* Test remote key protocols selection */
-    if (m_ucp_config->ctx.proto_enable) {
+    if (is_proto_enabled()) {
         test_rkey_proto(memh);
     } else {
         bool have_rma              = resolve_rma(&receiver(), rkey);
@@ -351,11 +350,6 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
 
     ucp_rkey_destroy(rkey);
     ucp_rkey_buffer_release(rkey_buffer);
-}
-
-bool test_ucp_mmap::disable_proto() const
-{
-    return get_variant_value() == VARIANT_PROTO_DISABLE;
 }
 
 void test_ucp_mmap::check_distance_precision(double rkey_value,
@@ -424,7 +418,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ASSERT_UCS_OK(status);
 
     /* Check rkey configuration */
-    if (!disable_proto() && m_ucp_config->ctx.proto_enable) {
+    if (is_proto_enabled()) {
         ucp_rkey_config_t *rkey_config = ucp_rkey_config(receiver().worker(),
                                                          rkey);
         ucp_ep_config_t *ep_config     = ucp_ep_config(receiver().ep());
