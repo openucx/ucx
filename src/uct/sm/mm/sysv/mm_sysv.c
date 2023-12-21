@@ -138,7 +138,7 @@ static ucs_status_t uct_sysv_mem_free(uct_md_h tl_md, uct_mem_h memh)
 }
 
 static ucs_status_t
-uct_sysv_md_mkey_pack(uct_md_h md, uct_mem_h memh,
+uct_sysv_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *address, size_t length,
                       const uct_md_mkey_pack_params_t *params,
                       void *mkey_buffer)
 {

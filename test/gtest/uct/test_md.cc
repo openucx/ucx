@@ -41,6 +41,7 @@ extern "C" {
                    rocm_ipc, \
                    ib, \
                    ugni, \
+                   gdr_copy, \
                    sockcm, \
                    rdmacm \
                    )
@@ -134,7 +135,8 @@ void test_md::test_reg_mem(unsigned access_mask,
         uct_md_mkey_pack_params_t pack_params;
         pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
         pack_params.flags      = invalidate_flag;
-        status = uct_md_mkey_pack_v2(md(), memh, &pack_params, rkey.data());
+        status = uct_md_mkey_pack_v2(md(), memh, ptr, size, &pack_params,
+                                     rkey.data());
         EXPECT_UCS_OK(status);
 
         status = uct_md_mem_dereg_v2(md(), &params);
@@ -445,8 +447,8 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             }
 
             if (md_attr().rkey_packed_size != 0) {
-                status = uct_md_mkey_pack_v2(md(), mem.memh, &pack_params,
-                                             key.data());
+                status = uct_md_mkey_pack_v2(md(), mem.memh, address, size,
+                                             &pack_params, key.data());
                 ASSERT_UCS_OK(status);
             }
 
@@ -876,7 +878,7 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE) ||
         ASSERT_UCS_OK(status);
         memhs.push_back(memh);
 
-        status = uct_md_mkey_pack_v2(md(), memh, &pack_params, &key);
+        status = uct_md_mkey_pack_v2(md(), memh, ptr, size, &pack_params, &key);
         ASSERT_UCS_OK(status);
 
         bool is_unique = keys_set.insert(key).second;
@@ -888,7 +890,8 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE) ||
             ASSERT_UCS_OK(status);
             memhs.push_back(memh);
 
-            status = uct_md_mkey_pack_v2(md(), memh, &pack_params, &key);
+            status = uct_md_mkey_pack_v2(md(), memh, ptr, size, &pack_params,
+                                         &key);
             ASSERT_UCS_OK(status);
         }
 
@@ -962,7 +965,7 @@ UCS_TEST_SKIP_COND_P(test_md, exported_mkey,
     uct_md_mkey_pack_params_t pack_params;
     pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
     pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_EXPORT;
-    status = uct_md_mkey_pack_v2(md(), export_memh, &pack_params,
+    status = uct_md_mkey_pack_v2(md(), export_memh, address, size, &pack_params,
                                  mkey_buffer.data());
     ASSERT_UCS_OK(status);
 
@@ -1172,3 +1175,63 @@ UCS_TEST_SKIP_COND_P(test_md_non_blocking, reg,
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_non_blocking)
+
+class test_cuda : public test_md
+{
+};
+
+UCS_TEST_P(test_cuda, sparse_regions)
+{
+    static size_t size = 65536;
+    static size_t count = 5;
+    void *ptr[count];
+
+    if (!(md_attr().cache_mem_types & md_attr().reg_mem_types &
+          UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+        UCS_TEST_SKIP_R("not caching CUDA registration");
+    }
+
+    /* create contiguous CUDA registrations list */
+    for (int i = 0; i < count; i++) {
+        alloc_memory(&ptr[i], size, NULL, UCS_MEMORY_TYPE_CUDA);
+
+        UCS_TEST_MESSAGE << GetParam().md_name << " " << i << " " << ptr[i];
+
+        if ((i > 0) && (UCS_PTR_BYTE_OFFSET(ptr[i - 1], size) != ptr[i])) {
+            for (int j = 0; j < i; j++) {
+                free_memory(ptr[j], UCS_MEMORY_TYPE_CUDA);
+            }
+            UCS_TEST_SKIP_R("failed to create contiguous CUDA registrations list");
+        }
+    }
+
+    /* make CUDA registrations list sparse */
+    for (int i = 0; i < count; i++) {
+        if ((i & 1) == 0) {
+            free_memory(ptr[i], UCS_MEMORY_TYPE_CUDA);
+        }
+    }
+
+    std::vector<uint8_t> rkey(md_attr().rkey_packed_size + 1);
+    uct_md_mkey_pack_params_t params = {};
+    uct_mem_h memh;
+
+    ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr[0], size * count, &memh));
+
+    for (int i = 0; i < count; i++) {
+        if ((i & 1) == 1) {
+            ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), memh, ptr[i], size,
+                                              &params, &rkey[0]));
+        }
+    }
+
+    ASSERT_UCS_OK(uct_md_mem_dereg(md(), memh));
+
+    for (int i = 0; i < count; i++) {
+        if ((i & 1) == 1) {
+            free_memory(ptr[i], UCS_MEMORY_TYPE_CUDA);
+        }
+    }
+}
+
+UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)

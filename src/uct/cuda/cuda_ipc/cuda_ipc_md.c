@@ -45,24 +45,81 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->dmabuf_mem_types       = 0;
     md_attr->max_alloc              = 0;
     md_attr->max_reg                = ULONG_MAX;
-    md_attr->rkey_packed_size       = sizeof(uct_cuda_ipc_key_t);
+    md_attr->rkey_packed_size       = sizeof(uct_cuda_ipc_rkey_t);
     md_attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
 
 static ucs_status_t
-uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
-                       const uct_md_mkey_pack_params_t *params,
+uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
+                         uct_cuda_ipc_lkey_t **key_p)
+{
+    uct_cuda_ipc_lkey_t *key;
+    ucs_status_t status;
+
+    key = ucs_malloc(sizeof(*key), "uct_cuda_ipc_lkey_t");
+    if (key == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph, (CUdeviceptr)addr),
+                              UCS_LOG_LEVEL_ERROR);
+    if (UCS_OK != status) {
+        goto err;
+    }
+
+    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
+                                          (CUdeviceptr)addr),
+                     UCS_LOG_LEVEL_ERROR);
+
+    ucs_list_add_tail(&memh->list, &key->link);
+    ucs_trace("registered addr:%p/%p length:%zd dev_num:%d",
+              addr, (void *)key->d_bptr, key->b_len, (int)memh->dev_num);
+
+    *key_p = key;
+    return UCS_OK;
+
+err:
+    ucs_free(key);
+    return status;
+}
+
+static ucs_status_t
+uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
+                       size_t length, const uct_md_mkey_pack_params_t *params,
                        void *mkey_buffer)
 {
-    uct_cuda_ipc_key_t *packed   = mkey_buffer;
-    uct_cuda_ipc_key_t *mem_hndl = memh;
+    uct_cuda_ipc_rkey_t *packed = mkey_buffer;
+    uct_cuda_ipc_memh_t *memh   = tl_memh;
+    uct_cuda_ipc_lkey_t *key;
+    ucs_status_t status;
 
-    *packed = *mem_hndl;
+    ucs_list_for_each(key, &memh->list, link) {
+        if (((uintptr_t)address >= key->d_bptr) &&
+            ((uintptr_t)address < (key->d_bptr + key->b_len))) {
+            goto found;
+        }
+    }
+
+    status = uct_cuda_ipc_mem_add_reg(address, memh, &key);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+found:
+    ucs_assertv(((uintptr_t)address + length) <= (key->d_bptr + key->b_len),
+                "buffer 0x%lx..0x%lx region 0x%llx..0x%llx", (uintptr_t)address,
+                (uintptr_t)address + length, key->d_bptr, key->d_bptr +
+                key->b_len);
+
+    packed->pid    = memh->pid;
+    packed->ph     = key->ph;
+    packed->d_bptr = key->d_bptr;
+    packed->b_len  = key->b_len;
 
     return UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&packed->uuid,
-                                                    mem_hndl->dev_num));
+                                                    memh->dev_num));
 }
 
 static inline int uct_cuda_ipc_uuid_equals(const CUuuid* a, const CUuuid* b)
@@ -82,7 +139,7 @@ static inline void uct_cuda_ipc_uuid_copy(CUuuid* dst, const CUuuid* src)
 
 ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
                                                     uct_cuda_ipc_md_t* md,
-                                                    uct_cuda_ipc_key_t *rkey)
+                                                    uct_cuda_ipc_rkey_t *rkey)
 {
     int i;
     int num_devices;
@@ -133,7 +190,7 @@ ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
 }
 
 static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *mdc,
-                                                    uct_cuda_ipc_key_t *rkey)
+                                                    uct_cuda_ipc_rkey_t *rkey)
 {
     CUdevice this_device;
     ucs_status_t status;
@@ -192,8 +249,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
                  uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_cuda_ipc_component_t *com = ucs_derived_of(component, uct_cuda_ipc_component_t);
-    uct_cuda_ipc_key_t *packed    = (uct_cuda_ipc_key_t *) rkey_buffer;
-    uct_cuda_ipc_key_t *key;
+    uct_cuda_ipc_rkey_t *packed   = (uct_cuda_ipc_rkey_t *) rkey_buffer;
+    uct_cuda_ipc_rkey_t *key;
     ucs_status_t status;
 
     status = uct_cuda_ipc_is_peer_accessible(com, packed);
@@ -201,9 +258,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
         return status;
     }
 
-    key = ucs_malloc(sizeof(uct_cuda_ipc_key_t), "uct_cuda_ipc_key_t");
+    key = ucs_malloc(sizeof(*key), "uct_cuda_ipc_rkey_t");
     if (NULL == key) {
-        ucs_error("failed to allocate memory for uct_cuda_ipc_key_t");
+        ucs_error("failed to allocate memory for uct_cuda_ipc_rkey_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -223,57 +280,25 @@ static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
 }
 
 static ucs_status_t
-uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
-                              unsigned flags, uct_cuda_ipc_key_t *key)
-{
-    ucs_log_level_t log_level;
-    CUdevice cu_device;
-    ucs_status_t status;
-
-    ucs_assert((addr != NULL) && (length != 0));
-
-    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
-                UCS_LOG_LEVEL_ERROR;
-
-    status    = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph, (CUdeviceptr)addr),
-                                 log_level);
-    if (UCS_OK != status) {
-        return status;
-    }
-
-    UCT_CUDA_IPC_GET_DEVICE(cu_device);
-
-    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
-                                          (CUdeviceptr)addr),
-                     log_level);
-
-    key->dev_num  = (int) cu_device;
-    key->pid      = getpid();
-    ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
-              addr, UCS_PTR_BYTE_OFFSET(addr, length), length, (int) cu_device);
-    return UCS_OK;
-}
-
-static ucs_status_t
 uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
-    uct_cuda_ipc_key_t *key;
-    ucs_status_t status;
+    uct_cuda_ipc_memh_t *memh;
+    CUdevice cu_device;
 
-    key = ucs_malloc(sizeof(uct_cuda_ipc_key_t), "uct_cuda_ipc_key_t");
-    if (NULL == key) {
-        ucs_error("failed to allocate memory for uct_cuda_ipc_key_t");
+    UCT_CUDA_IPC_GET_DEVICE(cu_device);
+
+    memh = ucs_malloc(sizeof(*memh), "uct_cuda_ipc_rkey_t");
+    if (NULL == memh) {
+        ucs_error("failed to allocate memory for uct_cuda_ipc_rkey_t");
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_cuda_ipc_mem_reg_internal(md, address, length, 0, key);
-    if (status != UCS_OK) {
-        ucs_free(key);
-        return status;
-    }
-    *memh_p = key;
+    memh->dev_num = (int) cu_device;
+    memh->pid     = getpid();
+    ucs_list_head_init(&memh->list);
 
+    *memh_p = memh;
     return UCS_OK;
 }
 
@@ -281,7 +306,14 @@ static ucs_status_t
 uct_cuda_ipc_mem_dereg(uct_md_h md,
                        const uct_md_mem_dereg_params_t *params)
 {
+    uct_cuda_ipc_memh_t *memh = params->memh;
+    uct_cuda_ipc_lkey_t *key, *tmp;
+
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    ucs_list_for_each_safe(key, tmp, &memh->list, link) {
+        ucs_free(key);
+    }
 
     ucs_free(params->memh);
     return UCS_OK;
