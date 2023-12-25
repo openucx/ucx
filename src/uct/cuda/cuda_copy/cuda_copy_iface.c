@@ -131,15 +131,49 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+static ucs_status_t uct_cuda_copy_sync_streams(uct_cuda_copy_iface_t *iface)
+{
+    CUstream stream;
+    uint32_t stream_index;
+    ucs_memory_type_t src_mem_type, dst_mem_type;
+    ucs_status_t status;
+
+    UCS_BITMAP_FOR_EACH_BIT(iface->streams_to_sync, stream_index) {
+        src_mem_type = stream_index / UCS_MEMORY_TYPE_LAST;
+        if ((src_mem_type >= UCS_MEMORY_TYPE_LAST)) {
+            break;
+        }
+
+        dst_mem_type = stream_index % UCS_MEMORY_TYPE_LAST;
+        stream       = iface->queue_desc[src_mem_type][dst_mem_type].stream;
+        status       = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamSynchronize(stream));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        UCS_BITMAP_UNSET(iface->streams_to_sync,
+                         uct_cuda_copy_flush_bitmap_idx(src_mem_type,
+                                                        dst_mem_type));
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                               uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
     uct_cuda_copy_queue_desc_t *q_desc;
     ucs_queue_iter_t iter;
+    ucs_status_t status;
 
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_cuda_copy_sync_streams(iface);
+    if (status != UCS_OK) {
+        return status;
     }
 
     ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
@@ -269,6 +303,21 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_copy_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_cuda_copy_iface_t);
+    ucs_status_t status;
+
+    status = uct_cuda_copy_sync_streams(iface);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_base_ep_flush(tl_ep, flags, comp);
+}
+
 static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .ep_get_short             = uct_cuda_copy_ep_get_short,
     .ep_put_short             = uct_cuda_copy_ep_put_short,
@@ -276,7 +325,7 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .ep_put_zcopy             = uct_cuda_copy_ep_put_zcopy,
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
-    .ep_flush                 = uct_base_ep_flush,
+    .ep_flush                 = uct_cuda_copy_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_copy_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_ep_t),
@@ -429,6 +478,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->config.max_poll        = config->max_poll;
     self->config.max_cuda_events = config->max_cuda_events;
     self->config.bandwidth       = config->bandwidth;
+    UCS_BITMAP_CLEAR(&self->streams_to_sync);
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_cuda_copy_event_desc_t);
