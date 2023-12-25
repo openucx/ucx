@@ -228,7 +228,6 @@ typedef struct {
 typedef struct {
     pthread_t                     thread;
     uct_ib_md_t                   *md;
-    int                           reg;
     void                          *address;
     size_t                        length;
     const uct_md_mem_reg_params_t *params;
@@ -323,7 +322,8 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
         mr_idx++;
     }
 
-    ucs_trace("%s %p..%p took %f usec\n", ctx->reg ? "reg_mr" : "dereg_mr",
+    ucs_trace("%s %p..%p took %f usec\n",
+              (ctx->params != NULL) ? "reg_mr" : "dereg_mr",
               ctx->mrs[0]->addr, ctx->address,
               ucs_time_to_usec(ucs_get_time() - t0));
     return UCS_STATUS_PTR(UCS_OK);
