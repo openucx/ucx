@@ -96,6 +96,30 @@ _ucs_bitmap_word_index(size_t bitmap_words, size_t bit_index)
 
 
 /**
+ * Assert that bit index is inside the expected range.
+ *
+ * @param _bit_index  Index to check.
+ * @param _num_words  Number of words in the bitmap
+ * @param _cmp        Comparison operator - should be < or <=
+ */
+#define UCS_BITMAP_CHECK_INDEX(_bit_index, _num_words, _cmp) \
+    ucs_assertv((_bit_index) _cmp (UCS_BITMAP_BITS_IN_WORD * (_num_words)), \
+                "bit_index=%zu num_words=%zu", (_bit_index), (_num_words))
+
+
+/**
+ * Check that destination number of words is at least as large as the source.
+ *
+ * @param _dst_num_words   Nunber of words in the destination bitmap.
+ * @param _src_num_words   Nunber of words in the source bitmap.
+ */
+#define UCS_BITMAP_CHECK_DST_NUM_WORDS(_dst_num_words, _src_num_words) \
+    ucs_assertv((_dst_num_words) >= (_src_num_words), \
+                "dst_num_words=%zu src_num_words=%zu", (_dst_num_words), \
+                (_src_num_words));
+
+
+/**
  * Given a bitmap and a bit index, get the whole word that contains it
  *
  * @param _bitmap    Take the word from this bitmap
@@ -567,6 +591,75 @@ _UCS_BITMAP_DECLARE_TYPE(64)
 _UCS_BITMAP_DECLARE_TYPE(128)
 _UCS_BITMAP_DECLARE_TYPE(256)
 
+
+/* Helper function to set all bitmap bits to 0 */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_reset_all(ucs_bitmap_word_t *bits, size_t num_words)
+{
+    memset(bits, 0, num_words * sizeof(ucs_bitmap_word_t));
+}
+
+
+/* Helper function to return work mask of bit at given index */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_bit_mask(size_t bit_index)
+{
+    return UCS_BIT(bit_index % UCS_BITMAP_BITS_IN_WORD);
+}
+
+
+/* Helper function to return word index of a given bit index */
+static UCS_F_ALWAYS_INLINE size_t ucs_bitmap_word_index(size_t bit_index,
+                                                        size_t num_words)
+{
+    UCS_BITMAP_CHECK_INDEX(bit_index, num_words, <);
+    return bit_index / UCS_BITMAP_BITS_IN_WORD;
+}
+
+
+/* Helper function to retrieve the value of a single bit */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_get(const ucs_bitmap_word_t *bits, size_t num_words,
+                    size_t bit_index)
+{
+    const ucs_bitmap_word_t mask = ucs_bitmap_word_bit_mask(bit_index);
+    return !!(bits[ucs_bitmap_word_index(bit_index, num_words)] & mask);
+}
+
+
+/* Helper function to set the value of a single bit to 1 */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_set(ucs_bitmap_word_t *bits, size_t num_words, size_t bit_index)
+{
+    const ucs_bitmap_word_t mask = ucs_bitmap_word_bit_mask(bit_index);
+    bits[ucs_bitmap_word_index(bit_index, num_words)] |= mask;
+}
+
+
+/* Helper function to set the value of a single bit to 0 */
+static UCS_F_ALWAYS_INLINE void ucs_bitmap_bits_reset(ucs_bitmap_word_t *bits,
+                                                      size_t num_words,
+                                                      size_t bit_index)
+
+{
+    const ucs_bitmap_word_t mask = ucs_bitmap_word_bit_mask(bit_index);
+    bits[ucs_bitmap_word_index(bit_index, num_words)] &= ~mask;
+}
+
+
+/* Helper function to test if all bitmap bits are 0 */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_is_zero(const ucs_bitmap_word_t *bits, size_t num_words)
+{
+    const ucs_bitmap_word_t *bits_word;
+
+    ucs_carray_for_each(bits_word, bits, num_words) {
+        if (*bits_word != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 END_C_DECLS
 
