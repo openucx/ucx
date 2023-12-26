@@ -25,10 +25,10 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel76
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder-mofed-5.0-1.0.0.0:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel76_mofed47
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.6/builder-mofed-4.7-1.0.0.1:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel74
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
@@ -37,16 +37,16 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel82
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder-mofed-5.0-1.0.0.0:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel90
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder-mofed-5.6-0.5.0.0:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2004
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu20.04/builder-mofed-5.0-1.0.0.0:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2204
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04/builder-mofed-5.7-0.2.3.0:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2210
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.10/builder:mofed-5.8-0.2.1.0
@@ -55,10 +55,10 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: debian113
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/debian11.3/builder-mofed-5.8-3.0.7.0:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: debian109
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian10.9/builder:mofed-5.8-3.0.7.0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/debian10.9/builder-mofed-5.8-3.0.7.0:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: sles15sp2
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
@@ -192,10 +192,6 @@ stages:
             - ucx_docker -equals yes
         strategy:
           matrix:
-            rhel72:
-              CONTAINER: rhel72
-            rhel74:
-              CONTAINER: rhel74
             rhel76:
               CONTAINER: rhel76
               long_test: yes
@@ -206,32 +202,16 @@ stages:
               CONTAINER: ubuntu2004
               long_test: yes
               extra_modules: ""
-            ubuntu1804:
-              CONTAINER: ubuntu1804
-              extra_modules: ""
             ubuntu2204:
               CONTAINER: ubuntu2204
-            ubuntu2210:
-              CONTAINER: ubuntu2210
             debian113:
               CONTAINER: debian113
             debian109:
               CONTAINER: debian109
-            sles15sp2:
-              CONTAINER: sles15sp2
             rhel82:
               CONTAINER: rhel82
             rhel90:
               CONTAINER: rhel90
-            fedora34:
-              CONTAINER: fedora34
-              long_test: yes
-            centos7:
-              CONTAINER: centos7_ib
-            ubuntu2004_rocm:
-              CONTAINER: ubuntu2004_rocm_5_4_0
-            ubuntu2204_rocm:
-              CONTAINER: ubuntu2204_rocm_6_0_0
         container: $[ variables['CONTAINER'] ]
         timeoutInMinutes: 340
 
@@ -365,18 +345,8 @@ stages:
             - ucx_docker -equals yes
         strategy:
           matrix:
-            centos7:
-              CONTAINER: centos7_ib
-              extra_modules: ucx-ib ucx-cma ucx-rdmacm
-              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
-              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
             ubuntu2004:
               CONTAINER: ubuntu2004
-              extra_modules: ""
-              extra_tls: ""
-              run_tls: ""
-            ubuntu1804:
-              CONTAINER: ubuntu1804
               extra_modules: ""
               extra_tls: ""
               run_tls: ""
