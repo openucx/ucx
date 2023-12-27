@@ -1083,6 +1083,207 @@ ucs_status_t
 uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
                  const uct_rkey_compare_params_t *params, int *result);
 
+typedef enum {
+    UCT_IFACE_ATTR_FIELD_CAP_PUT_MAX_SHORT             = UCS_BIT(0),
+    UCT_IFACE_ATTR_FIELD_CAP_PUT_MAX_BCOPY             = UCS_BIT(1),
+    UCT_IFACE_ATTR_FIELD_CAP_PUT_MIN_ZCOPY             = UCS_BIT(2),
+    UCT_IFACE_ATTR_FIELD_CAP_PUT_MAX_ZCOPY             = UCS_BIT(3),
+    UCT_IFACE_ATTR_FIELD_CAP_PUT_OPT_ZCOPY_ALIGN       = UCS_BIT(4),
+    UCT_IFACE_ATTR_FIELD_CAP_PUT_ALIGN_MTU             = UCS_BIT(5),
+    UCT_IFACE_ATTR_FIELD_CAP_PUT_ALIGN_MAX_IOV         = UCS_BIT(6),
+
+    UCT_IFACE_ATTR_FIELD_CAP_GET_MAX_SHORT             = UCS_BIT(7),
+    UCT_IFACE_ATTR_FIELD_CAP_GET_MAX_BCOPY             = UCS_BIT(8),
+    UCT_IFACE_ATTR_FIELD_CAP_GET_MIN_ZCOPY             = UCS_BIT(9),
+    UCT_IFACE_ATTR_FIELD_CAP_GET_MAX_ZCOPY             = UCS_BIT(10),
+    UCT_IFACE_ATTR_FIELD_CAP_GET_OPT_ZCOPY_ALIGN       = UCS_BIT(11),
+    UCT_IFACE_ATTR_FIELD_CAP_GET_ALIGN_MTU             = UCS_BIT(12),
+    UCT_IFACE_ATTR_FIELD_CAP_GET_ALIGN_MAX_IOV         = UCS_BIT(13),
+
+    UCT_IFACE_ATTR_FIELD_CAP_AM_MAX_SHORT              = UCS_BIT(14),
+    UCT_IFACE_ATTR_FIELD_CAP_AM_MAX_BCOPY              = UCS_BIT(15),
+    UCT_IFACE_ATTR_FIELD_CAP_AM_MIN_ZCOPY              = UCS_BIT(16),
+    UCT_IFACE_ATTR_FIELD_CAP_AM_MAX_ZCOPY              = UCS_BIT(17),
+    UCT_IFACE_ATTR_FIELD_CAP_AM_OPT_ZCOPY_ALIGN        = UCS_BIT(18),
+    UCT_IFACE_ATTR_FIELD_CAP_AM_ALIGN_MTU              = UCS_BIT(19),
+    UCT_IFACE_ATTR_FIELD_CAP_AM_ALIGN_MAX_HDR          = UCS_BIT(20),
+    UCT_IFACE_ATTR_FIELD_CAP_AM_ALIGN_MAX_IOV          = UCS_BIT(21),
+
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_RECV_MIN_RECV         = UCS_BIT(22),
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_RECV_MAX_ZCOPY        = UCS_BIT(23),
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_RECV_MAX_IOV          = UCS_BIT(24),
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_RECV_MAX_OUTSTANDING  = UCS_BIT(25),
+
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_EAGER_MAX_SHORT       = UCS_BIT(22),
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_EAGER_MAX_BCOPY       = UCS_BIT(23),
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_EAGER_MAX_ZCOPY       = UCS_BIT(24),
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_EAGER_MAX_IOV         = UCS_BIT(25),
+
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_RNDV_MAX_ZCOPY        = UCS_BIT(26),
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_RNDV_MAX_HDR          = UCS_BIT(27),
+    UCT_IFACE_ATTR_FIELD_CAP_TAG_RNDV_MAX_IOV          = UCS_BIT(28),
+
+    UCT_IFACE_ATTR_FIELD_CAP_ATOMIC32_OP_FLAGS         = UCS_BIT(29),
+    UCT_IFACE_ATTR_FIELD_CAP_ATOMIC32_FOP_FLAGS        = UCS_BIT(30),
+
+    UCT_IFACE_ATTR_FIELD_CAP_ATOMIC64_OP_FLAGS         = UCS_BIT(31),
+    UCT_IFACE_ATTR_FIELD_CAP_ATOMIC64_FOP_FLAGS        = UCS_BIT(32),
+
+    UCT_IFACE_ATTR_FIELD_CAP_FLAGS                     = UCS_BIT(33),
+    UCT_IFACE_ATTR_FIELD_CAP_EVENT_FLAGS               = UCS_BIT(34),
+
+    UCT_IFACE_ATTR_FIELD_DEVICE_ADDR_LEN               = UCS_BIT(43),
+    UCT_IFACE_ATTR_FIELD_IFACE_ADDR_LEN                = UCS_BIT(44),
+    UCT_IFACE_ATTR_FIELD_EP_ADDR_LEN                   = UCS_BIT(206),
+    UCT_IFACE_ATTR_FIELD_MAX_CONN_PRIV                 = UCS_BIT(46),
+    UCT_IFACE_ATTR_FIELD_LISTEN_SOCKADDR               = UCS_BIT(47),
+    UCT_IFACE_ATTR_FIELD_OVERHEAD                      = UCS_BIT(48),
+    UCT_IFACE_ATTR_FIELD_BANDWIDTH                     = UCS_BIT(49),
+    UCT_IFACE_ATTR_FIELD_LATENCY                       = UCS_BIT(50),
+    UCT_IFACE_ATTR_FIELD_PRIORITY                      = UCS_BIT(51),
+    UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS                   = UCS_BIT(52),
+    UCT_IFACE_ATTR_FIELD_DEV_NUM_PATHS                 = UCS_BIT(53),
+
+} uct_iface_attr_field_t;
+
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_attr_field_t.
+     */
+    uint64_t          field_mask;
+
+    struct {
+        struct {
+            size_t           max_short;  /**< Maximal size for put_short */
+            size_t           max_bcopy;  /**< Maximal size for put_bcopy */
+            size_t           min_zcopy;  /**< Minimal size for put_zcopy (total
+                                              of @ref uct_iov_t::length of the
+                                              @a iov parameter) */
+            size_t           max_zcopy;  /**< Maximal size for put_zcopy (total
+                                              of @ref uct_iov_t::length of the
+                                              @a iov parameter) */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
+            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref ::uct_ep_put_zcopy
+                                              @anchor uct_iface_attr_cap_put_max_iov */
+        } put;                           /**< Attributes for PUT operations */
+
+        struct {
+            size_t           max_short;  /**< Maximal size for get_short */
+            size_t           max_bcopy;  /**< Maximal size for get_bcopy */
+            size_t           min_zcopy;  /**< Minimal size for get_zcopy (total
+                                              of @ref uct_iov_t::length of the
+                                              @a iov parameter) */
+            size_t           max_zcopy;  /**< Maximal size for get_zcopy (total
+                                              of @ref uct_iov_t::length of the
+                                              @a iov parameter) */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
+            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_get_zcopy
+                                              @anchor uct_iface_attr_cap_get_max_iov */
+        } get;                           /**< Attributes for GET operations */
+
+        struct {
+            size_t           max_short;  /**< Total maximum size (incl. the header)
+                                              @anchor uct_iface_attr_cap_am_max_short */
+            size_t           max_bcopy;  /**< Total maximum size (incl. the header) */
+            size_t           min_zcopy;  /**< Minimal size for am_zcopy (incl. the
+                                              header and total of @ref uct_iov_t::length
+                                              of the @a iov parameter) */
+            size_t           max_zcopy;  /**< Total max. size (incl. the header
+                                              and total of @ref uct_iov_t::length
+                                              of the @a iov parameter) */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
+            size_t           max_hdr;    /**< Max. header size for zcopy */
+            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref ::uct_ep_am_zcopy
+                                              @anchor uct_iface_attr_cap_am_max_iov */
+        } am;                            /**< Attributes for AM operations */
+
+        struct {
+            struct {
+                size_t       min_recv;   /**< Minimal allowed length of posted receive buffer */
+                size_t       max_zcopy;  /**< Maximal allowed data length in
+                                              @ref uct_iface_tag_recv_zcopy */
+                size_t       max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_iface_tag_recv_zcopy
+                                              @anchor uct_iface_attr_cap_tag_recv_iov */
+                size_t       max_outstanding; /**< Maximal number of simultaneous
+                                                   receive operations */
+            } recv;
+
+            struct {
+                  size_t     max_short;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_short */
+                  size_t     max_bcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_bcopy */
+                  size_t     max_zcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_zcopy */
+                  size_t     max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_tag_eager_zcopy */
+            } eager;                     /**< Attributes related to eager protocol */
+
+            struct {
+                  size_t     max_zcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_rndv_zcopy */
+                  size_t     max_hdr;    /**< Maximal allowed header length in
+                                              @ref uct_ep_tag_rndv_zcopy and
+                                              @ref uct_ep_tag_rndv_request */
+                  size_t     max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_tag_rndv_zcopy */
+            } rndv;                      /**< Attributes related to rendezvous protocol */
+        } tag;                           /**< Attributes for TAG operations */
+
+        struct {
+            uint64_t         op_flags;   /**< Attributes for atomic-post operations */
+            uint64_t         fop_flags;  /**< Attributes for atomic-fetch operations */
+        } atomic32, atomic64;            /**< Attributes for atomic operations */
+
+        uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
+        uint64_t             event_flags;/**< Flags from @ref UCT_RESOURCE_IFACE_EVENT_CAP */
+    } cap;                               /**< Interface capabilities */
+
+    size_t                   device_addr_len;/**< Size of device address */
+    size_t                   iface_addr_len; /**< Size of interface address */
+    size_t                   ep_addr_len;    /**< Size of endpoint address */
+    size_t                   max_conn_priv;  /**< Max size of the iface's private data.
+                                                  used for connection
+                                                  establishment with sockaddr */
+    struct sockaddr_storage  listen_sockaddr; /**< Sockaddr on which this iface
+                                                   is listening. */
+    /*
+     * The following fields define expected performance of the communication
+     * interface, this would usually be a combination of device and system
+     * characteristics and determined at run time.
+     */
+    double                   overhead;     /**< Message overhead, seconds */
+    uct_ppn_bandwidth_t      bandwidth;    /**< Bandwidth model */
+    ucs_linear_func_t        latency;      /**< Latency as function of number of
+                                                active endpoints */
+    uint8_t                  priority;     /**< Priority of device */
+    size_t                   max_num_eps;  /**< Maximum number of endpoints */
+    unsigned                 dev_num_paths;/**< How many network paths can be
+                                                utilized on the device used by
+                                                this interface for optimal
+                                                performance. Endpoints that connect
+                                                to the same remote address but use
+                                                different paths can potentially
+                                                achieve higher total bandwidth
+                                                compared to using only a single
+                                                endpoint. */
+
+} uct_iface_attr_v2_t;
+
+ucs_status_t
+uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
 END_C_DECLS
 
 #endif

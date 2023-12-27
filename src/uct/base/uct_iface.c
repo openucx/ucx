@@ -192,7 +192,21 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
 
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
+    uct_iface_attr_v2_t iface_attr_v2;
+    ucs_status_t status;
+
+    status = uct_iface_query_v2(iface, &iface_attr_v2);
+    if(status != UCS_OK) {
+        return status;
+    }
+
     return iface->ops.iface_query(iface, iface_attr);
+}
+
+ucs_status_t
+uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+{
+    return iface->ops.iface_query_v2(iface, iface_attr);
 }
 
 ucs_status_t
