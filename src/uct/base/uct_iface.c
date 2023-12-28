@@ -22,6 +22,16 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
+#define UCT_IFACE_ATTR_V2_FIELD_COPY(_md_attr_dst, _md_attr_src, _field_name, \
+                                     _field_flag) \
+    { \
+        if ((_md_attr_dst)->field_mask & (_field_flag)) { \
+            ucs_assert((_md_attr_src)->field_mask &(_field_flag)); \
+            memcpy(&((_md_attr_dst)->_field_name), \
+                   &((_md_attr_src)->_field_name), \
+                   sizeof((_md_attr_src)->_field_name)); \
+        } \
+    }
 
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
@@ -189,8 +199,71 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                        NULL);
 }
 
-static void uct_iface_attr_v2_to_v1(uct_iface_attr_t *iface_attr, uct_iface_attr_v2_t *iface_attr)
+static void uct_iface_attr_v2_to_v1(uct_iface_attr_t *dest, uct_iface_attr_v2_t *src)
 {
+    /* PUT attributes */
+    dest->cap.put.max_short       = src->cap.put.max_short;
+    dest->cap.put.max_bcopy       = src->cap.put.max_bcopy;
+    dest->cap.put.min_zcopy       = src->cap.put.min_zcopy;
+    dest->cap.put.max_zcopy       = src->cap.put.max_zcopy;
+    dest->cap.put.opt_zcopy_align = src->cap.put.opt_zcopy_align;
+    dest->cap.put.align_mtu       = src->cap.put.align_mtu;
+    dest->cap.put.max_iov         = src->cap.put.max_iov;
+
+    /* GET attributes */
+    dest->cap.get.max_short       = src->cap.get.max_short;
+    dest->cap.get.max_bcopy       = src->cap.get.max_bcopy;
+    dest->cap.get.min_zcopy       = src->cap.get.min_zcopy;
+    dest->cap.get.max_zcopy       = src->cap.get.max_zcopy;
+    dest->cap.get.opt_zcopy_align = src->cap.get.opt_zcopy_align;
+    dest->cap.get.align_mtu       = src->cap.get.align_mtu;
+    dest->cap.get.max_iov         = src->cap.get.max_iov;
+
+    /* AM attributes */
+    dest->cap.am.max_short       = src->cap.am.max_short;
+    dest->cap.am.max_bcopy       = src->cap.am.max_bcopy;
+    dest->cap.am.min_zcopy       = src->cap.am.min_zcopy;
+    dest->cap.am.max_zcopy       = src->cap.am.max_zcopy;
+    dest->cap.am.opt_zcopy_align = src->cap.am.opt_zcopy_align;
+    dest->cap.am.align_mtu       = src->cap.am.align_mtu;
+    dest->cap.am.max_hdr         = src->cap.am.max_hdr;
+    dest->cap.am.max_iov         = src->cap.am.max_iov;
+
+    /* TAG attributes */
+    dest->cap.tag.recv.min_recv        = src->cap.tag.recv.min_recv;
+    dest->cap.tag.recv.max_zcopy       = src->cap.tag.recv.max_zcopy;
+    dest->cap.tag.recv.max_iov         = src->cap.tag.recv.max_iov;
+    dest->cap.tag.recv.max_outstanding = src->cap.tag.recv.max_outstanding;
+
+    dest->cap.tag.eager.max_short = src->cap.tag.eager.max_short;
+    dest->cap.tag.eager.max_bcopy = src->cap.tag.eager.max_bcopy;
+    dest->cap.tag.eager.max_zcopy = src->cap.tag.eager.max_zcopy;
+    dest->cap.tag.eager.max_iov   = src->cap.tag.eager.max_iov;
+
+    dest->cap.tag.rndv.max_zcopy = src->cap.tag.rndv.max_zcopy;
+    dest->cap.tag.rndv.max_hdr   = src->cap.tag.rndv.max_hdr;
+    dest->cap.tag.rndv.max_iov   = src->cap.tag.rndv.max_iov;
+
+    /* Atomics attributes */
+    dest->cap.atomic32.op_flags  = src->cap.atomic32.op_flags;
+    dest->cap.atomic32.fop_flags = src->cap.atomic32.fop_flags;
+    dest->cap.atomic64.op_flags  = src->cap.atomic64.op_flags;
+    dest->cap.atomic64.fop_flags = src->cap.atomic64.fop_flags;
+
+    dest->cap.flags       = src->cap.flags;
+    dest->cap.event_flags = src->cap.event_flags;
+
+    dest->device_addr_len = src->device_addr_len;
+    dest->iface_addr_len  = src->iface_addr_len;
+    dest->ep_addr_len     = src->ep_addr_len;
+    dest->max_conn_priv   = src->max_conn_priv;
+    dest->listen_sockaddr = src->listen_sockaddr;
+    dest->overhead        = src->overhead;
+    dest->bandwidth       = src->bandwidth;
+    dest->latency         = src->latency;
+    dest->priority        = src->priority;
+    dest->max_num_eps     = src->max_num_eps;
+    dest->dev_num_paths   = src->dev_num_paths;
 }
 
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
@@ -203,13 +276,16 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    return iface->ops.iface_query(iface, iface_attr);
+    uct_iface_attr_v2_to_v1(iface_attr, &iface_attr_v2);
+
+    return status;
 }
 
 ucs_status_t
 uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 {
-    return iface->internal_ops->iface_query_v2(iface, iface_attr);
+    return UCS_OK;
+    // return iface->ops.->iface_query_v2(iface, iface_attr);
 }
 
 ucs_status_t

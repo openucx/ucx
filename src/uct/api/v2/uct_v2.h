@@ -1132,17 +1132,17 @@ typedef enum {
     UCT_IFACE_ATTR_FIELD_CAP_FLAGS                     = UCS_BIT(33),
     UCT_IFACE_ATTR_FIELD_CAP_EVENT_FLAGS               = UCS_BIT(34),
 
-    UCT_IFACE_ATTR_FIELD_DEVICE_ADDR_LEN               = UCS_BIT(43),
-    UCT_IFACE_ATTR_FIELD_IFACE_ADDR_LEN                = UCS_BIT(44),
-    UCT_IFACE_ATTR_FIELD_EP_ADDR_LEN                   = UCS_BIT(206),
-    UCT_IFACE_ATTR_FIELD_MAX_CONN_PRIV                 = UCS_BIT(46),
-    UCT_IFACE_ATTR_FIELD_LISTEN_SOCKADDR               = UCS_BIT(47),
-    UCT_IFACE_ATTR_FIELD_OVERHEAD                      = UCS_BIT(48),
-    UCT_IFACE_ATTR_FIELD_BANDWIDTH                     = UCS_BIT(49),
-    UCT_IFACE_ATTR_FIELD_LATENCY                       = UCS_BIT(50),
-    UCT_IFACE_ATTR_FIELD_PRIORITY                      = UCS_BIT(51),
-    UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS                   = UCS_BIT(52),
-    UCT_IFACE_ATTR_FIELD_DEV_NUM_PATHS                 = UCS_BIT(53),
+    UCT_IFACE_ATTR_FIELD_DEVICE_ADDR_LEN               = UCS_BIT(35),
+    UCT_IFACE_ATTR_FIELD_IFACE_ADDR_LEN                = UCS_BIT(36),
+    UCT_IFACE_ATTR_FIELD_EP_ADDR_LEN                   = UCS_BIT(37),
+    UCT_IFACE_ATTR_FIELD_MAX_CONN_PRIV                 = UCS_BIT(38),
+    UCT_IFACE_ATTR_FIELD_LISTEN_SOCKADDR               = UCS_BIT(39),
+    UCT_IFACE_ATTR_FIELD_OVERHEAD                      = UCS_BIT(40),
+    UCT_IFACE_ATTR_FIELD_BANDWIDTH                     = UCS_BIT(41),
+    UCT_IFACE_ATTR_FIELD_LATENCY                       = UCS_BIT(42),
+    UCT_IFACE_ATTR_FIELD_PRIORITY                      = UCS_BIT(43),
+    UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS                   = UCS_BIT(44),
+    UCT_IFACE_ATTR_FIELD_DEV_NUM_PATHS                 = UCS_BIT(45),
 
 } uct_iface_attr_field_t;
 
