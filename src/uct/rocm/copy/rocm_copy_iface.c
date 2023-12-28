@@ -32,18 +32,14 @@ static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
      ucs_offsetof(uct_rocm_copy_iface_config_t, h2d_thresh),
      UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"ENABLE_ASYNC_ZCOPY", "y",
-     "Enable asynchronous zcopy operations",
+    {"ENABLE_ASYNC_ZCOPY", "y", "Enable asynchronous zcopy operations",
      ucs_offsetof(uct_rocm_copy_iface_config_t, enable_async_zcopy),
      UCS_CONFIG_TYPE_BOOL},
 
-    {"LAT", "2e-7",
-     "Latency",
-     ucs_offsetof(uct_rocm_copy_iface_config_t, latency),
-     UCS_CONFIG_TYPE_TIME},
+    {"LAT", "1e-7", "Latency",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
 
-    {"SIGPOOL_MAX_ELEMS", "1024",
-     "Maximum number of elements in signal pool",
+    {"SIGPOOL_MAX_ELEMS", "1024", "Maximum number of elements in signal pool",
      ucs_offsetof(uct_rocm_copy_iface_config_t, sigpool_max_elems),
      UCS_CONFIG_TYPE_UINT},
 
