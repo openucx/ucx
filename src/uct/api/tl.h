@@ -274,9 +274,6 @@ typedef void         (*uct_iface_close_func_t)(uct_iface_h iface);
 typedef ucs_status_t (*uct_iface_query_func_t)(uct_iface_h iface,
                                                uct_iface_attr_t *iface_attr);
 
-typedef ucs_status_t (*uct_iface_query_v2_func_t)(
-        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
-
 /* interface - connection establishment */
 
 typedef ucs_status_t (*uct_iface_get_device_address_func_t)(uct_iface_h iface,

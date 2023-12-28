@@ -189,6 +189,9 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                        NULL);
 }
 
+static void uct_iface_attr_v2_to_v1(uct_iface_attr_t *iface_attr, uct_iface_attr_v2_t *iface_attr)
+{
+}
 
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
@@ -206,7 +209,7 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 ucs_status_t
 uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 {
-    return iface->ops.iface_query_v2(iface, iface_attr);
+    return iface->internal_ops->iface_query_v2(iface, iface_attr);
 }
 
 ucs_status_t

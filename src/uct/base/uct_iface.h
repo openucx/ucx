@@ -299,6 +299,10 @@ typedef int (*uct_iface_is_reachable_v2_func_t)(
 typedef int (*uct_ep_is_connected_func_t)(
         uct_ep_h ep, const uct_ep_is_connected_params_t *params);
 
+/* Query iface attributes v2 */
+typedef ucs_status_t (*uct_iface_query_v2_func_t)(
+        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
 
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
@@ -309,6 +313,7 @@ typedef struct uct_iface_internal_ops {
     uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
     uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
     uct_ep_is_connected_func_t       ep_is_connected;
+    uct_iface_query_v2_func_t        query_v2;
 } uct_iface_internal_ops_t;
 
 
