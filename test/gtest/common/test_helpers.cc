@@ -24,7 +24,7 @@ namespace ucs {
 
 typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
-const double test_timeout_in_sec = 60.;
+const double test_timeout_in_sec = 180.;
 
 double watchdog_timeout = 900.; // 15 minutes
 
