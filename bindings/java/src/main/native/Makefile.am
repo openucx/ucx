@@ -130,7 +130,7 @@ publish-release:
 	@make publish
 
 publish:
-	$(MVNCMD) deploy -DskipTests ${ARGS}
+	$(MVNCMD) deploy:deploy-file -Dfile=$(jarfile) -DskipTests ${ARGS}
 
 test:
 	$(MVNCMD) test -DargLine="-XX:OnError='cat hs_err_pid%p.log'"
