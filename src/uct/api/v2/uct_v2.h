@@ -1083,6 +1083,182 @@ ucs_status_t
 uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
                  const uct_rkey_compare_params_t *params, int *result);
 
+typedef enum {
+    /** Enables @ref uct_iface_op_attr::max_short */
+    UCT_IFACE_OP_ATTR_FIELD_MAX_SHORT       = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_op_attr::max_bcopy */
+    UCT_IFACE_OP_ATTR_FIELD_MAX_BCOPY       = UCS_BIT(1),
+
+    /** Enables @ref uct_iface_op_attr::min_zcopy */
+    UCT_IFACE_OP_ATTR_FIELD_MIN_ZCOPY       = UCS_BIT(2),
+
+    /** Enables @ref uct_iface_op_attr::max_zcopy */
+    UCT_IFACE_OP_ATTR_FIELD_MAX_ZCOPY       = UCS_BIT(3),
+
+    /** Enables @ref uct_iface_op_attr::opt_zcopy_align */
+    UCT_IFACE_OP_ATTR_FIELD_OPT_ZCOPY_ALIGN = UCS_BIT(4),
+
+    /** Enables @ref uct_iface_op_attr::align_mtu */
+    UCT_IFACE_OP_ATTR_FIELD_ALIGN_MTU       = UCS_BIT(5),
+
+    /** Enables @ref uct_iface_op_attr::max_hdr */
+    UCT_IFACE_OP_ATTR_FIELD_MAX_HDR         = UCS_BIT(6),
+
+    /** Enables @ref uct_iface_op_attr::max_iov */
+    UCT_IFACE_OP_ATTR_FIELD_MAX_IOV         = UCS_BIT(7)
+} uct_iface_op_attr_field_t;
+
+typedef struct uct_iface_op_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_op_attr_field_t.
+     */
+    uint64_t field_mask;
+    /** Maximal size for short */
+    size_t   max_short;
+    /** Maximal size for bcopy */
+    size_t   max_bcopy;
+    /** Minimal size for zcopy (total of
+     * @ref uct_iov_t::length of the @a iov parameter) */
+    size_t   min_zcopy;
+    /** Maximal size for zcopy (total of
+     * @ref uct_iov_t::length of the @a iov parameter) */
+    size_t   max_zcopy;
+    /** Optimal alignment for zero-copy buffer address */
+    size_t   opt_zcopy_align;
+    /** MTU used for alignment */
+    size_t   align_mtu;
+    /** Max. header size for zcopy */
+    size_t   max_hdr;
+    /** Maximal @a iovcnt  */
+    size_t   max_iov;
+} uct_iface_op_attr_t;
+
+typedef enum {
+    /** Enables @ref uct_iface_attr_v2_t::put */
+    UCT_IFACE_ATTR_FIELD_PUT                = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_attr_v2_t::get */
+    UCT_IFACE_ATTR_FIELD_GET                = UCS_BIT(1),
+
+    /** Enables @ref uct_iface_attr_v2_t::am */
+    UCT_IFACE_ATTR_FIELD_AM                 = UCS_BIT(2),
+
+    /** Enables @ref uct_iface_attr_v2_t::tag::receive */
+    UCT_IFACE_ATTR_FIELD_TAG_RECEIVE        = UCS_BIT(3),
+
+    /** Enables @ref uct_iface_attr_v2_t::tag::eager */
+    UCT_IFACE_ATTR_FIELD_TAG_EAGER          = UCS_BIT(4),
+
+    /** Enables @ref uct_iface_attr_v2_t::tag::rndv */
+    UCT_IFACE_ATTR_FIELD_TAG_RNDV           = UCS_BIT(5),
+
+    /** Enables @ref uct_iface_attr_v2_t::atomic32::op_flags */
+    UCT_IFACE_ATTR_FIELD_ATOMIC32_OP_FLAGS  = UCS_BIT(6),
+
+    /** Enables @ref uct_iface_attr_v2_t::atomic32::fop_flags */
+    UCT_IFACE_ATTR_FIELD_ATOMIC32_FOP_FLAGS = UCS_BIT(7),
+
+    /** Enables @ref uct_iface_attr_v2_t::atomic64::op_flags */
+    UCT_IFACE_ATTR_FIELD_ATOMIC64_OP_FLAGS  = UCS_BIT(8),
+
+    /** Enables @ref uct_iface_attr_v2_t::atomic64::fop_flags */
+    UCT_IFACE_ATTR_FIELD_ATOMIC64_FOP_FLAGS = UCS_BIT(9),
+
+    /** Enables @ref uct_iface_attr_v2_t::flags*/
+    UCT_IFACE_ATTR_FIELD_FLAGS              = UCS_BIT(10),
+
+    /** Enables @ref uct_iface_attr_v2_t::event_flags*/
+    UCT_IFACE_ATTR_FIELD_EVENT_FLAGS        = UCS_BIT(11),
+
+    /** Enables @ref uct_iface_attr_v2_t::device_addr_len */
+    UCT_IFACE_ATTR_FIELD_DEVICE_ADDR_LEN    = UCS_BIT(12),
+
+    /** Enables @ref uct_iface_attr_v2_t::iface_addr_len */
+    UCT_IFACE_ATTR_FIELD_IFACE_ADDR_LEN     = UCS_BIT(13),
+
+    /** Enables @ref uct_iface_attr_v2_t::ep_addr_len*/
+    UCT_IFACE_ATTR_FIELD_EP_ADDR_LEN        = UCS_BIT(14),
+
+    /** Enables @ref uct_iface_attr_v2_t::max_num_eps */
+    UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS        = UCS_BIT(15),
+} uct_iface_attr_field_t;
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface attributes: capabilities and limitations.
+ */
+typedef struct uct_iface_attr_v2 {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_attr_field_t.
+     */
+    uint64_t            field_mask;
+
+    /** Attributes for PUT operations */
+    uct_iface_op_attr_t *put;
+
+    /** Attributes for GET operations */
+    uct_iface_op_attr_t *get;
+
+    /** Attributes for AM operations */
+    uct_iface_op_attr_t *am;
+
+    /** Attributes for TAG operations */
+    struct {
+        /** Attributes related to receive protocol */
+        uct_iface_op_attr_t *recv;
+
+        /** Attributes related to eager protocol */
+        uct_iface_op_attr_t *eager;
+
+        /** Attributes related to rendezvous protocol */
+        uct_iface_op_attr_t *rndv;
+    } tag;
+
+    /** Attributes for atomic operations */
+    struct {
+        /** Attributes for atomic-post operations */
+        uint64_t op_flags;
+        /** Attributes for atomic-fetch operations */
+        uint64_t fop_flags;
+    } atomic32, atomic64;
+
+    /** Flags from @ref UCT_RESOURCE_IFACE_CAP */
+    uint64_t flags;
+
+    /** Flags from @ref UCT_RESOURCE_IFACE_EVENT_CAP */
+    uint64_t event_flags;
+
+    /** Size of device address */
+    size_t   device_addr_len;
+
+    /** Size of interface address */
+    size_t   iface_addr_len;
+
+    /** Size of endpoint address */
+    size_t   ep_addr_len;
+
+    /** Maximum number of endpoints */
+    size_t   max_num_eps;
+} uct_iface_attr_v2_t;
+
+
+/**
+ *
+ * @ingroup UCT_RESOURCE
+ * @brief Get interface selected attributes.
+ *
+ * Retreives attributes specified by the @ref uct_iface_attr_v2_t::field_mask
+ *
+ * @param [in]  iface      Interface to query.
+ * @param [out] iface_attr Filled with interface attributes.
+ */
+ucs_status_t
+uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+
+
 END_C_DECLS
 
 #endif
