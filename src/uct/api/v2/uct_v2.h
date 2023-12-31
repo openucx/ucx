@@ -1146,6 +1146,8 @@ typedef enum {
 
 } uct_iface_attr_field_t;
 
+#define UCT_IFACE_ATTR_V1_BITMASK UCS_MASK(46)
+
 typedef struct uct_iface_attr_v2 {
     /**
      * Mask of valid fields in this structure, using bits from
