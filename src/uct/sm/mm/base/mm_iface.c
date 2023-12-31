@@ -145,8 +145,8 @@ ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
-                                       uct_iface_attr_t *iface_attr)
+static ucs_status_t
+uct_mm_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_mm_md_t    *md    = ucs_derived_of(iface->super.super.md, uct_mm_md_t);
@@ -505,7 +505,6 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_event_fd_get       = uct_mm_iface_event_fd_get,
     .iface_event_arm          = uct_mm_iface_event_fd_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
-    .iface_query              = uct_mm_iface_query,
     .iface_get_device_address = uct_sm_iface_get_device_address,
     .iface_get_address        = uct_mm_iface_get_address,
     .iface_is_reachable       = uct_base_iface_is_reachable
@@ -585,7 +584,8 @@ static uct_iface_internal_ops_t uct_mm_iface_internal_ops = {
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_mm_iface_is_reachable_v2,
-    .ep_is_connected       = uct_mm_ep_is_connected
+    .ep_is_connected       = uct_mm_ep_is_connected,
+    .iface_query_v2        = uct_mm_iface_query
 };
 
 static void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj,

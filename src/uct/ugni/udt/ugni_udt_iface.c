@@ -160,7 +160,8 @@ static void uct_ugni_udt_iface_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_mpool_put(ugni_desc);
 }
 
-static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+static ucs_status_t
+uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_ugni_udt_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_udt_iface_t);
 
@@ -369,10 +370,13 @@ static uct_iface_ops_t uct_ugni_udt_iface_ops = {
     .iface_progress_disable   = ucs_empty_function,
     .iface_progress        = (void*)uct_ugni_udt_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_udt_iface_t),
-    .iface_query              = uct_ugni_udt_iface_query,
     .iface_get_address        = uct_ugni_iface_get_address,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_is_reachable       = uct_ugni_iface_is_reachable
+};
+
+static uct_iface_internal_ops_t uct_ugni_udt_internal_ops = {
+    .iface_query_v2 = uct_ugni_udt_iface_query,
 };
 
 static ucs_mpool_ops_t uct_ugni_udt_desc_mpool_ops = {

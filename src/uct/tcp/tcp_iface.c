@@ -246,8 +246,8 @@ uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
     return sysfs_path;
 }
 
-static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
-                                        uct_iface_attr_t *attr)
+static ucs_status_t
+uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *attr)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     size_t am_buf_size     = iface->config.tx_seg_size -
@@ -484,7 +484,6 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_event_fd_get       = uct_tcp_iface_event_fd_get,
     .iface_event_arm          = ucs_empty_function_return_success,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_iface_t),
-    .iface_query              = uct_tcp_iface_query,
     .iface_get_address        = uct_tcp_iface_get_address,
     .iface_get_device_address = uct_tcp_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable
@@ -603,7 +602,8 @@ static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = uct_tcp_ep_connect_to_ep_v2,
     .iface_is_reachable_v2 = uct_tcp_iface_is_reachable_v2,
-    .ep_is_connected       = uct_tcp_ep_is_connected
+    .ep_is_connected       = uct_tcp_ep_is_connected,
+    .iface_query_v2        = uct_tcp_iface_query
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,

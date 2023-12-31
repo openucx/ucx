@@ -1590,7 +1590,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 }
 
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
-                                uct_iface_attr_t *iface_attr)
+                                uct_iface_attr_v2_t *iface_attr)
 {
     static const uint8_t ib_port_widths[] =
             {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};

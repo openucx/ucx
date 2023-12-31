@@ -908,7 +908,7 @@ void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 }
 
 static void uct_rc_mlx5_tag_query(uct_rc_mlx5_iface_common_t *iface,
-                                  uct_iface_attr_t *iface_attr,
+                                  uct_iface_attr_v2_t *iface_attr,
                                   size_t max_inline, size_t max_tag_eager_iov)
 {
 #if IBV_HW_TM
@@ -1022,7 +1022,7 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
 #endif
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
-                                    uct_iface_attr_t *iface_attr,
+                                    uct_iface_attr_v2_t *iface_attr,
                                     size_t max_inline, size_t max_tag_eager_iov)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,

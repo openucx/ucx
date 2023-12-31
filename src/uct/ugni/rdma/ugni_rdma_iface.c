@@ -28,7 +28,8 @@ static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+static ucs_status_t
+uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_rdma_iface_t);
 
@@ -206,7 +207,6 @@ static uct_iface_ops_t uct_ugni_aries_rdma_iface_ops = {
     .iface_progress_disable   = ucs_empty_function,
     .iface_progress           = (void*)uct_ugni_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
-    .iface_query              = uct_ugni_rdma_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
     .iface_is_reachable       = uct_ugni_iface_is_reachable
@@ -233,10 +233,13 @@ static uct_iface_ops_t uct_ugni_gemini_rdma_iface_ops = {
     .iface_progress_disable   = ucs_empty_function,
     .iface_progress           = (void*)uct_ugni_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
-    .iface_query              = uct_ugni_rdma_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
     .iface_is_reachable       = uct_ugni_iface_is_reachable
+};
+
+static uct_iface_internal_ops_t uct_ugni_rdma_internal_ops = {
+    .iface_query_v2 = uct_ugni_rdma_iface_query
 };
 
 static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {
@@ -276,7 +279,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
         status = UCS_ERR_NO_DEVICE;
         goto exit;
     }
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops, NULL,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops,
+                              &uct_ugni_rdma_internal_ops,
                               &config->super UCS_STATS_ARG(NULL));
     /* Setting initial configuration */
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;

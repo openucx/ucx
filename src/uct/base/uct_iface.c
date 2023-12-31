@@ -22,18 +22,6 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
-/**
-#define UCT_IFACE_ATTR_V2_FIELD_COPY(_md_attr_dst, _md_attr_src, _field_name, \
-                                     _field_flag) \
-    { \
-        if ((_md_attr_dst)->field_mask & (_field_flag)) { \
-            ucs_assert((_md_attr_src)->field_mask &(_field_flag)); \
-            memcpy(&((_md_attr_dst)->_field_name), \
-                   &((_md_attr_src)->_field_name), \
-                   sizeof((_md_attr_src)->_field_name)); \
-        } \
-    }
-    */
 
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
@@ -205,6 +193,8 @@ static void
 uct_iface_attr_v2_to_v1(uct_iface_attr_t *dest, const uct_iface_attr_v2_t *src)
 {
     /* PUT attributes */
+    ucs_warn("%p = %p", dest, src);
+    dest->cap.put.max_short       = src->cap.put.max_short;
     dest->cap.put.max_short       = src->cap.put.max_short;
     dest->cap.put.max_bcopy       = src->cap.put.max_bcopy;
     dest->cap.put.min_zcopy       = src->cap.put.min_zcopy;
@@ -270,10 +260,11 @@ uct_iface_attr_v2_to_v1(uct_iface_attr_t *dest, const uct_iface_attr_v2_t *src)
 }
 
 ucs_status_t
-uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+uct_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
-    return UCS_OK;
-    // return iface->ops.->iface_query_v2(iface, iface_attr);
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    return iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
 }
 
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
@@ -288,7 +279,7 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 
     uct_iface_attr_v2_to_v1(iface_attr, &iface_attr_v2);
 
-    return iface->ops.iface_query(iface, iface_attr  );
+    return status;
 }
 
 ucs_status_t
@@ -543,10 +534,11 @@ ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
     return status;
 }
 
-void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
+void uct_base_iface_query(uct_base_iface_t *iface,
+                          uct_iface_attr_v2_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(*iface_attr));
-
+    iface_attr->field_mask    = UCT_IFACE_ATTR_V1_BITMASK;
     iface_attr->max_num_eps   = iface->config.max_num_eps;
     iface_attr->dev_num_paths = 1;
 }
@@ -658,9 +650,10 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
     ucs_assert_always(ops->iface_progress_disable   != NULL);
     ucs_assert_always(ops->iface_progress           != NULL);
     ucs_assert_always(ops->iface_close              != NULL);
-    ucs_assert_always(ops->iface_query              != NULL);
     ucs_assert_always(ops->iface_get_device_address != NULL);
     ucs_assert_always(ops->iface_is_reachable       != NULL);
+
+    ops->iface_query = uct_iface_query;
 
     self->ops = *ops;
     return UCS_OK;

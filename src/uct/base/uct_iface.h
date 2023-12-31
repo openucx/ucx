@@ -300,8 +300,8 @@ typedef int (*uct_ep_is_connected_func_t)(
         uct_ep_h ep, const uct_ep_is_connected_params_t *params);
 
 /* Query iface attributes v2 */
-// typedef ucs_status_t (*uct_iface_query_v2_func_t)(
-//         uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
+typedef ucs_status_t (*uct_iface_query_v2_func_t)(
+        uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);
 
 
 /* Internal operations, not exposed by the external API */
@@ -313,7 +313,7 @@ typedef struct uct_iface_internal_ops {
     uct_ep_connect_to_ep_v2_func_t   ep_connect_to_ep_v2;
     uct_iface_is_reachable_v2_func_t iface_is_reachable_v2;
     uct_ep_is_connected_func_t       ep_is_connected;
-    // uct_iface_query_v2_func_t        query_v2;
+    uct_iface_query_v2_func_t        iface_query_v2;
 } uct_iface_internal_ops_t;
 
 
@@ -871,7 +871,7 @@ uct_iface_param_am_alignment(const uct_iface_params_t *params, size_t elem_size,
                              size_t base_offset, size_t payload_offset,
                              size_t *align, size_t *align_offset);
 
-void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr);
+void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_v2_t *iface_attr);
 
 ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
                                         uct_device_type_t dev_type,

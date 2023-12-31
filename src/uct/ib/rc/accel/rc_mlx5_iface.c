@@ -214,7 +214,8 @@ static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
                                            UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
 }
 
-static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+static ucs_status_t
+uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
     uct_rc_iface_t *rc_iface   = &iface->super;
@@ -1013,7 +1014,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_invalidate         = uct_rc_mlx5_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_rc_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2 = uct_rc_mlx5_iface_is_reachable_v2,
-            .ep_is_connected       = uct_rc_mlx5_ep_is_connected
+            .ep_is_connected       = uct_rc_mlx5_ep_is_connected,
+            .iface_query_v2        = uct_rc_mlx5_iface_query,
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -1072,7 +1074,6 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .iface_event_fd_get       = uct_rc_mlx5_iface_event_fd_get,
     .iface_event_arm          = uct_rc_mlx5_iface_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
-    .iface_query              = uct_rc_mlx5_iface_query,
     .iface_get_address        = uct_rc_mlx5_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable
