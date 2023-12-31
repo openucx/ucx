@@ -22,6 +22,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
+/**
 #define UCT_IFACE_ATTR_V2_FIELD_COPY(_md_attr_dst, _md_attr_src, _field_name, \
                                      _field_flag) \
     { \
@@ -32,6 +33,7 @@
                    sizeof((_md_attr_src)->_field_name)); \
         } \
     }
+    */
 
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
@@ -199,7 +201,8 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                        NULL);
 }
 
-static void uct_iface_attr_v2_to_v1(uct_iface_attr_t *dest, uct_iface_attr_v2_t *src)
+static void
+uct_iface_attr_v2_to_v1(uct_iface_attr_t *dest, const uct_iface_attr_v2_t *src)
 {
     /* PUT attributes */
     dest->cap.put.max_short       = src->cap.put.max_short;
@@ -266,6 +269,13 @@ static void uct_iface_attr_v2_to_v1(uct_iface_attr_t *dest, uct_iface_attr_v2_t 
     dest->dev_num_paths   = src->dev_num_paths;
 }
 
+ucs_status_t
+uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
+{
+    return UCS_OK;
+    // return iface->ops.->iface_query_v2(iface, iface_attr);
+}
+
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
     uct_iface_attr_v2_t iface_attr_v2;
@@ -278,14 +288,7 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 
     uct_iface_attr_v2_to_v1(iface_attr, &iface_attr_v2);
 
-    return status;
-}
-
-ucs_status_t
-uct_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
-{
-    return UCS_OK;
-    // return iface->ops.->iface_query_v2(iface, iface_attr);
+    return iface->ops.iface_query(iface, iface_attr  );
 }
 
 ucs_status_t

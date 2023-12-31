@@ -1146,7 +1146,7 @@ typedef enum {
 
 } uct_iface_attr_field_t;
 
-typedef struct {
+typedef struct uct_iface_attr_v2 {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_iface_attr_field_t.
