@@ -761,6 +761,12 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         local_sockaddr;
 
+    /**
+     * Number of different priority levels, priority is not guarenteed,
+     * parameter must be between 1 and @ref ucp_worker_attr_t::max_message_priorities which
+     * can be acquired by @ref ucp_worker_query, default is 1.
+     */
+    uint32_t                required_num_of_priorities;
 } ucp_ep_params_t;
 
 

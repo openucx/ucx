@@ -186,8 +186,7 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_NAME           = UCS_BIT(6), /**< Worker name */
     UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT   = UCS_BIT(7), /**< Alignment of active
                                                              messages on the receiver */
-    UCP_WORKER_PARAM_FIELD_CLIENT_ID      = UCS_BIT(8), /**< Client id */
-    UCP_WORKER_PARAM_FIELD_NUM_PRIORITIES = UCS_BIT(9)  /**< Required number of message priority levels */
+    UCP_WORKER_PARAM_FIELD_CLIENT_ID      = UCS_BIT(8)  /**< Client id */
 };
 
 
@@ -265,7 +264,8 @@ enum ucp_ep_params_field {
     /**< Connection request field */
     UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
     UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7), /**< Endpoint name */
-    UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8)  /**< Local socket Address */
+    UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8), /**< Local socket Address */
+    UCP_EP_PARAM_FIELD_NUM_PRIORITIES    = UCS_BIT(9)  /**< Required number of message priority levels */
 };
 
 
@@ -434,8 +434,7 @@ enum ucp_context_attr_field {
     UCP_ATTR_FIELD_REQUEST_SIZE    = UCS_BIT(0), /**< UCP request size */
     UCP_ATTR_FIELD_THREAD_MODE     = UCS_BIT(1), /**< UCP context thread flag */
     UCP_ATTR_FIELD_MEMORY_TYPES    = UCS_BIT(2), /**< UCP supported memory types */
-    UCP_ATTR_FIELD_NAME            = UCS_BIT(3), /**< UCP context name */
-    UCP_ATTR_FIELD_MAX_PRIORITIES  = UCS_BIT(4)  /**< Max number of message priorities*/
+    UCP_ATTR_FIELD_NAME            = UCS_BIT(3)  /**< UCP context name */
 };
 
 
@@ -453,8 +452,9 @@ enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER   = UCS_BIT(3), /**< Maximum header size
                                                              used by UCP AM API */
     UCP_WORKER_ATTR_FIELD_NAME            = UCS_BIT(4), /**< UCP worker name */
-    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5)  /**< Maximum size of
+    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5), /**< Maximum size of
                                                              info string */
+    UCP_WORKER_ATTR_FIELD_MAX_PRIORITIES  = UCS_BIT(6)  /**< Max number of message priorities */
 };
 
 
@@ -1205,11 +1205,6 @@ typedef struct ucp_context_attr {
      * Tracing and analysis tools can use name to identify this UCX context.
      */
     char                  name[UCP_ENTITY_NAME_MAX];
-
-    /**
-     * Max number of message priority levels
-     */
-    uint8_t max_message_priorities;
 } ucp_context_attr_t;
 
 
@@ -1270,6 +1265,11 @@ typedef struct ucp_worker_attr {
      * Maximum debug string size that can be filled with @ref ucp_request_query.
      */
     size_t                max_debug_string;
+
+    /**
+     * Maximum available message priority levels
+     */
+    uint8_t               max_message_priorities;
 } ucp_worker_attr_t;
 
 
@@ -1395,13 +1395,6 @@ typedef struct ucp_worker_params {
     * using @ref ucp_conn_request_query.
     */
     uint64_t                client_id;
-
-    /**
-     * Number of different priority levels, priority is not guarenteed,
-     * this number must be between 1 and @ref ucp_context_attr_t::max_message_priorities which 
-     * can be acquired by @ref ucp_context_query, default is 1.
-     */
-    uint32_t                required_num_of_priorities;
 } ucp_worker_params_t;
 
 
