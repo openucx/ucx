@@ -814,16 +814,17 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,
                                             uint8_t gid_index,
                                             unsigned path_index,
-                                            struct ibv_ah_attr *ah_attr)
+                                            struct ibv_ah_attr *ah_attr,
+                                            uint8_t sl)
 {
     uint8_t path_bits;
     char buf[128];
 
     memset(ah_attr, 0, sizeof(*ah_attr));
 
-    ucs_assert(iface->config.sl < UCT_IB_SL_NUM);
+    ucs_assert(sl < UCT_IB_SL_NUM);
 
-    ah_attr->sl                = iface->config.sl;
+    ah_attr->sl                = sl;
     ah_attr->port_num          = iface->config.port_num;
     ah_attr->grh.traffic_class = iface->config.traffic_class;
 
@@ -882,7 +883,8 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          const uct_ib_address_t *ib_addr,
                                          unsigned path_index,
                                          struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu *path_mtu)
+                                         enum ibv_mtu *path_mtu,
+                                         uint8_t sl)
 {
     union ibv_gid *gid = NULL;
     uint16_t lid, flid = 0;
@@ -916,7 +918,7 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 
     lid = (flid == 0) ? params.lid : flid;
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, gid, params.gid_index,
-                                           path_index, ah_attr);
+                                           path_index, ah_attr, sl);
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
@@ -1875,8 +1877,7 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
 
 uint8_t uct_ib_iface_get_ep_sl(const uct_ib_iface_t *iface, const uct_ep_params_t *params)
 {
-    return (params->field_mask & UCT_EP_PARAM_FIELD_PRIORITY) &&
-                           (params->priority > 0) ?
+    return (params->field_mask & UCT_EP_PARAM_FIELD_PRIORITY) ?
                    iface->config.priority_sls[params->priority] :
                    iface->config.sl;
 }

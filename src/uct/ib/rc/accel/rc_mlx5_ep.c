@@ -798,7 +798,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                         ep->super.path_index, &ah_attr,
-                                        &path_mtu);
+                                        &path_mtu, ep->super.sl);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
     ah_attr.sl = ep->super.sl;
 

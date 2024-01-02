@@ -45,11 +45,11 @@ ucs_status_t
 uct_ud_iface_cep_get_peer_address(uct_ud_iface_t *iface,
                                   const uct_ib_address_t *ib_addr,
                                   const uct_ud_iface_addr_t *if_addr,
-                                  int path_index, void *address_p)
+                                  int path_index, void *address_p, uint8_t sl)
 {
     ucs_status_t status = uct_ud_iface_unpack_peer_address(iface, ib_addr,
                                                            if_addr, path_index,
-                                                           address_p);
+                                                           address_p, sl);
 
     if (status != UCS_OK) {
         ucs_diag("iface %p: failed to get peer address", iface);
@@ -69,14 +69,14 @@ uct_ud_iface_cep_ep_queue_type(uct_ud_ep_t *ep)
 ucs_status_t
 uct_ud_iface_cep_get_conn_sn(uct_ud_iface_t *iface,
                              const uct_ib_address_t *ib_addr,
-                             const uct_ud_iface_addr_t *if_addr,
-                             int path_index, uct_ud_ep_conn_sn_t *conn_sn_p)
+                             const uct_ud_iface_addr_t *if_addr, int path_index,
+                             uct_ud_ep_conn_sn_t *conn_sn_p, uint8_t sl)
 {
     void *peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
     ucs_status_t status;
-    
+
     status = uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr,
-                                               path_index, peer_address);
+                                               path_index, peer_address, sl);
     if (status != UCS_OK) {
         return status;
     } 
@@ -101,7 +101,8 @@ uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
     queue_type   = uct_ud_iface_cep_ep_queue_type(ep);
     peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
     status       = uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr,
-                                                     path_index, peer_address);
+                                                     path_index, peer_address,
+                                                     ep->sl);
     if (status != UCS_OK) {
         return status;
     }
@@ -131,9 +132,9 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
     ucs_status_t status;
 
     peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
-    status       = uct_ud_iface_cep_get_peer_address(iface, ib_addr,
-                                                     if_addr, path_index,
-                                                     peer_address);
+    status       = uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr,
+                                                     path_index, peer_address,
+                                                     iface->super.config.sl);
     if (status != UCS_OK) {
         return NULL;
     }

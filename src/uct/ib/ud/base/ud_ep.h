@@ -261,6 +261,7 @@ struct uct_ud_ep {
     uint8_t               path_index;
     ucs_wtimer_t          timer;
     ucs_time_t            close_time;   /* timestamp of closure */
+    uint8_t               sl;
     UCS_STATS_NODE_DECLARE(stats)
     UCT_UD_EP_HOOK_DECLARE(timer_hook)
 #if ENABLE_DEBUG_DATA

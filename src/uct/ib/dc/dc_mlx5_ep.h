@@ -77,6 +77,7 @@ struct uct_dc_mlx5_ep {
     uct_rc_fc_t           fc;
     uct_dc_mlx5_base_av_t av;
     uint8_t               dci_channel_index;
+    uint8_t               sl;
 };
 
 typedef struct {
@@ -91,7 +92,7 @@ typedef struct {
 
 
 UCS_CLASS_DECLARE(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *, const uct_dc_mlx5_iface_addr_t *,
-                  uct_ib_mlx5_base_av_t *, uint8_t);
+                  uct_ib_mlx5_base_av_t *, uint8_t, uint8_t);
 
 UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
                   const uct_dc_mlx5_iface_addr_t *,
