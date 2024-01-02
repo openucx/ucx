@@ -197,7 +197,7 @@ struct uct_ib_iface_config {
     unsigned long           reverse_sl;
 
     /* IB high priority SL (default: AUTO - same value as sl) */
-    unsigned long           priority_sl;
+    UCS_CONFIG_ARRAY_FIELD(u_int8_t, priority_sls) priority_sls;
 };
 
 
@@ -302,7 +302,7 @@ struct uct_ib_iface {
         uint8_t               port_num;
         uint8_t               sl;
         uint8_t               reverse_sl;
-        uint8_t               priority_sl;
+        uint8_t               priority_sls[UCT_IB_SL_NUM];
         uint8_t               traffic_class;
         uint8_t               hop_limit;
         uint8_t               qp_type;
