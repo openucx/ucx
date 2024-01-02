@@ -1116,61 +1116,6 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Interface attributes capabilities field mask flags 
- */
-typedef enum {
-    /** Enables @ref uct_iface_attr_v2_t::put */
-    UCT_IFACE_ATTR_FIELD_PUT                = UCS_BIT(0),
-
-    /** Enables @ref uct_iface_attr_v2_t::get */
-    UCT_IFACE_ATTR_FIELD_GET                = UCS_BIT(1),
-
-    /** Enables @ref uct_iface_attr_v2_t::am */
-    UCT_IFACE_ATTR_FIELD_AM                 = UCS_BIT(2),
-
-    /** Enables @ref uct_iface_attr_v2_t::tag::receive */
-    UCT_IFACE_ATTR_FIELD_TAG_RECEIVE        = UCS_BIT(3),
-
-    /** Enables @ref uct_iface_attr_v2_t::tag::eager */
-    UCT_IFACE_ATTR_FIELD_TAG_EAGER          = UCS_BIT(4),
-
-    /** Enables @ref uct_iface_attr_v2_t::tag::rndv */
-    UCT_IFACE_ATTR_FIELD_TAG_RNDV           = UCS_BIT(5),
-
-    /** Enables @ref uct_iface_attr_v2_t::atomic32::op_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC32_OP_FLAGS  = UCS_BIT(6),
-
-    /** Enables @ref uct_iface_attr_v2_t::atomic32::fop_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC32_FOP_FLAGS = UCS_BIT(7),
-
-    /** Enables @ref uct_iface_attr_v2_t::atomic64::op_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC64_OP_FLAGS  = UCS_BIT(8),
-
-    /** Enables @ref uct_iface_attr_v2_t::atomic64::fop_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC64_FOP_FLAGS = UCS_BIT(9),
-
-    /** Enables @ref uct_iface_attr_v2_t::flags*/
-    UCT_IFACE_ATTR_FIELD_FLAGS              = UCS_BIT(10),
-
-    /** Enables @ref uct_iface_attr_v2_t::event_flags*/
-    UCT_IFACE_ATTR_FIELD_EVENT_FLAGS        = UCS_BIT(11),
-
-    /** Enables @ref uct_iface_attr_v2_t::device_addr_len */
-    UCT_IFACE_ATTR_FIELD_DEVICE_ADDR_LEN    = UCS_BIT(12),
-
-    /** Enables @ref uct_iface_attr_v2_t::iface_addr_len */
-    UCT_IFACE_ATTR_FIELD_IFACE_ADDR_LEN     = UCS_BIT(13),
-
-    /** Enables @ref uct_iface_attr_v2_t::ep_addr_len*/
-    UCT_IFACE_ATTR_FIELD_EP_ADDR_LEN        = UCS_BIT(14),
-
-    /** Enables @ref uct_iface_attr_v2_t::max_num_eps */
-    UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS        = UCS_BIT(15),
-} uct_iface_attr_field_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Interface specific operations attributes, capabilities and limitations
  */
 typedef struct uct_iface_op_attr {
@@ -1202,6 +1147,60 @@ typedef struct uct_iface_op_attr {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Interface attributes capabilities field mask flags 
+ */
+typedef enum {
+    /** Enables @ref uct_iface_attr_v2_t::flags*/
+    UCT_IFACE_ATTR_FIELD_FLAGS              = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_attr_v2_t::event_flags*/
+    UCT_IFACE_ATTR_FIELD_EVENT_FLAGS        = UCS_BIT(1),
+
+    /** Enables @ref uct_iface_attr_v2_t::device_addr_len */
+    UCT_IFACE_ATTR_FIELD_DEVICE_ADDR_LEN    = UCS_BIT(2),
+
+    /** Enables @ref uct_iface_attr_v2_t::iface_addr_len */
+    UCT_IFACE_ATTR_FIELD_IFACE_ADDR_LEN     = UCS_BIT(3),
+
+    /** Enables @ref uct_iface_attr_v2_t::ep_addr_len*/
+    UCT_IFACE_ATTR_FIELD_EP_ADDR_LEN        = UCS_BIT(4),
+
+    /** Enables @ref uct_iface_attr_v2_t::max_num_eps */
+    UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS        = UCS_BIT(5),
+
+    /** Enables @ref uct_iface_attr_v2_t::put */
+    UCT_IFACE_ATTR_FIELD_PUT                = UCS_BIT(6),
+
+    /** Enables @ref uct_iface_attr_v2_t::get */
+    UCT_IFACE_ATTR_FIELD_GET                = UCS_BIT(7),
+
+    /** Enables @ref uct_iface_attr_v2_t::am */
+    UCT_IFACE_ATTR_FIELD_AM                 = UCS_BIT(8),
+
+    /** Enables @ref uct_iface_attr_v2_t::tag::receive */
+    UCT_IFACE_ATTR_FIELD_TAG_RECEIVE        = UCS_BIT(9),
+
+    /** Enables @ref uct_iface_attr_v2_t::tag::eager */
+    UCT_IFACE_ATTR_FIELD_TAG_EAGER          = UCS_BIT(10),
+
+    /** Enables @ref uct_iface_attr_v2_t::tag::rndv */
+    UCT_IFACE_ATTR_FIELD_TAG_RNDV           = UCS_BIT(11),
+
+    /** Enables @ref uct_iface_attr_v2_t::atomic32::op_flags */
+    UCT_IFACE_ATTR_FIELD_ATOMIC32_OP_FLAGS  = UCS_BIT(12),
+
+    /** Enables @ref uct_iface_attr_v2_t::atomic32::fop_flags */
+    UCT_IFACE_ATTR_FIELD_ATOMIC32_FOP_FLAGS = UCS_BIT(13),
+
+    /** Enables @ref uct_iface_attr_v2_t::atomic64::op_flags */
+    UCT_IFACE_ATTR_FIELD_ATOMIC64_OP_FLAGS  = UCS_BIT(14),
+
+    /** Enables @ref uct_iface_attr_v2_t::atomic64::fop_flags */
+    UCT_IFACE_ATTR_FIELD_ATOMIC64_FOP_FLAGS = UCS_BIT(15),
+} uct_iface_attr_field_t;
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Interface attributes: capabilities and limitations.
  */
 typedef struct uct_iface_attr_v2 {
@@ -1210,6 +1209,24 @@ typedef struct uct_iface_attr_v2 {
      * @ref uct_iface_attr_field_t.
      */
     uint64_t            field_mask;
+
+    /** Flags from @ref UCT_RESOURCE_IFACE_CAP */
+    uint64_t flags;
+
+    /** Flags from @ref UCT_RESOURCE_IFACE_EVENT_CAP */
+    uint64_t event_flags;
+
+    /** Size of device address */
+    size_t   device_addr_len;
+
+    /** Size of interface address */
+    size_t   iface_addr_len;
+
+    /** Size of endpoint address */
+    size_t   ep_addr_len;
+
+    /** Maximum number of endpoints */
+    size_t   max_num_eps;
 
     /** Attributes for PUT operations */
     uct_iface_op_attr_t *put;
@@ -1239,24 +1256,6 @@ typedef struct uct_iface_attr_v2 {
         /** Attributes for atomic-fetch operations */
         uint64_t fop_flags;
     } atomic32, atomic64;
-
-    /** Flags from @ref UCT_RESOURCE_IFACE_CAP */
-    uint64_t flags;
-
-    /** Flags from @ref UCT_RESOURCE_IFACE_EVENT_CAP */
-    uint64_t event_flags;
-
-    /** Size of device address */
-    size_t   device_addr_len;
-
-    /** Size of interface address */
-    size_t   iface_addr_len;
-
-    /** Size of endpoint address */
-    size_t   ep_addr_len;
-
-    /** Maximum number of endpoints */
-    size_t   max_num_eps;
 } uct_iface_attr_v2_t;
 
 
