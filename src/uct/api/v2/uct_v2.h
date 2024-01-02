@@ -1083,6 +1083,10 @@ ucs_status_t
 uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
                  const uct_rkey_compare_params_t *params, int *result);
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface operations capabilities and limitation field mask flags
+ */
 typedef enum {
     /** Enables @ref uct_iface_op_attr::max_short */
     UCT_IFACE_OP_ATTR_FIELD_MAX_SHORT       = UCS_BIT(0),
@@ -1102,39 +1106,18 @@ typedef enum {
     /** Enables @ref uct_iface_op_attr::align_mtu */
     UCT_IFACE_OP_ATTR_FIELD_ALIGN_MTU       = UCS_BIT(5),
 
-    /** Enables @ref uct_iface_op_attr::max_hdr */
-    UCT_IFACE_OP_ATTR_FIELD_MAX_HDR         = UCS_BIT(6),
+    /** Enables @ref uct_iface_op_attr::max_zcopy_hdr */
+    UCT_IFACE_OP_ATTR_FIELD_MAX_ZCOPY_HDR   = UCS_BIT(6),
 
     /** Enables @ref uct_iface_op_attr::max_iov */
     UCT_IFACE_OP_ATTR_FIELD_MAX_IOV         = UCS_BIT(7)
 } uct_iface_op_attr_field_t;
 
-typedef struct uct_iface_op_attr {
-    /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref uct_iface_op_attr_field_t.
-     */
-    uint64_t field_mask;
-    /** Maximal size for short */
-    size_t   max_short;
-    /** Maximal size for bcopy */
-    size_t   max_bcopy;
-    /** Minimal size for zcopy (total of
-     * @ref uct_iov_t::length of the @a iov parameter) */
-    size_t   min_zcopy;
-    /** Maximal size for zcopy (total of
-     * @ref uct_iov_t::length of the @a iov parameter) */
-    size_t   max_zcopy;
-    /** Optimal alignment for zero-copy buffer address */
-    size_t   opt_zcopy_align;
-    /** MTU used for alignment */
-    size_t   align_mtu;
-    /** Max. header size for zcopy */
-    size_t   max_hdr;
-    /** Maximal @a iovcnt  */
-    size_t   max_iov;
-} uct_iface_op_attr_t;
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface attributes capabilities field mask flags 
+ */
 typedef enum {
     /** Enables @ref uct_iface_attr_v2_t::put */
     UCT_IFACE_ATTR_FIELD_PUT                = UCS_BIT(0),
@@ -1184,6 +1167,38 @@ typedef enum {
     /** Enables @ref uct_iface_attr_v2_t::max_num_eps */
     UCT_IFACE_ATTR_FIELD_MAX_NUM_EPS        = UCS_BIT(15),
 } uct_iface_attr_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface specific operations attributes, capabilities and limitations
+ */
+typedef struct uct_iface_op_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_op_attr_field_t.
+     */
+    uint64_t field_mask;
+    /** Maximal size for short */
+    size_t   max_short;
+    /** Maximal size for bcopy */
+    size_t   max_bcopy;
+    /** Minimal size for zcopy (total of
+     * @ref uct_iov_t::length of the @a iov parameter) */
+    size_t   min_zcopy;
+    /** Maximal size for zcopy (total of
+     * @ref uct_iov_t::length of the @a iov parameter) */
+    size_t   max_zcopy;
+    /** Optimal alignment for zero-copy buffer address */
+    size_t   opt_zcopy_align;
+    /** MTU used for alignment */
+    size_t   align_mtu;
+    /** Max. header size for zcopy */
+    size_t   max_zcopy_hdr;
+    /** Maximal @a iovcnt  */
+    size_t   max_iov;
+} uct_iface_op_attr_t;
+
 
 /**
  * @ingroup UCT_RESOURCE
