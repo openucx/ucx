@@ -1083,9 +1083,12 @@ ucs_status_t
 uct_rkey_compare(uct_component_h component, uct_rkey_t rkey1, uct_rkey_t rkey2,
                  const uct_rkey_compare_params_t *params, int *result);
 
+
 /**
  * @ingroup UCT_RESOURCE
- * @brief Interface operations capabilities and limitation field mask flags
+ * @brief @ref uct_iface_op_attr_t field mask flags
+ * The enumeration allows specifying which fields in @ref uct_iface_op_attr_t are
+ * present. It is used to enable backward compatibility support.
  */
 typedef enum {
     /** Enables @ref uct_iface_op_attr::max_short */
@@ -1116,7 +1119,8 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Interface specific operations attributes, capabilities and limitations
+ * @brief Interface operations attributes, capabilities and limitations
+ * Capabilities and limitations of operations such as put, get, am and tag.
  */
 typedef struct uct_iface_op_attr {
     /**
@@ -1147,7 +1151,9 @@ typedef struct uct_iface_op_attr {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Interface attributes capabilities field mask flags 
+ * @brief @ref uct_iface_attr_v2_t field mask flags 
+ * The enumeration allows specifying which fields in @ref uct_iface_attr_v2_t are
+ * present. It is used to enable backward compatibility support.
  */
 typedef enum {
     /** Enables @ref uct_iface_attr_v2_t::flags*/
@@ -1196,7 +1202,7 @@ typedef enum {
     UCT_IFACE_ATTR_FIELD_ATOMIC64_OP_FLAGS  = UCS_BIT(14),
 
     /** Enables @ref uct_iface_attr_v2_t::atomic64::fop_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC64_FOP_FLAGS = UCS_BIT(15),
+    UCT_IFACE_ATTR_FIELD_ATOMIC64_FOP_FLAGS = UCS_BIT(15)
 } uct_iface_attr_field_t;
 
 /**
@@ -1211,22 +1217,22 @@ typedef struct uct_iface_attr_v2 {
     uint64_t            field_mask;
 
     /** Flags from @ref UCT_RESOURCE_IFACE_CAP */
-    uint64_t flags;
+    uint64_t            flags;
 
     /** Flags from @ref UCT_RESOURCE_IFACE_EVENT_CAP */
-    uint64_t event_flags;
+    uint64_t            event_flags;
 
     /** Size of device address */
-    size_t   device_addr_len;
+    size_t              device_addr_len;
 
     /** Size of interface address */
-    size_t   iface_addr_len;
+    size_t              iface_addr_len;
 
     /** Size of endpoint address */
-    size_t   ep_addr_len;
+    size_t              ep_addr_len;
 
     /** Maximum number of endpoints */
-    size_t   max_num_eps;
+    size_t              max_num_eps;
 
     /** Attributes for PUT operations */
     uct_iface_op_attr_t *put;
