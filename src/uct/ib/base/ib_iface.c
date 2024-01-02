@@ -209,7 +209,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, reverse_sl), UCS_CONFIG_TYPE_ULUNITS},
 
   {"PRIORITY_SLS", "0",
-   "High priority service level. 'auto' will set the same value of sl\n",
+   "List of SLs separated by comma, order determines which priority is using which SL\n",
    ucs_offsetof(uct_ib_iface_config_t, priority_sls), 
    UCS_CONFIG_TYPE_ARRAY(priority_sls)},
 
