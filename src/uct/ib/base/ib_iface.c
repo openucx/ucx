@@ -33,6 +33,9 @@ static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
                                sizeof(ucs_range_spec_t),
                                UCS_CONFIG_TYPE_RANGE_SPEC);
 
+static UCS_CONFIG_DEFINE_ARRAY(priority_sls, sizeof(unsigned long),
+                               UCS_CONFIG_TYPE_ULUNITS);
+
 const char *uct_ib_mtu_values[] = {
     [UCT_IB_MTU_DEFAULT]    = "default",
     [UCT_IB_MTU_512]        = "512",
@@ -204,6 +207,13 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {"REVERSE_SL", "auto",
    "Reverse Service level. 'auto' will set the same value of sl\n",
    ucs_offsetof(uct_ib_iface_config_t, reverse_sl), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"PRIORITY_SLS", "auto",
+   "Comma separated list of SLs to use for each priority level.\n"
+   "The first SL on the list will be used for priority 0, second one for priority 1, etc.\n"
+   "The special value 'auto' specifies the default interface SL.",
+   ucs_offsetof(uct_ib_iface_config_t, priority_sls), 
+   UCS_CONFIG_TYPE_ARRAY(priority_sls)},
 
   {NULL}
 };
@@ -1374,6 +1384,42 @@ void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
     ib_iface->config.reverse_sl = (uint8_t)ib_config->reverse_sl;
 }
 
+static ucs_status_t
+uct_ib_iface_set_priority_sls(uct_ib_iface_t *ib_iface,
+                              const uct_ib_iface_config_t *ib_config)
+{
+    int i;
+    unsigned long config_sl;
+
+    memset(ib_iface->config.priority_sls, ib_iface->config.sl, UCT_IB_SL_NUM);
+
+    for (i = 0; i < ib_config->priority_sls.count; ++i) {
+        config_sl = ib_config->priority_sls.priority_sls[i];
+        if (config_sl == UCS_ULUNITS_AUTO) {
+            continue;
+        }
+
+        if (config_sl >= UCT_IB_SL_NUM) {
+            ucs_error("invalid priority SL parameter: %lu, supported values: "
+                      "auto | [0-15]",
+                      config_sl);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        ib_iface->config.priority_sls[i] = config_sl;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_ib_iface_set_configured_sls(uct_ib_iface_t *ib_iface,
+                                const uct_ib_iface_config_t *ib_config)
+{
+    uct_ib_iface_set_reverse_sl(ib_iface, ib_config);
+    return uct_ib_iface_set_priority_sls(ib_iface, ib_config);
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_ops_t *ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
@@ -1441,6 +1487,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;
     self->config.flid_enabled       = config->flid_enabled;
+
+    memset(self->config.priority_sls, UCT_IB_SL_NUM, UCT_IB_SL_NUM);
+
     uct_ib_iface_set_path_mtu(self, config);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
