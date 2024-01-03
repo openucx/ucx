@@ -1428,8 +1428,6 @@ struct uct_ep_params {
      * On supported transports, an additional uct_ep is created
      * for higher priority messages, which can be handled differently in
      * the underlying transport.
-     * @note The interface in this routine requires the 
-     * @ref UCT_IFACE_FLAG_MESSAGE_PRIORITY capability.  
      */
     unsigned                                 priority;
 };
