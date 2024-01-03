@@ -14,7 +14,6 @@
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
-#include <ucs/config/types.h>
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/callbackq_compat.h>
 #include <ucs/datastruct/linear_func.h>
@@ -435,10 +434,6 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(52) /**< Hardware tag matching zcopy eager support */
 #define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(53) /**< Hardware tag matching rendezvous zcopy support */
-
-        /* Message Priority */
-#define UCT_IFACE_FLAG_MESSAGE_PRIORITY UCS_BIT(54) /**< Interface supports prioritizing 
-                                                         messages on demand */
 /**
  * @}
  */
@@ -974,10 +969,7 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15),
 
     /** Enables @ref uct_ep_params::local_sockaddr */
-    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16),
-
-    /** Enables @ref uct_ep_params::priority */
-    UCT_EP_PARAM_FIELD_PRIORITY                   = UCS_BIT(17)
+    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16)
 };
 
 
@@ -1428,17 +1420,6 @@ struct uct_ep_params {
      * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
      */
     const ucs_sock_addr_t             *local_sockaddr;
-
-    /**
-     * On supported transports, an additional uct_ep is created
-     * for higher priority messages, which can be handled differently in
-     * the underlying transport.
-     * 
-     * @note The interface in this routine requires the
-     * @ref UCT_IFACE_FLAG_MESSAGE_PRIORITY capability.
-     * 
-    */
-    unsigned                                 priority;
 };
 
 

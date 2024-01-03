@@ -176,17 +176,17 @@ enum ucp_feature {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_worker_params_field {
-    UCP_WORKER_PARAM_FIELD_THREAD_MODE    = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_PARAM_FIELD_CPU_MASK       = UCS_BIT(1), /**< Worker's CPU bitmap */
-    UCP_WORKER_PARAM_FIELD_EVENTS         = UCS_BIT(2), /**< Worker's events bitmap */
-    UCP_WORKER_PARAM_FIELD_USER_DATA      = UCS_BIT(3), /**< User data */
-    UCP_WORKER_PARAM_FIELD_EVENT_FD       = UCS_BIT(4), /**< External event file
-                                                             descriptor */
-    UCP_WORKER_PARAM_FIELD_FLAGS          = UCS_BIT(5), /**< Worker flags */
-    UCP_WORKER_PARAM_FIELD_NAME           = UCS_BIT(6), /**< Worker name */
-    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT   = UCS_BIT(7), /**< Alignment of active
-                                                             messages on the receiver */
-    UCP_WORKER_PARAM_FIELD_CLIENT_ID      = UCS_BIT(8)  /**< Client id */
+    UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
+    UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2), /**< Worker's events bitmap */
+    UCP_WORKER_PARAM_FIELD_USER_DATA    = UCS_BIT(3), /**< User data */
+    UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4), /**< External event file
+                                                           descriptor */
+    UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5), /**< Worker flags */
+    UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6), /**< Worker name */
+    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7), /**< Alignment of active
+                                                           messages on the receiver */
+    UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8)  /**< Client id */
 };
 
 
@@ -431,10 +431,10 @@ enum ucp_lib_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_context_attr_field {
-    UCP_ATTR_FIELD_REQUEST_SIZE    = UCS_BIT(0), /**< UCP request size */
-    UCP_ATTR_FIELD_THREAD_MODE     = UCS_BIT(1), /**< UCP context thread flag */
-    UCP_ATTR_FIELD_MEMORY_TYPES    = UCS_BIT(2), /**< UCP supported memory types */
-    UCP_ATTR_FIELD_NAME            = UCS_BIT(3)  /**< UCP context name */
+    UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
+    UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1), /**< UCP context thread flag */
+    UCP_ATTR_FIELD_MEMORY_TYPES = UCS_BIT(2), /**< UCP supported memory types */
+    UCP_ATTR_FIELD_NAME         = UCS_BIT(3)  /**< UCP context name */
 };
 
 
@@ -742,7 +742,7 @@ typedef enum {
                                                         of a single operation.
                                                         This flag and UCP_OP_ATTR_FLAG_FAST_CMPL
                                                         are mutually exclusive. */
-    UCP_OP_ATTR_FIELD_PRIORITY      = UCS_BIT(20)   /**< priority field */
+    UCP_OP_ATTR_FIELD_PRIORITY      = UCS_BIT(20)   /**< message priority field */
 } ucp_op_attr_t;
 
 
@@ -1269,7 +1269,7 @@ typedef struct ucp_worker_attr {
     /**
      * Maximum available message priority levels
      */
-    uint8_t               max_message_priorities;
+    int                   max_message_priorities;
 } ucp_worker_attr_t;
 
 
