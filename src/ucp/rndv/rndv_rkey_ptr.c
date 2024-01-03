@@ -324,12 +324,12 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
         return UCS_OK;
     }
 
+    req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     ucp_proto_rndv_mtype_copy(req, ppln_data->local_ptr, ppln_data->uct_memh,
                               uct_ep_get_zcopy,
                               ucp_proto_rndv_rkey_ptr_mtype_copy_completion,
                               "in from");
 
-    req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     return UCS_OK;
 }
 
