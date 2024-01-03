@@ -1268,3 +1268,19 @@ bool ucp_test::check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type) 
 
     return false;
 }
+
+size_t ucp_test::count_resources(const ucp_test_base::entity &e,
+                                 const std::string &tl_name) const
+{
+    return std::count_if(e.ucph()->tl_rscs,
+                         e.ucph()->tl_rscs + e.ucph()->num_tls,
+                         [&](const ucp_tl_resource_desc_t &rsc) {
+                             return tl_name == rsc.tl_rsc.tl_name;
+                         });
+}
+
+bool ucp_test::has_resource(const ucp_test_base::entity &e,
+                            const std::string &tl_name) const
+{
+    return count_resources(e, tl_name) != 0;
+}

@@ -326,16 +326,15 @@ ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
     }
 
     return ucs_config_parser_set_value(&ucs_global_opts,
-                                       ucs_global_opts_read_only_table,
+                                       ucs_global_opts_read_only_table, NULL,
                                        name, value);
 }
 
 ucs_status_t ucs_global_opts_set_value_modifiable(const char *name,
                                                   const char *value)
 {
-    return ucs_config_parser_set_value(&ucs_global_opts,
-                                       ucs_global_opts_table, name,
-                                       value);
+    return ucs_config_parser_set_value(&ucs_global_opts, ucs_global_opts_table,
+                                       NULL, name, value);
 }
 
 ucs_status_t ucs_global_opts_get_value(const char *name, char *value,
