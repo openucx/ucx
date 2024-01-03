@@ -98,6 +98,7 @@ noinst_HEADERS = \
 	config/ucm_opts.h \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
+	datastruct/dynamic_bitmap.h \
 	datastruct/frag_list.h \
         datastruct/lru.h \
 	datastruct/mpmc.h \
@@ -110,6 +111,7 @@ noinst_HEADERS = \
 	datastruct/conn_match.h \
 	datastruct/ptr_map.h \
 	datastruct/ptr_map.inl \
+	datastruct/static_bitmap.h \
 	datastruct/usage_tracker.h \
 	debug/assert.h \
 	debug/debug_int.h \
