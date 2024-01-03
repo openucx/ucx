@@ -1119,8 +1119,10 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Interface operations attributes, capabilities and limitations
- * Capabilities and limitations of operations such as put, get, am and tag.
+ * @brief Capabilities and limitations for a single operation on @ref uct_iface_t.
+ * 
+ * A structure that describes capabilities and limitations for short/bcopy/zcopy modes,
+ * as well as header sizes and alignment, for a single communication operation.
  */
 typedef struct uct_iface_op_attr {
     /**
