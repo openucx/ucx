@@ -64,7 +64,7 @@ static int ucp_ep_flush_is_completed(ucp_request_t *req)
     return (req->send.state.uct_comp.count == 0) && req->send.flush.sw_done;
 }
 
-static int uct_ep_flush_is_needed(ucp_ep_h ep, ucp_lane_index_t lane)
+static int uct_ep_flush_is_needed(const ucp_ep_h ep, ucp_lane_index_t lane)
 {
     ucp_worker_h worker = ep->worker;
     ucp_worker_iface_t *wiface;
@@ -81,9 +81,13 @@ static int uct_ep_flush_is_needed(ucp_ep_h ep, ucp_lane_index_t lane)
         return 1;
     }
 
+    if (ucp_ep_config(ep)->key.lanes[lane].lane_types &
+        UCS_BIT(UCP_LANE_TYPE_CM)) {
+        return 1;
+    }
+
     wiface = ucp_worker_iface(worker, ucp_ep_get_rsc_index(ep, lane));
-    return (wiface == NULL) ||
-           (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
+    return (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
 }
 
 static void ucp_ep_flush_progress(ucp_request_t *req)
