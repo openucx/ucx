@@ -766,7 +766,7 @@ typedef struct ucp_ep_params {
      * parameter must be between 1 and @ref ucp_worker_attr_t::max_message_priorities which
      * can be acquired by @ref ucp_worker_query, default is 1.
      */
-    uint32_t                num_of_priorities;
+    uint32_t                num_priorities;
 } ucp_ep_params_t;
 
 
