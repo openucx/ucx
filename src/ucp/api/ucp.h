@@ -742,7 +742,7 @@ typedef enum {
                                                         of a single operation.
                                                         This flag and UCP_OP_ATTR_FLAG_FAST_CMPL
                                                         are mutually exclusive. */
-    UCP_OP_ATTR_FIELD_PRIORITY      = UCS_BIT(20)   /**< active message priority field */
+    UCP_OP_ATTR_FIELD_PRIORITY      = UCS_BIT(20)   /**< Active message priority field */
 } ucp_op_attr_t;
 
 
@@ -1269,7 +1269,7 @@ typedef struct ucp_worker_attr {
     /**
      * Maximum available message priority levels
      */
-    unsigned              max_message_priorities;
+    unsigned              max_priorities;
 } ucp_worker_attr_t;
 
 
