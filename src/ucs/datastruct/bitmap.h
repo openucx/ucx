@@ -21,6 +21,11 @@ BEGIN_C_DECLS
 typedef uint64_t ucs_bitmap_word_t;
 
 
+/* Binary operation on bitmap words */
+typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
+                                                    ucs_bitmap_word_t);
+
+
 /*
  * Bits number in a single bitmap word
  */
@@ -600,6 +605,14 @@ ucs_bitmap_bits_reset_all(ucs_bitmap_word_t *bits, size_t num_words)
 }
 
 
+/* Helper function to set all bitmap bits to 1 */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_set_all(ucs_bitmap_word_t *bits, size_t num_words)
+{
+    memset(bits, 0xff, num_words * sizeof(ucs_bitmap_word_t));
+}
+
+
 /* Helper function to return work mask of bit at given index */
 static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
 ucs_bitmap_word_bit_mask(size_t bit_index)
@@ -659,6 +672,169 @@ ucs_bitmap_bits_is_zero(const ucs_bitmap_word_t *bits, size_t num_words)
         }
     }
     return 1;
+}
+
+
+/* Helper function to count the number of bits that are set to 1 */
+static UCS_F_ALWAYS_INLINE size_t
+ucs_bitmap_bits_popcount(const ucs_bitmap_word_t *bits, size_t num_words)
+{
+    size_t popcount = 0;
+    const ucs_bitmap_word_t *bits_word;
+
+    ucs_carray_for_each(bits_word, bits, num_words) {
+        popcount += ucs_popcount(*bits_word);
+    }
+
+    return popcount;
+}
+
+
+/* Helper function to return the number of bits that are set to 1 upto a
+   given bit_index (excluding bit_index) */
+static UCS_F_ALWAYS_INLINE size_t ucs_bitmap_bits_popcount_upto_index(
+        const ucs_bitmap_word_t *bits, size_t num_words, size_t bit_index)
+{
+    const size_t last_word_index = bit_index / UCS_BITMAP_BITS_IN_WORD;
+    ucs_bitmap_word_t mask       = ucs_bitmap_word_bit_mask(bit_index) - 1;
+
+    UCS_BITMAP_CHECK_INDEX(bit_index, num_words, <=);
+    return ucs_bitmap_bits_popcount(bits, last_word_index) +
+           ((mask == 0) ? 0 : ucs_popcount(bits[last_word_index] & mask));
+}
+
+
+/* Helper function to set the bitmap array to a mask up to the given index */
+static UCS_F_ALWAYS_INLINE void ucs_bitmap_bits_mask(ucs_bitmap_word_t *bits,
+                                                     size_t num_words,
+                                                     size_t bit_index)
+{
+    size_t last_word_index;
+    ucs_bitmap_word_t mask;
+
+    UCS_BITMAP_CHECK_INDEX(bit_index, num_words, <=);
+
+    last_word_index = bit_index / UCS_BITMAP_BITS_IN_WORD;
+    ucs_bitmap_bits_set_all(bits, last_word_index);
+
+    /* Add the mask remainder if needed */
+    mask = ucs_bitmap_word_bit_mask(bit_index) - 1;
+    if (mask != 0) {
+        bits[last_word_index++] = mask;
+    }
+
+    ucs_assertv(num_words >= last_word_index,
+                "num_words=%zu last_word_index=%zu", num_words,
+                last_word_index);
+    ucs_bitmap_bits_reset_all(bits + last_word_index,
+                              num_words - last_word_index);
+}
+
+
+/* Helper function to inverse the bitmap bits */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_not(ucs_bitmap_word_t *dst_bits, size_t dst_num_words,
+                    const ucs_bitmap_word_t *src_bits, size_t src_num_words)
+{
+    size_t word_index;
+
+    UCS_BITMAP_CHECK_DST_NUM_WORDS(dst_num_words, src_num_words);
+
+    for (word_index = 0; word_index < src_num_words; ++word_index) {
+        dst_bits[word_index] = ~src_bits[word_index];
+    }
+
+    if (dst_num_words > src_num_words) {
+        /* Set remaining bits in destination to 1 */
+        ucs_bitmap_bits_set_all(dst_bits + src_num_words,
+                                dst_num_words - src_num_words);
+    }
+}
+
+
+/* Helper function to do bitwise and between bitmap words */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_and(ucs_bitmap_word_t word1, ucs_bitmap_word_t word2)
+{
+    return word1 & word2;
+}
+
+
+/* Helper function to do bitwise or between bitmap words */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_or(ucs_bitmap_word_t word1, ucs_bitmap_word_t word2)
+{
+    return word1 | word2;
+}
+
+
+/* Helper function to do bitwise xor between bitmap words */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_xor(ucs_bitmap_word_t word1, ucs_bitmap_word_t word2)
+{
+    return word1 ^ word2;
+}
+
+
+/* Helper function to apply a binary operation on two bitmap bit arrays and
+   return the result in a third array. The destination size must be at least
+   the size of each of the source arrays. */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_binary_op(ucs_bitmap_word_t *dst_bits, size_t dst_num_words,
+                          const ucs_bitmap_word_t *src1_bits,
+                          size_t src1_num_words,
+                          const ucs_bitmap_word_t *src2_bits,
+                          size_t src2_num_words, ucs_bitmap_binary_op_t op)
+{
+    size_t word_index = 0;
+
+    UCS_BITMAP_CHECK_DST_NUM_WORDS(dst_num_words, src1_num_words);
+    UCS_BITMAP_CHECK_DST_NUM_WORDS(dst_num_words, src2_num_words);
+
+    while ((word_index < src1_num_words) && (word_index < src2_num_words)) {
+        dst_bits[word_index] = op(src1_bits[word_index], src2_bits[word_index]);
+        ++word_index;
+    }
+
+    /* Non-existing bits in either src1 or src2 are considered to be 0.
+       In practice, at most one of the below while loops will be executed. */
+    while (word_index < src1_num_words) {
+        dst_bits[word_index] = op(src1_bits[word_index], 0);
+        ++word_index;
+    }
+    while (word_index < src2_num_words) {
+        dst_bits[word_index] = op(0, src2_bits[word_index]);
+        ++word_index;
+    }
+
+    /* Clear the remaining bits */
+    ucs_bitmap_bits_reset_all(dst_bits + word_index,
+                              dst_num_words - word_index);
+}
+
+
+/* Helper function to compare two bitmaps */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_is_equal(const ucs_bitmap_word_t *bitmap1_bits,
+                         size_t bitmap1_num_words,
+                         const ucs_bitmap_word_t *bitmap2_bits,
+                         size_t bitmap2_num_words)
+{
+    size_t min_len;
+    int is_zero;
+
+    if (bitmap1_num_words > bitmap2_num_words) {
+        min_len = bitmap2_num_words;
+        is_zero = ucs_bitmap_bits_is_zero(bitmap1_bits + min_len,
+                                          bitmap1_num_words - min_len);
+    } else {
+        min_len = bitmap1_num_words;
+        is_zero = ucs_bitmap_bits_is_zero(bitmap2_bits + min_len,
+                                          bitmap2_num_words - min_len);
+    }
+
+    return is_zero && (memcmp(bitmap1_bits, bitmap2_bits,
+                              sizeof(ucs_bitmap_word_t) * min_len) == 0);
 }
 
 END_C_DECLS
