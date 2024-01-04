@@ -17,6 +17,7 @@ import (
 	. "ucx"
 	"unsafe"
 	. "cuda"
+	"runtime"
 )
 
 type PerfTestParams struct {
@@ -92,6 +93,7 @@ func initContext() {
 
 func tryCudaSetDevice() {
 	if perfTestParams.memType == UCS_MEMORY_TYPE_CUDA {
+		runtime.LockOSThread()
 		if ret := CudaSetDevice(); ret != nil {
 			panic(ret)
 		}
@@ -233,8 +235,6 @@ func serverAmRecvHandler(header unsafe.Pointer, headerSize uint64, data *UcpAmDa
 	if data.IsDataValid() {
 		atomic.AddUint32(&perfTest.numCompletedRequests, 1)
 	} else {
-		tryCudaSetDevice()
-
 		data.Receive(getAddressOffsetForThread(tid), perfTestParams.messageSize,
 			(&UcpRequestParams{}).SetMemType(perfTestParams.memType).SetCallback(func(request *UcpRequest, status UcsStatus, length uint64) {
 				atomic.AddUint32(&perfTest.numCompletedRequests, 1)
@@ -281,11 +281,11 @@ func serverStart() error {
 }
 
 func clientThreadDoIter(i int, t uint) {
+	tryCudaSetDevice()
+
 	start := time.Now()
 	var request *UcpRequest
 	requestParams := (&UcpRequestParams{}).SetMemType(perfTestParams.memType)
-
-	tryCudaSetDevice()
 
 	header := unsafe.Pointer(&t)
 	request, _ = perfTest.eps[t].SendAmNonBlocking(t, header, uint64(unsafe.Sizeof(t)), getAddressOffsetForThread(t), perfTestParams.messageSize, 0, requestParams)
