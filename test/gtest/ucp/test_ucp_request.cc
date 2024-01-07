@@ -16,7 +16,7 @@ extern "C" {
 
 class test_ucp_request : public ucp_test {
 public:
-    virtual void init() override
+    virtual void init()
     {
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
