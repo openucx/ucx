@@ -17,10 +17,17 @@ typedef struct uct_rocm_ipc_iface {
     uct_base_iface_t super;
     ucs_mpool_t signal_pool;
     ucs_queue_head_t signal_queue;
+    struct {
+        size_t min_zcopy;
+        double latency;
+    } config;
+
 } uct_rocm_ipc_iface_t;
 
 typedef struct uct_rocm_ipc_iface_config {
     uct_iface_config_t super;
+    size_t             min_zcopy;
+    double             latency;
 } uct_rocm_ipc_iface_config_t;
 
 #endif

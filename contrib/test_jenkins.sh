@@ -27,8 +27,6 @@ source $(dirname $0)/../buildlib/tools/common.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda11.4"
-GDRCOPY_MODULE="dev/gdrcopy2.3_cuda11.4"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -226,11 +224,6 @@ run_client_server_app() {
 run_hello() {
 	api=$1
 	shift
-	if [[ $1 == "proto" ]]
-	then
-		export UCX_PROTO_ENABLE=y
-		shift
-	fi
 
 	test_args="$@"
 	test_name=${api}_hello_world
@@ -290,7 +283,7 @@ run_ucp_hello() {
 	for tls in all tcp,cuda shm,cuda
 	do
 		export UCX_TLS=${tls}
-		for test_mode in -w -f -b -erecv -esend -ekeepalive proto
+		for test_mode in -w -f -b -erecv -esend -ekeepalive
 		do
 			for mem_type in $mem_types_list
 			do
@@ -410,9 +403,6 @@ run_io_demo() {
 
 		for server_ip in $server_rdma_addr $server_nonrdma_addr
 		do
-			export UCX_PROTO_ENABLE=y
-			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
-			unset UCX_PROTO_ENABLE
 			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
 		done
 
@@ -483,9 +473,11 @@ run_ucx_perftest() {
 		if [ $with_mpi -eq 1 ]
 		then
 			# Run UCP performance test
+			which mpirun
 			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
 
 			# Run UCP loopback performance test
+			which mpirun
 			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args "-l"
 		else
 			export UCX_NET_DEVICES=$dev
@@ -561,9 +553,7 @@ run_ucx_perftest() {
 			unset UCX_TLS
 		done
 
-		echo "==== Running ucx_perf with cuda memory and new protocols ===="
-
-		export UCX_PROTO_ENABLE=y
+		echo "==== Running ucx_perf one-sided with cuda memory ===="
 
 		# Add RMA tests to the list of tests
 		cat $ucx_inst_ptest/test_types_ucp_rma | grep cuda | sort -R >> $ucx_inst_ptest/test_types_short_ucp
@@ -576,7 +566,6 @@ run_ucx_perftest() {
 				      -n 1000 -w 1"
 		run_client_server_app "$ucx_perftest" "$ucp_test_args_atomic" "$(hostname)" 0 0
 
-		unset UCX_PROTO_ENABLE
 		unset CUDA_VISIBLE_DEVICES
 	fi
 }
@@ -590,6 +579,7 @@ test_malloc_hooks_mpi() {
 		for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
 		do
 			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
+			which mpirun
 			$MPIRUN -np 1 $AFFINITY \
 				./test/mpi/test_memhooks -t $tname -m ${mode}
 		done
@@ -597,6 +587,7 @@ test_malloc_hooks_mpi() {
 		echo "==== Running memory hook (malloc_hooks mode ${mode}) on MPI with LD_PRELOAD ===="
 		ucm_lib=$PWD/src/ucm/.libs/libucm.so
 		ls -l $ucm_lib
+		which mpirun
 		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
 			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
 	done

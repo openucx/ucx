@@ -411,6 +411,31 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-funwind-tables],
                                [AS_MESSAGE([compiling without unwind tables])])
 
 
+#
+# ASAN support
+#
+AC_ARG_ENABLE([asan],
+        AS_HELP_STRING([--enable-asan], [Enable address sanitized check]),
+        [],
+        [enable_asan=no])
+
+AS_IF([test "x$enable_asan" = xyes],
+      [ADD_COMPILER_FLAG_IF_SUPPORTED([-fsanitize=address -fno-omit-frame-pointer],
+                                     [-fsanitize=address -fno-omit-frame-pointer],
+                                     [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                                     [AS_MESSAGE([compiling with sanitizer])
+                                      BASE_CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer $BASE_CXXFLAGS"
+                                      LDFLAGS="-fsanitize=address -fno-omit-frame-pointer $LDFLAGS"],
+                                     [AC_MSG_ERROR([ASAN check is requested but not supported. Check libasan package existance])])
+
+      AC_RUN_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],
+                                     [[void *p = malloc(7); return 0;]])],
+                                     [AC_MSG_ERROR([ASAN cannot detect simple memory leak, consider installing newer compiler version])],
+                                     [AS_MESSAGE([sanitizer runtime leak detection check passed])]
+                    )],
+      [])
+
+
 AS_IF([test "x$enable_gcov" = xyes],
       [ADD_COMPILER_FLAGS_IF_SUPPORTED([[-ftest-coverage],
                                         [-fprofile-arcs]],

@@ -96,7 +96,7 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_trace("%s: cuda ipc cache purged", cache->name);
 }
 
-static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_key_t *key,
+static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_rkey_t *key,
                                                 CUdeviceptr *mapped_addr)
 {
     CUresult cuerr;
@@ -225,7 +225,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
-                 const uct_cuda_ipc_key_t *key, void **mapped_addr)
+                 const uct_cuda_ipc_rkey_t *key, void **mapped_addr)
 {
     uct_cuda_ipc_cache_t *cache;
     ucs_status_t status;

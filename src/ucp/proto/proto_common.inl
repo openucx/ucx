@@ -75,9 +75,9 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
 
     ucp_proto_completion_init(&req->send.state.uct_comp, comp_func);
 
-    return ucp_datatype_iter_mem_reg(ep->worker->context,
-                                     &req->send.state.dt_iter,
-                                     md_map, uct_reg_flags, dt_mask);
+    return UCS_PROFILE_CALL(ucp_datatype_iter_mem_reg, ep->worker->context,
+                            &req->send.state.dt_iter, md_map, uct_reg_flags,
+                            dt_mask);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -370,7 +370,8 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
 
     packed_rkey_size = ucp_rkey_pack_memh(
             req->send.ep->worker->context, md_map, dt_iter->type.contig.memh,
-            &dt_iter->mem_info, distance_dev_map, dev_distance,
+            dt_iter->type.contig.buffer, dt_iter->length, &dt_iter->mem_info,
+            distance_dev_map, dev_distance,
             ucp_ep_config(req->send.ep)->uct_rkey_pack_flags, rkey_buffer);
 
     if (packed_rkey_size < 0) {

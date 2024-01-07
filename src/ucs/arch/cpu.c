@@ -75,6 +75,10 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_GENERIC_RV64G] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_NVIDIA] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
     }
 };
 
@@ -86,7 +90,8 @@ const size_t ucs_cpu_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_GENERIC_PPC]   = UCS_CPU_EST_BCOPY_BW_DEFAULT,
     [UCS_CPU_VENDOR_GENERIC_RV64G] = UCS_CPU_EST_BCOPY_BW_DEFAULT,
     [UCS_CPU_VENDOR_FUJITSU_ARM]   = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,
-    [UCS_CPU_VENDOR_ZHAOXIN]       = UCS_CPU_EST_BCOPY_BW_DEFAULT
+    [UCS_CPU_VENDOR_ZHAOXIN]       = UCS_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_NVIDIA]        = UCS_CPU_EST_BCOPY_BW_DEFAULT
 };
 
 static void ucs_sysfs_get_cache_size()

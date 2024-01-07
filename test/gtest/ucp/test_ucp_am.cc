@@ -33,7 +33,7 @@ class test_ucp_am_base : public ucp_test {
 public:
     test_ucp_am_base()
     {
-        if (is_proto_disabled()) {
+        if (get_variant_value()) {
             modify_config("PROTO_ENABLE", "n");
         }
     }
@@ -53,12 +53,6 @@ public:
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
-    }
-
-protected:
-    bool is_proto_disabled() const
-    {
-        return get_variant_value();
     }
 };
 
@@ -324,6 +318,17 @@ UCS_TEST_P(test_ucp_am, set_am_handler_realloc)
     do_set_am_handler_realloc_test();
 }
 
+UCS_TEST_P(test_ucp_am, set_am_handler_out_of_order)
+{
+    set_handlers(UCP_SEND_ID + 20);
+    set_handlers(UCP_SEND_ID);
+    set_handlers(UCP_SEND_ID + 10);
+
+    do_send_process_data_test(0, UCP_SEND_ID, 0);
+    do_send_process_data_test(0, UCP_SEND_ID + 10, 0);
+    do_send_process_data_test(0, UCP_SEND_ID + 20, 0);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 
@@ -514,7 +519,7 @@ protected:
     {
         std::vector<ucp_dt_type> dts = {UCP_DATATYPE_CONTIG};
 
-        if (!is_proto_disabled()) {
+        if (is_proto_enabled()) {
             dts.push_back(UCP_DATATYPE_IOV);
         }
 
@@ -1088,7 +1093,7 @@ private:
 };
 
 /**
- * Self transport always has resources to perform the send operation, 
+ * Self transport always has resources to perform the send operation,
  * so its not returning pending request. For this reason with
  * self tl the test can't verify the copy header functionality.
  * The test is still used as a stress test for the Self transport,
@@ -1522,8 +1527,7 @@ private:
 /* Skip tests for ud_v and ud_x because of unstable reproducible failures during
  * roce on worker CI jobs. The test fails with invalid am_bcopy length. */
 UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
-                     !is_proto_disabled() &&
-                             has_any_transport({"ud_v", "ud_x"}),
+                     is_proto_enabled() && has_any_transport({"ud_v", "ud_x"}),
                      "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
 {
     test_datatypes([&]() {
@@ -1534,8 +1538,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, zcopy_send,
-                     !is_proto_disabled() &&
-                             has_any_transport({"ud_v", "ud_x"}),
+                     is_proto_enabled() && has_any_transport({"ud_v", "ud_x"}),
                      "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 {
     skip_no_am_lane_caps(UCT_IFACE_FLAG_AM_ZCOPY, "am_zcopy is not supported");

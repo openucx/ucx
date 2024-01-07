@@ -148,6 +148,21 @@ check_gpu() {
             azure_log_error "No GPU device found on $(hostname -s)"
             exit 1
         fi
+        check_nv_peer_mem
+    fi
+}
+
+check_nv_peer_mem() {
+    if [ -f /.dockerenv ]; then
+        echo "Skipping nv_peer_mem check on Docker."
+        return 0
+    fi
+
+    if ! lsmod | grep -q nv_peer_mem; then
+        lsmod | grep nv_peer_mem
+        systemctl status nv_peer_mem
+        azure_log_error "nv_peer_mem module not loaded on $(hostname -s)"
+        exit 1
     fi
 }
 
@@ -161,8 +176,8 @@ try_load_cuda_env() {
     if [ -f "/proc/driver/nvidia/version" ]; then
         have_cuda=yes
         have_gdrcopy=yes
-        az_module_load dev/cuda11.4 || have_cuda=no
-        az_module_load dev/gdrcopy2.3_cuda11.4 || have_gdrcopy=no
+        az_module_load dev/cuda12.2.2 || have_cuda=no
+        az_module_load dev/gdrcopy2.3.1-1_cuda12.2.2 || have_gdrcopy=no
         nvidia-smi -a
         ls -l /dev/nvidia*
         num_gpus=$(nvidia-smi -L | wc -l)

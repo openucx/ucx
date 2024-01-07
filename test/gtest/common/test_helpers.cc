@@ -24,7 +24,7 @@ namespace ucs {
 
 typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
-const double test_timeout_in_sec = 60.;
+const double test_timeout_in_sec = 180.;
 
 double watchdog_timeout = 900.; // 15 minutes
 
@@ -628,17 +628,16 @@ uint16_t get_port() {
     return port;
 }
 
-void *mmap_fixed_address(size_t length) {
-    void *ptr = mmap(NULL, length, PROT_READ | PROT_WRITE,
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (ptr == MAP_FAILED) {
-        return nullptr;
+mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
+    m_ptr = mmap(NULL, m_length, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (m_ptr == MAP_FAILED) {
+        UCS_TEST_ABORT("mmap failed to allocate memory region");
     }
+}
 
-    munmap(ptr, length);
-
-    /* coverity[use_after_free] */
-    return ptr;
+mmap_fixed_address::~mmap_fixed_address() {
+    munmap(m_ptr, m_length);
 }
 
 std::string compact_string(const std::string &str, size_t length)

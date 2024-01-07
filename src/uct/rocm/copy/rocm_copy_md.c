@@ -32,7 +32,7 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
      ucs_offsetof(uct_rocm_copy_md_config_t, enable_rcache),
      UCS_CONFIG_TYPE_TERNARY},
 
-    {"", "RCACHE_ADDR_ALIGN=" UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE), NULL,
+    {"", "", NULL,
      ucs_offsetof(uct_rocm_copy_md_config_t, rcache),
      UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
@@ -73,8 +73,8 @@ uct_rocm_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 }
 
 static ucs_status_t
-uct_rocm_copy_mkey_pack(uct_md_h uct_md, uct_mem_h memh,
-                        const uct_md_mkey_pack_params_t *params,
+uct_rocm_copy_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
+                        size_t length, const uct_md_mkey_pack_params_t *params,
                         void *mkey_buffer)
 {
     uct_rocm_copy_key_t *packed   = mkey_buffer;
@@ -314,8 +314,9 @@ uct_rocm_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     ucs_status_t status;
     uct_rocm_copy_mem_t *memh;
 
-    status = ucs_rcache_get(md->rcache, (void *)address, length, PROT_READ|PROT_WRITE,
-                            &flags, &rregion);
+    status = ucs_rcache_get(md->rcache, (void *)address, length,
+                            ucs_get_page_size(), PROT_READ | PROT_WRITE, &flags,
+                            &rregion);
     if (status != UCS_OK) {
         return status;
     }
@@ -431,8 +432,6 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
     if (md_config->enable_rcache != UCS_NO) {
         ucs_rcache_set_params(&rcache_params, &md_config->rcache);
         rcache_params.region_struct_size = sizeof(uct_rocm_copy_rcache_region_t);
-        rcache_params.alignment          = ucs_get_page_size();
-        rcache_params.max_alignment      = ucs_get_page_size();
         rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;

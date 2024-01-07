@@ -270,6 +270,7 @@ protected:
                         int poll_timeout = -1, int worker_index = 0);
     int max_connections();
     void configure_peer_failure_settings();
+    bool is_proto_enabled() const;
 
     static bool check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type);
 

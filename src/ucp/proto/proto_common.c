@@ -171,7 +171,6 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                                size_t *max_frag_p)
 {
     ucp_context_h context = params->super.worker->context;
-
     *min_frag_p = ucp_proto_common_get_iface_attr_field(iface_attr,
                                                         params->min_frag_offs,
                                                         0);
@@ -186,23 +185,13 @@ ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
                               *max_frag_p);
     }
 
-    /* Truncate maximum fragment size according to user configuration. */
+    /* Force upper bound on fragment size according to user configuration. */
     if (ucs_test_all_flags(params->flags,
                            UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                            UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
-        (context->config.ext.rma_zcopy_seg_size != UCS_MEMUNITS_AUTO)) {
-        if (context->config.ext.rma_zcopy_seg_size < *min_frag_p) {
-            ucs_warn("requested fragment size is smaller than minimum allowed "
-                     "(%lu), adjusting it",
-                     *min_frag_p);
-            *max_frag_p = *min_frag_p;
-        } else if (context->config.ext.rma_zcopy_seg_size > *max_frag_p) {
-            ucs_warn("requested fragment size is larger than maximum allowed "
-                     "(%lu), adjusting it",
-                     *max_frag_p);
-        } else {
-            *max_frag_p = context->config.ext.rma_zcopy_seg_size;
-        }
+        (context->config.ext.rma_zcopy_max_seg_size != UCS_MEMUNITS_AUTO)) {
+        *max_frag_p = ucs_min(*max_frag_p,
+                              context->config.ext.rma_zcopy_max_seg_size);
     }
 }
 
@@ -436,21 +425,10 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
               ucs_string_buffer_cstr(&sel_param_strb));
     ucs_log_indent(1);
 
-    if (flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY) {
-        /* Skip send payload check */
-    } else if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        if ((select_param->dt_class == UCP_DATATYPE_GENERIC)) {
-            /* Generic/IOV datatype cannot be used with zero-copy send */
-            ucs_trace("datatype %s cannot be used with zcopy",
-                      ucp_datatype_class_names[select_param->dt_class]);
-            goto out;
-        }
-    } else if (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(select_param->mem_type) &&
-               (memtype_op == UCT_EP_OP_LAST)) {
-        /* If zero-copy is off, the memory must be host-accessible for
-         * non-generic type (for generic type there is no buffer to access) */
-        ucs_trace("memory type %s with datatype %s is not supported",
-                  ucs_memory_type_names[select_param->mem_type],
+    if ((flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) &&
+        (select_param->dt_class == UCP_DATATYPE_GENERIC)) {
+        /* Generic/IOV datatype cannot be used with zero-copy send */
+        ucs_trace("datatype %s cannot be used with zcopy",
                   ucp_datatype_class_names[select_param->dt_class]);
         goto out;
     }
@@ -682,9 +660,7 @@ void ucp_proto_request_zcopy_completion(uct_completion_t *self)
 
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
 {
-    /* Short protocol requires contig/host */
-    return (select_param->dt_class == UCP_DATATYPE_CONTIG) &&
-           UCP_MEM_IS_HOST(select_param->mem_type);
+    return (select_param->dt_class == UCP_DATATYPE_CONTIG);
 }
 
 void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)

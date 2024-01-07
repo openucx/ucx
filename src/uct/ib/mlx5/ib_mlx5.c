@@ -953,12 +953,11 @@ size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length)
 }
 
 /* Keep the function as a separate to test SL selection */
-ucs_status_t
-uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
-                      ucs_ternary_auto_value_t ar_enable,
-                      uint16_t hw_sl_mask, int have_sl_mask_cap,
-                      const char *dev_name, uint8_t port_num,
-                      uint8_t *sl_p)
+ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
+                                   ucs_ternary_auto_value_t ar_enable,
+                                   uint16_t hw_sl_mask, int have_sl_mask_cap,
+                                   const char *dev_name, uint8_t port_num,
+                                   uint8_t *sl_p)
 {
     ucs_status_t status = UCS_OK;
     const char *sl_ar_support_str;
@@ -1018,6 +1017,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
               sl, sl_ar_support_str, dev_name, port_num,
               ucs_mask_str(sls_with_ar, &sls_with_ar_str),
               ucs_mask_str(sls_without_ar, &sls_without_ar_str));
+
 out_str_buf_clean:
     ucs_string_buffer_cleanup(&sls_with_ar_str);
     ucs_string_buffer_cleanup(&sls_without_ar_str);
@@ -1058,9 +1058,15 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
                                    iface->config.port_num)) {
         /* Ethernet priority for RoCE devices can't be selected regardless
          * AR support requested by user, pass empty ooo_sl_mask */
-        return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1, dev_name,
-                                     iface->config.port_num,
-                                     &iface->config.sl);
+        status = uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1, dev_name,
+                                       iface->config.port_num,
+                                       &iface->config.sl);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        uct_ib_iface_set_reverse_sl(iface, ib_config);
+        return status;
     }
 
 #if HAVE_DEVX
@@ -1073,10 +1079,17 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
     status = UCS_ERR_UNSUPPORTED;
 #endif
 
-    return uct_ib_mlx5_select_sl(ib_config, ib_mlx5_config->ar_enable,
-                                 ooo_sl_mask, status == UCS_OK, dev_name,
-                                 iface->config.port_num,
-                                 &iface->config.sl);
+    status = uct_ib_mlx5_select_sl(ib_config, ib_mlx5_config->ar_enable,
+                                   ooo_sl_mask, status == UCS_OK, dev_name,
+                                   iface->config.port_num, &iface->config.sl);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    uct_ib_iface_set_reverse_sl(iface, ib_config);
+
+out:
+    return status;
 }
 
 uint8_t uct_ib_mlx5_iface_get_counter_set_id(uct_ib_iface_t *iface)

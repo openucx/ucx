@@ -403,11 +403,23 @@ static UCS_F_ALWAYS_INLINE uint32_t uct_ib_mlx5_mkey_index(uint32_t mkey)
     return mkey >> 8;
 }
 
+static UCS_F_ALWAYS_INLINE uct_ib_mr_type_t uct_ib_devx_get_atomic_mr_type(
+        uct_ib_md_t *md, const uct_ib_mlx5_devx_mem_t *memh)
+{
+#if HAVE_IBV_DM
+    /* Device memory only supports default mr */
+    if (memh->dm != NULL) {
+        return UCT_IB_MR_DEFAULT;
+    }
+#endif
+    return uct_ib_md_get_atomic_mr_type(md);
+}
+
 UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_atomic_key,
                         (md, memh), uct_ib_mlx5_md_t *md,
                         uct_ib_mlx5_devx_mem_t *memh)
 {
-    uct_ib_mr_type_t mr_type  = uct_ib_md_get_atomic_mr_type(&md->super);
+    uct_ib_mr_type_t mr_type = uct_ib_devx_get_atomic_mr_type(&md->super, memh);
     uct_ib_mlx5_devx_mr_t *mr = &memh->mrs[mr_type];
     uint8_t mr_id             = uct_ib_md_get_atomic_mr_id(&md->super);
     uint32_t atomic_offset    = uct_ib_md_atomic_offset(mr_id);
@@ -762,23 +774,9 @@ static ucs_status_t uct_ib_devx_dereg_invalidate_params_check(
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
-                           const uct_md_mem_dereg_params_t *params)
+uct_ib_mlx5_devx_dereg_keys(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
 {
-    uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
-    uct_ib_mlx5_devx_mem_t *memh;
     ucs_status_t status;
-    int ret;
-
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
-    if (ENABLE_PARAMS_CHECK) {
-        status = uct_ib_devx_dereg_invalidate_params_check(md, params);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    memh = ucs_derived_of(params->memh, uct_ib_mlx5_devx_mem_t);
 
     if (memh->atomic_dvmr != NULL) {
         /* TODO atomic_dvmr should also be pushed to LRU since it can be used
@@ -800,6 +798,32 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
+                           const uct_md_mem_dereg_params_t *params)
+{
+    uct_ib_mlx5_md_t *md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    uct_ib_mlx5_devx_mem_t *memh;
+    ucs_status_t status;
+    int ret;
+
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
+    if (ENABLE_PARAMS_CHECK) {
+        status = uct_ib_devx_dereg_invalidate_params_check(md, params);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    memh   = ucs_derived_of(params->memh, uct_ib_mlx5_devx_mem_t);
+    status = uct_ib_mlx5_devx_dereg_keys(md, memh);
+    if (status != UCS_OK) {
+        return status;
     }
 
     if (memh->smkey_mr != NULL) {
@@ -1327,36 +1351,42 @@ err_free_memh:
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_device_mem_free(uct_md_h uct_md, uct_mem_h memh)
+uct_ib_mlx5_devx_device_mem_free(uct_md_h uct_md, uct_mem_h tl_memh)
 {
 #if HAVE_IBV_DM
-    uct_ib_mlx5_devx_mem_t *ib_memh = memh;
-    struct ibv_mr *ib_mr            = ib_memh->mrs[UCT_IB_MR_DEFAULT].super.ib;
-    size_t length                   = ib_mr->length;
+    uct_ib_mlx5_md_t *md         = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    uct_ib_mlx5_devx_mem_t *memh = tl_memh;
+    struct ibv_dm *dm            = memh->dm;
+    size_t length = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length;
     ucs_status_t status;
     int ret;
 
-    uct_ib_mlx5_devx_obj_destroy(ib_memh->dm_addr_dvmr, "DM-KSM");
+    uct_ib_mlx5_devx_obj_destroy(memh->dm_addr_dvmr, "DM-KSM");
 
-    status = uct_ib_dereg_mr(ib_mr);
-    if (status != UCS_OK) {
-        ucs_warn("%s: failed to dereg device memory mr",
-                 ucs_status_string(status));
-    }
-
-    ret = munmap(ib_memh->address, length);
+    ret = munmap(memh->address, length);
     if (ret != 0) {
-        ucs_warn("munmap(address=%p, length=%zu) failed: %m", ib_memh->address,
+        ucs_warn("munmap(address=%p, length=%zu) failed: %m", memh->address,
                  length);
     }
 
-    ret = UCS_PROFILE_CALL(ibv_free_dm, ib_memh->dm);
+    status = uct_ib_mlx5_devx_dereg_keys(md, memh);
+    if (status != UCS_OK) {
+        ucs_warn("%s: uct_ib_mlx5_devx_dereg_keys() failed",
+                 ucs_status_string(status));
+    }
+
+    status = uct_ib_mlx5_devx_dereg_mr(md, tl_memh, UCT_IB_MR_DEFAULT);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ret = UCS_PROFILE_CALL(ibv_free_dm, dm);
     if (ret) {
         ucs_warn("ibv_free_dm() failed: %m");
         status = UCS_ERR_BUSY;
     }
 
-    ucs_free(ib_memh);
+    ucs_free(memh);
     return status;
 #else
     return UCS_ERR_UNSUPPORTED;
@@ -1368,6 +1398,7 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #if HAVE_IBV_DM
     size_t length   = 1;
     uct_md_h uct_md = (uct_md_h)&md->super;
+    uct_ib_mlx5_devx_mem_t *devx_memh;
     void *address;
     uct_mem_h memh;
     ucs_status_t status;
@@ -1386,15 +1417,19 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
         return;
     }
 
+    devx_memh = ucs_derived_of(memh, uct_ib_mlx5_devx_mem_t);
+    status    = uct_ib_mlx5_devx_reg_atomic_key(md, devx_memh);
+    if (status == UCS_OK) {
+        /* Enable device memory only if atomics are available*/
+        md->super.cap_flags |= UCT_MD_FLAG_ALLOC;
+    }
+
     status = uct_ib_mlx5_devx_device_mem_free(uct_md, memh);
     if (status != UCS_OK) {
         ucs_diag("%s: failed to free dm allocated in check_dm_ksm_reg",
                  ucs_status_string(status));
         return;
     }
-
-    /* Indicates we can allocate device memory */
-    md->super.cap_flags |= UCT_MD_FLAG_ALLOC;
 #endif
 }
 
@@ -2026,6 +2061,7 @@ uct_ib_mlx5_devx_mkey_pack_invalidate_param_check(unsigned flags)
 
 static ucs_status_t
 uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                           void *address, size_t length,
                            const uct_md_mkey_pack_params_t *params,
                            void *mkey_buffer)
 {
@@ -2037,6 +2073,15 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 
     flags = UCS_PARAM_VALUE(UCT_MD_MKEY_PACK_FIELD, params, flags, FLAGS, 0);
     if (flags & UCT_MD_MKEY_PACK_FLAG_EXPORT) {
+#if HAVE_IBV_DM
+        if (memh->dm != NULL) {
+            ucs_error("%s: cannot export memory allocated on the device "
+                      "(address %p length %zu)",
+                      uct_ib_device_name(&md->super.dev), memh->address,
+                      memh->mrs[UCT_IB_MR_DEFAULT].super.ib->length);
+            return UCS_ERR_INVALID_PARAM;
+        }
+#endif
         if (uct_ib_mlx5_devx_mkey_pack_invalidate_param_check(flags)) {
             ucs_error("packing a memory key that supports invalidation "
                       "and exporting is unsupported");
@@ -2093,7 +2138,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) {
+    if ((flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA) || (memh->dm != NULL)) {
         if (ucs_unlikely(memh->indirect_dvmr == NULL)) {
             status = uct_ib_mlx5_devx_reg_indirect_key(md, memh);
             if (status != UCS_OK) {

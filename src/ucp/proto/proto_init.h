@@ -21,15 +21,11 @@ typedef struct {
 } ucp_proto_perf_envelope_elem_t;
 
 
-UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_envelope, unsigned,
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_envelope_t, unsigned,
                        ucp_proto_perf_envelope_elem_t);
-typedef ucs_array_t(ucp_proto_perf_envelope) ucp_proto_perf_envelope_t;
-
-
-UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_list, unsigned, ucs_linear_func_t);
-UCS_ARRAY_DECLARE_FUNCS(ucp_proto_perf_list, unsigned, ucs_linear_func_t, );
-typedef ucs_array_t(ucp_proto_perf_list) ucp_proto_perf_list_t;
-
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_list_t, unsigned, ucs_linear_func_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_ranges_t, unsigned,
+                       ucp_proto_perf_range_t);
 
 /**
  * Add a "pipelined performance" range, which represents the send time of
@@ -79,7 +75,7 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
  * @param [in] num_stages    Number of parallel stages in the protocol.
  */
 ucs_status_t
-ucp_proto_init_parallel_stages(const ucp_proto_common_init_params_t *params,
+ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
                                size_t range_start, size_t range_end,
                                size_t frag_size, double bias,
                                const ucp_proto_perf_range_t **stages,

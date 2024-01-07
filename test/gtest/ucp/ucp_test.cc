@@ -409,6 +409,11 @@ void ucp_test::configure_peer_failure_settings()
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
 }
 
+bool ucp_test::is_proto_enabled() const
+{
+    return m_ucp_config->ctx.proto_enable;
+}
+
 void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
 {
     ucs_status_t status;

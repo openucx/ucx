@@ -347,7 +347,15 @@ uint16_t get_port();
 /**
  * Address to use for mmap(FIXED)
  */
-void *mmap_fixed_address(size_t length);
+class mmap_fixed_address {
+public:
+    mmap_fixed_address(size_t length);
+    ~mmap_fixed_address();
+    void* operator*() const { return m_ptr; }
+private:
+    void *m_ptr;
+    size_t m_length;
+};
 
 
 /*

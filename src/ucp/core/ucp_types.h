@@ -117,16 +117,23 @@ extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
                    UCP_MAX_RESOURCES)
 
 
+#define UCS_FP8_MIN_BW  (512 * UCS_MBYTE)
+#define UCS_FP8_MAX_BW  (4 * UCS_TBYTE)
+#define UCS_FP8_MIN_LAT UCS_BIT(4)
+#define UCS_FP8_MAX_LAT UCS_BIT(17)
+#define UCS_FP8_MIN_OVH UCS_BIT(0)
+#define UCS_FP8_MAX_OVH UCS_BIT(12)
+
 /* Pack bandwidth as bytes/second, range: 512 MB/s to 4 TB/s */
-UCS_FP8_DECLARE_TYPE(BANDWIDTH, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
+UCS_FP8_DECLARE_TYPE(BANDWIDTH, UCS_FP8_MIN_BW, UCS_FP8_MAX_BW)
 
 
 /* Pack latency as nanoseconds, range: 16 nsec to 131 usec */
-UCS_FP8_DECLARE_TYPE(LATENCY, UCS_BIT(4), UCS_BIT(17))
+UCS_FP8_DECLARE_TYPE(LATENCY, UCS_FP8_MIN_LAT, UCS_FP8_MAX_LAT)
 
 
 /* Pack overhead as nanoseconds, range: 1 nsec to 4 usec */
-UCS_FP8_DECLARE_TYPE(OVERHEAD, UCS_BIT(0), UCS_BIT(12))
+UCS_FP8_DECLARE_TYPE(OVERHEAD, UCS_FP8_MIN_OVH, UCS_FP8_MAX_OVH)
 
 
 /**

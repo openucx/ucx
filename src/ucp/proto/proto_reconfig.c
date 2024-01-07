@@ -34,9 +34,22 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep        = req->send.ep;
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
 
     /* This protocol should not be selected for valid and connected endpoint */
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED));
+    if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
+        ucp_ep_config_name(ep->worker, req->send.proto_config->ep_cfg_index,
+                           &strb);
+        ucs_string_buffer_appendf(&strb, " | ");
+        ucp_proto_select_info_str(ep->worker,
+                                  req->send.proto_config->rkey_cfg_index,
+                                  &req->send.proto_config->select_param,
+                                  ucp_operation_names, &strb);
+        ucs_error("cannot find remote protocol for: %s",
+                  ucs_string_buffer_cstr(&strb));
+        ucp_request_complete_send(req, UCS_ERR_CANCELED);
+        return UCS_OK;
+    }
 
     if (ep->cfg_index != req->send.proto_config->ep_cfg_index) {
         ucp_trace_req(req,

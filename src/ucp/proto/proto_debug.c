@@ -14,7 +14,6 @@
 #include <ucp/am/ucp_am.inl>
 #include <ucp/rndv/proto_rndv.h>
 #include <ucs/arch/atomic.h>
-#include <ucs/datastruct/array.inl>
 #include <fnmatch.h>
 #include <ctype.h>
 
@@ -25,45 +24,38 @@ typedef struct {
     ucs_linear_func_t value;
 } ucp_proto_perf_node_data_t;
 
-/* Array of performance data entries */
-UCS_ARRAY_DEFINE_INLINE(ucp_proto_perf_node_data, unsigned,
-                        ucp_proto_perf_node_data_t);
-
-/* Array of performance node pointers - used for node children array */
-UCS_ARRAY_DEFINE_INLINE(ucp_proto_perf_node, unsigned, ucp_proto_perf_node_t*);
-
 /*
  * Performance estimation for a range of message sizes.
  * Defined in C file to prevent direct access to the structure fields.
  */
 struct ucp_proto_perf_node {
     /* Type of the range */
-    ucp_proto_perf_node_type_t       type;
+    ucp_proto_perf_node_type_t                    type;
 
     /* Name of the range */
-    const char                       *name;
+    const char                                    *name;
 
     /* Description of the range */
-    char                             desc[UCP_PROTO_DESC_STR_MAX];
+    char                                          desc[UCP_PROTO_DESC_STR_MAX];
 
     /* Number of references in the performance tree defined by 'children' */
-    unsigned                         refcount;
+    unsigned                                      refcount;
 
-    /* Child nodes */
-    ucs_array_t(ucp_proto_perf_node) children;
+    /* Array of child performance node pointers */
+    ucs_array_s(unsigned, ucp_proto_perf_node_t*) children;
 
     union {
         /*
          * Index of selected child node in the 'children' array.
          * Used when type == UCP_PROTO_PERF_NODE_TYPE_SELECT
          */
-        unsigned                              selected_child;
+        unsigned                                          selected_child;
 
         /*
-         * Data entries
+         * Array of performance data entries.
          * Used when type == UCP_PROTO_PERF_NODE_TYPE_DATA
          */
-        ucs_array_t(ucp_proto_perf_node_data) data;
+        ucs_array_s(unsigned, ucp_proto_perf_node_data_t) data;
     };
 };
 
@@ -73,7 +65,7 @@ typedef struct {
     char desc[UCP_PROTO_DESC_STR_MAX];
     char config[UCP_PROTO_CONFIG_STR_MAX];
 } ucp_proto_info_row_t;
-UCS_ARRAY_DEFINE_INLINE(ucp_proto_info_table, unsigned, ucp_proto_info_row_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_info_table_t, unsigned, ucp_proto_info_row_t);
 
 
 void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
@@ -209,7 +201,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
     static const char *info_row_fmt = "| %*s | %-*s | %-*s |\n";
-    ucs_array_t(ucp_proto_info_table) table;
+    ucp_proto_info_table_t table;
     int hdr_col_width[2], col_width[3];
     ucp_proto_query_attr_t proto_attr;
     ucp_proto_info_row_t *row_elem;
@@ -241,7 +233,7 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
             continue;
         }
 
-        row_elem = ucs_array_append(ucp_proto_info_table, &table, break);
+        row_elem = ucs_array_append(&table, break);
 
         ucs_snprintf_safe(row_elem->desc, sizeof(row_elem->desc), "%s%s",
                           proto_attr.is_estimation ? "(?) " : "",
@@ -628,7 +620,7 @@ static void
 ucp_proto_perf_node_append_child(ucp_proto_perf_node_t *perf_node,
                                  ucp_proto_perf_node_t *child_perf_node)
 {
-    ucs_array_append(ucp_proto_perf_node, &perf_node->children,
+    ucs_array_append(&perf_node->children,
                      ucs_diag("failed to add perf node child");
                      return );
     *ucs_array_last(&perf_node->children) = child_perf_node;
@@ -680,8 +672,7 @@ void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
 
     ucs_assert(perf_node->type == UCP_PROTO_PERF_NODE_TYPE_DATA);
 
-    ucs_array_append(ucp_proto_perf_node_data, &perf_node->data,
-                     ucs_diag("failed to add perf node data");
+    ucs_array_append(&perf_node->data, ucs_diag("failed to add perf node data");
                      return );
     data        = ucs_array_last(&perf_node->data);
     data->name  = name;

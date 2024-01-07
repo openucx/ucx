@@ -826,6 +826,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     status = uct_ib_mlx5_iface_select_sl(&self->super.super,
                                          &mlx5_config->super,
                                          &rc_config->super);
+
     if (status != UCS_OK) {
         return status;
     }

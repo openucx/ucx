@@ -167,7 +167,7 @@ typedef struct ucp_context_config {
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
     /** RMA zcopy segment size */
-    size_t                                 rma_zcopy_seg_size;
+    size_t                                 rma_zcopy_max_seg_size;
 } ucp_context_config_t;
 
 

@@ -104,7 +104,9 @@ ForEachMacros: ['_UCS_BITMAP_FOR_EACH_WORD',
                 'UCX_PERF_TEST_FOREACH',
 		'ucs_lru_for_each']
 StatementMacros : []
-TypenameMacros: ['khash_t', 'ucs_array_t']
+TypenameMacros: ['khash_t',
+                 'ucs_array_s',
+                 'ucs_static_bitmap_s']
 WhitespaceSensitiveMacros: []
 
 # CPP

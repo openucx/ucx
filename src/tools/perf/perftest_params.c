@@ -21,11 +21,8 @@ static void print_memory_type_usage(void)
     ucs_memory_type_t it;
 
     ucs_memory_type_for_each(it) {
-        if (ucx_perf_mem_type_allocators[it] != NULL) {
-            printf("                        %s - %s\n",
-                   ucs_memory_type_names[it],
-                   ucs_memory_type_descs[it]);
-        }
+        printf("                        %s - %s\n", ucs_memory_type_names[it],
+               ucs_memory_type_descs[it]);
     }
 }
 
@@ -162,8 +159,7 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
     }
 
     ucs_memory_type_for_each(it) {
-        if(!strcmp(opt_arg, ucs_memory_type_names[it]) &&
-           (ucx_perf_mem_type_allocators[it] != NULL)) {
+        if (!strcmp(opt_arg, ucs_memory_type_names[it])) {
             *mem_type = it;
             return UCS_OK;
         }
