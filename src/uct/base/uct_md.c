@@ -297,7 +297,8 @@ ucs_status_t uct_config_get(void *config, const char *name, char *value,
 ucs_status_t uct_config_modify(void *config, const char *name, const char *value)
 {
     uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
-    return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
+    return ucs_config_parser_set_value(bundle->data, bundle->table,
+                                       bundle->table_prefix, name, value);
 }
 
 static ucs_status_t
