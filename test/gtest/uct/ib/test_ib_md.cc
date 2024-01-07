@@ -149,7 +149,7 @@ UCS_TEST_P(test_ib_md, ib_md_umr_ksm) {
     ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
 }
 
-UCS_TEST_P(test_ib_md, relaxed_order, "PCI_RELAXED_ORDERING=try") {
+UCS_TEST_P(test_ib_md, relaxed_order, "IB_PCI_RELAXED_ORDERING=try") {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
 
     ib_md_umr_check(&rkey_buffer[0], false);
@@ -229,8 +229,8 @@ UCS_TEST_P(test_ib_md, smkey_reg_atomic)
     test_smkey_reg_atomic();
 }
 
-UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "REG_MT_THRESH=1k",
-           "REG_MT_CHUNK=1k")
+UCS_TEST_P(test_ib_md, smkey_reg_atomic_mt, "IB_REG_MT_THRESH=1k",
+           "IB_REG_MT_CHUNK=1k")
 {
     test_smkey_reg_atomic();
 }

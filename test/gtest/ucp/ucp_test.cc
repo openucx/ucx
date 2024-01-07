@@ -1283,3 +1283,9 @@ size_t ucp_test::count_resources(const ucp_test_base::entity &e,
                              return tl_name == rsc.tl_rsc.tl_name;
                          });
 }
+
+bool ucp_test::has_resource(const ucp_test_base::entity &e,
+                            const std::string &tl_name) const
+{
+    return count_resources(e, tl_name) != 0;
+}

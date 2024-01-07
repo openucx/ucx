@@ -726,7 +726,8 @@ void ucp_config_release(ucp_config_t *config)
 ucs_status_t ucp_config_modify_internal(ucp_config_t *config, const char *name,
                                         const char *value)
 {
-    return ucs_config_parser_set_value(config, ucp_config_table, name, value);
+    return ucs_config_parser_set_value(config, ucp_config_table, NULL, name,
+                                       value);
 }
 
 ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,

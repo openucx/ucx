@@ -84,12 +84,6 @@ protected:
     bool ep_iface_has_caps(const entity& e, const std::string& tl,
                            uint64_t caps);
 
-    bool has_resource(const ucp_test_base::entity &e,
-                      const std::string &tl_name) const
-    {
-        return count_resources(e, tl_name) != 0;
-    }
-
 protected:
     vec_type                               m_send_data;
     vec_type                               m_recv_data;

@@ -119,7 +119,7 @@ class test_rc_max_wr : public test_rc {
 protected:
     virtual void init() {
         ucs_status_t status1, status2;
-        status1 = uct_config_modify(m_iface_config, "TX_MAX_WR", "32");
+        status1 = uct_config_modify(m_iface_config, "RC_VERBS_TX_MAX_WR", "32");
         status2 = uct_config_modify(m_iface_config, "RC_TX_MAX_BB", "32");
         if (status1 != UCS_OK && status2 != UCS_OK) {
             UCS_TEST_ABORT("Error: cannot set rc max wr/bb");

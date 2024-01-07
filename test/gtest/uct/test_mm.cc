@@ -77,7 +77,7 @@ public:
     }
 
     void set_posix_config() {
-        set_config("DIR=" + GetParam()->shm_dir);
+        set_config("POSIX_DIR=" + GetParam()->shm_dir);
     }
 
     virtual void init() {

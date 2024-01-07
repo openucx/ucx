@@ -1139,7 +1139,7 @@ class test_md_non_blocking : public test_md
 protected:
     void init() override {
         /* ODPv1 IB feature can work only for certain DEVX configuration */
-        modify_config("MLX5_DEVX_OBJECTS", "dct,dcsrq", IGNORE_IF_NOT_EXIST);
+        modify_config("IB_MLX5_DEVX_OBJECTS", "dct,dcsrq", IGNORE_IF_NOT_EXIST);
         test_md::init();
     }
 };
