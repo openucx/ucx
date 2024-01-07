@@ -435,13 +435,13 @@ UCS_TEST_P(test_proto_reset, tag_eager_multi_zcopy_to_bcopy, "ZCOPY_THRESH=0",
 
 UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_zcopy_to_get_am_bcopy,
                      !has_transport("ib"), "ZCOPY_THRESH=0", "RNDV_THRESH=inf",
-                     "RMA_ZCOPY_SEG_SIZE=1024")
+                     "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     reset_protocol(RMA_GET, "get/am/bcopy");
 }
 
 UCS_TEST_P(test_proto_reset, put_offload_zcopy_to_put_am_bcopy,
-           "ZCOPY_THRESH=0", "RNDV_THRESH=inf", "RMA_ZCOPY_SEG_SIZE=1024")
+           "ZCOPY_THRESH=0", "RNDV_THRESH=inf", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     reset_protocol(RMA_PUT, "put/am/bcopy");
 }
@@ -465,7 +465,7 @@ UCS_TEST_P(test_proto_reset, am_eager_multi_zcopy_to_bcopy, "ZCOPY_THRESH=0",
 }
 
 UCS_TEST_P(test_proto_reset, rndv_put, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
-           "RMA_ZCOPY_SEG_SIZE=1024")
+           "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     reset_protocol(TAG, "rndv/put/zcopy");
 }
@@ -503,7 +503,7 @@ protected:
 };
 
 UCS_TEST_P(test_proto_reset_rndv_get, rndv_get_to_rtr, "RNDV_THRESH=0",
-           "RNDV_SCHEME=get_zcopy", "RMA_ZCOPY_SEG_SIZE=1024")
+           "RNDV_SCHEME=get_zcopy", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     reset_protocol(TAG, "rndv/rtr");
 }
@@ -627,7 +627,7 @@ protected:
 ucp_request_t *test_proto_reset_atp::m_req;
 
 UCS_TEST_P(test_proto_reset_atp, rndv_put_to_rndv_am, "RNDV_THRESH=0",
-           "RNDV_SCHEME=put_zcopy", "RMA_ZCOPY_SEG_SIZE=1024")
+           "RNDV_SCHEME=put_zcopy", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     if (count_resources(sender(), "rc_mlx5") <= 1) {
         UCS_TEST_SKIP_R("Less than 2 RC resources are found");
