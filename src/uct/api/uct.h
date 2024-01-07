@@ -1297,32 +1297,32 @@ struct uct_ep_params {
      * @ref uct_ep_params_field. Fields not specified by this mask will be
      * ignored.
      */
-    uint64_t                          field_mask;
+    uint64_t                                field_mask;
 
     /**
      * Interface to create the endpoint on.
      * Either @a iface or @a cm field must be initialized but not both.
      */
-    uct_iface_h                       iface;
+    uct_iface_h                             iface;
 
     /**
      * User data associated with the endpoint.
      */
-    void                              *user_data;
+    void                                    *user_data;
 
     /**
      * The device address to connect to on the remote peer. This must be defined
      * together with @ref uct_ep_params_t::iface_addr to create an endpoint
      * connected to a remote interface.
      */
-    const uct_device_addr_t           *dev_addr;
+    const uct_device_addr_t                 *dev_addr;
 
     /**
      * This specifies the remote address to use when creating an endpoint that
      * is connected to a remote interface.
      * @note This requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
      */
-    const uct_iface_addr_t            *iface_addr;
+    const uct_iface_addr_t                  *iface_addr;
 
     /**
      * The sockaddr to connect to on the remote peer. If set, @ref uct_ep_create
@@ -1331,7 +1331,7 @@ struct uct_ep_params {
      * @note The interface in this routine requires the
      * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
      */
-    const ucs_sock_addr_t             *sockaddr;
+    const ucs_sock_addr_t                   *sockaddr;
 
     /**
      * @ref uct_cb_flags to indicate @ref uct_ep_params_t::sockaddr_pack_cb,
@@ -1341,7 +1341,7 @@ struct uct_ep_params {
      * @ref uct_ep_params_t::cm_resolve_cb behavior.
      * If none from these are not set, this field will be ignored.
      */
-    uint32_t                          sockaddr_cb_flags;
+    uint32_t                                sockaddr_cb_flags;
 
     /**
      * Callback that will be used for filling the user's private data to be
@@ -1353,13 +1353,13 @@ struct uct_ep_params {
      * @note Can not be set together with @ref uct_ep_params_t::private_data or
      * @ref uct_ep_params_t::cm_resolve_cb.
      */
-    uct_cm_ep_priv_data_pack_callback_t sockaddr_pack_cb;
+    uct_cm_ep_priv_data_pack_callback_t     sockaddr_pack_cb;
 
     /**
      * The connection manager object as created by @ref uct_cm_open.
      * Either @a cm or @a iface field must be initialized but not both.
      */
-    uct_cm_h                          cm;
+    uct_cm_h                                cm;
 
     /**
      * Connection request that was passed to
@@ -1368,30 +1368,30 @@ struct uct_ep_params {
      *       consumed and should not be used anymore, even if the call returns
      *       with an error.
      */
-    uct_conn_request_h                conn_request;
+    uct_conn_request_h                      conn_request;
 
     /**
      * Callback that will be invoked when the endpoint on the client side
      * is being connected to the server by a connection manager @ref uct_cm_h .
      */
-    uct_cm_ep_client_connect_callback_t      sockaddr_cb_client;
+    uct_cm_ep_client_connect_callback_t     sockaddr_cb_client;
 
     /**
      * Callback that will be invoked when the endpoint on the server side
      * is being connected to a client by a connection manager @ref uct_cm_h .
      */
-    uct_cm_ep_server_conn_notify_callback_t  sockaddr_cb_server;
+    uct_cm_ep_server_conn_notify_callback_t sockaddr_cb_server;
 
     /**
      * Callback that will be invoked when the endpoint is disconnected.
      */
-    uct_ep_disconnect_cb_t              disconnect_cb;
+    uct_ep_disconnect_cb_t                  disconnect_cb;
 
     /**
      * Index of the path which the endpoint should use, must be in the range
      * 0..(@ref uct_iface_attr_t.dev_num_paths - 1).
      */
-    unsigned                            path_index;
+    unsigned                                path_index;
 
     /**
      * This callback is invoked when the remote server address provided in field
@@ -1400,7 +1400,7 @@ struct uct_ep_params {
      * @note This field is mutually exclusive with
      *       @ref uct_ep_params::sockaddr_pack_cb.
      */
-    uct_cm_ep_resolve_callback_t        cm_resolve_cb;
+    uct_cm_ep_resolve_callback_t            cm_resolve_cb;
 
     /**
      * Private data to be passed from server to client. Can be used only along
@@ -1408,13 +1408,13 @@ struct uct_ep_params {
      * @note This field is mutually exclusive with
      *       @ref uct_ep_params::sockaddr_pack_cb.
      */
-    const void                          *private_data;
+    const void                              *private_data;
 
     /**
      * Length of @ref uct_ep_params::private_data, the maximal allowed value is
      * indicated by the @ref uct_cm_attr::max_conn_priv.
      */
-    size_t                              private_data_length;
+    size_t                                  private_data_length;
 
     /**
      * The sockaddr to bind locally. If set, @ref uct_ep_create
@@ -1422,14 +1422,15 @@ struct uct_ep_params {
      * @note The interface in this routine requires the
      * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
      */
-    const ucs_sock_addr_t             *local_sockaddr;
+    const ucs_sock_addr_t                   *local_sockaddr;
 
     /**
-     * On supported transports, an additional uct_ep is created
-     * for higher priority messages, which can be handled differently in
-     * the underlying transport.
+     * Priority level of operations on this endpoint, supported values 
+     * are 0.. @ref uct_iface_attr_v2_t::max_priority -1.
+     * if not specified, the priority is considered to be 0,
+     * which is the lowest priority.
      */
-    unsigned                                 priority;
+    unsigned                                priority;
 };
 
 
