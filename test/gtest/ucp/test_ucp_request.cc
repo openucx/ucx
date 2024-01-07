@@ -113,6 +113,20 @@ public:
         AM
     } operation_t;
 
+    class request_pair_t {
+    public:
+        request_pair_t(void *user_sreq, void *user_rreq)
+        {
+            sreq = (ucp_request_t*)user_sreq - 1;
+            rreq = (ucp_request_t*)user_rreq - 1;
+        }
+
+        ucp_request_t *sreq;
+        ucp_request_t *rreq;
+    };
+
+    const request_pair_t invalid_pair = {NULL, NULL};
+
     test_proto_reset() : m_completed(false), m_am_cb_cnt(0)
     {
     }
@@ -268,7 +282,7 @@ public:
     }
 
     void send_nb(std::vector<uint8_t> &sbuf, mapped_buffer *rbuf,
-                 operation_t op, bool sync, std::vector<void*> &reqs)
+                 operation_t op, bool sync, std::vector<request_pair_t> &pairs)
     {
         ucp_request_param_t param = {0};
         void *rreq                = NULL;
@@ -284,7 +298,6 @@ public:
             rreq = ucp_tag_recv_nbx(receiver().worker(), rbuf->ptr(),
                                     rbuf->size(), 0, 0, &param);
             ASSERT_FALSE(UCS_PTR_IS_ERR(rreq));
-            reqs.push_back(rreq);
             break;
         case RMA_GET:
             param.op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
@@ -309,31 +322,74 @@ public:
         }
 
         ASSERT_FALSE(UCS_PTR_IS_ERR(sreq));
-        reqs.push_back(sreq);
+        pairs.push_back({sreq, rreq});
     }
 
-    void wait_recv(operation_t op, std::vector<void*> &reqs)
+    void wait_recv(operation_t op, std::vector<request_pair_t> &pairs)
     {
         if (op == STREAM) {
-            for (unsigned i = 0; i < reqs.size(); ++i) {
+            for (unsigned i = 0; i < pairs.size(); ++i) {
                 get_stream_data(*m_rbufs[i].get());
             }
         } else if (op == AM) {
-            wait_for_value(&m_am_cb_cnt, reqs.size());
+            wait_for_value(&m_am_cb_cnt, pairs.size());
         }
 
-        requests_wait(reqs);
+        std::vector<void*> sreqs, rreqs;
+        for (auto &pair : pairs) {
+            sreqs.push_back(pair.sreq + 1);
+            rreqs.push_back(pair.rreq + 1);
+        }
+
+        requests_wait(sreqs);
+        requests_wait(rreqs);
     }
 
-    void send_requests(unsigned reqs_count, std::vector<void*> &reqs,
+    void send_requests(unsigned reqs_count, std::vector<request_pair_t> &pairs,
                        operation_t op, bool sync)
     {
-        reqs.clear();
+        pairs.clear();
         m_am_cb_cnt = 0;
 
         for (int i = 0; i < reqs_count; ++i) {
-            send_nb(m_sbufs[i], m_rbufs[i].get(), op, sync, reqs);
+            send_nb(m_sbufs[i], m_rbufs[i].get(), op, sync, pairs);
         }
+    }
+
+    virtual void wait_and_restart(const std::vector<request_pair_t> &pairs)
+    {
+        wait_for_condition(pairs, [](const request_pair_t &pair) {
+            if ((pair.sreq + 1) == NULL) {
+                return false;
+            }
+
+            ucp_datatype_iter_t *dt_iter = &pair.sreq->send.state.dt_iter;
+            return (dt_iter->offset > 0) && (dt_iter->offset < dt_iter->length);
+        });
+
+        restart(sender().ep());
+    }
+
+    typedef std::function<bool(const request_pair_t &pair)> predicate_t;
+
+    const request_pair_t &
+    wait_for_condition(const std::vector<request_pair_t> &pairs,
+                       const predicate_t &predicate)
+    {
+        const double timeout      = 10;
+        const ucs_time_t deadline = ucs::get_deadline(timeout);
+
+        while (ucs_get_time() < deadline) {
+            for (auto &pair : pairs) {
+                if (predicate(pair)) {
+                    return pair;
+                }
+            }
+
+            progress();
+        }
+
+        return invalid_pair;
     }
 
     void reset_protocol(operation_t op, bool sync = false)
@@ -350,14 +406,14 @@ public:
 
         /* Send a single message to complete wireup before sending actual
            data */
-        std::vector<void*> reqs;
-        send_requests(1, reqs, op, sync);
-        wait_recv(op, reqs);
+        std::vector<request_pair_t> pairs;
+        send_requests(1, pairs, op, sync);
+        wait_recv(op, pairs);
 
         /* Send all messages */
-        send_requests(reqs_count, reqs, op, sync);
-        restart(sender().ep());
-        wait_recv(op, reqs);
+        send_requests(reqs_count, pairs, op, sync);
+        wait_and_restart(pairs);
+        wait_recv(op, pairs);
         flush_ep(sender());
 
         for (int i = 0; i < reqs_count; ++i) {
@@ -410,15 +466,15 @@ UCS_TEST_P(test_proto_reset, tag_eager_multi_bcopy, "ZCOPY_THRESH=inf",
     reset_protocol(TAG);
 }
 
-UCS_TEST_P(test_proto_reset, get_offload_bcopy_to_get_am_bcopy,
-           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, get_offload_bcopy, "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
     skip_no_pending_rma();
     reset_protocol(RMA_GET);
 }
 
-UCS_TEST_P(test_proto_reset, put_offload_bcopy_to_put_am_bcopy,
-           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, put_offload_bcopy, "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
     skip_no_pending_rma();
     reset_protocol(RMA_PUT);
@@ -448,47 +504,200 @@ UCS_TEST_P(test_proto_reset, am_eager_multi_bcopy, "ZCOPY_THRESH=inf",
     reset_protocol(AM);
 }
 
-UCS_TEST_P(test_proto_reset, tag_eager_multi_zcopy_to_bcopy, "ZCOPY_THRESH=0",
+UCS_TEST_P(test_proto_reset, tag_eager_multi_zcopy, "ZCOPY_THRESH=0",
            "RNDV_THRESH=inf")
 {
     reset_protocol(TAG);
 }
 
-UCS_TEST_P(test_proto_reset, get_offload_zcopy_to_get_am_bcopy,
-           "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, get_offload_zcopy, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     skip_no_pending_rma();
     reset_protocol(RMA_GET);
 }
 
-UCS_TEST_P(test_proto_reset, put_offload_zcopy_to_put_am_bcopy,
-           "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, put_offload_zcopy, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     skip_no_pending_rma();
     reset_protocol(RMA_PUT);
 }
 
-UCS_TEST_P(test_proto_reset, stream_multi_zcopy_to_bcopy, "ZCOPY_THRESH=0",
+UCS_TEST_P(test_proto_reset, stream_multi_zcopy, "ZCOPY_THRESH=0",
            "RNDV_THRESH=inf")
 {
     reset_protocol(STREAM);
 }
 
-UCS_TEST_P(test_proto_reset, rndv_am_zcopy_to_bcopy, "ZCOPY_THRESH=0",
-           "RNDV_THRESH=0", "RNDV_SCHEME=am")
+UCS_TEST_P(test_proto_reset, rndv_am_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=0",
+           "RNDV_SCHEME=am")
 {
     reset_protocol(TAG);
 }
 
-UCS_TEST_P(test_proto_reset, am_eager_multi_zcopy_to_bcopy, "ZCOPY_THRESH=0",
+UCS_TEST_P(test_proto_reset, am_eager_multi_zcopy, "ZCOPY_THRESH=0",
            "RNDV_THRESH=inf")
 {
     reset_protocol(AM);
 }
 
-UCS_TEST_P(test_proto_reset, rndv_put, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy")
+UCS_TEST_P(test_proto_reset, rndv_put, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
+           "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     reset_protocol(TAG);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_proto_reset)
+
+/* The following tests require ENABLE_DEBUG_DATA flag in order to access
+ * req->recv.proto_rndv_request, which is only present with this flag. */
+#if ENABLE_DEBUG_DATA
+class test_proto_reset_rndv_get : public test_proto_reset {
+protected:
+    void wait_and_restart(const std::vector<request_pair_t> &pairs) override
+    {
+        wait_for_condition(pairs, [](const request_pair_t &pair) {
+            if ((pair.rreq == NULL) ||
+                (pair.rreq->recv.proto_rndv_request == NULL)) {
+                return false;
+            }
+
+            const ucp_request_t *rndv_req = pair.rreq->recv.proto_rndv_request;
+            return rndv_req->send.state.dt_iter.offset > 0;
+        });
+
+        restart(receiver().ep());
+    }
+};
+
+UCS_TEST_P(test_proto_reset_rndv_get, rndv_get, "RNDV_THRESH=0",
+           "RNDV_SCHEME=get_zcopy", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
+{
+    reset_protocol(TAG);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_rndv_get, ib, "ib")
+
+class test_proto_reset_atp : public test_proto_reset {
+public:
+    void init() override
+    {
+        test_proto_reset::init();
+    }
+
+    void cleanup() override
+    {
+        test_proto_reset::cleanup();
+    }
+
+private:
+    void hook_uct_cbs()
+    {
+        ucp_ep_h ep                = sender().ep();
+        ucp_lane_index_t num_lanes = ucp_ep_config(ep)->key.num_lanes;
+        uct_ep_h uct_ep;
+        uct_iface_ops_t *ops;
+
+        for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+            uct_ep                = ucp_ep_get_lane(ep, lane);
+            ops                   = &uct_ep->iface->ops;
+            ops->ep_put_zcopy     = (uct_ep_put_zcopy_func_t)
+                                    ucs_empty_function_return_no_resource;
+            ops->ep_pending_add   = add_pending;
+            ops->ep_pending_purge = purge_pending;
+        }
+    }
+
+    void restore_uct_cbs()
+    {
+        ucp_ep_h ep                = sender().ep();
+        ucp_lane_index_t num_lanes = ucp_ep_config(ep)->key.num_lanes;
+
+        for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+            ucp_ep_get_lane(ep, lane)->iface->ops = m_ops[lane];
+        }
+    }
+
+    static ucs_status_t
+    add_pending(uct_ep_h tl_ep, uct_pending_req_t *n, unsigned flag)
+    {
+        return UCS_OK;
+    }
+
+    static void
+    purge_pending(uct_ep_h ep, uct_pending_purge_callback_t cb, void *arg)
+    {
+        cb(&m_req->send.uct, arg);
+    }
+
+protected:
+    void wait_and_restart(const std::vector<request_pair_t> &pairs) override
+    {
+        ucp_ep_h ep                = sender().ep();
+        ucp_lane_index_t num_lanes = ucp_ep_config(ep)->key.num_lanes;
+
+        /* Backup uct ops for all lanes */
+        for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+            m_ops.push_back(ucp_ep_get_lane(ep, lane)->iface->ops);
+        }
+
+        hook_uct_cbs();
+
+        /* Wait for rndv_put initialization */
+        auto &pair = wait_for_condition(pairs, [](const request_pair_t &pair) {
+            std::string rndv_put_zcopy_name("rndv/put/zcopy");
+            return rndv_put_zcopy_name ==
+                   pair.sreq->send.proto_config->proto->name;
+        });
+
+        restore_uct_cbs();
+
+        /* Wait until ATP stage starts */
+        static const unsigned send_stage = 0;
+        const double timeout             = 10;
+        ucs_time_t deadline              = ucs::get_deadline(timeout);
+
+        while ((pair.sreq->send.proto_stage == send_stage) &&
+               (ucs_get_time() < deadline)) {
+            pair.sreq->send.uct.func(&pair.sreq->send.uct);
+        }
+
+        /* One more progress to send the first ATP */
+        pair.sreq->send.uct.func(&pair.sreq->send.uct);
+
+        const ucp_request_t *rndv_req = pair.rreq->recv.proto_rndv_request;
+        deadline                      = ucs::get_deadline(timeout);
+
+        /* Wait until receiver gets the ATP message */
+        while (rndv_req->send.state.completed_size == 0 &&
+               (ucs_get_time() < deadline)) {
+            receiver().progress();
+        }
+
+        m_req = pair.sreq;
+
+        hook_uct_cbs();
+        restart(ep);
+        restore_uct_cbs();
+    }
+
+    static ucp_request_t *m_req;
+    std::vector<uct_iface_ops> m_ops;
+};
+
+ucp_request_t *test_proto_reset_atp::m_req;
+
+UCS_TEST_P(test_proto_reset_atp, rndv_put, "RNDV_THRESH=0",
+           "RNDV_SCHEME=put_zcopy", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
+{
+    if (count_resources(sender(), "rc_mlx5") <= 1) {
+        UCS_TEST_SKIP_R("Less than 2 RC resources are found");
+    }
+
+    reset_protocol(TAG);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_atp, ib, "ib")
+
+#endif
