@@ -101,7 +101,7 @@ void test_md::test_reg_mem(unsigned access_mask,
     params.flags       = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
     params.comp        = &comp().comp;
 
-    if (!is_supported_reg_mem_flags(access_mask)) {
+    if (!check_invalidate_support(access_mask)) {
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS |
                             UCT_MD_MEM_DEREG_FIELD_MEMH;
@@ -173,7 +173,7 @@ test_md::test_md()
     /* coverity[uninit_member] */
 }
 
-bool test_md::is_supported_reg_mem_flags(unsigned reg_flags) const
+bool test_md::check_invalidate_support(unsigned reg_flags) const
 {
     return (reg_flags & md_flags_remote_rma) ?
            check_caps(UCT_MD_FLAG_INVALIDATE_RMA) :
