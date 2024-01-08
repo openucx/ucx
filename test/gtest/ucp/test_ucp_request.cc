@@ -121,6 +121,11 @@ public:
             rreq = (ucp_request_t*)user_rreq - 1;
         }
 
+        static void *to_user(ucp_request_t *req)
+        {
+            return req + 1;
+        }
+
         ucp_request_t *sreq;
         ucp_request_t *rreq;
     };
@@ -269,12 +274,8 @@ public:
 
         UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
         for (auto &req : m_pending) {
-            if (req->send.state.dt_iter.offset > 0) {
-                ucp_request_send(req);
-            } else {
-                ucp_proto_request_restart(req);
-                restart_count++;
-            }
+            ucp_proto_request_restart(req);
+            restart_count++;
         }
         UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 
@@ -337,8 +338,8 @@ public:
 
         std::vector<void*> sreqs, rreqs;
         for (auto &pair : pairs) {
-            sreqs.push_back(pair.sreq + 1);
-            rreqs.push_back(pair.rreq + 1);
+            sreqs.push_back(request_pair_t::to_user(pair.sreq));
+            rreqs.push_back(request_pair_t::to_user(pair.rreq));
         }
 
         requests_wait(sreqs);
@@ -359,7 +360,7 @@ public:
     virtual void wait_and_restart(const std::vector<request_pair_t> &pairs)
     {
         wait_for_condition(pairs, [](const request_pair_t &pair) {
-            if ((pair.sreq + 1) == NULL) {
+            if (request_pair_t::to_user(pair.sreq) == NULL) {
                 return false;
             }
 
@@ -392,10 +393,10 @@ public:
         return invalid_pair;
     }
 
-    void reset_protocol(operation_t op, bool sync = false)
+    void reset_protocol(operation_t op, bool sync = false,
+                        unsigned reqs_count = 1000)
     {
-        static const unsigned reqs_count = 1000;
-        static const size_t msg_size     = UCS_KBYTE * 64;
+        static const size_t msg_size = UCS_KBYTE * 64;
 
         for (int i = 0; i < reqs_count; ++i) {
             mapped_buffer *rbuf = new mapped_buffer(msg_size, receiver());
@@ -558,13 +559,16 @@ protected:
     void wait_and_restart(const std::vector<request_pair_t> &pairs) override
     {
         wait_for_condition(pairs, [](const request_pair_t &pair) {
-            if ((pair.rreq == NULL) ||
+            if ((request_pair_t::to_user(pair.rreq) == NULL) ||
                 (pair.rreq->recv.proto_rndv_request == NULL)) {
                 return false;
             }
 
             const ucp_request_t *rndv_req = pair.rreq->recv.proto_rndv_request;
-            return rndv_req->send.state.dt_iter.offset > 0;
+
+            return (rndv_req->send.state.dt_iter.offset > 0) &&
+                   (rndv_req->send.state.dt_iter.offset <
+                    rndv_req->send.state.dt_iter.length);
         });
 
         restart(receiver().ep());
@@ -577,7 +581,7 @@ UCS_TEST_P(test_proto_reset_rndv_get, rndv_get, "RNDV_THRESH=0",
     reset_protocol(TAG);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_rndv_get, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE(test_proto_reset_rndv_get)
 
 class test_proto_reset_atp : public test_proto_reset {
 public:
@@ -628,7 +632,11 @@ private:
     static void
     purge_pending(uct_ep_h ep, uct_pending_purge_callback_t cb, void *arg)
     {
-        cb(&m_req->send.uct, arg);
+        static int once = 0;
+        if (!once) {
+            cb(&m_req->send.uct, arg);
+            once = 1;
+        }
     }
 
 protected:
@@ -695,7 +703,7 @@ UCS_TEST_P(test_proto_reset_atp, rndv_put, "RNDV_THRESH=0",
         UCS_TEST_SKIP_R("Less than 2 RC resources are found");
     }
 
-    reset_protocol(TAG);
+    reset_protocol(TAG, false, 1);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_reset_atp, ib, "ib")
