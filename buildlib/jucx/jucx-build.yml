@@ -2,7 +2,9 @@ parameters:
   arch:
   container:  
   demands: []
-
+  temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/tmp-settings.xml
+  gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg
+  
 jobs:
   - job: jucx_build_${{ parameters.arch }}
     displayName: JUCX build ${{ parameters.arch }}
