@@ -246,10 +246,14 @@ protected:
                       unsigned mem_flags = UCT_MD_MEM_ACCESS_ALL);
         virtual ~mapped_buffer();
 
+        mapped_buffer(mapped_buffer &&other);
+
         void *ptr() const;
         uintptr_t addr() const;
         size_t length() const;
         uct_mem_h memh() const;
+        ucs_memory_type_t mem_type() const;
+        void *reg_addr() const;
         uct_rkey_t rkey() const;
         const uct_iov_t* iov() const;
 
@@ -260,6 +264,7 @@ protected:
         static size_t pack(void *dest, void *arg);
 
     private:
+        void reset();
 
         const uct_test::entity& m_entity;
 

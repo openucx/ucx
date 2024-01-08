@@ -30,7 +30,7 @@ public:
 
     test_md();
 
-    bool is_supported_reg_mem_flags(unsigned reg_flags) const;
+    bool check_invalidate_support(unsigned reg_flags) const;
 
     bool is_bf_arm() const;
 
