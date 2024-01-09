@@ -126,11 +126,16 @@ public:
             return req + 1;
         }
 
+        bool operator==(const request_pair_t& other) const
+        {
+            return (sreq == other.sreq) && (rreq == other.rreq);
+        }
+
         ucp_request_t *sreq;
         ucp_request_t *rreq;
     };
 
-    const request_pair_t invalid_pair = {NULL, NULL};
+    const request_pair_t invalid_pair = {(void*)0xdeadbeef, (void*)0xdeadbeef};
 
     test_proto_reset() : m_completed(false), m_am_cb_cnt(0)
     {
@@ -149,6 +154,7 @@ public:
         ucp_test::init();
         modify_config("TCP_SNDBUF", "8K", IGNORE_IF_NOT_EXIST);
         modify_config("IB_TX_QUEUE_LEN", "65", IGNORE_IF_NOT_EXIST);
+        modify_config("MM_FIFO_SIZE", "64", IGNORE_IF_NOT_EXIST);
         create_entity(true);
 
         sender().connect(&receiver(), get_ep_params());
@@ -359,7 +365,7 @@ public:
 
     virtual void wait_and_restart(const std::vector<request_pair_t> &pairs)
     {
-        wait_for_condition(pairs, [](const request_pair_t &pair) {
+        auto& pair = wait_for_condition(pairs, [](const request_pair_t &pair) {
             if (request_pair_t::to_user(pair.sreq) == NULL) {
                 return false;
             }
@@ -368,6 +374,7 @@ public:
             return (dt_iter->offset > 0) && (dt_iter->offset < dt_iter->length);
         });
 
+        ASSERT_FALSE(invalid_pair == pair);
         restart(sender().ep());
     }
 
@@ -444,6 +451,11 @@ public:
         }
     }
 
+    bool no_rma_transport()
+    {
+        return has_transport("ud") || has_transport("udx") || has_transport("tcp");
+    }
+
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_with_value(variants,
@@ -467,7 +479,7 @@ UCS_TEST_P(test_proto_reset, tag_eager_multi_bcopy, "ZCOPY_THRESH=inf",
     reset_protocol(TAG);
 }
 
-UCS_TEST_P(test_proto_reset, get_offload_bcopy, "ZCOPY_THRESH=inf",
+UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_bcopy, no_rma_transport(), "ZCOPY_THRESH=inf",
            "RNDV_THRESH=inf")
 {
     skip_no_pending_rma();
@@ -511,7 +523,7 @@ UCS_TEST_P(test_proto_reset, tag_eager_multi_zcopy, "ZCOPY_THRESH=0",
     reset_protocol(TAG);
 }
 
-UCS_TEST_P(test_proto_reset, get_offload_zcopy, "ZCOPY_THRESH=0",
+UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_zcopy, no_rma_transport(), "ZCOPY_THRESH=0",
            "RNDV_THRESH=inf", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     skip_no_pending_rma();
@@ -575,7 +587,7 @@ protected:
     }
 };
 
-UCS_TEST_P(test_proto_reset_rndv_get, rndv_get, "RNDV_THRESH=0",
+UCS_TEST_SKIP_COND_P(test_proto_reset_rndv_get, rndv_get, no_rma_transport(), "RNDV_THRESH=0",
            "RNDV_SCHEME=get_zcopy", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     reset_protocol(TAG);
