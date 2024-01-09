@@ -457,7 +457,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "directory.",
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
 
-  {"REG_NONBLOCK_MEM_TYPES", "",
+  {"REG_NONBLOCK_MEM_TYPES", "auto",
    "Perform only non-blocking memory registration for these memory types:\n"
    "page registration may be deferred until it is accessed by the CPU or a transport.",
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
@@ -2042,6 +2042,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      context->config.ext.tm_max_bb_size,
                      context->config.ext.seg_size);
         }
+    }
+
+    if ((context->config.ext.reg_nb_mem_types & UCS_BIT(UCS_MEMORY_TYPE_AUTO))) {
+        /* overwrite ext.reg_nb_mem_types with mem_types relevant for this
+         * platform. For now, leave it as previous default. */
+        context->config.ext.reg_nb_mem_types = 0;
     }
 
     if (context->config.ext.keepalive_num_eps == 0) {
