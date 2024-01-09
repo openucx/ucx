@@ -1286,6 +1286,46 @@ out_mask_info_failed:
     return UCS_OK;
 }
 
+static unsigned uct_ib_iface_gid_index(uct_ib_iface_t *iface,
+                                       unsigned long cfg_gid_index)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uint8_t port_num     = iface->config.port_num;
+    int gid_tbl_len      = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
+    unsigned gid_index   = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
+    uct_ib_device_gid_info_t gid_info;
+    ucs_status_t status;
+    uint32_t oui;
+
+    if (cfg_gid_index != UCS_ULUNITS_AUTO) {
+        return cfg_gid_index;
+    }
+
+    if (!iface->config.flid_enabled ||
+        (gid_tbl_len <= UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX)) {
+        goto out;
+    }
+
+    status = uct_ib_device_query_gid_info(
+                          dev->ibv_context, uct_ib_device_name(dev), port_num,
+                          UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX, &gid_info);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (uct_ib_iface_gid_extract_flid(&gid_info.gid) == 0) {
+        goto out;
+    }
+
+    oui = be32toh(gid_info.gid.global.interface_id & 0xffffff) >> 8;
+    if (oui == UCT_IB_GUID_OPENIB_OUI) {
+        gid_index = UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX;
+    }
+
+out:
+    return gid_index;
+}
+
 static ucs_status_t
 uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
                            const uct_ib_iface_config_t *config)
@@ -1307,10 +1347,8 @@ uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
             goto out;
         }
     } else {
-        gid_info->gid_index             = (cfg_gid_index ==
-                                           UCS_ULUNITS_AUTO) ?
-                                          UCT_IB_MD_DEFAULT_GID_INDEX :
-                                          cfg_gid_index;
+        gid_info->gid_index             = uct_ib_iface_gid_index(iface,
+                                                                 cfg_gid_index);
         gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         gid_info->roce_info.addr_family = 0;
     }
