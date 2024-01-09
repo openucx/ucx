@@ -126,7 +126,7 @@ public:
             return req + 1;
         }
 
-        bool operator==(const request_pair_t& other) const
+        bool operator==(const request_pair_t &other) const
         {
             return (sreq == other.sreq) && (rreq == other.rreq);
         }
@@ -365,7 +365,7 @@ public:
 
     virtual void wait_and_restart(const std::vector<request_pair_t> &pairs)
     {
-        auto& pair = wait_for_condition(pairs, [](const request_pair_t &pair) {
+        auto &pair = wait_for_condition(pairs, [](const request_pair_t &pair) {
             if (request_pair_t::to_user(pair.sreq) == NULL) {
                 return false;
             }
@@ -453,7 +453,8 @@ public:
 
     bool no_rma_transport()
     {
-        return has_transport("ud") || has_transport("udx") || has_transport("tcp");
+        return has_transport("ud") || has_transport("udx") ||
+               has_transport("tcp");
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -473,14 +474,15 @@ protected:
     std::vector<ucp_request_t *>                m_pending;
 };
 
-UCS_TEST_P(test_proto_reset, tag_eager_multi_bcopy, "ZCOPY_THRESH=inf",
-           "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, tag_eager_multi_bcopy,
+                     has_transport("shm"), "ZCOPY_THRESH=inf",
+                     "RNDV_THRESH=inf")
 {
     reset_protocol(TAG);
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_bcopy, no_rma_transport(), "ZCOPY_THRESH=inf",
-           "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_bcopy, no_rma_transport(),
+                     "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     skip_no_pending_rma();
     reset_protocol(RMA_GET);
@@ -493,26 +495,28 @@ UCS_TEST_P(test_proto_reset, put_offload_bcopy, "ZCOPY_THRESH=inf",
     reset_protocol(RMA_PUT);
 }
 
-UCS_TEST_P(test_proto_reset, stream_multi_bcopy, "ZCOPY_THRESH=inf",
-           "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, stream_multi_bcopy, has_transport("shm"),
+                     "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     reset_protocol(STREAM);
 }
 
-UCS_TEST_P(test_proto_reset, rndv_am_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=0",
-           "RNDV_SCHEME=am")
+UCS_TEST_SKIP_COND_P(test_proto_reset, rndv_am_bcopy, has_transport("shm"),
+                     "ZCOPY_THRESH=inf", "RNDV_THRESH=0", "RNDV_SCHEME=am")
 {
     reset_protocol(TAG);
 }
 
-UCS_TEST_P(test_proto_reset, eager_sync_multi_bcopy, "ZCOPY_THRESH=inf",
-           "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, eager_sync_multi_bcopy,
+                     has_transport("shm"), "ZCOPY_THRESH=inf",
+                     "RNDV_THRESH=inf")
 {
     reset_protocol(TAG, true);
 }
 
-UCS_TEST_P(test_proto_reset, am_eager_multi_bcopy, "ZCOPY_THRESH=inf",
-           "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, am_eager_multi_bcopy,
+                     has_transport("shm"), "ZCOPY_THRESH=inf",
+                     "RNDV_THRESH=inf")
 {
     reset_protocol(AM);
 }
@@ -523,8 +527,9 @@ UCS_TEST_P(test_proto_reset, tag_eager_multi_zcopy, "ZCOPY_THRESH=0",
     reset_protocol(TAG);
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_zcopy, no_rma_transport(), "ZCOPY_THRESH=0",
-           "RNDV_THRESH=inf", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
+UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_zcopy, no_rma_transport(),
+                     "ZCOPY_THRESH=0", "RNDV_THRESH=inf",
+                     "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     skip_no_pending_rma();
     reset_protocol(RMA_GET);
@@ -537,20 +542,20 @@ UCS_TEST_P(test_proto_reset, put_offload_zcopy, "ZCOPY_THRESH=0",
     reset_protocol(RMA_PUT);
 }
 
-UCS_TEST_P(test_proto_reset, stream_multi_zcopy, "ZCOPY_THRESH=0",
-           "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, stream_multi_zcopy, has_transport("shm"),
+                     "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
     reset_protocol(STREAM);
 }
 
-UCS_TEST_P(test_proto_reset, rndv_am_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=0",
-           "RNDV_SCHEME=am")
+UCS_TEST_SKIP_COND_P(test_proto_reset, rndv_am_zcopy, has_transport("shm"),
+                     "ZCOPY_THRESH=0", "RNDV_THRESH=0", "RNDV_SCHEME=am")
 {
     reset_protocol(TAG);
 }
 
-UCS_TEST_P(test_proto_reset, am_eager_multi_zcopy, "ZCOPY_THRESH=0",
-           "RNDV_THRESH=inf")
+UCS_TEST_SKIP_COND_P(test_proto_reset, am_eager_multi_zcopy,
+                     has_transport("shm"), "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
 {
     reset_protocol(AM);
 }
@@ -587,8 +592,9 @@ protected:
     }
 };
 
-UCS_TEST_SKIP_COND_P(test_proto_reset_rndv_get, rndv_get, no_rma_transport(), "RNDV_THRESH=0",
-           "RNDV_SCHEME=get_zcopy", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
+UCS_TEST_SKIP_COND_P(test_proto_reset_rndv_get, rndv_get, no_rma_transport(),
+                     "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy",
+                     "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     reset_protocol(TAG);
 }
