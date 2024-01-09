@@ -1114,9 +1114,6 @@ typedef enum {
 
     /** Enables @ref uct_iface_op_attr::max_iov */
     UCT_IFACE_OP_ATTR_FIELD_MAX_IOV         = UCS_BIT(7),
-
-    /** Enables @ref uct_iface_op_attr::max_outstanding */
-    UCT_IFACE_OP_ATTR_FIELD_MAX_OUTSTANDING = UCS_BIT(8)
 } uct_iface_op_attr_field_t;
 
 
@@ -1151,8 +1148,6 @@ typedef struct uct_iface_op_attr {
     size_t   max_zcopy_hdr;
     /** Maximal @a iovcnt  */
     size_t   max_iov;
-    /** Maximal number of simultaneous receive operations */
-    size_t   max_outstanding;
 } uct_iface_op_attr_t;
 
 
@@ -1193,23 +1188,26 @@ typedef enum {
     /** Enables @ref uct_iface_attr_v2_t::tag::receive */
     UCT_IFACE_ATTR_FIELD_TAG_RECEIVE        = UCS_BIT(9),
 
+    /** Enables @ref uct_iface_attr_v2_t::tag::max_outstanding */
+    UCT_IFACE_ATTR_FIELD_MAX_OUTSTANDING    = UCS_BIT(10),
+
     /** Enables @ref uct_iface_attr_v2_t::tag::eager */
-    UCT_IFACE_ATTR_FIELD_TAG_EAGER          = UCS_BIT(10),
-
-    /** Enables @ref uct_iface_attr_v2_t::tag::rndv */
-    UCT_IFACE_ATTR_FIELD_TAG_RNDV           = UCS_BIT(11),
-
+    UCT_IFACE_ATTR_FIELD_TAG_EAGER          = UCS_BIT(11),
+                                                        
+    /** Enables @ref uct_iface_attr_v2_t::tag::rndv */  
+    UCT_IFACE_ATTR_FIELD_TAG_RNDV           = UCS_BIT(12),
+                                                        
     /** Enables @ref uct_iface_attr_v2_t::atomic32::op_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC32_OP_FLAGS  = UCS_BIT(12),
-
+    UCT_IFACE_ATTR_FIELD_ATOMIC32_OP_FLAGS  = UCS_BIT(13),
+                                                        
     /** Enables @ref uct_iface_attr_v2_t::atomic32::fop_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC32_FOP_FLAGS = UCS_BIT(13),
-
+    UCT_IFACE_ATTR_FIELD_ATOMIC32_FOP_FLAGS = UCS_BIT(14),
+                                                        
     /** Enables @ref uct_iface_attr_v2_t::atomic64::op_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC64_OP_FLAGS  = UCS_BIT(14),
-
+    UCT_IFACE_ATTR_FIELD_ATOMIC64_OP_FLAGS  = UCS_BIT(15),
+                                                        
     /** Enables @ref uct_iface_attr_v2_t::atomic64::fop_flags */
-    UCT_IFACE_ATTR_FIELD_ATOMIC64_FOP_FLAGS = UCS_BIT(15)
+    UCT_IFACE_ATTR_FIELD_ATOMIC64_FOP_FLAGS = UCS_BIT(16)
 } uct_iface_attr_field_t;
 
 /**
@@ -1254,6 +1252,9 @@ typedef struct uct_iface_attr_v2 {
     struct {
         /** Attributes related to receive protocol */
         uct_iface_op_attr_t *recv;
+
+        /** Maximal number of simultaneous receive operations */
+        size_t              max_outstanding;
 
         /** Attributes related to eager protocol */
         uct_iface_op_attr_t *eager;
