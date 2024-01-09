@@ -297,7 +297,8 @@ ucs_status_t uct_config_get(void *config, const char *name, char *value,
 ucs_status_t uct_config_modify(void *config, const char *name, const char *value)
 {
     uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
-    return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
+    return ucs_config_parser_set_value(bundle->data, bundle->table,
+                                       bundle->table_prefix, name, value);
 }
 
 static ucs_status_t
@@ -312,6 +313,7 @@ uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *mkey_buffer)
 }
 
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 void *address, size_t length,
                                  const uct_md_mkey_pack_params_t *params,
                                  void *mkey_buffer)
 {
@@ -322,7 +324,7 @@ ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
         return status;
     }
 
-    return md->ops->mkey_pack(md, memh, params, mkey_buffer);
+    return md->ops->mkey_pack(md, memh, address, length, params, mkey_buffer);
 }
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
@@ -331,7 +333,7 @@ ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
         .field_mask = 0
     };
 
-    return uct_md_mkey_pack_v2(md, memh, &params, rkey_buffer);
+    return uct_md_mkey_pack_v2(md, memh, NULL, SIZE_MAX, &params, rkey_buffer);
 }
 
 ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,

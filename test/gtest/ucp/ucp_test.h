@@ -237,6 +237,10 @@ protected:
     virtual bool has_transport(const std::string& tl_name) const;
     bool has_any_transport(const std::vector<std::string>& tl_names) const;
     bool has_any_transport(const std::string *tls, size_t tl_size) const;
+    size_t count_resources(const ucp_test_base::entity &e,
+                           const std::string &tl_name) const;
+    bool has_resource(const ucp_test_base::entity &e,
+                      const std::string &tl_name) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
     unsigned progress(const std::vector<entity*> &entities,
@@ -268,6 +272,7 @@ protected:
                         int poll_timeout = -1, int worker_index = 0);
     int max_connections();
     void configure_peer_failure_settings();
+    bool is_proto_enabled() const;
 
     static bool check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type);
 

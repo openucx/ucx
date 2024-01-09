@@ -453,6 +453,9 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
     ucs_log_level_t err_level;
     ucp_md_index_t md_index;
     ucs_status_t status;
+    void *reg_address;
+    size_t reg_length;
+    size_t reg_align;
 
     if (reg_md_map == 0) {
         return UCS_OK;
@@ -505,12 +508,20 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                      UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET;
         }
 
-        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, address,
-                                   length, &reg_params, &memh->uct[md_index]);
+        reg_address = address;
+        reg_length  = length;
+
+        if (context->rcache == NULL) {
+            reg_align = ucs_max(context->tl_mds[md_index].attr.reg_alignment, 1);
+            ucs_align_ptr_range(&reg_address, &reg_length, reg_align);
+        }
+
+        status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, reg_address,
+                                   reg_length, &reg_params, &memh->uct[md_index]);
         if (ucs_unlikely(status != UCS_OK)) {
-            ucp_memh_register_log_fail(err_level, address, length, mem_type,
-                                       reg_params.dmabuf_fd, md_index, context,
-                                       status);
+            ucp_memh_register_log_fail(err_level, reg_address, reg_length,
+                                       mem_type, reg_params.dmabuf_fd, md_index,
+                                       context, status);
             if (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) {
                 continue;
             }
@@ -521,7 +532,7 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
 
         ucs_trace("register address %p length %zu dmabuf-fd %d flags %ld "
                   "on md[%d]=%s %p",
-                  address, length,
+                  reg_address, reg_length,
                   (dmabuf_md_map & UCS_BIT(md_index)) ? reg_params.dmabuf_fd :
                                                         UCT_DMABUF_FD_INVALID,
                   reg_params.flags,
@@ -758,15 +769,15 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
     } else {
         status = ucp_memh_rcache_get(context->rcache, reg_address, reg_length,
                                      mem_type, reg_align, &memh);
+
+        ucs_assert(memh->mem_type == mem_type);
+        ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
+        ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
     }
 
     if (status != UCS_OK) {
         goto out;
     }
-
-    ucs_assert(memh->mem_type == mem_type);
-    ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
-    ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
 
     ucs_trace(
             "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
@@ -990,9 +1001,10 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       ucp_md_index_t md_index, ucp_mem_h *memh_p,
                                       uct_rkey_bundle_t *rkey_bundle)
 {
-    ucp_context_h context           = worker->context;
-    const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
-    ucp_mem_h memh                  = NULL; /* To suppress compiler warning */
+    ucp_context_h context            = worker->context;
+    const uct_md_attr_v2_t *md_attr  = &context->tl_mds[md_index].attr;
+    ucp_mem_h memh                   = NULL; /* To suppress compiler warning */
+    uct_md_mkey_pack_params_t params = { .field_mask = 0 };
     uct_component_h cmpt;
     ucp_tl_md_t *tl_md;
     ucs_status_t status;
@@ -1016,7 +1028,9 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     }
 
     rkey_buffer = ucs_alloca(md_attr->rkey_packed_size);
-    status      = uct_md_mkey_pack(tl_md->md, memh->uct[md_index], rkey_buffer);
+    status      = uct_md_mkey_pack_v2(tl_md->md, memh->uct[md_index],
+                                      remote_addr, length, &params,
+                                      rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("failed to pack key from md[%d]: %s",
                   md_index, ucs_status_string(status));
@@ -1432,13 +1446,18 @@ static ucs_rcache_ops_t ucp_mem_rcache_ops = {
 
 static ucs_status_t
 ucp_mem_rcache_create(ucp_context_h context, const char *name,
-                      ucs_rcache_t **rcache_p, ucs_rcache_params_t *rcache_params)
+                      ucs_rcache_t **rcache_p, int events,
+                      ucs_rcache_params_t *rcache_params)
 {
     rcache_params->region_struct_size = ucp_memh_size(context);
-    rcache_params->ucm_events         = UCM_EVENT_VM_UNMAPPED |
-                                        UCM_EVENT_MEM_TYPE_FREE;
     rcache_params->context            = context;
     rcache_params->ops                = &ucp_mem_rcache_ops;
+
+    if (events) {
+        rcache_params->flags         |= UCS_RCACHE_FLAG_SYNC_EVENTS;
+        rcache_params->ucm_events     = UCM_EVENT_VM_UNMAPPED |
+                                        UCM_EVENT_MEM_TYPE_FREE;
+    }
 
     return ucs_rcache_create(rcache_params, name, ucs_stats_get_root(),
                              rcache_p);
@@ -1452,7 +1471,7 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
 
     ucs_rcache_set_params(&rcache_params, rcache_config);
 
-    status = ucp_mem_rcache_create(context, "ucp_rcache", &context->rcache,
+    status = ucp_mem_rcache_create(context, "ucp_rcache", &context->rcache, 1,
                                    &rcache_params);
     if (status != UCS_OK) {
         goto err;
@@ -1595,7 +1614,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
 
             ucs_rcache_set_default_params(&rcache_params);
 
-            status = ucp_mem_rcache_create(context, rcache_name, &rcache,
+            status = ucp_mem_rcache_create(context, rcache_name, &rcache, 0,
                                            &rcache_params);
             if (status != UCS_OK) {
                 goto out;
@@ -1716,13 +1735,12 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                  * exists in the RCACHE of imported regions, it means that
                  * an exported memory handle has already been destroyed for a
                  * given address, but an imported memory handle hasn't been
-                 * retrieved from the RCACHE yet. So, it should have reference
-                 * counter == 1, since ucp_mem_unmap() should be invoked for
-                 * unused imported memory handles and then - for corresponding
-                 * exported ones */
-                ucs_assertv(rregion->refcount == 1, "%u", rregion->refcount);
+                 * removed from the RCACHE yet. So, it had refcount == 1 and
+                 * now it should be 2. */
+                ucs_assertv(rregion->refcount == 2, "%u", rregion->refcount);
                 ucs_rcache_region_invalidate(rcache, rregion,
                                              ucs_empty_function, NULL);
+                ucs_rcache_region_put_unsafe(rcache, rregion);
             }
         }
 

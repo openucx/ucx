@@ -199,8 +199,12 @@ static ucs_status_t ucp_worker_set_am_handler_common(ucp_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_array_resize(&worker->am.cbs, id + 1, empty_am_handler,
-                     return UCS_ERR_NO_MEMORY);
+    /* User handlers may be registered in any order, we need to resize the
+     * lookup array only when new ID is equal or above the current length */
+    if (id >= ucs_array_length(&worker->am.cbs)) {
+        ucs_array_resize(&worker->am.cbs, id + 1, empty_am_handler,
+                         return UCS_ERR_NO_MEMORY);
+    }
     return UCS_OK;
 }
 

@@ -38,9 +38,18 @@ uct_cuda_base_query_devices_common(
 {
     ucs_sys_device_t sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
     CUdevice cuda_device;
+    ucs_status_t status;
 
-    if (cuCtxGetDevice(&cuda_device) == CUDA_SUCCESS) {
+    if (uct_cuda_base_is_context_active()) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cuda_device));
+        if (status != UCS_OK) {
+            return status;
+        }
+
         uct_cuda_base_get_sys_dev(cuda_device, &sys_device);
+    } else {
+        ucs_debug("set cuda sys_device to `unknown` as no context is"
+                  " currently active");
     }
 
     return uct_single_device_resource(md, UCT_CUDA_DEV_NAME, dev_type,

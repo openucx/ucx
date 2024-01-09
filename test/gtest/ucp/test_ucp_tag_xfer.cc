@@ -246,9 +246,8 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
 
 size_t test_ucp_tag_xfer::get_msg_size()
 {
-    size_t raw_size   = 1148544 / ucs::test_time_multiplier();
-    size_t chunk_size = num_lanes() * UCS_SYS_PCI_MAX_PAYLOAD;
-    return ucs_div_round_up(raw_size, chunk_size) * chunk_size;
+    size_t raw_size = 1148544 / ucs::test_time_multiplier();
+    return ucs_align_up(raw_size, ucs_get_page_size() * num_lanes());
 }
 
 void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
@@ -1110,7 +1109,7 @@ public:
         EXPECT_EQ(1, get_zcopy + rtr + rkey_ptr);
         EXPECT_LE(put_zcopy, rtr);
 
-        if (m_ucp_config->ctx.proto_enable) {
+        if (is_proto_enabled()) {
             if (has_xpmem() || is_self() || has_rma_zcopy()) {
                 /* Expect one of the bulk transfer protocols */
                 EXPECT_EQ(1u, rkey_ptr + get_zcopy + put_zcopy);
@@ -1238,7 +1237,7 @@ public:
 UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
-    if (m_ucp_config->ctx.proto_enable) {
+    if (is_proto_enabled()) {
         UCS_TEST_SKIP_R("TM_SW_RNDV has no effect with proto v2");
     }
 

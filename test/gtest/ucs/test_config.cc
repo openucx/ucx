@@ -308,7 +308,8 @@ protected:
         }
 
         void set(const char *name, const char *value) {
-            ucs_config_parser_set_value(&m_opts, car_opts_table, name, value);
+            ucs_config_parser_set_value(&m_opts, car_opts_table, NULL, name,
+                                        value);
         }
 
         const char* get(const char *name) {

@@ -404,7 +404,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "GID_INDEX=1") {
+UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "IB_GID_INDEX=1") {
     send_recv_short();
 }
 

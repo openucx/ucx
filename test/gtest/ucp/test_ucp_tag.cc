@@ -663,7 +663,7 @@ protected:
 
         do_send_recv(send_dt, recv_dt, send_param, recv_param);
 
-        if (prereg() && !is_self() && (!is_iov() || m_ucp_config->ctx.proto_enable)) {
+        if (prereg() && !is_self() && (!is_iov() || is_proto_enabled())) {
             /* Not relevant for 'self' because both sender and receiver are the same entity.
                Must be called before request is freed by free_callback (wait_for_value). */
             /* User-provided memh on iov supported only with proto_v2 */

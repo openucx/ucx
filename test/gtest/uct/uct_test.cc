@@ -814,8 +814,8 @@ void uct_test::reduce_tl_send_queues()
     set_config("RC_TX_QUEUE_LEN?=32");
     set_config("UD_TX_QUEUE_LEN?=128");
     set_config("RC_FC_ENABLE?=n");
-    set_config("SNDBUF?=1k");
-    set_config("RCVBUF?=128");
+    set_config("TCP_SNDBUF?=1k");
+    set_config("TCP_RCVBUF?=128");
 }
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,

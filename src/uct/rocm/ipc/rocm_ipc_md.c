@@ -44,8 +44,8 @@ static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr
 }
 
 static ucs_status_t
-uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh,
-                       const uct_md_mkey_pack_params_t *params,
+uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
+                       size_t length, const uct_md_mkey_pack_params_t *params,
                        void *mkey_buffer)
 {
     uct_rocm_ipc_key_t *packed = mkey_buffer;

@@ -40,6 +40,7 @@ depcomp
 contrib/rpmdef.sh
 contrib/ucx
 bindings/java/pom.xml
+bindings/java/src/main/native/tmp-settings.xml
 src/ucs/ucs_stats_parser
 test/gtest/gtest
 build-*

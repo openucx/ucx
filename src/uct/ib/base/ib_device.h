@@ -52,6 +52,7 @@
 #define UCT_IB_LINK_LOCAL_PREFIX          be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
 #define UCT_IB_SITE_LOCAL_PREFIX          be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_MASK            be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_SITE_LOCAL_FLID_MASK       be64toh(0xffffffff00000000ul) /* site-local + flid */
 #define UCT_IB_DEFAULT_ROCEV2_DSCP        106  /* Default DSCP for RoCE v2 */
 #define UCT_IB_ROCE_UDP_SRC_PORT_BASE     0xC000
 #define UCT_IB_CQE_SL_PKTYPE_MASK         0x7 /* SL for IB or packet type

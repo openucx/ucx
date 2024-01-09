@@ -223,6 +223,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "multiple rails. Must be greater than 0.",
    ucs_offsetof(ucp_context_config_t, min_rndv_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"RMA_ZCOPY_MAX_SEG_SIZE", "auto",
+   "Max size of a segment for rma/rndv zcopy.",
+   ucs_offsetof(ucp_context_config_t, rma_zcopy_max_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"RNDV_SCHEME", "auto",
    "Communication scheme in RNDV protocol.\n"
    " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
@@ -722,7 +726,8 @@ void ucp_config_release(ucp_config_t *config)
 ucs_status_t ucp_config_modify_internal(ucp_config_t *config, const char *name,
                                         const char *value)
 {
-    return ucs_config_parser_set_value(config, ucp_config_table, name, value);
+    return ucs_config_parser_set_value(config, ucp_config_table, NULL, name,
+                                       value);
 }
 
 ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,

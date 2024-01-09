@@ -369,8 +369,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
                                                 min_length,
                                                 range_max_length, SIZE_MAX,
                                                 params->perf_bias,
-                                                parallel_stages, 2,
-                                                params->super.flags);
+                                                parallel_stages, 2);
         if (status != UCS_OK) {
             goto out_deref_perf_node;
         }
@@ -570,7 +569,7 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
 
         status = ucp_proto_init_parallel_stages(init_params, min_length,
                                                 ack_range.max_length, SIZE_MAX,
-                                                0, parallel_stages, 2, flags);
+                                                0, parallel_stages, 2);
         if (status != UCS_OK) {
             break;
         }
@@ -632,7 +631,7 @@ size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg)
 
 ucs_status_t ucp_proto_rndv_ats_complete(ucp_request_t *req)
 {
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0, UCP_DT_MASK_ALL);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
     return ucp_proto_rndv_recv_complete(req);
 }
 

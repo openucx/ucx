@@ -117,7 +117,7 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md,
 }
 
 static ucs_status_t
-uct_ugni_mkey_pack(uct_md_h md, uct_mem_h memh,
+uct_ugni_mkey_pack(uct_md_h md, uct_mem_h memh, void *address, size_t length,
                    const uct_md_mkey_pack_params_t *params,
                    void *mkey_buffer)
 {

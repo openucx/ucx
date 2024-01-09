@@ -33,13 +33,13 @@ public:
                                "user_memh");
     }
 
-    virtual void init() {
-        if (disable_proto()) {
+    test_ucp_rma()
+    {
+        if (get_variant_value() & DISABLE_PROTO) {
             modify_config("PROTO_ENABLE", "n");
         } else {
             modify_config("MAX_RMA_LANES", "2");
         }
-        test_ucp_memheap::init();
     }
 
     void do_nbi_iov(iov_op_t op, size_t size, void *expected_data,
@@ -112,6 +112,14 @@ protected:
         return (100 * UCS_MBYTE) / ucs::test_time_multiplier();
     }
 
+    virtual unsigned size_step() {
+        return 4;
+    }
+
+    virtual unsigned max_iters() {
+        return 100;
+    }
+
     void test_mem_types(send_func_t send_func, size_t min_size = 128,
                         size_t max_size = default_max_size()) {
         const std::vector<std::vector<ucs_memory_type_t> >& pairs =
@@ -120,9 +128,8 @@ protected:
         for (size_t i = 0; i < pairs.size(); ++i) {
 
             /* Memory type put/get is fully supported only with new protocols */
-            if (!m_ucp_config->ctx.proto_enable &&
-                (!UCP_MEM_IS_HOST(pairs[i][0]) ||
-                 !UCP_MEM_IS_HOST(pairs[i][1]))) {
+            if (!is_proto_enabled() && (!UCP_MEM_IS_HOST(pairs[i][0]) ||
+                                        !UCP_MEM_IS_HOST(pairs[i][1]))) {
                 continue;
             }
 
@@ -135,13 +142,42 @@ protected:
                            UCS_MEMORY_TYPE_HOST, UCP_MEM_MAP_NONBLOCK);
     }
 
-    void test_message_sizes(send_func_t send_func) {
-        test_message_sizes(send_func, 128, default_max_size(),
-                           UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST, 0);
-    }
+    void test_message_sizes(send_func_t send_func, size_t min_size,
+                            size_t max_size, ucs_memory_type_t send_mem_type,
+                            ucs_memory_type_t target_mem_type,
+                            unsigned mem_map_flags) {
+        ucs::detail::message_stream ms("INFO");
 
-    bool disable_proto() {
-        return !m_ucp_config->ctx.proto_enable;
+        ucs_assert(min_size <= max_size);
+        ms << ucs_memory_type_names[send_mem_type] << "->" <<
+              ucs_memory_type_names[target_mem_type] << " ";
+        if (mem_map_flags & UCP_MEM_MAP_NONBLOCK) {
+            ms << "map_nb ";
+        }
+
+        /* Test different random sizes */
+        for (size_t current_max_size = min_size; current_max_size <= max_size;
+             current_max_size *= size_step()) {
+            size_t size = min_size;
+            if (min_size < current_max_size) {
+                size += ucs::rand() % (current_max_size - min_size);
+            }
+
+            unsigned num_iters = ucs_min(max_iters(), max_size / (size + 1));
+            num_iters          = ucs_max(1, num_iters / ucs::test_time_multiplier());
+
+            ms << num_iters << "x" << size << " ";
+            fflush(stdout);
+
+            ucs_memory_type_t mem_types[] = {send_mem_type, target_mem_type};
+            test_xfer(send_func, size, num_iters, 1, send_mem_type,
+                      target_mem_type, mem_map_flags, is_ep_flush(), user_memh(),
+                      mem_types);
+
+            if (HasFailure() || (num_errors() > 0)) {
+                break;
+            }
+        }
     }
 
     bool user_memh()
@@ -237,69 +273,10 @@ private:
                            rkey, param);
     }
 
-    void test_message_sizes(send_func_t send_func, size_t min_size,
-                            size_t max_size, ucs_memory_type_t send_mem_type,
-                            ucs_memory_type_t target_mem_type,
-                            unsigned mem_map_flags) {
-        ucs::detail::message_stream ms("INFO");
-
-        ucs_assert(min_size <= max_size);
-        ms << ucs_memory_type_names[send_mem_type] << "->" <<
-              ucs_memory_type_names[target_mem_type] << " ";
-        if (mem_map_flags & UCP_MEM_MAP_NONBLOCK) {
-            ms << "map_nb ";
-        }
-
-        /* Test different random sizes */
-        for (size_t current_max_size = min_size; current_max_size <= max_size;
-             current_max_size *= 4) {
-            size_t size = min_size;
-            if (min_size < current_max_size) {
-                size += ucs::rand() % (current_max_size - min_size);
-            }
-
-            unsigned num_iters = ucs_min(100, max_size / (size + 1));
-            num_iters          = ucs_max(1, num_iters / ucs::test_time_multiplier());
-
-            ms << num_iters << "x" << size << " ";
-            fflush(stdout);
-
-            ucs_memory_type_t mem_types[] = {send_mem_type, target_mem_type};
-            test_xfer(send_func, size, num_iters, 1, send_mem_type,
-                      target_mem_type, mem_map_flags, is_ep_flush(), user_memh(),
-                      mem_types);
-
-            if (HasFailure() || (num_errors() > 0)) {
-                break;
-            }
-        }
-    }
-
     bool is_ep_flush() {
         return get_variant_value() & FLUSH_EP;
     }
 
-};
-
-class test_ucp_rma_reg_nb : public test_ucp_rma {
-public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_RMA, NO_DEVX, "no_devx");
-    }
-
-    virtual void init() {
-        modify_config("REG_NONBLOCK_MEM_TYPES", "host");
-        if (get_variant_value() & NO_DEVX) {
-            modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
-        }
-        test_ucp_rma::init();
-    }
-
-private:
-    enum {
-        NO_DEVX = UCS_BIT(0),
-    };
 };
 
 UCS_TEST_P(test_ucp_rma, put_blocking) {
@@ -310,8 +287,9 @@ UCS_TEST_P(test_ucp_rma, put_nonblocking) {
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma, put_nonblocking_iov_zcopy, disable_proto(),
-                     "ZCOPY_THRESH=0") {
+UCS_TEST_SKIP_COND_P(test_ucp_rma, put_nonblocking_iov_zcopy,
+                     !is_proto_enabled(), "ZCOPY_THRESH=0")
+{
     if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
         UCS_TEST_SKIP_R("put_zcopy is not supported");
     }
@@ -329,8 +307,9 @@ UCS_TEST_P(test_ucp_rma, get_nonblocking) {
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma, get_nonblocking_iov_zcopy, disable_proto(),
-                     "ZCOPY_THRESH=0") {
+UCS_TEST_SKIP_COND_P(test_ucp_rma, get_nonblocking_iov_zcopy,
+                     !is_proto_enabled(), "ZCOPY_THRESH=0")
+{
     if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
         UCS_TEST_SKIP_R("get_zcopy is not supported");
     }
@@ -347,23 +326,79 @@ UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)
 
-UCS_TEST_P(test_ucp_rma_reg_nb, put_blocking) {
-    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::put_b));
+
+class test_ucp_rma_reg : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, NON_BLOCK, "nb");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, NON_BLOCK | NO_DEVX, "no_devx");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, NO_RCACHE, "no_rcache");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, NON_BLOCK | NO_RCACHE, "nb_no_rcache");
+    }
+
+    virtual void init() {
+        if (get_variant_value() & NON_BLOCK) {
+            modify_config("REG_NONBLOCK_MEM_TYPES", "host");
+        }
+        if (get_variant_value() & NO_DEVX) {
+            modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
+        }
+        if (get_variant_value() & NO_RCACHE) {
+            modify_config("RCACHE_ENABLE", "n");
+        }
+        test_ucp_rma::init();
+    }
+
+protected:
+    void test_reg(send_func_t send_func) {
+        const std::vector<ucs_memory_type_t>& mem_types = host_only() ?
+            std::vector<ucs_memory_type_t>{ UCS_MEMORY_TYPE_HOST } :
+            mem_buffer::supported_mem_types();
+
+        for (size_t i = 0; i < mem_types.size(); ++i) {
+            test_message_sizes(send_func, 128, default_max_size(),
+                               mem_types[i], mem_types[i], 0);
+        }
+    }
+
+    virtual unsigned size_step() {
+        return 16;
+    }
+
+    virtual unsigned max_iters() {
+        return 5;
+    }
+
+    bool host_only() {
+        return get_variant_value() & NON_BLOCK;
+    }
+
+private:
+    enum {
+        NON_BLOCK = UCS_BIT(0),
+        NO_DEVX   = UCS_BIT(1),
+        NO_RCACHE = UCS_BIT(2),
+    };
+};
+
+UCS_TEST_P(test_ucp_rma_reg, put_blocking) {
+    test_reg(static_cast<send_func_t>(&test_ucp_rma::put_b));
 }
 
-UCS_TEST_P(test_ucp_rma_reg_nb, put_nonblocking) {
-    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
+UCS_TEST_P(test_ucp_rma_reg, put_nonblocking) {
+    test_reg(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
 }
 
-UCS_TEST_P(test_ucp_rma_reg_nb, get_blocking) {
-    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b));
+UCS_TEST_P(test_ucp_rma_reg, get_blocking) {
+    test_reg(static_cast<send_func_t>(&test_ucp_rma::get_b));
 }
 
-UCS_TEST_P(test_ucp_rma_reg_nb, get_nonblocking) {
-    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
+UCS_TEST_P(test_ucp_rma_reg, get_nonblocking) {
+    test_reg(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_rma_reg_nb)
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma_reg)
 
 
 class test_ucp_rma_order : public test_ucp_rma {

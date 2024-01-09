@@ -1560,9 +1560,11 @@ err:
 }
 
 ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
-                                        const char *name, const char *value)
+                                         const char *prefix, const char *name,
+                                         const char *value)
 {
-    return ucs_config_parser_set_value_internal(opts, fields, name, value, NULL, 1);
+    return ucs_config_parser_set_value_internal(opts, fields, name, value,
+                                                prefix, 1);
 }
 
 ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,

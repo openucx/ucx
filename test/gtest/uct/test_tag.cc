@@ -1018,7 +1018,8 @@ void test_tag_mp_xrq::init()
     set_env_var_or_skip(m_iface_config, "RC_TM_ENABLE", "y");
     set_env_var_or_skip(m_iface_config, "RC_TM_MP_SRQ_ENABLE", "try");
     set_env_var_or_skip(m_iface_config, "RC_TM_MP_NUM_STRIDES", "8");
-    set_env_var_or_skip(m_md_config, "MLX5_DEVX_OBJECTS", "dct,dcsrq,rcsrq,rcqp");
+    set_env_var_or_skip(m_md_config, "IB_MLX5_DEVX_OBJECTS",
+                        "dct,dcsrq,rcsrq,rcqp");
 
     uct_test::init();
 
