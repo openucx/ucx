@@ -456,7 +456,7 @@ public:
 
     bool no_rma_transport()
     {
-        return has_transport("ud") || has_transport("udx") ||
+        return has_transport("ud_v") || has_transport("ud_x") ||
                has_transport("tcp");
     }
 
@@ -577,8 +577,7 @@ protected:
     void wait_and_restart(const std::vector<request_pair_t> &pairs) override
     {
         wait_for_condition(pairs, [](const request_pair_t &pair) {
-            if ((request_pair_t::to_user(pair.rreq) == NULL) ||
-                (pair.rreq->recv.proto_rndv_request == NULL)) {
+            if (pair.rreq->recv.proto_rndv_request == NULL) {
                 return false;
             }
 
@@ -651,10 +650,9 @@ private:
     static void
     purge_pending(uct_ep_h ep, uct_pending_purge_callback_t cb, void *arg)
     {
-        static int once = 0;
-        if (!once) {
+        if (m_req != NULL) {
             cb(&m_req->send.uct, arg);
-            once = 1;
+            m_req = NULL;
         }
     }
 
