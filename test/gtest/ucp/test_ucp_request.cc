@@ -156,6 +156,7 @@ public:
         modify_config("IB_TX_QUEUE_LEN", "65", IGNORE_IF_NOT_EXIST);
         modify_config("MM_FIFO_SIZE", "64", IGNORE_IF_NOT_EXIST);
         create_entity(true);
+        create_entity();
 
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
@@ -273,6 +274,7 @@ public:
         ASSERT_FALSE(UCS_PTR_IS_ERR(request));
         if (request != NULL) {
             wait_for_value(&m_completed, true);
+            ASSERT_EQ(m_completed, true);
             ucp_request_release(request);
         }
 
@@ -340,6 +342,7 @@ public:
             }
         } else if (op == AM) {
             wait_for_value(&m_am_cb_cnt, pairs.size());
+            ASSERT_EQ(m_am_cb_cnt, pairs.size());
         }
 
         std::vector<void*> sreqs, rreqs;
@@ -403,7 +406,7 @@ public:
     void reset_protocol(operation_t op, bool sync = false,
                         unsigned reqs_count = 1000)
     {
-        static const size_t msg_size = UCS_KBYTE * 64;
+        static const size_t msg_size = UCS_KBYTE * 70;
 
         for (int i = 0; i < reqs_count; ++i) {
             mapped_buffer *rbuf = new mapped_buffer(msg_size, receiver());
@@ -474,9 +477,8 @@ protected:
     std::vector<ucp_request_t *>                m_pending;
 };
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, tag_eager_multi_bcopy,
-                     has_transport("shm"), "ZCOPY_THRESH=inf",
-                     "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, tag_eager_multi_bcopy, "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(TAG);
 }
@@ -495,14 +497,14 @@ UCS_TEST_P(test_proto_reset, put_offload_bcopy, "ZCOPY_THRESH=inf",
     reset_protocol(RMA_PUT);
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, stream_multi_bcopy, has_transport("shm"),
-                     "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, stream_multi_bcopy, "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(STREAM);
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, rndv_am_bcopy, has_transport("shm"),
-                     "ZCOPY_THRESH=inf", "RNDV_THRESH=0", "RNDV_SCHEME=am")
+UCS_TEST_P(test_proto_reset, rndv_am_bcopy, "ZCOPY_THRESH=inf", "RNDV_THRESH=0",
+           "RNDV_SCHEME=am")
 {
     reset_protocol(TAG);
 }
@@ -514,9 +516,8 @@ UCS_TEST_SKIP_COND_P(test_proto_reset, eager_sync_multi_bcopy,
     reset_protocol(TAG, true);
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, am_eager_multi_bcopy,
-                     has_transport("shm"), "ZCOPY_THRESH=inf",
-                     "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, am_eager_multi_bcopy, "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(AM);
 }
@@ -542,20 +543,20 @@ UCS_TEST_P(test_proto_reset, put_offload_zcopy, "ZCOPY_THRESH=0",
     reset_protocol(RMA_PUT);
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, stream_multi_zcopy, has_transport("shm"),
-                     "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, stream_multi_zcopy, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(STREAM);
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, rndv_am_zcopy, has_transport("shm"),
-                     "ZCOPY_THRESH=0", "RNDV_THRESH=0", "RNDV_SCHEME=am")
+UCS_TEST_P(test_proto_reset, rndv_am_zcopy, "ZCOPY_THRESH=0", "RNDV_THRESH=0",
+           "RNDV_SCHEME=am")
 {
     reset_protocol(TAG);
 }
 
-UCS_TEST_SKIP_COND_P(test_proto_reset, am_eager_multi_zcopy,
-                     has_transport("shm"), "ZCOPY_THRESH=0", "RNDV_THRESH=inf")
+UCS_TEST_P(test_proto_reset, am_eager_multi_zcopy, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf")
 {
     reset_protocol(AM);
 }
