@@ -1113,7 +1113,10 @@ typedef enum {
     UCT_IFACE_OP_ATTR_FIELD_MAX_ZCOPY_HDR   = UCS_BIT(6),
 
     /** Enables @ref uct_iface_op_attr::max_iov */
-    UCT_IFACE_OP_ATTR_FIELD_MAX_IOV         = UCS_BIT(7)
+    UCT_IFACE_OP_ATTR_FIELD_MAX_IOV         = UCS_BIT(7),
+
+    /** Enables @ref uct_iface_op_attr::max_outstanding */
+    UCT_IFACE_OP_ATTR_FIELD_MAX_OUTSTANDING = UCS_BIT(8)
 } uct_iface_op_attr_field_t;
 
 
@@ -1148,6 +1151,8 @@ typedef struct uct_iface_op_attr {
     size_t   max_zcopy_hdr;
     /** Maximal @a iovcnt  */
     size_t   max_iov;
+    /** Maximal number of simultaneous receive operations */
+    size_t   max_outstanding;
 } uct_iface_op_attr_t;
 
 
