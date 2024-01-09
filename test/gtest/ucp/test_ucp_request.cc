@@ -491,7 +491,7 @@ UCS_TEST_SKIP_COND_P(test_proto_reset, get_offload_bcopy, no_rma_transport(),
 }
 
 UCS_TEST_P(test_proto_reset, put_offload_bcopy, "ZCOPY_THRESH=inf",
-           "RNDV_THRESH=inf")
+           "RNDV_THRESH=inf", "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     skip_no_pending_rma();
     reset_protocol(RMA_PUT);
