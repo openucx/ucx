@@ -370,9 +370,11 @@ public:
     {
         auto &pair = wait_for_condition(pairs, [](const request_pair_t &pair) {
             if (request_pair_t::to_user(pair.sreq) == NULL) {
+                printf("sreq %p null\n", pair.sreq);
                 return false;
             }
 
+            printf("dt_iter %p\n", pair.sreq);
             ucp_datatype_iter_t *dt_iter = &pair.sreq->send.state.dt_iter;
             return (dt_iter->offset > 0) && (dt_iter->offset < dt_iter->length);
         });
@@ -381,7 +383,7 @@ public:
         restart(sender().ep());
     }
 
-    typedef std::function<bool(const request_pair_t &pair)> predicate_t;
+    typedef std::function<bool(const request_pair_t&)> predicate_t;
 
     const request_pair_t &
     wait_for_condition(const std::vector<request_pair_t> &pairs,
