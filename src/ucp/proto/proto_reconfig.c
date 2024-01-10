@@ -21,7 +21,7 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
 
-    status = ucp_proto_request_init(req);
+    status = ucp_proto_request_init(req, &req->send.proto_config->select_param);
     if (ucs_unlikely(status != UCS_OK)) {
         /* will try again later */
         return UCS_ERR_NO_RESOURCE;

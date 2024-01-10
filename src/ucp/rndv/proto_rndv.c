@@ -803,7 +803,8 @@ UCS_PROFILE_FUNC_VOID(ucp_proto_rndv_receive_start,
     }
 
 #if ENABLE_DEBUG_DATA
-    recv_req->recv.proto_rndv_config = req->send.proto_config;
+    recv_req->recv.proto_rndv_config  = req->send.proto_config;
+    recv_req->recv.proto_rndv_request = req;
 #endif
 
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
