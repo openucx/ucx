@@ -753,6 +753,8 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
     } else {
         ucp_trace_req(req, "progress protocol %s returned: %s", proto->name,
                       ucs_status_string(status));
+
+        ucp_worker_track_ep_usage(req->send.ep->worker, req->send.ep);
     }
     ucs_log_indent(-1);
     return status;

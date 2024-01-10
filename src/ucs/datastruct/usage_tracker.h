@@ -13,6 +13,13 @@
 #include <ucs/datastruct/linear_func.h>
 #include <ucs/datastruct/lru.h>
 
+#define UCS_USAGE_TRACKER_PROMOTE_CAPACITY      20
+#define UCS_USAGE_TRACKER_PROMOTE_THRESH        10
+#define UCS_USAGE_TRACKER_REMOVE_THRESH         0.2
+#define UCS_USAGE_TRACKER_EXP_DECAY_MULTIPLIER  0.8
+#define UCS_USAGE_TRACKER_EXP_DECAY_CONST       0.2
+#define UCS_USAGE_TRACKER_SAMPLES_COUNT_PER_RUN 10000
+
 /* Usage Tracker element data structure */
 typedef struct {
     /* Key to use as hash table input */

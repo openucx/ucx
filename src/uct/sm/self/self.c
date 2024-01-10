@@ -157,6 +157,20 @@ uct_self_iface_is_reachable_v2(const uct_iface_h tl_iface,
            uct_iface_scope_is_reachable(tl_iface, params);
 }
 
+int uct_self_ep_is_connected(const uct_ep_h tl_ep,
+                             const uct_ep_is_connected_params_t *params)
+{
+    if (!(params->field_mask & UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR)) {
+        ucs_error("missing params (field_mask: %lu), iface_addr must be "
+                  "provided.",
+                  params->field_mask);
+        return 0;
+    }
+
+    return uct_base_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                       params->iface_addr);
+}
+
 static void uct_self_iface_sendrecv_am(uct_self_iface_t *iface, uint8_t am_id,
                                        void *buffer, size_t length, const char *title)
 {
@@ -372,7 +386,8 @@ static uct_iface_internal_ops_t uct_self_iface_internal_ops = {
     .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_self_iface_is_reachable_v2
+    .iface_is_reachable_v2 = uct_self_iface_is_reachable_v2,
+    .ep_is_connected       = uct_self_ep_is_connected
 };
 
 static uct_iface_ops_t uct_self_iface_ops = {

@@ -39,7 +39,7 @@
 #include <time.h>
 
 
-#define UCP_WORKER_KEEPALIVE_ITER_SKIP 32
+#define UCP_WORKER_SLOW_CB_ITER_SKIP 32
 
 #define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
 
@@ -2413,6 +2413,100 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
                             ucs_min(max_am_header, UINT32_MAX) : 0ul;
 }
 
+static unsigned ucp_worker_progress_usage_tracker(void *arg)
+{
+    ucp_worker_h worker = (ucp_worker_h)arg;
+    ucs_time_t now;
+
+    if ((worker->usage_tracker.iter_count++ % UCP_WORKER_SLOW_CB_ITER_SKIP) !=
+        0) {
+        return 0;
+    }
+
+    now = ucs_get_time();
+    if (ucs_likely((now - worker->usage_tracker.last_round) <
+                   worker->context->config.ext.usage_tracker_interval)) {
+        return 0;
+    }
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_usage_tracker_progress(worker->usage_tracker.handle);
+    uct_worker_progress_unregister_safe(worker->uct,
+                                        &worker->usage_tracker.cb_id);
+    worker->usage_tracker.running = 1;
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
+void ucp_worker_track_ep_usage(ucp_worker_h worker, ucp_ep_h ep)
+{
+    if (!worker->usage_tracker.running) {
+        return;
+    }
+
+    ucs_usage_tracker_touch_key(worker->usage_tracker.handle, ep);
+    worker->usage_tracker.samples_count++;
+
+    if ((worker->usage_tracker.samples_count %
+         UCS_USAGE_TRACKER_SAMPLES_COUNT_PER_RUN) == 0) {
+        worker->usage_tracker.running    = 0;
+        worker->usage_tracker.last_round = ucs_get_time();
+
+        uct_worker_progress_register_safe(worker->uct,
+                                          ucp_worker_progress_usage_tracker,
+                                          worker, 0,
+                                          &worker->usage_tracker.cb_id);
+    }
+}
+
+static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
+{
+    ucs_usage_tracker_params_t params;
+    ucs_status_t status;
+
+    if (!worker->context->config.ext.usage_tracker_enable) {
+        return UCS_OK;
+    }
+
+    params.promote_capacity = UCS_USAGE_TRACKER_PROMOTE_CAPACITY;
+    params.promote_thresh   = UCS_USAGE_TRACKER_PROMOTE_THRESH;
+    params.remove_thresh    = UCS_USAGE_TRACKER_REMOVE_THRESH;
+    params.exp_decay.m      = UCS_USAGE_TRACKER_EXP_DECAY_MULTIPLIER;
+    params.exp_decay.c      = UCS_USAGE_TRACKER_EXP_DECAY_CONST;
+    params.promote_cb       =
+            (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
+    params.demote_cb        =
+            (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
+
+    status = ucs_usage_tracker_create(&params, &worker->usage_tracker.handle);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    worker->usage_tracker.running       = 0;
+    worker->usage_tracker.iter_count    = 0;
+    worker->usage_tracker.samples_count = 0;
+    worker->usage_tracker.last_round    = ucs_get_time();
+
+    uct_worker_progress_register_safe(worker->uct,
+                                      ucp_worker_progress_usage_tracker, worker,
+                                      0, &worker->usage_tracker.cb_id);
+    return UCS_OK;
+}
+
+static void ucp_worker_destroy_usage_tracker(ucp_worker_h worker)
+{
+    if (!worker->context->config.ext.usage_tracker_enable) {
+        return;
+    }
+
+    ucs_usage_tracker_destroy(worker->usage_tracker.handle);
+    uct_worker_progress_unregister_safe(worker->uct,
+                                        &worker->usage_tracker.cb_id);
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -2615,9 +2709,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
+    status = ucp_worker_create_usage_tracker(worker);
+    if (status != UCS_OK) {
+        goto err_am_cleanup;
+    }
+
     *worker_p = worker;
     return UCS_OK;
 
+err_am_cleanup:
+    ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
 err_destroy_mpools:
@@ -2847,6 +2948,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
+    ucp_worker_destroy_usage_tracker(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
@@ -3106,10 +3208,9 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
         /* Make sure not missing keepalive rounds after a long time without
          * calling UCP worker progress.
          */
-        UCS_STATIC_ASSERT(ucs_is_pow2_or_zero(UCP_WORKER_KEEPALIVE_ITER_SKIP));
-        worker->keepalive.iter_count =
-                ucs_align_up_pow2(worker->keepalive.iter_count,
-                                  UCP_WORKER_KEEPALIVE_ITER_SKIP);
+        UCS_STATIC_ASSERT(ucs_is_pow2_or_zero(UCP_WORKER_SLOW_CB_ITER_SKIP));
+        worker->keepalive.iter_count = ucs_align_up_pow2(
+                worker->keepalive.iter_count, UCP_WORKER_SLOW_CB_ITER_SKIP);
     }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -3479,7 +3580,7 @@ static unsigned ucp_worker_keepalive_progress(void *arg)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
 
-    if ((worker->keepalive.iter_count++ % UCP_WORKER_KEEPALIVE_ITER_SKIP) != 0) {
+    if ((worker->keepalive.iter_count++ % UCP_WORKER_SLOW_CB_ITER_SKIP) != 0) {
         return 0;
     }
 

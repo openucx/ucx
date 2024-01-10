@@ -801,7 +801,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
 
-    status = ucp_wireup_ep_create(ep, NULL, &uct_ep);
+    status = ucp_wireup_ep_create(ep, &uct_ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -1797,6 +1797,68 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
     return UCP_NULL_LANE;
 }
 
+static void ucp_ep_init_is_connect_params(uct_ep_is_connected_params_t *params,
+                                          const ucp_address_entry_t *addr_entry)
+{
+    params->field_mask = 0;
+
+    if (addr_entry->dev_addr != NULL) {
+        params->device_addr = addr_entry->dev_addr;
+        params->field_mask |= UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR;
+    }
+
+    if (addr_entry->iface_addr != NULL) {
+        params->iface_addr  = addr_entry->iface_addr;
+        params->field_mask |= UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
+    }
+}
+
+static int ucp_ep_is_lane_connected(uct_ep_h uct_ep,
+                                    const ucp_address_entry_t *addr_entry)
+{
+    uct_ep_is_connected_params_t params;
+    ucp_wireup_ep_t *wireup_ep;
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    if (wireup_ep != NULL) {
+        uct_ep = wireup_ep->super.uct_ep;
+    }
+
+    ucp_ep_init_is_connect_params(&params, addr_entry);
+
+    if ((addr_entry->num_ep_addrs == 0) &&
+        uct_ep_is_connected(uct_ep, &params)) {
+        return 1;
+    }
+
+    return ucp_ep_get_remote_lane(uct_ep, addr_entry) != UCP_NULL_LANE;
+}
+
+ucp_lane_index_t
+ucp_ep_get_remote_lane(uct_ep_h uct_ep, const ucp_address_entry_t *addr_entry)
+{
+    uct_ep_is_connected_params_t params;
+    unsigned ep_index;
+    ucp_wireup_ep_t *wireup_ep;
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    if (wireup_ep != NULL) {
+        uct_ep = wireup_ep->super.uct_ep;
+    }
+
+    ucp_ep_init_is_connect_params(&params, addr_entry);
+
+    for (ep_index = 0; ep_index < addr_entry->num_ep_addrs; ++ep_index) {
+        params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
+        params.ep_addr     = addr_entry->ep_addrs[ep_index].addr;
+        if (uct_ep_is_connected(uct_ep, &params)) {
+            return addr_entry->ep_addrs[ep_index].lane;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
 static int ucp_ep_lane_is_dst_index_match(ucp_rsc_index_t dst_index1,
                                           ucp_rsc_index_t dst_index2)
 {
@@ -1820,17 +1882,13 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
 
 static ucp_lane_index_t
 ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                              const ucp_rsc_index_t *dst_rsc_indices1,
                               ucp_lane_index_t lane1,
-                              const ucp_ep_config_key_t *key2,
-                              const ucp_rsc_index_t *dst_rsc_indices2)
+                              const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane_idx;
 
     for (lane_idx = 0; lane_idx < key2->num_lanes; ++lane_idx) {
-        if (ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane_idx) &&
-            ucp_ep_lane_is_dst_index_match(dst_rsc_indices1[lane1],
-                                           dst_rsc_indices2[lane_idx])) {
+        if (ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane_idx)) {
             return lane_idx;
         }
     }
@@ -1838,21 +1896,54 @@ ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
     return UCP_NULL_LANE;
 }
 
+static ucp_lane_index_t ucp_ep_find_reusable_lane(
+        ucp_ep_h ep, const ucp_unpacked_address_t *remote_address,
+        const unsigned *addr_indices, const ucp_ep_config_key_t *key1,
+        ucp_lane_index_t old_lane, const ucp_ep_config_key_t *key2)
+{
+    ucp_lane_index_t new_lane;
+    unsigned addr_index;
+    ucp_address_entry_t *addr_entry;
+    uct_ep_h uct_ep;
+
+    new_lane = ucp_ep_config_find_match_lane(key1, old_lane, key2);
+
+    if (new_lane == UCP_NULL_LANE) {
+        return UCP_NULL_LANE;
+    }
+
+    uct_ep     = ucp_ep_get_lane(ep, old_lane);
+    addr_index = addr_indices[new_lane];
+    addr_entry = &remote_address->address_list[addr_index];
+
+    if (!ucp_ep_is_local_connected(ep)) {
+        return new_lane;
+    }
+
+    return ucp_ep_is_lane_connected(uct_ep, addr_entry) ? new_lane :
+                                                          UCP_NULL_LANE;
+}
+
 /* Go through the first configuration and check if the lanes selected
  * for this configuration could be used for the second configuration */
-void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_rsc_index_t *dst_rsc_indices1,
+void ucp_ep_config_lanes_intersect(const ucp_ep_h ep,
+                                   const ucp_unpacked_address_t *remote_address,
+                                   const unsigned *addr_indices,
+                                   const ucp_ep_config_key_t *key1,
                                    const ucp_ep_config_key_t *key2,
-                                   const ucp_rsc_index_t *dst_rsc_indices2,
                                    ucp_lane_index_t *lane_map)
 {
     ucp_lane_index_t lane1_idx;
 
     for (lane1_idx = 0; lane1_idx < key1->num_lanes; ++lane1_idx) {
-        lane_map[lane1_idx] = ucp_ep_config_find_match_lane(key1,
-                                                            dst_rsc_indices1,
-                                                            lane1_idx, key2,
-                                                            dst_rsc_indices2);
+        if (lane1_idx == key1->cm_lane) {
+            lane_map[lane1_idx] = key2->cm_lane;
+            continue;
+        }
+
+        lane_map[lane1_idx] = ucp_ep_find_reusable_lane(ep, remote_address,
+                                                        addr_indices, key1,
+                                                        lane1_idx, key2);
     }
 }
 
