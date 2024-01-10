@@ -564,6 +564,7 @@ UCS_TEST_P(test_proto_reset, am_eager_multi_zcopy, "ZCOPY_THRESH=0",
 UCS_TEST_P(test_proto_reset, rndv_put, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
            "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
+    skip_no_pending_rma();
     reset_protocol(TAG);
 }
 
@@ -596,6 +597,7 @@ UCS_TEST_SKIP_COND_P(test_proto_reset_rndv_get, rndv_get, no_rma_transport(),
                      "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy",
                      "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
+    skip_no_pending_rma();
     reset_protocol(TAG);
 }
 
