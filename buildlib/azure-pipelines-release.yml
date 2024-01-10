@@ -20,6 +20,7 @@ resources:
       options: $(DOCKER_OPT_VOLUMES)
     - container: centos8_cuda11_x86_64
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/centos8-mofed5-cuda11:3
+      options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu16_cuda11_x86_64
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu16.04-mofed5-cuda11:3
     - container: ubuntu18_cuda11_x86_64
@@ -112,7 +113,7 @@ stages:
       - template: jucx/jucx-build.yml
         parameters:
           arch: amd64
-          container: centos7_cuda11_x86_64
+          container: centos8_cuda11_x86_64
           demands: ucx_docker
 
       - template: jucx/jucx-build.yml
