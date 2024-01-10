@@ -112,38 +112,69 @@ uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md, int atomic, uint64_t address,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md, int atomic, void *address,
-                              uct_ib_mlx5_devx_ksm_data_t *ksm_data,
-                              size_t length, uint64_t iova, uint32_t mkey_index,
-                              const char *reason, struct mlx5dv_devx_obj **mr_p,
-                              uint32_t *mkey)
+static void uct_ib_mlx5_devx_ksm_log(uct_ib_mlx5_md_t *md, int atomic,
+                                     void *address, size_t length,
+                                     uint64_t iova, ucs_status_t status, int mt)
 {
-    void *mr_address = address;
+    ucs_debug("KSM %s-thread memory registration status \"%s\" "
+              "range %p..%p iova 0x%" PRIx64 "%s on %s",
+              mt ? "multi" : "single", ucs_status_string(status), address,
+              UCS_PTR_BYTE_OFFSET(address, length), iova,
+              atomic ? " atomic" : "", uct_ib_device_name(&md->super.dev));
+}
+
+/*
+ * Register KSM data for given memory handle. Can work only with MRs
+ * that were registered in multi-threaded mode.
+ */
+static ucs_status_t
+uct_ib_mlx5_devx_reg_ksm_data_mt(uct_ib_mlx5_md_t *md, int atomic,
+                                 void *address,
+                                 uct_ib_mlx5_devx_ksm_data_t *ksm_data,
+                                 uint64_t iova, uint32_t mkey_index,
+                                 const char *reason,
+                                 struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
+{
+    struct ibv_mr *last_mr = ksm_data->mrs[ksm_data->mr_num - 1];
+    uint64_t iova_offset   = iova - (uint64_t)address;
+    void *mr_address       = address;
+    size_t list_size       = ksm_data->mr_num;
     ucs_status_t status;
     char *in;
     void *klm;
     int i;
 
-    status = uct_ib_mlx5_alloc_mkey_inbox(ksm_data->mr_num, &in);
+    /* Add offset to workaround CREATE_MKEY range check issue */
+    if (iova_offset > 0) {
+        ++list_size;
+    }
+
+    status = uct_ib_mlx5_alloc_mkey_inbox(list_size, &in);
     if (status != UCS_OK) {
-        return UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
     for (i = 0; i < ksm_data->mr_num; i++) {
         UCT_IB_MLX5DV_SET64(klm, klm, address, (uintptr_t)mr_address);
-        UCT_IB_MLX5DV_SET(klm, klm, byte_count, ksm_data->mrs[i]->length);
         UCT_IB_MLX5DV_SET(klm, klm, mkey, ksm_data->mrs[i]->lkey);
         klm        = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
         mr_address = UCS_PTR_BYTE_OFFSET(mr_address, ksm_data->mrs[i]->length);
     }
 
-    status = uct_ib_mlx5_devx_reg_ksm(md, atomic, iova, length,
-                                      ksm_data->mr_num,
-                                      ksm_data->mrs[0]->length, in, mkey_index,
-                                      reason, mr_p, mkey);
+    if (iova_offset > 0) {
+        UCT_IB_MLX5DV_SET64(klm, klm, address, (uintptr_t)mr_address);
+        UCT_IB_MLX5DV_SET(klm, klm, mkey, last_mr->lkey);
+    }
+
+    status = uct_ib_mlx5_devx_reg_ksm(md, atomic, iova, ksm_data->length,
+                                      list_size, ksm_data->mrs[0]->length, in,
+                                      mkey_index, reason, mr_p, mkey);
     ucs_free(in);
+
+    uct_ib_mlx5_devx_ksm_log(md, atomic, address, ksm_data->length, iova,
+                             status, 1);
+out:
     return status;
 }
 
@@ -180,12 +211,17 @@ uct_ib_mlx5_devx_reg_ksm_data_addr(uct_ib_mlx5_md_t *md, struct ibv_mr *mr,
     return status;
 }
 
+/*
+ * Register KSM data for given memory handle. Can work only with MRs
+ * that were registered in single-threaded mode.
+ */
 static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_contig(
         uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr, void *address,
         uint64_t iova, int atomic, uint32_t mkey_index, const char *reason,
         struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
 {
     size_t mr_length = mr->super.ib->length;
+    ucs_status_t status;
     uint64_t ksm_address;
     uint64_t ksm_iova;
     size_t ksm_length;
@@ -202,10 +238,13 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_contig(
     list_size = ucs_div_round_up(ksm_length + ucs_get_page_size(),
                                  UCT_IB_MD_MAX_MR_SIZE);
 
-    return uct_ib_mlx5_devx_reg_ksm_data_addr(md, mr->super.ib, ksm_address,
-                                              ksm_length, ksm_iova, atomic,
-                                              list_size, mkey_index, reason,
-                                              mr_p, mkey);
+    status = uct_ib_mlx5_devx_reg_ksm_data_addr(md, mr->super.ib, ksm_address,
+                                                ksm_length, ksm_iova, atomic,
+                                                list_size, mkey_index, reason,
+                                                mr_p, mkey);
+
+    uct_ib_mlx5_devx_ksm_log(md, atomic, address, mr_length, ksm_iova, status, 0);
+    return status;
 }
 
 static void *
@@ -362,6 +401,37 @@ static void uct_ib_mlx5_devx_mr_lru_cleanup(uct_ib_mlx5_md_t *md)
     kh_destroy_inplace(rkeys, &md->lru_rkeys.hash);
 }
 
+/*
+ * Register KSM data for given memory handle. Distinguish the way of KSM creation
+ * structures filling by checking UCT_IB_MEM_MULTITHREADED flag.
+ */
+static ucs_status_t
+uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md,
+                              uct_ib_mlx5_devx_mem_t *memh,
+                              uct_ib_mr_type_t mr_type, uint32_t iova_offset,
+                              int atomic, uint32_t mkey_index,
+                              const char *reason, struct mlx5dv_devx_obj **mr_p,
+                              uint32_t *mkey)
+{
+    uct_ib_mlx5_devx_mr_t *mr = &memh->mrs[mr_type];
+    void *address             = uct_ib_mlx5_devx_memh_base_address(memh);
+    uint64_t iova             = (uint64_t)address + iova_offset;
+    ucs_status_t status;
+
+    if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
+        status = uct_ib_mlx5_devx_reg_ksm_data_mt(md, atomic, address,
+                                                  mr->ksm_data, iova,
+                                                  mkey_index, reason, mr_p,
+                                                  mkey);
+    } else {
+        status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, mr, address, iova,
+                                                      atomic, mkey_index,
+                                                      reason, mr_p, mkey);
+    }
+
+    return status;
+}
+
 UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_indirect_key,
                         (md, memh), uct_ib_mlx5_md_t *md,
                         uct_ib_mlx5_devx_mem_t *memh)
@@ -372,11 +442,10 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_indirect_key,
                 md->super.name);
 
     do {
-        status = uct_ib_mlx5_devx_reg_ksm_data_contig(
-                md, &memh->mrs[UCT_IB_MR_DEFAULT],
-                uct_ib_mlx5_devx_memh_base_address(memh),
-                (uint64_t)memh->address, 0, 0, "indirect key",
-                &memh->indirect_dvmr, &memh->indirect_rkey);
+        status = uct_ib_mlx5_devx_reg_ksm_data(md, memh, UCT_IB_MR_DEFAULT, 0,
+                                               0, 0, "indirect key",
+                                               &memh->indirect_dvmr,
+                                               &memh->indirect_rkey);
         if (status != UCS_OK) {
             break;
         }
@@ -420,12 +489,9 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_atomic_key,
                         uct_ib_mlx5_devx_mem_t *memh)
 {
     uct_ib_mr_type_t mr_type = uct_ib_devx_get_atomic_mr_type(&md->super, memh);
-    uct_ib_mlx5_devx_mr_t *mr = &memh->mrs[mr_type];
-    uint8_t mr_id             = uct_ib_md_get_atomic_mr_id(&md->super);
-    uint32_t atomic_offset    = uct_ib_md_atomic_offset(mr_id);
+    uint8_t mr_id            = uct_ib_md_get_atomic_mr_id(&md->super);
+    uint32_t atomic_offset   = uct_ib_md_atomic_offset(mr_id);
     uint32_t mkey_index;
-    uint64_t iova;
-    ucs_status_t status;
     int is_atomic;
 
     if (memh->smkey_mr != NULL) {
@@ -436,31 +502,11 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_atomic_key,
     }
 
     is_atomic = memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC;
-    iova      = (uint64_t)memh->address + atomic_offset;
 
-    if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
-        return uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, memh->address,
-                                             mr->ksm_data, mr->ksm_data->length,
-                                             iova, mkey_index,
-                                             "multi-thread atomic key",
-                                             &memh->atomic_dvmr,
-                                             &memh->atomic_rkey);
-    }
-
-    status = uct_ib_mlx5_devx_reg_ksm_data_contig(
-            md, mr, uct_ib_mlx5_devx_memh_base_address(memh), iova, is_atomic,
-            mkey_index, "atomic key", &memh->atomic_dvmr, &memh->atomic_rkey);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_debug("KSM registered memory %p..%p lkey 0x%x offset 0x%x%s on %s rkey "
-              "0x%x",
-              memh->address,
-              UCS_PTR_BYTE_OFFSET(memh->address, mr->super.ib->length),
-              mr->super.ib->lkey, atomic_offset, is_atomic ? " atomic" : "",
-              uct_ib_device_name(&md->super.dev), memh->atomic_rkey);
-    return UCS_OK;
+    return uct_ib_mlx5_devx_reg_ksm_data(md, memh, mr_type, atomic_offset,
+                                         is_atomic, mkey_index, "atomic key",
+                                         &memh->atomic_dvmr,
+                                         &memh->atomic_rkey);
 }
 
 static ucs_status_t
@@ -506,10 +552,10 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_mlx5_md_t *md, void *address, size_t length,
         goto err_free;
     }
 
-    status = uct_ib_mlx5_devx_reg_ksm_data(md, is_atomic, address, ksm_data,
-                                           length, (uint64_t)address, 0,
-                                           "multi-thread key", &ksm_data->dvmr,
-                                           mkey_p);
+    status = uct_ib_mlx5_devx_reg_ksm_data_mt(md, is_atomic, address, ksm_data,
+                                              (uint64_t)address, 0,
+                                              "multi-thread key",
+                                              &ksm_data->dvmr, mkey_p);
     if (status != UCS_OK) {
         goto err_dereg;
     }
@@ -2022,6 +2068,7 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
         goto out_umem_mr;
     }
 
+    ucs_assert(!(memh->super.flags & UCT_IB_MEM_MULTITHREADED));
     status = uct_ib_mlx5_devx_reg_ksm_data_contig(md,
                                                   &memh->mrs[UCT_IB_MR_DEFAULT],
                                                   memh->address,
