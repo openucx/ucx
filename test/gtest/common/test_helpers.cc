@@ -512,42 +512,17 @@ out_close:
     return result;
 }
 
-static std::map<std::string, std::string> get_all_rdmacm_net_devices()
+static void get_roce_devices(std::map<std::string, std::string> &devices)
 {
     static const std::string sysfs_ib_dir  = "/sys/class/infiniband";
-    static const std::string sysfs_net_dir = "/sys/class/net";
     static const std::string ndevs_fmt     = sysfs_ib_dir +
                                              "/%s/ports/%d/gid_attrs/ndevs/0";
     static const std::string node_guid_fmt = sysfs_ib_dir + "/%s/node_guid";
-    std::map<std::string, std::string> devices;
     char dev_name[32];
     char guid_buf[32];
-    ssize_t nread;
     int port_num;
+    ssize_t nread;
 
-    std::vector<std::string> ndevs = read_dir(sysfs_net_dir);
-
-    /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA
-     * device.
-     */
-    for (size_t i = 0; i < ndevs.size(); ++i) {
-        std::string infiniband_dir          = sysfs_net_dir + "/" + ndevs[i] +
-                                              "/device/infiniband";
-        std::vector<std::string> ib_devices = read_dir(infiniband_dir);
-
-        if (!ib_devices.empty()) {
-            std::string ib_device = ib_devices.front();
-            std::string ports_dir = infiniband_dir + "/" + ib_device +
-                                    "/ports";
-            std::string ib_port   = read_dir(ports_dir).front();
-
-            devices.emplace(ndevs[i], ib_device + ":" + ib_port);
-        }
-    }
-
-    /* Enumerate all RoCE devices, including bonding (RoCE LAG). Some devices
-     * can be found again, but std::set will eliminate the duplicates.
-      */
     std::vector<std::string> rdma_devs = read_dir(sysfs_ib_dir);
     for (size_t i = 0; i < rdma_devs.size(); ++i) {
         const char *ndev_name = rdma_devs[i].c_str();
@@ -574,8 +549,46 @@ static std::map<std::string, std::string> get_all_rdmacm_net_devices()
             }
         }
     }
+}
 
+static std::map<std::string, std::string> get_all_rdmacm_net_devices()
+{
+    static const std::string sysfs_ib_dir  = "/sys/class/infiniband";
+    static const std::string sysfs_net_dir = "/sys/class/net";
+    std::map<std::string, std::string> devices;
+
+    std::vector<std::string> ndevs = read_dir(sysfs_net_dir);
+
+    /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA
+     * device.
+     */
+    for (size_t i = 0; i < ndevs.size(); ++i) {
+        std::string infiniband_dir          = sysfs_net_dir + "/" + ndevs[i] +
+                                              "/device/infiniband";
+        std::vector<std::string> ib_devices = read_dir(infiniband_dir);
+
+        if (!ib_devices.empty()) {
+            std::string ib_device = ib_devices.front();
+            std::string ports_dir = infiniband_dir + "/" + ib_device +
+                                    "/ports";
+            std::string ib_port   = read_dir(ports_dir).front();
+
+            devices.emplace(ndevs[i], ib_device + ":" + ib_port);
+        }
+    }
+
+    /* Enumerate all RoCE devices, including bonding (RoCE LAG). Some devices
+     * can be found again, but std::set will eliminate the duplicates.
+      */
+    get_roce_devices(devices);
     return devices;
+}
+
+bool has_roce_devices()
+{
+    std::map<std::string, std::string> devices;
+    get_roce_devices(devices);
+    return !devices.empty();
 }
 
 std::string get_rdmacm_netdev(const char *ifa_name)

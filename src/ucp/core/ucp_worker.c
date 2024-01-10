@@ -2463,7 +2463,7 @@ void ucp_worker_track_ep_usage(ucp_worker_h worker, ucp_ep_h ep)
 
 static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
 {
-    ucs_usage_tracker_params_t params;
+    ucs_usage_tracker_params_t params = {0};
     ucs_status_t status;
 
     if (!worker->context->config.ext.usage_tracker_enable) {
@@ -2475,10 +2475,8 @@ static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
     params.remove_thresh    = UCS_USAGE_TRACKER_REMOVE_THRESH;
     params.exp_decay.m      = UCS_USAGE_TRACKER_EXP_DECAY_MULTIPLIER;
     params.exp_decay.c      = UCS_USAGE_TRACKER_EXP_DECAY_CONST;
-    params.promote_cb       =
-            (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
-    params.demote_cb        =
-            (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
+    params.promote_cb       = ucp_wireup_send_promotion_request;
+    params.demote_cb        = ucp_wireup_send_demotion_request;
 
     status = ucs_usage_tracker_create(&params, &worker->usage_tracker.handle);
     if (status != UCS_OK) {
@@ -2489,6 +2487,7 @@ static ucs_status_t ucp_worker_create_usage_tracker(ucp_worker_h worker)
     worker->usage_tracker.iter_count    = 0;
     worker->usage_tracker.samples_count = 0;
     worker->usage_tracker.last_round    = ucs_get_time();
+    worker->usage_tracker.cb_id         = UCS_CALLBACKQ_ID_NULL;
 
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_worker_progress_usage_tracker, worker,
@@ -2948,7 +2947,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
-    ucp_worker_destroy_usage_tracker(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
@@ -2988,6 +2986,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_close_cms(worker);
     ucp_worker_close_ifaces(worker);
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
+    ucp_worker_destroy_usage_tracker(worker);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);

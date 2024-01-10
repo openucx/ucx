@@ -47,6 +47,8 @@ enum {
     UCP_WIREUP_MSG_ACK,
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
+    UCP_WIREUP_MSG_PROMOTION,
+    UCP_WIREUP_MSG_DEMOTION,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -119,10 +121,13 @@ typedef struct {
  * Packet structure for wireup requests.
  */
 typedef struct ucp_wireup_msg {
-    uint8_t                type; /* Message type */
-    uint8_t                err_mode; /* Peer error handling mode defined in
-                                        @ucp_err_handling_mode_t */
-    ucp_ep_match_conn_sn_t conn_sn; /* Connection sequence number */
+    uint8_t                type;      /* Message type */
+    union {
+        uint8_t            err_mode;  /* Peer error handling mode defined in
+                                         @ucp_err_handling_mode_t */
+        uint8_t            score;     /* Peer score */
+    };
+    ucp_ep_match_conn_sn_t conn_sn;   /* Connection sequence number */
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
@@ -186,10 +191,11 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                         ucp_tl_bitmap_t tl_bitmap,
                         const ucp_unpacked_address_t *remote_address,
                         unsigned *addr_indices, ucp_ep_config_key_t *key,
-                        int show_error);
+                        int show_error, int connect_to_ep);
 
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
-                                        ucs_queue_head_t *tmp_pending_queue);
+                                        ucs_queue_head_t *tmp_pending_queue,
+                                        int reconfigure);
 
 /* add flags to all wireup_ep->flags */
 void ucp_wireup_update_flags(ucp_ep_h ep, uint32_t new_flags);
@@ -216,6 +222,14 @@ double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 double ucp_wireup_iface_lat_distance_v2(const ucp_worker_iface_t *wiface);
 
 double ucp_wireup_iface_bw_distance(const ucp_worker_iface_t *wiface);
+
+void ucp_wireup_send_promotion_request(void *entry, void *arg, int is_progress);
+
+void ucp_wireup_send_demotion_request(void *entry, void *arg, int is_progress);
+
+ucs_status_t
+ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
+                    const ucp_lane_index_t *lanes2remote);
 
 static inline int ucp_wireup_lane_types_has_fast_path(ucp_lane_map_t lane_types)
 {

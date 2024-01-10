@@ -52,6 +52,27 @@ static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
+uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    uct_ep_h wireup_msg_ep;
+
+    if ((wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) || (wireup_ep->aux_ep == NULL)) {
+        wireup_msg_ep = wireup_ep->super.uct_ep;
+        ucp_proxy_ep_set_uct_ep(&wireup_ep->super, NULL, 0, UCP_NULL_RESOURCE);
+    } else {
+        wireup_msg_ep = wireup_ep->aux_ep;
+        wireup_ep->aux_ep = NULL;
+    }
+
+    ucs_assertv(wireup_msg_ep != NULL,
+                "ucp_ep=%p wireup_ep=%p flags=%c%c next_ep=%p aux_ep=%p",
+                wireup_ep->super.ucp_ep, wireup_ep,
+                (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) ? 'c' : '-',
+                (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY)           ? 'r' : '-',
+                wireup_ep->super.uct_ep, wireup_ep->aux_ep);
+    return wireup_msg_ep;
+}
+
 uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
 {
     uct_ep_h wireup_msg_ep;

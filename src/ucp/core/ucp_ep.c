@@ -1393,6 +1393,9 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
     ucp_ep_release_discard_arg(arg);
 }
 
+
+
+
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
 {
     unsigned ep_flush_flags         = (ucp_ep_config(ep)->key.err_mode ==
@@ -1583,6 +1586,7 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
     ucp_worker_h worker = ep->worker;
+    ucs_usage_tracker_h usage_tracker;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
 
@@ -1604,6 +1608,12 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     }
 
     ucp_ep_match_remove_ep(worker, ep);
+
+    if (worker->context->config.ext.usage_tracker_enable) {
+        usage_tracker = ucp_worker_get_usage_tracker(ep->worker);
+        ucs_usage_tracker_remove(usage_tracker, ep);
+    }
+
     ucp_ep_destroy_internal(ep);
 }
 
@@ -1814,9 +1824,9 @@ static void ucp_ep_init_is_connect_params(uct_ep_is_connected_params_t *params,
 }
 
 static int ucp_ep_is_lane_connected(uct_ep_h uct_ep,
-                                    const ucp_address_entry_t *addr_entry)
+                                    const ucp_address_entry_t *addr_entry,
+                                    const uct_ep_is_connected_params_t *params)
 {
-    uct_ep_is_connected_params_t params;
     ucp_wireup_ep_t *wireup_ep;
 
     wireup_ep = ucp_wireup_ep(uct_ep);
@@ -1824,14 +1834,7 @@ static int ucp_ep_is_lane_connected(uct_ep_h uct_ep,
         uct_ep = wireup_ep->super.uct_ep;
     }
 
-    ucp_ep_init_is_connect_params(&params, addr_entry);
-
-    if ((addr_entry->num_ep_addrs == 0) &&
-        uct_ep_is_connected(uct_ep, &params)) {
-        return 1;
-    }
-
-    return ucp_ep_get_remote_lane(uct_ep, addr_entry) != UCP_NULL_LANE;
+    return uct_ep_is_connected(uct_ep, params);
 }
 
 ucp_lane_index_t
@@ -1839,19 +1842,13 @@ ucp_ep_get_remote_lane(uct_ep_h uct_ep, const ucp_address_entry_t *addr_entry)
 {
     uct_ep_is_connected_params_t params;
     unsigned ep_index;
-    ucp_wireup_ep_t *wireup_ep;
-
-    wireup_ep = ucp_wireup_ep(uct_ep);
-    if (wireup_ep != NULL) {
-        uct_ep = wireup_ep->super.uct_ep;
-    }
 
     ucp_ep_init_is_connect_params(&params, addr_entry);
 
     for (ep_index = 0; ep_index < addr_entry->num_ep_addrs; ++ep_index) {
         params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
         params.ep_addr     = addr_entry->ep_addrs[ep_index].addr;
-        if (uct_ep_is_connected(uct_ep, &params)) {
+        if (ucp_ep_is_lane_connected(uct_ep, addr_entry, &params)) {
             return addr_entry->ep_addrs[ep_index].lane;
         }
     }
@@ -1896,32 +1893,43 @@ ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
     return UCP_NULL_LANE;
 }
 
-static ucp_lane_index_t ucp_ep_find_reusable_lane(
-        ucp_ep_h ep, const ucp_unpacked_address_t *remote_address,
-        const unsigned *addr_indices, const ucp_ep_config_key_t *key1,
-        ucp_lane_index_t old_lane, const ucp_ep_config_key_t *key2)
+static ucp_lane_index_t
+ucp_ep_find_reusable_lane(ucp_ep_h ep, const ucp_address_entry_t *address_list,
+                          const unsigned *addr_indices,
+                          const ucp_ep_config_key_t *key1,
+                          ucp_lane_index_t old_lane,
+                          const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t new_lane;
-    unsigned addr_index;
-    ucp_address_entry_t *addr_entry;
+    const ucp_address_entry_t *addr_entry;
     uct_ep_h uct_ep;
+    uct_ep_is_connected_params_t params;
 
+    /* Search for a new lane with the same local resources as the old lane. */
     new_lane = ucp_ep_config_find_match_lane(key1, old_lane, key2);
-
     if (new_lane == UCP_NULL_LANE) {
         return UCP_NULL_LANE;
     }
 
-    uct_ep     = ucp_ep_get_lane(ep, old_lane);
-    addr_index = addr_indices[new_lane];
-    addr_entry = &remote_address->address_list[addr_index];
-
+    /* If ucp_ep is not locally connected yet (wireup_ep), lane is
+     * available for reuse. */
     if (!ucp_ep_is_local_connected(ep)) {
         return new_lane;
     }
 
-    return ucp_ep_is_lane_connected(uct_ep, addr_entry) ? new_lane :
-                                                          UCP_NULL_LANE;
+    uct_ep     = ucp_ep_get_lane(ep, old_lane);
+    addr_entry = &address_list[addr_indices[new_lane]];
+    ucp_ep_init_is_connect_params(&params, addr_entry);
+
+    if ((addr_entry->num_ep_addrs == 0) &&
+        ucp_ep_is_lane_connected(uct_ep, addr_entry, &params)) {
+        return new_lane;
+    }
+
+    /* Reuse lane if it is connected to the required remote address */
+    return (ucp_ep_get_remote_lane(uct_ep, addr_entry) != UCP_NULL_LANE) ?
+                   new_lane :
+                   UCP_NULL_LANE;
 }
 
 /* Go through the first configuration and check if the lanes selected
@@ -1941,9 +1949,9 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_h ep,
             continue;
         }
 
-        lane_map[lane1_idx] = ucp_ep_find_reusable_lane(ep, remote_address,
-                                                        addr_indices, key1,
-                                                        lane1_idx, key2);
+        lane_map[lane1_idx] =
+                ucp_ep_find_reusable_lane(ep, remote_address->address_list,
+                                          addr_indices, key1, lane1_idx, key2);
     }
 }
 

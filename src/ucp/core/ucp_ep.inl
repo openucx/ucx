@@ -277,4 +277,28 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
     return ep->flags & UCP_EP_FLAG_INDIRECT_ID;
 }
 
+static UCS_F_ALWAYS_INLINE double ucp_ep_get_usage_score(ucp_ep_h ep)
+{
+    double score;
+    ucs_status_t status;
+
+    if (!ep->worker->context->config.ext.usage_tracker_enable) {
+        return 0.0;
+    }
+
+    status = ucs_usage_tracker_get_score(ep->worker->usage_tracker.handle, ep,
+                                         &score);
+    if (status != UCS_OK) {
+        return 0.0;
+    }
+
+    return score;
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_ep_is_promoted(ucp_ep_h ep)
+{
+    return ep->worker->context->config.ext.usage_tracker_enable &&
+           ucs_usage_tracker_is_promoted(ep->worker->usage_tracker.handle, ep);
+}
+
 #endif
