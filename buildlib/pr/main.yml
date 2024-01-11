@@ -291,11 +291,6 @@ stages:
         container: centos7_cuda11
     - template: tests.yml
       parameters:
-        name: new
-        demands: ucx_new -equals yes
-        test_perf: 1
-    - template: tests.yml
-      parameters:
         name: roce
         demands: ucx_roce -equals yes
         test_perf: 0
