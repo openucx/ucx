@@ -1,6 +1,6 @@
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
-  DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/
+  DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/ --net=host
   DOCKER_OPT_GPU: --gpus all $(DOCKER_OPT_IB)
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
 
@@ -11,10 +11,10 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: centos7_ib
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:5
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB) --net host
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
-      options: $(DOCKER_OPT_ARGS) --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
       options: $(DOCKER_OPT_ARGS)
@@ -168,6 +168,9 @@ resources:
     - container: ubuntu2004_rocm_5_4_0
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu2004:rocm_5_4_0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu22_cuda12
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda12:3
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu2204_rocm_6_0_0
       image: registry.hub.docker.com/rocm/ucx:rocm-6.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -296,11 +299,13 @@ stages:
         demands: ucx_gpu -equals yes
         test_perf: 1
         container: centos7_cuda11
+        valgrind_disable: yes
     - template: tests.yml
       parameters:
         name: new
         demands: ucx_new -equals yes
         test_perf: 1
+        valgrind_disable: yes
     - template: tests.yml
       parameters:
         name: roce
@@ -402,6 +407,19 @@ stages:
     dependsOn: [Static_check]
     jobs:
       - template: cuda/cuda.yml
+
+
+  - stage: AddressSanitizer
+    dependsOn: [Static_check]
+    jobs:
+    - template: tests.yml
+      parameters:
+        name: gpu
+        demands: ucx_gpu -equals yes
+        test_perf: 0
+        container: ubuntu22_cuda12
+        asan_check: yes
+        valgrind_disable: yes
 
 #  - stage: Cuda_compatible
 #    dependsOn: [Static_check]
