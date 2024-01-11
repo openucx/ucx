@@ -268,7 +268,7 @@ stages:
     - template: wire_compat.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: ucx_giga -equals yes
     - template: wire_compat.yml
       parameters:
         name: bond
@@ -298,11 +298,6 @@ stages:
         container: centos7_cuda11
     - template: tests.yml
       parameters:
-        name: new
-        demands: ucx_new -equals yes
-        test_perf: 1
-    - template: tests.yml
-      parameters:
         name: roce
         demands: ucx_roce -equals yes
         test_perf: 0
@@ -324,7 +319,7 @@ stages:
     - template: namespace_tests.yml
       parameters:
         name: new_namespace
-        demands: ucx_new -equals yes
+        demands: ucx_giga -equals yes
 
   - stage: io_demo
     dependsOn: [Static_check]
@@ -337,7 +332,7 @@ stages:
       - template: ../jucx/jucx-test.yml
         parameters:
           name: new
-          demands: ucx_new -equals yes
+          demands: ucx_giga -equals yes
       - template: ../jucx/jucx-test.yml
         parameters:
           name: gpu
@@ -349,7 +344,7 @@ stages:
       - template: go/go-test.yml
         parameters:
           name: new
-          demands: ucx_new -equals yes
+          demands: ucx_giga -equals yes
       - template: go/go-test.yml
         parameters:
             name: gpu
