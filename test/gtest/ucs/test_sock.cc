@@ -37,6 +37,22 @@ protected:
 
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
+
+    static void check_ip_port(const char *ip_port_str, uint16_t default_port,
+                              ucs_status_t exp_status, const std::string &exp_str)
+    {
+        struct sockaddr_storage ss = {0};
+        struct sockaddr *saddr     = (struct sockaddr*)&ss;
+        ucs_status_t status;
+
+        status = ucs_sock_ipportstr_to_sockaddr(ip_port_str, default_port, &ss);
+        EXPECT_EQ(exp_status, status);
+        if (UCS_OK == status) {
+            char test_str[1024];
+            ucs_sockaddr_str(saddr, test_str, sizeof(test_str));
+            EXPECT_EQ(exp_str, test_str);
+        }
+    }
 };
 
 UCS_TEST_F(test_socket, sockaddr_sizeof) {
@@ -391,6 +407,86 @@ UCS_TEST_F(test_socket, str_sockaddr_str) {
             str = (char*)ucs_sockaddr_str(NULL, NULL, 0);
             EXPECT_EQ(NULL, str);
         }
+    }
+}
+
+UCS_TEST_F(test_socket, sock_ipportstr_to_sockaddr) {
+    check_ip_port("1.2.3.4", 1234, UCS_OK, "1.2.3.4:1234");
+    check_ip_port("1.2.3.4:4567", 1234, UCS_OK, "1.2.3.4:4567");
+    check_ip_port("192.168.100.100:60000", 1234, UCS_OK, "192.168.100.100:60000");
+
+    /* Check wrong IPv4:port addresses */
+    {
+        socket_err_exp_str = "invalid address";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        check_ip_port("", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("randomstring", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port(":9999", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.2.3.", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.1.1.256:9999", 0, UCS_ERR_INVALID_ADDR, "");
+    }
+    {
+        socket_err_exp_str = "invalid port";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        check_ip_port("1.1.1.1:-1", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.1.1.1:65536", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.1.1.1:1111111", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("1.1.1.1:randomstring", 0, UCS_ERR_INVALID_ADDR, "");
+    }
+
+    /* TODO: for IPv6 addresses string representation "IPv6%0:port" produced by
+     * ucs_sockaddr_str does not conform RFC format: "[IPv6]:port" */
+
+    check_ip_port("::", 1234, UCS_OK, "::%0:1234");
+    check_ip_port("::1", 1234, UCS_OK, "::1%0:1234");
+    check_ip_port("[::1]:9999", 1234, UCS_OK, "::1%0:9999");
+    check_ip_port("::ffff:127.0.0.1", 1234, UCS_OK, "::ffff:127.0.0.1%0:1234");
+    check_ip_port("[::ffff:127.0.0.1]:9999", 0, UCS_OK, "::ffff:127.0.0.1%0:9999");
+    check_ip_port("1234:1234:1234:1234:1234:1234:1234:1234", 4444, UCS_OK,
+                  "1234:1234:1234:1234:1234:1234:1234:1234%0:4444");
+    check_ip_port("[1234:1234:1234:1234:1234:1234:1234:1234]:7777", 4444, UCS_OK,
+                  "1234:1234:1234:1234:1234:1234:1234:1234%0:7777");
+
+    /* Check wrong IPv6:port addresses */
+    {
+        socket_err_exp_str = "invalid address";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        check_ip_port("", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port(":::", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("::fffg", 0, UCS_ERR_INVALID_ADDR, "");
+    }
+    {
+        socket_err_exp_str = "invalid port";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        check_ip_port("[::1]:-1", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("[::1]:65536", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("[::1]:1111111", 0, UCS_ERR_INVALID_ADDR, "");
+        check_ip_port("[::1]:randomstring", 0, UCS_ERR_INVALID_ADDR, "");
+    }
+}
+
+UCS_TEST_F(test_socket, port_from_string) {
+    uint16_t port = 0;
+
+    EXPECT_EQ(UCS_OK, ucs_sock_port_from_string("0", &port));
+    EXPECT_EQ(0, port);
+    EXPECT_EQ(UCS_OK, ucs_sock_port_from_string("1234", &port));
+    EXPECT_EQ(1234, port);
+    EXPECT_EQ(UCS_OK, ucs_sock_port_from_string("65535", &port));
+    EXPECT_EQ(65535, port);
+
+    {
+        socket_err_exp_str = "invalid port";
+        scoped_log_handler log_handler(socket_error_handler);
+
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("", &port));
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("-1", &port));
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("str", &port));
+        EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("65536", &port));
     }
 }
 
