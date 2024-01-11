@@ -69,9 +69,9 @@ BEGIN_C_DECLS
 
 #define UCS_ENABLE_ASSERT 0
 
-#define ucs_bug(...)
-#define ucs_assert(...)
-#define ucs_assertv(...)
+#define ucs_bug(...)     do {} while(0)
+#define ucs_assert(...)  do {} while(0)
+#define ucs_assertv(...) do {} while(0)
 
 #endif
 

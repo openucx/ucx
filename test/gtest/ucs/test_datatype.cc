@@ -1052,6 +1052,27 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_locked_perf,
     }
 }
 
+UCS_TEST_F(test_datatype, is_unsigned_type) {
+    EXPECT_TRUE(ucs_is_unsigned_type(uint8_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint16_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint32_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint64_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned char));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned short));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned int));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned long));
+
+    EXPECT_FALSE(ucs_is_unsigned_type(int8_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int16_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int32_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int64_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed char));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed short));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed int));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed long));
+}
+
 typedef struct {
     int  num1;
     int  num2;
@@ -1166,8 +1187,7 @@ void test_array::test_fixed(test_1int_t *array, size_t capacity)
 {
     /* check initial capacity */
     size_t initial_capacity = ucs_array_capacity(array);
-    EXPECT_LE(initial_capacity, capacity);
-    EXPECT_GE(initial_capacity, capacity - 1);
+    EXPECT_EQ(initial_capacity, capacity);
 
     /* append one element */
     ucs_array_append(array, FAIL());
@@ -1204,6 +1224,13 @@ UCS_TEST_F(test_array, fixed_onstack) {
     test_fixed(&test_array, num_elems);
 }
 
+UCS_TEST_F(test_array, fixed_runtime_onstack) {
+    for (size_t i = 1; i < 200; ++i) {
+        UCS_ARRAY_DEFINE_ONSTACK(test_1int_t, test_array, i);
+        test_fixed(&test_array, i);
+    }
+}
+
 UCS_TEST_F(test_array, resize) {
     static const size_t NUM_ELEMS = 10;
     static const int VALUE1       = 896;
@@ -1218,6 +1245,32 @@ UCS_TEST_F(test_array, resize) {
     for (size_t i = 0; i < NUM_ELEMS; ++i) {
         int expected_value = (i == 0) ? VALUE1 : VALUE2;
         EXPECT_EQ(expected_value, ucs_array_elem(&test_array, i));
+    }
+
+    ucs_array_cleanup_dynamic(&test_array);
+}
+
+UCS_TEST_F(test_array, max_capacity) {
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint8_t, uint8_t, int);
+    EXPECT_EQ(127, ucs_array_max_capacity((test_array_uint8_t *)NULL));
+
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint16_t, uint16_t, int);
+    EXPECT_EQ(32767, ucs_array_max_capacity((test_array_uint16_t *)NULL));
+}
+
+UCS_TEST_F(test_array, add_above_max_capacity) {
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint8_t, uint8_t, int);
+    test_array_uint8_t test_array;
+    size_t max_capacity = ucs_array_max_capacity(&test_array);
+
+    ucs_array_init_dynamic(&test_array);
+    ucs_array_resize(&test_array, max_capacity, 0, FAIL());
+    EXPECT_EQ(max_capacity, ucs_array_length(&test_array));
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        ucs_status_t status = ucs_array_reserve(&test_array, max_capacity + 1);
+        EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
     }
 
     ucs_array_cleanup_dynamic(&test_array);
