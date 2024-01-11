@@ -687,7 +687,8 @@ ucp_wireup_handle_conn_match(ucp_worker_h worker, ucp_ep_h *ep_p,
                          worker, ep, worker->context);
             }
         }
-    } else {
+    } else if ((msg->type != UCP_WIREUP_MSG_PROMOTION) &&
+               (msg->type != UCP_WIREUP_MSG_DEMOTION)) {
         status = ucp_ep_config_err_mode_check_mismatch(ep, msg->err_mode);
         if (status != UCS_OK) {
             ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
@@ -752,6 +753,12 @@ static UCS_F_NOINLINE void ucp_wireup_process_promotion_request(
     ucs_usage_tracker_h usage_tracker;
     ucs_status_t status;
 
+    if (!worker->context->config.ext.usage_tracker_enable) {
+        ucs_debug("usage tracker is not enabled: ignoring promotion "
+                  "request (from %p to %p)", (void*)msg->src_ep_id, ep);
+        return;
+    }
+
     if (ucp_wireup_get_ep_from_msg(worker, &ep, msg, remote_address,
                                            UCP_EP_INIT_CREATE_AM_LANE,
                                            UCP_WIREUP_MSG_PROMOTION) !=
@@ -774,11 +781,8 @@ static UCS_F_NOINLINE void ucp_wireup_process_promotion_request(
     status = ucp_wireup_process_entry_msg(ep, msg, remote_address,
                                                  UCP_EP_INIT_CREATE_AM_LANE);
     if (status != UCS_OK) {
-        goto err_ep_set_failed;
+        ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
     }
-
-err_ep_set_failed:
-    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
 }
 
 static UCS_F_NOINLINE void ucp_wireup_process_demotion_request(

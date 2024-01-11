@@ -509,6 +509,28 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, intense_switch,
     requests_wait(reqs);
 }
 
+UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, promote,
+                     !m_ucp_config->ctx.proto_enable, "USAGE_TRACKER_ENABLE=y")
+{
+    connect();
+    //todo: insert to connect
+
+    ucp_worker_h worker = sender().ep()->worker;
+    worker->usage_tracker.running = 1;
+    send_recv(100);
+
+    reconf_ep_t sender_ep(sender()), receiver_ep(receiver());
+
+    for (int i =0; i < 10; ++ i) {
+        send_recv(100);
+        ucs_usage_tracker_progress(worker->usage_tracker.handle);
+    }
+
+    send_recv(100);
+    sender_ep.verify(0);
+    receiver_ep.verify(0);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, ib, "ib")
 
 class test_ucp_wireup_reconfigure_multi : public test_ucp_reconfigure {
