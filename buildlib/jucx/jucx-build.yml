@@ -8,6 +8,9 @@ parameters:
 jobs:
   - job: jucx_build_${{ parameters.arch }}
     displayName: JUCX build ${{ parameters.arch }}
+    variables:
+      ${{ if ne(parameters.arch, 'amd64') }}:
+        SUFFIX: "-${{ parameters.arch }}"
 
     # we need to use lowest version for compatibility
     container: ${{ parameters.container }}    
@@ -43,7 +46,7 @@ jobs:
           MAVEN_VERSION=${TAG:1}
           make -C bindings/java/src/main/native/ package JUCX_VERSION=${MAVEN_VERSION}
         displayName: Build JUCX
-        condition: eq(variables['Build.Reason'], 'PullRequest')
+        condition: eq(variables['Build.Reason'], 'IndividualCI')
 
       - bash: |
           set -eE
@@ -82,12 +85,20 @@ jobs:
           cp $(publicKey.secureFilePath)  ${{ parameters.gpg_dir }}/pubring.gpg
           cp $(privateKey.secureFilePath) ${{ parameters.gpg_dir }}/secring.gpg
           export GNUPGHOME=${{ parameters.gpg_dir }}
+
+          # GPG agent config
+          echo "use-agent" > $GNUPGHOME/gpg.conf
+          echo "pinentry-mode loopback" >> $GNUPGHOME/gpg.conf
+          echo "allow-loopback-pinentry" > $GNUPGHOME/gpg-agent.conf
+          gpg-connect-agent reloadagent /bye || true
+
           TAG=`git describe --tags`
           # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
           # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
           MAVEN_VERSION=${TAG:1}
           make -C bindings/java/src/main/native/ publish-release \
-              ARGS="--settings ${{ parameters.temp_cfg }}" JUCX_VERSION=${MAVEN_VERSION}
+              ARGS="--settings ${{ parameters.temp_cfg }}" \
+              JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
         displayName: Publish JUCX jar to maven central
         condition: eq(variables['Build.Reason'], 'IndividualCI')
         env:

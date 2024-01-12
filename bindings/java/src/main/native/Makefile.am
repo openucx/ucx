@@ -129,12 +129,10 @@ publish-snapshot:
 
 publish-release:
 	@make set-version JUCX_VERSION=${JUCX_VERSION}
-	@make repack-jar
-	@make check-jar
 	@make publish
 
 publish:
-	$(MVNCMD) deploy:deploy-file -Dfile=$(jarfile) -DskipTests ${ARGS}
+	$(MVNCMD) deploy -DskipTests ${ARGS}
 
 test:
 	$(MVNCMD) test -DargLine="-XX:OnError='cat hs_err_pid%p.log'"
