@@ -424,8 +424,8 @@ AS_IF([test "x$enable_asan" = xyes],
                                      [-fsanitize=address -fno-omit-frame-pointer],
                                      [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                                      [AS_MESSAGE([compiling with sanitizer])
-                                      BASE_CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer $BASE_CXXFLAGS"
-                                      LDFLAGS="-fsanitize=address -fno-omit-frame-pointer $LDFLAGS"],
+                                      BASE_CXXFLAGS="-fsanitize=address -static-libasan -fno-omit-frame-pointer $BASE_CXXFLAGS"
+                                      LDFLAGS="-fsanitize=address -static-libasan -fno-omit-frame-pointer $LDFLAGS"],
                                      [AC_MSG_ERROR([ASAN check is requested but not supported. Check libasan package existance])])
 
       AC_RUN_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],

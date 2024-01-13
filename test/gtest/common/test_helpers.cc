@@ -324,12 +324,16 @@ void analyze_test_results()
 int test_time_multiplier()
 {
     int factor = 1;
-#if _BullseyeCoverage
-    factor *= 10;
-#endif
     if (RUNNING_ON_VALGRIND) {
         factor *= 20;
     }
+#if _BullseyeCoverage
+    factor *= 10;
+#endif
+#ifdef __SANITIZE_ADDRESS__
+    factor *= 20;
+#endif
+
     return factor;
 }
 
