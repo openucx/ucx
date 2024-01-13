@@ -37,6 +37,8 @@ void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
     ucp_proto_caps_t *caps             = init_params->caps;
     ucp_proto_perf_range_t *ppln_range = &caps->ranges[caps->num_ranges];
     size_t frag_size                   = frag_range->max_length;
+    ucs_linear_func_t *ppln_perf       = ppln_range->perf;
+    ucp_proto_perf_type_t perf_type;
     double frag_overhead;
     char frag_str[64];
 
@@ -44,27 +46,30 @@ void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
     ppln_range->node = ucp_proto_perf_node_new_data("pipeline", "frag size: %s",
                                                     frag_str);
 
+    UCP_PROTO_PERF_TYPE_FOREACH(perf_type) {
+        /* For multi-fragment protocols, we need to apply the fragment
+         * size to the performance function linear factor.
+         */
+        ppln_perf[perf_type]    = frag_range->perf[perf_type];
+        ppln_perf[perf_type].m += frag_range->perf[perf_type].c / frag_size;
+    }
+
     /* Overhead of sending one fragment before starting the pipeline */
+    /* Calculation of frag-overhead should be based on frag_range->perf
+     * but it causes significant performance degradation in the current perf
+     * prediction scheme */
     frag_overhead =
-            ucs_linear_func_apply(frag_range->perf[UCP_PROTO_PERF_TYPE_SINGLE],
-                                  frag_size) -
-            ucs_linear_func_apply(frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI],
-                                  frag_size);
+            ucs_linear_func_apply(ppln_perf[UCP_PROTO_PERF_TYPE_SINGLE], frag_size) -
+            ucs_linear_func_apply(ppln_perf[UCP_PROTO_PERF_TYPE_MULTI], frag_size);
+    ucs_assert(frag_overhead >= 0);
 
     ucs_trace("frag-size: %zd" UCP_PROTO_TIME_FMT(frag_overhead), frag_size,
               UCP_PROTO_TIME_ARG(frag_overhead));
 
     /* Apply the pipelining effect when sending multiple fragments */
-    ppln_range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
-            ucs_linear_func_add(frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI],
+    ppln_perf[UCP_PROTO_PERF_TYPE_SINGLE] =
+            ucs_linear_func_add(ppln_perf[UCP_PROTO_PERF_TYPE_MULTI],
                                 ucs_linear_func_make(frag_overhead, 0));
-
-    /* Multiple send performance is the same */
-    ppln_range->perf[UCP_PROTO_PERF_TYPE_MULTI] =
-            frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI];
-
-    ppln_range->perf[UCP_PROTO_PERF_TYPE_CPU] =
-            frag_range->perf[UCP_PROTO_PERF_TYPE_CPU];
 
     ppln_range->max_length = max_length;
 
@@ -199,12 +204,10 @@ ucp_proto_init_parallel_stages(const ucp_proto_common_init_params_t *params,
     ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
     UCS_ARRAY_DEFINE_ONSTACK(stage_list, ucp_proto_perf_list, 16);
     UCS_ARRAY_DEFINE_ONSTACK(concave, ucp_proto_perf_envelope, 16);
-    ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST];
     ucs_linear_func_t sum_single_perf, sum_cpu_perf;
     const ucp_proto_perf_range_t **stage_elem;
     ucp_proto_perf_envelope_elem_t *elem;
     ucp_proto_perf_node_t *stage_node;
-    ucp_proto_perf_type_t perf_type;
     ucp_proto_perf_range_t *range;
     ucs_linear_func_t *perf_elem;
     char frag_size_str[64];
@@ -221,27 +224,17 @@ ucp_proto_init_parallel_stages(const ucp_proto_common_init_params_t *params,
     sum_single_perf = UCS_LINEAR_FUNC_ZERO;
     sum_cpu_perf    = UCS_LINEAR_FUNC_ZERO;
     ucs_carray_for_each(stage_elem, stages, num_stages) {
-        UCP_PROTO_PERF_TYPE_FOREACH(perf_type) {
-            perf[perf_type] = (*stage_elem)->perf[perf_type];
-            /* For multi-fragment protocols, we need to apply the fragment
-             * size to the performance function linear factor.
-             */
-            if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
-                perf[perf_type].m += perf[perf_type].c / frag_size;
-            }
-        }
-
         /* Summarize single and CPU time */
         ucs_linear_func_add_inplace(&sum_single_perf,
-                                    perf[UCP_PROTO_PERF_TYPE_SINGLE]);
+                                    (*stage_elem)->perf[UCP_PROTO_PERF_TYPE_SINGLE]);
         ucs_linear_func_add_inplace(&sum_cpu_perf,
-                                    perf[UCP_PROTO_PERF_TYPE_CPU]);
+                                    (*stage_elem)->perf[UCP_PROTO_PERF_TYPE_CPU]);
 
         /* Add all multi perf ranges to envelope array */
         perf_elem  = ucs_array_append(ucp_proto_perf_list, &stage_list,
                                       status = UCS_ERR_NO_MEMORY;
                                       goto out);
-        *perf_elem = perf[UCP_PROTO_PERF_TYPE_MULTI];
+        *perf_elem = (*stage_elem)->perf[UCP_PROTO_PERF_TYPE_MULTI];
 
         ucs_trace("stage[%zu] %s " UCP_PROTO_PERF_FUNC_TYPES_FMT
                   UCP_PROTO_PERF_FUNC_FMT(perf_elem),
