@@ -24,11 +24,17 @@ extern "C" {
 
 class test_ucp_reconfigure : public ucp_test {
 protected:
-
     class reconf_ep_t {
     public:
-        reconf_ep_t(const entity &e) : m_ep(e.ep()),
-                                       m_cfg_index(e.ep()->cfg_index)
+        typedef enum {
+            PROMOTED,
+            RACE,
+            NONE
+        } mode_t;
+
+        reconf_ep_t(const entity &e, mode_t mode = NONE) : m_ep(e.ep()),
+                                                      m_cfg_index(e.ep()->cfg_index),
+                                                      m_mode(mode)
         {
             for (ucp_lane_index_t lane = 0; lane < num_lanes(); ++ lane) {
                 uct_ep_h uct_ep = ucp_ep_get_lane(e.ep(), lane);
@@ -39,6 +45,26 @@ protected:
                     m_uct_eps.push_back(uct_ep);
                 }
             }
+
+            m_transport = ucp_ep_get_tl_rsc(m_ep, m_ep->am_lane)->tl_name;
+        }
+
+        static bool is_scale_mode(ucp_ep_h ep)
+        {
+            return ep->worker->context->config.est_num_eps == m_num_eps_scale_mode;
+        }
+
+        bool is_tl_scalable(const std::string &tl_name)
+        {
+            static const std::string scalable_tls[2] = {"dc_mlx5", "ud_mlx5"};
+
+            for (const auto &tl : scalable_tls) {
+                if (tl_name == tl) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         ucp_lane_index_t num_lanes()
@@ -46,11 +72,58 @@ protected:
             return ucp_ep_config(m_ep)->key.num_lanes;
         }
 
-        void verify(unsigned expected_reused, bool reconfigured = true)
+        unsigned count_dc_resources()
+        {
+            unsigned dc_count = 0;
+            ucp_context_h context = m_ep->worker->context;
+            ucp_rsc_index_t tl_id;
+
+            UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
+                std::string tl_name = context->tl_rscs[tl_id].tl_rsc.tl_name;
+                
+                if (tl_name == "dc_mlx5") {
+                    dc_count ++;
+                }
+            }
+
+            return dc_count;
+        }
+
+        void verify(bool reconfigured = true)
         {
             bool is_reconfigured = (m_ep->cfg_index != m_cfg_index);
-            ASSERT_EQ(is_reconfigured, reconfigured);
-            ASSERT_EQ(reused_count(), expected_reused);
+            EXPECT_EQ(is_reconfigured, reconfigured);
+
+            static const unsigned num_paths = 2;
+            unsigned dc_count = count_dc_resources();
+            unsigned common_num_lanes = std::min((size_t)num_lanes(), m_uct_eps.size());
+            unsigned expected_reused = is_reconfigured ? common_num_lanes -
+                                       dc_count * num_paths : common_num_lanes;
+
+            EXPECT_EQ(reused_count(), expected_reused);
+
+            //todo: verify all DC ifaces 
+            auto transport = ucp_ep_get_tl_rsc(m_ep, m_ep->am_lane)->tl_name;
+            bool expect_scale;
+
+            switch (m_mode) {
+            case NONE:
+                expect_scale = is_scale_mode(m_ep);
+                break;
+            case RACE:
+                expect_scale = is_reconfigured ? (m_transport == "rc_mlx5") :
+                                              is_tl_scalable(m_transport);
+                break;
+            case PROMOTED:
+                expect_scale = false;
+                break;
+            }
+
+            if (expect_scale) {
+                EXPECT_TRUE(is_tl_scalable(transport));
+            } else {
+                EXPECT_STREQ("rc_mlx5", transport);
+            }
         }
 
     private:
@@ -81,6 +154,8 @@ protected:
         ucp_ep_h               m_ep;
         ucp_worker_cfg_index_t m_cfg_index;
         std::vector<uct_ep_h>  m_uct_eps;
+        std::string            m_transport;
+        mode_t                 m_mode;
     };
 
     enum {
@@ -89,10 +164,6 @@ protected:
         MSG_SIZE_LARGE  = 262144
     };
 
-    typedef ucs_status_t (*query_devices_t)(uct_md_h,
-                          uct_tl_device_resource_t **,
-                          unsigned *);
-
     void init()
     {
         ucp_test::init();
@@ -100,6 +171,8 @@ protected:
         if (!has_resource(sender(), "rc_mlx5") && !has_resource(sender(), "dc_mlx5")) {
             UCS_TEST_SKIP_R("IB transport is not present");
         }
+
+        m_reconfigure = false;
     }
 
     virtual bool start_scaled()
@@ -112,11 +185,6 @@ protected:
         return get_variant_value(2);
     }
 
-    bool is_scale_mode()
-    {
-        return sender().ucph()->config.est_num_eps == m_num_eps_scale_mode;
-    }
-
     void set_scale(bool enable, bool race = false)
     {
         if (enable) {
@@ -126,40 +194,6 @@ protected:
             sender().ucph()->config.est_num_eps = 1;
             receiver().ucph()->config.est_num_eps = race ? m_num_eps_scale_mode : 1;
         }
-    }
-
-    bool is_tl_scalable(const std::string &tl_name)
-    {
-        static const std::string scalable_tls[2] = {"dc_mlx5", "ud_mlx5"};
-
-        for (const auto &tl : scalable_tls) {
-            if (tl_name == tl) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool verify_transport()
-    {
-        return verify_entity_transport(sender()) &&
-               verify_entity_transport(receiver());
-    }
-
-    bool verify_entity_transport(const entity &entity)
-    {
-        const ucp_ep_config_t *config = ucp_ep_config(entity.ep());
-        const auto lane               = config->key.am_lane;
-        const char *transport;
-
-        transport = ucp_ep_get_tl_rsc(entity.ep(), lane)->tl_name;
-
-        if (is_scale_mode()) {
-            return is_tl_scalable(transport);
-        }
-
-        return std::string("rc_mlx5") == transport;
     }
 
     void connect()
@@ -198,6 +232,7 @@ protected:
     void reconfigure_nb(bool scale)
     {
         set_scale(scale);
+        m_reconfigure = true;
         UCS_ASYNC_BLOCK(&sender().worker()->async);
         ucp_wireup_send_pre_request(sender().ep());
         UCS_ASYNC_UNBLOCK(&sender().worker()->async);
@@ -206,7 +241,8 @@ protected:
     bool is_connected(ucp_ep_h ep)
     {
         ucp_lane_index_t lane;
-        auto finish_state = is_scale_mode() ? UCP_EP_FLAG_LOCAL_CONNECTED :
+        auto finish_state = (reconf_ep_t::is_scale_mode(sender().ep()) && !m_reconfigure) ?
+                                              UCP_EP_FLAG_LOCAL_CONNECTED :
                                               UCP_EP_FLAG_REMOTE_CONNECTED;
 
         for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
@@ -220,16 +256,15 @@ protected:
 
     void wireup_wait()
     {
-        while (!verify_transport() || !is_connected(sender().ep()) ||
+        while(m_reconfigure && !(receiver().ep()->flags &
+                               UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
+            progress();
+        }
+
+        while (!is_connected(sender().ep()) ||
                !is_connected(receiver().ep())) {
             progress();
         }
-    }
-
-    void reconfigure_b(bool scale)
-    {
-        reconfigure_nb(scale);
-        wireup_wait();
     }
 
     void *recv_nb()
@@ -245,6 +280,7 @@ protected:
     static const unsigned m_num_eps_scale_mode = 128;
     std::string           m_sbuf;
     std::string           m_rbuf;
+    bool                  m_reconfigure;
 
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -310,7 +346,8 @@ public:
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
 
-        reconf_ep_t reconf_sender(sender()), reconf_receiver(receiver());
+        reconf_ep_t reconf_sender(sender(), reconf_ep_t::RACE),
+                    reconf_receiver(receiver(), reconf_ep_t::RACE);
 
         while(!is_connected(sender().ep()) ||
               !is_connected(receiver().ep())) {
@@ -357,7 +394,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_all_reuse, is_self())
 {
     set_scale(start_scaled());
     auto reconf_ep = race_connect();
-    reconf_ep.verify(reconf_ep.num_lanes(), false);
+    reconf_ep.verify(false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_all_reuse_part_scale, is_self())
@@ -365,7 +402,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_all_reuse_part_scale, is_self())
     disable_dc_dev(0);
     set_scale(start_scaled());
     auto reconf_ep = race_connect();
-    reconf_ep.verify(reconf_ep.num_lanes(), false);
+    reconf_ep.verify(false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse, is_self() ||
@@ -373,7 +410,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse, is_self() ||
 {
     set_scale(start_scaled(), true);
     auto reconf_ep = race_connect();
-    reconf_ep.verify(0);
+    reconf_ep.verify();
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse_wireup, is_self() ||
@@ -381,7 +418,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse_wireup, is_self() ||
 {
     set_scale(start_scaled(), true);
     auto reconf_ep = race_connect();
-    reconf_ep.verify(0);
+    reconf_ep.verify();
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_part_reuse, is_self() ||
@@ -394,11 +431,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_part_reuse, is_self() ||
     }
 
     disable_dc_dev(0);
-    size_t dc_count = count_resources(sender(), "dc_mlx5");
-
     set_scale(start_scaled(), true);
     auto reconf_ep = race_connect();
-    reconf_ep.verify(dc_count / 2);
+    reconf_ep.verify();
 }
 
 UCS_TEST_P(test_ucp_reconfigure, serial_no_reuse)
@@ -414,11 +449,11 @@ UCS_TEST_P(test_ucp_reconfigure, serial_no_reuse)
     reconf_ep_t sender_ep(sender()), receiver_ep(receiver());
 
     send_recv(100);
-    reconfigure_b(!start_scaled());
+    reconfigure_nb(!start_scaled());
     send_recv(100);
 
-    sender_ep.verify(0);
-    receiver_ep.verify(0);
+    sender_ep.verify();
+    receiver_ep.verify();
 }
 
 UCS_TEST_P(test_ucp_reconfigure, serial_all_reuse)
@@ -427,18 +462,17 @@ UCS_TEST_P(test_ucp_reconfigure, serial_all_reuse)
     reconf_ep_t sender_ep(sender()), receiver_ep(receiver());
 
     send_recv(100);
-    reconfigure_b(start_scaled());
+    reconfigure_nb(start_scaled());
     send_recv(100);
 
-    sender_ep.verify(sender_ep.num_lanes(), false);
-    receiver_ep.verify(receiver_ep.num_lanes(), false);
+    sender_ep.verify(false);
+    receiver_ep.verify(false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, serial_part_reuse, is_self() ||
                      ucs::has_roce_devices(),
                      "RESOLVE_REMOTE_EP_ID=y")
 {
-    size_t dc_count = count_resources(sender(), "dc_mlx5");
     disable_dc_dev(1);
 
     connect();
@@ -448,9 +482,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, serial_part_reuse, is_self() ||
     reconfigure_nb(!start_scaled());
     send_recv(100);
 
-    /* Reused eps is calculated as: dc_count / 2 * num_paths */
-    sender_ep.verify(dc_count);
-    receiver_ep.verify(dc_count);
+    sender_ep.verify();
+    receiver_ep.verify();
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, serial_all_reuse_part_scale, is_self())
@@ -464,8 +497,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, serial_all_reuse_part_scale, is_self(
     reconfigure_nb(start_scaled());
     send_recv(100);
 
-    sender_ep.verify(sender_ep.num_lanes(), false);
-    receiver_ep.verify(receiver_ep.num_lanes(), false);
+    sender_ep.verify(false);
+    receiver_ep.verify(false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, pending_not_empty,
@@ -497,6 +530,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, intense_switch,
         }
 
         sender().ep()->flags &= ~UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED;
+        receiver().ep()->flags &= ~UCP_EP_FLAG_CONNECT_REQ_QUEUED;
         reconfigure_nb((start_scaled() + j + 1) % 2);
 
         for (int i = 0; i < msg_count; ++i) {
@@ -519,16 +553,17 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, promote,
     worker->usage_tracker.running = 1;
     send_recv(100);
 
-    reconf_ep_t sender_ep(sender()), receiver_ep(receiver());
+    reconf_ep_t sender_ep(sender(), reconf_ep_t::PROMOTED),
+                receiver_ep(receiver(), reconf_ep_t::PROMOTED);
 
-    for (int i =0; i < 10; ++ i) {
+    for (int i = 0; i < 10; ++ i) {
         send_recv(100);
         ucs_usage_tracker_progress(worker->usage_tracker.handle);
     }
 
     send_recv(100);
-    sender_ep.verify(0);
-    receiver_ep.verify(0);
+    sender_ep.verify();
+    receiver_ep.verify();
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, ib, "ib")
