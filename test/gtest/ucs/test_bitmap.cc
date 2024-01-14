@@ -352,6 +352,22 @@ public:
 
 protected:
     ucs_dynamic_bitmap_t m_bitmap;
+
+    static void set(ucs_dynamic_bitmap_t &bitmap,
+                    const std::initializer_list<size_t> &offsets)
+    {
+        for (auto offset : offsets) {
+            ucs_dynamic_bitmap_set(&bitmap, offset);
+        }
+    }
+
+    void expect_bits(const std::initializer_list<size_t> &offsets) const
+    {
+        EXPECT_EQ(offsets.size(), ucs_dynamic_bitmap_popcount(&m_bitmap));
+        for (auto offset : offsets) {
+            EXPECT_EQ(1, ucs_dynamic_bitmap_get(&m_bitmap, offset));
+        }
+    }
 };
 
 UCS_TEST_F(test_dynamic_bitmap, test_get_set_reset)
@@ -367,4 +383,109 @@ UCS_TEST_F(test_dynamic_bitmap, test_get_set_reset)
     EXPECT_EQ(0, ucs_dynamic_bitmap_get(&m_bitmap, bit_index));
 
     EXPECT_TRUE(ucs_dynamic_bitmap_is_zero(&m_bitmap));
+}
+
+UCS_TEST_F(test_dynamic_bitmap, test_popcount)
+{
+    EXPECT_EQ(0, ucs_dynamic_bitmap_popcount(&m_bitmap));
+    ucs_dynamic_bitmap_set(&m_bitmap, 12);
+    EXPECT_EQ(1, ucs_dynamic_bitmap_popcount(&m_bitmap));
+    ucs_dynamic_bitmap_set(&m_bitmap, 53);
+    EXPECT_EQ(2, ucs_dynamic_bitmap_popcount(&m_bitmap));
+    ucs_dynamic_bitmap_set(&m_bitmap, 71);
+    EXPECT_EQ(3, ucs_dynamic_bitmap_popcount(&m_bitmap));
+    ucs_dynamic_bitmap_set(&m_bitmap, 110);
+    EXPECT_EQ(4, ucs_dynamic_bitmap_popcount(&m_bitmap));
+}
+
+UCS_TEST_F(test_dynamic_bitmap, test_popcount_upto_index)
+{
+    int popcount;
+    set(m_bitmap, {17, 71, 121});
+    popcount = ucs_dynamic_bitmap_popcount_upto_index(&m_bitmap, 110);
+    EXPECT_EQ(2, popcount);
+
+    popcount = ucs_dynamic_bitmap_popcount_upto_index(&m_bitmap, 121);
+    EXPECT_EQ(2, popcount);
+
+    popcount = ucs_dynamic_bitmap_popcount_upto_index(&m_bitmap, 20);
+    EXPECT_EQ(1, popcount);
+}
+
+UCS_TEST_F(test_dynamic_bitmap, is_equal)
+{
+    ucs_dynamic_bitmap_t bitmap2;
+    ucs_dynamic_bitmap_init(&bitmap2);
+
+    EXPECT_TRUE(ucs_dynamic_bitmap_is_equal(&m_bitmap, &m_bitmap));
+    EXPECT_TRUE(ucs_dynamic_bitmap_is_equal(&m_bitmap, &bitmap2));
+
+    ucs_dynamic_bitmap_set(&m_bitmap, 17);
+    EXPECT_FALSE(ucs_dynamic_bitmap_is_equal(&m_bitmap, &bitmap2));
+
+    ucs_dynamic_bitmap_reset(&m_bitmap, 17);
+    EXPECT_TRUE(ucs_dynamic_bitmap_is_equal(&m_bitmap, &bitmap2));
+
+    ucs_dynamic_bitmap_set(&m_bitmap, 17);
+    ucs_dynamic_bitmap_set(&bitmap2, 17);
+    EXPECT_TRUE(ucs_dynamic_bitmap_is_equal(&m_bitmap, &bitmap2));
+
+    ucs_dynamic_bitmap_cleanup(&bitmap2);
+}
+
+UCS_TEST_F(test_dynamic_bitmap, test_not)
+{
+    set(m_bitmap, {1, 3, 4});
+    EXPECT_EQ(3, ucs_dynamic_bitmap_popcount(&m_bitmap));
+
+    ucs_dynamic_bitmap_not_inplace(&m_bitmap);
+    EXPECT_EQ(1, ucs_dynamic_bitmap_get(&m_bitmap, 0));
+    EXPECT_EQ(0, ucs_dynamic_bitmap_get(&m_bitmap, 1));
+    EXPECT_EQ(1, ucs_dynamic_bitmap_get(&m_bitmap, 2));
+    EXPECT_EQ(0, ucs_dynamic_bitmap_get(&m_bitmap, 3));
+
+    EXPECT_EQ(UCS_BITMAP_BITS_IN_WORD - 3,
+              ucs_dynamic_bitmap_popcount(&m_bitmap));
+}
+
+UCS_TEST_F(test_dynamic_bitmap, test_and)
+{
+    ucs_dynamic_bitmap_t bitmap2;
+    ucs_dynamic_bitmap_init(&bitmap2);
+
+    set(m_bitmap, {1, 3, 4});
+    set(bitmap2, {2, 3, 4, 5, 2000});
+
+    ucs_dynamic_bitmap_and_inplace(&m_bitmap, &bitmap2);
+    expect_bits({3, 4});
+
+    ucs_dynamic_bitmap_cleanup(&bitmap2);
+}
+
+UCS_TEST_F(test_dynamic_bitmap, test_or)
+{
+    ucs_dynamic_bitmap_t bitmap2;
+    ucs_dynamic_bitmap_init(&bitmap2);
+
+    set(m_bitmap, {1, 3, 4});
+    set(bitmap2, {2, 3, 4, 5, 1000});
+
+    ucs_dynamic_bitmap_or_inplace(&m_bitmap, &bitmap2);
+    expect_bits({1, 2, 3, 4, 5, 1000});
+
+    ucs_dynamic_bitmap_cleanup(&bitmap2);
+}
+
+UCS_TEST_F(test_dynamic_bitmap, test_xor)
+{
+    ucs_dynamic_bitmap_t bitmap2;
+    ucs_dynamic_bitmap_init(&bitmap2);
+
+    set(m_bitmap, {1, 3, 4});
+    set(bitmap2, {2, 3, 4, 5, 1200});
+
+    ucs_dynamic_bitmap_xor_inplace(&m_bitmap, &bitmap2);
+    expect_bits({1, 2, 5, 1200});
+
+    ucs_dynamic_bitmap_cleanup(&bitmap2);
 }

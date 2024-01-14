@@ -241,7 +241,8 @@ static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
                       "in batch file '%s' line %d: ", file_name, *line_num);
 
     optind = 1;
-    while ((c = getopt (argc, argv, TEST_PARAMS_ARGS)) != -1) {
+    while ((c = getopt_long(argc, argv, TEST_PARAMS_ARGS,
+                            TEST_PARAMS_ARGS_LONG, NULL)) != -1) {
         status = parse_test_params(params, c, optarg);
         if (status != UCS_OK) {
             ucs_error("%s-%c %s: %s", error_prefix, c, optarg,

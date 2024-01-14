@@ -10,6 +10,8 @@
 #include "api/libperf.h"
 #include "lib/libperf_int.h"
 
+#include <getopt.h>
+
 #if defined (HAVE_MPI)
 #  include <mpi.h>
 #endif
@@ -18,8 +20,12 @@
 #define MAX_BATCH_FILES         32
 #define MAX_CPUS                1024
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:lyz"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:lyzg:G:"
 #define TEST_ID_UNDEFINED       -1
+
+#define DEFAULT_DAEMON_PORT     1338
+
+extern const struct option TEST_PARAMS_ARGS_LONG[];
 
 enum {
     TEST_FLAG_PRINT_RESULTS    = UCS_BIT(0),
@@ -57,7 +63,7 @@ typedef struct perftest_params {
 struct perftest_context {
     perftest_params_t            params;
     const char                   *server_addr;
-    int                          port;
+    uint16_t                     port;
     sa_family_t                  af;
     int                          mpi;
     unsigned                     num_cpus;

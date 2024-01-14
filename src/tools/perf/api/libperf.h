@@ -217,11 +217,14 @@ typedef struct ucx_perf_params {
     } uct;
 
     struct {
-        unsigned               nonblocking_mode; /* TBD */
-        ucp_perf_datatype_t    send_datatype;
-        ucp_perf_datatype_t    recv_datatype;
-        size_t                 am_hdr_size; /* UCP Active Message header size
-                                               (not included in message size) */
+        ucp_perf_datatype_t     send_datatype;
+        ucp_perf_datatype_t     recv_datatype;
+        size_t                  am_hdr_size; /* UCP Active Message header size
+                                                (not included in message size) */
+        struct sockaddr_storage dmn_local_addr;  /* IP and port of local daemon,
+                                                    used to offload communication */
+        struct sockaddr_storage dmn_remote_addr; /* IP and port of remote daemon,
+                                                    used to offload communication */
     } ucp;
 
 } ucx_perf_params_t;

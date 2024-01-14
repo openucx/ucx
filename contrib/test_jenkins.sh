@@ -1048,10 +1048,7 @@ run_release_mode_tests() {
 	test_ucm_hooks
 }
 
-#
-# Run all tests
-#
-run_tests() {
+set_ucx_common_test_env() {
 	export UCX_HANDLE_ERRORS=bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
@@ -1061,6 +1058,14 @@ run_tests() {
 	export UCX_IB_ROCE_LOCAL_SUBNET=y
 	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
+	export LSAN_OPTIONS=suppressions=${WORKSPACE}/contrib/lsan.supp
+	export ASAN_OPTIONS=protect_shadow_gap=0
+}
+
+#
+# Run all tests
+#
+run_tests() {
 	export UCX_PROTO_REQUEST_RESET=y
 
 	# load cuda env only if GPU available for remaining tests
@@ -1100,15 +1105,6 @@ run_tests() {
 }
 
 run_test_proto_disable() {
-	export UCX_HANDLE_ERRORS=bt
-	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
-	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 1000))-$((33999 + EXECUTOR_NUMBER * 1000))"
-	export UCX_TCP_CM_REUSEADDR=y
-
-	# Don't cross-connect RoCE devices
-	export UCX_IB_ROCE_LOCAL_SUBNET=y
-	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
-
 	# build for devel tests and gtest
 	build devel --enable-gtest
 
@@ -1118,14 +1114,23 @@ run_test_proto_disable() {
 	run_gtest "default"
 }
 
+run_asan_check() {
+	build devel --enable-gtest --enable-asan --without-valgrind
+	run_gtest "default"
+}
+
 prepare
 try_load_cuda_env
 
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
     check_machine
+    set_ucx_common_test_env
+
     if [[ "$PROTO_ENABLE" == "no" ]]; then
         run_test_proto_disable
+    elif [[ "$ASAN_CHECK" == "yes" ]]; then
+        run_asan_check
     else
         run_tests
     fi

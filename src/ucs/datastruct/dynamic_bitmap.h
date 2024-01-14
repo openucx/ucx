@@ -56,19 +56,35 @@ ucs_dynamic_bitmap_reset_all(ucs_dynamic_bitmap_t *bitmap)
 
 
 /**
- * Reserve space in a bitmap, setting the newly allocated bits to 0.
+ * Helper function to reserve space in a bitmap in word granularity, setting the
+ * newly allocated words to 0.
  *
- * @param [inout] bitmap   Bitmap to reserve space in.
+ * @param [inout] bitmap     Bitmap to reserve space in.
+ * @param [in]    num_words  Number of words to reserve.
  */
 static UCS_F_ALWAYS_INLINE void
-ucs_dynamic_bitmap_reserve(ucs_dynamic_bitmap_t *bitmap, size_t num_bits)
+ucs_dynamic_bitmap_reserve_words(ucs_dynamic_bitmap_t *bitmap, size_t num_words)
 {
-    size_t num_words = ucs_div_round_up(num_bits, UCS_BITMAP_BITS_IN_WORD);
-
     if (num_words > ucs_array_length(bitmap)) {
         ucs_array_resize(bitmap, num_words, 0,
                          ucs_fatal("failed to reserve space in a bitmap"));
     }
+}
+
+
+/**
+ * Reserve space in a bitmap, setting the newly allocated bits to 0.
+ *
+ * @param [inout] bitmap     Bitmap to reserve space in.
+ * @param [in]    num_bits   Number of bits to reserve.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_dynamic_bitmap_reserve(ucs_dynamic_bitmap_t *bitmap, size_t num_bits)
+{
+    const size_t num_words = ucs_div_round_up(num_bits,
+                                              UCS_BITMAP_BITS_IN_WORD);
+
+    ucs_dynamic_bitmap_reserve_words(bitmap, num_words);
 }
 
 
@@ -144,6 +160,142 @@ ucs_dynamic_bitmap_is_zero(const ucs_dynamic_bitmap_t *bitmap)
 {
     return ucs_bitmap_bits_is_zero(ucs_array_begin(bitmap),
                                    ucs_array_length(bitmap));
+}
+
+
+/**
+ * Count the number of bits set to 1 in the bitmap.
+ *
+ * @param [in] bitmap   Count set bits in this bitmap.
+ *
+ * @return Number of bits set to 1 in the bitmap.
+ */
+static UCS_F_ALWAYS_INLINE size_t
+ucs_dynamic_bitmap_popcount(const ucs_dynamic_bitmap_t *bitmap)
+{
+    return ucs_bitmap_bits_popcount(ucs_array_begin(bitmap),
+                                    ucs_array_length(bitmap));
+}
+
+
+/**
+ * Count the number of bits set to 1 in the bitmap up to a given index (not
+ * including the bit at that index).
+ *
+ * @param [in] bitmap     Count set bits in this bitmap.
+ * @param [in] bit_index  Maximal index to count bits.
+ *
+ * @return Number of bits set to 1 in the bitmap up to @a bit_index.
+ */
+static UCS_F_ALWAYS_INLINE size_t ucs_dynamic_bitmap_popcount_upto_index(
+        const ucs_dynamic_bitmap_t *bitmap, size_t bit_index)
+{
+    return ucs_bitmap_bits_popcount_upto_index(ucs_array_begin(bitmap),
+                                               ucs_array_length(bitmap),
+                                               bit_index);
+}
+
+
+/**
+ * Inverse the bits of the bitmap.
+ *
+ * @param [inout]  bitmap   Inverse the bits of this bitmap.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_dynamic_bitmap_not_inplace(ucs_dynamic_bitmap_t *bitmap)
+{
+    ucs_bitmap_bits_not(ucs_array_begin(bitmap), ucs_array_length(bitmap),
+                        ucs_array_begin(bitmap), ucs_array_length(bitmap));
+}
+
+
+/**
+ * Helper function to perform an in-place binary operation on the bitmap
+ *
+ * @param [inout] dest  First bitmap for the binary operation; the result
+ *                      is placed in this bitmap.
+ * @param [in]    src   Second bitmap for the binary operation.
+ * @param [in]    op    Binary operation function to perform.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_dynamic_bitmap_binary_op_inplace(ucs_dynamic_bitmap_t *dest,
+                                     const ucs_dynamic_bitmap_t *src,
+                                     ucs_bitmap_binary_op_t op)
+{
+    ucs_dynamic_bitmap_reserve_words(dest, ucs_array_length(src));
+    ucs_bitmap_bits_binary_op(ucs_array_begin(dest), ucs_array_length(dest),
+                              ucs_array_begin(dest), ucs_array_length(dest),
+                              ucs_array_begin(src), ucs_array_length(src), op);
+}
+
+
+/**
+ * Perform bitwise "and" operation of two bitmaps and place the result in the
+ * first bitmap. The destination bitmap size must be at least the source bitmap
+ * size. Non-allocated bits are considered to be 0.
+ *
+ * @param [inout] dest  First bitmap for the bitwise and operation; the result
+ *                      is placed in this bitmap.
+ * @param [in]    src   Second bitmap for the bitwise and operation.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_dynamic_bitmap_and_inplace(ucs_dynamic_bitmap_t *dest,
+                               const ucs_dynamic_bitmap_t *src)
+{
+    ucs_dynamic_bitmap_binary_op_inplace(dest, src, ucs_bitmap_word_and);
+}
+
+
+/**
+ * Perform bitwise "or" operation of two bitmaps and place the result in the
+ * first bitmap. The destination bitmap size must be at least the source bitmap
+ * size. Non-allocated bits are considered to be 0.
+ *
+ * @param [inout] dest  First bitmap for the bitwise or operation; the result
+ *                      is placed in this bitmap.
+ * @param [in]    src   Second bitmap for the bitwise or operation.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_dynamic_bitmap_or_inplace(ucs_dynamic_bitmap_t *dest,
+                              const ucs_dynamic_bitmap_t *src)
+{
+    ucs_dynamic_bitmap_binary_op_inplace(dest, src, ucs_bitmap_word_or);
+}
+
+
+/**
+ * Perform bitwise "xor" operation of two bitmaps and place the result in the
+ * first bitmap. The destination bitmap size must be at least the source bitmap
+ * size. Non-allocated bits are considered to be 0.
+ *
+ * @param [inout] dest  First bitmap for the bitwise xor operation; the result
+ *                      is placed in this bitmap.
+ * @param [in]    src   Second bitmap for the bitwise xor operation.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_dynamic_bitmap_xor_inplace(ucs_dynamic_bitmap_t *dest,
+                               const ucs_dynamic_bitmap_t *src)
+{
+    ucs_dynamic_bitmap_binary_op_inplace(dest, src, ucs_bitmap_word_xor);
+}
+
+
+/**
+ * Compare two bitmaps. Non-allocated bits are considered to be 0.
+ *
+ * @param [in] bitmap1   First bitmap to compare.
+ * @param [in] bitmap2   Second bitmap to compare.
+ *
+ * @return Nonzero if the bitmaps are equal, zero if they are different.
+*/
+static UCS_F_ALWAYS_INLINE int
+ucs_dynamic_bitmap_is_equal(const ucs_dynamic_bitmap_t *bitmap1,
+                            const ucs_dynamic_bitmap_t *bitmap2)
+{
+    return ucs_bitmap_bits_is_equal(ucs_array_begin(bitmap1),
+                                    ucs_array_length(bitmap1),
+                                    ucs_array_begin(bitmap2),
+                                    ucs_array_length(bitmap2));
 }
 
 END_C_DECLS

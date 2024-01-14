@@ -1084,13 +1084,15 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     ASSERT_EQ(pid, waitpid(pid, &child_status, 0));
     EXPECT_TRUE(WIFEXITED(child_status)) << ucs::exit_status_info(child_status);
 
+#ifndef __SANITIZE_ADDRESS__
     if (!RUNNING_ON_VALGRIND) {
-        /* Under valgrind, leaks are possible due to early exit, so don't expect
-         * an exit status of 0
+        /* Under valgrind or ASAN, leaks are possible due to early exit,
+         * so don't expect an exit status of 0
          */
         EXPECT_EQ(0, WEXITSTATUS(child_status)) <<
                 ucs::exit_status_info(child_status);
     }
+#endif
 
     free(page);
 }
