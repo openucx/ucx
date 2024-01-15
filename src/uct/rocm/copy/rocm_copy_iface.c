@@ -180,33 +180,71 @@ static uct_iface_ops_t uct_rocm_copy_iface_ops = {
     .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
+static UCS_F_ALWAYS_INLINE void
+uct_rocm_copy_set_default_bandwidth(uct_perf_attr_t *perf_attr)
+{
+    switch (perf_attr->operation) {
+    case UCT_EP_OP_GET_SHORT:
+        perf_attr->bandwidth.shared = 2000.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_GET_ZCOPY:
+        perf_attr->bandwidth.shared = 8000.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_PUT_SHORT:
+        perf_attr->bandwidth.shared = 10500.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_PUT_ZCOPY:
+        perf_attr->bandwidth.shared = 9500.0 * UCS_MBYTE;
+        break;
+    default:
+        perf_attr->bandwidth.shared = 0;
+        break;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rocm_copy_set_mi300a_bandwidth(uct_perf_attr_t *perf_attr)
+{
+    switch (perf_attr->operation) {
+    case UCT_EP_OP_GET_SHORT:
+        perf_attr->bandwidth.shared = 6000.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_GET_ZCOPY:
+        perf_attr->bandwidth.shared = 8000.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_PUT_SHORT:
+        perf_attr->bandwidth.shared = 10500.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_PUT_ZCOPY:
+        perf_attr->bandwidth.shared = 25000.0 * UCS_MBYTE;
+        break;
+    default:
+        perf_attr->bandwidth.shared = 0;
+        break;
+    }
+}
 
 static ucs_status_t
 uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_iface,
-                                                  uct_rocm_copy_iface_t);
+    uct_rocm_copy_iface_t *iface                  = ucs_derived_of(tl_iface,
+                                                                   uct_rocm_copy_iface_t);
+    static uct_rocm_amd_gpu_product_t gpu_product = UCT_ROCM_AMD_GPU_UNDEFINED;
+
+    if (gpu_product == UCT_ROCM_AMD_GPU_UNDEFINED) {
+        gpu_product = uct_rocm_base_get_gpu_product();
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.dedicated = 0;
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
             perf_attr->bandwidth.shared = 0;
         } else {
-            switch (perf_attr->operation) {
-            case UCT_EP_OP_GET_SHORT:
-                perf_attr->bandwidth.shared = 2000.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_GET_ZCOPY:
-                perf_attr->bandwidth.shared = 8000.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_PUT_SHORT:
-                perf_attr->bandwidth.shared = 10500.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_PUT_ZCOPY:
-                perf_attr->bandwidth.shared = 9500.0 * UCS_MBYTE;
-                break;
-            default:
-                perf_attr->bandwidth.shared = 0;
-                break;
+            if (gpu_product == UCT_ROCM_AMD_GPU_MI300A ||
+                gpu_product == UCT_ROCM_AMD_GPU_MI300X) {
+                uct_rocm_copy_set_mi300a_bandwidth(perf_attr);
+            } else {
+                uct_rocm_copy_set_default_bandwidth(perf_attr);
             }
         }
     }
