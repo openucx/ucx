@@ -2,13 +2,13 @@ parameters:
   arch:
   container:  
   demands: []
-  temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/tmp-settings.xml
-  gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg
-  
+
 jobs:
   - job: jucx_build_${{ parameters.arch }}
     displayName: JUCX build ${{ parameters.arch }}
     variables:
+      temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/tmp-settings.xml
+      gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg    
       ${{ if ne(parameters.arch, 'amd64') }}:
         SUFFIX: "-${{ parameters.arch }}"
 
@@ -46,7 +46,6 @@ jobs:
           MAVEN_VERSION=${TAG:1}
           make -C bindings/java/src/main/native/ package JUCX_VERSION=${MAVEN_VERSION}
         displayName: Build JUCX
-        condition: eq(variables['Build.Reason'], 'IndividualCI')
 
       - bash: |
           set -eE
@@ -55,9 +54,8 @@ jobs:
             echo -e "<id>ossrh</id><username>\${env.SONATYPE_USERNAME}</username>"
             echo -e "<password>\${env.SONATYPE_PASSWORD}</password>"
             echo -e "</server></servers></settings>"
-          } > ${{ parameters.temp_cfg }}
+          } > $(temp_cfg)
         displayName: Generate temporary config
-        condition: eq(variables['Build.Reason'], 'IndividualCI')
 
       - task: DownloadSecureFile@1
         displayName: Download Secure file
@@ -79,12 +77,12 @@ jobs:
           # use the lowest supported Java version for compatibility:
           az_module_load dev/jdk-1.8
           mvn --version
-          mkdir -p ${{ parameters.gpg_dir }}
+          mkdir -p $(gpg_dir)
           export GPG_TTY=`tty`
-          chmod 700 ${{ parameters.gpg_dir }}
-          cp $(publicKey.secureFilePath)  ${{ parameters.gpg_dir }}/pubring.gpg
-          cp $(privateKey.secureFilePath) ${{ parameters.gpg_dir }}/secring.gpg
-          export GNUPGHOME=${{ parameters.gpg_dir }}
+          chmod 700 $(gpg_dir)
+          cp $(publicKey.secureFilePath)  $(gpg_dir)/pubring.gpg
+          cp $(privateKey.secureFilePath) $(gpg_dir)/secring.gpg
+          export GNUPGHOME=$(gpg_dir)
 
           # GPG agent config
           echo "use-agent" > $GNUPGHOME/gpg.conf
@@ -96,8 +94,8 @@ jobs:
           # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
           # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
           MAVEN_VERSION=${TAG:1}
-          make -C bindings/java/src/main/native/ publish-release \
-              ARGS="--settings ${{ parameters.temp_cfg }}" \
+          make -C bindings/java/src/main/native/ publish-snapshot \
+              ARGS="--settings $(temp_cfg)" \
               JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
         displayName: Publish JUCX jar to maven central
         condition: eq(variables['Build.Reason'], 'IndividualCI')
