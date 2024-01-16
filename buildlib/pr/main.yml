@@ -295,33 +295,10 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        test_perf: 1
-        container: centos7_cuda11
-        valgrind_disable: yes
-    - template: tests.yml
-      parameters:
         name: new
         demands: ucx_new -equals yes
         test_perf: 1
         valgrind_disable: yes
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-    - template: tests.yml
-      parameters:
-        name: roce_proto_disable
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        proto_enable: no
-    - template: tests.yml
-      parameters:
-        name: BlueField
-        demands: ucx_bf -equals yes
-        test_perf: 0
 
   - stage: Namespace_Tests
     dependsOn: [Static_check]
