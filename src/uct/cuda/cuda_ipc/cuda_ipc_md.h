@@ -43,16 +43,37 @@ typedef struct uct_cuda_ipc_md_config {
 
 
 /**
- * @brief cuda_ipc packed and remote key for put/get
+ * @brief list of cuda ipc regions registered for memh
  */
-typedef struct uct_cuda_ipc_key {
-    CUipcMemHandle ph;      /* Memory handle of GPU memory */
-    pid_t          pid;     /* PID as key to resolve peer_map hash */
-    CUdeviceptr    d_bptr;  /* Allocation base address */
-    size_t         b_len;   /* Allocation size */
-    int            dev_num; /* GPU Device number */
-    CUuuid         uuid;    /* GPU Device UUID */
-} uct_cuda_ipc_key_t;
+typedef struct {
+    pid_t           pid;     /* PID as key to resolve peer_map hash */
+    int             dev_num; /* GPU Device number */
+    ucs_list_link_t list;
+} uct_cuda_ipc_memh_t;
+
+
+/**
+ * @brief cudar ipc region registered for exposure
+ */
+typedef struct {
+    CUipcMemHandle  ph;      /* Memory handle of GPU memory */
+    CUdeviceptr     d_bptr;  /* Allocation base address */
+    size_t          b_len;   /* Allocation size */
+    ucs_list_link_t link;
+} uct_cuda_ipc_lkey_t;
+
+
+/**
+ * @brief cuda ipc remote key for put/get
+ */
+typedef struct {
+    CUipcMemHandle  ph;      /* Memory handle of GPU memory */
+    pid_t           pid;     /* PID as key to resolve peer_map hash */
+    CUdeviceptr     d_bptr;  /* Allocation base address */
+    size_t          b_len;   /* Allocation size */
+    int             dev_num; /* GPU Device number */
+    CUuuid          uuid;    /* GPU Device UUID */
+} uct_cuda_ipc_rkey_t;
 
 
 #define UCT_CUDA_IPC_GET_DEVICE(_cu_device)                          \

@@ -166,6 +166,8 @@ typedef struct ucp_context_config {
     uint64_t                               reg_nb_mem_types;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
+    /** RMA zcopy segment size */
+    size_t                                 rma_zcopy_max_seg_size;
 } ucp_context_config_t;
 
 

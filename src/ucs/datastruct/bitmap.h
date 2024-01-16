@@ -21,6 +21,11 @@ BEGIN_C_DECLS
 typedef uint64_t ucs_bitmap_word_t;
 
 
+/* Binary operation on bitmap words */
+typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
+                                                    ucs_bitmap_word_t);
+
+
 /*
  * Bits number in a single bitmap word
  */
@@ -93,6 +98,30 @@ _ucs_bitmap_word_index(size_t bitmap_words, size_t bit_index)
 
 #define _UCS_BITMAP_INDEX_IN_BOUNDS_CONDITION(_bitmap, _bit_index) \
     ((_bit_index) < _UCS_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD)
+
+
+/**
+ * Assert that bit index is inside the expected range.
+ *
+ * @param _bit_index  Index to check.
+ * @param _num_words  Number of words in the bitmap
+ * @param _cmp        Comparison operator - should be < or <=
+ */
+#define UCS_BITMAP_CHECK_INDEX(_bit_index, _num_words, _cmp) \
+    ucs_assertv((_bit_index) _cmp (UCS_BITMAP_BITS_IN_WORD * (_num_words)), \
+                "bit_index=%zu num_words=%zu", (_bit_index), (_num_words))
+
+
+/**
+ * Check that destination number of words is at least as large as the source.
+ *
+ * @param _dst_num_words   Nunber of words in the destination bitmap.
+ * @param _src_num_words   Nunber of words in the source bitmap.
+ */
+#define UCS_BITMAP_CHECK_DST_NUM_WORDS(_dst_num_words, _src_num_words) \
+    ucs_assertv((_dst_num_words) >= (_src_num_words), \
+                "dst_num_words=%zu src_num_words=%zu", (_dst_num_words), \
+                (_src_num_words));
 
 
 /**
@@ -567,6 +596,246 @@ _UCS_BITMAP_DECLARE_TYPE(64)
 _UCS_BITMAP_DECLARE_TYPE(128)
 _UCS_BITMAP_DECLARE_TYPE(256)
 
+
+/* Helper function to set all bitmap bits to 0 */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_reset_all(ucs_bitmap_word_t *bits, size_t num_words)
+{
+    memset(bits, 0, num_words * sizeof(ucs_bitmap_word_t));
+}
+
+
+/* Helper function to set all bitmap bits to 1 */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_set_all(ucs_bitmap_word_t *bits, size_t num_words)
+{
+    memset(bits, 0xff, num_words * sizeof(ucs_bitmap_word_t));
+}
+
+
+/* Helper function to return work mask of bit at given index */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_bit_mask(size_t bit_index)
+{
+    return UCS_BIT(bit_index % UCS_BITMAP_BITS_IN_WORD);
+}
+
+
+/* Helper function to return word index of a given bit index */
+static UCS_F_ALWAYS_INLINE size_t ucs_bitmap_word_index(size_t bit_index,
+                                                        size_t num_words)
+{
+    UCS_BITMAP_CHECK_INDEX(bit_index, num_words, <);
+    return bit_index / UCS_BITMAP_BITS_IN_WORD;
+}
+
+
+/* Helper function to retrieve the value of a single bit */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_get(const ucs_bitmap_word_t *bits, size_t num_words,
+                    size_t bit_index)
+{
+    const ucs_bitmap_word_t mask = ucs_bitmap_word_bit_mask(bit_index);
+    return !!(bits[ucs_bitmap_word_index(bit_index, num_words)] & mask);
+}
+
+
+/* Helper function to set the value of a single bit to 1 */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_set(ucs_bitmap_word_t *bits, size_t num_words, size_t bit_index)
+{
+    const ucs_bitmap_word_t mask = ucs_bitmap_word_bit_mask(bit_index);
+    bits[ucs_bitmap_word_index(bit_index, num_words)] |= mask;
+}
+
+
+/* Helper function to set the value of a single bit to 0 */
+static UCS_F_ALWAYS_INLINE void ucs_bitmap_bits_reset(ucs_bitmap_word_t *bits,
+                                                      size_t num_words,
+                                                      size_t bit_index)
+
+{
+    const ucs_bitmap_word_t mask = ucs_bitmap_word_bit_mask(bit_index);
+    bits[ucs_bitmap_word_index(bit_index, num_words)] &= ~mask;
+}
+
+
+/* Helper function to test if all bitmap bits are 0 */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_is_zero(const ucs_bitmap_word_t *bits, size_t num_words)
+{
+    const ucs_bitmap_word_t *bits_word;
+
+    ucs_carray_for_each(bits_word, bits, num_words) {
+        if (*bits_word != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+
+/* Helper function to count the number of bits that are set to 1 */
+static UCS_F_ALWAYS_INLINE size_t
+ucs_bitmap_bits_popcount(const ucs_bitmap_word_t *bits, size_t num_words)
+{
+    size_t popcount = 0;
+    const ucs_bitmap_word_t *bits_word;
+
+    ucs_carray_for_each(bits_word, bits, num_words) {
+        popcount += ucs_popcount(*bits_word);
+    }
+
+    return popcount;
+}
+
+
+/* Helper function to return the number of bits that are set to 1 upto a
+   given bit_index (excluding bit_index) */
+static UCS_F_ALWAYS_INLINE size_t ucs_bitmap_bits_popcount_upto_index(
+        const ucs_bitmap_word_t *bits, size_t num_words, size_t bit_index)
+{
+    const size_t last_word_index = bit_index / UCS_BITMAP_BITS_IN_WORD;
+    ucs_bitmap_word_t mask       = ucs_bitmap_word_bit_mask(bit_index) - 1;
+
+    UCS_BITMAP_CHECK_INDEX(bit_index, num_words, <=);
+    return ucs_bitmap_bits_popcount(bits, last_word_index) +
+           ((mask == 0) ? 0 : ucs_popcount(bits[last_word_index] & mask));
+}
+
+
+/* Helper function to set the bitmap array to a mask up to the given index */
+static UCS_F_ALWAYS_INLINE void ucs_bitmap_bits_mask(ucs_bitmap_word_t *bits,
+                                                     size_t num_words,
+                                                     size_t bit_index)
+{
+    size_t last_word_index;
+    ucs_bitmap_word_t mask;
+
+    UCS_BITMAP_CHECK_INDEX(bit_index, num_words, <=);
+
+    last_word_index = bit_index / UCS_BITMAP_BITS_IN_WORD;
+    ucs_bitmap_bits_set_all(bits, last_word_index);
+
+    /* Add the mask remainder if needed */
+    mask = ucs_bitmap_word_bit_mask(bit_index) - 1;
+    if (mask != 0) {
+        bits[last_word_index++] = mask;
+    }
+
+    ucs_assertv(num_words >= last_word_index,
+                "num_words=%zu last_word_index=%zu", num_words,
+                last_word_index);
+    ucs_bitmap_bits_reset_all(bits + last_word_index,
+                              num_words - last_word_index);
+}
+
+
+/* Helper function to inverse the bitmap bits */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_not(ucs_bitmap_word_t *dst_bits, size_t dst_num_words,
+                    const ucs_bitmap_word_t *src_bits, size_t src_num_words)
+{
+    size_t word_index;
+
+    UCS_BITMAP_CHECK_DST_NUM_WORDS(dst_num_words, src_num_words);
+
+    for (word_index = 0; word_index < src_num_words; ++word_index) {
+        dst_bits[word_index] = ~src_bits[word_index];
+    }
+
+    if (dst_num_words > src_num_words) {
+        /* Set remaining bits in destination to 1 */
+        ucs_bitmap_bits_set_all(dst_bits + src_num_words,
+                                dst_num_words - src_num_words);
+    }
+}
+
+
+/* Helper function to do bitwise and between bitmap words */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_and(ucs_bitmap_word_t word1, ucs_bitmap_word_t word2)
+{
+    return word1 & word2;
+}
+
+
+/* Helper function to do bitwise or between bitmap words */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_or(ucs_bitmap_word_t word1, ucs_bitmap_word_t word2)
+{
+    return word1 | word2;
+}
+
+
+/* Helper function to do bitwise xor between bitmap words */
+static UCS_F_ALWAYS_INLINE ucs_bitmap_word_t
+ucs_bitmap_word_xor(ucs_bitmap_word_t word1, ucs_bitmap_word_t word2)
+{
+    return word1 ^ word2;
+}
+
+
+/* Helper function to apply a binary operation on two bitmap bit arrays and
+   return the result in a third array. The destination size must be at least
+   the size of each of the source arrays. */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_binary_op(ucs_bitmap_word_t *dst_bits, size_t dst_num_words,
+                          const ucs_bitmap_word_t *src1_bits,
+                          size_t src1_num_words,
+                          const ucs_bitmap_word_t *src2_bits,
+                          size_t src2_num_words, ucs_bitmap_binary_op_t op)
+{
+    size_t word_index = 0;
+
+    UCS_BITMAP_CHECK_DST_NUM_WORDS(dst_num_words, src1_num_words);
+    UCS_BITMAP_CHECK_DST_NUM_WORDS(dst_num_words, src2_num_words);
+
+    while ((word_index < src1_num_words) && (word_index < src2_num_words)) {
+        dst_bits[word_index] = op(src1_bits[word_index], src2_bits[word_index]);
+        ++word_index;
+    }
+
+    /* Non-existing bits in either src1 or src2 are considered to be 0.
+       In practice, at most one of the below while loops will be executed. */
+    while (word_index < src1_num_words) {
+        dst_bits[word_index] = op(src1_bits[word_index], 0);
+        ++word_index;
+    }
+    while (word_index < src2_num_words) {
+        dst_bits[word_index] = op(0, src2_bits[word_index]);
+        ++word_index;
+    }
+
+    /* Clear the remaining bits */
+    ucs_bitmap_bits_reset_all(dst_bits + word_index,
+                              dst_num_words - word_index);
+}
+
+
+/* Helper function to compare two bitmaps */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_bits_is_equal(const ucs_bitmap_word_t *bitmap1_bits,
+                         size_t bitmap1_num_words,
+                         const ucs_bitmap_word_t *bitmap2_bits,
+                         size_t bitmap2_num_words)
+{
+    size_t min_len;
+    int is_zero;
+
+    if (bitmap1_num_words > bitmap2_num_words) {
+        min_len = bitmap2_num_words;
+        is_zero = ucs_bitmap_bits_is_zero(bitmap1_bits + min_len,
+                                          bitmap1_num_words - min_len);
+    } else {
+        min_len = bitmap1_num_words;
+        is_zero = ucs_bitmap_bits_is_zero(bitmap2_bits + min_len,
+                                          bitmap2_num_words - min_len);
+    }
+
+    return is_zero && (memcmp(bitmap1_bits, bitmap2_bits,
+                              sizeof(ucs_bitmap_word_t) * min_len) == 0);
+}
 
 END_C_DECLS
 

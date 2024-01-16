@@ -998,10 +998,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
     if (status != UCS_OK) {
         return status;
     }
-    self->super.super.config.reverse_sl =
-            (config->super.super.reverse_sl == UCS_ULUNITS_AUTO) ?
-                    self->super.super.config.sl :
-                    config->super.super.reverse_sl;
 
     self->super.tx.available     = self->tx.wq.bb_max;
     self->super.config.tx_qp_len = self->tx.wq.bb_max;

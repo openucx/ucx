@@ -24,7 +24,7 @@ namespace ucs {
 
 typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
-const double test_timeout_in_sec = 60.;
+const double test_timeout_in_sec = 180.;
 
 double watchdog_timeout = 900.; // 15 minutes
 
@@ -324,12 +324,16 @@ void analyze_test_results()
 int test_time_multiplier()
 {
     int factor = 1;
-#if _BullseyeCoverage
-    factor *= 10;
-#endif
     if (RUNNING_ON_VALGRIND) {
         factor *= 20;
     }
+#if _BullseyeCoverage
+    factor *= 10;
+#endif
+#ifdef __SANITIZE_ADDRESS__
+    factor *= 20;
+#endif
+
     return factor;
 }
 

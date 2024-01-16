@@ -403,6 +403,8 @@ public:
                                   (uint64_t)ptr, m_perf.ucp.self_recv_rkey,
                                   &param);
             request_wait(request, mem_type, "read_sn");
+            request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
+            request_wait(request, mem_type, "flush read_sn");
             return sn;
         }
     }
@@ -420,6 +422,8 @@ public:
             request = ucp_put_nbx(m_perf.ucp.self_ep, &sn, sizeof(sn),
                                   (uint64_t)ptr, rkey, &param);
             request_wait(request, mem_type, "write_sn");
+            request = ucp_ep_flush_nbx(m_perf.ucp.self_ep, &param);
+            request_wait(request, mem_type, "flush write_sn");
         }
     }
 

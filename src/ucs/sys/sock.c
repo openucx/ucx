@@ -824,6 +824,69 @@ ucs_status_t ucs_sock_ipstr_to_sockaddr(const char *ip_str,
     return UCS_ERR_INVALID_ADDR;
 }
 
+static int is_ipv6_str(const char *ip_port_str)
+{
+    /* Address is treated as IPv6 if it contains more than one colon */
+    const char *ch = strchr(ip_port_str, ':');
+    if (NULL != ch) {
+        return (NULL != strchr(++ch, ':'));
+    }
+    return 0;
+}
+
+ucs_status_t ucs_sock_ipportstr_to_sockaddr(const char *ip_port_str,
+                                            uint16_t default_port,
+                                            struct sockaddr_storage *sa_storage)
+{
+    char ip_str[INET6_ADDRSTRLEN] = {0};
+    char port_str[7]              = {0};
+    uint16_t port                 = default_port;
+    ucs_status_t status;
+
+    if (is_ipv6_str(ip_port_str)) {
+        if (*ip_port_str == '[') {
+            /* Parse [IPv6]:port (max IPv6 size is 39), skipping brackets */
+            sscanf(ip_port_str, "%*[[]%39[^]]]:%6s", ip_str, port_str);
+        } else {
+            /* No brackets means no port specified for IPv6 address */
+            ucs_strncpy_safe(ip_str, ip_port_str, sizeof(ip_str));
+        }
+    } else {
+        /* Parse IPv4 address (max size is 15) with optional port */
+        sscanf(ip_port_str, "%15[^:]:%6s", ip_str, port_str);
+    }
+
+    if (*port_str != '\0') {
+        status = ucs_sock_port_from_string(port_str, &port);
+        if (UCS_OK != status) {
+            return status;
+        }
+    }
+
+    status = ucs_sock_ipstr_to_sockaddr(ip_str, sa_storage);
+    if (UCS_OK != status) {
+        return status;
+    }
+    return ucs_sockaddr_set_port((struct sockaddr *)sa_storage, port);
+}
+
+ucs_status_t ucs_sock_port_from_string(const char *port_str, uint16_t *port)
+{
+    char *endptr;
+    long port_long;
+
+    port_long = strtol(port_str, &endptr, 0);
+    if ((*port_str == '\0') || (*endptr != '\0') ||
+        (port_long < 0) || (port_long > UINT16_MAX)) {
+
+        ucs_error("invalid port '%s'", port_str);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    *port = (uint16_t)port_long;
+    return UCS_OK;
+}
+
 int ucs_sockaddr_cmp(const struct sockaddr *sa1,
                      const struct sockaddr *sa2,
                      ucs_status_t *status_p)

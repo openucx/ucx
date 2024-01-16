@@ -167,6 +167,8 @@ static int safe_recv(int sock, void *data, size_t size,
 
 ucs_status_t init_test_params(perftest_params_t *params)
 {
+    static const struct sockaddr_storage empty_addr = {};
+
     memset(params, 0, sizeof(*params));
     params->super.api               = UCX_PERF_API_LAST;
     params->super.command           = UCX_PERF_CMD_LAST;
@@ -194,6 +196,8 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.am_hdr_size   = 0;
+    params->super.ucp.dmn_local_addr  = empty_addr;
+    params->super.ucp.dmn_remote_addr = empty_addr;
     strcpy(params->super.uct.dev_name, TL_RESOURCE_NAME_NONE);
     strcpy(params->super.uct.tl_name,  TL_RESOURCE_NAME_NONE);
 

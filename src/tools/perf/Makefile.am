@@ -17,7 +17,7 @@ noinst_HEADERS = \
 	perftest_mad.h \
 	api/libperf.h
 
-bin_PROGRAMS = ucx_perftest
+bin_PROGRAMS = ucx_perftest ucx_perftest_daemon
 
 ucx_perftest_SOURCES = \
 	perftest.c \
@@ -51,6 +51,19 @@ dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp \
 	$(top_srcdir)/contrib/ucx_perftest_config/transports
 
+
+ucx_perftest_daemon_SOURCES = \
+	perftest_daemon.c
+
+ucx_perftest_daemon_CXXFLAGS = $(BASE_CXXFLAGS)
+ucx_perftest_daemon_CPPFLAGS = $(BASE_CPPFLAGS)
+ucx_perftest_daemon_CFLAGS   = $(BASE_CFLAGS)
+ucx_perftest_daemon_LDADD    = \
+	$(abs_top_builddir)/src/ucp/libucp.la \
+	$(abs_top_builddir)/src/ucs/libucs.la \
+	lib/libucxperf.la
+
+
 if HAVE_MPIRUN
 .PHONY: ucx test help
 
@@ -60,7 +73,7 @@ MPI_ARGS  = -n 2 -map-by node -mca pml ob1 -mca btl self,tcp,sm $(MPI_EXTRA)
 ucx:
 	$(MAKE) -C $(top_builddir)
 
-test: ucx ucx_perftest
+test: ucx ucx_perftest ucx_perftest_daemon
 	$(MPIRUN) $(MPI_ARGS) $(abs_builddir)/ucx_perftest$(EXEEXT) $(TEST_ARGS)
 
 help:
