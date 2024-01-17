@@ -826,7 +826,7 @@ test_malloc_hook() {
 
 test_no_cuda_context() {
 	echo "==== Running no CUDA context test ===="
-	if [ -x ./test/apps/test_no_cuda_ctx ]
+	if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/apps/test_no_cuda_ctx ]
 	then
 		./test/apps/test_no_cuda_ctx
 	fi
