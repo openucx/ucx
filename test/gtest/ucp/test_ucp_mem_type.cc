@@ -113,6 +113,12 @@ UCS_TEST_P(test_ucp_cuda, sparse_regions) {
     void *ptr[count];
     ucp_mem_h memh[count];
 
+    auto mem_types = mem_buffer::supported_mem_types();
+    if (std::find(mem_types.begin(), mem_types.end(), mem_type) ==
+        mem_types.end()) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
     /* create contiguous CUDA registrations list */
     for (int i = 0; i < count; i++) {
         ptr[i] = mem_buffer::allocate(size, mem_type);
