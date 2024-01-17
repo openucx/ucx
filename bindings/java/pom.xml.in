@@ -117,7 +117,33 @@
         </build>
       </profile>
 
+      <profile>
+        <id>local-deploy</id>
+        <properties>
+          <gpg.skip>true</gpg.skip>
+        </properties>
+        <distributionManagement>
+          <repository>
+            <id>local-repo</id>
+            <url>file://tmp</url>
+          </repository>
+        </distributionManagement>
+        <build>
+          <plugins>
+            <!-- Skip nexus staging for local deployment -->
+            <plugin>
+              <groupId>org.sonatype.plugins</groupId>
+              <artifactId>nexus-staging-maven-plugin</artifactId>
+              <configuration>
+                <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
+              </configuration>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
     </profiles>
+
+
 
   <issueManagement>
     <system>Github</system>
