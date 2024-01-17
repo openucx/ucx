@@ -21,18 +21,25 @@
 
 
 ucs_status_t ucs_array_grow(void **buffer_p, size_t *capacity_p,
-                            size_t min_capacity, size_t value_size,
-                            void **old_buffer_p, const char *array_name)
+                            size_t min_capacity, size_t max_capacity,
+                            size_t value_size, void **old_buffer_p,
+                            const char *array_name)
 {
-    void *old_buffer = *buffer_p;
-    size_t new_capacity, aligned_capacity, current_capacity;
+    void *old_buffer        = *buffer_p;
+    size_t current_capacity = *capacity_p;
+    size_t new_capacity;
     void *new_buffer;
 
-    current_capacity = *capacity_p;
-    new_capacity     = ucs_max(current_capacity * UCS_ARRAY_GROW_FACTOR,
-                               min_capacity);
-    aligned_capacity = (new_capacity + ~UCS_ARRAY_CAP_MASK) & UCS_ARRAY_CAP_MASK;
-    new_buffer       = ucs_malloc(aligned_capacity * value_size, array_name);
+    if (min_capacity > max_capacity) {
+        ucs_error("failed to grow %s from %zu to %zu, maximum capacity is %zu",
+                  array_name, current_capacity, min_capacity, max_capacity);
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    new_capacity = ucs_max(current_capacity * UCS_ARRAY_GROW_FACTOR,
+                           min_capacity);
+    new_capacity = ucs_min(new_capacity, max_capacity);
+    new_buffer   = ucs_malloc(new_capacity * value_size, array_name);
     if (new_buffer == NULL) {
         ucs_error("failed to grow %s from %zu to %zu elems of %zu bytes",
                   array_name, current_capacity, new_capacity, value_size);
@@ -43,8 +50,6 @@ ucs_status_t ucs_array_grow(void **buffer_p, size_t *capacity_p,
         goto out;
     }
 
-    ucs_assert(!(current_capacity & UCS_ARRAY_CAP_FLAG_FIXED));
-
     memcpy(new_buffer, *buffer_p, current_capacity * value_size);
 
 out:
@@ -54,7 +59,7 @@ out:
         *old_buffer_p = old_buffer;
     }
     *buffer_p   = new_buffer;
-    *capacity_p = aligned_capacity;
+    *capacity_p = new_capacity;
     return UCS_OK;
 }
 

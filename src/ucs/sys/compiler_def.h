@@ -177,6 +177,14 @@
     ucs_typeof(((_type*)0)->_field)
 
 /**
+ * @param _type   Integer type.
+ *
+ * @return Whether integer type is unsigned.
+ */
+#define ucs_is_unsigned_type(_type) \
+    ((_type)(-1) > (_type)(0))
+
+/**
  * Prevent compiler from reordering instructions
  */
 #define ucs_compiler_fence()       asm volatile(""::: "memory")
