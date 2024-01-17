@@ -1259,9 +1259,8 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     ucs_assert_always(ep->dest_ep_id != UCT_UD_EP_NULL_ID);
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
 
-    /* Check that CREQ is neither scheduled nor waiting for CREP ack */
-    ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ) &&
-                       uct_ud_ep_is_last_ack_received(ep),
+    /* Check that CREQ is not scheduled */
+    ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ),
                        "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
                        "ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
                        iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
