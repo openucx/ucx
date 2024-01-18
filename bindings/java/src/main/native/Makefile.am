@@ -131,7 +131,7 @@ publish-release:
 
 publish-local:
 	@make set-version JUCX_VERSION=${JUCX_VERSION}
-	$(MVNCMD) deploy -DskipTests -Plocal-deploy
+	$(MVNCMD) deploy -DskipTests ${ARGS} -Plocal-deploy
 
 publish:
 	$(MVNCMD) deploy -DskipTests ${ARGS}

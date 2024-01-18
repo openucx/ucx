@@ -2,6 +2,7 @@ parameters:
   arch:
   container:  
   demands: []
+  target:
 
 jobs:
   - job: jucx_build_${{ parameters.arch }}
@@ -46,21 +47,6 @@ jobs:
           MAVEN_VERSION=${TAG:1}
           make -C bindings/java/src/main/native/ package JUCX_VERSION=${MAVEN_VERSION}
         displayName: Build JUCX
-
-
-      - bash: |
-          set -exE
-          source buildlib/az-helpers.sh
-          az_init_modules
-          az_module_load dev/mvn
-          az_module_load dev/jdk-1.8
-          TAG=`git describe --tags`
-          MAVEN_VERSION=${TAG:1}
-          make -C bindings/java/src/main/native/ publish-local \
-              JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
-        displayName: Local Publish of JUCX jar
-        condition: eq(variables['Build.Reason'], 'PullRequest')
-
 
       - bash: |
           set -eE
@@ -109,10 +95,10 @@ jobs:
           # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
           # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
           MAVEN_VERSION=${TAG:1}
-          make -C bindings/java/src/main/native/ publish-snapshot \
+          make -C bindings/java/src/main/native/ ${{ parameters.target }} \
               ARGS="--settings $(temp_cfg)" \
               JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
-        displayName: Publish JUCX jar to maven central
+        displayName: Publish-Maven
         condition: eq(variables['Build.Reason'], 'IndividualCI')
         env:
           GPG_PASSPHRASE: $(GPG_PASSPHRASE)

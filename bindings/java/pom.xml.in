@@ -119,18 +119,27 @@
 
       <profile>
         <id>local-deploy</id>
-        <properties>
-          <gpg.skip>true</gpg.skip>
-        </properties>
         <distributionManagement>
           <repository>
             <id>local-repo</id>
-            <url>file://tmp</url>
+            <name>Local Repository</name>
+            <url>file://bindings/java/src/main/native/build-java/</url>
           </repository>
         </distributionManagement>
         <build>
           <plugins>
-            <!-- Skip nexus staging for local deployment -->
+            <!-- Disable GPG signing -->
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-gpg-plugin</artifactId>
+              <executions>
+                <execution>
+                  <id>sign-artifacts</id>
+                  <phase>none</phase>
+                </execution>
+              </executions>
+            </plugin>
+            <!-- Skip nexus staging -->
             <plugin>
               <groupId>org.sonatype.plugins</groupId>
               <artifactId>nexus-staging-maven-plugin</artifactId>
@@ -142,8 +151,6 @@
         </build>
       </profile>
     </profiles>
-
-
 
   <issueManagement>
     <system>Github</system>
