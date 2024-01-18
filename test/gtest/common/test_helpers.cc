@@ -794,6 +794,15 @@ std::string sock_addr_storage::to_str() const {
     return ucs_sockaddr_str(get_sock_addr_ptr(), str, sizeof(str));
 }
 
+std::string sock_addr_storage::to_ip_str() const {
+    char str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    status = ucs_sockaddr_get_ipstr(get_sock_addr_ptr(), str, sizeof(str));
+    ASSERT_UCS_OK(status);
+    return str;
+}
+
 const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
     return m_is_valid ? (struct sockaddr *)(&m_storage) : NULL;
 }

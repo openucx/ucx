@@ -420,6 +420,8 @@ public:
 
     std::string to_str() const;
 
+    std::string to_ip_str() const;
+
     const struct sockaddr* get_sock_addr_ptr() const;
 
     const void* get_sock_addr_in_buf() const;

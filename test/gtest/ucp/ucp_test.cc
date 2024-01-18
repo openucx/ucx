@@ -772,6 +772,7 @@ void ucp_test_base::entity::accept(int worker_index,
 
     status = ucp_ep_create(ucp_worker, &ep_params, &ep);
     if (status == UCS_ERR_UNREACHABLE) {
+        ++m_err_cntr;
         UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                         "feature or no supported transport to send partial "
                         "worker address)");
