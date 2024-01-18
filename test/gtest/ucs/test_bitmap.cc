@@ -9,6 +9,8 @@
 #include <ucs/datastruct/dynamic_bitmap.h>
 #include <ucs/datastruct/static_bitmap.h>
 
+#include <numeric>
+
 class test_ucs_bitmap : public ucs::test {
 public:
     virtual void init()
@@ -353,22 +355,60 @@ public:
 protected:
     ucs_dynamic_bitmap_t m_bitmap;
 
-    static void set(ucs_dynamic_bitmap_t &bitmap,
-                    const std::initializer_list<size_t> &offsets)
-    {
-        for (auto offset : offsets) {
-            ucs_dynamic_bitmap_set(&bitmap, offset);
+    static void
+    set(ucs_dynamic_bitmap_t &bitmap, const std::vector<size_t> &offsets);
+
+    void expect_bits(const std::vector<size_t> &offsets) const;
+
+    void test_ffs_fns(const std::vector<size_t> &offsets) const;
+};
+
+void test_dynamic_bitmap::set(ucs_dynamic_bitmap_t &bitmap,
+                              const std::vector<size_t> &offsets)
+{
+    for (auto offset : offsets) {
+        ucs_dynamic_bitmap_set(&bitmap, offset);
+    }
+}
+
+void test_dynamic_bitmap::expect_bits(const std::vector<size_t> &offsets) const
+{
+    EXPECT_EQ(offsets.size(), ucs_dynamic_bitmap_popcount(&m_bitmap));
+    for (auto offset : offsets) {
+        EXPECT_EQ(1, ucs_dynamic_bitmap_get(&m_bitmap, offset));
+    }
+}
+
+void test_dynamic_bitmap::test_ffs_fns(const std::vector<size_t> &offsets) const
+{
+    ucs_dynamic_bitmap_t bitmap;
+
+    ucs_dynamic_bitmap_init(&bitmap);
+    set(bitmap, offsets);
+
+    EXPECT_EQ(offsets.size(), ucs_dynamic_bitmap_popcount(&bitmap));
+
+    if (!offsets.empty()) {
+        /* Asking more bits that are set should result in a value larger than
+           bitmap size */
+        EXPECT_GT(ucs_dynamic_bitmap_fns(&bitmap, offsets.size()),
+                  offsets.back());
+
+        /* Verify first set bit */
+        EXPECT_EQ(offsets.front(), ucs_dynamic_bitmap_ffs(&bitmap));
+        EXPECT_EQ(offsets.front(), ucs_dynamic_bitmap_fns(&bitmap, 0));
+
+        /* Verify all set bits */
+        size_t count = 0;
+        for (auto bit_index : offsets) {
+            EXPECT_EQ(bit_index, ucs_dynamic_bitmap_fns(&bitmap, count));
+            ++count;
         }
     }
 
-    void expect_bits(const std::initializer_list<size_t> &offsets) const
-    {
-        EXPECT_EQ(offsets.size(), ucs_dynamic_bitmap_popcount(&m_bitmap));
-        for (auto offset : offsets) {
-            EXPECT_EQ(1, ucs_dynamic_bitmap_get(&m_bitmap, offset));
-        }
-    }
-};
+    ucs_dynamic_bitmap_cleanup(&bitmap);
+}
+
 
 UCS_TEST_F(test_dynamic_bitmap, test_get_set_reset)
 {
@@ -410,6 +450,40 @@ UCS_TEST_F(test_dynamic_bitmap, test_popcount_upto_index)
 
     popcount = ucs_dynamic_bitmap_popcount_upto_index(&m_bitmap, 20);
     EXPECT_EQ(1, popcount);
+}
+
+UCS_TEST_F(test_dynamic_bitmap, test_ffs_fns) {
+    test_ffs_fns({120, 121, 127, 128, 712});
+    test_ffs_fns({});
+
+    std::vector<size_t> vec(128);
+    std::iota(vec.begin(), vec.end(), 0);
+    test_ffs_fns(vec);
+}
+
+UCS_TEST_F(test_dynamic_bitmap, test_for_each_bit)
+{
+    set(m_bitmap, {0, 25, 64, 100});
+
+    std::vector<int> bits;
+    int bit_index;
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(bit_index, &m_bitmap) {
+        bits.push_back(bit_index);
+    }
+
+    EXPECT_EQ(4, bits.size());
+    EXPECT_EQ(0, bits[0]);
+    EXPECT_EQ(25, bits[1]);
+    EXPECT_EQ(64, bits[2]);
+    EXPECT_EQ(100, bits[3]);
+
+    /* Test FOREACH on an empty m_bitmap */
+    ucs_dynamic_bitmap_reset_all(&m_bitmap);
+    bits.clear();
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(bit_index, &m_bitmap) {
+        bits.push_back(bit_index);
+    }
+    EXPECT_TRUE(bits.empty());
 }
 
 UCS_TEST_F(test_dynamic_bitmap, is_equal)

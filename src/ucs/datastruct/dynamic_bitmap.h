@@ -18,6 +18,17 @@ BEGIN_C_DECLS
 UCS_ARRAY_DECLARE_TYPE(ucs_dynamic_bitmap_t, size_t, ucs_bitmap_word_t);
 
 
+/*
+ * Iterate over all set (1) bits of a given bitmap.
+ *
+ * @param _bit_index   Bit index (global offset - relative to the whole bitmap).
+ * @param _bitmap      Iterate over bits of this bitmap.
+ */
+#define UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(_bit_index, _bitmap) \
+    UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, ucs_array_begin(_bitmap), \
+                                 ucs_array_length(_bitmap))
+
+
 /**
  * Initilaize a dynamic bitmap.
  *
@@ -160,6 +171,40 @@ ucs_dynamic_bitmap_is_zero(const ucs_dynamic_bitmap_t *bitmap)
 {
     return ucs_bitmap_bits_is_zero(ucs_array_begin(bitmap),
                                    ucs_array_length(bitmap));
+}
+
+
+/**
+ * Find first set bit in the bitmap. If the bitmap is all zero, the result is
+ * undefined.
+ *
+ * @param [in] bitmap  Find the set bit in this bitmap.
+ *
+ * @return Index of the first bit set to 1.
+ */
+static UCS_F_ALWAYS_INLINE size_t
+ucs_dynamic_bitmap_ffs(const ucs_dynamic_bitmap_t *bitmap)
+{
+    return ucs_bitmap_bits_ffs(ucs_array_begin(bitmap),
+                               ucs_array_length(bitmap), 0);
+}
+
+
+/**
+ * Find the index of the n-th bit set to 1 in a given bitmap, starting from a
+ * particular index (inclusive). If all bits are zero, returns the index past
+ * the last bit (bitmap size).
+ *
+ * @param [in] bitmap Look for the first bit in the words of this bitmap.
+ * @param [in] n      Number of set bits to look up.
+ *
+ * @return Bit index of the n-th set bit in the bitmap.
+ */
+static UCS_F_ALWAYS_INLINE size_t
+ucs_dynamic_bitmap_fns(const ucs_dynamic_bitmap_t *bitmap, size_t n)
+{
+    return ucs_bitmap_bits_fns(ucs_array_begin(bitmap),
+                               ucs_array_length(bitmap), 0, n);
 }
 
 

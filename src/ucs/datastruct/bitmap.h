@@ -597,6 +597,47 @@ _UCS_BITMAP_DECLARE_TYPE(128)
 _UCS_BITMAP_DECLARE_TYPE(256)
 
 
+/**
+ * Helper macro to iterate over all set (1) bits of a given bitmap.
+ *
+ * @param _bit_index Bit index (global offset - relative to the whole bitmap).
+ * @param _bits      Iterate over bits of this bitmap.
+ * @param _num_words Number of words in the bitmap.
+ */
+#define UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, _bits, _num_words) \
+    for (_bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, 0); \
+         _bit_index < (_num_words)*UCS_BITMAP_BITS_IN_WORD; \
+         _bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, _bit_index + 1))
+
+
+/**
+ * Helper function to find the index of the first bit set to 1 in a given
+ * bitmap, starting from the index @a start_index (inclusive). If all bits are
+ * zero, returns the index past the last bit (bitmap size).
+ *
+ * @param bits         Look for the first bit in the words of this bitmap.
+ * @param num_words    Number of words in the bitmap.
+ * @param start_index  The first bit to look from.
+ */
+size_t ucs_bitmap_bits_ffs(const ucs_bitmap_word_t *bits, size_t num_words,
+                           size_t start_index);
+
+
+/**
+ * Helper function to find the index of the @a bit_count-th bit set to 1 in a
+ * given bitmap, starting from the index @a start_index (inclusive). If all bits
+ * are zero, returns the index past the last bit (bitmap size).
+ *
+ * @param bits         Look for the first bit in the words of this bitmap.
+ * @param num_words    Number of words in the bitmap.
+ * @param start_index  The first bit to look from.
+ * @param bit_count    Number of bits to look for. If @a bit_count is 0, returns
+ *                     the first set bit after @a start_index (inclusive).
+ */
+size_t ucs_bitmap_bits_fns(const ucs_bitmap_word_t *bits, size_t num_words,
+                           size_t start_index, size_t bit_count);
+
+
 /* Helper function to set all bitmap bits to 0 */
 static UCS_F_ALWAYS_INLINE void
 ucs_bitmap_bits_reset_all(ucs_bitmap_word_t *bits, size_t num_words)

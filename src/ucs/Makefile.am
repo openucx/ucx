@@ -165,6 +165,7 @@ libucs_la_SOURCES = \
 	config/parser.c \
 	datastruct/arbiter.c \
 	datastruct/array.c \
+	datastruct/bitmap.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
 	datastruct/lru.c \
