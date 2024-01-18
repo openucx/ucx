@@ -892,8 +892,10 @@ ucs_bitmap_bits_is_equal(const ucs_bitmap_word_t *bitmap1_bits,
                                           bitmap2_num_words - min_len);
     }
 
-    return is_zero && (memcmp(bitmap1_bits, bitmap2_bits,
-                              sizeof(ucs_bitmap_word_t) * min_len) == 0);
+    /* Remainder must be zero and overlapping words must be equal */
+    return is_zero && ((min_len == 0) ||
+                       (memcmp(bitmap1_bits, bitmap2_bits,
+                               sizeof(ucs_bitmap_word_t) * min_len) == 0));
 }
 
 END_C_DECLS
