@@ -53,6 +53,10 @@
 #define UCT_IB_SITE_LOCAL_PREFIX          be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_MASK            be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_FLID_MASK       be64toh(0xffffffff00000000ul) /* site-local + flid */
+#define UCT_IB_GUID_OPENIB_OUI            0x001405 /* An OUI is a 24 bit globally unique assigned
+                                                      number referenced by various standards.
+                                                      IB_OPENIB_OUI is part of the routable alias
+                                                      GUID built by SM. */
 #define UCT_IB_DEFAULT_ROCEV2_DSCP        106  /* Default DSCP for RoCE v2 */
 #define UCT_IB_ROCE_UDP_SRC_PORT_BASE     0xC000
 #define UCT_IB_CQE_SL_PKTYPE_MASK         0x7 /* SL for IB or packet type
@@ -65,6 +69,9 @@
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
 #define UCT_IB_DEVICE_ECE_DEFAULT         0x0         /* default ECE */
 #define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
+#define UCT_IB_DEVICE_DEFAULT_GID_INDEX 0   /* The gid index used by default for an IB/RoCE port */
+#define UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX 1 /* The gid index used by default
+                                                   with FLID based IB routing */
 
 
 enum {
