@@ -9,10 +9,39 @@
 
 #include "rcache_int.h"
 
+#include <ucs/arch/atomic.h>
+#include <ucs/datastruct/queue.h>
+#include <ucs/profile/profile.h>
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucs_rcache_region_flags(ucs_rcache_region_t *region)
+{
+    ucs_memory_cpu_load_fence();
+    return region->flags;
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+ucs_rcache_region_set_flag(ucs_rcache_region_t *region, unsigned flag)
+{
+    ucs_atomic_or8(&region->flags, flag);
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+ucs_rcache_region_clear_flag(ucs_rcache_region_t *region, unsigned flag)
+{
+    ucs_atomic_and8(&region->flags, ~flag);
+}
+
+
 static UCS_F_ALWAYS_INLINE int
 ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
 {
-    return (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) &&
+    return ((ucs_rcache_region_flags(region) &
+            (UCS_RCACHE_REGION_FLAG_REGISTERED |
+             UCS_RCACHE_REGION_FLAG_RELEASING)) ==
+            UCS_RCACHE_REGION_FLAG_REGISTERED) &&
            ucs_test_all_flags(region->prot, prot) &&
            ((alignment == 1) || (region->alignment >= alignment));
 }
@@ -57,7 +86,6 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
     ucs_trace_func("rcache=%s, address=%p, length=%zu", rcache->name, address,
                    length);
 
-    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_GETS, 1);
     if (ucs_unlikely(!ucs_queue_is_empty(&rcache->inv_q))) {
         return NULL;
     }
@@ -68,14 +96,17 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
     }
 
     region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
-    if (((start + length) > region->super.end) ||
-        !ucs_rcache_region_test(region, prot, alignment))
-    {
+    region->refcount++;
+    ucs_memory_cpu_store_fence();
+
+    if (ucs_unlikely(((start + length) > region->super.end) ||
+        !ucs_rcache_region_test(region, prot, alignment))) {
+        region->refcount--;
         return NULL;
     }
 
-    region->refcount++;
     ucs_rcache_region_lru_remove(rcache, region);
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_GETS, 1);
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_HITS_FAST, 1);
     return region;
 }
@@ -88,7 +119,9 @@ ucs_rcache_region_put_unsafe(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 
     ucs_assert(region->refcount > 0);
     if (ucs_unlikely(--region->refcount == 0)) {
-        ucs_mem_region_destroy_internal(rcache, region, 0);
+        pthread_rwlock_wrlock(&rcache->pgt_lock);
+        ucs_mem_region_destroy_internal(rcache, region);
+        pthread_rwlock_unlock(&rcache->pgt_lock);
     }
 
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_PUTS, 1);

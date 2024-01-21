@@ -1487,7 +1487,6 @@ ucp_mem_rcache_create(ucp_context_h context, const char *name,
     rcache_params->ops                = &ucp_mem_rcache_ops;
 
     if (events) {
-        rcache_params->flags         |= UCS_RCACHE_FLAG_SYNC_EVENTS;
         rcache_params->ucm_events     = UCM_EVENT_VM_UNMAPPED |
                                         UCM_EVENT_MEM_TYPE_FREE;
     }

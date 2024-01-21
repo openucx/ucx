@@ -43,8 +43,9 @@ typedef struct ucs_rcache_config  ucs_rcache_config_t;
  * Memory region flags.
  */
 enum {
-    UCS_RCACHE_REGION_FLAG_REGISTERED = UCS_BIT(0), /**< Memory registered */
-    UCS_RCACHE_REGION_FLAG_PGTABLE    = UCS_BIT(1), /**< In the page table */
+    UCS_RCACHE_REGION_FLAG_PGTABLE    = UCS_BIT(0), /**< In the page table */
+    UCS_RCACHE_REGION_FLAG_REGISTERED = UCS_BIT(2), /**< Memory registered */
+    UCS_RCACHE_REGION_FLAG_RELEASING  = UCS_BIT(1), /**< Memory invalidated */
 };
 
 /*
@@ -60,7 +61,6 @@ enum {
 enum {
     UCS_RCACHE_FLAG_NO_PFN_CHECK  = UCS_BIT(0), /**< PFN check not supported for this rcache */
     UCS_RCACHE_FLAG_PURGE_ON_FORK = UCS_BIT(1), /**< purge rcache on fork */
-    UCS_RCACHE_FLAG_SYNC_EVENTS   = UCS_BIT(2), /**< Synchronize memory events handling */
 };
 
 /*
@@ -161,7 +161,10 @@ struct ucs_rcache_config {
 
 struct ucs_rcache_region {
     ucs_pgt_region_t       super;     /**< Base class - page table region */
-    ucs_list_link_t        lru_list;  /**< LRU list element */
+    union {
+        ucs_list_link_t    lru_list;  /**< LRU list element */
+        ucs_list_link_t    gc_list;   /**< GC list element */
+    };
     ucs_list_link_t        tmp_list;  /**< Temp list element */
     ucs_list_link_t        comp_list; /**< Completion list element */
     size_t                 alignment;
@@ -169,7 +172,7 @@ struct ucs_rcache_region {
                                            in the page table */
     ucs_status_t           status;    /**< Current status code */
     uint8_t                prot;      /**< Protection bits */
-    uint8_t                flags;     /**< Status flags. Protected by page table lock. */
+    uint8_t                flags;     /**< Status flags */
     uint8_t                lru_flags; /**< LRU flags */
     union {
         uint64_t           priv;      /**< Used internally */
