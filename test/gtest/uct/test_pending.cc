@@ -15,28 +15,22 @@ extern "C" {
 class test_uct_pending : public uct_test {
 public:
     test_uct_pending() : uct_test() {
-        m_e1 = NULL;
-        m_e2 = NULL;
-
         reduce_tl_send_queues();
     }
 
     virtual void init() {
         uct_test::init();
 
-        m_e1 = uct_test::create_entity(0);
-        m_entities.push_back(m_e1);
-
-        m_e2 = uct_test::create_entity(0);
-        m_entities.push_back(m_e2);
+        uct_test::create_entity(0);
+        uct_test::create_entity(0);
 
         check_skip_test();
     }
 
     void initialize() {
 
-        m_e1->connect(0, *m_e2, 0);
-        m_e2->connect(0, *m_e1, 0);
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
         flush();
     }
 
@@ -61,13 +55,13 @@ public:
         ucs_status_t status, status_pend;
 
         do {
-            status = uct_ep_am_short(m_e1->ep(idx), AM_ID, header, send_data,
+            status = uct_ep_am_short(sender().ep(idx), AM_ID, header, send_data,
                                      sizeof(*send_data));
             if (status != UCS_OK) {
                 EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
                 pending_send_request_t *req = (preq != NULL) ? preq :
                                               pending_alloc(*send_data, idx);
-                status_pend                 = uct_ep_pending_add(m_e1->ep(idx),
+                status_pend                 = uct_ep_pending_add(sender().ep(idx),
                                                                  &req->uct, 0);
                 if (status_pend == UCS_ERR_BUSY) { /* retry */
                     if (preq == NULL) {
@@ -238,7 +232,7 @@ public:
                                           int count = 5, bool delete_me = true,
                                           uct_pending_callback_t cb = pending_send_op) {
         pending_send_request_t *req = new pending_send_request_t();
-        req->ep                     = m_e1->ep(ep_idx);
+        req->ep                     = sender().ep(ep_idx);
         req->data                   = send_data;
         req->pending                = false;
         req->countdown              = count;
@@ -258,7 +252,6 @@ protected:
     static const uint64_t PENDING_HDR;
     static const uint64_t COMP_HDR;
     static const uint8_t  AM_ID;
-    entity *m_e1, *m_e2;
     static int n_pending;
     static int n_purge;
     static bool pend_received;
@@ -299,7 +292,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_op,
     initialize();
 
     /* set a callback for the uct to invoke for receiving the data */
-    install_handler_sync_or_async(m_e2->iface(), AM_ID, am_handler, &counter);
+    install_handler_sync_or_async(receiver().iface(), AM_ID, am_handler, &counter);
 
     /* send the data until the resources run out */
     unsigned n_sends = send_ams_and_add_pending(&send_data, PENDING_HDR, false);
@@ -325,20 +318,20 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending,
     initialize();
 
     /* set a callback for the uct to invoke when receiving the data */
-    install_handler_sync_or_async(m_e2->iface(), AM_ID, am_handler, &counter);
+    install_handler_sync_or_async(receiver().iface(), AM_ID, am_handler, &counter);
 
     unsigned n_sends = send_ams_and_add_pending(&send_data);
 
     /* progress the receiver a bit to release resources */
     for (unsigned i = 0; i < 1000; i++) {
-        m_e2->progress();
+        receiver().progress();
     }
 
     /* send a new message. the transport should make sure that this new message
      * isn't sent before the one in pending, thus preventing out-of-order in
      * sending. */
     do {
-        status = uct_ep_am_short(m_e1->ep(0), AM_ID, PENDING_HDR, &send_data,
+        status = uct_ep_am_short(sender().ep(0), AM_ID, PENDING_HDR, &send_data,
                                  sizeof(send_data));
         short_progress_loop();
     } while (status == UCS_ERR_NO_RESOURCE);
@@ -362,11 +355,11 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
     bool ep_pending_idx[num_eps];
 
      /* set a callback for the uct to invoke when receiving the data */
-    install_handler_sync_or_async(m_e2->iface(), AM_ID, am_handler_count,
+    install_handler_sync_or_async(receiver().iface(), AM_ID, am_handler_count,
                                   &counter);
 
     for (unsigned idx = 0; idx < num_eps; ++idx) {
-        m_e1->connect(idx, *m_e2, idx);
+        sender().connect(idx, receiver(), idx);
         ep_pending_idx[idx] = false;
     }
 
@@ -386,7 +379,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
             }
 
             /* try to user all transport's resources */
-            status = uct_ep_am_short(m_e1->ep(idx), AM_ID, PENDING_HDR,
+            status = uct_ep_am_short(sender().ep(idx), AM_ID, PENDING_HDR,
                                      &send_data, sizeof(send_data));
             if (status != UCS_OK) {
                 ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
@@ -397,7 +390,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
                 pending_send_request_t *preq =
                     pending_alloc(send_data, num_eps - idx - 1,
                                   0, true, pending_send_op_add_pending);
-                status = uct_ep_pending_add(m_e1->ep(idx), &preq->uct, 0);
+                status = uct_ep_pending_add(sender().ep(idx), &preq->uct, 0);
                 ASSERT_UCS_OK(status);
                 ++n_pending;
                 preq->pending = true;
@@ -430,16 +423,16 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_purge,
     uint64_t send_data = 0xdeadbeefUL;
 
      /* set a callback for the uct to invoke when receiving the data */
-    install_handler_sync_or_async(m_e2->iface(), AM_ID, am_handler_simple, NULL);
+    install_handler_sync_or_async(receiver().iface(), AM_ID, am_handler_simple, NULL);
 
     for (int i = 0; i < num_eps; ++i) {
-        m_e1->connect(i, *m_e2, i);
+        sender().connect(i, receiver(), i);
         send_ams_and_add_pending(&send_data, PENDING_HDR, true, false, i);
     }
 
     for (int i = 0; i < num_eps; ++i) {
         n_purge = 0;
-        uct_ep_pending_purge(m_e1->ep(i), purge_cb, NULL);
+        uct_ep_pending_purge(sender().ep(i), purge_cb, NULL);
         EXPECT_EQ(1, n_purge);
     }
 }
@@ -456,7 +449,8 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_async,
     initialize();
 
     /* set a callback for the uct to invoke when receiving the data */
-    install_handler_sync_or_async(m_e2->iface(), AM_ID, am_handler_simple, 0);
+    install_handler_sync_or_async(receiver().iface(), AM_ID, am_handler_simple,
+                                  0);
 
     /* send while resources are available */
     uint64_t send_data = 0xABC;
@@ -469,9 +463,9 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_async,
     EXPECT_EQ(1, n_pending);
 
     /* send should fail, because we have pending op */
-    mapped_buffer sbuf(ucs_min(64ul, m_e1->iface_attr().cap.am.max_bcopy),
-                       0, *m_e1);
-    ssize_t packed_len = uct_ep_am_bcopy(m_e1->ep(0), AM_ID,
+    mapped_buffer sbuf(ucs_min(64ul, sender().iface_attr().cap.am.max_bcopy),
+                       0, receiver());
+    ssize_t packed_len = uct_ep_am_bcopy(sender().ep(0), AM_ID,
                                          mapped_buffer::pack, &sbuf, 0);
     EXPECT_EQ(1, n_pending);
     EXPECT_EQ((ssize_t)UCS_ERR_NO_RESOURCE, packed_len);
@@ -493,15 +487,17 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug,
 
     initialize();
 
-    mapped_buffer sbuf(ucs_min(64ul, m_e1->iface_attr().cap.am.max_bcopy), 0,
-                       *m_e1);
+    mapped_buffer sbuf(ucs_min(64ul, sender().iface_attr().cap.am.max_bcopy), 0,
+                       receiver());
 
     /* set a callback for the uct to invoke when receiving the data */
-    install_handler_sync_or_async(m_e2->iface(), AM_ID, am_handler_simple, 0);
+    install_handler_sync_or_async(receiver().iface(), AM_ID, am_handler_simple,
+                                  0);
 
     if (RUNNING_ON_VALGRIND) {
         N = 64;
-    } else if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+    } else if (sender().iface_attr().cap.flags &
+               UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         N = 2048;
     } else {
         N = 128;
@@ -515,7 +511,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug,
 
         for (j = 0; j < max_listen_conn; j++) {
             int idx = i + j;
-            m_e1->connect(idx, *m_e2, idx);
+            sender().connect(idx, receiver(), idx);
         }
         /* give a chance to finish connection for some transports (ib/ud, tcp) */
         flush();
@@ -544,16 +540,16 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness,
 
     initialize();
 
-    if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+    if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         N = ucs_min(128, max_connect_batch());
     }
     pending_send_request_t *reqs[N];
-    install_handler_sync_or_async(m_e2->iface(), AM_ID, am_handler_simple, 0);
+    install_handler_sync_or_async(receiver().iface(), AM_ID, am_handler_simple, 0);
 
     /* idx 0 is setup in initialize(). only need to alloc request */
     reqs[0] = pending_alloc(send_data, 0, 0, false);
     for (i = 1; i < N; i++) {
-        m_e1->connect(i, *m_e2, i);
+        sender().connect(i, receiver(), i);
         reqs[i] = pending_alloc(send_data, i, 0, false);
     }
 
@@ -624,20 +620,20 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_comp,
     bool comp_received = false;
     pend_received      = false;
 
-    uct_iface_set_am_handler(m_e2->iface(), AM_ID, am_handler_check_rx_order,
+    uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler_check_rx_order,
                              &comp_received, 0);
 
-    mapped_buffer sendbuf(32, 0, *m_e1);
+    mapped_buffer sendbuf(32, 0, sender());
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                             sendbuf.memh(), 1);
     am_completion_t comp;
     comp.uct.func       = completion_cb;
     comp.uct.count      = 1;
     comp.uct.status     = UCS_OK;
-    comp.ep             = m_e1->ep(0);
-    ucs_status_t status = uct_ep_am_zcopy(m_e1->ep(0), AM_ID, &AM_HDR,
-                                           sizeof(AM_HDR), iov, iovcnt, 0,
-                                           &comp.uct);
+    comp.ep             = sender().ep(0);
+    ucs_status_t status = uct_ep_am_zcopy(sender().ep(0), AM_ID, &AM_HDR,
+                                          sizeof(AM_HDR), iov, iovcnt, 0,
+                                          &comp.uct);
     ASSERT_FALSE(UCS_STATUS_IS_ERR(status));
 
     uint64_t send_data = 0xFAFAul;

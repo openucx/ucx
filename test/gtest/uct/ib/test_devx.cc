@@ -14,13 +14,9 @@ extern "C" {
 
 class test_devx : public uct_test {
 public:
-    entity* m_e;
-
     void init() {
         uct_test::init();
-
-        m_e = create_entity(0);
-        m_entities.push_back(m_e);
+        create_entity(0);
 
         if (!(md()->super.dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM &&
               md()->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
@@ -31,11 +27,11 @@ public:
     }
 
     uct_ib_mlx5_md_t *md() {
-        return ucs_derived_of(m_e->md(), uct_ib_mlx5_md_t);
+        return ucs_derived_of(e(0).md(), uct_ib_mlx5_md_t);
     }
 
     uct_priv_worker_t *worker() {
-        return ucs_derived_of(m_e->worker(), uct_priv_worker_t);
+        return ucs_derived_of(e(0).worker(), uct_priv_worker_t);
     }
 };
 

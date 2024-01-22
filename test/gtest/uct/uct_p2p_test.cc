@@ -67,19 +67,16 @@ void uct_p2p_test::init() {
     ucs_assert_always(r != NULL);
 
     /* Create 2 connected endpoints */
-    entity *e1 = uct_test::create_entity(m_rx_headroom, m_err_handler);
-    m_entities.push_back(e1);
+    uct_test::create_entity(m_rx_headroom, m_err_handler);
 
     check_skip_test();
 
     if (r->loopback) {
-        e1->connect(0, *e1, 0);
+        sender().connect(0, sender(), 0);
     } else {
-        entity *e2 = uct_test::create_entity(m_rx_headroom, m_err_handler);
-        m_entities.push_back(e2);
-
-        e1->connect(0, *e2, 0);
-        e2->connect(0, *e1, 0);
+        uct_test::create_entity(m_rx_headroom, m_err_handler);
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
     }
 
     /* Allocate completion handle and set the callback */
@@ -92,6 +89,7 @@ void uct_p2p_test::init() {
 void uct_p2p_test::cleanup() {
     flush();
     uct_test::cleanup();
+    m_entities.clear();
 }
 
 void uct_p2p_test::test_xfer(send_func_t send, size_t length, unsigned flags,
@@ -310,16 +308,8 @@ void uct_p2p_test::wait_for_remote() {
     flush();
 }
 
-uct_test::entity& uct_p2p_test::sender() {
-    return **m_entities.begin();
-}
-
 uct_ep_h uct_p2p_test::sender_ep() {
     return sender().ep(0);
-}
-
-uct_test::entity& uct_p2p_test::receiver() {
-    return **(m_entities.end() - 1);
 }
 
 uct_completion_t *uct_p2p_test::comp() {

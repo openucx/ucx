@@ -21,7 +21,6 @@ public:
         /* data follows */
     } recv_desc_t;
 
-    test_uct_ib();
     void init();
     virtual void create_connected_entities();
     static ucs_status_t ib_am_handler(void *arg, void *data,
@@ -29,7 +28,6 @@ public:
     virtual void send_recv_short();
 
 protected:
-    entity *m_e1, *m_e2;
     static size_t m_ib_am_handler_counter;
 };
 

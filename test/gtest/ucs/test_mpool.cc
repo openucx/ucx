@@ -37,7 +37,7 @@ protected:
     {
         // Ignore errors that invalid input parameters as it is expected
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
             std::string exp_str = "Invalid memory pool parameter(s)";
 
             if (err_str == exp_str) {
@@ -62,7 +62,7 @@ protected:
                            const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_WARN) {
-            std::string msg = format_message(message, ap);
+            std::string msg = ucs::log::format_message(message, ap);
             if (is_leak_str(msg)) {
                 UCS_TEST_MESSAGE << "< " << msg << " >";
                 ++leak_count;
@@ -135,7 +135,7 @@ UCS_TEST_F(test_mpool, wrong_ops) {
     ucs_mpool_t mp;
     ucs_status_t status;
     ucs_mpool_ops_t ops = { 0 };
-    scoped_log_handler log_handler(mpool_log_handler);
+    ucs::log::scoped_handler log_handler(mpool_log_handler);
     ucs_mpool_params_t mp_params;
 
     ucs_mpool_params_reset(&mp_params);
@@ -153,7 +153,7 @@ UCS_TEST_F(test_mpool, wrong_ops) {
 UCS_TEST_F(test_mpool, wrong_mpool_chuk_size) {
     ucs_mpool_t mp;
     ucs_mpool_ops_t ops = { 0 };
-    scoped_log_handler log_handler(mpool_log_handler);
+    ucs::log::scoped_handler log_handler(mpool_log_handler);
     ucs_mpool_params_t mp_params;
 
     ucs_mpool_params_reset(&mp_params);
@@ -361,7 +361,7 @@ UCS_TEST_F(test_mpool, leak_check) {
     // Do not release allocated objects
 
     leak_count = 0;
-    scoped_log_handler log_handler(mpool_log_leak_handler);
+    ucs::log::scoped_handler log_handler(mpool_log_leak_handler);
     ucs_mpool_cleanup(&mp, 1);
 
     EXPECT_EQ(5u, leak_count);

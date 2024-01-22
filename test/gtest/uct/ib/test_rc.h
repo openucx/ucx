@@ -26,18 +26,19 @@ public:
         uct_ep_h          ep;
     } pending_send_request_t;
 
-    virtual void init();
+    virtual void init() override;
+    virtual void cleanup() override;
     virtual void connect();
 
-    uct_rc_iface_t* rc_iface(entity *e) {
-        return ucs_derived_of(e->iface(), uct_rc_iface_t);
+    uct_rc_iface_t* rc_iface(entity &e) {
+        return ucs_derived_of(e.iface(), uct_rc_iface_t);
     }
 
-    uct_rc_ep_t* rc_ep(entity *e, int ep_idx = 0) {
-        return ucs_derived_of(e->ep(ep_idx), uct_rc_ep_t);
+    uct_rc_ep_t* rc_ep(entity &e, int ep_idx = 0) {
+        return ucs_derived_of(e.ep(ep_idx), uct_rc_ep_t);
     }
 
-    void send_am_messages(entity *e, int wnd, ucs_status_t expected,
+    void send_am_messages(entity &e, int wnd, ucs_status_t expected,
                           uint8_t am_id = 0, int ep_idx = 0) {
         for (int i = 0; i < wnd; i++) {
             EXPECT_EQ(expected, send_am_message(e, am_id, ep_idx));
@@ -54,10 +55,6 @@ public:
                                          unsigned flags) {
         return UCS_OK;
     }
-
-protected:
-    entity *m_e1, *m_e2;
-
 };
 
 class test_rc_flow_control : public test_rc {
@@ -71,23 +68,24 @@ public:
     void init();
     void cleanup();
 
-    virtual uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
+    virtual uct_rc_fc_t* get_fc_ptr(entity &e, int ep_idx = 0) {
         return &rc_ep(e, ep_idx)->fc;
     }
 
-    virtual void disable_entity(entity *e) {
+    virtual void disable_entity(entity &e) {
         rc_iface(e)->tx.cq_available = 0;
     }
 
-    virtual void enable_entity(entity *e, unsigned cq_num = 128) {
+    virtual void enable_entity(entity &e, unsigned cq_num = 128) {
         rc_iface(e)->tx.cq_available = cq_num;
     }
 
-    virtual void set_tx_moderation(entity *e, int val) {
+    virtual void set_tx_moderation(entity &e, int val) {
         rc_iface(e)->config.tx_moderation = val;
     }
 
-    void set_fc_attributes(entity *e, bool enabled, int wnd, int s_thresh, int h_thresh) {
+    void set_fc_attributes(entity &e, bool enabled, int wnd, int s_thresh,
+                           int h_thresh) {
         rc_iface(e)->config.fc_enabled     = enabled;
         rc_iface(e)->config.fc_wnd_size    = get_fc_ptr(e)->fc_wnd = wnd;
         rc_iface(e)->config.fc_soft_thresh = s_thresh;
@@ -95,12 +93,12 @@ public:
 
     }
 
-    void set_fc_disabled(entity *e) {
+    void set_fc_disabled(entity &e) {
         /* same as default settings in rc_iface_init */
         set_fc_attributes(e, false, std::numeric_limits<int16_t>::max(), 0, 0);
     }
 
-    void send_am_and_flush(entity *e, int num_msg);
+    void send_am_and_flush(entity &e, int num_msg);
 
     void progress_loop(double delta_ms=10.0) {
         uct_test::short_progress_loop(delta_ms);
@@ -132,11 +130,11 @@ public:
         return UCS_OK;
     }
 
-    void validate_grant(entity *e);
+    void validate_grant(entity &e);
 
     void test_general(int wnd, int s_thresh, int h_thresh, bool is_fc_enabled);
 
-    virtual void wait_fc_hard_resend(entity *e);
+    virtual void wait_fc_hard_resend(entity &e);
 
     virtual void test_pending_grant(int16_t wnd);
 

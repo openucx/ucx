@@ -20,9 +20,8 @@ public:
         }
 
         uct_test::init();
-        m_ent = uct_test::create_entity(0);
-        m_entities.push_back(m_ent);
-        m_tcp_iface = (uct_tcp_iface*)m_ent->iface();
+        uct_test::create_entity(0);
+        m_tcp_iface = (uct_tcp_iface*)e(0).iface();
     }
 
     size_t get_accepted_conn_num(entity& ent) {
@@ -46,7 +45,7 @@ public:
         size_t msg_size = sizeof(msg);
         ucs_status_t status;
 
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         if (nb) {
             status = ucs_socket_recv_nb(fd, &msg, &msg_size);
         } else {
@@ -57,7 +56,7 @@ public:
     }
 
     void post_send(int fd, const std::vector<char> &buf) {
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         ucs_status_t status = ucs_socket_send(fd, &buf[0], buf.size());
         // send can be OK or fail when a connection was closed by a peer
         // before all data were sent
@@ -232,7 +231,6 @@ private:
 
 protected:
     uct_tcp_iface *m_tcp_iface;
-    entity        *m_ent;
 };
 
 UCS_TEST_P(test_uct_tcp, listener_flood_connect_and_send_large) {
@@ -240,7 +238,7 @@ UCS_TEST_P(test_uct_tcp, listener_flood_connect_and_send_large) {
         ucs_min(static_cast<size_t>(max_connections()), 128lu) /
         ucs::test_time_multiplier();
     const size_t msg_size = m_tcp_iface->config.rx_seg_size * 4;
-    test_listener_flood(*m_ent, max_conn, msg_size);
+    test_listener_flood(e(0), max_conn, msg_size);
 }
 
 UCS_TEST_P(test_uct_tcp, listener_flood_connect_and_send_small) {
@@ -249,24 +247,24 @@ UCS_TEST_P(test_uct_tcp, listener_flood_connect_and_send_small) {
         ucs::test_time_multiplier();
     // It should be less than length of the expected magic number by TCP
     const size_t msg_size = 1;
-    test_listener_flood(*m_ent, max_conn, msg_size);
+    test_listener_flood(e(0), max_conn, msg_size);
 }
 
 UCS_TEST_P(test_uct_tcp, listener_flood_connect_and_close) {
     const size_t max_conn =
         ucs_min(static_cast<size_t>(max_connections()), 128lu) /
         ucs::test_time_multiplier();
-    test_listener_flood(*m_ent, max_conn, 0);
+    test_listener_flood(e(0), max_conn, 0);
 }
 
 UCS_TEST_P(test_uct_tcp, check_addr_len)
 {
     uct_iface_attr_t iface_attr;
 
-    ucs_status_t status = uct_iface_query(m_ent->iface(), &iface_attr);
+    ucs_status_t status = uct_iface_query(e(0).iface(), &iface_attr);
     ASSERT_UCS_OK(status);
 
-    UCS_TEST_MESSAGE << m_ent->md()->component->name;
+    UCS_TEST_MESSAGE << e(0).md()->component->name;
     if (!GetParam()->dev_name.compare("lo")) {
         EXPECT_EQ(sizeof(uct_tcp_device_addr_t) +
                           sizeof(uct_iface_local_addr_ns_t),

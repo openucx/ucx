@@ -683,7 +683,7 @@ public:
             // Should not have warnings if leak check is off
             ucp_test::cleanup();
         } else {
-            scoped_log_handler wrap_warn(wrap_warns_logger);
+            ucs::log::scoped_handler wrap_warn(ucs::log::wrap_warns_logger);
             ucp_test::cleanup();
             check_leak_warnings(); // Leak check is enabled - expect warnings
         }
@@ -692,10 +692,9 @@ public:
 private:
     void check_leak_warnings()
     {
-        EXPECT_EQ(2u, m_warnings.size());
-        for (size_t i = 0; i < m_warnings.size(); ++i) {
-            std::string::size_type pos = m_warnings[i].find(
-                    "not returned to mpool ucp_requests");
+        EXPECT_EQ(2u, ucs::log::warnings().size());
+        for (auto &w : ucs::log::warnings()) {
+            auto pos = w.find("not returned to mpool ucp_requests");
             EXPECT_NE(std::string::npos, pos);
         }
     }

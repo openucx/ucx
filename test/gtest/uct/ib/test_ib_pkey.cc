@@ -23,8 +23,8 @@ protected:
     }
 
     void check_pkeys() {
-        EXPECT_TRUE(check_pkey(m_e1->iface(), m_pkey[0], m_pkey_index[0]));
-        EXPECT_TRUE(check_pkey(m_e2->iface(), m_pkey[1], m_pkey_index[1]));
+        EXPECT_TRUE(check_pkey(sender().iface(), m_pkey[0], m_pkey_index[0]));
+        EXPECT_TRUE(check_pkey(receiver().iface(), m_pkey[1], m_pkey_index[1]));
     }
 
     int check_is_reachable(const uct_iface_h tl_iface,
@@ -39,12 +39,9 @@ protected:
     }
 
     void cleanup_entities() {
-        m_e1->destroy_eps();
-        m_e2->destroy_eps();
-        m_entities.remove(m_e1);
-        m_entities.remove(m_e2);
-        m_e1 = NULL;
-        m_e2 = NULL;
+        sender().destroy_eps();
+        receiver().destroy_eps();
+        m_entities.clear();
     }
 
     void send_recv_short() {
@@ -184,22 +181,20 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         modify_config("IB_PKEY", "0x" +
                       ucs::to_hex_string(m_pkey[0] &
                                          UCT_IB_PKEY_PARTITION_MASK));
-        m_e1 = uct_test::create_entity(0);
-        m_entities.push_back(m_e1);
+        uct_test::create_entity(0);
 
         modify_config("IB_PKEY", "0x" +
                       ucs::to_hex_string(m_pkey[1] &
                                          UCT_IB_PKEY_PARTITION_MASK));
-        m_e2 = uct_test::create_entity(0);
-        m_entities.push_back(m_e2);
+        uct_test::create_entity(0);
 
-        m_e1->connect(0, *m_e2, 0);
-        m_e2->connect(0, *m_e1, 0);
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
 
         check_pkeys();
 
         /* pack-unpack the first IB iface address */
-        uct_ib_iface_t *iface1      = ucs_derived_of(m_e1->iface(),
+        uct_ib_iface_t *iface1      = ucs_derived_of(sender().iface(),
                                                      uct_ib_iface_t);
          uct_ib_address_t *ib_addr1 =
              (uct_ib_address_t*)ucs_alloca(uct_ib_iface_address_size(iface1));
@@ -207,7 +202,7 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
                                                                   ib_addr1);
 
         /* pack-unpack the second IB iface address */
-        uct_ib_iface_t *iface2     = ucs_derived_of(m_e2->iface(),
+        uct_ib_iface_t *iface2     = ucs_derived_of(receiver().iface(),
                                                     uct_ib_iface_t);
         uct_ib_address_t *ib_addr2 =
             (uct_ib_address_t*)ucs_alloca(uct_ib_iface_address_size(iface2));
@@ -219,9 +214,9 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
                     /* the PKEYs are not equal */
                     ((pkey1 ^ pkey2) & UCT_IB_PKEY_PARTITION_MASK));
 
-        EXPECT_EQ(res, check_is_reachable(m_e1->iface(),
+        EXPECT_EQ(res, check_is_reachable(sender().iface(),
                                           (uct_device_addr_t*)ib_addr2));
-        EXPECT_EQ(res, check_is_reachable(m_e2->iface(),
+        EXPECT_EQ(res, check_is_reachable(receiver().iface(),
                                           (uct_device_addr_t*)ib_addr1));
 
         if (res) {

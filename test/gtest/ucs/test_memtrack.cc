@@ -273,7 +273,7 @@ public:
                           const ucs_log_component_config_t *comp_conf,
                           const char *message, va_list ap)
     {
-        std::string log_str = format_message(message, ap);
+        std::string log_str = ucs::log::format_message(message, ap);
         if ((level == UCS_LOG_LEVEL_WARN) &&
             (log_str.find("allocated zero-size block") != std::string::npos)) {
             UCS_TEST_MESSAGE << log_str;
@@ -290,7 +290,7 @@ public:
 size_t test_memtrack_log::log_count = 0;
 
 UCS_TEST_F(test_memtrack_log, zero_size) {
-    scoped_log_handler slh(zero_size_log_handler);
+    ucs::log::scoped_handler slh(zero_size_log_handler);
 
     int count_before = log_count;
     void *ptr        = ucs_calloc(1, 0, "test");

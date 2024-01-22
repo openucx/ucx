@@ -44,7 +44,7 @@ public:
     {
         pack_arg arg;
 
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
 
         ucs_status_t status = UCS_OK;
         ssize_t packed_len;
@@ -106,9 +106,8 @@ public:
         /* Count how many error messages match/don't match the given pattern */
         size_t num_matched   = 0;
         size_t num_unmatched = 0;
-        for (std::vector<std::string>::iterator iter = m_errors.begin();
-                        iter != m_errors.end(); ++iter) {
-            if (iter->find(error_pattern) != iter->npos) {
+        for (auto &e : ucs::log::errors()) {
+            if (e.find(error_pattern) != e.npos) {
                 ++num_matched;
             } else {
                 ++num_unmatched;
@@ -139,9 +138,8 @@ private:
     static ucs_status_t
     error_handler(void *arg, uct_ep_h ep, ucs_status_t status) {
         uct_p2p_err_test *self = static_cast<uct_p2p_err_test*>(arg);
-        const p2p_resource *r = dynamic_cast<const p2p_resource*>(self->GetParam());
-        ucs_assert_always(r != NULL);
-        if (r->loopback) {
+
+        if (self->is_loopback()) {
             /* In loop back IB TLs can generate QP flush error before remote
              * access error. */
             ucs_log(UCS_LOG_LEVEL_ERROR, "Error on ep %p with status %s is handled",

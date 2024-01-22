@@ -13,17 +13,12 @@ extern "C" {
 #endif
 
 
-test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL) { }
-
 void test_uct_ib::create_connected_entities() {
-    m_e1 = uct_test::create_entity(0);
-    m_e2 = uct_test::create_entity(0);
+    uct_test::create_entity(0);
+    uct_test::create_entity(0);
 
-    m_entities.push_back(m_e1);
-    m_entities.push_back(m_e2);
-
-    m_e1->connect(0, *m_e2, 0);
-    m_e2->connect(0, *m_e1, 0);
+    sender().connect(0, receiver(), 0);
+    receiver().connect(0, sender(), 0);
 }
 
 void test_uct_ib::init() {
@@ -60,10 +55,10 @@ void test_uct_ib::send_recv_short() {
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler, recv_buffer, 0);
+    uct_iface_set_am_handler(receiver().iface(), 0, ib_am_handler, recv_buffer, 0);
 
     /* send the data */
-    status = uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr,
+    status = uct_ep_am_short(sender().ep(0), 0, test_ib_hdr,
                              &send_data, sizeof(send_data));
     EXPECT_TRUE((status == UCS_OK) || (status == UCS_INPROGRESS));
 
@@ -86,7 +81,7 @@ public:
     }
 
     void test_address_pack(uint64_t subnet_prefix) {
-        uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+        uct_ib_iface_t *iface = ucs_derived_of(sender().iface(), uct_ib_iface_t);
         static const uint16_t lid_in = 0x1ee7;
         union ibv_gid gid_in;
         uct_ib_address_t *ib_addr;
@@ -150,7 +145,7 @@ public:
     }
 
     void test_fill_ah_attr(uint64_t subnet_prefix) {
-        uct_ib_iface_t *iface      = ucs_derived_of(m_e1->iface(),
+        uct_ib_iface_t *iface      = ucs_derived_of(sender().iface(),
                                                     uct_ib_iface_t);
         static const uint16_t lid  = 0x1ee7;
         const int config_is_global = ib_config()->is_global ||
@@ -613,7 +608,7 @@ protected:
                                       const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
 
             for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl) {
                 std::string sl_val = ucs::to_string(static_cast<uint16_t>(sl));
@@ -633,10 +628,11 @@ protected:
     ucs_status_t select_sl_nok(ucs_ternary_auto_value_t ar_enable,
                                unsigned long config_sl, uint64_t ooo_sl_mask,
                                const uct_ib_iface_config_t &config) const {
-        scoped_log_handler slh(((ooo_sl_mask != m_ooo_sl_mask_not_detected) &&
-                                (config_sl == UCS_ULUNITS_AUTO)) ?
-                               wrap_errors_check_sl_masks_logger :
-                               wrap_errors_logger);
+        ucs::log::scoped_handler slh(
+                ((ooo_sl_mask != m_ooo_sl_mask_not_detected) &&
+                 (config_sl == UCS_ULUNITS_AUTO)) ?
+                wrap_errors_check_sl_masks_logger :
+                ucs::log::wrap_errors_logger);
         uint8_t sl;
 
         EXPECT_NE(UCS_AUTO, ar_enable);
@@ -815,12 +811,12 @@ public:
 
         check_skip_test();
 
-        m_buf1 = new mapped_buffer(length, 0x1, *m_e1);
-        m_buf2 = new mapped_buffer(length, 0x2, *m_e2);
+        m_buf1 = new mapped_buffer(length, 0x1, sender());
+        m_buf2 = new mapped_buffer(length, 0x2, receiver());
 
         /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(m_e1->iface(), 0, ib_am_handler, m_buf1->ptr(),
-                                 0);
+        uct_iface_set_am_handler(receiver().iface(), 0, ib_am_handler,
+                                 m_buf2->ptr(), 0);
 
         test_uct_event_ib::bcopy_pack_count = 0;
     }
@@ -828,16 +824,12 @@ public:
     /* overload `test_uct_ib` variant to pass the async event handler to
      * the receive entity */
     void create_connected_entities() {
-        /* `m_e1` entity is used as a receiver in UCT IB Event tests */
-        m_e1 = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
-                                       async_event_handler, this);
-        m_e2 = uct_test::create_entity(0);
+        uct_test::create_entity(0);
+        uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
+                                async_event_handler, this);
 
-        m_entities.push_back(m_e1);
-        m_entities.push_back(m_e2);
-
-        m_e1->connect(0, *m_e2, 0);
-        m_e2->connect(0, *m_e1, 0);
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
     }
 
     static void async_event_handler(void *arg, unsigned flags) {
@@ -853,20 +845,22 @@ public:
     }
 
     /* Use put_bcopy here to provide send_cq entry */
-    void send_msg_e1_e2(size_t count = 1) {
+    void send_msg(size_t count = 1) {
         for (size_t i = 0; i < count; ++i) {
-            ssize_t status = uct_ep_put_bcopy(m_e1->ep(0), pack_cb, (void *)m_buf1,
-                                              m_buf2->addr(), m_buf2->rkey());
+            ssize_t status =
+                    uct_ep_put_bcopy(receiver().ep(0), pack_cb, (void *)m_buf2,
+                                     m_buf1->addr(), m_buf1->rkey());
             if (status < 0) {
                 ASSERT_UCS_OK((ucs_status_t)status);
             }
         }
     }
 
-    void send_msg_e2_e1(size_t count = 1) {
+    void send_msg_back(size_t count = 1) {
         for (size_t i = 0; i < count; ++i) {
-            ucs_status_t status = uct_ep_am_short(m_e2->ep(0), 0, test_ib_hdr,
-                                                  m_buf2->ptr(), m_buf2->length());
+            ucs_status_t status =
+                    uct_ep_am_short(sender().ep(0), 0, test_ib_hdr,
+                                    m_buf2->ptr(), m_buf2->length());
             ASSERT_UCS_OK(status);
         }
     }
@@ -933,30 +927,29 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
 {
     ucs_status_t status;
 
-    status = uct_iface_event_arm(m_e1->iface(), EVENTS);
+    status = uct_iface_event_arm(receiver().iface(), EVENTS);
     ASSERT_EQ(status, UCS_OK);
 
     /* check initial state of the fd and [send|recv]_cq */
-    EXPECT_FALSE(m_async_event_ctx.wait_for_event(*m_e1, 0));
-    check_cq(m_e1->iface(), UCT_IB_DIR_TX, 0);
-    check_cq(m_e1->iface(), UCT_IB_DIR_RX, 0);
+    EXPECT_FALSE(m_async_event_ctx.wait_for_event(receiver(), 0));
+    check_cq(receiver().iface(), UCT_IB_DIR_TX, 0);
+    check_cq(receiver().iface(), UCT_IB_DIR_RX, 0);
 
     /* send the data */
-    send_msg_e1_e2();
+    send_msg();
 
     /* make sure the file descriptor is signaled once */
-    EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e1,
-                                                 1000 *
-                                                 ucs::test_time_multiplier()));
+    EXPECT_TRUE(m_async_event_ctx.wait_for_event(
+            receiver(), 1000 * ucs::test_time_multiplier()));
 
-    status = uct_iface_event_arm(m_e1->iface(), EVENTS);
+    status = uct_iface_event_arm(receiver().iface(), EVENTS);
     ASSERT_EQ(status, UCS_ERR_BUSY);
 
     /* make sure [send|recv]_cq handled properly */
-    check_cq(m_e1->iface(), UCT_IB_DIR_TX, 1);
-    check_cq(m_e1->iface(), UCT_IB_DIR_RX, 0);
+    check_cq(receiver().iface(), UCT_IB_DIR_TX, 1);
+    check_cq(receiver().iface(), UCT_IB_DIR_RX, 0);
 
-    m_e1->flush();
+    receiver().flush();
 }
 
 
@@ -970,17 +963,17 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
     const size_t msg_count = 1;
     ucs_status_t status;
 
-    status = uct_iface_event_arm(m_e1->iface(), EVENTS);
+    status = uct_iface_event_arm(receiver().iface(), EVENTS);
     ASSERT_EQ(UCS_OK, status);
 
     /* check initial state of the fd and [send|recv]_cq */
-    EXPECT_FALSE(m_async_event_ctx.wait_for_event(*m_e1, 0));
-    check_cq(m_e1->iface(), UCT_IB_DIR_TX, 0);
-    check_cq(m_e1->iface(), UCT_IB_DIR_RX, 0);
+    EXPECT_FALSE(m_async_event_ctx.wait_for_event(receiver(), 0));
+    check_cq(receiver().iface(), UCT_IB_DIR_TX, 0);
+    check_cq(receiver().iface(), UCT_IB_DIR_RX, 0);
 
     /* send the data */
-    send_msg_e1_e2(msg_count);
-    send_msg_e2_e1(msg_count);
+    send_msg(msg_count);
+    send_msg_back(msg_count);
 
     twait(150); /* Let completion to be generated */
 
@@ -991,21 +984,20 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
     }
 
     /* make sure the file descriptor is signaled */
-    EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e1,
-                                                 1000 *
-                                                 ucs::test_time_multiplier()));
+    EXPECT_TRUE(m_async_event_ctx.wait_for_event(
+            receiver(), 1000 * ucs::test_time_multiplier()));
 
     /* Acknowledge all the requests */
     short_progress_loop();
-    status = uct_iface_event_arm(m_e1->iface(), EVENTS);
+    status = uct_iface_event_arm(receiver().iface(), EVENTS);
     ASSERT_EQ(UCS_ERR_BUSY, status);
 
     /* make sure [send|recv]_cq handled properly */
-    check_cq(m_e1->iface(), UCT_IB_DIR_TX, 1);
-    check_cq(m_e1->iface(), UCT_IB_DIR_RX, 1);
+    check_cq(receiver().iface(), UCT_IB_DIR_TX, 1);
+    check_cq(receiver().iface(), UCT_IB_DIR_RX, 1);
 
-    m_e1->flush();
-    m_e2->flush();
+    receiver().flush();
+    sender().flush();
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_event_ib);
@@ -1015,15 +1007,12 @@ public:
     void create_connected_entities()
     {
         modify_config("IB_PATH_MTU", "4096");
-        m_e1 = uct_test::create_entity(0);
+        uct_test::create_entity(0);
         modify_config("IB_PATH_MTU", "2048");
-        m_e2 = uct_test::create_entity(0);
+        uct_test::create_entity(0);
 
-        m_entities.push_back(m_e1);
-        m_entities.push_back(m_e2);
-
-        m_e1->connect(0, *m_e2, 0);
-        m_e2->connect(0, *m_e1, 0);
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
     }
 
     static ucs_status_t
@@ -1042,7 +1031,7 @@ public:
         return length;
     }
 
-    void send_recv_bcopy(uct_ep_h ep, entity *ent, size_t length)
+    void send_recv_bcopy(uct_ep_h ep, entity &ent, size_t length)
     {
         size_t start_am_counter = test_uct_ib::m_ib_am_handler_counter;
         uct_ib_iface_t *iface   = ucs_derived_of(ep->iface, uct_ib_iface_t);
@@ -1056,7 +1045,7 @@ public:
         ASSERT_LE(length, attr.cap.am.max_bcopy);
 
         /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(ent->iface(), 0, ib_am_bcopy_handler,
+        uct_iface_set_am_handler(ent.iface(), 0, ib_am_bcopy_handler,
                                  (void*)length, 0);
 
         /* send the data */
@@ -1072,8 +1061,10 @@ public:
 UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, non_equal_mtu,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
-    send_recv_bcopy(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy);
-    send_recv_bcopy(m_e2->ep(0), m_e1, m_e2->iface_attr().cap.am.max_bcopy);
+    send_recv_bcopy(sender().ep(0), receiver(),
+                    sender().iface_attr().cap.am.max_bcopy);
+    send_recv_bcopy(receiver().ep(0), sender(),
+                    receiver().iface_attr().cap.am.max_bcopy);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_uct_ib_mtu);

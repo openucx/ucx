@@ -16,26 +16,19 @@ protected:
     void init() {
         uct_test::init();
 
-        m_sender   = NULL;
-        m_receiver = uct_test::create_entity(0);
-        m_entities.push_back(m_receiver);
+        uct_test::create_entity(0);
+        uct_test::create_entity(0);
 
         check_skip_test();
 
-        uct_iface_set_am_handler(m_receiver->iface(), 1,
+        uct_iface_set_am_handler(receiver().iface(), 1,
                                  (uct_am_callback_t)ucs_empty_function_return_success,
                                  NULL, UCT_CB_FLAG_ASYNC);
     }
 
-    void create_sender()
-    {
-        m_sender = uct_test::create_entity(0);
-        m_entities.push_back(m_sender);
-    }
-
     void connect()
     {
-        m_sender->connect(0, *m_receiver, 0);
+        sender().connect(0, receiver(), 0);
 
         /* Some transports need time to become ready */
         flush();
@@ -43,19 +36,25 @@ protected:
 
     void disconnect(bool should_flush = true)
     {
+        disconnect(sender(), receiver(), should_flush);
+    }
+
+    void disconnect(entity &txe, entity &rxe, bool should_flush = true)
+    {
         if (should_flush) {
             flush();
         }
 
-        if (m_receiver->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-            m_receiver->destroy_ep(0);
+        if (rxe.iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+            rxe.destroy_ep(0);
         }
-        m_sender->destroy_ep(0);
+
+        txe.destroy_ep(0);
     }
 
     struct test_ep_comp_t {
         uct_completion_t comp;
-        test_uct_ep      *test;
+        entity           *sender;
         uct_ep_h         ep;
     };
 
@@ -65,7 +64,7 @@ protected:
 
         EXPECT_TRUE(ep_comp->ep != NULL);
         /* Check that completion callback was invoked not after EP destroy */
-        EXPECT_EQ(ep_comp->test->m_sender->ep(0), ep_comp->ep);
+        EXPECT_EQ(ep_comp->sender->ep(0), ep_comp->ep);
     }
 
     static ucs_log_func_rc_t
@@ -75,7 +74,7 @@ protected:
                             const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_WARN) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
             if (err_str.find("with uncompleted operation") !=
                 std::string::npos) {
                 return UCS_LOG_FUNC_RC_STOP;
@@ -92,23 +91,18 @@ protected:
             EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
         }
     }
-
-    entity * m_sender;
-    entity * m_receiver;
 };
 
 UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
                      !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
     ucs_status_t status;
 
-    create_sender();
-
-    mapped_buffer buffer(256, 0, *m_sender);
+    mapped_buffer buffer(256, 0, sender());
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer.ptr(),
                             (ucs_min(buffer.length(),
-                                     m_sender->iface_attr().cap.am.max_zcopy)),
+                                     sender().iface_attr().cap.am.max_zcopy)),
                             buffer.memh(),
-                            m_sender->iface_attr().cap.am.max_iov);
+                            sender().iface_attr().cap.am.max_iov);
 
     unsigned max_iter = 300 / ucs::test_time_multiplier();
 
@@ -118,7 +112,7 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
     for (unsigned i = 0; i < max_retry_iter; ++i) {
         connect();
         for (unsigned count = 0; count < max_iter; ) {
-            status = uct_ep_am_zcopy(m_sender->ep(0), 1, NULL, 0, iov, iovcnt,
+            status = uct_ep_am_zcopy(sender().ep(0), 1, NULL, 0, iov, iovcnt,
                                      0, NULL);
             if (status == UCS_ERR_NO_RESOURCE) {
                 if (count > 0) {
@@ -141,26 +135,23 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, is_connected,
     uct_ep_is_connected_params_t params;
     uct_iface_attr_t iface_attr;
     std::string dev_addr, ep_addr, iface_addr;
-    entity *e1, *e2;
 
-    create_sender();
     connect();
+    entity &sender1   = sender();
+    entity &receiver1 = receiver();
 
-    e1 = create_entity(0);
-    e2 = create_entity(0);
-    e1->connect(0, *e2, 0);
+    entity &sender2   = create_entity(0);
+    entity &receiver2 = create_entity(0);
+    sender2.connect(0, receiver2, 0);
 
-    m_entities.push_back(e1);
-    m_entities.push_back(e2);
-
-    ASSERT_UCS_OK(uct_iface_query(m_receiver->iface(), &iface_attr));
+    ASSERT_UCS_OK(uct_iface_query(receiver1.iface(), &iface_attr));
     dev_addr.resize(iface_attr.device_addr_len);
     iface_addr.resize(iface_attr.iface_addr_len);
 
-    ASSERT_UCS_OK(uct_iface_get_address(m_receiver->iface(),
+    ASSERT_UCS_OK(uct_iface_get_address(receiver1.iface(),
                                         (uct_iface_addr_t*)iface_addr.data()));
     ASSERT_UCS_OK(
-            uct_iface_get_device_address(m_receiver->iface(),
+            uct_iface_get_device_address(receiver1.iface(),
                                          (uct_device_addr_t*)dev_addr.data()));
 
     params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
@@ -170,29 +161,30 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, is_connected,
 
     if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         ep_addr.resize(iface_attr.ep_addr_len);
-        ASSERT_UCS_OK(uct_ep_get_address(m_receiver->ep(0),
+        ASSERT_UCS_OK(uct_ep_get_address(receiver1.ep(0),
                                          (uct_ep_addr_t*)ep_addr.data()));
         params.ep_addr     = (uct_ep_addr_t*)ep_addr.data();
         params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
     }
 
-    EXPECT_TRUE(uct_ep_is_connected(m_sender->ep(0), &params));
-    EXPECT_FALSE(uct_ep_is_connected(e1->ep(0), &params));
+    EXPECT_TRUE(uct_ep_is_connected(sender1.ep(0), &params));
+    EXPECT_FALSE(uct_ep_is_connected(sender2.ep(0), &params));
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,
                      !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
 {
     const unsigned max_iter = 300 / ucs::test_time_multiplier();
+    entity &e_receiver      = receiver();
 
     for (unsigned i = 0; i < max_iter; ++i) {
-        create_sender();
-        connect();
+        entity &e_sender = create_entity(0);
+        e_sender.connect(0, e_receiver, 0);
 
-        const uct_iface_attr &iface_attr = m_sender->iface_attr();
+        const uct_iface_attr &iface_attr = e_sender.iface_attr();
         const size_t msg_length          = 256 * UCS_KBYTE;
         ucs::auto_ptr<mapped_buffer> buffer(
-                new mapped_buffer(msg_length, 0, *m_sender));
+                new mapped_buffer(msg_length, 0, e_sender));
 
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer->ptr(),
                                 ucs_min(buffer->length(),
@@ -204,18 +196,18 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,
         comp.comp.status = UCS_OK;
         comp.comp.count  = 0;
         comp.comp.func   = completion_cb;
-        comp.test        = this;
-        comp.ep          = m_sender->ep(0);
+        comp.sender      = &e_sender;
+        comp.ep          = e_sender.ep(0);
 
         for (unsigned count = 0; count < max_iter;) {
-            ucs_status_t status = uct_ep_am_zcopy(m_sender->ep(0), 1, NULL, 0,
+            ucs_status_t status = uct_ep_am_zcopy(e_sender.ep(0), 1, NULL, 0,
                                                   iov, iovcnt, 0, &comp.comp);
             handle_status(status, comp);
             if (status == UCS_ERR_NO_RESOURCE) {
                 if (count == 0) {
                     progress();
                 } else {
-                    status = uct_ep_flush(m_sender->ep(0), UCT_FLUSH_FLAG_LOCAL,
+                    status = uct_ep_flush(e_sender.ep(0), UCT_FLUSH_FLAG_LOCAL,
                                           &comp.comp);
                     handle_status(status, comp);
                     break;
@@ -225,10 +217,10 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,
         }
 
         if (comp.comp.count != 0) {
-            scoped_log_handler slh(detect_uncomp_op_logger);
+            ucs::log::scoped_handler slh(detect_uncomp_op_logger);
             /* Destroy EP without flushing prior to not complete AM Zcopy and
              * flush operations during progress() */
-            disconnect(false);
+            disconnect(e_sender, e_receiver, false);
             /* All outstanding operations must be completed in EP destroy */
             EXPECT_EQ(0, comp.comp.count);
         }
@@ -236,7 +228,7 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,
         /* Mapped buffer has to be released before destroying a sender entity */
         buffer.reset();
 
-        m_entities.remove(m_sender);
+        m_entities.remove(&e_sender);
     }
 }
 

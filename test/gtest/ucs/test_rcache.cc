@@ -702,7 +702,7 @@ protected:
     {
         /* Ignore warnings about empty memory pool */
         if ((level == UCS_LOG_LEVEL_WARN) && strstr(message, "failed to register")) {
-            UCS_TEST_MESSAGE << format_message(message, ap);
+            UCS_TEST_MESSAGE << ucs::log::format_message(message, ap);
             return UCS_LOG_FUNC_RC_STOP;
         }
 

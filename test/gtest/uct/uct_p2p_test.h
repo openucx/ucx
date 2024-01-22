@@ -58,9 +58,7 @@ protected:
     void blocking_send(send_func_t send, uct_ep_h ep, const mapped_buffer &sendbuf,
                        const mapped_buffer &recvbuf, bool wait_for_completion);
     void wait_for_remote();
-    entity& sender();
     uct_ep_h sender_ep();
-    entity& receiver();
     uct_completion_t *comp();
     void disable_comp();
 

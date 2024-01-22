@@ -32,6 +32,67 @@
 
 namespace ucs {
 
+namespace log {
+    class scoped_handler {
+    public:
+        scoped_handler(ucs_log_func_t handler) {
+            ucs_log_push_handler(handler);
+        }
+        ~scoped_handler() {
+            ucs_log_pop_handler();
+        }
+    };
+
+    void setup();
+    void teardown();
+    const std::vector<std::string>& errors();
+    const std::vector<std::string>& warnings();
+    std::vector<std::string>& warnings_raw();
+
+    size_t num_errors();
+    size_t num_warnings();
+
+    std::string format_message(const char *message, va_list ap);
+
+    ucs_log_func_rc_t
+    common_logger(ucs_log_level_t log_level_to_handle, bool print,
+                  std::vector<std::string> &messages_vec, size_t limit,
+                  const char *file, unsigned line, const char *function,
+                  ucs_log_level_t level,
+                  const ucs_log_component_config_t *comp_conf,
+                  const char *message, va_list ap);
+
+    ucs_log_func_rc_t
+    count_warns_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
+
+    ucs_log_func_rc_t
+    hide_errors_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
+
+    ucs_log_func_rc_t
+    hide_warns_logger(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level,
+                      const ucs_log_component_config_t *comp_conf,
+                      const char *message, va_list ap);
+
+    ucs_log_func_rc_t
+    wrap_errors_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
+
+    ucs_log_func_rc_t
+    wrap_warns_logger(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level,
+                      const ucs_log_component_config_t *comp_conf,
+                      const char *message, va_list ap);
+};
+
 /**
  * Base class for tests
  */
@@ -59,16 +120,6 @@ public:
     void stats_activate();
     void stats_restore();
 protected:
-    class scoped_log_handler {
-    public:
-        scoped_log_handler(ucs_log_func_t handler) {
-            ucs_log_push_handler(handler);
-        }
-        ~scoped_log_handler() {
-            ucs_log_pop_handler();
-        }
-    };
-
     typedef enum {
         NEW, RUNNING, SKIPPED, ABORTED, FINISHED
     } state_t;
@@ -78,7 +129,6 @@ protected:
     void SetUpProxy();
     void TearDownProxy();
     void TestBodyProxy();
-    static std::string format_message(const char *message, va_list ap);
 
     virtual void cleanup();
     virtual void init();
@@ -88,71 +138,15 @@ protected:
 
     virtual void test_body() = 0;
 
-    static ucs_log_func_rc_t
-    common_logger(ucs_log_level_t log_level_to_handle, bool print,
-                  std::vector<std::string> &messages_vec, size_t limit,
-                  const char *file, unsigned line, const char *function,
-                  ucs_log_level_t level,
-                  const ucs_log_component_config_t *comp_conf,
-                  const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    count_warns_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level,
-                       const ucs_log_component_config_t *comp_conf,
-                       const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    hide_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level,
-                       const ucs_log_component_config_t *comp_conf,
-                       const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    hide_warns_logger(const char *file, unsigned line, const char *function,
-                      ucs_log_level_t level,
-                      const ucs_log_component_config_t *comp_conf,
-                      const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    wrap_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level,
-                       const ucs_log_component_config_t *comp_conf,
-                       const char *message, va_list ap);
-
-    static ucs_log_func_rc_t
-    wrap_warns_logger(const char *file, unsigned line, const char *function,
-                      ucs_log_level_t level,
-                      const ucs_log_component_config_t *comp_conf,
-                      const char *message, va_list ap);
-
-    unsigned num_errors();
-
-    unsigned num_warnings();
-
     state_t                         m_state;
     bool                            m_initialized;
     unsigned                        m_num_threads;
     config_stack_t                  m_config_stack;
     ptr_vector<scoped_setenv>       m_env_stack;
-    int                             m_num_valgrind_errors_before;
-    unsigned                        m_num_errors_before;
-    unsigned                        m_num_warnings_before;
-    unsigned                        m_num_log_handlers_before;
-
-    static pthread_mutex_t          m_logger_mutex;
-    static unsigned                 m_total_errors;
-    static unsigned                 m_total_warnings;
-    static std::vector<std::string> m_errors;
-    static std::vector<std::string> m_warnings;
-    static std::vector<std::string> m_first_warns_and_errors;
 
 private:
     void skipped(const test_skip_exception& e);
     void run();
-    static void push_debug_message_with_limit(std::vector<std::string>& vec,
-                                              const std::string& message,
-                                              const size_t limit);
 
     static void *thread_func(void *arg);
 
@@ -199,7 +193,11 @@ public:
     }
 
     T& sender() {
-        return *m_entities.front();
+        return sender(0);
+    }
+
+    T& sender(size_t idx) {
+        return e(idx);
     }
 
     T& receiver() {

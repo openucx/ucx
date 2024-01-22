@@ -737,7 +737,7 @@ UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
     EXPECT_UCS_OK(status);
 
     // Check that error is returned if id or callback is not set
-    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
 
     params.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID;
     status            = ucp_worker_set_am_recv_handler(sender().worker(),
@@ -786,7 +786,7 @@ UCS_TEST_P(test_ucp_am_nbx, max_am_header)
 #if ENABLE_PARAMS_CHECK
 UCS_TEST_P(test_ucp_am_nbx, am_header_error)
 {
-    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
 
     ucp_request_param_t param;
     param.op_attr_mask    = 0ul;
@@ -1249,7 +1249,7 @@ protected:
         } else {
             // Send request may complete with error
             // (rndv should complete with EP_TIMEOUT)
-            scoped_log_handler wrap_err(wrap_errors_logger);
+            ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
             request_wait(sreq);
             EXPECT_LT(m_recv_counter, m_send_counter);
         }
@@ -1735,7 +1735,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_rndv, invalid_recv_desc,
 
     wait_receives();
 
-    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
     /* attempt to recv data with invalid 'data_desc' since it was reliased
      * due to am_data_drop_rndv_cb() returned UCS_OK */
     ucs_status_ptr_t rptr = ucp_am_recv_data_nbx(receiver().worker(),
@@ -1760,7 +1760,7 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)
     param.op_attr_mask      = 0ul;
     ucs_status_t statuses[] = {UCS_OK, UCS_ERR_REJECTED, UCS_ERR_NO_MEMORY};
 
-    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
 
     for (int i = 0; i < ucs_static_array_size(statuses); ++i) {
         reset_counters();

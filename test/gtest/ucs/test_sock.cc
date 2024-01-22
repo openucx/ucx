@@ -27,7 +27,7 @@ protected:
     {
         // Ignore errors that invalid input parameters as it is expected
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
 
             if (err_str.find(socket_err_exp_str) != std::string::npos) {
                 UCS_TEST_MESSAGE << err_str;
@@ -80,7 +80,7 @@ UCS_TEST_F(test_socket, sockaddr_sizeof) {
     /* Check with wrong address family */
     {
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         size             = 0;
         saddr->sa_family = AF_UNIX;
@@ -114,7 +114,7 @@ UCS_TEST_F(test_socket, sockaddr_inet_addr_sizeof) {
     /* Check with wrong address family */
     {
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         size             = 0;
         saddr->sa_family = AF_UNIX;
@@ -152,7 +152,7 @@ UCS_TEST_F(test_socket, sockaddr_get_port) {
     /* Check with wrong address family */
     {
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         port             = sin_port;
         saddr->sa_family = AF_UNIX;
@@ -197,7 +197,7 @@ UCS_TEST_F(test_socket, sockaddr_get_inet_addr) {
     {
         saddr->sa_family   = AF_UNIX;
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         EXPECT_EQ(NULL, ucs_sockaddr_get_inet_addr(saddr));
     }
@@ -227,7 +227,7 @@ UCS_TEST_F(test_socket, sockaddr_set_port) {
     {
         saddr->sa_family   = AF_UNIX;
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
                   ucs_sockaddr_set_port(saddr, sin_port));
@@ -265,7 +265,7 @@ UCS_TEST_F(test_socket, sockaddr_set_inet_addr) {
     {
         saddr->sa_family   = AF_UNIX;
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
                   ucs_sockaddr_set_inet_addr(saddr, NULL));
@@ -318,7 +318,7 @@ UCS_TEST_F(test_socket, sockaddr_is_inaddr) {
     {
         saddr->sa_family   = AF_UNIX;
         socket_err_exp_str = "unknown address family:";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         EXPECT_FALSE(ucs_sockaddr_is_inaddr_any(saddr));
     }
@@ -418,7 +418,7 @@ UCS_TEST_F(test_socket, sock_ipportstr_to_sockaddr) {
     /* Check wrong IPv4:port addresses */
     {
         socket_err_exp_str = "invalid address";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         check_ip_port("", 0, UCS_ERR_INVALID_ADDR, "");
         check_ip_port("randomstring", 0, UCS_ERR_INVALID_ADDR, "");
@@ -428,7 +428,7 @@ UCS_TEST_F(test_socket, sock_ipportstr_to_sockaddr) {
     }
     {
         socket_err_exp_str = "invalid port";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         check_ip_port("1.1.1.1:-1", 0, UCS_ERR_INVALID_ADDR, "");
         check_ip_port("1.1.1.1:65536", 0, UCS_ERR_INVALID_ADDR, "");
@@ -452,7 +452,7 @@ UCS_TEST_F(test_socket, sock_ipportstr_to_sockaddr) {
     /* Check wrong IPv6:port addresses */
     {
         socket_err_exp_str = "invalid address";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         check_ip_port("", 0, UCS_ERR_INVALID_ADDR, "");
         check_ip_port(":::", 0, UCS_ERR_INVALID_ADDR, "");
@@ -460,7 +460,7 @@ UCS_TEST_F(test_socket, sock_ipportstr_to_sockaddr) {
     }
     {
         socket_err_exp_str = "invalid port";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         check_ip_port("[::1]:-1", 0, UCS_ERR_INVALID_ADDR, "");
         check_ip_port("[::1]:65536", 0, UCS_ERR_INVALID_ADDR, "");
@@ -481,7 +481,7 @@ UCS_TEST_F(test_socket, port_from_string) {
 
     {
         socket_err_exp_str = "invalid port";
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
 
         EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("", &port));
         EXPECT_EQ(UCS_ERR_INVALID_ADDR, ucs_sock_port_from_string("-1", &port));
@@ -523,7 +523,7 @@ UCS_TEST_F(test_socket, socket_setopt) {
         socket_err_exp_str = "failed to set " + ucs::to_string(optname) + " option for " +
                              ucs::to_string(level) + " level on fd " + ucs::to_string(fd) +
                              + ": " + strerror(EINVAL);
-        scoped_log_handler log_handler(socket_error_handler);
+        ucs::log::scoped_handler log_handler(socket_error_handler);
         status = ucs_socket_setopt(fd, level, optname, &optval, optlen);
         EXPECT_EQ(status, UCS_ERR_IO_ERROR);
     }
@@ -662,7 +662,7 @@ UCS_TEST_F(test_socket, sockaddr_cmp_err) {
     sa_in.sin_family = AF_INET;
 
     socket_err_exp_str = "unknown address family: ";
-    scoped_log_handler log_handler(socket_error_handler);
+    ucs::log::scoped_handler log_handler(socket_error_handler);
 
     sockaddr_cmp_err_test((const struct sockaddr*)&sa_un,
                           (const struct sockaddr*)&sa_un);
@@ -709,7 +709,7 @@ UCS_TEST_F(test_socket, sockaddr_get_ipstr) {
 
     /* Check invalid sa_family */
     socket_err_exp_str = "unknown address family:";
-    scoped_log_handler log_handler(socket_error_handler);
+    ucs::log::scoped_handler log_handler(socket_error_handler);
 
     saddr->sa_family = AF_UNIX;
     sockaddr_get_ipstr_check(saddr, UCS_ERR_INVALID_PARAM);

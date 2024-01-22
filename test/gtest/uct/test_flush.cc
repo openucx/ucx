@@ -30,18 +30,14 @@ public:
     void init() {
         uct_test::init();
 
-        entity *m_sender = uct_test::create_entity(0);
-        m_entities.push_back(m_sender);
-
+        uct_test::create_entity(0);
         check_skip_test();
 
         if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
-            m_sender->connect(0, *m_sender, 0);
+            sender().connect(0, sender(), 0);
         } else {
-            entity *m_receiver = uct_test::create_entity(0);
-            m_entities.push_back(m_receiver);
-
-            m_sender->connect(0, *m_receiver, 0);
+            uct_test::create_entity(0);
+            sender().connect(0, receiver(), 0);
         }
         am_rx_count   = 0;
         m_flush_flags = 0;
@@ -331,11 +327,11 @@ public:
     void test_flush_am_pending(flush_func_t flush, bool destroy_ep);
 
 protected:
-    uct_test::entity& sender() {
+    entity& sender() {
         return **m_entities.begin();
     }
 
-    uct_test::entity& receiver() {
+    entity& receiver() {
         return **(m_entities.end() - 1);
     }
 
@@ -614,8 +610,8 @@ public:
         peer(uct_cancel_test &test) :
             m_e(NULL), m_buf(NULL), m_buf32(NULL), m_peer(NULL), m_test(test)
         {
-            m_e = m_test.uct_test::create_entity(0, error_handler_cb);
-            m_test.m_entities.push_back(m_e);
+            m_test.uct_test::create_entity(0, error_handler_cb);
+            m_e = m_test.m_entities.front();
 
             m_buf.reset(new mapped_buffer(BUF_SIZE, 0, *m_e));
             m_buf32.reset(new mapped_buffer(32, 0, *m_e));

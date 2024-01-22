@@ -266,7 +266,7 @@ protected:
     {
         // Ignore errors that invalid input parameters as it is expected
         if ((level == UCS_LOG_LEVEL_WARN) || (level == UCS_LOG_LEVEL_ERROR)) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
 
             for (size_t i = 0; i < config_err_exp_str.size(); i++) {
                 if (err_str.find(config_err_exp_str[i]) != std::string::npos) {
@@ -288,8 +288,8 @@ protected:
         // Ignore errors that invalid input parameters as it is expected
         if (level == UCS_LOG_LEVEL_ERROR) {
             m_num_errors++;
-            return wrap_errors_logger(file, line, function, level, comp_conf,
-                                      message, ap);
+            return ucs::log::wrap_errors_logger(file, line, function, level,
+                                                comp_conf, message, ap);
         }
 
         return UCS_LOG_FUNC_RC_CONTINUE;
@@ -567,7 +567,7 @@ UCS_TEST_F(test_config, set_get) {
 
     /* try to set incorrect value - color should not be updated */
     {
-        scoped_log_handler log_handler_vars(config_error_suppress);
+        ucs::log::scoped_handler log_handler_vars(config_error_suppress);
         opts.set("COLOR", "magenta");
     }
 
@@ -630,7 +630,7 @@ UCS_TEST_F(test_config, unused) {
 
     {
         config_err_exp_str.push_back(warn_str + ": " + unused_var1);
-        scoped_log_handler log_handler(config_error_handler);
+        ucs::log::scoped_handler log_handler(config_error_handler);
         car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
 
         ucs_config_parser_print_env_vars_once(UCS_DEFAULT_ENV_PREFIX);
@@ -644,7 +644,7 @@ UCS_TEST_F(test_config, unused) {
         ucs::scoped_setenv env2(unused_var2.c_str(), "unused");
 
         config_err_exp_str.push_back(warn_str + ": " + unused_var2);
-        scoped_log_handler log_handler(config_error_handler);
+        ucs::log::scoped_handler log_handler(config_error_handler);
         car_opts opts("TEST_", NULL);
 
         ucs_config_parser_print_env_vars_once("TEST_");
@@ -688,7 +688,7 @@ UCS_TEST_F(test_config, deprecated) {
     config_err_exp_str.push_back(deprecated_var1 + warn_str);
 
     {
-        scoped_log_handler log_handler(config_error_handler);
+        ucs::log::scoped_handler log_handler(config_error_handler);
         car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
     }
 
@@ -698,7 +698,7 @@ UCS_TEST_F(test_config, deprecated) {
         ucs::scoped_setenv env2(deprecated_var2.c_str(), "58");
         config_err_exp_str.push_back(deprecated_var2 + warn_str);
 
-        scoped_log_handler log_handler_vars(config_error_handler);
+        ucs::log::scoped_handler log_handler_vars(config_error_handler);
         car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
         config_err_exp_str.pop_back();
     }
@@ -809,7 +809,7 @@ UCS_TEST_F(test_config, test_key_value_wrong_syntax) {
         config_err_exp_str = {"key 'unknown' is not supported",
                               "Invalid value for TEMP: 'unknown:10'"};
 
-        scoped_log_handler log_handler_vars(config_error_handler);
+        ucs::log::scoped_handler log_handler_vars(config_error_handler);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, opts.set("TEMP", "unknown:10"));
         EXPECT_EQ(17, opts->temp_front);
         EXPECT_EQ(17, opts->temp_rear);
@@ -819,7 +819,7 @@ UCS_TEST_F(test_config, test_key_value_wrong_syntax) {
     {
         config_err_exp_str = {"Invalid value for TEMP: ''"};
 
-        scoped_log_handler log_handler_vars(config_error_handler);
+        ucs::log::scoped_handler log_handler_vars(config_error_handler);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, opts.set("TEMP", ""));
         EXPECT_EQ(17, opts->temp_front);
         EXPECT_EQ(17, opts->temp_rear);
@@ -830,7 +830,7 @@ UCS_TEST_F(test_config, test_key_value_wrong_syntax) {
         config_err_exp_str = {"no value configured for key 'first'",
                               "Invalid value for PASSENGERS: "};
 
-        scoped_log_handler log_handler_vars(config_error_handler);
+        ucs::log::scoped_handler log_handler_vars(config_error_handler);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, opts.set("PASSENGERS", "second:2"));
         EXPECT_STREQ("None", opts->passengers[0]);
         EXPECT_STREQ("None", opts->passengers[1]);

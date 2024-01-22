@@ -12,24 +12,252 @@
 #include <ucs/sys/sys.h>
 
 #include <memory>
+#include <mutex>
 
 namespace ucs {
+namespace log {
 
-pthread_mutex_t test_base::m_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
-unsigned test_base::m_total_warnings = 0;
-unsigned test_base::m_total_errors   = 0;
-std::vector<std::string> test_base::m_errors;
-std::vector<std::string> test_base::m_warnings;
-std::vector<std::string> test_base::m_first_warns_and_errors;
+/* helper structure to control all static variables in single place */
+static struct instance {
+    instance();
+    void setup();
+    void teardown();
+
+    std::mutex               m_mutex;
+    unsigned                 m_total_errors;
+    unsigned                 m_total_warnings;
+    std::vector<std::string> m_errors;
+    std::vector<std::string> m_warnings;
+    std::vector<std::string> m_first_warns_and_errors;
+
+    unsigned                 m_num_valgrind_errors_before;
+    unsigned                 m_num_errors_before;
+    unsigned                 m_num_warnings_before;
+    unsigned                 m_num_log_handlers_before;
+} inst;
+
+instance::instance() :
+    m_total_errors(0), m_total_warnings(0), m_num_valgrind_errors_before(0),
+    m_num_errors_before(0), m_num_warnings_before(0),
+    m_num_log_handlers_before(0)
+{}
+
+void instance::setup()
+{
+    m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
+    m_num_warnings_before        = m_total_warnings;
+    m_num_errors_before          = m_total_errors;
+
+    m_errors.clear();
+    m_warnings.clear();
+    m_first_warns_and_errors.clear();
+    m_num_log_handlers_before = ucs_log_num_handlers();
+}
+
+void instance::teardown()
+{
+    m_errors.clear();
+
+    ucs_assert(ucs_log_get_current_indent() == 0);
+    if (ucs_log_num_handlers() > m_num_log_handlers_before) {
+        ucs_log_pop_handler();
+    }
+
+    unsigned num_not_removed = ucs_log_num_handlers() -
+                               m_num_log_handlers_before;
+    if (num_not_removed != 0) {
+         ADD_FAILURE() << num_not_removed << " log handlers were not removed";
+    }
+
+    unsigned num_valgrind_errors = VALGRIND_COUNT_ERRORS -
+                                   m_num_valgrind_errors_before;
+    if (num_valgrind_errors != 0) {
+        ADD_FAILURE() << "Got " << num_valgrind_errors
+                      << " valgrind errors during the test";
+    }
+
+    if ((num_errors() > 0) || (num_warnings() > 0)) {
+        ADD_FAILURE() << "Got " << num_errors() << " errors "
+                      << "and " << num_warnings() << " warnings "
+                      << "during the test";
+        for (auto &msg : m_first_warns_and_errors) {
+            UCS_TEST_MESSAGE << "< " << msg << " >";
+        }
+    }
+}
+
+void setup()
+{
+    inst.setup();
+    ucs_log_push_handler(count_warns_logger);
+}
+
+void teardown()
+{
+    inst.teardown();
+}
+
+const std::vector<std::string>& errors()
+{
+    return inst.m_errors;
+}
+
+std::vector<std::string>& warnings_raw()
+{
+    return inst.m_warnings;
+}
+
+const std::vector<std::string>& warnings()
+{
+    return warnings_raw();
+}
+
+std::string format_message(const char *message, va_list ap)
+{
+    const size_t buffer_size = ucs_log_get_buffer_size();
+    std::string buf(buffer_size, '\0');
+    vsnprintf(&buf[0], buffer_size, message, ap);
+    buf.resize(strlen(buf.c_str()));
+    return buf;
+}
+
+static void push_debug_message_with_limit(std::vector<std::string>& vec,
+                                          const std::string& message,
+                                          const size_t limit)
+{
+    if (vec.size() >= limit) {
+        UCS_TEST_ABORT("aborting after " + ucs::to_string(vec.size()) +
+                       " error messages (" + message + ")");
+    }
+
+    vec.push_back(message);
+}
+
+ucs_log_func_rc_t
+common_logger(ucs_log_level_t log_level_to_handle, bool print,
+              std::vector<std::string> &messages_vec, size_t limit,
+              const char *file, unsigned line, const char *function,
+              ucs_log_level_t level,
+              const ucs_log_component_config_t *comp_conf,
+              const char *message, va_list ap)
+{
+    if (level != log_level_to_handle) {
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    // dump the formatted message to a stringstream
+    va_list ap2;
+    va_copy(ap2, ap);
+    std::istringstream iss(format_message(message, ap2));
+    va_end(ap2);
+
+    // save each line of the message to messages_vec, and print it if reqeusted
+    {
+        std::string message_line;
+        std::lock_guard<std::mutex> lock(inst.m_mutex);
+        while (getline(iss, message_line, '\n')) {
+            push_debug_message_with_limit(messages_vec, message_line, limit);
+            if (print) {
+                UCS_TEST_MESSAGE << "< " << message_line << " >";
+            }
+        }
+    }
+
+    // if the message was not printed, pass it to default handler in debug level
+    if (!print) {
+        ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG,
+                                comp_conf, message, ap);
+    }
+
+    return UCS_LOG_FUNC_RC_STOP;
+}
+
+ucs_log_func_rc_t
+hide_errors_logger(const char *file, unsigned line,
+                   const char *function, ucs_log_level_t level,
+                   const ucs_log_component_config_t *comp_conf,
+                   const char *message, va_list ap)
+{
+    return common_logger(UCS_LOG_LEVEL_ERROR, false, inst.m_errors,
+                         std::numeric_limits<size_t>::max(), file, line,
+                         function, level, comp_conf, message, ap);
+}
+
+ucs_log_func_rc_t
+hide_warns_logger(const char *file, unsigned line,
+                  const char *function, ucs_log_level_t level,
+                  const ucs_log_component_config_t *comp_conf,
+                  const char *message, va_list ap)
+{
+    return common_logger(UCS_LOG_LEVEL_WARN, false, inst.m_warnings,
+                         std::numeric_limits<size_t>::max(), file, line,
+                         function, level, comp_conf, message, ap);
+}
+
+ucs_log_func_rc_t
+wrap_errors_logger(const char *file, unsigned line,
+                   const char *function, ucs_log_level_t level,
+                   const ucs_log_component_config_t *comp_conf,
+                   const char *message, va_list ap)
+{
+    return common_logger(UCS_LOG_LEVEL_ERROR, true, inst.m_errors, 1000, file,
+                         line, function, level, comp_conf, message, ap);
+}
+
+ucs_log_func_rc_t
+wrap_warns_logger(const char *file, unsigned line,
+                  const char *function, ucs_log_level_t level,
+                  const ucs_log_component_config_t *comp_conf,
+                  const char *message, va_list ap)
+{
+    return common_logger(UCS_LOG_LEVEL_WARN, true, inst.m_warnings, 1000, file,
+                         line, function, level, comp_conf, message, ap);
+}
+
+ucs_log_func_rc_t
+count_warns_logger(const char *file, unsigned line, const char *function,
+                   ucs_log_level_t level,
+                   const ucs_log_component_config_t *comp_conf,
+                   const char *message, va_list ap)
+{
+    std::lock_guard<std::mutex> lock(inst.m_mutex);
+
+    if (level == UCS_LOG_LEVEL_ERROR) {
+        ++inst.m_total_errors;
+    } else if (level == UCS_LOG_LEVEL_WARN) {
+        ++inst.m_total_warnings;
+    }
+
+    if ((level <= UCS_LOG_LEVEL_WARN) &&
+        (inst.m_first_warns_and_errors.size() < 5)) {
+        /* Save the first few errors/warnings which cause the test to fail */
+        va_list ap2;
+        va_copy(ap2, ap);
+        std::stringstream ss;
+        ss << file << ":" << line << " " << format_message(message, ap2);
+        va_end(ap2);
+        inst.m_first_warns_and_errors.push_back(ss.str());
+    }
+
+    return UCS_LOG_FUNC_RC_CONTINUE;
+}
+
+size_t num_errors()
+{
+    return inst.m_total_errors - inst.m_num_errors_before;
+}
+
+size_t num_warnings()
+{
+    return inst.m_total_warnings - inst.m_num_warnings_before;
+}
+
+} // namespace log
 
 test_base::test_base() :
                 m_state(NEW),
                 m_initialized(false),
-                m_num_threads(1),
-                m_num_valgrind_errors_before(0),
-                m_num_errors_before(0),
-                m_num_warnings_before(0),
-                m_num_log_handlers_before(0)
+                m_num_threads(1)
 {
     push_config();
 }
@@ -173,154 +401,10 @@ void test_base::stats_restore()
 #endif
 }
 
-ucs_log_func_rc_t
-test_base::count_warns_logger(const char *file, unsigned line, const char *function,
-                              ucs_log_level_t level,
-                              const ucs_log_component_config_t *comp_conf,
-                              const char *message, va_list ap)
-{
-    pthread_mutex_lock(&m_logger_mutex);
-    if (level == UCS_LOG_LEVEL_ERROR) {
-        ++m_total_errors;
-    } else if (level == UCS_LOG_LEVEL_WARN) {
-        ++m_total_warnings;
-    }
-    if ((level <= UCS_LOG_LEVEL_WARN) &&
-        (m_first_warns_and_errors.size() < 5)) {
-        /* Save the first few errors/warnings which cause the test to fail */
-        va_list ap2;
-        va_copy(ap2, ap);
-        std::stringstream ss;
-        ss << file << ":" << line << " " << format_message(message, ap2);
-        va_end(ap2);
-        m_first_warns_and_errors.push_back(ss.str());
-    }
-    pthread_mutex_unlock(&m_logger_mutex);
-    return UCS_LOG_FUNC_RC_CONTINUE;
-}
-
-std::string test_base::format_message(const char *message, va_list ap)
-{
-    const size_t buffer_size = ucs_log_get_buffer_size();
-    std::string buf(buffer_size, '\0');
-    vsnprintf(&buf[0], buffer_size, message, ap);
-    buf.resize(strlen(buf.c_str()));
-    return buf;
-}
-
-void test_base::push_debug_message_with_limit(std::vector<std::string>& vec,
-                                              const std::string& message,
-                                              const size_t limit) {
-    if (vec.size() >= limit) {
-        UCS_TEST_ABORT("aborting after " + ucs::to_string(vec.size()) +
-                       " error messages (" + message + ")");
-    }
-
-    vec.push_back(message);
-}
-
-ucs_log_func_rc_t
-test_base::common_logger(ucs_log_level_t log_level_to_handle, bool print,
-                         std::vector<std::string> &messages_vec, size_t limit,
-                         const char *file, unsigned line, const char *function,
-                         ucs_log_level_t level,
-                         const ucs_log_component_config_t *comp_conf,
-                         const char *message, va_list ap)
-{
-    if (level != log_level_to_handle) {
-        return UCS_LOG_FUNC_RC_CONTINUE;
-    }
-
-    // dump the formatted message to a stringstream
-    va_list ap2;
-    va_copy(ap2, ap);
-    std::istringstream iss(format_message(message, ap2));
-    va_end(ap2);
-
-    // save each line of the message to messages_vec, and print it if reqeusted
-    pthread_mutex_lock(&m_logger_mutex);
-    std::string message_line;
-    while (getline(iss, message_line, '\n')) {
-        push_debug_message_with_limit(messages_vec, message_line, limit);
-        if (print) {
-            UCS_TEST_MESSAGE << "< " << message_line << " >";
-        }
-    }
-    pthread_mutex_unlock(&m_logger_mutex);
-
-    // if the message was not printed, pass it to default handler in debug level
-    if (!print) {
-        ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG,
-                                comp_conf, message, ap);
-    }
-
-    return UCS_LOG_FUNC_RC_STOP;
-}
-
-ucs_log_func_rc_t
-test_base::hide_errors_logger(const char *file, unsigned line,
-                              const char *function, ucs_log_level_t level,
-                              const ucs_log_component_config_t *comp_conf,
-                              const char *message, va_list ap)
-{
-    return common_logger(UCS_LOG_LEVEL_ERROR, false, m_errors,
-                         std::numeric_limits<size_t>::max(), file, line,
-                         function, level, comp_conf, message, ap);
-}
-
-ucs_log_func_rc_t
-test_base::hide_warns_logger(const char *file, unsigned line,
-                             const char *function, ucs_log_level_t level,
-                             const ucs_log_component_config_t *comp_conf,
-                             const char *message, va_list ap)
-{
-    return common_logger(UCS_LOG_LEVEL_WARN, false, m_warnings,
-                         std::numeric_limits<size_t>::max(), file, line,
-                         function, level, comp_conf, message, ap);
-}
-
-ucs_log_func_rc_t
-test_base::wrap_errors_logger(const char *file, unsigned line,
-                              const char *function, ucs_log_level_t level,
-                              const ucs_log_component_config_t *comp_conf,
-                              const char *message, va_list ap)
-{
-    return common_logger(UCS_LOG_LEVEL_ERROR, true, m_errors, 1000, file, line,
-                         function, level, comp_conf, message, ap);
-}
-
-ucs_log_func_rc_t
-test_base::wrap_warns_logger(const char *file, unsigned line,
-                             const char *function, ucs_log_level_t level,
-                             const ucs_log_component_config_t *comp_conf,
-                             const char *message, va_list ap)
-{
-    return common_logger(UCS_LOG_LEVEL_WARN, true, m_warnings, 1000, file, line,
-                         function, level, comp_conf, message, ap);
-}
-
-
-unsigned test_base::num_errors()
-{
-    return m_total_errors - m_num_errors_before;
-}
-
-unsigned test_base::num_warnings()
-{
-    return m_total_warnings - m_num_warnings_before;
-}
-
 void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
-    m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
-    m_num_warnings_before        = m_total_warnings;
-    m_num_errors_before          = m_total_errors;
 
-    m_errors.clear();
-    m_warnings.clear();
-    m_first_warns_and_errors.clear();
-    m_num_log_handlers_before = ucs_log_num_handlers();
-    ucs_log_push_handler(count_warns_logger);
+    log::setup();
 
     try {
         check_skip_test();
@@ -346,30 +430,7 @@ void test_base::TearDownProxy() {
         cleanup();
     }
 
-    m_errors.clear();
-
-    ucs_assert(ucs_log_get_current_indent() == 0);
-    if (ucs_log_num_handlers() > m_num_log_handlers_before) {
-        ucs_log_pop_handler();
-    }
-
-    unsigned num_not_removed = ucs_log_num_handlers() - m_num_log_handlers_before;
-    if (num_not_removed != 0) {
-         ADD_FAILURE() << num_not_removed << " log handlers were not removed";
-    }
-
-    int num_valgrind_errors = VALGRIND_COUNT_ERRORS - m_num_valgrind_errors_before;
-    if (num_valgrind_errors > 0) {
-        ADD_FAILURE() << "Got " << num_valgrind_errors << " valgrind errors during the test";
-    }
-    if ((num_errors() > 0) || (num_warnings() > 0)) {
-        ADD_FAILURE() << "Got " << num_errors() << " errors "
-                      << "and " << num_warnings() << " warnings "
-                      << "during the test";
-        for (size_t i = 0; i < m_first_warns_and_errors.size(); ++i) {
-            UCS_TEST_MESSAGE << "< " << m_first_warns_and_errors[i] << " >";
-        }
-    }
+    log::teardown();
 }
 
 void test_base::run()

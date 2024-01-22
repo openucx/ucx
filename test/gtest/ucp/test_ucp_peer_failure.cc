@@ -212,7 +212,7 @@ test_ucp_peer_failure::warn_unreleased_rdesc_handler(const char *file, unsigned 
                                                      const char *message, va_list ap)
 {
     if (level == UCS_LOG_LEVEL_WARN) {
-        std::string err_str = format_message(message, ap);
+        std::string err_str = ucs::log::format_message(message, ap);
 
         if (err_str.find("unexpected tag-receive descriptor") != std::string::npos) {
             return UCS_LOG_FUNC_RC_STOP;
@@ -236,7 +236,7 @@ void test_ucp_peer_failure::fail_receiver() {
         /* transform warning messages about unreleased TM rdescs to test
          * message that are expected here, since we closed receiver w/o
          * reading the messages that were potentially received */
-        scoped_log_handler slh(warn_unreleased_rdesc_handler);
+        ucs::log::scoped_handler slh(warn_unreleased_rdesc_handler);
 
         cleanup_rndv_descs();
         failing_receiver().cleanup();
@@ -393,7 +393,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     double prev_ib_ud_peer_timeout = sender().set_ib_ud_peer_timeout(3.);
 
     {
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
 
         fail_receiver();
 
@@ -561,8 +561,8 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
            "KEEPALIVE_INTERVAL=0.3", "KEEPALIVE_NUM_EPS=inf") {
     /* TODO: wireup is not tested yet */
 
-    scoped_log_handler err_handler(wrap_errors_logger);
-    scoped_log_handler warn_handler(hide_warns_logger);
+    ucs::log::scoped_handler err_handler(ucs::log::wrap_errors_logger);
+    ucs::log::scoped_handler warn_handler(ucs::log::hide_warns_logger);
 
     /* initiate p2p pairing */
     ucp_ep_resolve_remote_id(failing_sender(), 0);
@@ -599,9 +599,8 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     wait_for_flag(&m_err_count);
 
     /* dump warnings */
-    int warn_count = m_warnings.size();
-    for (int i = 0; i < warn_count; ++i) {
-        UCS_TEST_MESSAGE << "< " << m_warnings[i] << " >";
+    for (auto &w : ucs::log::warnings()) {
+        UCS_TEST_MESSAGE << "< " << w << " >";
     }
 
     EXPECT_NE(0, m_err_count);
@@ -719,7 +718,7 @@ protected:
             return;
         }
 
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         m_peer_to_close->close_all_eps(*self, 0, UCP_EP_CLOSE_FLAG_FORCE);
 
         void *peer_req = (m_peer_to_close == &sender()) ? m_sreq : m_rreq;
@@ -797,7 +796,7 @@ protected:
         protos_replace_progress();
 
         {
-            scoped_log_handler slh(wrap_errors_logger);
+            ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
             auto result = smoke_test(true);
             ASSERT_TRUE(UCS_STATUS_IS_ERR(result.first));
             ASSERT_TRUE(UCS_STATUS_IS_ERR(result.second));

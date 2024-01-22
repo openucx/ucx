@@ -42,8 +42,7 @@ void test_uct_peer_failure::init()
     uct_iface_params_t p = entity_params();
     p.field_mask |= UCT_IFACE_PARAM_FIELD_OPEN_MODE;
     p.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
-    m_sender = uct_test::create_entity(p);
-    m_entities.push_back(m_sender);
+    m_sender = &uct_test::create_entity(p);
 
     check_skip_test();
     for (size_t i = 0; i < 2; ++i) {
@@ -138,8 +137,7 @@ void test_uct_peer_failure::new_receiver()
     uct_iface_params_t p = entity_params();
     p.field_mask |= UCT_IFACE_PARAM_FIELD_OPEN_MODE;
     p.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
-    m_receivers.push_back(uct_test::create_entity(p));
-    m_entities.push_back(m_receivers.back());
+    m_receivers.push_back(&uct_test::create_entity(p));
     m_sender->connect(m_receivers.size() - 1, *m_receivers.back(), 0);
 
     if (m_sender->iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
@@ -266,7 +264,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
                                  m_required_caps))
 {
     {
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
 
         inject_error();
         EXPECT_EQ(UCS_OK, uct_ep_put_short(ep0(), NULL, 0, 0, 0));
@@ -290,7 +288,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
     std::vector<pending_send_request_t> reqs(num_pend_sends);
 
     {
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         ucs_status_t status;
 
         fill_resources(false, loop_end_limit);
@@ -331,7 +329,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send,
 
     /* kill the 1st receiver while sending on 2nd pair */
     {
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         inject_error();
         send_am(0);
         send_recv_am(1);
@@ -434,7 +432,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
                           ucs_time_from_sec(300 * ucs::test_time_multiplier());
 
     {
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         for (size_t idx = 0; idx < (m_nreceivers - 1); ++idx) {
             for (size_t i = 0; i < m_tx_window; ++i) {
                 EXPECT_UCS_OK(send_am(idx));
@@ -470,26 +468,20 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
 class test_uct_keepalive : public uct_test {
 public:
     test_uct_keepalive() :
-        m_pid(getpid()), m_entity(NULL), m_err_handler_count(0)
+        m_pid(getpid()), m_err_handler_count(0)
     {
     }
 
     void init()
     {
-        m_entity = create_entity(0, err_handler_cb);
-        m_entity->connect(0, *m_entity, 0);
-        m_entities.push_back(m_entity);
+        create_entity(0, err_handler_cb);
+        sender().connect(0, sender(), 0);
         ASSERT_TRUE(has_mm());
-    }
-
-    void cleanup()
-    {
-        m_entities.clear();
     }
 
     uct_keepalive_info_t *m_ka()
     {
-        uct_mm_ep_t *ep = ucs_derived_of(m_entity->ep(0), uct_mm_ep_t);
+        uct_mm_ep_t *ep = ucs_derived_of(sender().ep(0), uct_mm_ep_t);
 
         return &ep->keepalive;
     }
@@ -505,11 +497,10 @@ public:
 protected:
     void do_keepalive()
     {
-        uct_ep_keepalive_check(m_entity->ep(0), m_ka(), m_pid, 0, NULL);
+        uct_ep_keepalive_check(sender().ep(0), m_ka(), m_pid, 0, NULL);
     }
 
     pid_t                m_pid;
-    entity               *m_entity;
     unsigned             m_err_handler_count;
 };
 
@@ -571,7 +562,7 @@ protected:
     {
         ucs_status_t status;
 
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         flush();
         EXPECT_EQ(0, m_err_count);
 
@@ -644,7 +635,7 @@ public:
     void test_rma_zcopy_peer_failure(bool is_put_op)
     {
         {
-            scoped_log_handler slh(wrap_errors_logger);
+            ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
             const size_t size = 128;
             mapped_buffer sendbuf(size, 0, *m_sender);
             ucs_status_t status;

@@ -1268,7 +1268,7 @@ UCS_TEST_F(test_array, add_above_max_capacity) {
     EXPECT_EQ(max_capacity, ucs_array_length(&test_array));
 
     {
-        scoped_log_handler slh(hide_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
         ucs_status_t status = ucs_array_reserve(&test_array, max_capacity + 1);
         EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
     }

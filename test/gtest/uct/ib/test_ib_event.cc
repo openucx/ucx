@@ -186,7 +186,7 @@ public:
                        const ucs_log_component_config_t *comp_conf,
                        const char *message, va_list ap)
     {
-        std::string msg = format_message(message, ap);
+        std::string msg = ucs::log::format_message(message, ap);
 
         UCS_TEST_MESSAGE << msg.c_str();
         sscanf(msg.c_str(),
@@ -305,30 +305,27 @@ public:
 
     virtual void init() {
         uct_test::init();
-        m_e.reset(create_entity(0));
+        create_entity(0);
     }
 
     bool wait_for_last_wqe_event(bool before) {
         ucs_status_t status;
         bool ret;
 
-        init_qp(*m_e);
+        init_qp(e(0));
 
-        status = uct_ib_device_async_event_register(dev(*m_e),
+        status = uct_ib_device_async_event_register(dev(e(0)),
                 IBV_EVENT_QP_LAST_WQE_REACHED, m_qp->qp_num());
         ASSERT_UCS_OK(status);
 
-        ret = uct_test_event_base::wait_for_last_wqe_event(*m_e, before);
+        ret = uct_test_event_base::wait_for_last_wqe_event(e(0), before);
 
-        uct_ib_device_async_event_unregister(dev(*m_e),
+        uct_ib_device_async_event_unregister(dev(e(0)),
                 IBV_EVENT_QP_LAST_WQE_REACHED, m_qp->qp_num());
 
         m_qp.reset();
         return ret;
     }
-
-protected:
-    ucs::auto_ptr<entity> m_e;
 
 private:
 #if HAVE_MLX5_DV

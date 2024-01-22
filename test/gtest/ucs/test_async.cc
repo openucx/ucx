@@ -583,20 +583,19 @@ UCS_TEST_P(test_async, modify_event) {
 
 UCS_TEST_P(test_async, warn_block) {
     {
-        scoped_log_handler slh(hide_warns_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_warns_logger);
         {
             local_event le(GetParam());
             le.block();
         }
     }
 
-    int warn_count = m_warnings.size();
-    for (int i = 0; i < warn_count; ++i) {
-        UCS_TEST_MESSAGE << "< " << m_warnings[i] << " >";
+    for (auto &w : ucs::log::warnings()) {
+        UCS_TEST_MESSAGE << "< " << w << " >";
     }
 
     if (GetParam() != UCS_ASYNC_MODE_POLL) {
-        EXPECT_GE(warn_count, 1);
+        EXPECT_GE(ucs::log::warnings().size(), 1u);
     }
 }
 
