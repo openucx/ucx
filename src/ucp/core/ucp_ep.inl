@@ -251,6 +251,13 @@ ucp_ep_config_key_has_cm_lane(const ucp_ep_config_key_t *config_key)
     return config_key->cm_lane != UCP_NULL_LANE;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_config_is_inter_node(const ucp_ep_config_key_t *config_key)
+{
+    return !(config_key->flags & (UCP_EP_CONFIG_KEY_FLAG_SELF |
+                                  UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE));
+}
+
 static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
 {
     return (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&

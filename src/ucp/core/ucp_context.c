@@ -166,8 +166,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_THRESH", UCS_VALUE_AUTO_STR,
-   "Threshold for switching from eager to rendezvous protocol",
-   ucs_offsetof(ucp_context_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+   "Threshold for switching from eager to rendezvous protocol", 0,
+    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_MEMUNITS,
+        {"intra", "threshold for intra-node communication",
+         ucs_offsetof(ucp_context_config_t, rndv_intra_thresh)},
+        {"inter", "threshold for inter-node communication",
+         ucs_offsetof(ucp_context_config_t, rndv_inter_thresh)},
+        {NULL}
+  )},
 
   {"RNDV_SEND_NBR_THRESH", "256k",
    "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"

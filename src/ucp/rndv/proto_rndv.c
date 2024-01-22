@@ -387,19 +387,29 @@ out:
     return status;
 }
 
-static size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
+size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
 {
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     const ucp_context_config_t *cfg = &init_params->worker->context->config.ext;
+    size_t rndv_thresh;
 
-    if ((cfg->rndv_thresh == UCS_MEMUNITS_AUTO) &&
+    /* Explicit configuration for rendezvous threshold (either fine-grained or
+     * coarse-grained) has precedence over rndv_send_nbr_thresh
+     */
+    if (ucp_ep_config_is_inter_node(init_params->ep_config_key)) {
+        rndv_thresh = cfg->rndv_inter_thresh;
+    } else {
+        rndv_thresh = cfg->rndv_intra_thresh;
+    }
+
+    if ((rndv_thresh == UCS_MEMUNITS_AUTO) &&
         (ucp_proto_select_op_attr_unpack(select_param->op_attr) &
          UCP_OP_ATTR_FLAG_FAST_CMPL) &&
         ucs_likely(UCP_MEM_IS_HOST(select_param->mem_type))) {
-        return cfg->rndv_send_nbr_thresh;
+        rndv_thresh = cfg->rndv_send_nbr_thresh;
     }
 
-    return cfg->rndv_thresh;
+    return rndv_thresh;
 }
 
 ucs_status_t

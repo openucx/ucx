@@ -109,6 +109,8 @@ typedef struct {
 
 } ucp_proto_rndv_ctrl_init_params_t;
 
+/* Return rendezvous threshold for the provided configuration */
+size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params);
 
 /* Initializes protocol which sends rendezvous control message using AM lane
  * (e.g. RTS and ATS). */
