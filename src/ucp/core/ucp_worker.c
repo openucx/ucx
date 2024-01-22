@@ -331,7 +331,8 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
      */
     if ((events & UCP_WAKEUP_TAG_SEND) ||
         ((events & UCP_WAKEUP_TAG_RECV) &&
-         (context->config.ext.rndv_thresh != UCS_MEMUNITS_INF)))
+         ((context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
+          (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF))))
     {
         worker->uct_events |= UCT_EVENT_SEND_COMP;
     }
@@ -2159,6 +2160,11 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                         UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
                                         UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
                                         &ep_config->am_u.max_eager_short);
+
+        ucp_worker_ep_config_short_init(worker, ep_config, ep_cfg_index,
+                                        UCP_FEATURE_AM, UCP_OP_ID_AM_SEND_REPLY,
+                                        UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
+                                        &ep_config->am_u.max_reply_eager_short);
     }
 
     ucp_worker_print_used_tls(worker, ep_cfg_index);
