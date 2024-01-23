@@ -6,6 +6,7 @@ parameters:
   container:
   proto_enable: yes
   asan_check: no
+  valgrind_check: no
 
 jobs:
   - job: tests_${{ parameters.name }}
@@ -48,5 +49,5 @@ jobs:
           JENKINS_TEST_PERF: ${{ parameters.test_perf }}
           PROTO_ENABLE: ${{ parameters.proto_enable }}
           ASAN_CHECK: ${{ parameters.asan_check }}
-          JENKINS_NO_VALGRIND: ${{ parameters.valgrind_disable }}
+          VALGRIND_CHECK: ${{ parameters.valgrind_check }}
           RUNNING_IN_AZURE: yes
