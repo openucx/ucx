@@ -420,6 +420,14 @@ stages:
         container: ubuntu22_cuda12
         asan_check: yes
         valgrind_disable: yes
+    - template: tests.yml
+      parameters:
+        name: new
+        demands: ucx_new -equals yes
+        test_perf: 0
+        container: ubuntu2204
+        asan_check: yes
+        valgrind_disable: yes
 
 #  - stage: Cuda_compatible
 #    dependsOn: [Static_check]
