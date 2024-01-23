@@ -751,6 +751,7 @@ size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len,
     __m256i y0, y1, y2, y3;
     size_t offset;
 
+    ucs_nt_write_prefetch(dst);
     offset = 64 - ((uintptr_t)dst & 0x1f);
     y2 = _mm256_loadu_si256((__m256i_u const *)src);
     y3 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset - YMM_SZ));
@@ -774,6 +775,11 @@ size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len,
                 if (ucs_unlikely(hint & UCS_ARCH_MEMCPY_NT_SOURCE)) {
                     ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
                     ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
+                } else {
+                    if (len > 256) {
+                        ucs_read_prefetch((char *)src + offset + 3 * 64);
+                        ucs_read_prefetch((char *)src + offset + 4 * 64);
+                    }
                 }
 
                 offset += 4 * 32;
@@ -793,6 +799,11 @@ size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len,
                 if (ucs_unlikely(hint & UCS_ARCH_MEMCPY_NT_SOURCE)) {
                     ucs_nt_read_prefetch((char *)src + offset + 3 * 64);
                     ucs_nt_read_prefetch((char *)src + offset + 4 * 64);
+                } else {
+                    if (len > 256) {
+                        ucs_read_prefetch((char *)src + offset + 3 * 64);
+                        ucs_read_prefetch((char *)src + offset + 4 * 64);
+                    }
                 }
 
                 offset += 4 * 32;
@@ -805,7 +816,12 @@ size_t ucs_cpu_nt_dst_buffer_transfer(void *dst, const void *src, size_t len,
             y1 = _mm256_loadu_si256((__m256i_u const *)((char *)src + offset + 32));
             _mm256_stream_si256((__m256i *)((char *)dst + offset) , y0);
             _mm256_stream_si256((__m256i *)((char *)dst + offset + 32), y1);
+            offset += 2 * 32;
             len -= 64;
+        }
+
+        if (len) {
+            ucs_nt_write_prefetch((char *)dst + offset);
         }
 
         /* make the writes visible to the other core */
@@ -855,6 +871,7 @@ size_t ucs_cpu_nt_src_buffer_transfer(void *dst, const void *src, size_t len)
     __m256i y0, y1, y2, y3;
     size_t offset;
 
+    ucs_nt_read_prefetch(src);
     ucs_nt_read_prefetch((char *)src + 1 * 64);
     offset = 128 - ((uintptr_t)src & 0x3f);
     ucs_nt_read_prefetch((char *)src + offset);
