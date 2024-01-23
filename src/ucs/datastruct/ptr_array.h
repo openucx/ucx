@@ -240,7 +240,7 @@ __ucs_ptr_array_for_each_get_step_size(ucs_ptr_array_t *ptr_array,
     }
 
     /* Prefetch the next item */
-    ucs_prefetch(&ptr_array->start[element_index + size_elem]);
+    ucs_read_prefetch(&ptr_array->start[element_index + size_elem]);
 
     return size_elem;
 }

@@ -199,7 +199,7 @@
 /**
  * Prefetch cache line
  */
-#define ucs_prefetch(p)            __builtin_prefetch(p)
+#define ucs_read_prefetch(p)       __builtin_prefetch(p, 0, 3)
 #define ucs_write_prefetch(p)      __builtin_prefetch(p, 1, 3)
 
 #define ucs_nt_read_prefetch(p)    __builtin_prefetch(p, 0, 0)
