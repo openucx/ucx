@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2023. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -24,6 +24,7 @@
 #include <netdb.h>
 #include <sys/poll.h>
 #include <linux/types.h> /* __be64 */
+#include <dlfcn.h>
 
 #include <infiniband/mad.h>
 #include <infiniband/umad.h>
@@ -38,12 +39,44 @@ typedef struct perftest_mad_rte_group {
     int               is_server;
 } perftest_mad_rte_group_t;
 
+
+#define MAD_SYMS \
+    MAD_X(libibumad, umad_debug) \
+    MAD_X(libibumad, umad_send) \
+    MAD_X(libibumad, umad_recv) \
+    MAD_X(libibumad, umad_status) \
+    MAD_X(libibumad, umad_size) \
+    MAD_X(libibumad, umad_get_mad_addr) \
+    MAD_X(libibumad, umad_get_mad) \
+    MAD_X(libibumad, umad_get_port) \
+    MAD_X(libibumad, umad_release_port) \
+    MAD_X(libibmad, mad_build_pkt) \
+    MAD_X(libibmad, mad_rpc_class_agent) \
+    MAD_X(libibmad, mad_rpc_portid) \
+    MAD_X(libibmad, mad_rpc_open_port) \
+    MAD_X(libibmad, mad_rpc_close_port) \
+    MAD_X(libibmad, mad_register_server_via) \
+    MAD_X(libibmad, mad_encode_field) \
+    MAD_X(libibmad, mad_set_field64) \
+    MAD_X(libibmad, mad_decode_field) \
+    MAD_X(libibmad, ib_path_query_via) \
+    MAD_X(libibmad, ibdebug)
+
+static struct perftest_mad_callback {
+    void *dl_libibmad;
+    void *dl_libibumad;
+
+#define MAD_X(_lib, _func) typeof(_func) *_func;
+    MAD_SYMS
+#undef MAD_X
+} lib = {};
+
 static unsigned mad_magic = 0xdeadbeef;
 
 static ucs_status_t
 perftest_mad_get_remote_port(void *umad, ib_portid_t *remote_port)
 {
-    ib_mad_addr_t *mad_addr = umad_get_mad_addr(umad);
+    ib_mad_addr_t *mad_addr = lib.umad_get_mad_addr(umad);
 
     if (mad_addr == NULL) {
         return UCS_ERR_INVALID_PARAM;
@@ -65,7 +98,7 @@ static ucs_status_t perftest_mad_sendv(perftest_mad_rte_group_t *mad,
     };
     ib_rpc_t rpc       = {};
     size_t data_size   = ucs_iovec_total_length(iovec, iovcnt);
-    size_t size        = umad_size() + IB_VENDOR_RANGE2_DATA_OFFS + data_size;
+    size_t size        = lib.umad_size() + IB_VENDOR_RANGE2_DATA_OFFS + data_size;
     int umad_len, fd, agent, ret;
     ib_portid_t *portid;
     uint8_t *data;
@@ -81,7 +114,7 @@ static ucs_status_t perftest_mad_sendv(perftest_mad_rte_group_t *mad,
         return UCS_ERR_NO_MEMORY;
     }
 
-    data = umad_get_mad(umad);
+    data = lib.umad_get_mad(umad);
     data = UCS_PTR_BYTE_OFFSET(data, IB_VENDOR_RANGE2_DATA_OFFS);
     ucs_iov_copy(iovec, iovcnt, 0, data, data_size, UCS_IOV_COPY_TO_BUF);
 
@@ -100,7 +133,7 @@ static ucs_status_t perftest_mad_sendv(perftest_mad_rte_group_t *mad,
         portid->qkey = IB_DEFAULT_QP1_QKEY;
     }
 
-    ret = mad_build_pkt(umad, &rpc, &mad->dst_port, &rmpp, NULL);
+    ret = lib.mad_build_pkt(umad, &rpc, &mad->dst_port, &rmpp, NULL);
     if (ret < 0) {
         ucs_error("mad_build_pkt(mgtclass=%d oui=%x) failed: %m", rpc.mgtclass,
                   rpc.oui);
@@ -108,11 +141,11 @@ static ucs_status_t perftest_mad_sendv(perftest_mad_rte_group_t *mad,
         goto out;
     }
 
-    agent    = mad_rpc_class_agent(mad->mad_port, rpc.mgtclass);
-    fd       = mad_rpc_portid(mad->mad_port);
+    agent    = lib.mad_rpc_class_agent(mad->mad_port, rpc.mgtclass);
+    fd       = lib.mad_rpc_portid(mad->mad_port);
     umad_len = IB_VENDOR_RANGE2_DATA_OFFS + data_size;
 
-    ret = umad_send(fd, agent, umad, umad_len, 0, 0);
+    ret = lib.umad_send(fd, agent, umad, umad_len, 0, 0);
     if (ret < 0) {
         ucs_error("umad_send(agent=%d umad_len=%d) failed: %m", agent,
                   umad_len);
@@ -164,12 +197,12 @@ static int perftest_mad_user_mad_read(int fd, struct ib_user_mad **umad_p)
     ucs_status_t status;
     int ret;
 
-    umad = malloc(umad_size() + umad_len);
+    umad = malloc(lib.umad_size() + umad_len);
     if (umad == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    ret = umad_recv(fd, umad, &umad_len, timeout_msec);
+    ret = lib.umad_recv(fd, umad, &umad_len, timeout_msec);
     if (ret >= 0) {
         ucs_assertv(umad_len >= 0, "umad_len: %d", umad_len);
         *umad_p = umad;
@@ -191,7 +224,7 @@ static ucs_status_t perftest_mad_recv(perftest_mad_rte_group_t *rte_group,
                                       void *buffer, size_t *avail,
                                       ib_portid_t *remote_port)
 {
-    int fd = mad_rpc_portid(rte_group->mad_port);
+    int fd = lib.mad_rpc_portid(rte_group->mad_port);
     int ret;
     uint8_t *data;
     int len;
@@ -221,14 +254,14 @@ ping_retry:
         goto out;
     }
 
-    ret = umad_status(user_mad);
+    ret = lib.umad_status(user_mad);
     if (ret != 0) {
         ucs_warn("MAD: receive: status failure: %d", ret);
         status = UCS_ERR_REJECTED;
         goto out;
     }
 
-    data = UCS_PTR_BYTE_OFFSET(umad_get_mad(user_mad),
+    data = UCS_PTR_BYTE_OFFSET(lib.umad_get_mad(user_mad),
                                IB_VENDOR_RANGE2_DATA_OFFS);
     if (perftest_mad_is_ping(data, len)) {
         free(user_mad);
@@ -410,7 +443,7 @@ static struct ibmad_port *perftest_mad_open(char *ca, int ca_port)
         return NULL;
     }
 
-    port = mad_rpc_open_port(ca, ca_port, mgmt_classes, mgmt_classes_size);
+    port = lib.mad_rpc_open_port(ca, ca_port, mgmt_classes, mgmt_classes_size);
     if (port == 0) {
         ucs_error("mad_rpc_open_port(ca=\"%s\" ca_port=%d "
                   "mgmt_classes=IB_SA_CLASS) failed: %m",
@@ -418,8 +451,8 @@ static struct ibmad_port *perftest_mad_open(char *ca, int ca_port)
         return NULL;
     }
 
-    if (mad_register_server_via(perftest_rte_class, rmpp_version, NULL, oui,
-                                port) < 0) {
+    if (lib.mad_register_server_via(perftest_rte_class, rmpp_version, NULL, oui,
+                                    port) < 0) {
         ucs_error("mad_register_server_via(mgmt=%d rmpp_version=%d oui=%d)"
                   " failed: %m",
                   IB_SA_CLASS, UMAD_RMPP_VERSION, oui);
@@ -429,7 +462,7 @@ static struct ibmad_port *perftest_mad_open(char *ca, int ca_port)
     return port;
 
 err:
-    mad_rpc_close_port(port);
+    lib.mad_rpc_close_port(port);
     return NULL;
 }
 
@@ -448,7 +481,7 @@ static ucs_status_t perftest_mad_path_query(const char *ca, int ca_port,
     int ret;
     ib_portid_t sm_id; /* SM: the GUID to LID resolver */
 
-    ret = umad_get_port(ca, ca_port, &port);
+    ret = lib.umad_get_port(ca, ca_port, &port);
     if (ret < 0) {
         ucs_error("umad_get_port(ca=\"%s\" ca_port=%d) failed: %s", ca, ca_port,
                   strerror_r(-ret, err_str, sizeof(err_str)));
@@ -463,24 +496,24 @@ static ucs_status_t perftest_mad_path_query(const char *ca, int ca_port,
     gid_prefix = be64toh(port.gid_prefix);
     port_guid  = be64toh(port.port_guid);
 
-    umad_release_port(&port);
+    lib.umad_release_port(&port);
 
-    mad_encode_field(selfgid, IB_GID_PREFIX_F, &gid_prefix);
-    mad_encode_field(selfgid, IB_GID_GUID_F, &port_guid);
+    lib.mad_encode_field(selfgid, IB_GID_PREFIX_F, &gid_prefix);
+    lib.mad_encode_field(selfgid, IB_GID_GUID_F, &port_guid);
 
     memcpy(&prefix, selfgid, sizeof(prefix));
-    mad_set_field64(dst_port->gid, 0, IB_GID_PREFIX_F,
-                    prefix ? be64toh(prefix) : IB_DEFAULT_SUBN_PREFIX);
-    mad_set_field64(dst_port->gid, 0, IB_GID_GUID_F, guid);
+    lib.mad_set_field64(dst_port->gid, 0, IB_GID_PREFIX_F,
+                        prefix ? be64toh(prefix) : IB_DEFAULT_SUBN_PREFIX);
+    lib.mad_set_field64(dst_port->gid, 0, IB_GID_GUID_F, guid);
 
-    dst_port->lid = ib_path_query_via(mad_port, selfgid, dst_port->gid, &sm_id,
-                                      buf);
+    dst_port->lid = lib.ib_path_query_via(mad_port, selfgid, dst_port->gid,
+                                          &sm_id, buf);
     if (dst_port->lid < 0) {
         ucs_error("MAD: GUID query failed");
         return UCS_ERR_UNREACHABLE;
     }
 
-    mad_decode_field(buf, IB_SA_PR_SL_F, &dst_port->sl);
+    lib.mad_decode_field(buf, IB_SA_PR_SL_F, &dst_port->sl);
     return UCS_OK;
 }
 
@@ -603,8 +636,8 @@ static void perftest_mad_set_logging(void)
     static const int ib_debug_level = 10;
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
-        ibdebug = ib_debug_level; /* extern variable from mad headers */
-        umad_debug(ib_debug_level);
+        *lib.ibdebug = ib_debug_level; /* extern variable from mad headers */
+        lib.umad_debug(ib_debug_level);
     }
 }
 
@@ -633,12 +666,71 @@ static ucs_status_t perftest_mad_parse_ca_and_port(const char *mad_port,
     return UCS_OK;
 }
 
+static void unload_mad_callbacks(void)
+{
+    dlclose(lib.dl_libibmad);
+    dlclose(lib.dl_libibumad);
+}
+
+static ucs_status_t load_mad_callbacks(void)
+{
+    static const char libibmad_str[]  = "libibmad.so";
+    static const char libibumad_str[] = "libibumad.so";
+    void *dl_libibmad                 = dlopen(libibmad_str, RTLD_LAZY);
+    void *dl_libibumad                = dlopen(libibumad_str, RTLD_LAZY);
+    struct load_list {
+        void       *dl;
+        const char *sym;
+        void       **dest;
+    } *entry, list[] = {
+#define MAD_X(_lib, _func) {dl_##_lib, #_func, (void*)&lib._func},
+        MAD_SYMS
+#undef MAD_X
+        {}
+    };
+
+    if ((dl_libibmad == NULL) || (dl_libibumad == NULL)) {
+        ucs_error("MAD: Cannot find %s/%s on running machine", libibmad_str,
+                  libibumad_str);
+        goto err;
+    }
+
+    lib.dl_libibmad  = dl_libibmad;
+    lib.dl_libibumad = dl_libibumad;
+
+    for (entry = list; entry->sym != NULL; entry++) {
+        *entry->dest = dlsym(entry->dl, entry->sym);
+        if (*entry->dest == NULL) {
+            ucs_error("MAD: Missing symbol '%s' on running machine",
+                      entry->sym);
+            goto err;
+        }
+    }
+
+    return UCS_OK;
+
+err:
+    if (dl_libibmad != NULL) {
+        dlclose(dl_libibmad);
+    }
+
+    if (dl_libibumad != NULL) {
+        dlclose(dl_libibumad);
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
 ucs_status_t setup_mad_rte(struct perftest_context *ctx)
 {
     perftest_mad_rte_group_t *rte_group;
     ucs_status_t status;
     int ca_port;
     char ca[32];
+
+    if (load_mad_callbacks() != UCS_OK) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     status = perftest_mad_parse_ca_and_port(ctx->mad_port, ca, sizeof(ca),
                                             &ca_port);
@@ -697,7 +789,7 @@ ucs_status_t setup_mad_rte(struct perftest_context *ctx)
     return UCS_OK;
 
 err_close_mad_port:
-    mad_rpc_close_port(rte_group->mad_port);
+    lib.mad_rpc_close_port(rte_group->mad_port);
 err:
     free(rte_group);
     return UCS_ERR_NO_DEVICE;
@@ -709,9 +801,10 @@ ucs_status_t cleanup_mad_rte(struct perftest_context *ctx)
 
     ctx->params.super.rte_group = NULL;
     if (group != NULL) {
-        mad_rpc_close_port(group->mad_port);
+        lib.mad_rpc_close_port(group->mad_port);
         free(group);
     }
 
+    unload_mad_callbacks();
     return UCS_OK;
 }

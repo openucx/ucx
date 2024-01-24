@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2024. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
@@ -33,7 +33,6 @@ ucx_perftest_CPPFLAGS = $(BASE_CPPFLAGS)
 ucx_perftest_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS) $(MAD_CFLAGS)
 ucx_perftest_LDFLAGS  = \
 	$(LDFLAGS_DYNAMIC_LIST_DATA) \
-	$(MAD_LDFLAGS) \
 	$(MAD_LIBS)
 
 ucx_perftest_LDADD    = \
