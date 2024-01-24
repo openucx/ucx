@@ -15,6 +15,7 @@ extern "C" {
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/piecewise_func.h>
 #include <ucs/time/time.h>
 #include <ucs/type/init_once.h>
 #include <ucs/arch/cpu.h>
@@ -22,6 +23,8 @@ extern "C" {
 
 #include <vector>
 #include <queue>
+#include <random>
+#include <set>
 #include <map>
 
 class test_datatype : public ucs::test {
@@ -1408,4 +1411,225 @@ UCS_MT_TEST_F(test_datatype_ptr_map_safe, safe_put, num_threads)
             }
         }
     }
+}
+
+
+class test_piecewise_func : public test_datatype {
+protected:
+    /* Represents piecewise function segment which consists of the linear
+     * function and the range on which this function is applicable.
+     * Both `start` and `end` is included to the range.
+     */
+    struct segment {
+        size_t            start;
+        size_t            end;
+        ucs_linear_func_t func;
+    };
+
+    static std::string get_segment_string(const segment &seg)
+    {
+        std::stringstream ss;
+        ss << "segment [" << seg.start << ", " << seg.end << "] : ";
+        ss << "func f(x) = " << seg.func.c << " + x*" << seg.func.m;
+
+        return ss.str();
+    }
+
+    static void print_piecewise_func(const ucs_piecewise_func_t &pw_func)
+    {
+        size_t start = 0;
+        ucs_piecewise_segment_t *seg;
+
+        UCS_TEST_MESSAGE << "piecewise func:";
+        ucs_piecewise_func_seg_foreach(&pw_func, seg) {
+            segment test_segment = {start, seg->end, seg->func};
+            UCS_TEST_MESSAGE << "\t" << get_segment_string(test_segment);
+            start = seg->end + 1;
+        }
+    }
+
+    static void compare_point_value(const ucs_piecewise_func_t &pw_func,
+                                    const ucs_linear_func_t &l_func,
+                                    size_t x)
+    {
+        ASSERT_EQ(ucs_piecewise_func_apply(&pw_func, x),
+                  ucs_linear_func_apply(l_func, x)) << "X axis point is " << x;
+    }
+
+    static size_t get_num_segments(ucs_piecewise_func_t &func)
+    {
+        size_t seg_num = 0;
+        ucs_piecewise_segment_t *seg;
+
+        ucs_piecewise_func_seg_foreach(&func, seg) {
+            ++seg_num;
+        }
+
+        return seg_num;
+    }
+
+    static void check_single_segment_func(ucs_piecewise_func_t &pw_func,
+                                          const ucs_linear_func_t &segment_func)
+    {
+        ucs_piecewise_segment_t *seg;
+
+        ASSERT_EQ(get_num_segments(pw_func), 1);
+        ucs_piecewise_func_seg_foreach(&pw_func, seg) {
+            ASSERT_TRUE(ucs_linear_func_is_equal(seg->func, segment_func, 0));
+        }
+    }
+
+    static void check_funcs_sum(ucs_piecewise_func_t &result,
+                                std::vector<ucs_piecewise_func_t> &pw_funcs)
+    {
+        size_t seg_start = 0;
+        std::set<size_t> points;
+        ucs_piecewise_segment_t *seg;
+
+        for (auto &pw_func : pw_funcs) {
+            ucs_piecewise_func_seg_foreach(&pw_func, seg) {
+                /* Test start, end and middle of the each segment */
+                segment test_seg{seg_start, seg->end, seg->func};
+                auto seg_points = get_segment_points(test_seg);
+                points.insert(seg_points.begin(), seg_points.end());
+
+                seg_start = seg->end + 1;
+            }
+        }
+
+        for (size_t point : points) {
+            double expected = 0;
+            for (auto &pw_func : pw_funcs) {
+                expected += ucs_piecewise_func_apply(&pw_func, point);
+            }
+
+            double actual = ucs_piecewise_func_apply(&result, point);
+
+            if (actual != expected) {
+                for (const auto &pw_func : pw_funcs) {
+                    print_piecewise_func(pw_func);
+                }
+            }
+            ASSERT_EQ(actual, expected) << "point is " << point;
+        }
+    }
+
+    static std::vector<size_t> get_segment_points(const segment &seg)
+    {
+        return {seg.start, seg.end, seg.start + (seg.end - seg.start) / 2};
+    }
+};
+
+UCS_TEST_F(test_piecewise_func, init) {
+    ucs_piecewise_func_t zero_pw_func;
+    ucs_piecewise_func_init(&zero_pw_func);
+    check_single_segment_func(zero_pw_func, UCS_LINEAR_FUNC_ZERO);
+
+    ucs_piecewise_func_t pw_func;
+    ucs_piecewise_func_init(&pw_func);
+    ucs_linear_func_t seg_func = ucs_linear_func_make(1, 1);
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func, 0, SIZE_MAX, seg_func));
+    check_single_segment_func(pw_func, seg_func);
+
+    for (size_t point = SIZE_MAX; point != 0; point /= 2) {
+        compare_point_value(zero_pw_func, UCS_LINEAR_FUNC_ZERO, point);
+        compare_point_value(pw_func, seg_func, point);
+    }
+
+    ucs_piecewise_func_cleanup(&zero_pw_func);
+    ucs_piecewise_func_cleanup(&pw_func);
+}
+
+UCS_TEST_F(test_piecewise_func, segment_add) {
+    std::vector<std::pair<size_t, size_t>> ranges_to_test =
+            {{0, 0}, {0, 5}, {0, SIZE_MAX}, {10, 20},
+             {20, 20}, {20, SIZE_MAX}, {SIZE_MAX, SIZE_MAX}};
+    ucs_linear_func_t new_seg_func = ucs_linear_func_make(2, 2);
+
+    for (const auto &range : ranges_to_test) {
+        segment seg = {range.first, range.second, new_seg_func};
+        UCS_TEST_MESSAGE << get_segment_string(seg);
+
+        ucs_piecewise_func_t pw_func;
+        ucs_piecewise_func_init(&pw_func);
+        ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func, seg.start, seg.end,
+                                                   seg.func));
+
+        /* Check number of the segments in the result function */
+        size_t expected_num_segments = 3;
+        if (seg.start == 0) {
+            --expected_num_segments;
+        }
+        if (seg.end == SIZE_MAX) {
+            --expected_num_segments;
+        }
+        ASSERT_EQ(get_num_segments(pw_func), expected_num_segments);
+
+        /* Check points which should be affected by added segment */
+        for (auto point : get_segment_points(seg)) {
+            compare_point_value(pw_func, new_seg_func, point);
+        }
+
+        /* Check points which should not be affected by added segment */
+        std::vector<size_t> initial_segment_points;
+        if (seg.start > 0) {
+            initial_segment_points.emplace_back(seg.start - 1);
+        }
+        if (seg.end < SIZE_MAX) {
+            initial_segment_points.emplace_back(seg.end + 1);
+        }
+
+        for (auto point : initial_segment_points) {
+            compare_point_value(pw_func, UCS_LINEAR_FUNC_ZERO, point);
+        }
+
+        ucs_piecewise_func_cleanup(&pw_func);
+    }
+}
+
+UCS_TEST_F(test_piecewise_func, add_one_range_funcs) {
+    ucs_piecewise_func_t pw_func1, pw_func2, result_pw_func;
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&pw_func1));
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&pw_func2));
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&result_pw_func));
+
+    ucs_linear_func_t seg_func1 = ucs_linear_func_make(1, 1);
+    ucs_linear_func_t seg_func2 = ucs_linear_func_make(2, 2);
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func1, 0, SIZE_MAX, seg_func1));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func2, 0, SIZE_MAX, seg_func2));
+
+    ASSERT_UCS_OK(ucs_piecewise_func_add_inplace(&result_pw_func, &pw_func1));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_inplace(&result_pw_func, &pw_func2));
+
+    ucs_linear_func_t result_segment = ucs_linear_func_add(seg_func1, seg_func2);
+    check_single_segment_func(result_pw_func, result_segment);
+
+    ucs_piecewise_func_cleanup(&pw_func1);
+    ucs_piecewise_func_cleanup(&pw_func2);
+    ucs_piecewise_func_cleanup(&result_pw_func);
+}
+
+UCS_TEST_F(test_piecewise_func, add_multi_segment_funcs) {
+    std::vector<ucs_piecewise_func_t> pw_funcs(2);
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&pw_funcs[0]));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[0], 1,    10,       ucs_linear_func_make(1, 0.333)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[0], 20,   30,       ucs_linear_func_make(2, 2)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[0], 30,   40,       ucs_linear_func_make(3, 3)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[0], 1000, SIZE_MAX, ucs_linear_func_make(4, 4)));
+
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&pw_funcs[1]));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[1], 1,  10,     ucs_linear_func_make(5, 1)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[1], 15, 50,     ucs_linear_func_make(0, 3)));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_funcs[1], 2000, 4000, ucs_linear_func_make(1.22, 2)));
+
+    ucs_piecewise_func_t result_pw_func;
+    ASSERT_UCS_OK(ucs_piecewise_func_init(&result_pw_func));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_inplace(&result_pw_func, &pw_funcs[0]));
+    ASSERT_UCS_OK(ucs_piecewise_func_add_inplace(&result_pw_func, &pw_funcs[1]));
+
+    check_funcs_sum(result_pw_func, pw_funcs);
+
+    ucs_piecewise_func_cleanup(&pw_funcs[0]);
+    ucs_piecewise_func_cleanup(&pw_funcs[1]);
+    ucs_piecewise_func_cleanup(&result_pw_func);
 }
