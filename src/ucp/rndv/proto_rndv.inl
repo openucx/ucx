@@ -244,19 +244,30 @@ ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
     size_t total_length = ucp_proto_rndv_request_total_length(req);
     size_t max_frag_sum = rpriv->mpriv.max_frag_sum;
     size_t lane_offset, max_payload, scaled_length;
+    size_t min_rndv_chunk_size;
 
     if (ucs_likely(total_length < max_frag_sum)) {
-        /* Each lane sends less than its maximal fragment size */
+        /**
+         * Each lane sends less than its maximal fragment size but more than the
+         * minimal chunk size
+         */
+        min_rndv_chunk_size =
+                req->send.ep->worker->context->config.ext.min_rndv_chunk_size;
         scaled_length = ucp_proto_multi_scaled_length(lpriv->weight_sum,
                                                       total_length);
 
         ucs_assertv(scaled_length >= total_offset,
-                    "req=%p scaled_length=%zu total_offset=%zu "
-                    "total_length=%zu weight_sum=%zu%% ",
-                    req, scaled_length, total_offset, total_length,
+                    "req=%p min_rndv_chunk_size=%zu scaled_length=%zu "
+                    "total_offset=%zu total_length=%zu weight_sum=%zu%% ",
+                    req, min_rndv_chunk_size, scaled_length, total_offset,
+                    total_length,
                     ucp_proto_multi_scaled_length(lpriv->weight_sum, 100));
-
-        max_payload = scaled_length - total_offset;
+        /**
+         * max_payload is later capped by remaining request length when
+         * advancing datatype iterator
+         */
+        max_payload = ucs_max(min_rndv_chunk_size,
+                              scaled_length - total_offset);
     } else {
         /* Send in round-robin fashion, each lanes sends its maximal size */
         lane_offset = total_offset % max_frag_sum;
