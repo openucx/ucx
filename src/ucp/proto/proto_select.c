@@ -595,7 +595,7 @@ ucp_proto_select_wiface_activate(ucp_worker_h worker,
     ep_config_key = &ucs_array_elem(&worker->ep_config, ep_cfg_index).key;
     ucs_for_each_bit(lane, lane_map) {
         ucs_assertv(lane < UCP_MAX_LANES,
-                    "lane=%" PRIu8 ", lane_map=0x%" PRIx16, lane, lane_map);
+                    "lane=%" PRIu8 ", lane_map=0x%" PRIx64, lane, lane_map);
         rsc_index = ep_config_key->lanes[lane].rsc_index;
         wiface    = ucp_worker_iface(worker, rsc_index);
         ucp_worker_iface_progress_ep(wiface);
