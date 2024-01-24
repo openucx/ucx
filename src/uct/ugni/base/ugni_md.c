@@ -117,7 +117,7 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md,
 }
 
 static ucs_status_t
-uct_ugni_mkey_pack(uct_md_h md, uct_mem_h memh,
+uct_ugni_mkey_pack(uct_md_h md, uct_mem_h memh, void *address, size_t length,
                    const uct_md_mkey_pack_params_t *params,
                    void *mkey_buffer)
 {
@@ -233,7 +233,7 @@ uct_component_t uct_ugni_component = {
     .rkey_unpack        = uct_ugni_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_ugni_rkey_release,
-    .rkey_compare       = ucs_empty_function_return_unsupported,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = UCT_UGNI_MD_NAME,
     .md_config          = {
         .name           = "UGNI memory domain",

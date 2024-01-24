@@ -288,12 +288,18 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
             reqs.push_back(req);
         }
 
-        ucs_status_t status = ucp_worker_fence(ep->worker);
-        ASSERT_UCS_OK(status);
+        /* FIXME: using flush here instead of fence, because strong fence
+         * implementation is currently blocking and may hang if target side
+         * is not progressed. Need to use fence here as soon as strong fence
+         * implementation is updated to be non-blocking. */
+        ucp_request_param_t param = {};
+        void *req = ucp_ep_flush_nbx(ep, &param);
+        ASSERT_UCS_PTR_OK(req);
+        reqs.push_back(req);
 
-        void *req = ucp_put_nb(ep, &m_send_data[0], sizeof(m_send_data[0]),
-                               (uintptr_t)&m_recv_data[length], rkey,
-                               send_completion);
+        req = ucp_put_nb(ep, &m_send_data[0], sizeof(m_send_data[0]),
+                         (uintptr_t)&m_recv_data[length], rkey,
+                         send_completion);
         ASSERT_UCS_PTR_OK(req);
         reqs.push_back(req);
     }

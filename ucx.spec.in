@@ -126,6 +126,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %{_libdir}/lib*.so.*
 %{_bindir}/ucx_info
 %{_bindir}/ucx_perftest
+%{_bindir}/ucx_perftest_daemon
 %{_bindir}/ucx_read_profile
 %if "%{debug}" == "1"
 %{_bindir}/ucs_stats_parser
@@ -343,6 +344,8 @@ library internals, protocol objects, transports status, and more.
 %endif
 
 %changelog
+* Tue Oct 31 2023 Yossi Itigin <yosefe@nvidia.com> 1.17.0-1
+- Bump version to 1.17.0
 * Fri Apr 28 2023 Yossi Itigin <yosefe@nvidia.com> 1.16.0-1
 - Bump version to 1.16.0
 * Mon Oct 24 2022 Yossi Itigin <yosefe@mellanox.com> 1.15.0-1

@@ -78,18 +78,21 @@ const char* ucp_wireup_msg_str(uint8_t msg_type)
 
 static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
 {
-    ucp_context_h   context           = ep->worker->context;
-    ucp_ep_config_t *ep_config        = ucp_ep_config(ep);
-    ucp_lane_index_t lane             = UCP_NULL_LANE;
+    ucp_context_h   context    = ep->worker->context;
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_lane_index_t lane, fallback_lane;
 
-    if (msg_type != UCP_WIREUP_MSG_ACK) {
+    if (msg_type == UCP_WIREUP_MSG_ACK) {
+        lane          = ep_config->key.am_lane;
+        fallback_lane = ep_config->key.wireup_msg_lane;
+    } else {
         /* for request/response, try wireup_msg_lane first */
-        lane = ep_config->key.wireup_msg_lane;
+        lane          = ep_config->key.wireup_msg_lane;
+        fallback_lane = ep_config->key.am_lane;
     }
 
     if (lane == UCP_NULL_LANE) {
-        /* fallback to active messages lane */
-        lane = ep_config->key.am_lane;
+        lane = fallback_lane;
     }
 
     if (lane == UCP_NULL_LANE) {

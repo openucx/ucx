@@ -85,6 +85,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
  * Atomics support
  */
 #define IBV_DEVICE_ATOMIC_HCA(dev)              (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_HCA)
+#define IBV_DEVICE_ATOMIC_GLOB(dev)             (IBV_DEV_ATTR(dev, atomic_cap) == IBV_ATOMIC_GLOB)
 
 
 /*
@@ -108,6 +109,11 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #  define uct_ib_grh_required(_attr)                ((_attr)->flags & IBV_QPF_GRH_REQUIRED)
 #else
 #  define uct_ib_grh_required(_attr)                0
+#endif
+
+/* Dummy structure declaration, when not present in verbs.h */
+#if !HAVE_IBV_DM
+    struct ibv_dm;
 #endif
 
 typedef uint8_t uct_ib_uint24_t[3];

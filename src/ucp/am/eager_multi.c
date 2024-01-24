@@ -193,12 +193,13 @@ ucp_am_eager_multi_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.hdr_size      = sizeof(ucp_am_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY   |
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_eager_lanes,
         .initial_reg_md_map  = 0,
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,

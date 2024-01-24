@@ -131,11 +131,6 @@ void ucs_rcache_atfork_disable();
 size_t ucs_rcache_distribution_get_num_bins();
 
 
-ucs_status_t
-ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
-                         int prot, void *arg, ucs_rcache_region_t **region_p);
-
-
 void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
                                      ucs_rcache_region_t *region,
                                      int drop_lock);

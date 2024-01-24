@@ -75,16 +75,3 @@ func memoryGet(entity *TestEntity) []byte {
 		return GoBytes(recvMem, memAttr.Length)
 	}
 }
-
-// Progress thread that progress a worker until it receives quit signal from channel.
-func progressThread(quit chan bool, worker *UcpWorker) {
-	for {
-		select {
-		case <-quit:
-			close(quit)
-			return
-		default:
-			worker.Progress()
-		}
-	}
-}

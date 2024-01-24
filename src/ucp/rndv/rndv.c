@@ -159,7 +159,8 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
         packed_rkey_size      = ucp_rkey_pack_memh(
                 worker->context, sreq->send.rndv.md_map,
-                sreq->send.state.dt.dt.contig.memh, &mem_info, 0, NULL,
+                sreq->send.state.dt.dt.contig.memh, sreq->send.buffer,
+                sreq->send.length, &mem_info, 0, NULL,
                 ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags, rkey_buf);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
@@ -201,8 +202,10 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
 
         packed_rkey_size = ucp_rkey_pack_memh(
                 ep->worker->context, rndv_req->send.rndv.md_map,
-                rreq->recv.dt_iter.type.contig.memh, &mem_info, 0, NULL,
-                ucp_ep_config(ep)->uct_rkey_pack_flags, rndv_rtr_hdr + 1);
+                rreq->recv.dt_iter.type.contig.memh,
+                rreq->recv.dt_iter.type.contig.buffer, rndv_req->send.length,
+                &mem_info, 0, NULL, ucp_ep_config(ep)->uct_rkey_pack_flags,
+                rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
         }
@@ -432,7 +435,7 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_request_reset_super(rndv_req);
     ucp_request_send_state_reset(rndv_req, NULL,
                                  UCP_REQUEST_SEND_PROTO_BCOPY_AM);
-    UCP_WORKER_STAT_RNDV(rndv_req->send.ep->worker, SEND_RTR, +1);
+    UCP_WORKER_STAT_RNDV(rndv_req->send.ep->worker, RTR, +1);
 
     rreq->recv.remote_req_id       = sender_req_id;
     rndv_req->send.lane            = ucp_ep_get_am_lane(rndv_req->send.ep);

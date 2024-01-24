@@ -27,6 +27,9 @@ export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
 export UCX_LOG_PRINT_ENABLE
 
+export LSAN_OPTIONS=suppressions=$(top_srcdir)/contrib/lsan.supp
+export ASAN_OPTIONS=protect_shadow_gap=0
+
 GTEST_ARGS = \
 	--gtest_filter=$(GTEST_FILTER) \
 	$(GTEST_EXTRA_ARGS)

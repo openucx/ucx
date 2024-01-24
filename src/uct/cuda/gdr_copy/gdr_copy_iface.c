@@ -18,8 +18,8 @@
 
 #define UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH (6911.0 * UCS_MBYTE)
 #define UCT_GDR_COPY_IFACE_OVERHEAD          0
-#define UCT_GDR_COPY_IFACE_LATENCY           ucs_linear_func_make(1.4e-6, 0)
-
+#define UCT_GDR_COPY_IFACE_GET_LATENCY       ucs_linear_func_make(1.4e-6, 0)
+#define UCT_GDR_COPY_IFACE_PUT_LATENCY       ucs_linear_func_make(0.4e-6, 0)
 
 static ucs_config_field_t uct_gdr_copy_iface_config_table[] = {
 
@@ -99,7 +99,8 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_hdr          = 0;
     iface_attr->cap.am.max_iov          = 1;
 
-    iface_attr->latency                 = UCT_GDR_COPY_IFACE_LATENCY;
+    /* Report GET latency by default as worst case */
+    iface_attr->latency                 = UCT_GDR_COPY_IFACE_GET_LATENCY;
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
     iface_attr->overhead                = UCT_GDR_COPY_IFACE_OVERHEAD;
@@ -111,23 +112,13 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 static ucs_status_t
 uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
+    uct_ep_operation_t op = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                           OPERATION, UCT_EP_OP_LAST);
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION) {
-            switch (perf_attr->operation) {
-            case UCT_EP_OP_GET_SHORT:
-            case UCT_EP_OP_GET_ZCOPY:
-                perf_attr->bandwidth.dedicated = 250.0 * UCS_MBYTE;
-                perf_attr->bandwidth.shared    = 0;
-                break;
-            case UCT_EP_OP_PUT_SHORT:
-                perf_attr->bandwidth.dedicated = 0;
-                perf_attr->bandwidth.shared    = 10200.0 * UCS_MBYTE;
-                break;
-            default:
-                perf_attr->bandwidth.dedicated = 0;
-                perf_attr->bandwidth.shared    =
-                        UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
-            }
+        if ((op == UCT_EP_OP_GET_SHORT) || (op == UCT_EP_OP_GET_ZCOPY)) {
+            perf_attr->bandwidth.dedicated = 250.0 * UCS_MBYTE;
+            perf_attr->bandwidth.shared    = 0;
         } else {
             perf_attr->bandwidth.dedicated = 0;
             perf_attr->bandwidth.shared    =
@@ -148,7 +139,11 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
-        perf_attr->latency = UCT_GDR_COPY_IFACE_LATENCY;
+        if (op == UCT_EP_OP_PUT_SHORT) {
+            perf_attr->latency = UCT_GDR_COPY_IFACE_PUT_LATENCY;
+        } else {
+            perf_attr->latency = UCT_GDR_COPY_IFACE_GET_LATENCY;
+        }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {

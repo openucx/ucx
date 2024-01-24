@@ -10,8 +10,8 @@ pr:
 variables:
 - name: WorkDir
   value: /hpc/scrap/azure/$(Build.DefinitionName)/$(Build.BuildId)-$(Build.BuildNumber)
-- name: perf_nodes
-  value: vulcan03,vulcan04
+- name: warning
+  value: Attention! CI testing is in progress. Please refrain from any manual action on this machine.
 - name: threshold
   value: 5
 
@@ -26,11 +26,11 @@ resources:
 stages:
   - stage: Prepare
     jobs:
-      - job: Prepare
+      - job: PrepareWorkdir
         pool:
           name: MLNX
           demands:
-          - ucx_perf
+          - ucx_perf_master
 
         steps:
           - checkout: self
@@ -47,16 +47,50 @@ stages:
               mv $(Build.SourcesDirectory)/* $(WorkDir)    
             displayName: Prepare WorkDir with code
 
+      - job: UserHandling
+        strategy:
+          matrix:
+            node1:
+              name: vulcan03
+            node2:
+              name: vulcan04
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: none
+          - bash: |
+              set -xeE
+              # Send a warning
+              sudo usermod -aG tty `whoami`  # add user to the tty group
+              sudo chmod g+rw /dev/pts/*  # set permissions for terminals
+              wall 'CI test is starting. Connections will terminate soon!'
+              sleep 30
+
+              # Disconnect SSH users
+              pgrep -f 'sshd:' | xargs -r sudo kill -HUP || true
+
+              # Add nagging reminder
+              crontab <<EOL
+              * * * * * /usr/bin/mesg y
+              * * * * * sudo chmod g+rw /dev/pts/*
+              * * * * * wall "$(warning)"
+              EOL
+            displayName: Warn and disconnect users
+
 
   - stage: Performance
     dependsOn: Prepare
     jobs:
       - job: Perf
         displayName: Performance testing
+        timeoutInMinutes: 180
         pool:
           name: MLNX
           demands:
-          - ucx_perf
+          - ucx_perf_master
 
         steps:
           - checkout: none
@@ -85,46 +119,33 @@ stages:
             displayName: Debug info
             workingDirectory: $(WorkDir)
 
+          - template: tools/perf-common.yml
+            parameters:
+              Name: Build-UCX
+
+          - template: tools/perf-common.yml
+            parameters:
+              Name: Perf-test-multi-node
+
+          - template: tools/perf-common.yml
+            parameters:
+              Name: Perf-test-single-node
+
           - bash: |
-              set -eE
-              # Extract commit SHAs from the PR's merge message.
-              # SHA_After=$(Build.SourceVersion)
-              SHA_After=$(echo $(Build.SourceVersionMessage) | awk '{print $2}')
-              SHA_Before=$(echo $(Build.SourceVersionMessage) | awk '{print $4}')
-
-              python3 -m venv VENV
-              source VENV/bin/activate
-              cd $(WorkDir)/PerfX
-              pip3 install -q -r requirements.txt
-              module load /hpc/local/etc/modulefiles/hpcx-gcc
-
-              set -xeE -o pipefail
-              python3 -u perfx.py \
-                --source-branch $(Build.SourceBranch) \
-                --config ucx-rdmz.yml \
-                --before "$SHA_Before" \
-                --after "$SHA_After" \
-                --module hpcx-gcc \
-                --filter \
-                --extra-ompi-opts " -H $(perf_nodes)" | tee $(WorkDir)/results.txt
-            displayName: Perf test
-            workingDirectory: $(WorkDir)
-
-          - script: $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results.txt $(threshold)
+              $(WorkDir)/ucx/buildlib/tools/perf_results.py $(WorkDir)/results-Perf\*.txt $(threshold)
+              echo "Manual repro environment: $(WorkDir)"
             displayName: Results analyzer
             workingDirectory: $(WorkDir)
 
           - bash: |
-              set -x
-              cat perfx.log
-            displayName: Print raw log
+              set -xe
+              sep_line="######################"
+              for file in *.log; do
+                  echo -e "$sep_line $file $sep_line"
+                  cat "$file"
+              done
+            displayName: Print logs
             workingDirectory: $(WorkDir)/PerfX
-
-          - task: PublishBuildArtifacts@1
-            inputs:
-              pathToPublish: '$(WorkDir)/PerfX/perfx.log'
-              artifactName: perfx.log
-            displayName: Publish raw log
             condition: always()
 
 
@@ -132,7 +153,7 @@ stages:
     dependsOn: Performance
     condition: always()
     jobs:
-      - job: Cleanup
+      - job: CleanupWorkDir
         displayName: Cleanup WorkDir
         pool:
           name: MLNX
@@ -141,5 +162,29 @@ stages:
             clean: true
           - bash: |
               set -x
-              rm -rf $(WorkDir)
+              echo 'Retain 3 latest workdirs for manual repro; clean the rest'
+              wrk_dirs="/hpc/scrap/azure/$(Build.DefinitionName)/"
+              for dir in $(ls -lt "$wrk_dirs" | tail -n +4 | awk '{print $NF}'); do
+                  echo "Removing old workdir: ${wrk_dirs}${dir}"
+                  rm -rf "${wrk_dirs}${dir}"
+              done
             displayName: Cleanup WorkDir
+
+      - job: RemoveWarning
+        strategy:
+          matrix:
+            node1:
+              name: vulcan03
+            node2:
+              name: vulcan04
+        pool:
+          name: MLNX
+          demands:
+          - ucx_perf
+
+        steps:
+          - checkout: none
+          - bash: |
+              set -x
+              crontab -r || true
+            displayName: remove warning

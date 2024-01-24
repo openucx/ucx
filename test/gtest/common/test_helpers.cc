@@ -24,7 +24,7 @@ namespace ucs {
 
 typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
-const double test_timeout_in_sec = 60.;
+const double test_timeout_in_sec = 180.;
 
 double watchdog_timeout = 900.; // 15 minutes
 
@@ -324,12 +324,16 @@ void analyze_test_results()
 int test_time_multiplier()
 {
     int factor = 1;
-#if _BullseyeCoverage
-    factor *= 10;
-#endif
     if (RUNNING_ON_VALGRIND) {
         factor *= 20;
     }
+#if _BullseyeCoverage
+    factor *= 10;
+#endif
+#ifdef __SANITIZE_ADDRESS__
+    factor *= 20;
+#endif
+
     return factor;
 }
 
@@ -628,17 +632,16 @@ uint16_t get_port() {
     return port;
 }
 
-void *mmap_fixed_address(size_t length) {
-    void *ptr = mmap(NULL, length, PROT_READ | PROT_WRITE,
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (ptr == MAP_FAILED) {
-        return nullptr;
+mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
+    m_ptr = mmap(NULL, m_length, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (m_ptr == MAP_FAILED) {
+        UCS_TEST_ABORT("mmap failed to allocate memory region");
     }
+}
 
-    munmap(ptr, length);
-
-    /* coverity[use_after_free] */
-    return ptr;
+mmap_fixed_address::~mmap_fixed_address() {
+    munmap(m_ptr, m_length);
 }
 
 std::string compact_string(const std::string &str, size_t length)
@@ -789,6 +792,15 @@ ucs_sock_addr_t sock_addr_storage::to_ucs_sock_addr() const {
 std::string sock_addr_storage::to_str() const {
     char str[UCS_SOCKADDR_STRING_LEN];
     return ucs_sockaddr_str(get_sock_addr_ptr(), str, sizeof(str));
+}
+
+std::string sock_addr_storage::to_ip_str() const {
+    char str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    status = ucs_sockaddr_get_ipstr(get_sock_addr_ptr(), str, sizeof(str));
+    ASSERT_UCS_OK(status);
+    return str;
 }
 
 const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {

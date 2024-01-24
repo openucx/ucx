@@ -62,6 +62,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_put_common_complete(ucp_request_t *req)
 {
     ucp_trace_req(req, "rndv_put_common_complete");
+    UCP_WORKER_STAT_RNDV(req->send.ep->worker, PUT_ZCOPY, +1);
     ucp_proto_rndv_rkey_destroy(req);
     ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
@@ -471,13 +472,13 @@ ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
     }
 
     ucp_proto_rndv_put_common_request_init(req);
+    req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
                               ucp_proto_rndv_mtype_get_req_memh(req),
                               uct_ep_get_zcopy,
                               ucp_proto_rndv_put_mtype_pack_completion,
                               "in from");
 
-    req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     return UCS_OK;
 }
 

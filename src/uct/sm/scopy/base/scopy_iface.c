@@ -16,6 +16,14 @@
 #include <uct/sm/base/sm_iface.h>
 
 
+/* Default overhead for iface_query, changing this value can break wire
+  compatibility */
+#define UCT_SCOPY_IFACE_DEFAULT_OVERHEAD 2e-6
+
+/* Overhead value used for estimate_perf */
+#define UCT_SCOPY_IFACE_OVERHEAD 500e-9
+
+
 ucs_config_field_t uct_scopy_iface_config_table[] = {
     {"SM_", "", NULL,
      ucs_offsetof(uct_scopy_iface_config_t, super),
@@ -84,7 +92,28 @@ void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_att
     iface_attr->latency                 = ucs_linear_func_make(80e-9, 0); /* 80 ns */
     iface_attr->overhead                = (ucs_arch_get_cpu_vendor() ==
                                            UCS_CPU_VENDOR_FUJITSU_ARM) ?
-                                          6e-6 : 2e-6;
+                                          6e-6 : UCT_SCOPY_IFACE_DEFAULT_OVERHEAD;
+}
+
+ucs_status_t
+uct_scopy_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    ucs_status_t status;
+
+    status = uct_base_iface_estimate_perf(iface, perf_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
+        perf_attr->send_pre_overhead = UCT_SCOPY_IFACE_OVERHEAD;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
+        perf_attr->recv_overhead = UCT_SCOPY_IFACE_OVERHEAD;
+    }
+
+    return UCS_OK;
 }
 
 UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_iface_ops_t *ops,

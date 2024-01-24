@@ -136,4 +136,12 @@ ucp_amo_request_reply_mem_type(ucp_request_t *req)
     return req->send.proto_config->select_param.op.reply.mem_type;
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_sw_rma_cfg_thresh(ucp_context_h context, size_t default_value)
+{
+    return (context->config.ext.prefer_offload == UCS_YES) ?
+           UCS_MEMUNITS_INF: /* used only as last resort */
+           default_value;
+}
+
 #endif

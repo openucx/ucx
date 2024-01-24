@@ -430,6 +430,11 @@ void ucp_test::configure_peer_failure_settings()
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
 }
 
+bool ucp_test::is_proto_enabled() const
+{
+    return m_ucp_config->ctx.proto_enable;
+}
+
 void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
 {
     ucs_status_t status;
@@ -793,6 +798,7 @@ void ucp_test_base::entity::accept(int worker_index,
 
     status = ucp_ep_create(ucp_worker, &ep_params, &ep);
     if (status == UCS_ERR_UNREACHABLE) {
+        ++m_err_cntr;
         UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                         "feature or no supported transport to send partial "
                         "worker address)");
@@ -1262,6 +1268,14 @@ ucs::handle<ucp_rkey_h> ucp_test::mapped_buffer::rkey(const entity& entity) cons
     return ucs::handle<ucp_rkey_h>(rkey, ucp_rkey_destroy);
 }
 
+void ucp_test::mapped_buffer::rkey(const entity& entity, ucs::handle<ucp_rkey_h> &rkey) const
+{
+    ucp_rkey_h ucp_rkey;
+
+    ASSERT_UCS_OK(ucp_ep_rkey_unpack(entity.ep(), m_rkey_buffer, &ucp_rkey));
+    rkey.reset(ucp_rkey, ucp_rkey_destroy);
+}
+
 ucp_mem_h ucp_test::mapped_buffer::memh() const
 {
     return m_memh;
@@ -1285,4 +1299,20 @@ bool ucp_test::check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type) 
     }
 
     return false;
+}
+
+size_t ucp_test::count_resources(const ucp_test_base::entity &e,
+                                 const std::string &tl_name) const
+{
+    return std::count_if(e.ucph()->tl_rscs,
+                         e.ucph()->tl_rscs + e.ucph()->num_tls,
+                         [&](const ucp_tl_resource_desc_t &rsc) {
+                             return tl_name == rsc.tl_rsc.tl_name;
+                         });
+}
+
+bool ucp_test::has_resource(const ucp_test_base::entity &e,
+                            const std::string &tl_name) const
+{
+    return count_resources(e, tl_name) != 0;
 }

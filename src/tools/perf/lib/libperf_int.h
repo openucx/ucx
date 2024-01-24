@@ -112,6 +112,9 @@ struct ucx_perf_context {
             ucp_dt_iov_t               *send_iov;
             ucp_dt_iov_t               *recv_iov;
             void                       *am_hdr;
+            ucp_ep_h                   self_ep;
+            ucp_rkey_h                 self_send_rkey;
+            ucp_rkey_h                 self_recv_rkey;
         } ucp;
     };
 };
@@ -172,6 +175,7 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
 
 void ucx_perf_report(ucx_perf_context_t *perf);
 
+ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);
 
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
 {

@@ -14,6 +14,7 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/string_set.h>
@@ -110,6 +111,7 @@ static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_CUDA_MANAGED] = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ROCM]         = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_RDMA]         = 0,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -119,6 +121,7 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_CUDA_MANAGED] = 128,
     [UCS_MEMORY_TYPE_ROCM]         = 128,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 128,
+    [UCS_MEMORY_TYPE_RDMA]         = 0,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -135,7 +138,8 @@ const size_t ucp_context_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_GENERIC_ARM] = UCP_CPU_EST_BCOPY_BW_DEFAULT,
     [UCS_CPU_VENDOR_GENERIC_PPC] = UCP_CPU_EST_BCOPY_BW_DEFAULT,
     [UCS_CPU_VENDOR_FUJITSU_ARM] = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,
-    [UCS_CPU_VENDOR_ZHAOXIN]     = UCP_CPU_EST_BCOPY_BW_DEFAULT
+    [UCS_CPU_VENDOR_ZHAOXIN]     = UCP_CPU_EST_BCOPY_BW_DEFAULT,
+    [UCS_CPU_VENDOR_NVIDIA]      = UCP_CPU_EST_BCOPY_BW_DEFAULT
 };
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
@@ -162,8 +166,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_THRESH", UCS_VALUE_AUTO_STR,
-   "Threshold for switching from eager to rendezvous protocol",
-   ucs_offsetof(ucp_context_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+   "Threshold for switching from eager to rendezvous protocol", 0,
+    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_MEMUNITS,
+        {"intra", "threshold for intra-node communication",
+         ucs_offsetof(ucp_context_config_t, rndv_intra_thresh)},
+        {"inter", "threshold for inter-node communication",
+         ucs_offsetof(ucp_context_config_t, rndv_inter_thresh)},
+        {NULL}
+  )},
 
   {"RNDV_SEND_NBR_THRESH", "256k",
    "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"
@@ -218,6 +228,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Minimum chunk size to split the message sent with rendezvous protocol on\n"
    "multiple rails. Must be greater than 0.",
    ucs_offsetof(ucp_context_config_t, min_rndv_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RMA_ZCOPY_MAX_SEG_SIZE", "auto",
+   "Max size of a segment for rma/rndv zcopy.",
+   ucs_offsetof(ucp_context_config_t, rma_zcopy_max_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_SCHEME", "auto",
    "Communication scheme in RNDV protocol.\n"
@@ -454,6 +468,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "page registration may be deferred until it is accessed by the CPU or a transport.",
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+  {"PREFER_OFFLOAD", "y",
+   "Prefer transports capable of remote memory access for RMA and AMO operations.\n"
+   "The value is interpreted as follows:\n"
+   " 'y' : Prefer transports with native RMA/AMO support (if available)\n"
+   " 'n' : Select RMA/AMO lanes according to performance charasteristics",
+   ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -711,7 +732,8 @@ void ucp_config_release(ucp_config_t *config)
 ucs_status_t ucp_config_modify_internal(ucp_config_t *config, const char *name,
                                         const char *value)
 {
-    return ucs_config_parser_set_value(config, ucp_config_table, name, value);
+    return ucs_config_parser_set_value(config, ucp_config_table, NULL, name,
+                                       value);
 }
 
 ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
@@ -1783,6 +1805,8 @@ err_free_resources:
 static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
                              ucp_mt_type_t mt_type)
 {
+    static uint64_t context_counter = 0;
+
     context->config.features = UCP_PARAM_FIELD_VALUE(params, features, FEATURES,
                                                      0);
     if (!context->config.features) {
@@ -1822,7 +1846,8 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
         ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "%s",
                           params->name);
     } else {
-        ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "%p", context);
+        ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "ucp_context_%lu",
+                          ucs_atomic_fadd64(&context_counter, 1));
     }
 }
 
@@ -2059,7 +2084,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.worker_strong_fence =
             (context->config.ext.fence_mode == UCP_FENCE_MODE_STRONG) ||
             ((context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) &&
-             (context->config.ext.max_rma_lanes > 1));
+             ((context->config.ext.max_rma_lanes > 1) ||
+              context->config.ext.proto_enable));
 
     return UCS_OK;
 

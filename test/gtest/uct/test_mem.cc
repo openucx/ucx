@@ -107,6 +107,11 @@ UCS_TEST_P(test_mem, md_alloc) {
         status = uct_md_query(md, &md_attr);
         ASSERT_UCS_OK(status);
 
+        if (md_attr.cap.max_alloc < min_length) {
+            uct_md_close(md);
+            continue;
+        }
+
         ucs_for_each_bit(mem_type, md_attr.cap.alloc_mem_types) {
             params.mem_type = (ucs_memory_type_t)mem_type;
             for (nonblock = 0; nonblock <= 1; ++nonblock) {
@@ -149,10 +154,7 @@ UCS_TEST_P(test_mem, md_fixed) {
     uct_alloc_method_t       meth;
     size_t                   length      = 1;
     size_t                   n_success;
-    void*                    p_addr      = ucs::mmap_fixed_address(page_size * 2 * n_tryes);
-    if (p_addr == nullptr) {
-        UCS_TEST_ABORT("mmap failed to allocate memory region");
-    }
+    ucs::mmap_fixed_address  p_addr(page_size * 2 * n_tryes);
 
     uct_allocated_memory_t  uct_mem;
     ucs_status_t            status;
@@ -184,7 +186,7 @@ UCS_TEST_P(test_mem, md_fixed) {
 
         if ((md_attr.cap.flags & UCT_MD_FLAG_ALLOC) &&
             (md_attr.cap.flags & UCT_MD_FLAG_FIXED)) {
-            void* curr_addr = p_addr;
+            void* curr_addr = *p_addr;
             n_success       = 0;
 
             for (j = 0; j < n_tryes; ++j) {
@@ -225,10 +227,8 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     uct_alloc_method_t      meth;
     size_t                  length      = 1;
     size_t                  n_success;
-    void*                   p_addr      = ucs::mmap_fixed_address(page_size * 2 * (n_tryes + 1));
-    if (p_addr == nullptr) {
-        UCS_TEST_ABORT("mmap failed to allocate memory region");
-    }
+    ucs::mmap_fixed_address p_addr(page_size * 2 * (n_tryes + 1));
+    void*                   curr_addr;
 
     uct_allocated_memory_t  uct_mem;
     ucs_status_t            status;
@@ -243,20 +243,21 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     params.mem_type        = UCS_MEMORY_TYPE_HOST;
 
     n_success = 0;
+    curr_addr = *p_addr;
 
     for (i = 0; i < n_tryes; ++i) {
         meth                   = (i % 2) ? UCT_ALLOC_METHOD_MMAP : UCT_ALLOC_METHOD_HUGE;
-        params.address         = p_addr;
+        params.address         = curr_addr;
 
         status = uct_mem_alloc(length, &meth, 1, &params, &uct_mem);
         if (status == UCS_OK) {
             ++n_success;
             EXPECT_EQ(meth, uct_mem.method);
-            EXPECT_EQ(p_addr, uct_mem.address);
+            EXPECT_EQ(curr_addr, uct_mem.address);
             EXPECT_GE(uct_mem.length, (size_t)1);
             /* touch the page */
             memset(uct_mem.address, 'c', uct_mem.length);
-            EXPECT_EQ(*(char*)p_addr, 'c');
+            EXPECT_EQ(*(char*)curr_addr, 'c');
             status = uct_mem_free(&uct_mem);
             if (status != UCS_OK) {
                 UCS_TEST_ABORT("uct_mem_free failed to release memory region");
@@ -264,7 +265,7 @@ UCS_TEST_P(test_mem, mmap_fixed) {
         } else {
             EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
         }
-        p_addr = (char*)p_addr + (2 * page_size);
+        curr_addr = (char*)curr_addr + (2 * page_size);
     }
 }
 

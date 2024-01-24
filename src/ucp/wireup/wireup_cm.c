@@ -1239,6 +1239,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                   ucs_sockaddr_str((struct sockaddr*)&conn_request->client_address,
                                    client_addr_str, sizeof(client_addr_str)),
                   conn_request->dev_name);
+        uct_listener_reject(conn_request->uct_listener, conn_request->uct_req);
         status = UCS_ERR_UNREACHABLE;
         goto out_free_request;
     }

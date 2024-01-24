@@ -66,7 +66,8 @@ public:
     ucs::sock_addr_storage m_test_addr;
 
     void init() {
-        m_err_count = 0;
+        m_err_count             = 0;
+        m_unreachable_err_count = 0;
         modify_config("KEEPALIVE_INTERVAL", "5s");
         modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
         modify_config("SA_DATA_VERSION", sa_data_version_v1() ? "v1" : "v2");
@@ -839,8 +840,10 @@ public:
          * teardown.
          */
         switch (status) {
-        case UCS_ERR_REJECTED:
         case UCS_ERR_UNREACHABLE:
+            ++m_unreachable_err_count;
+            /* Fallthrough */
+        case UCS_ERR_REJECTED:
         case UCS_ERR_CONNECTION_RESET:
         case UCS_ERR_NOT_CONNECTED:
         case UCS_ERR_ENDPOINT_TIMEOUT:
@@ -1003,10 +1006,12 @@ protected:
 
 protected:
     static unsigned m_err_count;
+    static unsigned m_unreachable_err_count;
     static std::map<uct_iface_h, uct_iface_ops_t> m_sender_uct_ops;
 };
 
 unsigned test_ucp_sockaddr::m_err_count                                    = 0;
+unsigned test_ucp_sockaddr::m_unreachable_err_count                        = 0;
 std::map<uct_iface_h, uct_iface_ops_t> test_ucp_sockaddr::m_sender_uct_ops = {};
 
 
@@ -2249,7 +2254,11 @@ protected:
             short_progress_loop();
             message = ucp_tag_probe_nb(receiver().worker(),
                                        0, 0, 1, &recv_info);
-        } while (message == NULL);
+        } while ((message == NULL) && (m_unreachable_err_count == 0));
+
+        if ((message == NULL) && (m_unreachable_err_count != 0)) {
+            UCS_TEST_SKIP_R(ucs_status_string(UCS_ERR_UNREACHABLE));
+        }
 
         EXPECT_EQ(size, recv_info.length);
         EXPECT_EQ(0,    recv_info.sender_tag);
@@ -2299,7 +2308,8 @@ protected:
             std::vector<void*> reqs;
 
             ucs::auto_ptr<scoped_log_handler> slh;
-            if (err_handling_test) {
+            if (err_handling_test ||
+                (i == 0) /* to handle unreachable on 1st iteration */) {
                 slh.reset(new scoped_log_handler(wrap_errors_logger));
             }
 
@@ -2327,8 +2337,16 @@ protected:
             reqs.push_back(sreq);
 
             if (!is_exp) {
-                rreq = do_unexp_recv(recv_buf, size, sreq, send_stop,
-                                     recv_stop);
+                try {
+                    rreq = do_unexp_recv(recv_buf, size, sreq, send_stop,
+                                         recv_stop);
+                } catch (const ucs::test_skip_exception &e) {
+                    /* force cleanup sender side */
+                    sender().disconnect_nb(0, 0, UCP_EP_CLOSE_FLAG_FORCE);
+                    requests_wait(reqs);
+                    throw e;
+                }
+
                 reqs.push_back(rreq);
             }
 
@@ -2912,7 +2930,8 @@ public:
                                "restrict_client_server");
     }
 
-    void modify_net_devices(bool only_net_device)
+    void modify_net_devices(const std::string &entity_name,
+                            bool only_net_device)
     {
         std::string value;
 
@@ -2928,6 +2947,9 @@ public:
             value = "all";
         }
 
+        UCS_TEST_MESSAGE << entity_name << " using NET_DEVICES=" << value
+                         << (only_net_device ?
+                             (" (" + m_test_addr.to_ip_str() + ')') : "");
         modify_config("NET_DEVICES", value, SKIP_IF_NOT_EXIST);
     }
 
@@ -2939,13 +2961,13 @@ public:
      */
     void create_entities_and_connect()
     {
-        modify_net_devices(get_variant_value() &
-                           TEST_MODIFIER_CLIENT_RESTRICT_NETDEV);
-        create_entity(); // client
+        modify_net_devices("client", get_variant_value() &
+                                     TEST_MODIFIER_CLIENT_RESTRICT_NETDEV);
+        create_entity();
 
-        modify_net_devices(get_variant_value() &
-                           TEST_MODIFIER_SERVER_RESTRICT_NETDEV);
-        create_entity(); // server
+        modify_net_devices("server", get_variant_value() &
+                                     TEST_MODIFIER_SERVER_RESTRICT_NETDEV);
+        create_entity();
 
         start_listener(cb_type());
         client_ep_connect();

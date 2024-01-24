@@ -47,8 +47,10 @@ enum {
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
     size_t                                 bcopy_thresh;
-    /** Threshold for switching UCP to rendezvous protocol */
-    size_t                                 rndv_thresh;
+    /** Threshold for switching UCP to rendezvous protocol for intra-node */
+    size_t                                 rndv_intra_thresh;
+    /** Threshold for switching UCP to rendezvous protocol for inter-node */
+    size_t                                 rndv_inter_thresh;
     /** Threshold for switching UCP to rendezvous protocol
      *  in ucp_tag_send_nbr() */
     size_t                                 rndv_send_nbr_thresh;
@@ -164,6 +166,10 @@ typedef struct ucp_context_config {
     char                                   *proto_info_dir;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
+    /** Prefer native RMA transports for RMA/AMO protocols */
+    int                                    prefer_offload;
+    /** RMA zcopy segment size */
+    size_t                                 rma_zcopy_max_seg_size;
 } ucp_context_config_t;
 
 

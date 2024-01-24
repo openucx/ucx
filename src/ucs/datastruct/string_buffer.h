@@ -18,17 +18,18 @@
 
 BEGIN_C_DECLS
 
-UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
+/**
+ * String buffer - a dynamic NULL-terminated character buffer which can grow
+ * on demand.
+ */
+UCS_ARRAY_DECLARE_TYPE(ucs_string_buffer_t, size_t, char);
 
 
 /**
  * Dynamic string buffer initializer. The backing storage should be released
  * explicitly by calling @ref ucs_string_buffer_cleanup()
  */
-#define UCS_STRING_BUFFER_INITIALIZER \
-    { \
-        UCS_ARRAY_DYNAMIC_INITIALIZER \
-    }
+#define UCS_STRING_BUFFER_INITIALIZER UCS_ARRAY_DYNAMIC_INITIALIZER
 
 
 /**
@@ -53,9 +54,7 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
  * @endcode
  */
 #define UCS_STRING_BUFFER_FIXED(_var, _buffer, _capacity) \
-    ucs_string_buffer_t _var = { \
-        UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
-    }
+    ucs_string_buffer_t _var = UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity)
 
 
 /**
@@ -80,18 +79,7 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
 
 
 #define UCS_STRING_BUFFER_ONSTACK(_var, _capacity) \
-    UCS_STRING_BUFFER_FIXED(_var, \
-                            UCS_ARRAY_ALLOC_ONSTACK(string_buffer, _capacity), \
-                            _capacity)
-
-
-/**
- * String buffer - a dynamic NULL-terminated character buffer which can grow
- * on demand.
- */
-typedef struct ucs_string_buffer {
-    ucs_array_t(string_buffer) str;
-} ucs_string_buffer_t;
+    UCS_ARRAY_DEFINE_ONSTACK(ucs_string_buffer_t, _var, _capacity)
 
 
 /**

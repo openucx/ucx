@@ -207,7 +207,7 @@ ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 }
 
 static ucs_status_t
-uct_knem_mkey_pack(uct_md_h md, uct_mem_h memh,
+uct_knem_mkey_pack(uct_md_h md, uct_mem_h memh, void *address, size_t length,
                    const uct_md_mkey_pack_params_t *params,
                    void *mkey_buffer)
 {
@@ -295,7 +295,7 @@ uct_component_t uct_knem_component = {
     .rkey_unpack        = uct_knem_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_knem_rkey_release,
-    .rkey_compare       = ucs_empty_function_return_unsupported,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "knem",
     .md_config          = {
         .name           = "KNEM memory domain",

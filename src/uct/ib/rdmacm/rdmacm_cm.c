@@ -485,15 +485,15 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
         /* For local IB address, assume the remote subnet prefix is the same
          * and pack it to make reachability check pass */
         ret = ibv_query_gid(cm_id->verbs, cm_id->port_num,
-                            UCT_IB_MD_DEFAULT_GID_INDEX, &params.gid);
+                            UCT_IB_DEVICE_DEFAULT_GID_INDEX, &params.gid);
         if (ret) {
             ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
                       ibv_get_device_name(cm_id->verbs->device),
-                      cm_id->port_num, UCT_IB_MD_DEFAULT_GID_INDEX);
+                      cm_id->port_num, UCT_IB_DEVICE_DEFAULT_GID_INDEX);
             return UCS_ERR_IO_ERROR;
         }
 
-        params.gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+        params.gid_index = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
         params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
                            UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
     }

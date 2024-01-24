@@ -107,7 +107,8 @@ typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 uct_md_mem_attr_t *mem_attr);
 
 typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
-        uct_md_h md, uct_mem_h memh, const uct_md_mkey_pack_params_t *params,
+        uct_md_h md, uct_mem_h memh, void *address, size_t length,
+        const uct_md_mkey_pack_params_t *params,
         void *buffer);
 
 typedef ucs_status_t
@@ -215,6 +216,11 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p);
+
+ucs_status_t uct_base_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
+                                   uct_rkey_t rkey2,
+                                   const uct_rkey_compare_params_t *params,
+                                   int *result);
 
 /**
  * Check allocation parameters and return an appropriate error if parameters

@@ -32,7 +32,12 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 
     self->remote_pid = *(const pid_t*)params->iface_addr;
 
-    return uct_ep_keepalive_init(&self->keepalive, self->remote_pid);
+    /* Ignore return status, because error handling may not be needed
+     * (it will fail during first check anyway)
+     */
+    uct_ep_keepalive_init(&self->keepalive, self->remote_pid);
+
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_ep_t)
@@ -64,7 +69,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                   uct_completion_t *comp, int direction)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_ipc_iface_t);
-    uct_cuda_ipc_key_t *key     = (uct_cuda_ipc_key_t *) rkey;
+    uct_cuda_ipc_rkey_t *key    = (uct_cuda_ipc_rkey_t *) rkey;
     void *mapped_rem_addr;
     void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;

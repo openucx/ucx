@@ -20,7 +20,6 @@
 #include <ucs/sys/math.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/api/v2/uct_v2.h>
-#include <cuda_runtime.h>
 #include <cuda.h>
 #if CUDA_VERSION >= 11070
 #include <cudaTypedefs.h>
@@ -106,8 +105,7 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->reg_nonblock_mem_types = 0;
-    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->alloc_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
@@ -125,8 +123,8 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 }
 
 static ucs_status_t
-uct_cuda_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
-                        const uct_md_mkey_pack_params_t *params,
+uct_cuda_copy_mkey_pack(uct_md_h md, uct_mem_h memh, void *address,
+                        size_t length, const uct_md_mkey_pack_params_t *params,
                         void *mkey_buffer)
 {
     return UCS_OK;
@@ -159,6 +157,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
     CUresult result;
     ucs_status_t status;
 
+    if (!uct_cuda_base_is_context_active()) {
+        ucs_debug("attempt to register memory without active context");
+        return uct_md_dummy_mem_reg(md, address, length, params, memh_p);
+    }
+
     result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                    (CUdeviceptr)(address));
     if ((result == CUDA_SUCCESS) && ((memType == CU_MEMORYTYPE_HOST)    ||
@@ -170,8 +173,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
-    status    = UCT_CUDA_CALL(log_level, cudaHostRegister, address, length,
-                              cudaHostRegisterPortable);
+    status    = UCT_CUDADRV_FUNC(cuMemHostRegister(address, length,
+                                                   CU_MEMHOSTREGISTER_PORTABLE),
+                                 log_level);
     if (status != UCS_OK) {
         return status;
     }
@@ -194,7 +198,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
         return UCS_OK;
     }
 
-    status = UCT_CUDA_CALL_LOG_ERR(cudaHostUnregister, address);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemHostUnregister(address));
     if (status != UCS_OK) {
         return status;
     }
@@ -202,47 +206,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_copy_md_set_ctx(uct_cuda_copy_md_t *md)
+static ucs_status_t uct_cuda_copy_mem_alloc(uct_md_h md, size_t *length_p,
+                                            void **address_p,
+                                            ucs_memory_type_t mem_type,
+                                            unsigned flags,
+                                            const char *alloc_name,
+                                            uct_mem_h *memh_p)
 {
-    ucs_status_t status;
-    CUdevice dev;
-    CUcontext ctx;
-
-    ucs_assertv(!md->cuda_ctx_retained,
-                "md %p: cuda primary context has already been retained", md);
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&dev, 0));
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRetain(&ctx, dev));
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxSetCurrent(ctx));
-    if (status != UCS_OK) {
-        goto err_release;
-    }
-
-    md->cuda_ctx_retained = 1;
-    ucs_debug("md %p: cuda primary context retained on gpu %d", md, dev);
-
-    return UCS_OK;
-
-err_release:
-    UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRelease(dev));
-err:
-    return status;
-}
-
-static ucs_status_t
-uct_cuda_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                        ucs_memory_type_t mem_type, unsigned flags,
-                        const char *alloc_name, uct_mem_h *memh_p)
-{
-    uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
     ucs_status_t status;
 
     if ((mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) &&
@@ -251,10 +221,8 @@ uct_cuda_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     }
 
     if (!uct_cuda_base_is_context_active()) {
-        status = uct_cuda_copy_md_set_ctx(md);
-        if (status != UCS_OK) {
-            return UCS_ERR_NO_DEVICE;
-        }
+        ucs_error("attempt to allocate cuda memory without active context");
+        return UCS_ERR_NO_DEVICE;
     }
 
     if (mem_type == UCS_MEMORY_TYPE_CUDA) {
@@ -283,13 +251,6 @@ static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
 
 static void uct_cuda_copy_md_close(uct_md_h uct_md) {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
-    CUdevice dev;
-
-    if (md->cuda_ctx_retained &&
-        (UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&dev, 0)) == UCS_OK) &&
-        (UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxRelease(dev)) == UCS_OK)) {
-        ucs_debug("md %p: cuda primary context released on gpu %d", md, dev);
-    }
 
     ucs_free(md);
 }
@@ -625,7 +586,6 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
     md->config.max_reg_ratio    = config->max_reg_ratio;
     md->config.pref_loc         = config->pref_loc;
     md->config.dmabuf_supported = 0;
-    md->cuda_ctx_retained       = 0;
 
     dmabuf_supported = uct_cuda_copy_md_is_dmabuf_supported();
     if ((config->enable_dmabuf == UCS_YES) && !dmabuf_supported) {
@@ -655,7 +615,7 @@ uct_component_t uct_cuda_copy_component = {
     .rkey_unpack        = uct_cuda_copy_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = uct_cuda_copy_rkey_release,
-    .rkey_compare       = ucs_empty_function_return_unsupported,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "cuda_cpy",
     .md_config          = {
         .name           = "Cuda-copy memory domain",

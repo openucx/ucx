@@ -39,6 +39,7 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU,
     UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI,
     UCS_CPU_MODEL_RV64G,
+    UCS_CPU_MODEL_NVIDIA_GRACE,
     UCS_CPU_MODEL_LAST
 } ucs_cpu_model_t;
 
@@ -70,6 +71,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_FUJITSU_ARM,
     UCS_CPU_VENDOR_ZHAOXIN,
     UCS_CPU_VENDOR_GENERIC_RV64G,
+    UCS_CPU_VENDOR_NVIDIA,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 

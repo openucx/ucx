@@ -2131,13 +2131,13 @@ ucs_status_t ucp_context_query(ucp_context_h context_p,
  * @ingroup UCP_MEM
  * @brief Compare two remote keys
  *
- * This routine compares two remote keys.
+ * This routine compares two remote keys. They must belong to the same worker.
  *
  * It sets the @a result argument to < 0 if rkey1 is lower than rkey2, 0 if they
  * are equal or > 0 if rkey1 is greater than rkey2. The result value can be used
  * for sorting remote keys.
  *
- * @param [in]  context     Handle to @ref ucp_context_h
+ * @param [in]  worker      Worker object both rkeys are referring to
  * @param [in]  rkey1       First rkey to compare
  * @param [in]  rkey2       Second rkey to compare
  * @param [in]  params      Additional parameters to the comparison
@@ -2148,7 +2148,7 @@ ucs_status_t ucp_context_query(ucp_context_h context_p,
  * @return Other                 - Error code as defined by @ref ucs_status_t
  */
 ucs_status_t
-ucp_rkey_compare(ucp_context_h context, ucp_rkey_h rkey1, ucp_rkey_h rkey2,
+ucp_rkey_compare(ucp_worker_h worker, ucp_rkey_h rkey1, ucp_rkey_h rkey2,
                  const ucp_rkey_compare_params_t *params, int *result);
 
 

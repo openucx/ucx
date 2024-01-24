@@ -79,7 +79,8 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = 40e-9,
-        .super.cfg_thresh    = context->config.ext.bcopy_thresh,
+        .super.cfg_thresh    = ucp_proto_sw_rma_cfg_thresh(
+                                   context, context->config.ext.bcopy_thresh),
         .super.cfg_priority  = 20,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,

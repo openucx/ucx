@@ -347,7 +347,15 @@ uint16_t get_port();
 /**
  * Address to use for mmap(FIXED)
  */
-void *mmap_fixed_address(size_t length);
+class mmap_fixed_address {
+public:
+    mmap_fixed_address(size_t length);
+    ~mmap_fixed_address();
+    void* operator*() const { return m_ptr; }
+private:
+    void *m_ptr;
+    size_t m_length;
+};
 
 
 /*
@@ -411,6 +419,8 @@ public:
     ucs_sock_addr_t to_ucs_sock_addr() const;
 
     std::string to_str() const;
+
+    std::string to_ip_str() const;
 
     const struct sockaddr* get_sock_addr_ptr() const;
 

@@ -141,8 +141,12 @@ uct_posix_md_query(uct_md_h tl_md, uct_md_attr_v2_t *md_attr)
     }
 
     shm_size = shm_statvfs.f_bsize * shm_statvfs.f_bavail;
-    uct_mm_md_query(&md->super, md_attr,
-                    (shm_size < posix_config->shm_min_size) ? 0 : shm_size);
+    if (shm_size < posix_config->shm_min_size) {
+        ucs_debug("md alloc disabled: only %zu bytes left in shm", shm_size);
+        shm_size = 0;
+    }
+
+    uct_mm_md_query(&md->super, md_attr, shm_size);
 
     md_attr->rkey_packed_size = sizeof(uct_posix_packed_rkey_t) +
                                 uct_posix_iface_addr_length(md);
@@ -646,8 +650,8 @@ static ucs_status_t uct_posix_iface_addr_pack(uct_mm_md_t *md, void *buffer)
 }
 
 static ucs_status_t
-uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh,
-                       const uct_md_mkey_pack_params_t *params,
+uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh, void *address,
+                       size_t length, const uct_md_mkey_pack_params_t *params,
                        void *mkey_buffer)
 {
     uct_mm_md_t *md                      = ucs_derived_of(tl_md, uct_mm_md_t);

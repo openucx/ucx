@@ -532,7 +532,7 @@ make_scripts()
 			    fi
 			    for pid in \$(list_pids)
 			    do
-			        grep -qP "IODEMO_ROLE=\${pattern}\x00" /proc/\${pid}/environ \\
+			        grep -qxz "IODEMO_ROLE=\${pattern}" /proc/\${pid}/environ \\
 			            && echo \${pid}
 			    done
 			}

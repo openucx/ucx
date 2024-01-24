@@ -103,7 +103,18 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
         req->status = status;
         UCS_PROFILE_REQUEST_EVENT(req, "complete_imm_tag_recv", 0);
 
-        ucp_request_imm_cmpl_param(param, req, recv, &req->recv.tag.info);
+        if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
+            return ucp_request_prevent_imm_cmpl(param, req, recv,
+                                                &req->recv.tag.info);
+        }
+
+        if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_RECV_INFO) &&
+            (status == UCS_OK)) {
+            *param->recv_info.tag_info = req->recv.tag.info;
+        }
+
+        ucp_request_put_param(param, req);
+        return UCS_STATUS_PTR(status);
     }
 
     /* TODO: allocate request only in case if flag
@@ -159,7 +170,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV)) {
         ucp_tag_rndv_matched(worker, req, ucp_tag_rndv_rts_from_rdesc(rdesc),
                              rdesc->length);
-        UCP_WORKER_STAT_RNDV(worker, UNEXP, 1);
+        UCP_WORKER_STAT_RNDV(worker, RX_UNEXP, 1);
         ucp_recv_desc_release(rdesc);
     } else {
         ucp_tag_recv_eager_multi(worker, req, rdesc);

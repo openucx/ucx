@@ -162,6 +162,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Number of memory registration attempts.",
      ucs_offsetof(uct_ib_md_config_t, ext.reg_retry_cnt), UCS_CONFIG_TYPE_UINT},
 
+    {"SMKEY_BLOCK_SIZE", "8",
+     "Number of indexes in a symmetric block. More can lead to less contention.",
+     ucs_offsetof(uct_ib_md_config_t, ext.smkey_block_size), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -224,14 +228,12 @@ typedef struct {
 typedef struct {
     pthread_t                     thread;
     uct_ib_md_t                   *md;
-    int                           reg;
     void                          *address;
     size_t                        length;
     const uct_md_mem_reg_params_t *params;
     uint64_t                      access_flags;
     struct ibv_mr                 **mrs;
 } uct_ib_md_mem_reg_thread_t;
-
 
 ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
@@ -252,8 +254,8 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost                  = md->reg_cost;
     md_attr->exported_mkey_packed_size = sizeof(uct_ib_md_packed_mkey_t);
-    ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);
 
+    ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);
     UCS_STATIC_ASSERT(sizeof(guid) <=
                       (UCT_MD_GLOBAL_ID_MAX - UCT_COMPONENT_NAME_MAX));
     memcpy(md_attr->global_id, md->super.component->name, component_name_length);
@@ -305,7 +307,7 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
         length = ucs_min(ctx->length, max_chunk);
         if (ctx->params != NULL) {
             status = uct_ib_reg_mr(ctx->md, ctx->address, length, ctx->params,
-                                   ctx->access_flags, &ctx->mrs[mr_idx]);
+                                   ctx->access_flags, NULL, &ctx->mrs[mr_idx]);
             if (status != UCS_OK) {
                 goto err_dereg;
             }
@@ -320,7 +322,8 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
         mr_idx++;
     }
 
-    ucs_trace("%s %p..%p took %f usec\n", ctx->reg ? "reg_mr" : "dereg_mr",
+    ucs_trace("%s %p..%p took %f usec\n",
+              (ctx->params != NULL) ? "reg_mr" : "dereg_mr",
               ctx->mrs[0]->addr, ctx->address,
               ucs_time_to_usec(ucs_get_time() - t0));
     return UCS_STATUS_PTR(UCS_OK);
@@ -436,7 +439,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
 
 ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
-                           uint64_t access_flags, struct ibv_mr **mr_p)
+                           uint64_t access_flags, struct ibv_dm *dm,
+                           struct ibv_mr **mr_p)
 {
     ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
     unsigned retry                     = 0;
@@ -452,7 +456,15 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
     dmabuf_offset = UCS_PARAM_VALUE(UCT_MD_MEM_REG_FIELD, params, dmabuf_offset,
                                     DMABUF_OFFSET, 0);
 
-    if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+    if (dm != NULL) {
+#if HAVE_IBV_DM
+        title = "ibv_reg_dm_mr";
+        mr    = UCS_PROFILE_CALL_ALWAYS(ibv_reg_dm_mr, md->pd, dm, 0, length,
+                                        access_flags | IBV_ACCESS_ZERO_BASED);
+#else
+        return UCS_ERR_UNSUPPORTED;
+#endif
+    } else if (dmabuf_fd == UCT_DMABUF_FD_INVALID) {
         title = "ibv_reg_mr";
         do {
             /* when access_flags contains IBV_ACCESS_ON_DEMAND ibv_reg_mr() may
@@ -622,7 +634,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     memh         = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
     access_flags = uct_ib_memh_access_flags(md, &memh->super);
 
-    status = uct_ib_reg_mr(md, address, length, params, access_flags,
+    status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
                            &mr_default);
     if (status != UCS_OK) {
         goto err_free;
@@ -635,7 +647,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     if (md->relaxed_order) {
         status = uct_ib_reg_mr(md, address, length, params,
                                access_flags & ~IBV_ACCESS_RELAXED_ORDERING,
-                               &memh->mrs[UCT_IB_MR_STRICT_ORDER].ib);
+                               NULL, &memh->mrs[UCT_IB_MR_STRICT_ORDER].ib);
         if (status != UCS_OK) {
             goto err_dereg_default;
         }
@@ -684,6 +696,7 @@ uct_ib_verbs_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 }
 
 ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                                    void *address, size_t length,
                                     const uct_md_mkey_pack_params_t *params,
                                     void *mkey_buffer)
 {
@@ -1150,7 +1163,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     md->super.component = &uct_ib_component;
     md->config          = md_config->ext;
-    md->cap_flags       = UCT_MD_FLAG_REG |
+    md->cap_flags      |= UCT_MD_FLAG_REG |
                           UCT_MD_FLAG_NEED_MEMH |
                           UCT_MD_FLAG_NEED_RKEY |
                           UCT_MD_FLAG_ADVISE;
@@ -1360,8 +1373,14 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_md_free;
     }
 
-    if (IBV_DEVICE_ATOMIC_HCA(dev)) {
+    if (IBV_DEVICE_ATOMIC_HCA(dev) ||
+        IBV_DEVICE_ATOMIC_GLOB(dev)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);
+    }
+
+    if (IBV_DEVICE_ATOMIC_GLOB(dev)) {
+        dev->pci_fadd_arg_sizes = sizeof(uint64_t);
+        dev->pci_cswap_arg_sizes = sizeof(uint64_t);
     }
 
     status  = uct_ib_md_parse_device_config(md, md_config);
@@ -1429,7 +1448,7 @@ uct_component_t uct_ib_component = {
     .rkey_unpack        = uct_ib_rkey_unpack,
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
-    .rkey_compare       = ucs_empty_function_return_unsupported,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "ib",
     .md_config          = {
         .name           = "IB memory domain",

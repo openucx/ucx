@@ -784,7 +784,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_EXPORTED_MKEY_PACKED_SIZE = UCS_BIT(14),
 
     /** Unique global identifier of the memory domain. */
-    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15)
+    UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
+
+    /** Indicate registration alignment. */
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
 } uct_md_attr_field_t;
 
 
@@ -890,6 +893,11 @@ typedef struct {
      * Memory Domains belong to the same device.
      */
     char              global_id[UCT_MD_GLOBAL_ID_MAX];
+
+    /**
+     * Registration alignment.
+     */
+    size_t            reg_alignment;
 } uct_md_attr_v2_t;
 
 
@@ -940,6 +948,9 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
  *
  * @param [in]  md          Handle to memory domain.
  * @param [in]  memh        Pack a remote key for this memory handle.
+ * @param [in]  address     Memory address to expose for remote access.
+ * @param [in]  length      The size (in bytes) of memory that will be exposed
+ *                          for remote access.
  * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mkey_pack_params_t.
  * @param [out] mkey_buffer Pointer to a buffer to hold the packed memory key.
@@ -950,6 +961,7 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
  * @return                  Error code.
  */
 ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 void *address, size_t length,
                                  const uct_md_mkey_pack_params_t *params,
                                  void *mkey_buffer);
 

@@ -2275,7 +2275,7 @@ ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
-    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
+    if (context->config.ext.rndv_inter_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
         status = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                 config->key.am_bw_lanes,
@@ -2288,8 +2288,8 @@ ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
         rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
         ucs_trace("active message rendezvous threshold is %zu", rndv_thresh);
     } else {
-        rndv_thresh       = context->config.ext.rndv_thresh;
-        rndv_local_thresh = context->config.ext.rndv_thresh;
+        rndv_thresh       = context->config.ext.rndv_inter_thresh;
+        rndv_local_thresh = context->config.ext.rndv_inter_thresh;
     }
 
     min_thresh     = ucs_max(iface_attr->cap.am.min_zcopy, min_rndv_thresh);
@@ -2325,7 +2325,7 @@ ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker, ucp_ep_config_t *config,
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
+    if (context->config.ext.rndv_inter_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
         status = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                 config->key.am_bw_lanes,
@@ -2336,8 +2336,8 @@ ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker, ucp_ep_config_t *config,
 
         rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
     } else {
-        rndv_thresh       = context->config.ext.rndv_thresh;
-        rndv_local_thresh = context->config.ext.rndv_thresh;
+        rndv_thresh       = context->config.ext.rndv_inter_thresh;
+        rndv_local_thresh = context->config.ext.rndv_inter_thresh;
     }
 
     min_thresh = ucs_max(iface_attr->cap.get.min_zcopy, min_rndv_thresh);
@@ -2463,8 +2463,8 @@ ucp_ep_config_max_short(ucp_context_t *context, uct_iface_attr_t *iface_attr,
     }
 
     if ((rndv_thresh != NULL) &&
-        (context->config.ext.rndv_thresh != UCS_MEMUNITS_AUTO)) {
-        /* Adjust max_short if rndv_thresh is set externally. Note local and
+        (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_AUTO)) {
+        /* Adjust max_short if rndv_inter_thresh is set externally. Note local and
          * remote threshold values are the same if set externally, so can
          * compare with just one of them. */
         ucs_assert(rndv_thresh->remote == rndv_thresh->local);

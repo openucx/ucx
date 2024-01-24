@@ -38,7 +38,9 @@ depcomp
 *.lo
 *.o
 contrib/rpmdef.sh
+contrib/ucx
 bindings/java/pom.xml
+bindings/java/src/main/native/tmp-settings.xml
 src/ucs/ucs_stats_parser
 test/gtest/gtest
 build-*
@@ -52,6 +54,7 @@ test/apps/test_link_map
 test/apps/test_ucp_dlopen
 test/apps/test_ucs_dlopen
 test/apps/sockaddr/sa
+test/apps/test_hooks
 examples/ucp_client_server
 examples/ucp_hello_world
 examples/uct_hello_world
@@ -97,6 +100,7 @@ test/apps/test_cuda_hook_dynamic
 test/apps/test_cuda_hook_static
 test/apps/test_ucp_config
 test/apps/test_memtrack_limit
+test/apps/test_no_cuda_ctx
 test/apps/test_tcmalloc
 test/apps/profiling/ucx_profiling
 test/apps/uct_info/uct_info
@@ -105,3 +109,4 @@ cmake/*.cmake
 *.gcno
 *.gcda
 lcov_data/
+.noinst/

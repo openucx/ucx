@@ -7,6 +7,8 @@ parameters:
       ucx_tag: v1.14.0
     ucx_1_15:
       ucx_tag: v1.15.x
+    ucx_1_16:
+      ucx_tag: v1.16.x
 
 jobs:
   - job: build_pr_${{ parameters.name }}
@@ -51,9 +53,9 @@ jobs:
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     variables:
-        ucx_current: ucx_current_$(Build.BuildId)_${{ parameters.name }}
-        ucx_legacy: ucx_$(ucx_tag)_$(Build.BuildId)_${{ parameters.name }}
-        test_dir: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
+      ucx_current: ucx_current_$(Build.BuildId)_${{ parameters.name }}
+      ucx_legacy: ucx_$(ucx_tag)_$(Build.BuildId)_${{ parameters.name }}
+      test_dir: $(System.DefaultWorkingDirectory)/$(ucx_legacy)/examples
     steps:
       - checkout: self
         clean: true
@@ -63,6 +65,7 @@ jobs:
         inputs:
           artifactName: $(ucx_current)
           downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/$(ucx_current)/bin/ucx_info
       - bash: |
           set -eEx
           ucx_dir=$(System.DefaultWorkingDirectory)/$(ucx_legacy)
@@ -77,6 +80,12 @@ jobs:
           gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o client_server ucp_client_server.c -lm -lucs -lucp
           gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ucp_hworld ucp_hello_world.c -lm -lucs -lucp
         displayName: Build ucx artifact
+      - bash: buildlib/tools/check_tls_perf_caps.sh
+        env:
+          UCX_PR_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)
+          UCX_LEGACY_PATH: $(System.DefaultWorkingDirectory)/$(ucx_legacy)
+        displayName: compare tls performance characteristics
+        condition: ne(variables.ucx_tag, 'v1.14.0')
       - bash: buildlib/tools/test_wire_compat.sh $(test_dir)/client_server -a
         env:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/$(ucx_current)/lib

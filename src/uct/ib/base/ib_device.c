@@ -651,7 +651,7 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
 {
     if (md->config.gid_index == UCS_ULUNITS_AUTO) {
-        return UCT_IB_MD_DEFAULT_GID_INDEX;
+        return UCT_IB_DEVICE_DEFAULT_GID_INDEX;
     } else {
         return md->config.gid_index;
     }
@@ -907,7 +907,7 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
         }
     }
 
-    gid_info->gid_index             = UCT_IB_MD_DEFAULT_GID_INDEX;
+    gid_info->gid_index             = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
     gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
     gid_info->roce_info.addr_family = AF_INET;
 

@@ -16,6 +16,8 @@ import (
 	"time"
 	. "ucx"
 	"unsafe"
+	. "cuda"
+	"runtime"
 )
 
 type PerfTestParams struct {
@@ -89,9 +91,17 @@ func initContext() {
 	perfTest.context, _ = NewUcpContext(params)
 }
 
+func tryCudaSetDevice() {
+	if perfTestParams.memType == UCS_MEMORY_TYPE_CUDA {
+		runtime.LockOSThread()
+		if ret := CudaSetDevice(); ret != nil {
+			panic(ret)
+		}
+	}
+}
+
 func initMemory() error {
 	var err error
-	var dummyMemh *UcpMemory
 	memTypeMask, _ := perfTest.context.MemoryTypesMask()
 
 	if !IsMemTypeSupported(perfTestParams.memType, memTypeMask) {
@@ -99,17 +109,10 @@ func initMemory() error {
 	}
 
 	mmapParams := &UcpMmapParams{}
-	// Allocate dummy host memory, to initialize cuda context if the memType is Cuda.
-	mmapParams.SetMemoryType(UCS_MEMORY_TYPE_HOST).Allocate()
-	mmapParams.SetLength(1)
-	dummyMemh, err = perfTest.context.MemMap(mmapParams)
-	if err != nil {
-		return err
-	}
-	dummyMemh.Close()
-
 	mmapParams.SetMemoryType(perfTestParams.memType).Allocate()
 	mmapParams.SetLength(perfTestParams.messageSize * uint64(perfTestParams.numThreads))
+
+	tryCudaSetDevice()
 
 	perfTest.memory, err = perfTest.context.MemMap(mmapParams)
 	if err != nil {
@@ -136,7 +139,8 @@ func initWorker(i int) {
 
 func epErrorHandling(ep *UcpEp, status UcsStatus) {
 	if status != UCS_ERR_CONNECTION_RESET {
-		fmt.Printf("Endpoint error: %v \n", status.String())
+		errorString := fmt.Sprintf("Endpoint error: %v", status.String())
+		panic(errorString)
 	}
 }
 
@@ -258,26 +262,27 @@ func serverStart() error {
 		perfTest.perThreadWorkers[t+1].SetAmRecvHandler(t, UCP_AM_FLAG_WHOLE_MSG, serverAmRecvHandler)
 	}
 
-	for i := uint(0); i < perfTestParams.numIterations; i += 1 {
-		perfTest.numCompletedRequests = 0
+	totalNumRequests := uint32((perfTestParams.warmUpIter + perfTestParams.numIterations) * perfTestParams.numThreads)
+	perfTest.wg.Add(int(perfTestParams.numThreads + 1))
+	for t := uint(0); t < perfTestParams.numThreads+1; t += 1 {
+		go func(tid uint) {
+			tryCudaSetDevice()
 
-		perfTest.wg.Add(int(perfTestParams.numThreads + 1))
-		for t := uint(0); t < perfTestParams.numThreads+1; t += 1 {
-			go func(tid uint) {
-				for perfTest.numCompletedRequests < uint32(perfTestParams.numThreads) {
-					progressWorker(int(tid))
-				}
-				perfTest.wg.Done()
-			}(t)
-		}
-
-		perfTest.wg.Wait()
+			for atomic.LoadUint32(&perfTest.numCompletedRequests) < totalNumRequests {
+				progressWorker(int(tid))
+			}
+			perfTest.wg.Done()
+		}(t)
 	}
+	perfTest.wg.Wait()
+
 	close()
 	return nil
 }
 
 func clientThreadDoIter(i int, t uint) {
+	tryCudaSetDevice()
+
 	start := time.Now()
 	var request *UcpRequest
 	requestParams := (&UcpRequestParams{}).SetMemType(perfTestParams.memType)
@@ -287,6 +292,10 @@ func clientThreadDoIter(i int, t uint) {
 
 	for request.GetStatus() == UCS_INPROGRESS {
 		progressWorker(int(t))
+	}
+	if request.GetStatus() != UCS_OK {
+		errorString := fmt.Sprintf("Request completion error: %v", request.GetStatus().String())
+		panic(errorString)
 	}
 	perfTest.completionTime[t] = time.Since(start)
 	request.Close()

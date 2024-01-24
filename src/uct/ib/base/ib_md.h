@@ -18,8 +18,6 @@
 #define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)
 #define UCT_IB_MD_INVALID_FLUSH_RKEY 0xff
 
-#define UCT_IB_MD_DEFAULT_GID_INDEX 0   /**< The gid index used by default for an IB/RoCE port */
-
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
                                   IBV_ACCESS_REMOTE_WRITE | \
                                   IBV_ACCESS_REMOTE_READ | \
@@ -97,6 +95,7 @@ typedef struct uct_ib_md_ext_config {
                                                        that are kept idle before
                                                        reuse*/
     unsigned                 reg_retry_cnt; /**< Memory registration retry count */
+    unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
 } uct_ib_md_ext_config_t;
 
 
@@ -153,6 +152,10 @@ typedef struct uct_ib_md {
      * be initiated.  */
     uint32_t                 flush_rkey;
     uint16_t                 vhca_id;
+    struct {
+        uint32_t             base;
+        uint32_t             size;
+    } mkey_by_name_reserve;
 } uct_ib_md_t;
 
 
@@ -353,7 +356,8 @@ void uct_ib_md_close(uct_md_h tl_md);
 
 ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
                            const uct_md_mem_reg_params_t *params,
-                           uint64_t access_flags, struct ibv_mr **mr_p);
+                           uint64_t access_flags, struct ibv_dm *dm,
+                           struct ibv_mr **mr_p);
 
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 
@@ -380,6 +384,7 @@ ucs_status_t uct_ib_verbs_mem_dereg(uct_md_h uct_md,
                                     const uct_md_mem_dereg_params_t *params);
 
 ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                                    void *address, size_t length,
                                     const uct_md_mkey_pack_params_t *params,
                                     void *mkey_buffer);
 

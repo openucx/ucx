@@ -32,15 +32,16 @@ static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
      ucs_offsetof(uct_rocm_copy_iface_config_t, h2d_thresh),
      UCS_CONFIG_TYPE_MEMUNITS},
 
-    {"ENABLE_ASYNC_ZCOPY", "y",
-     "Enable asynchronous zcopy operations",
+    {"ENABLE_ASYNC_ZCOPY", "y", "Enable asynchronous zcopy operations",
      ucs_offsetof(uct_rocm_copy_iface_config_t, enable_async_zcopy),
      UCS_CONFIG_TYPE_BOOL},
 
-    {"LAT", "2e-7",
-     "Latency",
-     ucs_offsetof(uct_rocm_copy_iface_config_t, latency),
-     UCS_CONFIG_TYPE_TIME},
+    {"LAT", "1e-7", "Latency",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
+
+    {"SIGPOOL_MAX_ELEMS", "1024", "Maximum number of elements in signal pool",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, sigpool_max_elems),
+     UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
@@ -179,33 +180,71 @@ static uct_iface_ops_t uct_rocm_copy_iface_ops = {
     .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
+static UCS_F_ALWAYS_INLINE void
+uct_rocm_copy_set_default_bandwidth(uct_perf_attr_t *perf_attr)
+{
+    switch (perf_attr->operation) {
+    case UCT_EP_OP_GET_SHORT:
+        perf_attr->bandwidth.shared = 2000.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_GET_ZCOPY:
+        perf_attr->bandwidth.shared = 8000.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_PUT_SHORT:
+        perf_attr->bandwidth.shared = 10500.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_PUT_ZCOPY:
+        perf_attr->bandwidth.shared = 9500.0 * UCS_MBYTE;
+        break;
+    default:
+        perf_attr->bandwidth.shared = 0;
+        break;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rocm_copy_set_mi300a_bandwidth(uct_perf_attr_t *perf_attr)
+{
+    switch (perf_attr->operation) {
+    case UCT_EP_OP_GET_SHORT:
+        perf_attr->bandwidth.shared = 6000.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_GET_ZCOPY:
+        perf_attr->bandwidth.shared = 8000.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_PUT_SHORT:
+        perf_attr->bandwidth.shared = 10500.0 * UCS_MBYTE;
+        break;
+    case UCT_EP_OP_PUT_ZCOPY:
+        perf_attr->bandwidth.shared = 25000.0 * UCS_MBYTE;
+        break;
+    default:
+        perf_attr->bandwidth.shared = 0;
+        break;
+    }
+}
 
 static ucs_status_t
 uct_rocm_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_iface,
-                                                  uct_rocm_copy_iface_t);
+    uct_rocm_copy_iface_t *iface                  = ucs_derived_of(tl_iface,
+                                                                   uct_rocm_copy_iface_t);
+    static uct_rocm_amd_gpu_product_t gpu_product = UCT_ROCM_AMD_GPU_UNDEFINED;
+
+    if (gpu_product == UCT_ROCM_AMD_GPU_UNDEFINED) {
+        gpu_product = uct_rocm_base_get_gpu_product();
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.dedicated = 0;
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
             perf_attr->bandwidth.shared = 0;
         } else {
-            switch (perf_attr->operation) {
-            case UCT_EP_OP_GET_SHORT:
-                perf_attr->bandwidth.shared = 2000.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_GET_ZCOPY:
-                perf_attr->bandwidth.shared = 8000.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_PUT_SHORT:
-                perf_attr->bandwidth.shared = 10500.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_PUT_ZCOPY:
-                perf_attr->bandwidth.shared = 9500.0 * UCS_MBYTE;
-                break;
-            default:
-                perf_attr->bandwidth.shared = 0;
-                break;
+            if (gpu_product == UCT_ROCM_AMD_GPU_MI300A ||
+                gpu_product == UCT_ROCM_AMD_GPU_MI300X) {
+                uct_rocm_copy_set_mi300a_bandwidth(perf_attr);
+            } else {
+                uct_rocm_copy_set_default_bandwidth(perf_attr);
             }
         }
     }
@@ -269,7 +308,7 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h work
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_rocm_base_signal_desc_t);
     mp_params.elems_per_chunk = 128;
-    mp_params.max_elems       = 1024;
+    mp_params.max_elems       = config->sigpool_max_elems;
     mp_params.ops             = &uct_rocm_base_signal_desc_mpool_ops;
     mp_params.name            = "ROCM_COPY signal objects";
     status                    = ucs_mpool_init(&mp_params, &self->signal_pool);

@@ -1588,7 +1588,7 @@ unsigned long ucs_sys_get_proc_create_time(pid_t pid)
     }
 
 scan_err:
-    ucs_error("failed to scan "UCS_PROCCESS_STAT_FMT, pid);
+    ucs_debug("failed to scan "UCS_PROCCESS_STAT_FMT, pid);
 err:
     return 0ul;
 }

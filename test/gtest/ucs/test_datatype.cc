@@ -9,7 +9,7 @@
 
 extern "C" {
 #include <ucs/debug/memtrack.h>
-#include <ucs/datastruct/array.inl>
+#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hlist.h>
 #include <ucs/datastruct/ptr_array.h>
@@ -1052,6 +1052,27 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_locked_perf,
     }
 }
 
+UCS_TEST_F(test_datatype, is_unsigned_type) {
+    EXPECT_TRUE(ucs_is_unsigned_type(uint8_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint16_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint32_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(uint64_t));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned char));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned short));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned int));
+    EXPECT_TRUE(ucs_is_unsigned_type(unsigned long));
+
+    EXPECT_FALSE(ucs_is_unsigned_type(int8_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int16_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int32_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(int64_t));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed char));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed short));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed int));
+    EXPECT_FALSE(ucs_is_unsigned_type(signed long));
+}
+
 typedef struct {
     int  num1;
     int  num2;
@@ -1066,16 +1087,16 @@ static std::ostream& operator<<(std::ostream& os, const test_value_type_t &v) {
 }
 
 
-UCS_ARRAY_DEFINE_INLINE(test_2num, unsigned, test_value_type_t);
-UCS_ARRAY_DEFINE_INLINE(test_1int, size_t, int);
+UCS_ARRAY_DECLARE_TYPE(test_2num_t, unsigned, test_value_type_t);
+UCS_ARRAY_DECLARE_TYPE(test_1int_t, size_t, int);
 
 class test_array : public test_datatype {
 protected:
-    void test_fixed(ucs_array_t(test_1int) *array, size_t capacity);
+    void test_fixed(test_1int_t *array, size_t capacity);
 };
 
 UCS_TEST_F(test_array, dynamic_array_2int_grow) {
-    ucs_array_t(test_2num) test_array;
+    test_2num_t test_array;
     test_value_type_t value;
     ucs_status_t status;
 
@@ -1084,7 +1105,7 @@ UCS_TEST_F(test_array, dynamic_array_2int_grow) {
 
     /* grow the array enough to contain 'value_index' */
     unsigned value_index = 9;
-    status = ucs_array_reserve(test_2num, &test_array, value_index + 1);
+    status               = ucs_array_reserve(&test_array, value_index + 1);
     ASSERT_UCS_OK(status);
 
     value.num1 = ucs::rand();
@@ -1095,12 +1116,12 @@ UCS_TEST_F(test_array, dynamic_array_2int_grow) {
     EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
 
     /* grow the array to larger size, check the value is not changed */
-    status = ucs_array_reserve(test_2num, &test_array, 40);
+    status = ucs_array_reserve(&test_array, 40);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
 
     /* grow the array with smaller size, check the value is not changed */
-    status = ucs_array_reserve(test_2num, &test_array, 30);
+    status = ucs_array_reserve(&test_array, 30);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
 
@@ -1110,7 +1131,7 @@ UCS_TEST_F(test_array, dynamic_array_2int_grow) {
 UCS_TEST_F(test_array, dynamic_array_int_append) {
     static const size_t NUM_ELEMS = 1000;
 
-    ucs_array_t(test_1int) test_array;
+    test_1int_t test_array;
     std::vector<int> vec;
 
     ucs_array_init_dynamic(&test_array);
@@ -1119,7 +1140,7 @@ UCS_TEST_F(test_array, dynamic_array_int_append) {
     /* push same elements to the array and the std::vector */
     for (size_t i = 0; i < NUM_ELEMS; ++i) {
         int value = ucs::rand();
-        int *elem = ucs_array_append(test_1int, &test_array, FAIL());
+        int *elem = ucs_array_append(&test_array, FAIL());
         EXPECT_EQ(i + 1, ucs_array_length(&test_array));
         *elem = value;
         vec.push_back(value);
@@ -1162,15 +1183,14 @@ UCS_TEST_F(test_array, dynamic_array_int_append) {
     ucs_array_cleanup_dynamic(&test_array);
 }
 
-void test_array::test_fixed(ucs_array_t(test_1int) *array, size_t capacity)
+void test_array::test_fixed(test_1int_t *array, size_t capacity)
 {
     /* check initial capacity */
     size_t initial_capacity = ucs_array_capacity(array);
-    EXPECT_LE(initial_capacity, capacity);
-    EXPECT_GE(initial_capacity, capacity - 1);
+    EXPECT_EQ(initial_capacity, capacity);
 
     /* append one element */
-    ucs_array_append(test_1int, array, FAIL());
+    ucs_array_append(array, FAIL());
 
     size_t idx = ucs_array_length(array) - 1;
     ucs_array_elem(array, idx) = 17;
@@ -1185,15 +1205,14 @@ void test_array::test_fixed(ucs_array_t(test_1int) *array, size_t capacity)
 UCS_TEST_F(test_array, fixed_static) {
     const size_t num_elems = 100;
     int buffer[num_elems];
-    ucs_array_t(test_1int) test_array =
-             UCS_ARRAY_FIXED_INITIALIZER(buffer, num_elems);
+    test_1int_t test_array = UCS_ARRAY_FIXED_INITIALIZER(buffer, num_elems);
     test_fixed(&test_array, num_elems);
 }
 
 UCS_TEST_F(test_array, fixed_init) {
     const size_t num_elems = 100;
     int buffer[num_elems];
-    ucs_array_t(test_1int) test_array;
+    test_1int_t test_array;
 
     ucs_array_init_fixed(&test_array, buffer, num_elems);
     test_fixed(&test_array, num_elems);
@@ -1201,8 +1220,60 @@ UCS_TEST_F(test_array, fixed_init) {
 
 UCS_TEST_F(test_array, fixed_onstack) {
     const size_t num_elems = 100;
-    UCS_ARRAY_DEFINE_ONSTACK(test_array, test_1int, num_elems);
+    UCS_ARRAY_DEFINE_ONSTACK(test_1int_t, test_array, num_elems);
     test_fixed(&test_array, num_elems);
+}
+
+UCS_TEST_F(test_array, fixed_runtime_onstack) {
+    for (size_t i = 1; i < 200; ++i) {
+        UCS_ARRAY_DEFINE_ONSTACK(test_1int_t, test_array, i);
+        test_fixed(&test_array, i);
+    }
+}
+
+UCS_TEST_F(test_array, resize) {
+    static const size_t NUM_ELEMS = 10;
+    static const int VALUE1       = 896;
+    static const int VALUE2       = 1234;
+    test_1int_t test_array;
+
+    ucs_array_init_dynamic(&test_array);
+    *ucs_array_append(&test_array, FAIL()) = VALUE1;
+    ucs_array_resize(&test_array, NUM_ELEMS, VALUE2, FAIL());
+
+    EXPECT_EQ(NUM_ELEMS, ucs_array_length(&test_array));
+    for (size_t i = 0; i < NUM_ELEMS; ++i) {
+        int expected_value = (i == 0) ? VALUE1 : VALUE2;
+        EXPECT_EQ(expected_value, ucs_array_elem(&test_array, i));
+    }
+
+    ucs_array_cleanup_dynamic(&test_array);
+}
+
+UCS_TEST_F(test_array, max_capacity) {
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint8_t, uint8_t, int);
+    EXPECT_EQ(127, ucs_array_max_capacity((test_array_uint8_t *)NULL));
+
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint16_t, uint16_t, int);
+    EXPECT_EQ(32767, ucs_array_max_capacity((test_array_uint16_t *)NULL));
+}
+
+UCS_TEST_F(test_array, add_above_max_capacity) {
+    UCS_ARRAY_DECLARE_TYPE(test_array_uint8_t, uint8_t, int);
+    test_array_uint8_t test_array;
+    size_t max_capacity = ucs_array_max_capacity(&test_array);
+
+    ucs_array_init_dynamic(&test_array);
+    ucs_array_resize(&test_array, max_capacity, 0, FAIL());
+    EXPECT_EQ(max_capacity, ucs_array_length(&test_array));
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        ucs_status_t status = ucs_array_reserve(&test_array, max_capacity + 1);
+        EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
+    }
+
+    ucs_array_cleanup_dynamic(&test_array);
 }
 
 class test_datatype_ptr_map : public test_datatype {
