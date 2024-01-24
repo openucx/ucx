@@ -459,25 +459,27 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
 
     ucs_assert(wireup_ep != NULL);
 
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
-                               UCT_EP_PARAM_FIELD_PATH_INDEX;
-    uct_ep_params.path_index = path_index;
-    uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
-    status = uct_ep_create(&uct_ep_params, &next_ep);
-    if (status != UCS_OK) {
-        /* make Coverity happy */
-        ucs_assert(next_ep == NULL);
-        goto err;
+    if (wireup_ep->super.uct_ep == NULL) {
+        uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                                   UCT_EP_PARAM_FIELD_PATH_INDEX;
+        uct_ep_params.path_index = path_index;
+        uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
+        status                   = uct_ep_create(&uct_ep_params, &next_ep);
+        if (status != UCS_OK) {
+            /* make Coverity happy */
+            ucs_assert(next_ep == NULL);
+            goto err;
+        }
+
+        ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1, rsc_index);
+
+        ucs_debug("ep %p: wireup_ep %p created next_ep %p to %s "
+                  "using " UCT_TL_RESOURCE_DESC_FMT,
+                  ucp_ep, wireup_ep, wireup_ep->super.uct_ep,
+                  ucp_ep_peer_name(ucp_ep),
+                  UCT_TL_RESOURCE_DESC_ARG(
+                          &worker->context->tl_rscs[rsc_index].tl_rsc));
     }
-
-    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1, rsc_index);
-
-    ucs_debug("ep %p: wireup_ep %p created next_ep %p to %s "
-              "using " UCT_TL_RESOURCE_DESC_FMT,
-              ucp_ep, wireup_ep, wireup_ep->super.uct_ep,
-              ucp_ep_peer_name(ucp_ep),
-              UCT_TL_RESOURCE_DESC_ARG(
-                      &worker->context->tl_rscs[rsc_index].tl_rsc));
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {

@@ -1395,6 +1395,14 @@ static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
     }
 }
 
+static int ucp_wireup_aux_setup_required(ucp_ep_h ep, ucp_lane_index_t lane,
+                                         ucp_ep_config_key_t *new_key)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    return (lane == new_key->wireup_msg_lane) &&
+           (ucp_wireup_ep(uct_ep)->aux_ep == NULL);
+}
+
 static ucs_status_t
 ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                                   const ucp_unpacked_address_t *remote_address,
@@ -1483,7 +1491,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
             }
         } else if (uct_ep != NULL) {
             if (!ucp_wireup_ep_test(uct_ep) ||
-                (ucp_wireup_ep(uct_ep)->super.uct_ep != NULL)) {
+                ((ucp_wireup_ep(uct_ep)->super.uct_ep != NULL) &&
+                 !ucp_wireup_aux_setup_required(ep, lane, new_key))) {
                 /* no need to connect lane */
                 *connect_lane_bitmap &= ~UCS_BIT(reuse_lane);
             }

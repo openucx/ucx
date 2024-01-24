@@ -8,6 +8,7 @@
 
 #define __STDC_LIMIT_MACROS
 #include <ucp/api/ucp.h>
+#include <ucp/core/ucp_types.h>
 #include <ucs/time/time.h>
 #include <common/mem_buffer.h>
 
@@ -77,9 +78,10 @@ public:
             LISTEN_CB_CUSTOM    /* User's callback with custom test logic */
         } listen_cb_type_t;
 
-        entity(const ucp_test_param& test_param, ucp_config_t* ucp_config,
-               const ucp_worker_params_t& worker_params,
-               const ucp_test_base* test_owner);
+        entity(const ucp_test_param &test_param, ucp_config_t *ucp_config,
+               const ucp_worker_params_t &worker_params,
+               const ucp_test_base *test_owner,
+               const ucp_tl_bitmap_t *tl_bitmap);
 
         ~entity();
 
@@ -237,8 +239,14 @@ protected:
     virtual bool has_transport(const std::string& tl_name) const;
     bool has_any_transport(const std::vector<std::string>& tl_names) const;
     bool has_any_transport(const std::string *tls, size_t tl_size) const;
-    entity* create_entity(bool add_in_front = false);
-    entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
+    size_t count_resources(const ucp_test_base::entity &e,
+                           const std::string &tl_name) const;
+    bool has_resource(const ucp_test_base::entity &e,
+                      const std::string &tl_name) const;
+    entity *create_entity(bool add_in_front = false,
+                          const ucp_tl_bitmap_t *tl_bitmap = NULL);
+    entity *create_entity(bool add_in_front, const ucp_test_param &test_param,
+                          const ucp_tl_bitmap_t *tl_bitmap = NULL);
     unsigned progress(const std::vector<entity*> &entities,
                       int worker_index = 0) const;
     unsigned progress(int worker_index = 0) const;
