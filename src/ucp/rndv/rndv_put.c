@@ -254,6 +254,7 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     ucp_lane_index_t lane_idx, lane;
     int send_atp, use_fence;
     size_t bulk_priv_size;
+    unsigned atp_map;
     ucs_status_t status;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
@@ -273,26 +274,37 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     *init_params->priv_size = ucs_offsetof(ucp_proto_rndv_put_priv_t, bulk) +
                               bulk_priv_size;
 
-    /* Check if all potential lanes support sending ATP */
-    rpriv     = params.super.super.priv;
-    send_atp  = !ucp_proto_rndv_init_params_is_ppln_frag(init_params);
-    use_fence = send_atp && !context->config.ext.rndv_put_force_flush;
+    rpriv    = params.super.super.priv;
+    send_atp = !ucp_proto_rndv_init_params_is_ppln_frag(init_params);
 
-    /* Check if all potential lanes support sending ATP */
-    lane_idx  = 0;
-    while (use_fence && (lane_idx < rpriv->bulk.mpriv.num_lanes)) {
-        lane       = rpriv->bulk.mpriv.lanes[lane_idx++].super.lane;
+    /* Check which lanes support sending ATP */
+    atp_map = 0;
+    for (lane_idx = 0; lane_idx < rpriv->bulk.mpriv.num_lanes; ++lane_idx) {
+        lane       = rpriv->bulk.mpriv.lanes[lane_idx].super.lane;
         iface_attr = ucp_proto_common_get_iface_attr(init_params, lane);
-        use_fence  = use_fence &&
-                     (((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) &&
-                       (iface_attr->cap.am.max_short >= atp_size)) ||
-                      ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
-                       (iface_attr->cap.am.max_bcopy >= atp_size)));
+        if (((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) &&
+             (iface_attr->cap.am.max_short >= atp_size)) ||
+            ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) &&
+             (iface_attr->cap.am.max_bcopy >= atp_size))) {
+            atp_map |= UCS_BIT(lane);
+        }
     }
 
+    /* Use fence only if all lanes support sending ATP and flush is not forced
+     */
+    use_fence = send_atp && !context->config.ext.rndv_put_force_flush &&
+                (rpriv->bulk.mpriv.lane_map == atp_map);
+
     /* All lanes can send ATP - invalidate am_lane, to use mpriv->lanes.
-     * Otherwise, would need to flush all lanes and send ATP on
-     * rpriv->super.lane when the flush is completed
+     * Otherwise, would need to flush all lanes and send ATP on:
+     * - All lanes supporting ATP send. This ensures that data is flushed
+     *   remotely (i.e. resides in the target buffer), which may not be the case
+     *   with IB transports. An alternative would be to pass
+     *   UCT_FLUSH_FLAG_REMOTE to uct_ep_flush, but using this flag increases
+     *   UCP worker address size.
+     *   TODO: Consider calling UCT ep flush with remote flag when/if address
+     *   size is not an issue anymore.
+     * - Control lane if none of the lanes support sending ATP
      */
     if (use_fence) {
         /* Send fence followed by ATP on all lanes */
@@ -303,12 +315,14 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
         rpriv->flush_map       = 0;
         rpriv->atp_map         = rpriv->bulk.mpriv.lane_map;
     } else {
-        /* Flush all lanes and send single ATP on control message lane */
+        /* Flush all lanes and send ATP on all supporting lanes (or control lane
+         * otherwise) */
         if (send_atp) {
             rpriv->put_comp_cb =
                     ucp_proto_rndv_put_common_flush_completion_send_atp;
             rpriv->atp_comp_cb = comp_cb;
-            rpriv->atp_map     = UCS_BIT(rpriv->bulk.super.lane);
+            rpriv->atp_map     = (atp_map == 0) ?
+                                 UCS_BIT(rpriv->bulk.super.lane) : atp_map;
         } else {
             rpriv->put_comp_cb = comp_cb;
             rpriv->atp_comp_cb = NULL;
