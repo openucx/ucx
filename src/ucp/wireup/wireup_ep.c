@@ -519,6 +519,22 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
               wireup_ep, wireup_ep->super.uct_ep);
 }
 
+uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    uct_ep_h wireup_msg_ep;
+
+    if ((wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) ||
+        (wireup_ep->aux_ep == NULL)) {
+        wireup_msg_ep = ucp_wireup_ep_extract_next_ep(&wireup_ep->super.super);
+    } else {
+        wireup_msg_ep     = wireup_ep->aux_ep;
+        wireup_ep->aux_ep = NULL;
+    }
+
+    ucs_assert(wireup_msg_ep != NULL);
+    return wireup_msg_ep;
+}
+
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);

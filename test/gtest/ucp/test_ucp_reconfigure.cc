@@ -98,7 +98,10 @@ protected:
                                                               dc_count * num_paths :
                                                              common_num_lanes;
 
-            EXPECT_EQ(reused_count(), expected_reused);
+            EXPECT_LE(reused_count(), expected_reused);
+            if (expected_reused > 0) {
+                EXPECT_GE(reused_count(), expected_reused - 1);
+            }
 
             const auto config = ucp_ep_config(m_ep);
 
@@ -422,7 +425,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse,
     reconf_ep.verify(m_dc_disabled_devs);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse_wireup,
+UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse_switch_wireup_lane,
                      is_self() || ucs::has_roce_devices(),
                      "RESOLVE_REMOTE_EP_ID=y")
 {
