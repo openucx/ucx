@@ -1663,7 +1663,7 @@ UCS_TEST_F(test_piecewise_func, add_inplace) {
 }
 
 UCS_TEST_F(test_piecewise_func, add_range_random) {
-    constexpr size_t segmetns_num = 10;
+    constexpr size_t segments_num = 10;
     constexpr size_t test_num     = 100;
 
     for (size_t test_it = 0; test_it < test_num; ++test_it) {
@@ -1677,7 +1677,7 @@ UCS_TEST_F(test_piecewise_func, add_range_random) {
         }
 
         std::vector<segment> segments;
-        for (size_t i = 0; i < segmetns_num; ++i) {
+        for (size_t i = 0; i < segments_num; ++i) {
             auto seg = get_random_segment(128);
 
             ASSERT_UCS_OK(ucs_piecewise_func_add_range(&pw_func, seg.start,
