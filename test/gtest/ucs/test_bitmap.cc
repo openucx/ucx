@@ -304,6 +304,12 @@ public:
 protected:
     using bitmap_t = ucs_static_bitmap_s(128);
 
+    void copy_bitmap(bitmap_t *m_bitmap, uint64_t *dest)
+    {
+        static const size_t num_words = UCS_STATIC_BITMAP_NUM_WORDS(*m_bitmap);
+        ucs_bitmap_bits_copy(m_bitmap->bits, num_words, dest, num_words);
+    }
+
     void test_set_get_unset(uint64_t offset)
     {
         UCS_STATIC_BITMAP_SET(&m_bitmap, offset);
@@ -321,7 +327,78 @@ protected:
 
 protected:
     bitmap_t m_bitmap;
+
+    static void
+    set(bitmap_t &bitmap, const std::initializer_list<size_t> &offsets)
+    {
+        for (auto offset : offsets) {
+            UCS_STATIC_BITMAP_SET(&bitmap, offset);
+        }
+    }
 };
+
+UCS_TEST_F(test_static_bitmap, test_popcount) {
+    int popcount = UCS_STATIC_BITMAP_POPCOUNT(m_bitmap);
+    EXPECT_EQ(0, popcount);
+    set(m_bitmap, {12, 53, 71, 110});
+    popcount = UCS_STATIC_BITMAP_POPCOUNT(m_bitmap);
+    EXPECT_EQ(4, popcount);
+}
+
+UCS_TEST_F(test_static_bitmap, test_popcount_upto_index) {
+    int popcount;
+    set(m_bitmap, {17, 71, 121});
+    popcount = UCS_STATIC_BITMAP_POPCOUNT_UPTO_INDEX(m_bitmap, 110);
+    EXPECT_EQ(2, popcount);
+
+    popcount = UCS_STATIC_BITMAP_POPCOUNT_UPTO_INDEX(m_bitmap, 20);
+    EXPECT_EQ(1, popcount);
+}
+
+UCS_TEST_F(test_static_bitmap, test_mask) {
+    /* coverity[unsigned_compare] */
+    UCS_STATIC_BITMAP_MASK(&m_bitmap, 0);
+    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(m_bitmap));
+    UCS_STATIC_BITMAP_SET(&m_bitmap, 64 + 42);
+    UCS_STATIC_BITMAP_MASK(&m_bitmap, 64 + 42);
+
+    EXPECT_EQ(UINT64_MAX, m_bitmap.bits[0]);
+    EXPECT_EQ(UCS_MASK(42), m_bitmap.bits[1]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_set_all) {
+    UCS_STATIC_BITMAP_SET_ALL(&m_bitmap);
+    EXPECT_EQ(UINT64_MAX, m_bitmap.bits[0]);
+    EXPECT_EQ(UINT64_MAX, m_bitmap.bits[1]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_ffs) {
+    size_t bit_index;
+
+    bit_index = UCS_STATIC_BITMAP_FFS(m_bitmap);
+    EXPECT_EQ(128, bit_index);
+
+    set(m_bitmap, {90, 100});
+    bit_index = UCS_STATIC_BITMAP_FFS(m_bitmap);
+    EXPECT_EQ(90, bit_index);
+
+    UCS_STATIC_BITMAP_RESET_ALL(&m_bitmap);
+    set(m_bitmap, {0});
+    bit_index = UCS_STATIC_BITMAP_FFS(m_bitmap);
+    EXPECT_EQ(0, bit_index);
+
+    UCS_STATIC_BITMAP_RESET_ALL(&m_bitmap);
+    set(m_bitmap, {64});
+    bit_index = UCS_STATIC_BITMAP_FFS(m_bitmap);
+    EXPECT_EQ(64, bit_index);
+}
+
+UCS_TEST_F(test_static_bitmap, test_is_zero) {
+    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(m_bitmap));
+
+    set(m_bitmap, {71});
+    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(m_bitmap));
+}
 
 UCS_TEST_F(test_static_bitmap, test_get_set_clear)
 {
@@ -338,6 +415,148 @@ UCS_TEST_F(test_static_bitmap, test_get_set_clear)
     for (int i = 0; i < 128; i++) {
         EXPECT_EQ(0, UCS_STATIC_BITMAP_GET(m_bitmap, i));
     }
+}
+
+UCS_TEST_F(test_static_bitmap, test_foreach)
+{
+    uint64_t bitmap_words[2] = {};
+
+    set(m_bitmap, {1, 25, 61});
+
+    UCS_STATIC_BITMAP_SET(&m_bitmap, UCS_BITMAP_BITS_IN_WORD + 0);
+    UCS_STATIC_BITMAP_SET(&m_bitmap, UCS_BITMAP_BITS_IN_WORD + 37);
+    UCS_STATIC_BITMAP_SET(&m_bitmap, UCS_BITMAP_BITS_IN_WORD + 58);
+
+    copy_bitmap(&m_bitmap, bitmap_words);
+
+    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(25) | UCS_BIT(61), bitmap_words[0]);
+    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(37) | UCS_BIT(58), bitmap_words[1]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_not)
+{
+    bitmap_t bitmap2;
+
+    set(m_bitmap, {1});
+    bitmap2 = UCS_STATIC_BITMAP_NOT(m_bitmap);
+    UCS_STATIC_BITMAP_NOT_INPLACE(&m_bitmap);
+
+    EXPECT_EQ(-3ull, m_bitmap.bits[0]);
+    EXPECT_EQ(UINT64_MAX, m_bitmap.bits[1]);
+    EXPECT_EQ(-3ull, bitmap2.bits[0]);
+    EXPECT_EQ(UINT64_MAX, bitmap2.bits[1]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_and)
+{
+    bitmap_t bitmap2, bitmap3;
+
+    UCS_STATIC_BITMAP_RESET_ALL(&bitmap2);
+    set(m_bitmap,
+        {1, UCS_BITMAP_BITS_IN_WORD + 1, UCS_BITMAP_BITS_IN_WORD + 16});
+    set(bitmap2,
+        {25, UCS_BITMAP_BITS_IN_WORD + 1, UCS_BITMAP_BITS_IN_WORD + 30});
+    bitmap3 = UCS_STATIC_BITMAP_AND(m_bitmap, bitmap2);
+    UCS_STATIC_BITMAP_AND_INPLACE(&m_bitmap, bitmap2);
+
+    EXPECT_EQ(0, m_bitmap.bits[0]);
+    EXPECT_EQ(UCS_BIT(1), m_bitmap.bits[1]);
+    EXPECT_EQ(0, bitmap3.bits[0]);
+    EXPECT_EQ(UCS_BIT(1), bitmap3.bits[1]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_or)
+{
+    bitmap_t bitmap2, bitmap3;
+
+    UCS_STATIC_BITMAP_RESET_ALL(&bitmap2);
+    set(m_bitmap,
+        {1, UCS_BITMAP_BITS_IN_WORD + 1, UCS_BITMAP_BITS_IN_WORD + 16});
+    set(bitmap2,
+        {25, UCS_BITMAP_BITS_IN_WORD + 1, UCS_BITMAP_BITS_IN_WORD + 30});
+    bitmap3 = UCS_STATIC_BITMAP_OR(m_bitmap, bitmap2);
+    UCS_STATIC_BITMAP_OR_INPLACE(&m_bitmap, bitmap2);
+
+    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(25), m_bitmap.bits[0]);
+    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(16) | UCS_BIT(30), m_bitmap.bits[1]);
+    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(25), bitmap3.bits[0]);
+    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(16) | UCS_BIT(30), bitmap3.bits[1]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_xor) {
+    bitmap_t bitmap2 = UCS_STATIC_BITMAP_ZERO_INITIALIZER,
+             bitmap3 = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+
+    m_bitmap.bits[0] = 1;
+    m_bitmap.bits[1] = UINT64_MAX;
+    bitmap2.bits[0]  = UINT64_MAX;
+    bitmap2.bits[1]  = 1;
+    bitmap3          = UCS_STATIC_BITMAP_XOR(m_bitmap, bitmap2);
+    UCS_STATIC_BITMAP_XOR_INPLACE(&m_bitmap, bitmap2);
+
+    EXPECT_EQ(-2, m_bitmap.bits[0]);
+    EXPECT_EQ(-2, m_bitmap.bits[1]);
+    EXPECT_EQ(-2, bitmap3.bits[0]);
+    EXPECT_EQ(-2, bitmap3.bits[1]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_copy)
+{
+    bitmap_t bitmap2 = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+
+    set(m_bitmap, {1, 25, 61, UCS_BITMAP_BITS_IN_WORD,
+                   UCS_BITMAP_BITS_IN_WORD + 37, UCS_BITMAP_BITS_IN_WORD + 58});
+
+    UCS_STATIC_BITMAP_COPY(&bitmap2, m_bitmap);
+
+    EXPECT_EQ(UCS_BIT(1) | UCS_BIT(25) | UCS_BIT(61), m_bitmap.bits[0]);
+    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(37) | UCS_BIT(58), m_bitmap.bits[1]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_for_each_bit)
+{
+    std::vector<int> bits;
+    int bit_index;
+
+    set(m_bitmap, {0, 25, 64, 100});
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(bit_index, &m_bitmap) {
+        bits.push_back(bit_index);
+    }
+
+    EXPECT_EQ(4u, bits.size());
+    EXPECT_EQ(0, bits[0]);
+    EXPECT_EQ(25, bits[1]);
+    EXPECT_EQ(64, bits[2]);
+    EXPECT_EQ(100, bits[3]);
+
+    /* Test FOREACH on an empty m_bitmap */
+    UCS_STATIC_BITMAP_RESET_ALL(&m_bitmap);
+
+    bits.clear();
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(bit_index, &m_bitmap) {
+        bits.push_back(bit_index);
+    }
+    EXPECT_TRUE(bits.empty());
+}
+
+UCS_TEST_F(test_static_bitmap, test_for_each_bit_single_word) {
+    std::vector<int> bits;
+    int bit_index;
+
+    set(m_bitmap, {0, 25, 104});
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(bit_index, &m_bitmap) {
+        bits.push_back(bit_index);
+    }
+
+    EXPECT_EQ(3, bits.size());
+    EXPECT_EQ(0, bits[0]);
+    EXPECT_EQ(25, bits[1]);
+    EXPECT_EQ(104, bits[2]);
+}
+
+UCS_TEST_F(test_static_bitmap, test_compose) {
+    /* The result is irrelevant, the code only needs to compile */
+    UCS_STATIC_BITMAP_AND(UCS_STATIC_BITMAP_NOT(m_bitmap), m_bitmap);
 }
 
 class test_dynamic_bitmap : public ucs::test {

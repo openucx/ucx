@@ -27,7 +27,7 @@ ucp_tag_rndv_offload_proto_init(const ucp_proto_init_params_t *init_params)
        .super.super         = *init_params,
        .super.latency       = 0,
        .super.overhead      = 40e-9,
-       .super.cfg_thresh    = context->config.ext.rndv_thresh,
+       .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
        .super.cfg_priority  = 60,
        .super.min_length    = ucp_ep_tag_offload_min_rndv_thresh(
                                   context, init_params->ep_config_key),
@@ -158,7 +158,7 @@ ucp_tag_rndv_offload_sw_proto_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = 40e-9,
-        .super.cfg_thresh    = context->config.ext.rndv_thresh,
+        .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
         .super.cfg_priority  = 60,
         .super.min_length    = ucp_ep_tag_offload_min_rndv_thresh(
                                    context, init_params->ep_config_key),

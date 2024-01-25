@@ -745,6 +745,24 @@ static UCS_F_ALWAYS_INLINE size_t ucs_bitmap_bits_popcount_upto_index(
 }
 
 
+/* Helper function to copy between bitmap bit arrays. Destination size must
+   be at least the source size. 'src' argument comes first to enable using
+   this function with UCS_STATIC_BITMAP_FUNC_CALL macro. */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_copy(const ucs_bitmap_word_t *src_bits, size_t src_num_words,
+                     ucs_bitmap_word_t *dst_bits, size_t dst_num_words)
+{
+    UCS_BITMAP_CHECK_DST_NUM_WORDS(dst_num_words, src_num_words);
+    /* Copy from source to destination */
+    memmove(dst_bits, src_bits, src_num_words * sizeof(ucs_bitmap_word_t));
+    if (dst_num_words > src_num_words) {
+        /* Reset remaining bits in destination */
+        ucs_bitmap_bits_reset_all(dst_bits + src_num_words,
+                                  dst_num_words - src_num_words);
+    }
+}
+
+
 /* Helper function to set the bitmap array to a mask up to the given index */
 static UCS_F_ALWAYS_INLINE void ucs_bitmap_bits_mask(ucs_bitmap_word_t *bits,
                                                      size_t num_words,

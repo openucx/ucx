@@ -88,6 +88,9 @@ public:
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
 
+    /* returns whether ROCM device supports hipMallocPitch */
+    static bool is_rocm_malloc_pitch_supported();
+
     /* Return free memory on the BAR1 / GPU. If GPU is not used
      * SIZE_MAX is returned */
     static size_t get_bar1_free_size();
