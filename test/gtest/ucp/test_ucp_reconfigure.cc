@@ -83,7 +83,29 @@ protected:
             return dc_count;
         }
 
-        void verify(const std::vector<ucp_rsc_index_t> &dc_disabled_devs,
+        bool is_dc_enabled(const std::vector<ucp_rsc_index_t> &disabled_devs,
+                           ucp_rsc_index_t dev_index)
+        {
+            auto it = std::find(disabled_devs.begin(), disabled_devs.end(),
+                                dev_index);
+            if (it != disabled_devs.end()) {
+                return false;
+            }
+
+            ucp_rsc_index_t tl_id;
+            UCS_BITMAP_FOR_EACH_BIT(m_ep->worker->context->tl_bitmap, tl_id) {
+                auto resource = &m_ep->worker->context->tl_rscs[tl_id];
+                if (resource->dev_index == dev_index) {
+                    if (std::string(resource->tl_rsc.tl_name) == "dc_mlx5") {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        void verify(const std::vector<ucp_rsc_index_t> &disabled_devs,
                     bool reconfigured = true)
         {
             bool is_reconfigured = (m_ep->cfg_index != m_cfg_index);
@@ -118,12 +140,9 @@ protected:
                 auto resource =
                         &m_ep->worker->context
                                  ->tl_rscs[ucp_ep_get_rsc_index(m_ep, lane)];
-                bool dc_disabled = std::find(dc_disabled_devs.begin(),
-                                             dc_disabled_devs.end(),
-                                             resource->dev_index) !=
-                                   dc_disabled_devs.end();
 
-                if (expect_scale && !dc_disabled) {
+                if (expect_scale &&
+                    is_dc_enabled(disabled_devs, resource->dev_index)) {
                     EXPECT_TRUE(is_tl_scalable(transport));
                 } else {
                     EXPECT_STREQ("rc_mlx5", transport);
@@ -288,7 +307,7 @@ protected:
     std::string m_sbuf;
     std::string m_rbuf;
     bool m_reconfigure;
-    std::vector<ucp_rsc_index_t> m_dc_disabled_devs;
+    std::vector<ucp_rsc_index_t> m_disabled_devs;
 
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -392,7 +411,7 @@ public:
 
             if ((dc_count - 1) == dev_index) {
                 UCS_BITMAP_UNSET(tl_bitmap, tl_id);
-                m_dc_disabled_devs.push_back(resource->dev_index);
+                m_disabled_devs.push_back(resource->dev_index);
                 break;
             }
         }
@@ -406,7 +425,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_all_reuse, is_self())
 {
     set_scale(start_scaled());
     auto reconf_ep = race_connect();
-    reconf_ep.verify(m_dc_disabled_devs, false);
+    reconf_ep.verify(m_disabled_devs, false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_all_reuse_part_scale, is_self())
@@ -414,7 +433,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_all_reuse_part_scale, is_self())
     disable_dc_dev(0);
     set_scale(start_scaled());
     auto reconf_ep = race_connect();
-    reconf_ep.verify(m_dc_disabled_devs, false);
+    reconf_ep.verify(m_disabled_devs, false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse,
@@ -422,7 +441,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse,
 {
     set_scale(start_scaled(), true);
     auto reconf_ep = race_connect();
-    reconf_ep.verify(m_dc_disabled_devs);
+    reconf_ep.verify(m_disabled_devs);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse_switch_wireup_lane,
@@ -431,7 +450,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_no_reuse_switch_wireup_lane,
 {
     set_scale(start_scaled(), true);
     auto reconf_ep = race_connect();
-    reconf_ep.verify(m_dc_disabled_devs);
+    reconf_ep.verify(m_disabled_devs);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_part_reuse,
@@ -445,7 +464,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_reconfigure, race_part_reuse,
     disable_dc_dev(0);
     set_scale(start_scaled(), true);
     auto reconf_ep = race_connect();
-    reconf_ep.verify(m_dc_disabled_devs);
+    reconf_ep.verify(m_disabled_devs);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, ib, "ib")
