@@ -163,6 +163,10 @@ ucs_linear_func_intersect(ucs_linear_func_t func1, ucs_linear_func_t func2,
 {
     double x;
 
+    if (func1.m == func2.m) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     x = (func2.c - func1.c) / (func1.m - func2.m);
     if (isnan(x) || isinf(x)) {
         return UCS_ERR_INVALID_PARAM;

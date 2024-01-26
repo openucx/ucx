@@ -82,7 +82,8 @@ ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
 
     /* Set the performance estimation as worse than any other protocol */
     perf_range->max_length = SIZE_MAX;
-    ucp_proto_perf_set(perf_range->perf, ucs_linear_func_make(INFINITY, 0));
+    ucp_proto_perf_set(perf_range->perf, ucs_linear_func_make(INFINITY,
+                                                              INFINITY));
 
     perf_range->node = ucp_proto_perf_node_new_data("dummy", "");
     return UCS_OK;
