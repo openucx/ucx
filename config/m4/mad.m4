@@ -9,9 +9,9 @@
 #
 AC_ARG_WITH([mad],
             [AS_HELP_STRING([--with-mad=(DIR)],
-                [Enable Infiniband MAD support (default is guess).])],
+                [Enable Infiniband MAD support (default is no).])],
             [],
-            [with_mad=guess])
+            [with_mad=no])
 
 mad_happy=no
 AS_IF([test "x$with_mad" == "xno"],
