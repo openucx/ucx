@@ -76,6 +76,8 @@ test-driver
 src/ucp/api/ucp_version.h
 src/ucp/core/ucp_version.c
 test/mpi/run_mpi.sh
+test/mpi/shmem_pingpong
+test/mpi/test_memhooks
 *.tap
 valgrind.xml
 tags
