@@ -158,6 +158,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
     CUresult result;
     ucs_status_t status;
 
+    if (!uct_cuda_base_is_context_active()) {
+        ucs_debug("attempt to register memory without active context");
+        return uct_md_dummy_mem_reg(md, address, length, params, memh_p);
+    }
+
     result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                    (CUdeviceptr)(address));
     if ((result == CUDA_SUCCESS) && ((memType == CU_MEMORYTYPE_HOST)    ||
