@@ -417,6 +417,13 @@ stages:
         test_perf: 0
         container: ubuntu22_cuda12
         asan_check: yes
+    - template: tests.yml
+      parameters:
+        name: new
+        demands: ucx_new -equals yes
+        test_perf: 0
+        container: ubuntu2204
+        asan_check: yes
 
   - stage: Valgrind
     dependsOn: [Static_check]
