@@ -137,31 +137,6 @@ module_unload() {
 }
 
 #
-# try load cuda modules if nvidia driver is installed
-#
-try_load_cuda_env() {
-	num_gpus=0
-	have_cuda=no
-	have_gdrcopy=no
-	if [ -f "/proc/driver/nvidia/version" ]; then
-		have_cuda=yes
-		have_gdrcopy=yes
-		module_load $CUDA_MODULE    || have_cuda=no
-		module_load $GDRCOPY_MODULE || have_gdrcopy=no
-		num_gpus=$(nvidia-smi -L | wc -l)
-		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
-	fi
-}
-
-#
-# Alwasy succeeds
-#
-unload_cuda_env() {
-	module_unload $CUDA_MODULE
-	module_unload $GDRCOPY_MODULE
-}
-
-#
 # Get list IB devices
 #
 get_ib_devices() {

@@ -425,15 +425,10 @@ stages:
         container: ubuntu2204
         asan_check: yes
 
+
   - stage: Valgrind
     dependsOn: [Static_check]
     jobs:
-    - template: tests.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-        test_perf: 0
-        valgrind_check: yes
     - template: tests.yml
       parameters:
         name: roce
@@ -446,12 +441,6 @@ stages:
         demands: ucx_roce -equals yes
         test_perf: 0
         proto_enable: no
-        valgrind_check: yes
-    - template: tests.yml
-      parameters:
-        name: BlueField
-        demands: ucx_bf -equals yes
-        test_perf: 0
         valgrind_check: yes
 
 #  - stage: Cuda_compatible

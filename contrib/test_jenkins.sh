@@ -24,6 +24,7 @@
 #  - worker   : number of current parallel executor
 #
 
+source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
@@ -1082,9 +1083,6 @@ set_ucx_common_test_env() {
 #
 run_tests() {
 	export UCX_PROTO_REQUEST_RESET=y
-
-	# load cuda env only if GPU available for remaining tests
-	try_load_cuda_env
 
 	# all are running mpi tests
 	run_mpi_tests
