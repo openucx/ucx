@@ -46,6 +46,10 @@ ucp_proto_bcopy_send_func_status(ssize_t packed_size)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_msg_multi_request_init(ucp_request_t *req)
 {
+    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
+        return;
+    }
+
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
 }
 
@@ -156,6 +160,13 @@ ucp_proto_common_zcopy_adjust_min_frag(ucp_request_t *req, size_t min_frag,
                                                   iovcnt, offset_p);
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_is_progress_wrapper_enabled(ucp_worker_h worker)
+{
+    return ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
+           worker->context->config.ext.usage_tracker_enable;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
 {
@@ -170,7 +181,7 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
     req->send.proto_stage = proto_stage;
 
     /* Set pointer to progress function */
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+    if (ucp_proto_is_progress_wrapper_enabled(req->send.ep->worker)) {
         req->send.uct.func = ucp_request_progress_wrapper;
     } else {
         req->send.uct.func = proto->progress[proto_stage];

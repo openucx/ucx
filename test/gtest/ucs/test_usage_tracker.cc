@@ -33,7 +33,7 @@ protected:
         }
     }
 
-    static void update_cb(void *entry, void *arg)
+    static void update_cb(void *entry, void *arg, int is_progress)
     {
         auto results = reinterpret_cast<entries_vec_t*>(arg);
         results->push_back((uint64_t)entry);
@@ -79,6 +79,7 @@ protected:
     entries_vec_t              m_promoted;
     entries_vec_t              m_demoted;
     ucs_usage_tracker_h        m_usage_tracker;
+    static const unsigned      m_min_progress_for_promote = 3;
 };
 
 /* Tests promotion of entries */
@@ -116,8 +117,10 @@ UCS_TEST_F(test_usage_tracker, stability) {
     }
 
     /* Initial entries inserted into usage tracker. */
-    touch_all(elements1);
-    ucs_usage_tracker_progress(m_usage_tracker);
+    for (int i = 0; i < m_min_progress_for_promote; ++i) {
+        touch_all(elements1);
+        ucs_usage_tracker_progress(m_usage_tracker);
+    }
 
     /* New entries are inserted, but removed immediately because the score
      * is not high enough (diff is too small). */
@@ -151,7 +154,7 @@ UCS_TEST_F(test_usage_tracker, demote) {
 
     /* Add more entries and progress enough times so that the old entries will
      * be removed. */
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 20; ++i) {
         ucs_usage_tracker_progress(m_usage_tracker);
         touch_all(elements2);
     }

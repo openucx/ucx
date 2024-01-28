@@ -106,3 +106,11 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
     *length_p = total_iov_length;
     return UCS_OK;
 }
+
+int uct_knem_ep_is_connected(const uct_ep_h tl_ep,
+                             const uct_ep_is_connected_params_t *params)
+{
+    UCT_EP_IS_CONNECTED_CHECK_DEV_ADDR(params);
+    return uct_base_iface_is_reachable(tl_ep->iface, params->device_addr,
+                                       params->iface_addr);
+}

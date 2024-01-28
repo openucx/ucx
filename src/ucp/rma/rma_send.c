@@ -226,6 +226,10 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
         return UCS_ERR_NO_RESOURCE;
     }
 
+    if (ucp_proto_is_progress_wrapper_enabled(ep->worker)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     rkey_config = ucp_rkey_config(ep->worker, rkey);
     if (ucs_unlikely(!ucp_proto_select_is_short(ep, &rkey_config->put_short,
                                                 length))) {

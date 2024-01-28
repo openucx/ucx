@@ -226,6 +226,12 @@ ucp_worker_common_address_pack_flags(ucp_worker_h worker)
     return pack_flags;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_usage_tracker_h
+ucp_worker_get_usage_tracker(ucp_worker_h worker)
+{
+    return worker->usage_tracker.handle;
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 ucp_worker_default_address_pack_flags(ucp_worker_h worker)
 {

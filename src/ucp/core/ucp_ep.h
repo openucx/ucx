@@ -105,7 +105,7 @@ enum {
                                                         while merging pending queues */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    /* 11 bit is vacant for a flag */
+    UCP_EP_FLAG_LANES_DISCARDED        = UCS_BIT(11),/* Old uct eps were discarded */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or
@@ -735,10 +735,14 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      const ucp_ep_config_key_t *key2,
                                      ucp_lane_index_t lane2);
 
-void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_rsc_index_t *dst_rsc_indices1,
+ucp_lane_index_t ucp_ep_get_remote_lane(const uct_ep_h uct_ep,
+                                        const ucp_address_entry_t *addr_entry);
+
+void ucp_ep_config_lanes_intersect(const ucp_ep_h ep,
+                                   const ucp_unpacked_address_t *remote_address,
+                                   const unsigned *addr_indices,
+                                   const ucp_ep_config_key_t *key1,
                                    const ucp_ep_config_key_t *key2,
-                                   const ucp_rsc_index_t *dst_rsc_indices2,
                                    ucp_lane_index_t *lane_map);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
@@ -884,5 +888,28 @@ ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
+
+/**
+ * @brief Callback to notify about ep restart completion.
+ *
+ * @param [in]  ep       Endpoint which completed restart operation.
+ * @param [in]  arg      User argument to be passed to the callback.
+ */
+typedef void (*ucp_ep_restart_completion_cb_t)(ucp_ep_h ep, void *arg);
+
+/**
+ * @brief Restarts all pending requests by selecting a new protocol for each
+ *        one and reset old protocol.
+ *
+ * @param [in] ep   Endpoint object.
+ * @param [in] cb   Callback to be called upon completion.
+ * @param [in] arg  Argument to be passed to callback.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_pending_schedule_restart(ucp_ep_h ep,
+                                             ucs_queue_head_t *tmp_pending_queue,
+                                             ucp_ep_restart_completion_cb_t cb,
+                                             void *arg);
 
 #endif

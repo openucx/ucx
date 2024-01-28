@@ -414,6 +414,23 @@ ucp_proto_rndv_put_zcopy_query(const ucp_proto_query_params_t *params,
                       UCP_PROTO_ZCOPY_DESC, put_desc);
 }
 
+static ucs_status_t ucp_proto_rndv_put_zcopy_reset(ucp_request_t *request)
+{
+    const ucp_proto_rndv_put_priv_t *rpriv = request->send.proto_config->priv;
+    ucp_datatype_iter_t *dt_iter           = &request->send.state.dt_iter;
+    ucp_lane_map_t acked_map;
+
+    if (request->send.rndv.put.atp_map != 0) {
+        acked_map       = request->send.rndv.put.atp_map ^ rpriv->atp_map;
+        dt_iter->offset = ucs_popcount(acked_map);
+    } else {
+        dt_iter->offset = dt_iter->length;
+    }
+
+    request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_put_zcopy_proto = {
     .name     = "rndv/put/zcopy",
     .desc     = NULL,
@@ -427,7 +444,7 @@ ucp_proto_t ucp_rndv_put_zcopy_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_put_zcopy_reset
 };
 
 

@@ -21,6 +21,7 @@
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/datastruct/ptr_map.h>
+#include <ucs/datastruct/usage_tracker.h>
 #include <ucs/arch/bitops.h>
 
 #include <ucs/datastruct/array.h>
@@ -364,6 +365,15 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    struct {
+        int                          running;
+        ucs_usage_tracker_h          handle;
+        unsigned                     iter_count;
+        unsigned                     samples_count;
+        ucs_time_t                   last_round;
+        uct_worker_cb_id_t           cb_id;
+    } usage_tracker;
 } ucp_worker_t;
 
 
@@ -412,6 +422,8 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                        void *discarded_cb_arg);
 
 void ucp_worker_vfs_refresh(void *obj);
+
+void ucp_worker_track_ep_usage(ucp_worker_h worker, ucp_ep_h ep);
 
 ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 

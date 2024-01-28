@@ -135,12 +135,11 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, disconnect_after_send,
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_uct_ep, is_connected,
-                     !has_ib() && !has_transport("tcp"))
+UCS_TEST_P(test_uct_ep, is_connected)
 {
     uct_ep_is_connected_params_t params;
-    uct_iface_attr_t iface_attr;
     std::string dev_addr, ep_addr, iface_addr;
+    uct_iface_attr_t iface_attr;
     entity *e1, *e2;
 
     create_sender();
@@ -177,7 +176,12 @@ UCS_TEST_SKIP_COND_P(test_uct_ep, is_connected,
     }
 
     EXPECT_TRUE(uct_ep_is_connected(m_sender->ep(0), &params));
-    EXPECT_FALSE(uct_ep_is_connected(e1->ep(0), &params));
+
+    if (!has_cma() && !has_transport("knem")) {
+        /* For knem,cma transports, is_connect will always return true if 
+           it's the same machine. */
+        EXPECT_FALSE(uct_ep_is_connected(e1->ep(0), &params));
+    }
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_ep, destroy_entity_after_send,

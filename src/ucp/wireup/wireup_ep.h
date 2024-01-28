@@ -57,9 +57,6 @@ struct ucp_wireup_ep {
     unsigned                  ep_init_flags; /**< UCP wireup EP init flags */
     /**< TLs which are available on client side resolved device */
     ucp_tl_bitmap_t           cm_resolve_tl_bitmap;
-    /**< Destination resource indicies used for checking intersection between
-         two configurations in case of CM */
-    ucp_rsc_index_t           dst_rsc_indices[UCP_MAX_LANES];
 };
 
 
@@ -67,7 +64,6 @@ struct ucp_wireup_ep {
  * Create a proxy endpoint for wireup.
  */
 ucs_status_t ucp_wireup_ep_create(ucp_ep_h ep,
-                                  const ucp_rsc_index_t *dst_rsc_indices,
                                   uct_ep_h *ep_p);
 
 
@@ -124,6 +120,8 @@ int ucp_wireup_aux_ep_is_owner(ucp_wireup_ep_t *wireup_ep, uct_ep_h owned_ep);
 int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
+
+uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep);
 
 uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep);
 

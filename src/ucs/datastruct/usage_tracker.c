@@ -180,13 +180,15 @@ static int ucs_usage_tracker_compare(const void *elem_ptr1,
     return (elem1->key > elem2->key) ? 1 : -1;
 }
 
-/* Promote/Demote entires base on the latest score, and triggers user
+/* Promote/demote entries based on the latest score and trigger user
   * callback accordingly. */
-static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
+static void
+ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker, int is_progress)
 {
-    ucs_usage_tracker_params_t *params = &usage_tracker->params;
-    khint_t elems_count                = kh_size(&usage_tracker->hash);
-    size_t elem_index                  = 0;
+    static const double min_promote_score = 0.4;
+    ucs_usage_tracker_params_t *params    = &usage_tracker->params;
+    khint_t elems_count                   = kh_size(&usage_tracker->hash);
+    size_t elem_index                     = 0;
     ucs_usage_tracker_element_t **elems_array, *item;
     khiter_t iter;
     uint64_t key;
@@ -213,12 +215,14 @@ static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
     promote_count = ucs_min(params->promote_thresh, elems_count);
     for (elem_index = 0; elem_index < promote_count; ++elem_index) {
         item = elems_array[elem_index];
-        if (item->promoted) {
+
+        if (item->promoted ||
+            (ucs_usage_tracker_score(item) < min_promote_score)) {
             continue;
         }
 
         item->promoted = 1;
-        params->promote_cb(item->key, params->promote_arg);
+        params->promote_cb(item->key, params->promote_arg, is_progress);
     }
 
     for (elem_index = params->promote_capacity; elem_index < elems_count;
@@ -229,8 +233,8 @@ static void ucs_usage_tracker_promote(ucs_usage_tracker_h usage_tracker)
             continue;
         }
 
-        params->demote_cb(item->key, params->demote_arg);
         item->promoted = 0;
+        params->demote_cb(item->key, params->demote_arg, is_progress);
     }
 
     ucs_free(elems_array);
@@ -245,7 +249,7 @@ void ucs_usage_tracker_set_min_score(ucs_usage_tracker_h usage_tracker,
     elem->min_score = score;
 
     if (elem->min_score > elem->score) {
-        ucs_usage_tracker_promote(usage_tracker);
+        ucs_usage_tracker_promote(usage_tracker, 0);
     }
 }
 
@@ -270,6 +274,6 @@ void ucs_usage_tracker_progress(ucs_usage_tracker_h usage_tracker)
         ucs_usage_tracker_put(usage_tracker, *item);
     }
 
-    ucs_usage_tracker_promote(usage_tracker);
+    ucs_usage_tracker_promote(usage_tracker, 1);
     ucs_lru_reset(usage_tracker->lru);
 }

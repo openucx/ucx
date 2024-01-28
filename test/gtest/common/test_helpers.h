@@ -333,6 +333,11 @@ std::string get_rdmacm_netdev(const char *ifa_name);
 
 
 /**
+ * Checks if any RoCE device exist.
+ */
+bool has_roce_devices();
+
+/**
  * Check if the given network device is supported by rdmacm.
  */
 bool is_rdmacm_netdev(const char *ifa_name);
