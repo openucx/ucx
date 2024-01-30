@@ -5,6 +5,7 @@
  */
 
 #include <uct/test_md.h>
+#include <uct/test_p2p_rma.h>
 
 extern "C" {
 #include <ucs/sys/ptr_arith.h>
@@ -143,3 +144,57 @@ UCS_TEST_P(test_switch_cuda_device, detect_mem_type_cuda_fabric)
 #endif
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_switch_cuda_device, cuda_cpy);
+
+class test_p2p_create_destroy_ctx : public uct_p2p_rma_test {
+public:
+    void test_xfer(send_func_t send, size_t length, unsigned flags,
+                   ucs_memory_type_t mem_type) override;
+};
+
+void test_p2p_create_destroy_ctx::test_xfer(send_func_t send, size_t length,
+                                            unsigned flags,
+                                            ucs_memory_type_t mem_type)
+{
+    int num_devices;
+    ASSERT_EQ(cuDeviceGetCount(&num_devices), CUDA_SUCCESS);
+
+    if (num_devices < 1) {
+        UCS_TEST_SKIP_R("no cuda devices available");
+    }
+
+    CUdevice device;
+    ASSERT_EQ(cuDeviceGet(&device, 0), CUDA_SUCCESS);
+
+    CUcontext ctx;
+    ASSERT_EQ(cuCtxCreate(&ctx, 0, device), CUDA_SUCCESS);
+    uct_p2p_rma_test::test_xfer(send, length, flags, mem_type);
+    EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
+}
+
+UCS_TEST_P(test_p2p_create_destroy_ctx, put_short)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_short), 1,
+              TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_create_destroy_ctx, get_short)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_short), 1,
+              TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_create_destroy_ctx, put_zcopy)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
+              sender().iface_attr().cap.put.min_zcopy + 1,
+              TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_p2p_create_destroy_ctx, get_zcopy)
+{
+    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+              sender().iface_attr().cap.get.min_zcopy + 1,
+              TEST_UCT_FLAG_RECV_ZCOPY, UCS_MEMORY_TYPE_CUDA);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_p2p_create_destroy_ctx, cuda_copy)
