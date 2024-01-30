@@ -110,6 +110,8 @@ typedef struct ucp_context_config {
     unsigned                               max_rndv_lanes;
     /** RMA multi-lane support */
     unsigned                               max_rma_lanes;
+    /** Lane batch size when adding RMA bw lanes iteratively over mem types */
+    unsigned                               rma_bw_lanes_batch;
     /** Minimum allowed chunk size when splitting rndv message over multiple
      *  lanes */
     size_t                                 min_rndv_chunk_size;

@@ -236,6 +236,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "multiple rails. Must be greater than 0.",
    ucs_offsetof(ucp_context_config_t, min_rndv_chunk_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"RMA_BW_LANES_BATCH", UCS_PP_MAKE_STRING(UCP_PROTO_MAX_LANES),
+   "Add RMA bandwidth lanes in batches of this size iteratively over memory types",
+   ucs_offsetof(ucp_context_config_t, rma_bw_lanes_batch), UCS_CONFIG_TYPE_UINT},
+
   {"RMA_ZCOPY_MAX_SEG_SIZE", "auto",
    "Max size of a segment for rma/rndv zcopy.",
    ucs_offsetof(ucp_context_config_t, rma_zcopy_max_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
