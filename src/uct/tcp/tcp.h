@@ -60,6 +60,9 @@
 /* Maximal value for connection sequence number */
 #define UCT_TCP_CM_CONN_SN_MAX               UINT64_MAX
 
+/* A string to hold the pair of local and remote addresses */
+#define UCT_TCP_CM_SOCKADDR_STR_LEN          ((UCS_SOCKADDR_STRING_LEN * 2) + 32)
+
 /* The seconds the connection needs to remain idle before TCP starts sending
  * keepalive probes */
 #define UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE    10
