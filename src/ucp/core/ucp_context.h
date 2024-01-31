@@ -164,6 +164,11 @@ typedef struct ucp_context_config {
     char                                   *select_distance_md;
     /** Directory to write protocol selection information */
     char                                   *proto_info_dir;
+    /** Window size (WS) defines the contribution of single operation
+     *  performance into estimation of multiple operations performance:
+     *  (1 / WS) * single_op_estimation + ((WS - 1) / WS) * multi_op_estimation
+     */
+    unsigned                               proto_window_size;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
     /** Prefer native RMA transports for RMA/AMO protocols */

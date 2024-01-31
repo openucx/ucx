@@ -463,6 +463,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "directory.",
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
 
+  {"PROTO_WINDOW_SIZE", "64",
+    "Window size (WS) defines the contribution of single operation\n"
+    "performance into estimation of multiple operations performance:\n"
+    "(1 / WS) * single_op_estimation + ((WS - 1) / WS) * multi_op_estimation",
+    ucs_offsetof(ucp_context_config_t, proto_window_size),
+    UCS_CONFIG_TYPE_UINT},
+
   {"REG_NONBLOCK_MEM_TYPES", "",
    "Perform only non-blocking memory registration for these memory types:\n"
    "page registration may be deferred until it is accessed by the CPU or a transport.",
@@ -2058,6 +2065,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (context->config.ext.keepalive_interval == 0) {
         ucs_error("UCX_KEEPALIVE_INTERVAL value must be greater than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
+    if (context->config.ext.proto_window_size == 0) {
+        ucs_error("UCX_PROTO_WINDOW_SIZE value must be greater than 0");
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
     }

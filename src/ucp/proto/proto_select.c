@@ -60,6 +60,23 @@ ucp_proto_caps_range_find(const ucp_proto_caps_t *caps, size_t msg_length)
     return NULL;
 }
 
+static void
+ucp_proto_select_get_multi_op_perf(const ucp_proto_perf_range_t *range,
+                                   ucs_linear_func_t *proto_perf,
+                                   unsigned window_size)
+{
+    ucs_linear_func_t bias_func_single =
+            ucs_linear_func_make(0.0, 1.0 / window_size);
+    ucs_linear_func_t bias_func_multi =
+            ucs_linear_func_make(0.0, (window_size - 1.0) / window_size);
+
+    *proto_perf = ucs_linear_func_add(
+            ucs_linear_func_compose(bias_func_single,
+                                    range->perf[UCP_PROTO_PERF_TYPE_SINGLE]),
+            ucs_linear_func_compose(bias_func_multi,
+                                    range->perf[UCP_PROTO_PERF_TYPE_MULTI]));
+}
+
 /*
  * Fills 'perf_list' with candidate protocols for the next range, sets
  * *max_length_p to the end of that range, and *proto_mask_p to the mask of the
@@ -68,7 +85,7 @@ ucp_proto_caps_range_find(const ucp_proto_caps_t *caps, size_t msg_length)
 static ucs_status_t ucp_proto_thresholds_next_range(
         const ucp_proto_select_init_protocols_t *proto_init, size_t msg_length,
         ucp_proto_perf_list_t *perf_list, size_t *max_length_p,
-        uint64_t *proto_mask_p)
+        uint64_t *proto_mask_p, unsigned window_size)
 {
     const ucp_proto_select_param_t *select_param = proto_init->select_param;
     ucp_proto_id_mask_t valid_proto_mask, disabled_proto_mask;
@@ -111,7 +128,12 @@ static ucs_status_t ucp_proto_thresholds_next_range(
         }
 
         valid_proto_mask    |= UCS_BIT(proto_id);
-        proto_perf[proto_id] = range->perf[perf_type];
+        if (perf_type == UCP_PROTO_PERF_TYPE_MULTI) {
+            ucp_proto_select_get_multi_op_perf(range, &proto_perf[proto_id],
+                                               window_size);
+        } else {
+            proto_perf[proto_id] = range->perf[perf_type];
+        }
         max_length           = ucs_min(max_length, range->max_length);
 
         /* Apply user threshold configuration */
@@ -473,11 +495,11 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
 
 
 static ucs_status_t
-ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
-                                  ucp_proto_select_elem_t *select_elem,
+ucp_proto_select_elem_init_thresh(ucp_proto_select_elem_t *select_elem,
                                   ucp_proto_select_init_protocols_t *proto_init,
                                   ucp_worker_cfg_index_t ep_cfg_index,
-                                  ucp_worker_cfg_index_t rkey_cfg_index)
+                                  ucp_worker_cfg_index_t rkey_cfg_index,
+                                  unsigned window_size)
 {
     ucp_proto_thresh_t thresholds  = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucp_proto_ranges_t perf_ranges = UCS_ARRAY_DYNAMIC_INITIALIZER;
@@ -498,7 +520,7 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
 
         status = ucp_proto_thresholds_next_range(proto_init, msg_length,
                                                  &perf_list, &max_length,
-                                                 &proto_mask);
+                                                 &proto_mask, window_size);
         if (status != UCS_OK) {
             if (status == UCS_ERR_UNSUPPORTED) {
                 ucs_debug("no protocol for msg_length %zu", msg_length);
@@ -638,8 +660,9 @@ ucp_proto_select_elem_init(ucp_worker_h worker, int internal,
         goto out_free_proto_init;
     }
 
-    status = ucp_proto_select_elem_init_thresh(worker, select_elem, proto_init,
-                                               ep_cfg_index, rkey_cfg_index);
+    status = ucp_proto_select_elem_init_thresh(
+            select_elem, proto_init, ep_cfg_index, rkey_cfg_index,
+            worker->context->config.ext.proto_window_size);
     if (status != UCS_OK) {
         goto out_cleanup_proto_init;
     }
