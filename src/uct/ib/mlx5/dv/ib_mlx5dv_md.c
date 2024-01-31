@@ -2075,8 +2075,7 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     }
 
     ucs_assert(!(memh->super.flags & UCT_IB_MEM_MULTITHREADED));
-    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh->address,
-                                                  (uint64_t)memh->address, 0, 0,
+    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh->address, 0, 0, 0,
                                                   "exported-key",
                                                   &memh->mrs[UCT_IB_MR_DEFAULT],
                                                   &cross_mr, &exported_lkey);
