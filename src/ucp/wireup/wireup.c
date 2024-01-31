@@ -1032,6 +1032,7 @@ static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
     return !context->config.ext.proto_enable ||
            (context->config.features & UCP_FEATURE_STREAM) ||
            (ucp_ep_config(ep)->key.keepalive_lane == lane) ||
+           (ucp_ep_config(ep)->key.wireup_msg_lane == lane) ||
            (ep->flags & UCP_EP_FLAG_INTERNAL) ||
            (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
 }
