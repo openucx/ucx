@@ -14,8 +14,8 @@
 static ucs_status_t
 ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_perf_range_t *range0;
-    ucp_proto_caps_t caps;
+    ucp_proto_caps_t *caps         = init_params->caps;
+    ucp_proto_perf_range_t *range0 = &caps->ranges[0];
     ucs_status_t status;
 
     if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
@@ -24,12 +24,10 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
 
     *init_params->priv_size = sizeof(ucp_proto_rndv_ack_priv_t);
 
-    caps.cfg_thresh   = 0;
-    caps.cfg_priority = 1;
-    caps.min_length   = 0;
-    caps.num_ranges   = 1;
-    range0            = &caps.ranges[0];
-    range0->node      = NULL;
+    caps->cfg_thresh   = UCS_MEMUNITS_AUTO;
+    caps->cfg_priority = 1;
+    caps->min_length   = 0;
+    caps->num_ranges   = 1;
     ucp_proto_perf_set(range0->perf, UCS_LINEAR_FUNC_ZERO);
 
     /* This protocols supports either a regular rendezvous receive but without
@@ -45,10 +43,15 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &caps, UCS_LINEAR_FUNC_ZERO,
-                                     init_params->priv, 0);
-    ucp_proto_select_caps_cleanup(&caps);
+    status = ucp_proto_rndv_ack_priv_init(init_params, init_params->priv);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_proto_rndv_add_ctrl_stages(init_params,
+                                            UCP_PROTO_RNDV_ATS_NAME,
+                                            UCS_BIT(UCP_RNDV_MODE_AUTO),
+                                            UCS_LINEAR_FUNC_ZERO);
 
     return status;
 }

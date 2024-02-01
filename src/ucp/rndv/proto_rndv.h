@@ -87,16 +87,6 @@ typedef struct {
     /* Which operation the remote peer is expected to perform */
     ucp_operation_id_t             remote_op_id;
 
-    /* Time to unpack the received data */
-    ucs_linear_func_t              unpack_time;
-
-    /* Performance node to represent unpacking time; ignored if NULL */
-    ucp_proto_perf_node_t          *unpack_perf_node;
-
-    /* Reduce estimated time by this value (for example, 0.03 means to report
-       a 3% better time) */
-    double                         perf_bias;
-
     /* Memory type of the transfer. Used as rkey memory information when
        selecting the remote protocol. */
     ucp_memory_info_t              mem_info;
@@ -138,18 +128,19 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
 
-ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *params,
-                                     const char *name,
-                                     const ucp_proto_caps_t *bulk_caps,
-                                     ucs_linear_func_t overhead,
-                                     ucp_proto_rndv_ack_priv_t *apriv,
-                                     unsigned flags);
-
+ucs_status_t
+ucp_proto_rndv_ack_priv_init(const ucp_proto_init_params_t *init_params,
+                             ucp_proto_rndv_ack_priv_t *apriv);
+ucs_status_t
+ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
+                               const char *ack_name, uint64_t rndv_modes,
+                               ucs_linear_func_t ppln_ack_overhead);
 
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
-                         ucp_proto_rndv_bulk_priv_t *rpriv, const char *name,
-                         const char *ack_name, size_t *priv_size_p);
+                         ucp_proto_rndv_bulk_priv_t *rpriv, uint64_t rndv_modes,
+                         const char *name, const char *ack_name,
+                         size_t *priv_size_p);
 
 
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);

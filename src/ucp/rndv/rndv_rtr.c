@@ -36,8 +36,6 @@ typedef struct {
 static ucs_status_t
 ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
                                uint64_t rndv_modes, size_t max_length,
-                               ucs_linear_func_t unpack_time,
-                               ucp_proto_perf_node_t *unpack_perf_node,
                                ucp_md_map_t md_map,
                                ucs_memory_type_t mem_type,
                                ucs_sys_device_t sys_dev)
@@ -46,7 +44,6 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
         .super.cfg_priority  = 0,
         .super.min_length    = 1,
@@ -61,9 +58,6 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
-        .unpack_time         = unpack_time,
-        .unpack_perf_node    = unpack_perf_node,
-        .perf_bias           = 0.0,
         .mem_info.type       = mem_type,
         .mem_info.sys_dev    = sys_dev,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
@@ -207,8 +201,7 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, SIZE_MAX,
-                                            UCS_LINEAR_FUNC_ZERO, NULL, 0,
+    status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, SIZE_MAX, 0,
                                             init_params->select_param->mem_type,
                                             init_params->select_param->sys_dev);
     if (status != UCS_OK) {
@@ -392,8 +385,6 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_rtr_priv_t *rpriv = init_params->priv;
     const uint64_t rndv_modes        = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
     ucp_context_h context            = init_params->worker->context;
-    ucp_proto_perf_node_t *unpack_perf_node;
-    ucs_linear_func_t unpack_time;
     ucp_md_map_t md_map, dummy_md_map;
     ucs_status_t status;
     size_t frag_size;
@@ -408,14 +399,6 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
         return status;
     }
 
-    status = ucp_proto_init_buffer_copy_time(
-            init_params->worker, "rtr/mtype unpack", UCS_MEMORY_TYPE_HOST,
-            init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
-            &unpack_time, &unpack_perf_node);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     /* Make sure that key of the md used to allocate a bounce buffer will be
      * packed to the RTR rkey
      */
@@ -426,10 +409,8 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
 
     md_map = UCS_BIT(md_index);
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
-                                            unpack_time, unpack_perf_node,
                                             md_map, UCS_MEMORY_TYPE_HOST,
                                             UCS_SYS_DEVICE_ID_UNKNOWN);
-    ucp_proto_perf_node_deref(&unpack_perf_node);
 
     rpriv->pack_cb       = ucp_proto_rndv_rtr_mtype_pack;
     rpriv->data_received = ucp_proto_rndv_rtr_mtype_data_received;

@@ -71,7 +71,6 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };
-    ucp_proto_caps_t rkey_ptr_caps;
     ucs_status_t status;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
@@ -79,17 +78,21 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    params.super.super.caps = &rkey_ptr_caps;
     status = ucp_proto_single_init_priv(&params, &rpriv->spriv);
     if (status != UCS_OK) {
         return status;
     }
 
     *init_params->priv_size = sizeof(*rpriv);
-    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &rkey_ptr_caps, UCS_LINEAR_FUNC_ZERO,
-                                     &rpriv->ack, 0);
-    ucp_proto_select_caps_cleanup(&rkey_ptr_caps);
+    
+    status = ucp_proto_rndv_ack_priv_init(init_params, &rpriv->ack);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_proto_rndv_add_ctrl_stages(init_params,
+                                            UCP_PROTO_RNDV_ATS_NAME,
+                                            rndv_modes, UCS_LINEAR_FUNC_ZERO);
 
     return status;
 }
@@ -233,7 +236,6 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
         .lane_type           = UCP_LANE_TYPE_LAST,
         .tl_cap_flags        = 0
     };
-    ucp_proto_caps_t rkey_ptr_caps;
     ucp_lane_index_t lane;
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
@@ -250,8 +252,6 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
         return status;
     }
 
-    params.super.super.caps = &rkey_ptr_caps;
-
     status = ucp_proto_single_init_priv(&params, &rpriv->super.spriv);
     if (status != UCS_OK) {
         return status;
@@ -266,11 +266,15 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
                 init_params->rkey_config_key->md_map);
 
     *init_params->priv_size = sizeof(*rpriv);
-    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_RKEY_PTR_DESC,
-                                     &rkey_ptr_caps, UCS_LINEAR_FUNC_ZERO,
-                                     &rpriv->super.ack, 0);
 
-    ucp_proto_select_caps_cleanup(&rkey_ptr_caps);
+    status = ucp_proto_rndv_ack_priv_init(init_params, &rpriv->super.ack);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_proto_rndv_add_ctrl_stages(init_params,
+                                            UCP_PROTO_RNDV_ATP_NAME,
+                                            rndv_modes, UCS_LINEAR_FUNC_ZERO);
 
     return status;
 }

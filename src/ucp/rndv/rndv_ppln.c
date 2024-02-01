@@ -43,16 +43,13 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
         .super = *init_params,
         .flags = 0
     };
-    const ucp_proto_threshold_elem_t *thresh_elem;
     const ucp_proto_select_elem_t *select_elem;
     const ucp_proto_perf_range_t *frag_range;
     size_t frag_min_length, frag_max_length;
     ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_init_params_t ppln_params;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
-    ucs_linear_func_t ppln_overhead;
-    ucp_proto_caps_t ppln_caps;
+    ucs_linear_func_t ppln_ack_overhead;
     char frag_size_str[32];
     ucs_status_t status;
 
@@ -92,8 +89,6 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     }
 
     frag_range  = ucp_proto_perf_range_search(select_elem, frag_max_length);
-    thresh_elem = ucp_proto_select_thresholds_search(select_elem,
-                                                     frag_max_length);
 
     ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
               ucs_memunits_to_str(rpriv->frag_size, frag_size_str,
@@ -101,26 +96,27 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
               UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
 
     /* Add the single range of the pipeline protocol to ppln_caps */
-    ppln_params            = *init_params;
-    ppln_params.caps       = &ppln_caps;
-    ppln_caps.cfg_thresh   = thresh_elem->proto_config.cfg_thresh;
-    ppln_caps.cfg_priority = 0;
-    ppln_caps.min_length   = frag_max_length + 1;
-    ppln_caps.num_ranges   = 0;
-    ucp_proto_common_add_ppln_range(&ppln_params, frag_range, SIZE_MAX);
+    init_params->caps->min_length = frag_max_length + 1;
+    ucp_proto_common_add_ppln_range(init_params, frag_range, SIZE_MAX);
 
     /* Initialize private data */
     *init_params->priv_size = sizeof(*rpriv);
     rpriv->frag_proto       = *select_elem;
     rpriv->frag_size        = frag_max_length;
 
-    /* Add ATS overhead */
-    ppln_overhead = ucs_linear_func_make(frag_overhead,
-                                         frag_overhead / frag_max_length);
-    status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &ppln_caps, ppln_overhead, &rpriv->ack, 0);
+    status = ucp_proto_rndv_ack_priv_init(init_params, &rpriv->ack);
+    if (status != UCS_OK) {
+        return status;
+    }
 
-    ucp_proto_select_caps_cleanup(&ppln_caps);
+    /* Add ATS ppln overhead */
+    ppln_ack_overhead = ucs_linear_func_make(frag_overhead,
+                                         frag_overhead / frag_max_length);
+
+    status = ucp_proto_rndv_add_ctrl_stages(init_params,
+                                            UCP_PROTO_RNDV_ATS_NAME,
+                                            UCS_BIT(UCP_RNDV_MODE_AUTO),
+                                            ppln_ack_overhead);
 
     return status;
 }

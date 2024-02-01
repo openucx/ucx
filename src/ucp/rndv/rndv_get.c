@@ -66,7 +66,7 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_rndv_bulk_init(&params, init_params->priv,
+    return ucp_proto_rndv_bulk_init(&params, init_params->priv, rndv_modes,
                                     UCP_PROTO_RNDV_GET_DESC,
                                     UCP_PROTO_RNDV_ATS_NAME,
                                     init_params->priv_size);

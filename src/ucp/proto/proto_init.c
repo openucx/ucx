@@ -188,13 +188,12 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
 }
 
 ucs_status_t
-ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
-                               size_t range_start, size_t range_end,
+ucp_proto_init_parallel_stages(size_t range_start, size_t range_end,
                                size_t frag_size, double bias,
                                const ucp_proto_perf_range_t **stages,
-                               unsigned num_stages)
+                               unsigned num_stages, const char *proto_name,
+                               ucp_proto_caps_t *caps)
 {
-    ucp_proto_caps_t *caps      = params->caps;
     ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
     UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_perf_envelope_t, concave, 16);
     UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_perf_list_t, stage_list, 16);
@@ -204,6 +203,7 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
     ucp_proto_perf_node_t *stage_node;
     ucp_proto_perf_range_t *range;
     ucs_linear_func_t *perf_elem;
+    size_t UCS_V_UNUSED prev_max_length;
     char frag_size_str[64];
     ucs_status_t status;
     char range_str[64];
@@ -253,11 +253,10 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
         range             = &caps->ranges[caps->num_ranges];
         range->max_length = elem->max_length;
         if (fabs(bias) > UCP_PROTO_PERF_EPSILON) {
-            range->node   = ucp_proto_perf_node_new_data(params->proto_name,
-                                                         "bias %f", bias);
+            range->node   = ucp_proto_perf_node_new_data(proto_name, "bias %f",
+                                                         bias);
         } else {
-            range->node   = ucp_proto_perf_node_new_data(params->proto_name,
-                                                         "");
+            range->node   = ucp_proto_perf_node_new_data(proto_name, "");
         }
 
         /* "single" performance estimation is sum of "stages" with the bias */
@@ -298,6 +297,12 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
 
         ucp_proto_perf_node_own_child(range->node, &stage_node);
 
+        ucs_assertv((caps->num_ranges == 0) ||
+                    (range->max_length > prev_max_length),
+                    "range->max_length=%zu, prev_max_length=%zu",
+                    prev_max_length, range->max_length);
+        prev_max_length = range->max_length;
+    
         ++caps->num_ranges;
         range_start = range->max_length + 1;
     }
@@ -311,12 +316,12 @@ out:
     return status;
 }
 
-void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
+void ucp_proto_init_memreg_time(const ucp_proto_init_params_t *params,
                                 ucp_md_map_t reg_md_map,
                                 ucs_linear_func_t *memreg_time,
                                 ucp_proto_perf_node_t **perf_node_p)
 {
-    ucp_context_h context            = params->super.worker->context;
+    ucp_context_h context            = params->worker->context;
     ucp_proto_perf_node_t *perf_node = NULL;
     const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
@@ -487,7 +492,7 @@ ucp_proto_common_init_send_perf(const ucp_proto_common_init_params_t *params,
 
     /* Calculate sender overhead */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        ucp_proto_init_memreg_time(params, reg_md_map, &send_overhead,
+        ucp_proto_init_memreg_time(&params->super, reg_md_map, &send_overhead,
                                    &child_perf_node);
         ucp_proto_perf_node_own_child(send_perf->node, &child_perf_node);
     } else if ((params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) ||
@@ -593,7 +598,7 @@ ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
     } else {
         if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
             /* Receiver has to register its buffer */
-            ucp_proto_init_memreg_time(params, reg_md_map, &recv_overhead,
+            ucp_proto_init_memreg_time(&params->super, reg_md_map, &recv_overhead,
                                        &child_perf_node);
         } else {
             if (params->super.rkey_config_key == NULL) {
@@ -669,8 +674,10 @@ ucp_proto_init_single_frag_ranges(const ucp_proto_common_init_params_t *params,
     parallel_stages[2] = &recv_perf;
 
     /* Add ranges representing sending single fragment */
-    status = ucp_proto_init_parallel_stages(&params->super, range_start, frag_size,
-                                            frag_size, 0.0, parallel_stages, 3);
+    status = ucp_proto_init_parallel_stages(range_start, frag_size, frag_size,
+                                            0.0, parallel_stages, 3,
+                                            params->super.proto_name,
+                                            params->super.caps);
 
     ucp_proto_perf_node_deref(&recv_perf.node);
 out_deref_send_perf:
