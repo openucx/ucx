@@ -22,14 +22,11 @@
 typedef struct uct_cuda_ipc_iface {
     uct_cuda_iface_t super;
     ucs_mpool_t      event_desc;              /* cuda event desc */
-    ucs_queue_head_t outstanding_d2d_event_q; /* stream for outstanding d2d */
     int              eventfd;              /* get event notifications */
     int              streams_initialized;     /* indicates if stream created */
     CUcontext        cuda_context;
-    CUstream         stream_d2d[UCT_CUDA_IPC_MAX_PEERS];
-                                              /* per-peer stream */
-    unsigned long    stream_refcount[UCT_CUDA_IPC_MAX_PEERS];
-                                              /* per stream outstanding ops */
+    ucs_queue_head_t      active_queue;
+    uct_cuda_queue_desc_t queue_desc[UCT_CUDA_IPC_MAX_PEERS];
     struct {
         unsigned                max_poll;            /* query attempts w.o success */
         unsigned                max_streams;         /* # concurrent streams for || progress*/
@@ -55,7 +52,6 @@ typedef struct uct_cuda_ipc_iface_config {
 typedef struct uct_cuda_ipc_event_desc {
     CUevent           event;
     void              *mapped_addr;
-    unsigned          stream_id;
     uct_completion_t  *comp;
     ucs_queue_elem_t  queue;
     uct_cuda_ipc_ep_t *ep;

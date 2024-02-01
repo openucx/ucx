@@ -234,61 +234,60 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
-                         uct_completion_t *comp)
+
+static ucs_status_t uct_cuda_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                              uct_completion_t *comp)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_queue_desc_t *q_desc;
+    ucs_queue_iter_t iter;
 
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (ucs_queue_is_empty(&iface->outstanding_d2d_event_q)) {
-        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
-        return UCS_OK;
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        if (!ucs_queue_is_empty(&q_desc->event_queue)) {
+            UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface,
+                                                        uct_base_iface_t));
+            return UCS_INPROGRESS;
+        }
     }
 
-    UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
-    return UCS_INPROGRESS;
+    UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return UCS_OK;
+
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
-                              ucs_queue_head_t *event_q)
+uct_cuda_ipc_progress_event_queue(uct_cuda_ipc_iface_t *iface,
+                                   ucs_queue_head_t *queue_head,
+                                   unsigned max_events)
 {
     unsigned count = 0;
-    uct_cuda_ipc_event_desc_t *cuda_ipc_event;
-    ucs_queue_iter_t iter;
+    uct_cuda_ipc_event_desc_t *cuda_event;
     ucs_status_t status;
-    unsigned max_events = iface->config.max_poll;
 
-    ucs_queue_for_each_safe(cuda_ipc_event, iter, event_q, queue) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventQuery(cuda_ipc_event->event));
-        if (UCS_INPROGRESS == status) {
-            continue;
-        } else if (UCS_OK != status) {
-            return status;
+    ucs_queue_for_each_extract(cuda_event, queue_head, queue,
+                               cuEventQuery(cuda_event->event) ==
+                                       CUDA_SUCCESS) {
+        ucs_queue_remove(queue_head, &cuda_event->queue);
+        if (cuda_event->comp != NULL) {
+            ucs_trace_data("cuda_ipc event %p completed", cuda_event);
+            uct_invoke_completion(cuda_event->comp, UCS_OK);
         }
 
-        ucs_queue_del_iter(event_q, iter);
-        if (cuda_ipc_event->comp != NULL) {
-            uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
-        }
-
-        status = uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid,
-                                              cuda_ipc_event->d_bptr,
-                                              cuda_ipc_event->mapped_addr,
+        status = uct_cuda_ipc_unmap_memhandle(cuda_event->pid,
+                                              cuda_event->d_bptr,
+                                              cuda_event->mapped_addr,
                                               iface->config.enable_cache);
         if (status != UCS_OK) {
-            ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
+            ucs_fatal("failed to unmap addr:%p", cuda_event->mapped_addr);
         }
 
-        ucs_trace_poll("CUDA_IPC Event Done :%p", cuda_ipc_event);
-        iface->stream_refcount[cuda_ipc_event->stream_id]--;
-        ucs_mpool_put(cuda_ipc_event);
+        ucs_trace_poll("CUDA Event Done :%p", cuda_event);
+        ucs_mpool_put(cuda_event);
         count++;
-
         if (count >= max_events) {
             break;
         }
@@ -297,22 +296,59 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
     return count;
 }
 
+
 static unsigned uct_cuda_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    unsigned max_events = iface->config.max_poll;
+    unsigned count      = 0;
+    ucs_queue_head_t *event_q;
+    uct_cuda_queue_desc_t *q_desc;
+    ucs_queue_iter_t iter;
 
-    return uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q);
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        event_q = &q_desc->event_queue;
+        count  += uct_cuda_ipc_progress_event_queue(iface, event_q,
+                                                     max_events - count);
+        if (ucs_queue_is_empty(event_q)) {
+            ucs_queue_del_iter(&iface->active_queue, iter);
+        }
+    }
+
+    return count;
+}
+
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_cuda_ipc_queue_head_ready(ucs_queue_head_t *queue_head)
+{
+    uct_cuda_event_desc_t *cuda_event;
+
+    if (ucs_queue_is_empty(queue_head)) {
+        return 0;
+    }
+
+    cuda_event = ucs_queue_head_elem_non_empty(queue_head,
+                                               uct_cuda_event_desc_t,
+                                               queue);
+    return (CUDA_SUCCESS == cuEventQuery(cuda_event->event));
 }
 
 static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
                                                     unsigned events)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
-    int i;
     ucs_status_t status;
+    CUstream *stream;
+    ucs_queue_head_t *event_q;
+    uct_cuda_queue_desc_t *q_desc;
+    ucs_queue_iter_t iter;
 
-    if (uct_cuda_ipc_progress_event_q(iface, &iface->outstanding_d2d_event_q)) {
-        return UCS_ERR_BUSY;
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        event_q = &q_desc->event_queue;
+        if (uct_cuda_ipc_queue_head_ready(event_q)) {
+            return UCS_ERR_BUSY;
+        }
     }
 
     status = ucs_async_eventfd_poll(iface->super.eventfd);
@@ -322,29 +358,33 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
         return status;
     }
 
-    if (iface->streams_initialized) {
-        for (i = 0; i < iface->config.max_streams; i++) {
-            if (iface->stream_refcount[i]) {
-                status =
+    ucs_assertv(status == UCS_ERR_NO_PROGRESS, "%s", ucs_status_string(status));
+
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        event_q = &q_desc->event_queue;
+        stream  = &q_desc->stream;
+        if (!ucs_queue_is_empty(event_q)) {
+            status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
                 UCT_CUDADRV_FUNC_LOG_ERR(
-                        cuLaunchHostFunc(iface->stream_d2d[i],
+                        cuLaunchHostFunc(*stream,
                                          uct_cuda_base_iface_stream_cb_fxn,
                                          &iface->super));
 #else
                 UCT_CUDADRV_FUNC_LOG_ERR(
-                        cuStreamAddCallback(iface->stream_d2d[i],
+                        cuStreamAddCallback(*stream,
                                             uct_cuda_base_iface_stream_cb_fxn,
                                             &iface->super, 0));
 #endif
-                if (UCS_OK != status) {
-                    return status;
-                }
+            if (UCS_OK != status) {
+                return status;
             }
         }
     }
+
     return UCS_OK;
 }
+
 
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .ep_get_zcopy             = uct_cuda_ipc_ep_get_zcopy,
@@ -398,13 +438,11 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
     int i;
 
     for (i = 0; i < iface->config.max_streams; i++) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamCreate(&iface->stream_d2d[i],
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamCreate(&iface->queue_desc[i].stream,
                                                          CU_STREAM_NON_BLOCKING));
         if (UCS_OK != status) {
             return status;
         }
-
-        iface->stream_refcount[i] = 0;
     }
 
     iface->streams_initialized = 1;
@@ -487,6 +525,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     uct_cuda_ipc_iface_config_t *config = NULL;
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
+    int i;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_cuda_iface_t, &uct_cuda_ipc_iface_ops,
@@ -518,9 +557,14 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return UCS_ERR_IO_ERROR;
     }
 
+    ucs_queue_head_init(&self->active_queue);
+
+    for (i = 0; i < UCT_CUDA_IPC_MAX_PEERS; i++) {
+        ucs_queue_head_init(&self->queue_desc[i].event_queue);
+    }
+
     self->streams_initialized = 0;
     self->cuda_context        = 0;
-    ucs_queue_head_init(&self->outstanding_d2d_event_q);
 
     return UCS_OK;
 }
@@ -536,12 +580,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     if (self->streams_initialized &&
         uct_cuda_base_context_match(cuda_context, self->cuda_context)) {
         for (i = 0; i < self->config.max_streams; i++) {
-            status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(self->stream_d2d[i]));
+            status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(self->queue_desc[i].stream));
             if (UCS_OK != status) {
                 continue;
             }
-
-            ucs_assert(self->stream_refcount[i] == 0);
         }
         self->streams_initialized = 0;
     }

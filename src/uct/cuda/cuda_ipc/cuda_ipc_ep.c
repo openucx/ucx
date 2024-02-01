@@ -63,6 +63,7 @@ int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
     return ep->remote_pid == *(pid_t*)params->iface_addr;
 }
 
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
                                   const uct_iov_t *iov, uct_rkey_t rkey,
@@ -73,11 +74,12 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     void *mapped_rem_addr;
     void *mapped_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
-    ucs_queue_head_t *outstanding_queue;
     ucs_status_t status;
     CUdeviceptr dst, src;
-    CUstream stream;
+    CUstream *stream;
     size_t offset;
+    uct_cuda_queue_desc_t *q_desc;
+    ucs_queue_head_t *event_q;
 
     if (0 == iov[0].length) {
         ucs_trace_data("Zero length request: skip it");
@@ -111,8 +113,9 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
 
     key->dev_num %= iface->config.max_streams; /* round-robin */
 
-    stream            = iface->stream_d2d[key->dev_num];
-    outstanding_queue = &iface->outstanding_d2d_event_q;
+    q_desc            = &iface->queue_desc[key->dev_num];
+    event_q           = &q_desc->event_queue;
+    stream            = &iface->queue_desc[key->dev_num].stream;
     cuda_ipc_event    = ucs_mpool_get(&iface->event_desc);
 
     if (ucs_unlikely(cuda_ipc_event == NULL)) {
@@ -126,27 +129,30 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         ((direction == UCT_CUDA_IPC_PUT) ? iov[0].buffer : mapped_rem_addr);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync(dst, src, iov[0].length,
-                                                        stream));
+                                                        *stream));
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
     }
-
-    iface->stream_refcount[key->dev_num]++;
-    cuda_ipc_event->stream_id = key->dev_num;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->event,
-                                                    stream));
+                                                    *stream));
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
     }
 
-    ucs_queue_push(outstanding_queue, &cuda_ipc_event->queue);
+
+    if (ucs_queue_is_empty(event_q)) {
+        ucs_queue_push(&iface->active_queue, &q_desc->queue);
+    }
+
+    ucs_queue_push(event_q, &cuda_ipc_event->queue);
     cuda_ipc_event->comp        = comp;
     cuda_ipc_event->mapped_addr = mapped_addr;
     cuda_ipc_event->d_bptr      = (uintptr_t)key->d_bptr;
     cuda_ipc_event->pid         = key->pid;
+
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     return UCS_INPROGRESS;
