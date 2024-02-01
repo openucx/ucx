@@ -30,10 +30,6 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Max number of event completions to pick during cuda events polling",
       ucs_offsetof(uct_cuda_ipc_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
-    {"MAX_STREAMS", "16",
-     "Max number of CUDA streams to make concurrent progress on",
-      ucs_offsetof(uct_cuda_ipc_iface_config_t, max_streams), UCS_CONFIG_TYPE_UINT},
-
     {"CACHE", "y",
      "Enable remote endpoint IPC memhandle mapping cache",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, enable_cache),
@@ -432,24 +428,6 @@ static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     }
 }
 
-ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
-{
-    ucs_status_t status;
-    int i;
-
-    for (i = 0; i < iface->config.max_streams; i++) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamCreate(&iface->queue_desc[i].stream,
-                                                         CU_STREAM_NON_BLOCKING));
-        if (UCS_OK != status) {
-            return status;
-        }
-    }
-
-    iface->streams_initialized = 1;
-
-    return UCS_OK;
-}
-
 static ucs_status_t
 uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
@@ -500,6 +478,65 @@ uct_cuda_ipc_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_ipc_queue_desc_init(uct_cuda_queue_desc_t *q_desc)
+{
+    ucs_queue_head_init(&q_desc->event_queue);
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuStreamCreate(&q_desc->stream,
+                                                   CU_STREAM_NON_BLOCKING));
+}
+
+static ucs_status_t
+uct_cuda_ipc_queue_desc_cleanup(uct_cuda_queue_desc_t *q_desc)
+{
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(q_desc->stream));
+}
+
+ucs_status_t uct_cuda_ipc_get_queue_desc(uct_cuda_ipc_iface_t *iface, int index,
+                                         uct_cuda_queue_desc_t **q_desc_p)
+{
+    uct_cuda_queue_desc_t *q_desc;
+    ucs_status_t status;
+    khiter_t iter;
+    int ret;
+
+    iter = kh_put(cuda_ipc_queue_desc, &iface->queue_desc_map,
+                  index, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("cannot allocate hash entry");
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        q_desc = kh_value(&iface->queue_desc_map, iter);
+    } else {
+        q_desc = ucs_malloc(sizeof(*q_desc), "cuda_ipc_queue_desc");
+        if (q_desc == NULL) {
+            ucs_error("failed to allocate queue desc");
+            status = UCS_ERR_NO_MEMORY;
+            goto err_kh_del;
+        }
+
+        status = uct_cuda_ipc_queue_desc_init(q_desc);
+        if (status != UCS_OK) {
+            goto err_free_ctx;
+        }
+
+        kh_value(&iface->queue_desc_map, iter) = q_desc;
+    }
+
+    *q_desc_p = q_desc;
+    return UCS_OK;
+
+err_free_ctx:
+    ucs_free(q_desc);
+err_kh_del:
+    kh_del(cuda_ipc_queue_desc, &iface->queue_desc_map, iter);
+out:
+    return status;
+}
+
 static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -525,7 +562,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     uct_cuda_ipc_iface_config_t *config = NULL;
     ucs_status_t status;
     ucs_mpool_params_t mp_params;
-    int i;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_cuda_iface_t, &uct_cuda_ipc_iface_ops,
@@ -538,7 +574,6 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     }
 
     self->config.max_poll            = config->max_poll;
-    self->config.max_streams         = config->max_streams;
     self->config.enable_cache        = config->enable_cache;
     self->config.enable_get_zcopy    = config->enable_get_zcopy;
     self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
@@ -557,36 +592,29 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
         return UCS_ERR_IO_ERROR;
     }
 
+    kh_init_inplace(cuda_ipc_queue_desc, &self->queue_desc_map);
     ucs_queue_head_init(&self->active_queue);
 
-    for (i = 0; i < UCT_CUDA_IPC_MAX_PEERS; i++) {
-        ucs_queue_head_init(&self->queue_desc[i].event_queue);
-    }
-
-    self->streams_initialized = 0;
-    self->cuda_context        = 0;
+    self->cuda_context = 0;
 
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
 {
-    ucs_status_t status;
-    int i;
     CUcontext cuda_context;
+    uct_cuda_queue_desc_t *q_desc;
 
     UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetCurrent(&cuda_context));
 
-    if (self->streams_initialized &&
-        uct_cuda_base_context_match(cuda_context, self->cuda_context)) {
-        for (i = 0; i < self->config.max_streams; i++) {
-            status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(self->queue_desc[i].stream));
-            if (UCS_OK != status) {
-                continue;
-            }
+    kh_foreach_value(&self->queue_desc_map, q_desc, {
+        if (uct_cuda_base_context_match(cuda_context, self->cuda_context)) {
+            uct_cuda_ipc_queue_desc_cleanup(q_desc);
         }
-        self->streams_initialized = 0;
-    }
+        ucs_free(q_desc);
+    });
+
+    kh_destroy_inplace(cuda_ipc_queue_desc, &self->queue_desc_map);
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);

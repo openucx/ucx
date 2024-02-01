@@ -104,18 +104,13 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
     ucs_assert(offset <= key->b_len);
 
-    if (!iface->streams_initialized) {
-        status = uct_cuda_ipc_iface_init_streams(iface);
-        if (UCS_OK != status) {
-            return status;
-        }
+    status = uct_cuda_ipc_get_queue_desc(iface, key->dev_num, &q_desc);
+    if (status != UCS_OK) {
+        return UCS_ERR_IO_ERROR;
     }
 
-    key->dev_num %= iface->config.max_streams; /* round-robin */
-
-    q_desc            = &iface->queue_desc[key->dev_num];
     event_q           = &q_desc->event_queue;
-    stream            = &iface->queue_desc[key->dev_num].stream;
+    stream            = &q_desc->stream;
     cuda_ipc_event    = ucs_mpool_get(&iface->event_desc);
 
     if (ucs_unlikely(cuda_ipc_event == NULL)) {
