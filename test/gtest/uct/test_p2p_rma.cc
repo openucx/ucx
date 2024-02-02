@@ -79,6 +79,16 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
     mapped_buffer sendbuf(length, SEED1, sender(), 1, src_mem_type);
     mapped_buffer recvbuf(length, SEED2, receiver(), 3, mem_type);
 
+    if (/*TODO: !is_loopback() */ (&sender() != &receiver()) && (length != 0) &&
+        (sender().md_attr().flags & UCT_MD_FLAG_EXPORTED_MKEY) &&
+        (receiver().md_attr().flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
+
+        void *exp_memh = receiver().memh_export(recvbuf.memh());
+        uct_rkey_bundle rkey_bundle;
+        sender().memh_attach(exp_memh, &rkey_bundle);
+        recvbuf.rkey_import(rkey_bundle);
+    }
+
     blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
     if (flags & TEST_UCT_FLAG_SEND_ZCOPY) {
         sendbuf.memset(0);

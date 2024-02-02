@@ -820,7 +820,7 @@ void uct_test::reduce_tl_send_queues()
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) :
-    m_resource(resource)
+    m_resource(resource), m_exp_memh(NULL)
 {
     ucs_status_t status;
 
@@ -886,7 +886,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 }
 
 uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
-                         uct_cm_config_t *cm_config) {
+                         uct_cm_config_t *cm_config) : m_exp_memh(NULL) {
     ucs_status_t         status;
     uct_component_attr_t comp_attr;
 
@@ -1016,6 +1016,48 @@ void uct_test::entity::rkey_release(const uct_rkey_bundle *rkey_bundle) const
                                                rkey_bundle);
         ucs_assert_always(status == UCS_OK);
     }
+}
+
+void *uct_test::entity::memh_export(uct_mem_h memh) const
+{
+    if (!(md_attr().flags & UCT_MD_FLAG_EXPORTED_MKEY)) {
+        return NULL;
+    }
+
+    void* rkey_buffer                = malloc(md_attr().rkey_packed_size);
+    uct_md_mkey_pack_params_t params = {
+        .field_mask                  = UCT_MD_MKEY_PACK_FIELD_FLAGS,
+        .flags                       = UCT_MD_MKEY_PACK_FLAG_EXPORT
+    };
+
+    if (rkey_buffer == NULL) {
+        UCS_TEST_ABORT("Failed to allocate exported rkey buffer");
+    }
+
+    ucs_status_t status = uct_md_mkey_pack_v2(m_md, memh, NULL, SIZE_MAX,
+                                              &params, rkey_buffer);
+    ASSERT_UCS_OK(status);
+    return rkey_buffer;
+}
+
+void uct_test::entity::memh_attach(void *rkey_buffer,
+                                   uct_rkey_bundle *rkey_bundle)
+{
+    uct_md_mem_attach_params_t attach_params = {0};
+    ucs_status_t status                      =
+            uct_md_mem_attach(m_md, rkey_buffer, &attach_params, &m_exp_memh);
+    ASSERT_UCS_OK(status);
+    free(rkey_buffer);
+
+    void *rkey_repack_buffer = malloc(md_attr().rkey_packed_size);
+    ASSERT_NE(nullptr, rkey_buffer) << "Failed to allocate repack rkey buffer";
+
+    status = uct_md_mkey_pack(m_md, m_exp_memh, rkey_repack_buffer);
+    ASSERT_UCS_OK(status);
+    status = uct_rkey_unpack(m_resource.component, rkey_repack_buffer,
+                             rkey_bundle);
+    ASSERT_UCS_OK(status);
+    free(rkey_repack_buffer);
 }
 
 unsigned uct_test::entity::progress() const {
@@ -1391,7 +1433,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
                                        const entity &entity, size_t offset,
                                        ucs_memory_type_t mem_type,
                                        unsigned mem_flags) :
-    m_entity(entity)
+    m_entity(entity), m_rkey_imported( { UCT_INVALID_RKEY, NULL, NULL } )
 {
     if (size == 0)  {
         reset();
@@ -1482,7 +1524,13 @@ void *uct_test::mapped_buffer::reg_addr() const
 }
 
 uct_rkey_t uct_test::mapped_buffer::rkey() const {
-    return m_rkey.rkey;
+    return (m_rkey_imported.rkey != UCT_INVALID_RKEY) ?
+        m_rkey_imported.rkey : m_rkey.rkey;
+}
+
+void uct_test::mapped_buffer::rkey_import(const uct_rkey_bundle_t &rkey_bundle)
+{
+    m_rkey_imported = rkey_bundle;
 }
 
 const uct_iov_t*  uct_test::mapped_buffer::iov() const {
