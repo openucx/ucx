@@ -138,7 +138,7 @@ static ucs_status_t uct_cuda_copy_sync_streams(uct_cuda_copy_iface_t *iface)
     ucs_memory_type_t src_mem_type, dst_mem_type;
     ucs_status_t status;
 
-    UCS_BITMAP_FOR_EACH_BIT(iface->streams_to_sync, stream_index) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(stream_index, &iface->streams_to_sync) {
         src_mem_type = stream_index / UCS_MEMORY_TYPE_LAST;
         if ((src_mem_type >= UCS_MEMORY_TYPE_LAST)) {
             break;
@@ -151,9 +151,9 @@ static ucs_status_t uct_cuda_copy_sync_streams(uct_cuda_copy_iface_t *iface)
             return status;
         }
 
-        UCS_BITMAP_UNSET(iface->streams_to_sync,
-                         uct_cuda_copy_flush_bitmap_idx(src_mem_type,
-                                                        dst_mem_type));
+        UCS_STATIC_BITMAP_RESET(&iface->streams_to_sync,
+                                uct_cuda_copy_flush_bitmap_idx(src_mem_type,
+                                                               dst_mem_type));
     }
 
     return UCS_OK;
@@ -478,7 +478,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->config.max_poll        = config->max_poll;
     self->config.max_cuda_events = config->max_cuda_events;
     self->config.bandwidth       = config->bandwidth;
-    UCS_BITMAP_CLEAR(&self->streams_to_sync);
+    UCS_STATIC_BITMAP_RESET_ALL(&self->streams_to_sync);
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.elem_size       = sizeof(uct_cuda_copy_event_desc_t);

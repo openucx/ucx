@@ -20,7 +20,6 @@
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
-#include <ucs/datastruct/bitmap.h>
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/memory/memory_type.h>
@@ -509,12 +508,13 @@ typedef struct ucp_tl_iface_atomic_flags {
         const uct_md_attr_v2_t *md_attr; \
         ucp_md_index_t md_index; \
         ucp_rsc_index_t tl_id; \
-        UCS_BITMAP_CLEAR(&(_tl_bitmap)); \
-        UCS_BITMAP_FOR_EACH_BIT((_context)->tl_bitmap, tl_id) { \
+        \
+        UCS_STATIC_BITMAP_RESET_ALL(&(_tl_bitmap)); \
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &(_context)->tl_bitmap) { \
             md_index = (_context)->tl_rscs[tl_id].md_index; \
             md_attr  = &(_context)->tl_mds[md_index].attr; \
             if (md_attr->_cap_field & UCS_BIT(_mem_type)) { \
-                UCS_BITMAP_SET(_tl_bitmap, tl_id); \
+                UCS_STATIC_BITMAP_SET(&(_tl_bitmap), tl_id); \
             } \
         } \
     }

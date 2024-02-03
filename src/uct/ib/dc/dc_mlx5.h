@@ -14,7 +14,6 @@
 #include <uct/ib/ud/base/ud_iface_common.h>
 #include <uct/ib/ud/accel/ud_mlx5_common.h>
 #include <ucs/debug/assert.h>
-#include <ucs/datastruct/bitmap.h>
 
 
 /*

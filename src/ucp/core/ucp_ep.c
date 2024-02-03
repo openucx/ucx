@@ -686,7 +686,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
         UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, access_mem_types,
                                 mem_access_tls);
         if (UCP_MEM_IS_HOST(mem_type) ||
-            UCS_BITMAP_IS_ZERO_INPLACE(&mem_access_tls)) {
+            UCS_STATIC_BITMAP_IS_ZERO(mem_access_tls)) {
             continue;
         }
 
@@ -3375,7 +3375,7 @@ void ucp_ep_get_tl_bitmap(const ucp_ep_config_key_t *key,
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_idx;
 
-    UCS_BITMAP_CLEAR(tl_bitmap);
+    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
     for (lane = 0; lane < key->num_lanes; ++lane) {
         if (lane == key->cm_lane) {
             continue;
@@ -3386,7 +3386,7 @@ void ucp_ep_get_tl_bitmap(const ucp_ep_config_key_t *key,
             continue;
         }
 
-        UCS_BITMAP_SET(*tl_bitmap, rsc_idx);
+        UCS_STATIC_BITMAP_SET(tl_bitmap, rsc_idx);
     }
 }
 
@@ -3444,7 +3444,7 @@ int ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_index, int is_p2p)
 ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                            ucp_rsc_index_t rsc_idx)
 {
-    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
+    ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucs_status_t status;
     ssize_t packed_len;
     struct iovec wireup_msg_iov[2];
@@ -3452,7 +3452,7 @@ ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
 
-    UCS_BITMAP_SET(tl_bitmap, rsc_idx);
+    UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
 
     status = ucp_wireup_msg_prepare(ucp_ep, UCP_WIREUP_MSG_EP_CHECK,
                                     &tl_bitmap, NULL, &wireup_msg,

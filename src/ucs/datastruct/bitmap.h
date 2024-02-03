@@ -638,11 +638,25 @@ size_t ucs_bitmap_bits_fns(const ucs_bitmap_word_t *bits, size_t num_words,
                            size_t start_index, size_t bit_count);
 
 
+/* Helper function to set all bitmap bits to a given value, avoiding a call to
+ * memset() if the value is known to be 0, to workaround a compiler warning.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_bitmap_bits_memset(ucs_bitmap_word_t *bits, int value, size_t num_words)
+{
+    if (__builtin_constant_p(num_words) && (num_words == 0)) {
+        return;
+    }
+
+    memset(bits, value, num_words * sizeof(ucs_bitmap_word_t));
+}
+
+
 /* Helper function to set all bitmap bits to 0 */
 static UCS_F_ALWAYS_INLINE void
 ucs_bitmap_bits_reset_all(ucs_bitmap_word_t *bits, size_t num_words)
 {
-    memset(bits, 0, num_words * sizeof(ucs_bitmap_word_t));
+    ucs_bitmap_bits_memset(bits, 0, num_words);
 }
 
 
@@ -650,7 +664,7 @@ ucs_bitmap_bits_reset_all(ucs_bitmap_word_t *bits, size_t num_words)
 static UCS_F_ALWAYS_INLINE void
 ucs_bitmap_bits_set_all(ucs_bitmap_word_t *bits, size_t num_words)
 {
-    memset(bits, 0xff, num_words * sizeof(ucs_bitmap_word_t));
+    ucs_bitmap_bits_memset(bits, 0xff, num_words);
 }
 
 
