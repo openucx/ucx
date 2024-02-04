@@ -184,7 +184,7 @@ try_load_cuda_env() {
     [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
 
     # Check number of available GPUs
-    nvidia-smi -a
+    nvidia-smi -a || true
     num_gpus=$(nvidia-smi -L | wc -l)
     [ "${num_gpus}" -gt 0 ] || return 0
 
