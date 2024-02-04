@@ -731,14 +731,15 @@ UCS_TEST_F(test_dynamic_bitmap, test_not)
     set(m_bitmap, {1, 3, 4});
     EXPECT_EQ(3, ucs_dynamic_bitmap_popcount(&m_bitmap));
 
-    ucs_dynamic_bitmap_not_inplace(&m_bitmap);
+    ucs_dynamic_bitmap_not_inplace(&m_bitmap, 1000);
     EXPECT_EQ(1, ucs_dynamic_bitmap_get(&m_bitmap, 0));
     EXPECT_EQ(0, ucs_dynamic_bitmap_get(&m_bitmap, 1));
     EXPECT_EQ(1, ucs_dynamic_bitmap_get(&m_bitmap, 2));
     EXPECT_EQ(0, ucs_dynamic_bitmap_get(&m_bitmap, 3));
-
-    EXPECT_EQ(UCS_BITMAP_BITS_IN_WORD - 3,
-              ucs_dynamic_bitmap_popcount(&m_bitmap));
+    EXPECT_EQ(0, ucs_dynamic_bitmap_get(&m_bitmap, 4));
+    for (size_t i = 5; i < 1000; ++i) {
+        EXPECT_EQ(1, ucs_dynamic_bitmap_get(&m_bitmap, i));
+    }
 }
 
 UCS_TEST_F(test_dynamic_bitmap, test_and)
