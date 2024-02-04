@@ -185,7 +185,7 @@ try_load_cuda_env() {
 
     # Check number of available GPUs
     nvidia-smi -a || true
-    num_gpus=$(nvidia-smi -L | wc -l)
+    num_gpus=$(nvidia-smi -L | grep GPU | wc -l)
     [ "${num_gpus}" -gt 0 ] || return 0
 
     # Check cuda env module
