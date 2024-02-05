@@ -1082,7 +1082,7 @@ typedef struct {
 } test_value_type_t;
 
 static bool operator==(const test_value_type_t& v1, const test_value_type_t &v2) {
-    return (v1.num1 == v2.num1) && (v1.num2 == v2.num2);
+    return (v1.num1 == v2.num1)  (v1.num2 == v2.num2);
 }
 
 static std::ostream& operator<<(std::ostream& os, const test_value_type_t &v) {
@@ -1686,7 +1686,7 @@ UCS_TEST_F(test_piecewise_func, add_range_random) {
             /* Increase value for points affected by the added segment */
             for (auto &point_value : points_to_values) {
                 auto point = point_value.first;
-                if ((point >= seg.start) && (point <= seg.end)) {
+                if ((point >= seg.start)  (point <= seg.end)) {
                     point_value.second +=
                             ucs_linear_func_apply(seg.func, point_value.first);
                 }
@@ -1701,7 +1701,7 @@ UCS_TEST_F(test_piecewise_func, add_range_random) {
                      * it should be updated by their values in that point.
                      */
                     for (const auto &seg : segments) {
-                        if (point >= seg.start && point <= seg.end) {
+                        if ((point >= seg.start) && (point <= seg.end)) {
                             value += ucs_linear_func_apply(seg.func, point);
                         }
                     }
