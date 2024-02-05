@@ -1686,7 +1686,7 @@ UCS_TEST_F(test_piecewise_func, add_range_random) {
             /* Increase value for points affected by the added segment */
             for (auto &point_value : points_to_values) {
                 auto point = point_value.first;
-                if ((point >= seg.start)  (point <= seg.end)) {
+                if ((point >= seg.start) && (point <= seg.end)) {
                     point_value.second +=
                             ucs_linear_func_apply(seg.func, point_value.first);
                 }
