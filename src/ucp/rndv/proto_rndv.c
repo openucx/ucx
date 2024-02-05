@@ -567,7 +567,7 @@ ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
     ucp_proto_caps_t tmp_caps;
     ucs_status_t status;
     size_t min_length, max_length, rndv_stage_idx;
-    int i;
+    unsigned i;
 
     ctrl_lane = ucp_proto_common_find_am_bcopy_hdr_lane(params);
     if (ctrl_lane == UCP_NULL_LANE) {
@@ -642,7 +642,7 @@ ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
     tmp_caps            = *params->caps;
     tmp_caps.num_ranges = 0;
     for (i = 0; i < params->caps->num_ranges; ++i) {
-        max_length                       = params->caps->ranges[i].max_length;
+        max_length                      = params->caps->ranges[i].max_length;
         parallel_stages[rndv_stage_idx] = &params->caps->ranges[i];
 
         status = ucp_proto_init_parallel_stages(min_length, max_length,

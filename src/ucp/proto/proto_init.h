@@ -73,7 +73,7 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
  * @param [in] stages        Array of parallel stages performance ranges.
  * @param [in] num_stages    Number of parallel stages in the protocol.
  * @param [in] proto_name    Name of the protocol.
- * @param [in] caps          Merged caps.
+ * @param [out] caps         Merged caps.
  */
 ucs_status_t
 ucp_proto_init_parallel_stages(size_t range_start, size_t range_end,
