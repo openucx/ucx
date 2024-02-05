@@ -25,6 +25,8 @@ public:
 
     static const std::vector<ucs_memory_type_t>& supported_mem_types();
 
+    static bool is_mem_type_supported(ucs_memory_type_t mem_type);
+
     /* allocate buffer of a given memory type */
     static void *allocate(size_t size, ucs_memory_type_t mem_type);
 
