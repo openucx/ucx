@@ -708,31 +708,17 @@ const char *ucp_proto_perf_node_desc(ucp_proto_perf_node_t *perf_node)
 void ucp_proto_perf_node_replace(ucp_proto_perf_node_t **old_perf_node_p,
                                  ucp_proto_perf_node_t **new_perf_node_p)
 {
-    ucs_assert(new_perf_node_p != NULL);
-    ucs_assert(old_perf_node_p != NULL);
+    ucp_proto_perf_node_t **child_elem;
 
-    ucp_proto_perf_node_copy_children(*new_perf_node_p, *old_perf_node_p);
+    if (*old_perf_node_p != NULL) {
+        ucs_array_for_each(child_elem, &(*old_perf_node_p)->children) {
+            ucp_proto_perf_node_add_child(*new_perf_node_p, *child_elem);
+        }
+    }
 
     ucp_proto_perf_node_deref(old_perf_node_p);
     *old_perf_node_p = *new_perf_node_p;
     *new_perf_node_p = NULL;
-}
-
-void ucp_proto_perf_node_copy_children(ucp_proto_perf_node_t *dst_perf_node,
-                                       ucp_proto_perf_node_t *src_perf_node)
-{
-    ucp_proto_perf_node_t **child_elem;
-
-    if (src_perf_node != NULL) {
-        ucs_array_for_each(child_elem, &src_perf_node->children) {
-            ucp_proto_perf_node_add_child(dst_perf_node, *child_elem);
-        }
-    }
-}
-
-ucp_proto_perf_node_type_t
-ucp_proto_perf_node_get_type(ucp_proto_perf_node_t *node) {
-    return node->type;
 }
 
 static void

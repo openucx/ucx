@@ -147,11 +147,6 @@ const char *ucp_proto_perf_node_desc(ucp_proto_perf_node_t *perf_node);
 void ucp_proto_perf_node_replace(ucp_proto_perf_node_t **old_perf_node_p,
                                  ucp_proto_perf_node_t **new_perf_node_p);
 
-void ucp_proto_perf_node_copy_children(ucp_proto_perf_node_t *dst_perf_node,
-                                       ucp_proto_perf_node_t *src_perf_node);
-
-ucp_proto_perf_node_type_t
-ucp_proto_perf_node_get_type(ucp_proto_perf_node_t *node);
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,
                                  ucp_worker_cfg_index_t ep_cfg_index,

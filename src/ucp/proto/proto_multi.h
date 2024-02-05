@@ -94,9 +94,6 @@ typedef struct {
         /* Required lane type */
         ucp_lane_type_t lane_type;
     } first, middle;
-
-    ucp_proto_perf_range_t        *prev_stages;
-    size_t                         num_stages;
 } ucp_proto_multi_init_params_t;
 
 

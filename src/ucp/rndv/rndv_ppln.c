@@ -111,7 +111,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
 
     /* Add ATS ppln overhead */
     ppln_ack_overhead = ucs_linear_func_make(frag_overhead,
-                                         frag_overhead / frag_max_length);
+                                             frag_overhead / frag_max_length);
 
     status = ucp_proto_rndv_add_ctrl_stages(init_params,
                                             UCP_PROTO_RNDV_ATS_NAME,
