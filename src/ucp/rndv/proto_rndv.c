@@ -549,51 +549,25 @@ ucp_proto_rndv_ack_perf(const ucp_proto_init_params_t *init_params,
 }
 
 ucs_status_t
-ucp_proto_caps_add_parallel_range(ucp_proto_caps_t *caps,
-                                  ucp_proto_perf_range_t *parallel_range,
-                                  double bias, const char *name) {
-    const ucp_proto_perf_range_t *parallel_stages[2];
-    ucp_proto_caps_t tmp_caps;
-    ucs_status_t status;
-    size_t min_length, max_length;
-    int i;
-
-    /* Create new caps by adding parallel range to the provided caps */
-    min_length          = caps->min_length;
-    tmp_caps            = *caps;
-    tmp_caps.num_ranges = 0;
-    for (i = 0; i < caps->num_ranges; ++i) {
-        max_length         = caps->ranges[i].max_length;
-        parallel_stages[0] = parallel_range;
-        parallel_stages[1] = &caps->ranges[i];
-
-        status = ucp_proto_init_parallel_stages(min_length, max_length,
-                                                SIZE_MAX, bias, parallel_stages,
-                                                2, name, &tmp_caps);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        min_length = max_length + 1;
-    }
-
-    *caps = tmp_caps;
-    return UCS_OK;
-}
-
-ucs_status_t
 ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
-                               const char *ack_name, uint64_t rndv_modes,
-                               ucs_linear_func_t ppln_ack_overhead) {
-    ucs_linear_func_t unpack_time      = UCS_LINEAR_FUNC_ZERO;
-    ucp_proto_perf_node_t *unpack_node = NULL;
+                               const char *proto_name, const char *ack_name,
+                               uint64_t rndv_modes,
+                               ucs_linear_func_t ppln_ack_overhead)
+{
     ucp_context_t *ctx                 = params->worker->context;
     double rndv_perf_bias              = ctx->config.ext.rndv_perf_diff / 100;
+    ucs_linear_func_t unpack_time      = UCS_LINEAR_FUNC_ZERO;
+    ucp_proto_perf_node_t *unpack_node = NULL;
+    size_t num_stages                  = 0;
     ucp_proto_perf_range_t ack_range, rts_range, rtr_range;
     ucp_md_map_t local_md_map, remote_md_map, rts_md_map;
+    const ucp_proto_perf_range_t *parallel_stages[4];
     ucp_memory_info_t ctrl_mem_info;
     ucp_lane_index_t ctrl_lane;
+    ucp_proto_caps_t tmp_caps;
     ucs_status_t status;
+    size_t min_length, max_length, rndv_stage_idx;
+    int i;
 
     ctrl_lane = ucp_proto_common_find_am_bcopy_hdr_lane(params);
     if (ctrl_lane == UCP_NULL_LANE) {
@@ -606,24 +580,18 @@ ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
     ucp_proto_rndv_ctrl_get_md_map(params, ctrl_mem_info, 0, &local_md_map,
                                    NULL, NULL);
     remote_md_map = ucp_proto_rndv_md_map_to_remote(params, local_md_map);
-    rts_md_map    = remote_md_map;
+    
 
-    /* Add ack latency */
-    if (!(rndv_modes & UCS_BIT(UCP_RNDV_MODE_AM)) &&
-        !ucp_proto_rndv_init_params_is_ppln_frag(params)) {
-        status = ucp_proto_rndv_ack_perf(params, ctrl_lane,
-                                         ucs_linear_func_make(150e-9, 0),
-                                         ack_name, &ack_range);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = ucp_proto_caps_add_parallel_range(params->caps, &ack_range,
-                                                   0, "rndv_ack");
-        if (status != UCS_OK) {
-            return status;
-        }
+    /* Add RTS latency */
+    rts_md_map = ucp_proto_rndv_op_check(params, UCP_OP_ID_RNDV_RECV, 1) ?
+            remote_md_map : local_md_map;
+    status     = ucp_proto_rndv_ctrl_perf(params, ctrl_lane, rts_md_map,
+                                          UCS_LINEAR_FUNC_ZERO, 275e-9,
+                                          UCP_PROTO_RNDV_RTS_NAME, &rts_range);
+    if (status != UCS_OK) {
+        return status;
     }
+    parallel_stages[num_stages++] = &rts_range;
 
     /* Add RTR latency */
     if (ucp_proto_rndv_op_check(params, UCP_OP_ID_RNDV_SEND, 1)) {
@@ -649,26 +617,46 @@ ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
             ucp_proto_perf_node_own_child(rtr_range.node, &unpack_node);
         }
 
-        status = ucp_proto_caps_add_parallel_range(params->caps, &rtr_range,
-                                                   0, "rndv/rtr");
+        parallel_stages[num_stages++] = &rtr_range;
+        rts_md_map = local_md_map;
+    }
+
+    /* Reserve parallel stage index for RNDV op */
+    rndv_stage_idx = num_stages++;
+
+    /* Add ack latency */
+    if (!(rndv_modes & UCS_BIT(UCP_RNDV_MODE_AM)) &&
+        !ucp_proto_rndv_init_params_is_ppln_frag(params)) {
+        status = ucp_proto_rndv_ack_perf(params, ctrl_lane,
+                                         ucs_linear_func_make(150e-9, 0),
+                                         ack_name, &ack_range);
         if (status != UCS_OK) {
             return status;
         }
 
-        rts_md_map = local_md_map;
+        parallel_stages[num_stages++] = &ack_range;
     }
 
-    /* Add RTS latency */
-    status = ucp_proto_rndv_ctrl_perf(params, ctrl_lane, rts_md_map,
-                                      UCS_LINEAR_FUNC_ZERO, 275e-9,
-                                      UCP_PROTO_RNDV_RTS_NAME, &rts_range);
-    if (status != UCS_OK) {
-        return status;
+    /* Create new caps by adding parallel stages to the proto caps */
+    min_length          = params->caps->min_length;
+    tmp_caps            = *params->caps;
+    tmp_caps.num_ranges = 0;
+    for (i = 0; i < params->caps->num_ranges; ++i) {
+        max_length                       = params->caps->ranges[i].max_length;
+        parallel_stages[rndv_stage_idx] = &params->caps->ranges[i];
+
+        status = ucp_proto_init_parallel_stages(min_length, max_length,
+                                                SIZE_MAX, rndv_perf_bias,
+                                                parallel_stages, num_stages,
+                                                proto_name, &tmp_caps);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        min_length = max_length + 1;
     }
 
-    status = ucp_proto_caps_add_parallel_range(params->caps, &rts_range,
-                                               rndv_perf_bias,
-                                               params->proto_name);
+    *params->caps = tmp_caps;
     return status;
 }
 

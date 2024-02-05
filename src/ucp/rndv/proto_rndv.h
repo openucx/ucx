@@ -131,6 +131,7 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
 ucs_status_t
 ucp_proto_rndv_ack_priv_init(const ucp_proto_init_params_t *init_params,
                              ucp_proto_rndv_ack_priv_t *apriv);
+
 ucs_status_t
 ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
                                const char *ack_name, uint64_t rndv_modes,
