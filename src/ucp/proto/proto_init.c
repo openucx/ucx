@@ -194,7 +194,8 @@ ucp_proto_init_parallel_stages(size_t range_start, size_t range_end,
                                unsigned num_stages, const char *proto_name,
                                ucp_proto_caps_t *caps)
 {
-    ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
+    ucs_linear_func_t bias_func         = ucs_linear_func_make(0.0, 1.0 - bias);
+    size_t UCS_V_UNUSED prev_max_length = 0;
     UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_perf_envelope_t, concave, 16);
     UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_perf_list_t, stage_list, 16);
     ucs_linear_func_t sum_single_perf, sum_cpu_perf;
@@ -203,7 +204,6 @@ ucp_proto_init_parallel_stages(size_t range_start, size_t range_end,
     ucp_proto_perf_node_t *stage_node;
     ucp_proto_perf_range_t *range;
     ucs_linear_func_t *perf_elem;
-    size_t UCS_V_UNUSED prev_max_length;
     char frag_size_str[64];
     ucs_status_t status;
     char range_str[64];

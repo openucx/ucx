@@ -550,7 +550,7 @@ ucp_proto_rndv_ack_perf(const ucp_proto_init_params_t *init_params,
 
 ucs_status_t
 ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
-                               const char *proto_name, const char *ack_name,
+                               const char *ack_name,
                                uint64_t rndv_modes,
                                ucs_linear_func_t ppln_ack_overhead)
 {
