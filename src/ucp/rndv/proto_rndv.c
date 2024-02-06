@@ -648,7 +648,7 @@ ucp_proto_rndv_add_ctrl_stages(const ucp_proto_init_params_t *params,
         status = ucp_proto_init_parallel_stages(min_length, max_length,
                                                 SIZE_MAX, rndv_perf_bias,
                                                 parallel_stages, num_stages,
-                                                proto_name, &tmp_caps);
+                                                params->proto_name, &tmp_caps);
         if (status != UCS_OK) {
             return status;
         }

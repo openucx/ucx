@@ -302,7 +302,7 @@ ucp_proto_init_parallel_stages(size_t range_start, size_t range_end,
                     "range->max_length=%zu, prev_max_length=%zu",
                     prev_max_length, range->max_length);
         prev_max_length = range->max_length;
-    
+
         ++caps->num_ranges;
         range_start = range->max_length + 1;
     }
