@@ -17,11 +17,11 @@ steps:
           perfxParams=(--skip-run --source-branch $(Build.SourceBranch) --omb-cuda)
           ;;
         "Perf-test-multi-node")
-          module="/hpc/local/etc/modulefiles/hpcx-gcc"
+          module="/hpc/local/etc/modulefiles/hpcx-ga-gcc"
           perfxParams=(--skip-update --skip-build --use-cache --filter "--extra-ompi-opts= -H $perf_nodes")
           ;;
         "Perf-test-single-node")
-          module="/hpc/local/etc/modulefiles/hpcx-gcc"
+          module="/hpc/local/etc/modulefiles/hpcx-ga-gcc"
           IFS=',' read -ra nodes <<< "$perf_nodes"
           node=${nodes[RANDOM % 2]}
           perfxParams=(--skip-update --skip-build --use-cache --filter --setup rdmz-intra "--extra-ompi-opts= -H $node,$node")
