@@ -9,6 +9,7 @@
 
 #include "rcache.h"
 
+#include <ucs/datastruct/lockless_sync.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats.h>
 #include <ucs/type/spinlock.h>

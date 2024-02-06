@@ -13,37 +13,13 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/profile/profile.h>
 
-static UCS_F_ALWAYS_INLINE unsigned
-ucs_rcache_region_flags(ucs_rcache_region_t *region)
-{
-    ucs_memory_cpu_load_fence();
-    return region->flags;
-}
-
-
-static UCS_F_ALWAYS_INLINE void
-ucs_rcache_region_set_flag(ucs_rcache_region_t *region, unsigned flag)
-{
-    ucs_atomic_or8(&region->flags, flag);
-}
-
-
-static UCS_F_ALWAYS_INLINE void
-ucs_rcache_region_clear_flag(ucs_rcache_region_t *region, unsigned flag)
-{
-    ucs_atomic_and8(&region->flags, ~flag);
-}
-
 
 static UCS_F_ALWAYS_INLINE int
-ucs_rcache_region_test(ucs_rcache_region_t *region, int prot, size_t alignment)
+ucs_rcache_region_get(ucs_rcache_region_t *region, int prot, size_t alignment)
 {
-    return ((ucs_rcache_region_flags(region) &
-            (UCS_RCACHE_REGION_FLAG_REGISTERED |
-             UCS_RCACHE_REGION_FLAG_RELEASING)) ==
-            UCS_RCACHE_REGION_FLAG_REGISTERED) &&
-           ucs_test_all_flags(region->prot, prot) &&
-           ((alignment == 1) || (region->alignment >= alignment));
+    return ucs_test_all_flags(region->prot, prot) &&
+           ((alignment == 1) || (region->alignment >= alignment)) &&
+           ucs_lockless_sync_get(&region->lls);
 }
 
 
@@ -96,12 +72,8 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
     }
 
     region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
-    region->refcount++;
-    ucs_memory_cpu_store_fence();
-
     if (ucs_unlikely(((start + length) > region->super.end) ||
-        !ucs_rcache_region_test(region, prot, alignment))) {
-        region->refcount--;
+        !ucs_rcache_region_get(region, prot, alignment))) {
         return NULL;
     }
 
@@ -115,10 +87,11 @@ ucs_rcache_lookup_unsafe(ucs_rcache_t *rcache, void *address, size_t length,
 static UCS_F_ALWAYS_INLINE void
 ucs_rcache_region_put_unsafe(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
+    ucs_rcache_region_trace(rcache, region, "put unsafe");
+
     ucs_rcache_region_lru_add(rcache, region);
 
-    ucs_assert(region->refcount > 0);
-    if (ucs_unlikely(--region->refcount == 0)) {
+    if (ucs_unlikely(ucs_lockless_sync_put(&region->lls))) {
         pthread_rwlock_wrlock(&rcache->pgt_lock);
         ucs_mem_region_destroy_internal(rcache, region);
         pthread_rwlock_unlock(&rcache->pgt_lock);

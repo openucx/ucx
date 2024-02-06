@@ -19,10 +19,11 @@
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/time/time_def.h>
 #include <ucs/config/parser.h>
+#include <ucs/datastruct/lockless_sync_def.h>
 #include <sys/mman.h>
 
 
-#define UCS_RCACHE_PROT_FMT "%c%c"
+#define UCS_RCACHE_PROT_FMT " %c%c"
 #define UCS_RCACHE_PROT_ARG(_prot) \
     ((_prot) & PROT_READ)  ? 'r' : '-', \
     ((_prot) & PROT_WRITE) ? 'w' : '-'
@@ -38,15 +39,6 @@ typedef struct ucs_rcache_ops     ucs_rcache_ops_t;
 typedef struct ucs_rcache_params  ucs_rcache_params_t;
 typedef struct ucs_rcache_region  ucs_rcache_region_t;
 typedef struct ucs_rcache_config  ucs_rcache_config_t;
-
-/*
- * Memory region flags.
- */
-enum {
-    UCS_RCACHE_REGION_FLAG_PGTABLE    = UCS_BIT(0), /**< In the page table */
-    UCS_RCACHE_REGION_FLAG_REGISTERED = UCS_BIT(2), /**< Memory registered */
-    UCS_RCACHE_REGION_FLAG_RELEASING  = UCS_BIT(1), /**< Memory invalidated */
-};
 
 /*
  * Memory registration flags.
@@ -168,11 +160,9 @@ struct ucs_rcache_region {
     ucs_list_link_t        tmp_list;  /**< Temp list element */
     ucs_list_link_t        comp_list; /**< Completion list element */
     size_t                 alignment;
-    volatile uint32_t      refcount;  /**< Reference count, including +1 if it's
-                                           in the page table */
+    ucs_ll_sync_obj_t      lls;       /**< Lock-less storage state */
     ucs_status_t           status;    /**< Current status code */
     uint8_t                prot;      /**< Protection bits */
-    uint8_t                flags;     /**< Status flags */
     uint8_t                lru_flags; /**< LRU flags */
     union {
         uint64_t           priv;      /**< Used internally */

@@ -792,15 +792,16 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
         status = ucp_memh_rcache_get(context->rcache, reg_address, reg_length,
                                      reg_align, mem_type, reg_md_map, uct_flags,
                                      alloc_name, &memh);
-
-        ucs_assert(memh->mem_type == mem_type);
-        ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
-        ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
     }
 
     if (status != UCS_OK) {
         goto out;
     }
+
+    ucs_assert(memh->mem_type == mem_type);
+    ucs_assert((context->rcache) == NULL ||
+            ((ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0) &&
+            (ucs_padding(ucp_memh_length(memh), reg_align) == 0)));
 
     ucs_trace(
             "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
@@ -1769,7 +1770,8 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                  * given address, but an imported memory handle hasn't been
                  * removed from the RCACHE yet. So, it had refcount == 1 and
                  * now it should be 2. */
-                ucs_assertv(rregion->refcount == 2, "%u", rregion->refcount);
+                ucs_assertv(rregion->lls.refcount == 2, "%u",
+                            rregion->lls.refcount);
                 ucs_rcache_region_invalidate(rcache, rregion,
                                              ucs_empty_function, NULL);
                 ucs_rcache_region_put_unsafe(rcache, rregion);

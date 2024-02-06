@@ -67,7 +67,6 @@ UCS_TEST_F(test_rcache_basic, create_destroy) {
 
 
 class test_rcache : public ucs::test_with_param<int> {
-    //base, public ::testing::TestWithParam<int> {
 protected:
 
     struct region {
@@ -109,7 +108,7 @@ protected:
         return params;
     }
 
-    int safe_api()
+    int unsafe_api()
     {
         return GetParam();
     }
@@ -120,7 +119,7 @@ protected:
         ucs_status_t status = UCS_OK;
         ucs_rcache_region_t *r = NULL;
 
-        if (safe_api()) {
+        if (unsafe_api()) {
              pthread_spin_lock(&m_lock);
              r = ucs_rcache_lookup_unsafe(m_rcache, address, length, alignment,
                                           prot);
@@ -143,7 +142,7 @@ protected:
     }
 
     void put(region *r) {
-        if (safe_api()) {
+        if (unsafe_api()) {
             pthread_spin_lock(&m_lock);
             ucs_rcache_region_put_unsafe(m_rcache, &r->super);
             pthread_spin_unlock(&m_lock);
@@ -468,10 +467,11 @@ UCS_TEST_P(test_rcache, merge_aligned)
     ptr2    = (char*)mem + 5 * ucs_get_page_size();
     region2 = get(ptr2, size);
 
-    /* Create region3 which should merge region1 and region2 */
+    /* Create region3 unaligned */
     ptr3    = (char*)mem + 9 * ucs_get_page_size();
     region3 = get(ptr3, size);
 
+    /* Create region3 which should merge region1 and region2 */
     region3_2 = get(ptr3, size, PROT_READ | PROT_WRITE, align);
     EXPECT_NE(region3, region3_2) << /* should be different */
         "region3 0x" << std::hex << region3->super.super.start << "..0x" <<
@@ -578,7 +578,7 @@ UCS_MT_TEST_P(test_rcache, merge_with_unwritable, 6) {
     EXPECT_GE(region2->super.super.start, (uintptr_t)ptr2);
     EXPECT_EQ(PROT_WRITE, region2->super.prot);
 
-    EXPECT_TRUE(!(region1->super.flags & UCS_RCACHE_REGION_FLAG_PGTABLE));
+    EXPECT_TRUE(!(region1->super.lls.flags & UCS_LOCKLESS_SYNC_FLAG_STORED));
     put(region1);
 
     put(region2);
@@ -631,7 +631,7 @@ UCS_MT_TEST_P(test_rcache, merge_expand_prot, 6) {
     /* Get 2-nd part - should merge with region1 with full protection */
     void *ptr2 = (char*)mem + size1;
     region *region2 = get(ptr2, size2, PROT_WRITE);
-    if (region1->super.flags & UCS_RCACHE_REGION_FLAG_PGTABLE) {
+    if (region1->super.lls.flags & UCS_LOCKLESS_SYNC_FLAG_STORED) {
         EXPECT_LE(region2->super.super.start, (uintptr_t)ptr1);
         EXPECT_TRUE(region2->super.prot & PROT_READ);
     }
@@ -1167,8 +1167,8 @@ UCS_TEST_F(test_rcache_pfn, enum_pfn) {
 }
 
 #define INSTANTIATE_RCACHE_TEST_CASES(_test_fixture) \
-    INSTANTIATE_TEST_SUITE_P(old_api, _test_fixture, ::testing::Values(0)); \
-    INSTANTIATE_TEST_SUITE_P(safe_api, _test_fixture, ::testing::Values(1))
+    INSTANTIATE_TEST_SUITE_P(safe_api, _test_fixture, ::testing::Values(0)); \
+    INSTANTIATE_TEST_SUITE_P(unsafe_api, _test_fixture, ::testing::Values(1))
 
 INSTANTIATE_RCACHE_TEST_CASES(test_rcache);
 INSTANTIATE_RCACHE_TEST_CASES(test_rcache_no_register);
