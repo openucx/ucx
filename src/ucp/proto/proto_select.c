@@ -224,8 +224,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     ucs_status_t status;
     size_t priv_size;
 
-    memset(0, &init_params, sizeof(init_params));
-    memset(0, &proto_caps, sizeof(proto_caps));
+    memset(&init_params, 0, sizeof(init_params));
+    memset(&proto_caps, 0, sizeof(proto_caps));
 
     ucs_assert(ep_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
 
