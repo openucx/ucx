@@ -160,6 +160,14 @@ const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
     return vec;
 }
 
+bool mem_buffer::is_mem_type_supported(ucs_memory_type_t mem_type)
+{
+    auto &mem_types = supported_mem_types();
+
+    return std::find(mem_types.begin(), mem_types.end(), mem_type) !=
+           mem_types.end();
+}
+
 void mem_buffer::set_device_context()
 {
     static __thread bool device_set = false;

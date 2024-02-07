@@ -23,12 +23,11 @@
 #  - worker   : number of current parallel executor
 #
 
+source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda11.4"
-GDRCOPY_MODULE="dev/gdrcopy2.3_cuda11.4"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -827,7 +826,7 @@ test_malloc_hook() {
 
 test_no_cuda_context() {
 	echo "==== Running no CUDA context test ===="
-	if [ -x ./test/apps/test_no_cuda_ctx ]
+	if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/apps/test_no_cuda_ctx ]
 	then
 		./test/apps/test_no_cuda_ctx
 	fi
@@ -1071,9 +1070,6 @@ run_tests() {
 	export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
 
 	export UCX_PROTO_REQUEST_RESET=y
-
-	# load cuda env only if GPU available for remaining tests
-	try_load_cuda_env
 
 	# all are running mpi tests
 	run_mpi_tests
