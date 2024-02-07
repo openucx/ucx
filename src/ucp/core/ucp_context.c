@@ -531,7 +531,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "  [a-z] - matches one character from the range given in the bracket.",
    ucs_offsetof(ucp_config_t, protos), UCS_CONFIG_TYPE_ALLOW_LIST},
 
-  {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
+  {"ALLOC_PRIO", "md:sysv,md:posix,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
    "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
    "specified memory domain for allocation. NAME can be either a UCT component\n"
