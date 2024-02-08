@@ -187,6 +187,7 @@ extern uct_tl_t UCT_TL_NAME(rc_verbs);
 extern uct_tl_t UCT_TL_NAME(rc_mlx5);
 extern uct_tl_t UCT_TL_NAME(ud_verbs);
 extern uct_tl_t UCT_TL_NAME(ud_mlx5);
+extern uct_tl_t UCT_TL_NAME(gga_mlx5);
 
 static uct_tl_t *uct_ib_tls[] = {
 #ifdef HAVE_TL_DC
@@ -197,6 +198,7 @@ static uct_tl_t *uct_ib_tls[] = {
 #endif
 #if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
     &UCT_TL_NAME(rc_mlx5),
+    &UCT_TL_NAME(gga_mlx5),
 #endif
 #ifdef HAVE_TL_UD
     &UCT_TL_NAME(ud_verbs),

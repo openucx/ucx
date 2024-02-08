@@ -1661,6 +1661,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG;
     }
 
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_MMO_DMA;
+    }
+
     vhca_id = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, vhca_id);
 
     status = uct_ib_mlx5_devx_query_cap_2(ctx, cap_2_out, sizeof(cap_2_out));
