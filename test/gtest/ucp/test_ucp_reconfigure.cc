@@ -48,25 +48,20 @@ protected:
                    m_num_eps_scale_mode;
         }
 
-        bool is_tl_scalable(const std::string &tl_name)
+        static bool is_tl_scalable(const std::string &tl_name)
         {
             static const std::string scalable_tls[2] = {"dc_mlx5", "ud_mlx5"};
 
-            for (const auto &tl : scalable_tls) {
-                if (tl_name == tl) {
-                    return true;
-                }
-            }
-
-            return false;
+            return std::find(std::begin(scalable_tls), std::end(scalable_tls),
+                             tl_name) != std::end(scalable_tls);
         }
 
-        ucp_lane_index_t num_lanes()
+        ucp_lane_index_t num_lanes() const
         {
             return ucp_ep_config(m_ep)->key.num_lanes;
         }
 
-        unsigned count_dc_resources()
+        unsigned count_dc_resources() const
         {
             unsigned dc_count     = 0;
             ucp_context_h context = m_ep->worker->context;
@@ -162,17 +157,12 @@ protected:
             return false;
         }
 
-        unsigned reused_count()
+        unsigned reused_count() const
         {
-            unsigned reused_count = 0;
-
-            for (auto &uct_ep : m_uct_eps) {
-                if (uct_ep_reused(uct_ep)) {
-                    reused_count++;
-                }
-            }
-
-            return reused_count;
+            return std::count_if(m_uct_eps.begin(), m_uct_eps.end(),
+                                 [this](uct_ep_h uct_ep) {
+                                     return uct_ep_reused(uct_ep);
+                                 });
         }
 
         ucp_ep_h m_ep;
