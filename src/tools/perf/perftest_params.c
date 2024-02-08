@@ -312,6 +312,7 @@ static ucs_status_t verify_daemon_params(ucx_perf_params_t *params)
         return UCS_ERR_UNSUPPORTED;
     }
 
+    params->ucp.is_daemon_mode = 1;
     return UCS_OK;
 }
 
