@@ -416,12 +416,30 @@ void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
     ep->flags &= ~UCT_TCP_EP_FLAG_ON_MATCH_CTX;
 }
 
+static const char*
+uct_tcp_cm_ep_addrs_str(uct_tcp_ep_t *ep, char *buffer, size_t max_length)
+{
+    static char addrs_format[]         = "remote_addr=%s local_addr=%s";
+    uct_tcp_iface_t *iface             = ucs_derived_of(ep->super.super.iface,
+                                                        uct_tcp_iface_t);
+    const struct sockaddr* local_addr  = (const void *)&iface->config.ifaddr;
+    const struct sockaddr* remote_addr = (const void *)&ep->peer_addr;
+    char remote_addr_str[UCS_SOCKADDR_STRING_LEN];
+    char local_addr_str[UCS_SOCKADDR_STRING_LEN];
+
+    snprintf(buffer, max_length, addrs_format,
+             ucs_sockaddr_str(remote_addr, remote_addr_str,
+                              sizeof(remote_addr_str)),
+             ucs_sockaddr_str(local_addr, local_addr_str,
+                              sizeof(local_addr_str)));
+    return buffer;
+}
+
 int uct_tcp_cm_ep_accept_conn(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
-    char str_local_addr[UCS_SOCKADDR_STRING_LEN];
-    char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
+    char err_str[UCT_TCP_CM_SOCKADDR_STR_LEN];
     int cmp;
     ucs_status_t status;
 
@@ -432,11 +450,8 @@ int uct_tcp_cm_ep_accept_conn(uct_tcp_ep_t *ep)
     cmp = ucs_sockaddr_cmp((const struct sockaddr*)&ep->peer_addr,
                            (const struct sockaddr*)&iface->config.ifaddr,
                            &status);
-    ucs_assertv_always(status == UCS_OK, "ucs_sockaddr_cmp(%s, %s) failed",
-                       ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
-                                        str_remote_addr, UCS_SOCKADDR_STRING_LEN),
-                       ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
-                                        str_local_addr, UCS_SOCKADDR_STRING_LEN));
+    ucs_assertv_always(status == UCS_OK, "ucs_sockaddr_cmp(%s) failed",
+                       uct_tcp_cm_ep_addrs_str(ep, err_str, sizeof(err_str)));
 
     /* Accept connection from a peer if the local iface address is greater
      * than peer's one */
@@ -553,6 +568,7 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
     ucs_status_t status;
     uct_tcp_ep_t *peer_ep;
     int connect_to_self;
+    char accept_err_str[UCT_TCP_CM_SOCKADDR_STR_LEN] UCS_V_UNUSED;
 
     ucs_assert(/* EP received the connection request after the TCP
                 * connection was accepted */
@@ -597,7 +613,11 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
             goto out_destroy_ep;
         }
     } else {
-        ucs_assert(uct_tcp_cm_ep_accept_conn(ep));
+        ucs_assertv(uct_tcp_cm_ep_accept_conn(ep),
+                    "ep %p: failed to accept (%s)", ep,
+                    uct_tcp_cm_ep_addrs_str(ep, accept_err_str,
+                                            sizeof(accept_err_str)));
+
         peer_ep = uct_tcp_ep_ptr_map_retrieve(iface, ep->cm_id.ptr_map_key);
         if (peer_ep == NULL) {
             /* Local user-exposed EP was destroyed before receiving CONN_REQ
