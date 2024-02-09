@@ -3655,10 +3655,10 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  * are a bit-wise OR of the @ref ucp_op_attr_t enumeration.
  *
  * @note The completion of a put operation signals the local @e buffer can be
- * reused. The completion of the operation on the remote endpoint requires use
+ * reused. The completion of the operation on the remote address requires use
  * of @ref ucp_worker_flush_nbx "ucp_worker_flush_nbx()" or
- * @ref ucp_ep_flush_nbx "ucp_ep_flush_nbx()", after which the data in
- * @e remote_addr is guaranteed to be available.
+ * @ref ucp_ep_flush_nbx "ucp_ep_flush_nbx()", after completion of which the
+ * data in @e remote_addr is guaranteed to be available.
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local source address.
