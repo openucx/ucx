@@ -3711,7 +3711,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
  * in order to guarantee re-usability of the source address @e buffer.
  * @note The completion of a get operation signals the local @e buffer holds the
- * the expected data and that both local @e buffer and remote @remote_addr are
+ * the expected data and that both local @e buffer and remote @e remote_addr are
  * safe to be reused, unlike with @ref ucp_put_nbx "ucp_put_nbx" where the use
  * of @ref ucp_worker_flush_nbx "ucp_worker_flush_nbx()" or
  * @ref ucp_ep_flush_nbx "ucp_ep_flush_nbx()" is required before the remote data
