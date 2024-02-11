@@ -11,6 +11,125 @@
 ### Features:
 ### Bugfixes:
 
+## 1.16.0 (January 21, 2024)
+### Features:
+#### UCP
+* Added tag offload rendezvous protocol in new infrastructure
+* Added rcache to old protocols infrastructure
+* Added multi-fragment protocols for stream API in new infrastructure
+* Enabled new protocols infrastructure by default
+* Removed context param from ucp_memh_put
+* Added assertion if trying to register unsupported memory type
+* Adjusted rendezvous latency to improve scalability
+* Improved endpoint configuration logging information
+* Added check for max length of user defined Active Message header
+* Added rcache support for mem type memory registration
+* Enabled error handling for rndv/put_zcopy protocol
+* Enabled v2 as default client/server connection establishment packet version
+* Enabled rendezvous protocol selection for reachable MDs only
+* Added ucp_rkey_compare API to enable rkey comparison
+* Added release version to worker address to enable wire compatability
+* Added support for memory invalidation for rendezvous through DC transport
+* Enabled the use of strong fence with new protocols infrastructure
+#### UCT
+* Added UCS_MEMORY_TYPE_RDMA memory type for better latency on supported devices
+* Implemented is_reachable_v2 API for IB transport
+* Added ep_is_conntected API
+#### RDMA CORE (IB, ROCE, etc.)
+* Added Floating LID(FLID) based routing support
+* Added latency and min_zcopy configuration variables to ROCm-IPC
+* Added support for indirect MR for cross-gvmi mkey instead of direct MR with DEVX UMEM
+#### TCP
+* Added filter for eliminate bridge devices from lane selection
+#### GPU (CUDA, ROCM)
+* Added support for handling memh with multiple registrations
+* Added performance estimation BW based on GPU type
+* Adjusted rocm/ipc latency and zcopy threshold parameters
+* Improved error message when libnvidia-ml not installed
+* Added profiling to Cuda runtime API calls
+* Adjusted gdr_copy estimated BW to improve protocol selection
+#### Shared Memory
+* Adjusted FIFO_SIZE to improve scalability
+* Removed redundent rcahce implementation in knem transport
+* Added support for symmetric rkey to improve memory usage 
+#### UCS
+* Improved scalability of connection establishment flow
+* Improved memtype cache performance by replacing ptrhead_lock to spinlock
+* Added support for VLAN over channel bonding interface
+* Added LRU cache and Usage Tracker datastructures
+* Improved cross-NUMA device detection
+#### Build
+* Added LCOV coverage report as a build option
+* Added binutils 2.40 library dependencies
+* Added development modulefile
+#### Tools
+* Added information about sizes of ucp_request_t fields in ucx_info
+* Added ucx env to profiling output
+* Added MAD RTE in ucx_perftest to support setups without IPoIB
+#### Tests
+* Added GTEST_LOG_LEVEL env var to set log level just before test run
+* Disabled protov1 and ud_verbs tests for valgrind mode
+* Reduced gtest execution time
+#### Documentation
+* Added a few details to coding style
+### Bugfixes:
+#### UCP
+* Reverted wireup latency calculation which caused lanes selection issue
+* Fixed strong fence to always ensure ordering
+* Fixed registration of memh for RNDV protocol
+* Fixed rndv_put and rkey_ptr assertion failure
+* Fixed performance estimation for multi-fragment protocols
+* Fixed memory registration error handling
+* Fixed buffer overflow of large log messages
+* Fixed progress enabling for selected lanes
+* Fixed atomic lanes progress enabling
+* Added missing rendezvous schemes to environment variable documentation
+* Fixed bcopy BW estimation for AMD 
+* Fixed lanes information printing for new protocols infrastructure
+* Fixed rndv_am protocol thresholds
+* Fixed fp8 packing issue
+* Fixed Intel OneAPI compilation error
+* Fixed CM address packing on server side
+* Fixed endpoint reconfiguration issue due to asymmetrical selection
+* Fixed asymmetrical selection due to wire compatability issue
+* Fixed potential deadlock with cuda_copy and RTR protocol
+* Fixed tag_recv return value on immediate completion  
+* Fixed memory corruption by proper memh handling in tag offload rendezvous
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixed compilation failure when DevX is explicitly disabled 
+* Fixed crash when using PCIe relaxed ordering
+* Fixed remote access error with rc_verbs transport
+* Fixed endpoint address management in unified mode
+* Fixed assertion failure when configured with UCX_IB_ADDR_TYPE=ib_global
+* Fixed overwritten MD attribute capabilities when querying a device
+#### TCP
+* Fixed assymetric lanes selection issue due to inconsistent device listing 
+#### GPU (CUDA, ROCM)
+* Fixed compilation flags to support ROCm 6.0
+* Fixed values of D2H_THRESH and latencey params
+* Fixed Cuda memory support for iov datatype
+#### Shared Memoey
+* Fixed posix and cma transport selection by enhancing reachability checks
+* Fixed UGNI build failure
+* Fixed latency overhead for knem and cma transports
+* Fixed possible out-of-order issue in mm_iface
+#### UCS
+* Fixed a deadlock when forked debugger is attached during an error in rcache operation
+* Fixed crash due to passing null pointer to log function
+* Fixed crash due to incorrect hashing method
+* Fixed crash in configuration parser cleanup by moving it after profiler cleanup 
+#### UCM
+* Fixed occasional crash in bisto hooks by adding a lock before hooking
+#### Java
+* Fixed go tests by setting CUDA device before allocating CUDA memory
+* Fixed perftest error detection and hanging issue
+#### Tools
+* Fixed cpu model type for AMD Genoa in ucx_info
+* Enhanced multi-thread test output
+#### Build
+* Fixed JUCX package publishing, so it will include support for ARM
+* Fixed ROCM building and testing
+
 ## 1.15.0 (September 28, 2023)
 ### Features:
 #### UCP
