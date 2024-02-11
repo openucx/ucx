@@ -1646,10 +1646,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices)
 {
-    ucp_worker_h worker                  = ep->worker;
-    ucp_tl_bitmap_t tl_bitmap =
-            UCS_STATIC_BITMAP_AND(*local_tl_bitmap, worker->context->tl_bitmap);
-    ucp_rsc_index_t cm_idx               = UCP_NULL_RESOURCE;
+    ucp_worker_h worker    = ep->worker;
+    ucp_rsc_index_t cm_idx = UCP_NULL_RESOURCE;
+    ucp_tl_bitmap_t tl_bitmap;
     ucp_lane_map_t connect_lane_bitmap;
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
@@ -1658,6 +1657,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     char str[32];
     ucs_queue_head_t replay_pending_queue;
 
+    tl_bitmap = UCS_STATIC_BITMAP_AND(*local_tl_bitmap,
+                                      worker->context->tl_bitmap);
     ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
 
     ucs_trace("ep %p: initialize lanes", ep);
