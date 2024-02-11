@@ -173,22 +173,42 @@ try_load_cuda_env() {
     num_gpus=0
     have_cuda=no
     have_gdrcopy=no
-    if [ -f "/proc/driver/nvidia/version" ]; then
-        have_cuda=yes
-        have_gdrcopy=yes
-        az_module_load dev/cuda12.2.2 || have_cuda=no
-        az_module_load dev/gdrcopy2.3.1-1_cuda12.2.2 || have_gdrcopy=no
-        nvidia-smi -a
-        ls -l /dev/nvidia*
-        num_gpus=$(nvidia-smi -L | wc -l)
-        if [ "$num_gpus" -gt 0 ] && ! [ -f /sys/kernel/mm/memory_peers/nv_mem/version ]
-        then
-            lsmod
-            azure_log_error "GPU direct driver not loaded"
-        fi
+
+    # List relevant modules
+    lsmod | grep -P "^(nvidia|nv_peer_mem|gdrdrv)\W" || true
+
+    # Check nvidia driver
+    [ -f "/proc/driver/nvidia/version" ] || return 0
+
+    # Check peer mem driver
+    [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
+
+    # Check number of available GPUs
+    nvidia-smi -a || true
+    num_gpus=$(nvidia-smi -L | grep GPU | wc -l)
+    [ "${num_gpus}" -gt 0 ] || return 0
+
+    # Check cuda env module
+    az_module_load dev/cuda12.2.2 || return 0
+    have_cuda=yes
+
+    # Check gdrcopy
+    if [ -w "/dev/gdrdrv" ]
+    then
+        az_module_load dev/gdrcopy2.3.1-1_cuda12.2.2 && have_gdrcopy=yes
+    fi
+
+    # Set CUDA_VISIBLE_DEVICES
+    if [ -n "${worker}" ]
+    then
+        export CUDA_VISIBLE_DEVICES=$((worker % num_gpus))
     fi
 }
 
+load_cuda_env() {
+    try_load_cuda_env
+    [ "${have_cuda}" == "yes" ] || azure_log_error "Cuda device is not available"
+}
 
 check_release_build() {
     build_reason=$1

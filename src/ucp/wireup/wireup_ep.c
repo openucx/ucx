@@ -385,7 +385,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->pending_count = 0;
     self->flags         = 0;
     ucs_queue_head_init(&self->pending_q);
-    UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
+    UCS_STATIC_BITMAP_RESET_ALL(&self->cm_resolve_tl_bitmap);
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
     ucp_worker_flush_ops_count_add(ucp_ep->worker, +1);

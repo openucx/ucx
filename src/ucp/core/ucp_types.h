@@ -10,7 +10,7 @@
 #include <ucp/api/ucp.h>
 #include <ucs/type/float8.h>
 #include <uct/api/uct.h>
-#include <ucs/datastruct/bitmap.h>
+#include <ucs/datastruct/static_bitmap.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/math.h>
 #include <stdint.h>
@@ -85,7 +85,7 @@ typedef struct ucp_mem_desc           ucp_mem_desc_t;
  *
  * Bitmap type for representing which TL resources are in use.
  */
-typedef ucs_bitmap_t(UCP_MAX_RESOURCES) ucp_tl_bitmap_t;
+typedef ucs_static_bitmap_s(UCP_MAX_RESOURCES) ucp_tl_bitmap_t;
 
 
 /**
@@ -113,8 +113,7 @@ extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
  * @return A new bitmap, which is the logical AND NOT of the operands
  */
 #define UCP_TL_BITMAP_AND_NOT(_bitmap1, _bitmap2) \
-    UCS_BITMAP_AND(_bitmap1, UCS_BITMAP_NOT(_bitmap2, UCP_MAX_RESOURCES), \
-                   UCP_MAX_RESOURCES)
+    UCS_STATIC_BITMAP_AND(_bitmap1, UCS_STATIC_BITMAP_NOT(_bitmap2))
 
 
 #define UCS_FP8_MIN_BW  (512 * UCS_MBYTE)

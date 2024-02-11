@@ -64,35 +64,32 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
     return UCS_ERR_NO_RESOURCE;
 }
 
-static ucs_status_t
-ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
+static void ucp_proto_reconfig_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_perf_range_t *perf_range = &init_params->caps->ranges[0];
+    ucp_proto_caps_t caps;
 
     /* Default reconfiguration protocol is a fallback for any case protocol
      * selection is unsuccessful. The protocol keeps queuing requests until they
      * can be executed.
+     * Its performance estimation is an "infinity" value, that is worse than any
+     * other protocol.
      */
+    caps.min_length           = 0;
+    caps.num_ranges           = 1;
+    caps.ranges[0].max_length = SIZE_MAX;
+    caps.ranges[0].node       = ucp_proto_perf_node_new_data("dummy", "");
+    ucp_proto_perf_set(caps.ranges[0].perf,
+                       ucs_linear_func_make(INFINITY, INFINITY));
 
-    ucp_proto_select_caps_reset(init_params->caps);
-
-    *init_params->priv_size       = 0;
-    init_params->caps->cfg_thresh = UCS_MEMUNITS_INF;
-    init_params->caps->num_ranges = 1;
-
-    /* Set the performance estimation as worse than any other protocol */
-    perf_range->max_length = SIZE_MAX;
-    ucp_proto_perf_set(perf_range->perf, ucs_linear_func_make(INFINITY, 0));
-
-    perf_range->node = ucp_proto_perf_node_new_data("dummy", "");
-    return UCS_OK;
+    ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_INF, 0, &caps, NULL,
+                               0);
 }
 
 ucp_proto_t ucp_reconfig_proto = {
     .name     = "reconfig",
     .desc     = "stub protocol",
     .flags    = UCP_PROTO_FLAG_INVALID,
-    .init     = ucp_proto_reconfig_init,
+    .probe    = ucp_proto_reconfig_probe,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_reconfig_progress},
     .abort    = ucp_request_complete_send,

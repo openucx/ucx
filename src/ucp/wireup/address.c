@@ -378,8 +378,8 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     }
 
     num_devices = 0;
-    UCS_BITMAP_AND_INPLACE(&current_tl_bitmap, context->tl_bitmap);
-    UCS_BITMAP_FOR_EACH_BIT(current_tl_bitmap, rsc_index) {
+    UCS_STATIC_BITMAP_AND_INPLACE(&current_tl_bitmap, context->tl_bitmap);
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &current_tl_bitmap) {
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (!ucp_worker_iface_can_connect(iface_attr)) {
             continue;
@@ -439,7 +439,7 @@ ucp_address_gather_devices(ucp_worker_h worker, const ucp_ep_config_key_t *key,
         }
 
         dev->rsc_index  = rsc_index;
-        UCS_BITMAP_SET(dev->tl_bitmap, rsc_index);
+        UCS_STATIC_BITMAP_SET(&dev->tl_bitmap, rsc_index);
         dev->num_paths  = ucs_min(max_num_paths, iface_attr->dev_num_paths);
     }
 
@@ -934,7 +934,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         unified             = ptr;
         rsc_idx             = unified->rsc_index & UCP_ADDRESS_IFACE_LEN_MASK;
         iface_attr->lat_ovh = fabs(unified->lat_ovh);
-        if (!UCS_BITMAP_GET(worker->context->tl_bitmap, rsc_idx)) {
+        if (!UCS_STATIC_BITMAP_GET(worker->context->tl_bitmap, rsc_idx)) {
             ucp_address_error(
                     unpack_flags,
                     "failed to unpack address, resource[%d] is not valid",
@@ -1259,15 +1259,15 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
 
     for (dev = devices; dev < (devices + num_devices); ++dev) {
         dev_tl_bitmap = context->tl_bitmap;
-        UCS_BITMAP_AND_INPLACE(&dev_tl_bitmap, dev->tl_bitmap);
+        UCS_STATIC_BITMAP_AND_INPLACE(&dev_tl_bitmap, dev->tl_bitmap);
 
         /* MD index */
         md_index      = context->tl_rscs[dev->rsc_index].md_index;
         md_flags      = context->tl_mds[md_index].attr.flags &
                             md_flags_pack_mask;
-        ptr           = ucp_address_pack_md_info(
-                            ptr, UCS_BITMAP_IS_ZERO_INPLACE(&dev_tl_bitmap),
-                            md_flags, md_index, addr_version);
+        ptr           = ucp_address_pack_md_info(ptr,
+                                                 UCS_STATIC_BITMAP_IS_ZERO(dev_tl_bitmap),
+                                                 md_flags, md_index, addr_version);
         dev_flags_ptr = ptr;
         ucs_assert_always((pack_flags & UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR) ||
                           (dev->dev_addr_len == 0));
@@ -1309,7 +1309,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         }
 
         flags_ptr = NULL;
-        UCS_BITMAP_FOR_EACH_BIT(dev_tl_bitmap, rsc_index) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &dev_tl_bitmap) {
             wiface     = ucp_worker_iface(worker, rsc_index);
             iface_attr = &wiface->attr;
 
@@ -1329,7 +1329,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                                       context->tl_rscs[rsc_index].tl_name_csum);
 
             /* Transport information */
-            enable_amo = UCS_BITMAP_GET(worker->atomic_tls, rsc_index);
+            enable_amo = UCS_STATIC_BITMAP_GET(worker->atomic_tls, rsc_index);
             attr_len   = ucp_address_pack_iface_attr(wiface, ptr, rsc_index,
                                                      pack_flags, addr_version,
                                                      enable_amo);
@@ -1468,11 +1468,11 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
          * during the above loop So, set the LAST flag for the flags_ptr
          * from the last iteration */
         if (flags_ptr != NULL) {
-            ucs_assert(!UCS_BITMAP_IS_ZERO_INPLACE(&dev_tl_bitmap));
+            ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(dev_tl_bitmap));
             *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_LAST;
         } else {
             /* cppcheck-suppress internalAstError */
-            ucs_assert(UCS_BITMAP_IS_ZERO_INPLACE(&dev_tl_bitmap));
+            ucs_assert(UCS_STATIC_BITMAP_IS_ZERO(dev_tl_bitmap));
         }
     }
 

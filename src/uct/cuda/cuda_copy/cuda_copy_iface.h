@@ -7,7 +7,7 @@
 #define UCT_CUDA_COPY_IFACE_H
 
 
-#include <ucs/datastruct/bitmap.h>
+#include <ucs/datastruct/static_bitmap.h>
 #include <ucs/memory/memory_type.h>
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_iface.h>
@@ -37,7 +37,7 @@ typedef uint64_t uct_cuda_copy_iface_addr_t;
     Bits will be set using:
     UCS_BITMAP_SET(bitmap, uct_cuda_copy_flush_bitmap_idx(src_mem_type, dst_mem_type))
 */
-typedef ucs_bitmap_t(UCT_CUDA_MEMORY_TYPES_MAP) uct_cu_stream_bitmap_t;
+typedef ucs_static_bitmap_s(UCT_CUDA_MEMORY_TYPES_MAP) uct_cu_stream_bitmap_t;
 
 typedef struct uct_cuda_copy_queue_desc {
     /* stream on which asynchronous memcpy operations are enqueued */

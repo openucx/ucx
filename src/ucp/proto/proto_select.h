@@ -157,6 +157,12 @@ ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
 void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
 
 
+void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
+                                size_t cfg_thresh, unsigned cfg_priority,
+                                const ucp_proto_caps_t *proto_caps,
+                                const void *priv, size_t priv_size);
+
+
 void ucp_proto_select_caps_reset(ucp_proto_caps_t *caps);
 
 

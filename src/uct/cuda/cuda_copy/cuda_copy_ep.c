@@ -158,8 +158,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     ucs_queue_push(event_q, &cuda_event->queue);
     cuda_event->comp = comp;
 
-    UCS_BITMAP_SET(iface->streams_to_sync,
-                   uct_cuda_copy_flush_bitmap_idx(src_type, dst_type));
+    UCS_STATIC_BITMAP_SET(&iface->streams_to_sync,
+                          uct_cuda_copy_flush_bitmap_idx(src_type, dst_type));
 
     ucs_trace("cuda async issued: %p dst:%p[%s], src:%p[%s] len:%ld",
               cuda_event, dst, ucs_memory_type_names[dst_type], src,

@@ -1600,8 +1600,10 @@ ucp_memh_import_attach(ucp_context_h context, ucp_mem_h memh,
         if (ucs_unlikely(status != UCS_OK)) {
             /* Don't print an error, because two MDs can have similar global
              * identifiers, but a memory key was exported on another MD */
-            ucs_trace("failed to attach memory on '%s': %s",
-                      md_attr->component_name, ucs_status_string(status));
+            ucs_trace("failed to attach memory on '%s/%s': %s",
+                      md_attr->component_name,
+                      context->tl_mds[md_index].rsc.md_name,
+                      ucs_status_string(status));
             continue;
         }
 

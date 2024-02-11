@@ -119,7 +119,8 @@ protected:
         ops.ep_destroy       = ep_destroy_func;
         iface.ops            = ops;
 
-        ucp_rsc_index_t rsc_index  = UCS_BITMAP_FFS(sender().ucph()->tl_bitmap);
+        ucp_rsc_index_t rsc_index  = UCS_STATIC_BITMAP_FFS(
+                sender().ucph()->tl_bitmap);
         ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(),
                                                       rsc_index);
         std::vector<uct_ep_h> eps_to_discard;
@@ -812,7 +813,7 @@ public:
     void verify_seg_size(ucp_worker_h worker) const {
         ucp_rsc_index_t tl_id;
 
-        UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, tl_id) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
             ucp_worker_iface_t *wiface = ucp_worker_iface(worker, tl_id);
 
             if (wiface->attr.cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
