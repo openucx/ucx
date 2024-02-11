@@ -14,7 +14,7 @@
 #include <sys/utsname.h>
 #include <pthread.h>
 
-#define MAX_AGENTS 63
+#define MAX_AGENTS 127
 static struct agents {
     int num;
     hsa_agent_t agents[MAX_AGENTS];
