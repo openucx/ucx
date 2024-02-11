@@ -67,7 +67,7 @@ protected:
             ucp_context_h context = m_ep->worker->context;
             ucp_rsc_index_t tl_id;
 
-            UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
+            UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
                 std::string tl_name = context->tl_rscs[tl_id].tl_rsc.tl_name;
 
                 if (tl_name == "dc_mlx5") {
@@ -88,7 +88,8 @@ protected:
             }
 
             ucp_rsc_index_t tl_id;
-            UCS_BITMAP_FOR_EACH_BIT(m_ep->worker->context->tl_bitmap, tl_id) {
+            UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id,
+                                           &m_ep->worker->context->tl_bitmap) {
                 auto resource = &m_ep->worker->context->tl_rscs[tl_id];
                 if (resource->dev_index == dev_index) {
                     if (std::string(resource->tl_rsc.tl_name) == "dc_mlx5") {
@@ -392,7 +393,7 @@ public:
         ucp_tl_bitmap_t tl_bitmap = sender().ucph()->tl_bitmap;
         ucp_rsc_index_t tl_id;
 
-        UCS_BITMAP_FOR_EACH_BIT(sender().ucph()->tl_bitmap, tl_id) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &sender().ucph()->tl_bitmap) {
             auto resource = &sender().ucph()->tl_rscs[tl_id];
 
             if (std::string(resource->tl_rsc.tl_name) == "dc_mlx5") {
@@ -400,7 +401,7 @@ public:
             }
 
             if ((dc_count - 1) == dev_index) {
-                UCS_BITMAP_UNSET(tl_bitmap, tl_id);
+                UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);
                 m_disabled_devs.push_back(resource->dev_index);
                 break;
             }

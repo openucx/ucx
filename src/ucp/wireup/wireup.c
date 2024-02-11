@@ -1647,9 +1647,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    unsigned *addr_indices)
 {
     ucp_worker_h worker                  = ep->worker;
-    ucp_tl_bitmap_t tl_bitmap            = UCS_BITMAP_AND(*local_tl_bitmap,
-                                                          worker->context->tl_bitmap,
-                                                          UCP_MAX_RESOURCES);
+    ucp_tl_bitmap_t tl_bitmap =
+            UCS_STATIC_BITMAP_AND(*local_tl_bitmap, worker->context->tl_bitmap);
     ucp_rsc_index_t cm_idx               = UCP_NULL_RESOURCE;
     ucp_lane_map_t connect_lane_bitmap;
     ucp_ep_config_key_t key;
