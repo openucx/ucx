@@ -1658,8 +1658,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     char str[32];
     ucs_queue_head_t replay_pending_queue;
 
-    tl_bitmap = UCS_STATIC_BITMAP_AND(*local_tl_bitmap,
-                                      worker->context->tl_bitmap);
     ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
 
     ucs_trace("ep %p: initialize lanes", ep);
