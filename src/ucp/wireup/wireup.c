@@ -1514,6 +1514,7 @@ static ucs_status_t ucp_wireup_set_msg_aux(ucp_ep_h ep,
         uct_ep_destroy(wireup_aux_ep);
     }
 
+    ucs_assert(aux_lane < UCP_MAX_LANES);
     ucp_wireup_ep_set_aux(wireup_ep, aux_ep, old_key->lanes[aux_lane].rsc_index,
                           ucp_ep_config(ep)->p2p_lanes & UCS_BIT(aux_lane));
 
