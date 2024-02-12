@@ -217,10 +217,10 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
                                 const ucp_proto_select_param_t *select_param,
                                 ucp_proto_select_init_protocols_t *proto_init)
 {
+    ucp_proto_caps_t proto_caps = {};
     UCS_STRING_BUFFER_ONSTACK(strb, UCP_PROTO_CONFIG_STR_MAX);
     void *proto_priv = ucs_alloca(UCP_PROTO_PRIV_MAX);
     ucp_proto_init_params_t init_params;
-    ucp_proto_caps_t proto_caps;
     ucs_status_t status;
     size_t priv_size;
 
