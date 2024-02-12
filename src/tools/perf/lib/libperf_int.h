@@ -109,6 +109,7 @@ struct ucx_perf_context {
             unsigned long              remote_addr;
             ucp_mem_h                  send_memh;
             ucp_mem_h                  recv_memh;
+            ucp_perf_daemon_req_t      daemon_req;
             ucp_dt_iov_t               *send_iov;
             ucp_dt_iov_t               *recv_iov;
             void                       *am_hdr;
