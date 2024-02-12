@@ -147,7 +147,7 @@ protected:
         }
 
     private:
-        bool uct_ep_reused(uct_ep_h uct_ep)
+        bool uct_ep_reused(uct_ep_h uct_ep) const
         {
             for (ucp_lane_index_t lane = 0; lane < num_lanes(); ++lane) {
                 if (ucp_ep_get_lane(m_ep, lane) == uct_ep) {
@@ -161,7 +161,7 @@ protected:
         unsigned reused_count() const
         {
             return std::count_if(m_uct_eps.begin(), m_uct_eps.end(),
-                                 [this](uct_ep_h uct_ep) {
+                                 [this](const uct_ep_h uct_ep) {
                                      return uct_ep_reused(uct_ep);
                                  });
         }
