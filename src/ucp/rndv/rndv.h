@@ -60,6 +60,12 @@ typedef struct {
 
     /* Offset of the data in the recv buffer */
     size_t   offset;
+
+    /* Recv buffer memory type */
+    uint8_t  mem_type;
+
+    /* Recv buffer system device */
+    uint8_t  sys_dev;
 } UCS_S_PACKED ucp_rndv_rtr_hdr_t;
 
 

@@ -104,11 +104,16 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_hdr_pack(ucp_request_t *req, ucp_rndv_rtr_hdr_t *rtr,
                             void *buffer)
 {
-    rtr->sreq_id = req->send.rndv.remote_req_id;
-    rtr->rreq_id = ucp_send_request_get_id(req);
-    rtr->size    = req->send.state.dt_iter.length;
-    rtr->offset  = req->send.rndv.offset;
-    rtr->address = (uintptr_t)buffer;
+    const ucp_proto_config_t *proto_config       = req->send.proto_config;
+    const ucp_proto_select_param_t *select_param = &proto_config->select_param;
+
+    rtr->sreq_id  = req->send.rndv.remote_req_id;
+    rtr->rreq_id  = ucp_send_request_get_id(req);
+    rtr->size     = req->send.state.dt_iter.length;
+    rtr->offset   = req->send.rndv.offset;
+    rtr->address  = (uintptr_t)buffer;
+    rtr->sys_dev  = select_param->sys_dev;
+    rtr->mem_type = select_param->mem_type;
     ucs_assert(rtr->size > 0);
 }
 

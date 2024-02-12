@@ -367,7 +367,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
         [ucs_ilog2(UCP_OP_ATTR_FLAG_MULTI_SEND)] = "multi",
     };
     static const char *rndv_flag_names[] = {
-        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)] = "frag"
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_RNDV_PPLN_SEND)] = "frag send",
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_RNDV_PPLN_RECV)] = "frag recv"
     };
     static const char *am_flag_names[]   = {
         [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)] = "egr",

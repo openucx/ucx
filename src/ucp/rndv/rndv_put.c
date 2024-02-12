@@ -215,8 +215,7 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
                                uint64_t rndv_modes, size_t max_length,
                                uct_ep_operation_t memtype_op, unsigned flags,
                                ucp_md_map_t initial_reg_md_map,
-                               uct_completion_callback_t comp_cb,
-                               int support_ppln)
+                               uct_completion_callback_t comp_cb)
 {
     const size_t atp_size                = sizeof(ucp_rndv_ack_hdr_t);
     ucp_context_t *context               = init_params->worker->context;
@@ -257,8 +256,7 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     ucs_status_t status;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
-                                 support_ppln) ||
+        !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND)) ||
         !ucp_proto_common_init_check_err_handling(&params.super)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -396,11 +394,15 @@ ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
     unsigned flags = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                      UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING;
 
+    if (ucp_proto_select_op_flags(init_params->select_param) &
+        UCP_PROTO_SELECT_OP_FLAG_RNDV_PPLN_SEND) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     return ucp_proto_rndv_put_common_init(init_params,
                                           UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY),
                                           SIZE_MAX, UCT_EP_OP_LAST, flags, 0,
-                                          ucp_proto_rndv_put_zcopy_completion,
-                                          0);
+                                          ucp_proto_rndv_put_zcopy_completion);
 }
 
 static void
@@ -539,7 +541,7 @@ ucp_proto_rndv_put_mtype_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_rndv_put_common_init(init_params,
                                           UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
                                           frag_size, UCT_EP_OP_GET_ZCOPY, 0,
-                                          mdesc_md_map, comp_cb, 1);
+                                          mdesc_md_map, comp_cb);
 }
 
 static void

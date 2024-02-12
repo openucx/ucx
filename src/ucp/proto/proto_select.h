@@ -26,7 +26,11 @@
 
 /* Select a protocol for sending one fragment of a rendezvous pipeline.
  * Relevant for UCP_OP_ID_RNDV_SEND and UCP_OP_ID_RNDV_RECV. */
-#define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
+#define UCP_PROTO_SELECT_OP_FLAG_RNDV_PPLN_SEND (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
+#define UCP_PROTO_SELECT_OP_FLAG_RNDV_PPLN_RECV (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
+
+#define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG \
+    (UCP_PROTO_SELECT_OP_FLAG_RNDV_PPLN_SEND | UCP_PROTO_SELECT_OP_FLAG_RNDV_PPLN_RECV)
 
 
 /* Select eager/rendezvous protocol for Active Message sends.
