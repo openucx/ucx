@@ -760,7 +760,7 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
                  (worker, req, op_id, op_attr_mask, length, rkey_buffer,
-                  rkey_length, sg_count),
+                  rkey_length, sg_count, remote_mem_info),
                  ucp_worker_h worker, ucp_request_t *req,
                  ucp_operation_id_t op_id, uint32_t op_attr_mask, size_t length,
                  const void *rkey_buffer, size_t rkey_length, uint8_t sg_count,
