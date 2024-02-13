@@ -60,6 +60,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .unpack_time         = unpack_time,
         .unpack_perf_node    = unpack_perf_node,

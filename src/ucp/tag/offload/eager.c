@@ -44,7 +44,6 @@ ucp_proto_eager_tag_offload_short_progress(uct_pending_req_t *self)
 static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         const ucp_proto_init_params_t *init_params)
 {
-    const ucp_proto_select_param_t *select_param = init_params->select_param;
     ucp_proto_single_init_params_t params        = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -65,12 +64,13 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_SHORT
     };
 
-    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 1) ||
-        !ucp_proto_is_short_supported(select_param)) {
+    if (!ucp_tag_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 1)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -139,6 +139,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = 0,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_BCOPY
     };
@@ -250,6 +251,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_ZCOPY
     };

@@ -91,7 +91,6 @@ static ucs_status_t
 ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
                                      ucp_operation_id_t op_id)
 {
-    const ucp_proto_select_param_t *select_param = init_params->select_param;
     ucp_proto_single_init_params_t params        = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -111,13 +110,14 @@ ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
-                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
-        !ucp_proto_is_short_supported(select_param)) {
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -242,6 +242,7 @@ static ucs_status_t ucp_am_eager_single_bcopy_proto_init_common(
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = 0,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
@@ -333,13 +334,14 @@ static ucs_status_t ucp_am_eager_single_zcopy_proto_init_common(
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
     if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
-                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

@@ -95,6 +95,8 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_IOV) |
+                               UCS_BIT(UCP_DATATYPE_GENERIC),
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_BCOPY,
@@ -104,8 +106,7 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
-    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -189,6 +190,7 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_GENERIC),
         .max_lanes           = context->config.ext.max_rma_lanes,
         .initial_reg_md_map  = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,

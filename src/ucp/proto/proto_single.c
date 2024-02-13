@@ -66,7 +66,8 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
 {
     ucs_status_t status;
 
-    if (!ucp_proto_common_init_check_err_handling(&params->super)) {
+    if (!ucp_proto_common_init_check_err_handling(&params->super) ||
+        !ucp_proto_common_check_range(&params->super)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

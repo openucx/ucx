@@ -92,6 +92,7 @@ ucp_stream_multi_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = 0,
         .max_lanes           = 1,
         .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -165,6 +166,7 @@ ucp_stream_multi_zcopy_init(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.inv_datatypes = UCS_BIT(UCP_DATATYPE_GENERIC),
         .max_lanes           = 1,
         .initial_reg_md_map  = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
