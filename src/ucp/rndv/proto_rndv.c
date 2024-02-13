@@ -91,7 +91,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_init_params_t *params,
         }
     }
 
-    if (sys_distance == NULL) {
+    if ((sys_distance == NULL) || (sys_dev_map == NULL)) {
         return;
     }
 
