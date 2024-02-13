@@ -440,6 +440,32 @@ UCS_TEST_P(test_dc, rand_dci_pending_purge) {
     flush();
 }
 
+UCS_TEST_P(test_dc, pool_indices)
+{
+    constexpr uint8_t max_dci_pools       = UCT_DC_MLX5_IFACE_MAX_DCI_POOLS;
+    constexpr uint8_t last_dci_pool_index = UCT_DC_MLX5_IFACE_MAX_DCI_POOLS - 1;
+
+    /* Set num paths to max */
+    modify_config("IB_NUM_PATHS", std::to_string(max_dci_pools).c_str());
+
+    entity *rand_e        = create_rand_entity();
+    uint8_t num_dci_pools = dc_iface(rand_e)->tx.num_dci_pools;
+    bool used_last_pool   = false;
+
+    EXPECT_EQ(num_dci_pools, max_dci_pools);
+
+    /* Create an ep for each pool */
+    for (int i = 0; i < max_dci_pools; i++) {
+        rand_e->connect_to_iface(i, *m_e2, i);
+        uct_dc_mlx5_ep_t *ep = dc_ep(rand_e, i);
+        if (uct_dc_mlx5_ep_pool_index(ep) == last_dci_pool_index) {
+            used_last_pool = true;
+        }
+    }
+
+    EXPECT_TRUE(used_last_pool);
+}
+
 UCS_TEST_SKIP_COND_P(test_dc, stress_iface_ops,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY), "DC_NUM_DCI=1") {
 

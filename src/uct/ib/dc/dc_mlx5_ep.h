@@ -27,35 +27,35 @@
 
 enum uct_dc_mlx5_ep_flags {
     /* DCI pool EP assigned to according to it's lag port */
-    UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK     = UCS_MASK(3),
+    UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK     = UCS_MASK(5),
 
     /* EP is in the tx_wait state. See description of the dcs+quota dci
        selection policy above */
-    UCT_DC_MLX5_EP_FLAG_TX_WAIT             = UCS_BIT(3),
+    UCT_DC_MLX5_EP_FLAG_TX_WAIT             = UCS_BIT(5),
 
     /* EP has GRH address. Used by dc_mlx5 endpoint */
-    UCT_DC_MLX5_EP_FLAG_GRH                 = UCS_BIT(4),
+    UCT_DC_MLX5_EP_FLAG_GRH                 = UCS_BIT(6),
 
     /* Keepalive Request scheduled: indicates that keepalive request
      * is scheduled in outstanding queue and no more keepalive actions
      * are needed */
-    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED    = UCS_BIT(5),
+    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED    = UCS_BIT(7),
 
     /* Flush cancel was executed on EP */
-    UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL        = UCS_BIT(6),
+    UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL        = UCS_BIT(8),
 
     /* Error handler already called or flush(CANCEL) disabled it */
-    UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(7),
+    UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(9),
 
     /* EP supports flush remote operation */
-    UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY          = UCS_BIT(8),
+    UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY          = UCS_BIT(10),
 
     /* Flush remote operation should be invoked */
-    UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(9),
+    UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE        = UCS_BIT(11),
 
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(10)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(12)
 #else
     UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
 #endif
