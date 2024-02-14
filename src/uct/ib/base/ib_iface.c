@@ -1094,7 +1094,7 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
         uct_ib_check_memlock_limit_msg(
                 UCS_LOG_LEVEL_ERROR,
                 "iface=%p: failed to create %s QP "
-                "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
+                "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
                 iface, uct_ib_qp_type_str(attr->qp_type), attr->cap.max_send_wr,
                 attr->cap.max_send_sge, attr->cap.max_inline_data,
                 attr->max_inl_cqe[UCT_IB_DIR_TX], attr->cap.max_recv_wr,
