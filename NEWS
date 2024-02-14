@@ -95,6 +95,8 @@
 * Fixed potential deadlock with cuda_copy and RTR protocol
 * Fixed tag_recv return value on immediate completion  
 * Fixed memory corruption by proper memh handling in tag offload rendezvous
+* Changed default allocator to not use reserved huge pages
+* Fixed rndv put protocol to avoid early completion
 #### RDMA CORE (IB, ROCE, etc.)
 * Fixed compilation failure when DevX is explicitly disabled 
 * Fixed crash when using PCIe relaxed ordering
@@ -102,12 +104,14 @@
 * Fixed endpoint address management in unified mode
 * Fixed assertion failure when configured with UCX_IB_ADDR_TYPE=ib_global
 * Fixed overwritten MD attribute capabilities when querying a device
+* Fixed ibv_reg_mr error by registering memory in rcache callback
 #### TCP
 * Fixed assymetric lanes selection issue due to inconsistent device listing 
 #### GPU (CUDA, ROCM)
 * Fixed compilation flags to support ROCm 6.0
 * Fixed values of D2H_THRESH and latencey params
 * Fixed Cuda memory support for iov datatype
+* Increased max number of agents in ROCm
 #### Shared Memoey
 * Fixed posix and cma transport selection by enhancing reachability checks
 * Fixed UGNI build failure
@@ -117,7 +121,8 @@
 * Fixed a deadlock when forked debugger is attached during an error in rcache operation
 * Fixed crash due to passing null pointer to log function
 * Fixed crash due to incorrect hashing method
-* Fixed crash in configuration parser cleanup by moving it after profiler cleanup 
+* Fixed crash in configuration parser cleanup by moving it after profiler cleanup
+* Fixed floating point division by zero during protocols initialization
 #### UCM
 * Fixed occasional crash in bisto hooks by adding a lock before hooking
 #### Java
@@ -128,7 +133,9 @@
 * Enhanced multi-thread test output
 #### Build
 * Fixed JUCX package publishing, so it will include support for ARM
-* Fixed ROCM building and testing
+* Fixed ROCm building and testing
+* Removed libnvidia-compute version dependency
+* Removed libibmad/libumad from default build configuration to avoid runtime dependency
 
 ## 1.15.0 (September 28, 2023)
 ### Features:
