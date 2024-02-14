@@ -516,7 +516,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     /* If using procfs link instead of mmid, remove the original file and update
      * seg->seg_id */
     if (posix_config->use_proc_link) {
-        uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_DEBUG);
+        uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_DIAG);
 
         /* Replace mmid by pid+fd. Keep previous SHM_OPEN flag for mkey_pack() */
         seg->seg_id = uct_posix_mmid_procfs_pack(fd) |
@@ -584,7 +584,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
 err_close:
     close(fd);
     if (!(seg->seg_id & UCT_POSIX_SEG_FLAG_PROCFS)) {
-        uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_ERROR);
+        uct_posix_unlink(md, seg->seg_id, UCS_LOG_LEVEL_WARN);
     }
 err_free_seg:
     ucs_free(seg);
