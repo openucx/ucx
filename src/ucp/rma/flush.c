@@ -720,31 +720,10 @@ static ucs_status_t ucp_worker_fence_weak(ucp_worker_h worker)
 
 static ucs_status_t ucp_worker_fence_strong(ucp_worker_h worker)
 {
-    ucp_request_t *request;
-    ucs_status_ptr_t status_ptr;
-    ucs_status_t status;
-
-    ucp_worker_flush_ops_count_add(worker, 1);
-    status_ptr = ucp_worker_flush_nbx_internal(worker,
-                                                &ucp_request_null_param,
-                                                UCT_FLUSH_FLAG_REMOTE);
-    if (ucs_unlikely(!UCS_PTR_IS_PTR(status_ptr))) {
-        status = UCS_PTR_STATUS(status_ptr);
-        goto out;
-    }
-
-    request = (ucp_request_t*)status_ptr - 1;
-
-    do {
-        ucp_worker_progress(worker);
-    } while (request->flush_worker.comp_count > 1);
-
-    ucp_worker_flush_complete_one(request, request->status, 1);
-    status = request->status;
-    ucp_request_put(request);
-out:
-    ucp_worker_flush_ops_count_add(worker, -1);
-    return status;
+    void *request = ucp_worker_flush_nbx_internal(worker,
+                                                  &ucp_request_null_param,
+                                                  UCT_FLUSH_FLAG_REMOTE);
+    return ucp_rma_wait(worker, request, "strong_fence");
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
