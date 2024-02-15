@@ -165,7 +165,7 @@ static ucs_mpool_ops_t uct_rc_send_op_mpool_ops = {
 };
 
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
-                                uct_iface_attr_t *iface_attr,
+                                uct_iface_attr_v2_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
                                 size_t am_min_hdr, size_t rma_max_iov)

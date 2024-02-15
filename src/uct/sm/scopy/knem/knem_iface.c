@@ -24,8 +24,8 @@ static ucs_config_field_t uct_knem_iface_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
-                                         uct_iface_attr_t *iface_attr)
+static ucs_status_t
+uct_knem_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_knem_iface_t *iface = ucs_derived_of(tl_iface, uct_knem_iface_t);
 
@@ -67,7 +67,6 @@ static uct_iface_ops_t uct_knem_iface_tl_ops = {
     .iface_event_fd_get       = ucs_empty_function_return_unsupported,
     .iface_event_arm          = uct_scopy_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_knem_iface_t),
-    .iface_query              = uct_knem_iface_query,
     .iface_get_device_address = uct_sm_iface_get_device_address,
     .iface_get_address        = ucs_empty_function_return_success,
     .iface_is_reachable       = uct_base_iface_is_reachable,
@@ -81,7 +80,8 @@ static uct_scopy_iface_ops_t uct_knem_iface_ops = {
         .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
         .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2 = uct_knem_iface_is_reachable_v2,
-        .ep_is_connected       = uct_base_ep_is_connected
+        .ep_is_connected       = uct_base_ep_is_connected,
+        .iface_query_v2        = uct_knem_iface_query
     },
     .ep_tx = uct_knem_ep_tx,
 };

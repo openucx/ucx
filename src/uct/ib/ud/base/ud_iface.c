@@ -672,7 +672,7 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
 
 ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
-                                uct_iface_attr_t *iface_attr,
+                                uct_iface_attr_v2_t *iface_attr,
                                 size_t am_max_iov, size_t am_max_hdr)
 {
     ucs_status_t status;

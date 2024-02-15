@@ -492,7 +492,7 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
  * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
  */
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
-                                uct_iface_attr_t *iface_attr);
+                                uct_iface_attr_v2_t *iface_attr);
 
 
 ucs_status_t

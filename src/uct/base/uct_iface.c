@@ -189,10 +189,97 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                        NULL);
 }
 
+static void
+uct_iface_attr_v2_to_v1(uct_iface_attr_t *dest, const uct_iface_attr_v2_t *src)
+{
+    /* PUT attributes */
+    ucs_warn("%p = %p", dest, src);
+    dest->cap.put.max_short       = src->cap.put.max_short;
+    dest->cap.put.max_short       = src->cap.put.max_short;
+    dest->cap.put.max_bcopy       = src->cap.put.max_bcopy;
+    dest->cap.put.min_zcopy       = src->cap.put.min_zcopy;
+    dest->cap.put.max_zcopy       = src->cap.put.max_zcopy;
+    dest->cap.put.opt_zcopy_align = src->cap.put.opt_zcopy_align;
+    dest->cap.put.align_mtu       = src->cap.put.align_mtu;
+    dest->cap.put.max_iov         = src->cap.put.max_iov;
+
+    /* GET attributes */
+    dest->cap.get.max_short       = src->cap.get.max_short;
+    dest->cap.get.max_bcopy       = src->cap.get.max_bcopy;
+    dest->cap.get.min_zcopy       = src->cap.get.min_zcopy;
+    dest->cap.get.max_zcopy       = src->cap.get.max_zcopy;
+    dest->cap.get.opt_zcopy_align = src->cap.get.opt_zcopy_align;
+    dest->cap.get.align_mtu       = src->cap.get.align_mtu;
+    dest->cap.get.max_iov         = src->cap.get.max_iov;
+
+    /* AM attributes */
+    dest->cap.am.max_short       = src->cap.am.max_short;
+    dest->cap.am.max_bcopy       = src->cap.am.max_bcopy;
+    dest->cap.am.min_zcopy       = src->cap.am.min_zcopy;
+    dest->cap.am.max_zcopy       = src->cap.am.max_zcopy;
+    dest->cap.am.opt_zcopy_align = src->cap.am.opt_zcopy_align;
+    dest->cap.am.align_mtu       = src->cap.am.align_mtu;
+    dest->cap.am.max_hdr         = src->cap.am.max_hdr;
+    dest->cap.am.max_iov         = src->cap.am.max_iov;
+
+    /* TAG attributes */
+    dest->cap.tag.recv.min_recv        = src->cap.tag.recv.min_recv;
+    dest->cap.tag.recv.max_zcopy       = src->cap.tag.recv.max_zcopy;
+    dest->cap.tag.recv.max_iov         = src->cap.tag.recv.max_iov;
+    dest->cap.tag.recv.max_outstanding = src->cap.tag.recv.max_outstanding;
+
+    dest->cap.tag.eager.max_short = src->cap.tag.eager.max_short;
+    dest->cap.tag.eager.max_bcopy = src->cap.tag.eager.max_bcopy;
+    dest->cap.tag.eager.max_zcopy = src->cap.tag.eager.max_zcopy;
+    dest->cap.tag.eager.max_iov   = src->cap.tag.eager.max_iov;
+
+    dest->cap.tag.rndv.max_zcopy = src->cap.tag.rndv.max_zcopy;
+    dest->cap.tag.rndv.max_hdr   = src->cap.tag.rndv.max_hdr;
+    dest->cap.tag.rndv.max_iov   = src->cap.tag.rndv.max_iov;
+
+    /* Atomics attributes */
+    dest->cap.atomic32.op_flags  = src->cap.atomic32.op_flags;
+    dest->cap.atomic32.fop_flags = src->cap.atomic32.fop_flags;
+    dest->cap.atomic64.op_flags  = src->cap.atomic64.op_flags;
+    dest->cap.atomic64.fop_flags = src->cap.atomic64.fop_flags;
+
+    dest->cap.flags       = src->cap.flags;
+    dest->cap.event_flags = src->cap.event_flags;
+
+    dest->device_addr_len = src->device_addr_len;
+    dest->iface_addr_len  = src->iface_addr_len;
+    dest->ep_addr_len     = src->ep_addr_len;
+    dest->max_conn_priv   = src->max_conn_priv;
+    dest->listen_sockaddr = src->listen_sockaddr;
+    dest->overhead        = src->overhead;
+    dest->bandwidth       = src->bandwidth;
+    dest->latency         = src->latency;
+    dest->priority        = src->priority;
+    dest->max_num_eps     = src->max_num_eps;
+    dest->dev_num_paths   = src->dev_num_paths;
+}
+
+ucs_status_t
+uct_iface_query_v2(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    return iface->internal_ops->iface_query_v2(tl_iface, iface_attr);
+}
 
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
-    return iface->ops.iface_query(iface, iface_attr);
+    uct_iface_attr_v2_t iface_attr_v2;
+    ucs_status_t status;
+
+    status = uct_iface_query_v2(iface, &iface_attr_v2);
+    if(status != UCS_OK) {
+        return status;
+    }
+
+    uct_iface_attr_v2_to_v1(iface_attr, &iface_attr_v2);
+
+    return status;
 }
 
 ucs_status_t
@@ -447,10 +534,11 @@ ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
     return status;
 }
 
-void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
+void uct_base_iface_query(uct_base_iface_t *iface,
+                          uct_iface_attr_v2_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(*iface_attr));
-
+    iface_attr->field_mask    = UCT_IFACE_ATTR_V1_BITMASK;
     iface_attr->max_num_eps   = iface->config.max_num_eps;
     iface_attr->dev_num_paths = 1;
 }
@@ -562,9 +650,10 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
     ucs_assert_always(ops->iface_progress_disable   != NULL);
     ucs_assert_always(ops->iface_progress           != NULL);
     ucs_assert_always(ops->iface_close              != NULL);
-    ucs_assert_always(ops->iface_query              != NULL);
     ucs_assert_always(ops->iface_get_device_address != NULL);
     ucs_assert_always(ops->iface_is_reachable       != NULL);
+
+    ops->iface_query = uct_iface_query;
 
     self->ops = *ops;
     return UCS_OK;

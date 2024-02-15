@@ -193,7 +193,8 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     }
 }
 
-static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+static ucs_status_t
+uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_v2_t *iface_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     size_t max_am_inline       = UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
@@ -1275,7 +1276,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
             .ep_invalidate         = uct_dc_mlx5_ep_invalidate,
             .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
             .iface_is_reachable_v2 = uct_dc_mlx5_iface_is_reachable_v2,
-            .ep_is_connected       = uct_dc_mlx5_ep_is_connected
+            .ep_is_connected       = uct_dc_mlx5_ep_is_connected,
+            .iface_query_v2        = uct_dc_mlx5_iface_query
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -1329,7 +1331,6 @@ static uct_iface_ops_t uct_dc_mlx5_iface_tl_ops = {
     .ep_create                = uct_dc_mlx5_ep_create_connected,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_ep_t),
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
-    .iface_query              = uct_dc_mlx5_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable,
     .iface_get_address        = uct_dc_mlx5_iface_get_address,
