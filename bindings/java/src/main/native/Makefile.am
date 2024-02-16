@@ -9,7 +9,7 @@ jardir         = $(libdir)
 topdir         = $(abs_top_builddir)
 java_build_dir = $(builddir)/build-java
 maven_repo    ?= $(java_build_dir)/.deps
-jarfile        = $(java_build_dir)/jucx-@VERSION@.jar
+jarfile        = $(java_build_dir)/jucx-@VERSION@$(suffix).jar
 javadir        = $(top_srcdir)/bindings/java
 
 MVNCMD = $(MVN) -B -T 1C -f \
@@ -50,6 +50,10 @@ $(JUCX_GENERATED_H_FILES): $(STAMP_FILE)
 
 # Return CPU architecure in Java format
 arch = $(if $(filter x86_64,$(shell uname -p)),amd64,$(shell uname -p))
+
+# Append non-x86_64 arch as filename suffix
+suffix = $(if $(filter-out x86_64,$(shell uname -p)),-$(shell uname -p))
+
 libjucx = $(objdir)/libjucx_$(arch).so
 
 lib_LTLIBRARIES = libjucx.la
@@ -82,7 +86,7 @@ $(libjucx): libjucx.la
 	cp $(objdir)/libjucx.so $(libjucx)
 
 $(jarfile): $(libjucx)
-	$(MVNCMD) package -DskipTests
+	$(MVNCMD) package -DskipTests -Djar.finalName=jucx-@VERSION@$(suffix)
 	jar tf $(jarfile)
 
 package : $(jarfile)
@@ -118,16 +122,16 @@ check-jar:
 
 # Publish JUCX jar to maven central
 publish-snapshot:
-	@make set-version JUCX_VERSION=@VERSION@-SNAPSHOT
-	@make repack-jar
-	@make check-jar
+	@make set-version JUCX_VERSION=${JUCX_VERSION}-SNAPSHOT
 	@make publish
 
 publish-release:
 	@make set-version JUCX_VERSION=${JUCX_VERSION}
-	@make repack-jar
-	@make check-jar
 	@make publish
+
+publish-local:
+	@make set-version JUCX_VERSION=${JUCX_VERSION}
+	$(MVNCMD) deploy -DskipTests ${ARGS} -Plocal-deploy
 
 publish:
 	$(MVNCMD) deploy -DskipTests ${ARGS}

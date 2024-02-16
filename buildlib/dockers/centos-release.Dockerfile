@@ -5,27 +5,28 @@ FROM nvidia/cuda:${CUDA_VERSION}-devel-centos${OS_VERSION}
 RUN yum install -y \
     autoconf \
     automake \
+    environment-modules \
+    ethtool \
     file \
+    fuse-libs \
     gcc-c++ \
     git \
     glibc-devel \
     libtool \
+    libusbx \
+    lsof \
     make \
     maven \
     numactl-devel \
+    pinentry \
+    python36 \
     rdma-core-devel \
     rpm-build \
     tcl \
     tcsh \
     tk \
-    wget \
-    libusbx \
-    fuse-libs \
-    python36 \
-    lsof \
-    ethtool \
-    environment-modules \
     valgrind-devel \
+    wget \
     && yum clean all
 
 # MOFED
