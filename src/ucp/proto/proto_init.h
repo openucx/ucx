@@ -31,13 +31,14 @@ UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_ranges_t, unsigned,
  * Add a "pipelined performance" range, which represents the send time of
  * multiples fragments. 'frag_range' is the time to send a single fragment.
  */
-void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
+void ucp_proto_common_add_ppln_range(ucp_proto_caps_t *caps,
                                      const ucp_proto_perf_range_t *frag_range,
                                      size_t max_length);
 
 
 void ucp_proto_common_init_base_caps(
-        const ucp_proto_common_init_params_t *params, size_t min_length);
+        const ucp_proto_common_init_params_t *params, ucp_proto_caps_t *caps,
+        size_t min_length);
 
 
 void ucp_proto_perf_range_add_data(const ucp_proto_perf_range_t *range);
@@ -66,20 +67,20 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
  * Initialize the performance of a protocol that consists of several parallel
  * stages. The performance estimations are added to params->caps.
  *
- * @param [in] params        Protocol initialization parameters.
- * @param [in] range_start   Range interval start.
- * @param [in] range_end     Range interval end.
- * @param [in] frag_size     Size of protocol's fragments.
- * @param [in] bias          Performance bias (0 - no bias).
- * @param [in] stages        Array of parallel stages performance ranges.
- * @param [in] num_stages    Number of parallel stages in the protocol.
+ * @param [in]    proto_name    Protocol name, for debugging.
+ * @param [in]    range_start   Range interval start.
+ * @param [in]    range_end     Range interval end.
+ * @param [in]    frag_size     Size of protocol's fragments.
+ * @param [in]    bias          Performance bias (0 - no bias).
+ * @param [in]    stages        Array of parallel stages performance ranges.
+ * @param [in]    num_stages    Number of parallel stages in the protocol.
+ * @param [inout] caps          Filled with protocol performance data.
  */
 ucs_status_t
-ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
-                               size_t range_start, size_t range_end,
-                               size_t frag_size, double bias,
+ucp_proto_init_parallel_stages(const char *proto_name, size_t range_start,
+                               size_t range_end, size_t frag_size, double bias,
                                const ucp_proto_perf_range_t **stages,
-                               unsigned num_stages);
+                               unsigned num_stages, ucp_proto_caps_t *caps);
 
 
 void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
@@ -100,7 +101,7 @@ ucs_status_t
 ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
                            ucp_proto_perf_node_t *const tl_perf_node,
-                           ucp_md_map_t reg_md_map);
+                           ucp_md_map_t reg_md_map, ucp_proto_caps_t *caps);
 
 
 /**

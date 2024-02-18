@@ -22,16 +22,15 @@
 #define UCP_PROTO_STREAM_ZCOPY_DESC \
     UCP_PROTO_STREAM_DESC " " UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_COPY_OUT_DESC
 
-static ucs_status_t
-ucp_stream_multi_common_init(const ucp_proto_multi_init_params_t *params)
+static void
+ucp_stream_multi_common_probe(const ucp_proto_multi_init_params_t *params)
 {
     if (!ucp_proto_init_check_op(&params->super.super,
                                  UCS_BIT(UCP_OP_ID_STREAM_SEND))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_multi_init(params, params->super.super.priv,
-                                params->super.super.priv_size);
+    ucp_proto_multi_probe(params);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -70,8 +69,8 @@ static ucs_status_t ucp_stream_multi_bcopy_progress(uct_pending_req_t *uct_req)
             ucp_proto_request_bcopy_complete_success);
 }
 
-static ucs_status_t
-ucp_stream_multi_bcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_stream_multi_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -101,14 +100,14 @@ ucp_stream_multi_bcopy_init(const ucp_proto_init_params_t *init_params)
         .middle.lane_type    = UCP_LANE_TYPE_AM
     };
 
-    return ucp_stream_multi_common_init(&params);
+    ucp_stream_multi_common_probe(&params);
 }
 
 ucp_proto_t ucp_stream_multi_bcopy_proto = {
     .name     = "stream/multi/bcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_STREAM_BCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_stream_multi_bcopy_init,
+    .probe    = ucp_stream_multi_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_stream_multi_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort,
@@ -142,8 +141,8 @@ static ucs_status_t ucp_stream_multi_zcopy_progress(uct_pending_req_t *uct_req)
             ucp_proto_request_zcopy_completion);
 }
 
-static ucs_status_t
-ucp_stream_multi_zcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_stream_multi_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -174,14 +173,14 @@ ucp_stream_multi_zcopy_init(const ucp_proto_init_params_t *init_params)
         .middle.lane_type    = UCP_LANE_TYPE_AM
     };
 
-    return ucp_stream_multi_common_init(&params);
+    ucp_stream_multi_common_probe(&params);
 }
 
 ucp_proto_t ucp_stream_multi_zcopy_proto = {
     .name     = "stream/multi/zcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_STREAM_ZCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_stream_multi_zcopy_init,
+    .probe    = ucp_stream_multi_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_stream_multi_zcopy_progress},
     .abort    = ucp_proto_request_zcopy_abort,

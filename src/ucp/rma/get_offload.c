@@ -71,8 +71,8 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
 }
 
-static ucs_status_t
-ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -106,18 +106,17 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_multi_init(&params, init_params->priv,
-                                init_params->priv_size);
+    ucp_proto_multi_probe(&params);
 }
 
 ucp_proto_t ucp_get_offload_bcopy_proto = {
     .name     = "get/bcopy",
     .desc     = UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
-    .init     = ucp_proto_get_offload_bcopy_init,
+    .probe    = ucp_proto_get_offload_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_bcopy_progress},
     .abort    = ucp_proto_abort_fatal_not_implemented,
@@ -162,8 +161,8 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
             ucp_proto_request_zcopy_completion);
 }
 
-static ucs_status_t
-ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -199,18 +198,17 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_multi_init(&params, init_params->priv,
-                                init_params->priv_size);
+    ucp_proto_multi_probe(&params);
 }
 
 ucp_proto_t ucp_get_offload_zcopy_proto = {
     .name     = "get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_proto_get_offload_zcopy_init,
+    .probe    = ucp_proto_get_offload_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_zcopy_progress},
     .abort    = ucp_proto_abort_fatal_not_implemented,
