@@ -266,7 +266,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
 
     if (worker->context->config.ext.proto_enable) {
         status = ucp_put_send_short(ep, buffer, count, remote_addr, rkey, param);
-        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+        if (ucs_likely(status != UCS_ERR_NO_RESOURCE) ||
+            ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
             ret = UCS_STATUS_PTR(status);
             goto out_unlock;
         }
