@@ -610,6 +610,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     int send_reply            = 0;
     unsigned ep_init_flags    = ucp_ep_err_mode_init_flags(msg->err_mode);
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    int ep_created            = 0;
     ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
@@ -641,6 +642,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                 return;
             }
 
+            ep_created = 1;
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
             if (!ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
@@ -687,6 +689,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                                    remote_address, addr_indices);
     if (status != UCS_OK) {
         goto err_set_ep_failed;
+    }
+
+    if (ep_created) {
+        ucp_ep_activate_worker_ifaces(ep);
     }
 
     ucp_wireup_match_p2p_lanes(ep, remote_address, addr_indices, lanes2remote);
@@ -844,6 +850,8 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         ucs_error("failed to create EP: %s", ucs_status_string(status));
         return;
     }
+
+    ucp_ep_activate_worker_ifaces(reply_ep);
 
     /* Initialize lanes of the reply EP */
     status = ucp_wireup_init_lanes(reply_ep, ep_init_flags, &ucp_tl_bitmap_max,
