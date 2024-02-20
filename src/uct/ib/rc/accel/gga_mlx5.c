@@ -8,26 +8,30 @@
 #  include "config.h"
 #endif
 
+#include "gga_mlx5.h"
+
 #include <uct/base/uct_iface.h>
 #include <uct/ib/base/ib_md.h>
 #include <uct/ib/rc/accel/rc_mlx5.h>
 
 
-typedef struct {                        
+typedef struct {
     uct_ib_md_packed_mkey_t packed_mkey;
-    uct_ib_mlx5_devx_mem_t  *memh;      
-    uct_rkey_bundle_t       rkey_ob;    
-} uct_gga_mlx5_rkey_handle_t;           
+    uct_ib_mlx5_devx_mem_t  *memh;
+    uct_ib_mlx5_md_t        *md;
+    uct_rkey_bundle_t       rkey_ob;
+} uct_gga_mlx5_rkey_handle_t;
 
+typedef struct {
+    uct_rc_mlx5_iface_common_t  super;
+} uct_gga_mlx5_iface_t;
 
-/**
- * GGA mlx5 interface configuration
- */
 typedef struct uct_gga_mlx5_iface_config {
     uct_rc_iface_config_t             super;
     uct_rc_mlx5_iface_common_config_t rc_mlx5_common;
 } uct_gga_mlx5_iface_config_t;
 
+extern ucs_config_field_t uct_ib_md_config_table[];
 
 ucs_config_field_t uct_gga_mlx5_iface_config_table[] = {
   {"GGA_", "", NULL,
@@ -41,46 +45,6 @@ ucs_config_field_t uct_gga_mlx5_iface_config_table[] = {
   {NULL}
 };
 
-
-typedef struct {
-    uct_rc_mlx5_iface_common_t  super;
-} uct_gga_mlx5_iface_t;
-
-
-static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
-                           uct_md_h tl_md, uct_worker_h worker,
-                           const uct_iface_params_t *params,
-                           const uct_iface_config_t *tl_config)
-{
-    return UCS_ERR_NOT_IMPLEMENTED;
-}
-
-static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_iface_t)
-{
-    ucs_fatal("gga_transport is not implemented yet");
-}
-
-UCS_CLASS_DEFINE(uct_gga_mlx5_iface_t, uct_rc_mlx5_iface_common_t);
-
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_gga_mlx5_iface_t, uct_iface_t, uct_md_h,
-                                 uct_worker_h, const uct_iface_params_t*,
-                                 const uct_iface_config_t*);
-
-ucs_status_t uct_ib_mlx5_gga_md_open(struct ibv_device *ibv_device,
-                                     const uct_ib_md_config_t *md_config,
-                                     struct uct_ib_md **md_p)
-{
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_devx_md_open(ibv_device, md_config, md_p);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    (*md_p)->name = UCT_IB_MD_NAME(gga);
-    return UCS_OK;
-}
-
 static ucs_status_t
 uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                           void *address, size_t length,
@@ -88,33 +52,25 @@ uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                           void *mkey_buffer)
 {
     uct_md_mkey_pack_params_t gga_params = *params;
-    ucs_status_t status;
-    uct_ib_md_packed_mkey_t *mkey;
 
-    gga_params.field_mask |= UCT_MD_MKEY_PACK_FIELD_FLAGS;
-    gga_params.flags      |= UCT_MD_MKEY_PACK_FLAG_EXPORT;
-
-    status = uct_ib_mlx5_devx_mkey_pack(uct_md, uct_memh, address, length,
-                                        &gga_params, mkey_buffer);
-    if (status != UCS_OK) {
-        return status;
+    if (gga_params.field_mask & UCT_MD_MKEY_PACK_FIELD_FLAGS) {
+        gga_params.flags      |= UCT_MD_MKEY_PACK_FLAG_EXPORT;
+    } else {
+        gga_params.field_mask |= UCT_MD_MKEY_PACK_FIELD_FLAGS;
+        gga_params.flags       = UCT_MD_MKEY_PACK_FLAG_EXPORT;
     }
 
-    mkey = (uct_ib_md_packed_mkey_t*)mkey_buffer;
-    ucs_assert(mkey->flags & UCT_IB_PACKED_MKEY_FLAG_EXPORTED);
-    mkey->flags |= UCT_IB_PACKED_MKEY_FLAG_GGA;
-
-    return UCS_OK;
+    return uct_ib_mlx5_devx_mkey_pack(uct_md, uct_memh, address, length,
+                                      &gga_params, mkey_buffer);
 }
 
-ucs_status_t
-uct_ib_mlx5_gga_rkey_unpack(const uct_ib_md_packed_mkey_t *mkey,
-                            uct_rkey_t *rkey_p, void **handle_p)
+static ucs_status_t
+uct_gga_mlx5_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
+                         uct_rkey_t *rkey_p, void **handle_p)
 {
+    const uct_ib_md_packed_mkey_t *mkey = rkey_buffer;
     uct_rkey_bundle_t *rkey_bundle;
     uct_gga_mlx5_rkey_handle_t *rkey_handle;
-
-    ucs_assert(mkey->flags & UCT_IB_PACKED_MKEY_FLAG_EXPORTED);
 
     rkey_bundle = ucs_malloc(sizeof(*rkey_bundle), "gga_rkey_bundle");
     if (rkey_bundle == NULL) {
@@ -123,6 +79,7 @@ uct_ib_mlx5_gga_rkey_unpack(const uct_ib_md_packed_mkey_t *mkey,
 
     rkey_handle = ucs_malloc(sizeof(*rkey_handle), "gga_rkey_handle");
     if (rkey_handle == NULL) {
+        ucs_free(rkey_bundle);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -142,23 +99,120 @@ uct_ib_mlx5_gga_rkey_unpack(const uct_ib_md_packed_mkey_t *mkey,
     return UCS_OK;
 }
 
-static uct_ib_md_ops_t uct_ib_mlx5_gga_md_ops = {
-    .super = {
-        .close              = uct_ib_mlx5_devx_md_close,
-        .query              = uct_ib_mlx5_devx_md_query,
-        .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
-        .mem_free           = uct_ib_mlx5_devx_device_mem_free,
-        .mem_reg            = uct_ib_mlx5_devx_mem_reg,
-        .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
-        .mem_attach         = uct_ib_mlx5_devx_mem_attach,
-        .mem_advise         = uct_ib_mem_advise,
-        .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+static void
+uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
+{
+    uct_md_mem_dereg_params_t params = {
+        .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH,
+        .memh       = rkey_handle->memh
+    };
+    ucs_status_t status;
+
+    if (rkey_handle->memh == NULL) {
+        return;
+    }
+
+    status = uct_ib_mlx5_devx_mem_dereg(&rkey_handle->md->super.super, &params);
+    if (status != UCS_OK) {
+        ucs_warn("md %p: failed to deregister GGA memh %p", rkey_handle->md,
+                 rkey_handle->memh);
+    }
+
+    rkey_handle->memh = NULL;
+}
+
+static ucs_status_t uct_gga_mlx5_rkey_release(uct_component_t *component,
+                                              uct_rkey_t rkey, void *handle)
+{
+    uct_rkey_bundle_t *rkey_bundle          = (uct_rkey_bundle_t*)rkey;
+    uct_gga_mlx5_rkey_handle_t *rkey_handle = rkey_bundle->handle;
+
+    ucs_assert(rkey_bundle->handle == handle);
+    uct_gga_mlx5_rkey_handle_dereg(rkey_handle);
+    ucs_free(handle);
+    ucs_free(rkey_bundle);
+    return UCS_OK;
+}
+
+static uct_component_t uct_gga_component = {
+    .query_md_resources = uct_ib_query_md_resources,
+    .md_open            = uct_ib_md_open,
+    .cm_open            = ucs_empty_function_return_unsupported,
+    .rkey_unpack        = uct_gga_mlx5_rkey_unpack,
+    .rkey_ptr           = ucs_empty_function_return_unsupported,
+    .rkey_release       = uct_gga_mlx5_rkey_release,
+    .rkey_compare       = uct_base_rkey_compare,
+    .name               = "gga",
+    .md_config          = {
+        .name           = "GGA memory domain",
+        .prefix         = "GGA_",
+        .table          = uct_ib_md_config_table,
+        .size           = sizeof(uct_ib_md_config_t),
     },
-    .open = uct_ib_mlx5_gga_md_open,
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
+    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gga_component),
+    .flags              = 0,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
-UCT_IB_MD_DEFINE_ENTRY(gga, uct_ib_mlx5_gga_md_ops);
+/* TODO: the function will be used on data path */
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_gga_mlx5_rkey_resolve(uct_ib_mlx5_md_t *md, uct_rkey_t rkey)
+{
+    uct_md_h uct_md                         = &md->super.super;
+    uct_rkey_bundle_t *rkey_bundle          = (uct_rkey_bundle_t*)rkey;
+    uct_gga_mlx5_rkey_handle_t *rkey_handle = rkey_bundle->handle;
+    uct_md_mem_attach_params_t atach_params = { 0 };
+    uct_md_mkey_pack_params_t repack_params = { 0 };
+    uint64_t repack_mkey;
+    ucs_status_t status;
+
+    if (ucs_likely(rkey_handle->memh != NULL)) {
+        return UCS_OK;
+    }
+
+    status = uct_ib_mlx5_devx_mem_attach(uct_md, &rkey_handle->packed_mkey,
+                                         &atach_params,
+                                         (uct_mem_h *)&rkey_handle->memh);
+    if (status != UCS_OK) {
+        goto err_out;
+    }
+
+    rkey_handle->md = md;
+
+    status = uct_ib_mlx5_devx_mkey_pack(uct_md, (uct_mem_h)rkey_handle->memh,
+                                        NULL, 0, &repack_params, &repack_mkey);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_ib_rkey_unpack(NULL, &repack_mkey,
+                              &rkey_handle->rkey_ob.rkey,
+                              &rkey_handle->rkey_ob.handle);
+err_dereg:
+    uct_gga_mlx5_rkey_handle_dereg(rkey_handle);
+err_out:
+    return status;
+}
+
+static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
+                           uct_md_h tl_md, uct_worker_h worker,
+                           const uct_iface_params_t *params,
+                           const uct_iface_config_t *tl_config)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
+
+static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_iface_t)
+{
+    ucs_fatal("Unreachable code");
+}
+
+UCS_CLASS_DEFINE(uct_gga_mlx5_iface_t, uct_rc_mlx5_iface_common_t);
+
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_gga_mlx5_iface_t, uct_iface_t, uct_md_h,
+                                 uct_worker_h, const uct_iface_params_t*,
+                                 const uct_iface_config_t*);
 
 static ucs_status_t
 uct_gga_mlx5_query_tl_devices(uct_md_h md,
@@ -189,7 +243,43 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
     return UCS_ERR_NO_DEVICE;
 }
 
-UCT_TL_DEFINE_ENTRY(&uct_ib_component, gga_mlx5, uct_gga_mlx5_query_tl_devices,
+UCT_TL_DEFINE_ENTRY(&uct_gga_component, gga_mlx5, uct_gga_mlx5_query_tl_devices,
                     uct_gga_mlx5_iface_t, "GGA_MLX5_",
                     uct_gga_mlx5_iface_config_table,
                     uct_gga_mlx5_iface_config_t);
+
+UCT_SINGLE_TL_INIT(&uct_gga_component, gga_mlx5, ctor,,)
+
+static uct_md_ops_t uct_mlx5_gga_md_ops = {
+    .close              = uct_ib_mlx5_devx_md_close,
+    .query              = uct_ib_mlx5_devx_md_query,
+    .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
+    .mem_free           = uct_ib_mlx5_devx_device_mem_free,
+    .mem_reg            = uct_ib_mlx5_devx_mem_reg,
+    .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
+    .mem_attach         = uct_ib_mlx5_devx_mem_attach,
+    .mem_advise         = uct_ib_mem_advise,
+    .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
+    .detect_memory_type = ucs_empty_function_return_unsupported,
+};
+
+ucs_status_t uct_ib_mlx5_gga_md_open(struct ibv_device *ibv_device,
+                                     const uct_ib_md_config_t *md_config,
+                                     struct uct_ib_md **md_p)
+{
+    ucs_status_t status;
+
+    if (md_config->devx == UCS_NO) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_ib_mlx5_devx_md_open(ibv_device, md_config, md_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    (*md_p)->super.component = &uct_gga_component;
+    (*md_p)->super.ops       = &uct_mlx5_gga_md_ops;
+    (*md_p)->name            = UCT_IB_MD_NAME(gga);
+    return UCS_OK;
+}

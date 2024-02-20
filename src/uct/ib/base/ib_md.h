@@ -168,7 +168,6 @@ typedef struct uct_ib_md {
 typedef struct uct_ib_md_packed_mkey {
     uint32_t lkey;
     uint16_t vhca_id;
-    uint8_t  flags;
 } UCS_S_PACKED uct_ib_md_packed_mkey_t;
 
 
@@ -394,6 +393,14 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                                     void *address, size_t length,
                                     const uct_md_mkey_pack_params_t *params,
                                     void *mkey_buffer);
+
+ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p);
+
+ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
+                                       uct_md_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p);
 
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,

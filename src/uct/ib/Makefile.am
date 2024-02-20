@@ -69,6 +69,7 @@ noinst_HEADERS += \
 	rc/accel/rc_mlx5.h \
 	rc/accel/rc_mlx5.inl \
 	rc/accel/rc_mlx5_common.h
+	rc/accel/gga_mlx5.h
 
 libuct_ib_la_SOURCES += \
 	rc/accel/rc_mlx5_ep.c \
