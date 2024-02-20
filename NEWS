@@ -1,5 +1,5 @@
 #
-## Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+## Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2024. ALL RIGHTS RESERVED.
 ## Copyright (C) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
 ## Copyright (C) ARM Ltd. 2017-2021.  ALL RIGHTS RESERVED.
 ##
@@ -10,6 +10,13 @@
 ## Current
 ### Features:
 ### Bugfixes:
+
+## 1.16.0-rc4 (February 21, 2024)
+### Bugfixes:
+#### UCT
+* Fixed Infiniband posting error when compiler optimizes code with memmove()
+#### Packaging
+* Fixed already existing target error when using cmake find_package(ucx) twice
 
 ## 1.16.0-rc3 (February 20, 2024)
 ### Bugfixes:
