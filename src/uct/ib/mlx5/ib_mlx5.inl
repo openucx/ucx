@@ -508,8 +508,15 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
     UCS_WORD_COPY(__m128i, dst, __m128i, src, MLX5_SEND_WQE_BB);
 #elif defined(__ARM_NEON)
     vst4q_u64(dst, vld4q_u64(src));
-#else /* NO SIMD support */
-    UCS_WORD_COPY(uint64_t, dst, uint64_t, src, MLX5_SEND_WQE_BB);
+#else
+    typedef struct {
+        uint8_t data[MLX5_SEND_WQE_BB];
+    } UCS_S_PACKED uct_ib_mlx5_send_wqe_bb_t;
+
+    /* Prevent the compiler to replace by memmove() */
+    UCS_WORD_COPY(uct_ib_mlx5_send_wqe_bb_t, dst,
+                  uct_ib_mlx5_send_wqe_bb_t, src,
+                  MLX5_SEND_WQE_BB);
 #endif
 }
 
