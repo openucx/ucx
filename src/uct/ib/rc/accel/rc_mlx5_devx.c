@@ -424,8 +424,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                           mlx5_av.hop_limit);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index,
                           ah_attr->grh.sgid_index);
-        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,
-                          iface->super.super.config.sl);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio, ah_attr->sl);
         if (uct_ib_iface_is_roce_v2(&iface->super.super)) {
             ucs_assert(ah_attr->dlid >= UCT_IB_ROCE_UDP_SRC_PORT_BASE);
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
@@ -441,8 +440,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.mlid,
                           ah_attr->src_path_bits & 0x7f);
-        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
-                          iface->super.super.config.sl);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl, ah_attr->sl);
 
         if (ah_attr->is_global) {
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index,

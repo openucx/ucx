@@ -636,7 +636,8 @@ static ucs_status_t
 uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
                                       const uct_ib_address_t *ib_addr,
                                       const uct_ud_iface_addr_t *if_addr,
-                                      int path_index, void *address_p)
+                                      int path_index, void *address_p,
+                                      uint8_t sl)
 {
     uct_ud_mlx5_iface_t *iface                  =
         ucs_derived_of(ud_iface, uct_ud_mlx5_iface_t);
@@ -650,7 +651,7 @@ uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
     status = uct_ud_mlx5_iface_get_av(&ud_iface->super, &iface->ud_mlx5_common,
                                       ib_addr, path_index, "UD mlx5 connect",
                                       &peer_address->av, &peer_address->grh_av,
-                                      &is_global);
+                                      &is_global, sl);
     if (status != UCS_OK) {
         return status;
     }

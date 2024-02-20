@@ -371,7 +371,8 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
         return status;
     }
 
-    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr, &path_mtu);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr, &path_mtu,
+                                        iface->config.sl);
     ah_attr.is_global = iface->config.force_global_addr;
     status = uct_ib_iface_create_ah(iface, &ah_attr, "compact AV check", &ah);
     if (status != UCS_OK) {
@@ -1065,7 +1066,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
             goto out;
         }
 
-        uct_ib_iface_set_reverse_sl(iface, ib_config);
+        uct_ib_iface_set_configured_sls(iface, ib_config);
         return status;
     }
 
@@ -1086,7 +1087,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
         goto out;
     }
 
-    uct_ib_iface_set_reverse_sl(iface, ib_config);
+    uct_ib_iface_set_configured_sls(iface, ib_config);
 
 out:
     return status;

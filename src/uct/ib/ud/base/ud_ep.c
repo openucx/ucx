@@ -394,6 +394,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
 
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->sl         = uct_ib_iface_get_ep_sl(&iface->super, params);
     uct_ud_ep_reset(self);
     uct_ud_iface_add_ep(iface, self);
     self->tx.tick = iface->tx.tick;
@@ -591,12 +592,15 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
     uct_ud_ep_conn_sn_t conn_sn;
     ucs_status_t status;
     uct_ud_ep_t *ep;
+    uint8_t sl;
 
     uct_ud_enter(iface);
 
     *new_ep_p = NULL;
-    status    = uct_ud_iface_cep_get_conn_sn(iface, ib_addr, if_addr,
-                                             path_index, &conn_sn);
+    sl        = uct_ib_iface_get_ep_sl(&iface->super, ep_params);
+
+    status = uct_ud_iface_cep_get_conn_sn(iface, ib_addr, if_addr, path_index,
+                                          &conn_sn, sl);
     if (status != UCS_OK) {
         goto out;
     }
@@ -634,7 +638,7 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
                                              ep_get_peer_address, ep);
 
     status = uct_ud_iface_unpack_peer_address(iface, ib_addr, if_addr,
-                                              ep->path_index, peer_address);
+                                              ep->path_index, peer_address, ep->sl);
     if (status != UCS_OK) {
         goto err_ep_disconnect;
     }
@@ -698,7 +702,8 @@ uct_ud_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                              ep_get_peer_address, ep);
     return uct_ud_iface_unpack_peer_address(iface, ib_addr,
                                             &ep_addr->iface_addr,
-                                            ep->path_index, peer_address);
+                                            ep->path_index, peer_address,
+                                            ep->sl);
 }
 
 static UCS_F_ALWAYS_INLINE void

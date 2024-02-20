@@ -169,6 +169,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     uct_ib_mlx5_base_av_t av;
     struct mlx5_grh_av grh_av;
     unsigned path_index;
+    uint8_t sl;
 
     ucs_trace_func("");
 
@@ -176,10 +177,12 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     ib_addr    = (const uct_ib_address_t *)params->dev_addr;
     if_addr    = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
     path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    sl         = uct_ib_iface_get_ep_sl(&iface->super.super.super, params);
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super.super,
                                       &iface->ud_common, ib_addr, path_index,
-                                      "DC ep create", &av, &grh_av, &is_global);
+                                      "DC ep create", &av, &grh_av, &is_global,
+                                      sl);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
@@ -189,7 +192,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
                              path_index, &grh_av);
     } else {
         return UCS_CLASS_NEW(uct_dc_mlx5_ep_t, ep_p, iface, if_addr, &av,
-                             path_index);
+                             path_index, sl);
     }
 }
 

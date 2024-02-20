@@ -115,7 +115,8 @@ typedef struct uct_ud_iface_ops {
     ucs_status_t              (*unpack_peer_address)(uct_ud_iface_t *iface,
                                                      const uct_ib_address_t *ib_addr,
                                                      const uct_ud_iface_addr_t *if_addr,
-                                                     int path_index, void *address_p);
+                                                     int path_index, void *address_p,
+                                                     uint8_t sl);
     void*                     (*ep_get_peer_address)(uct_ud_ep_t *ud_ep);
     size_t                    (*get_peer_address_length)();
     const char*               (*peer_address_str)(const uct_ud_iface_t *iface,
@@ -322,8 +323,8 @@ void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 ucs_status_t
 uct_ud_iface_cep_get_conn_sn(uct_ud_iface_t *iface,
                              const uct_ib_address_t *ib_addr,
-                             const uct_ud_iface_addr_t *if_addr,
-                             int path_index, uct_ud_ep_conn_sn_t *conn_sn_p);
+                             const uct_ud_iface_addr_t *if_addr, int path_index,
+                             uct_ud_ep_conn_sn_t *conn_sn_p, uint8_t sl);
 
 ucs_status_t uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
                                         const uct_ib_address_t *ib_addr,
@@ -517,12 +518,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_unpack_peer_address(uct_ud_iface_t *iface,
                                  const uct_ib_address_t *ib_addr,
                                  const uct_ud_iface_addr_t *if_addr,
-                                 unsigned path_index, void *address_p)
+                                 unsigned path_index, void *address_p,
+                                 uint8_t sl)
 {
     uct_ud_iface_ops_t *ud_ops = ucs_derived_of(iface->super.ops,
                                                 uct_ud_iface_ops_t);
     return ud_ops->unpack_peer_address(iface, ib_addr, if_addr,
-                                       path_index, address_p);
+                                       path_index, address_p, sl);
 }
 
 

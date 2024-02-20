@@ -195,6 +195,9 @@ struct uct_ib_iface_config {
 
     /* IB reverse SL (default: AUTO - same value as sl) */
     unsigned long           reverse_sl;
+
+    /* IB high priority SL (default: AUTO - same value as sl) */
+    UCS_CONFIG_ARRAY_FIELD(u_int8_t, priority_sls) priority_sls;
 };
 
 
@@ -299,6 +302,7 @@ struct uct_ib_iface {
         uint8_t               port_num;
         uint8_t               sl;
         uint8_t               reverse_sl;
+        uint8_t               priority_sls[UCT_IB_SL_NUM];
         uint8_t               traffic_class;
         uint8_t               hop_limit;
         uint8_t               qp_type;
@@ -555,13 +559,15 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,
                                             uint8_t gid_index,
                                             unsigned path_index,
-                                            struct ibv_ah_attr *ah_attr);
+                                            struct ibv_ah_attr *ah_attr,
+                                            uint8_t sl);
 
 void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          const uct_ib_address_t *ib_addr,
                                          unsigned path_index,
                                          struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu *path_mtu);
+                                         enum ibv_mtu *path_mtu,
+                                         uint8_t sl);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
@@ -586,11 +592,13 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
 
 uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
 
-void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
-                                 const uct_ib_iface_config_t *ib_config);
+void uct_ib_iface_set_configured_sls(uct_ib_iface_t *ib_iface,
+                                     const uct_ib_iface_config_t *ib_config);
 
 uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
                                           const union ibv_gid *gid);
+
+uint8_t uct_ib_iface_get_ep_sl(const uct_ib_iface_t *iface, const uct_ep_params_t *params);
 
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"
