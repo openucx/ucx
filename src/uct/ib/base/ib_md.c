@@ -198,7 +198,9 @@ static uct_tl_t *uct_ib_tls[] = {
 #endif
 #if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
     &UCT_TL_NAME(rc_mlx5),
+#ifdef HAVE_DEVX
     &UCT_TL_NAME(gga_mlx5),
+#endif
 #endif
 #ifdef HAVE_TL_UD
     &UCT_TL_NAME(ud_verbs),
