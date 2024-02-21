@@ -26,31 +26,30 @@ public:
 
     virtual uct_error_handler_t get_err_handler() const;
 
-    uct_ud_ep_t *ep(entity *e);
+    uct_ud_ep_t *ep(entity &e);
 
-    uct_ud_ep_t *ep(entity *e, int i);
+    uct_ud_ep_t *ep(entity &e, int i);
 
-    uct_ud_iface_t *iface(entity *e);
+    uct_ud_iface_t *iface(entity &e);
 
     void connect();
 
     void cleanup();
 
-    ucs_status_t tx(entity *e);
+    ucs_status_t tx(entity &e);
 
-    ucs_status_t ep_flush_b(entity *e);
+    ucs_status_t ep_flush_b(entity &e);
 
-    ucs_status_t iface_flush_b(entity *e);
+    ucs_status_t iface_flush_b(entity &e);
 
-    void set_tx_win(entity *e, uct_ud_psn_t size);
+    void set_tx_win(entity &e, uct_ud_psn_t size);
 
-    void disable_async(entity *e);
+    void disable_async(entity &e);
 
     virtual void
     short_progress_loop(double delta_ms = 10.0, entity *e = NULL) const;
 
 protected:
-    entity *m_e1, *m_e2;
     uint64_t m_dummy;
 };
 

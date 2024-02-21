@@ -452,11 +452,11 @@ public:
 
 
 protected:
-    uct_test::entity& sender() {
+    entity& sender() {
         return **m_entities.begin();
     }
 
-    uct_test::entity& receiver() {
+    entity& receiver() {
         return **(m_entities.end() - 1);
     }
 
@@ -774,6 +774,7 @@ public:
 
     void cleanup() {
         test_tag::cleanup();
+        m_entities.clear();
         stats_restore();
     }
 
@@ -967,14 +968,6 @@ protected:
     std::vector<void*> m_uct_descs;
     bool               m_hold_uct_desc;
 
-    uct_test::entity& sender() {
-        return **m_entities.begin();
-    }
-
-    uct_test::entity& receiver() {
-        return **(m_entities.end() - 1);
-    }
-
 private:
     ucs_status_t unexp_handler(void *data, unsigned flags, uint64_t imm,
                                void **context);
@@ -1023,23 +1016,21 @@ void test_tag_mp_xrq::init()
 
     uct_test::init();
 
-    entity *sender = uct_test::create_entity(0ul, NULL, unexp_eager, unexp_rndv,
-                                             reinterpret_cast<void*>(this),
-                                             reinterpret_cast<void*>(this));
-    m_entities.push_back(sender);
+    uct_test::create_entity(0ul, NULL, unexp_eager, unexp_rndv,
+                            reinterpret_cast<void*>(this),
+                            reinterpret_cast<void*>(this));
 
-    entity *receiver = uct_test::create_entity(0ul, NULL, unexp_eager, unexp_rndv,
-                                               reinterpret_cast<void*>(this),
-                                               reinterpret_cast<void*>(this));
-    m_entities.push_back(receiver);
+    uct_test::create_entity(0ul, NULL, unexp_eager, unexp_rndv,
+                            reinterpret_cast<void*>(this),
+                            reinterpret_cast<void*>(this));
 
     if (!UCT_RC_MLX5_MP_ENABLED(rc_mlx5_iface(test_tag_mp_xrq::sender()))) {
         UCS_TEST_SKIP_R("No MP XRQ support");
     }
 
-    sender->connect(0, *receiver, 0);
+    sender().connect(0, receiver(), 0);
 
-    uct_iface_set_am_handler(receiver->iface(), AM_ID, am_handler, this, 0);
+    uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, this, 0);
 }
 
 void test_tag_mp_xrq::send_eager_bcopy(mapped_buffer *buf)

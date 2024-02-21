@@ -72,7 +72,7 @@ protected:
                 const char *message, va_list ap) {
         // Ignore errors that transport cannot reach peer
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
             if (strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNREACHABLE)) ||
                 strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNSUPPORTED)) ||
                 strstr(err_str.c_str(), "no peer failure handler")) {

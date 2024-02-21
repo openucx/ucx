@@ -407,7 +407,7 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             ASSERT_UCS_OK(status);
 
             {
-                scoped_log_handler slh(hide_errors_logger);
+                ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
                 status = uct_md_open(iter->cmpt, iter->rsc_desc.md_name,
                                      md_config, &md);
             }
@@ -470,7 +470,6 @@ void uct_test::cleanup() {
     FOR_EACH_ENTITY(iter) {
         (*iter)->destroy_eps();
     }
-    m_entities.clear();
 }
 
 bool uct_test::is_caps_supported(uint64_t required_flags) {
@@ -631,7 +630,7 @@ bool uct_test::has_gpu() const {
             has_transport("rocm_copy"));
 }
 
-uct_test::entity *
+entity&
 uct_test::create_entity(size_t rx_headroom, uct_error_handler_t err_handler,
                         uct_tag_unexp_eager_cb_t eager_cb,
                         uct_tag_unexp_rndv_cb_t rndv_cb, void *eager_arg,
@@ -680,7 +679,7 @@ uct_test::create_entity(size_t rx_headroom, uct_error_handler_t err_handler,
         iface_params.am_align_offset = am_align_offset;
     }
 
-    return new entity(*GetParam(), m_iface_config, &iface_params, m_md_config);
+    return create_entity(iface_params);
 }
 
 void
@@ -693,39 +692,29 @@ uct_test::create_connected_entities(size_t rx_headroom,
                                     void *async_event_arg, size_t am_alignment,
                                     size_t am_align_offset)
 {
-    entity *sender = uct_test::create_entity(rx_headroom, err_handler, eager_cb,
-                                             rndv_cb, eager_arg, rndv_arg,
-                                             async_event_cb, async_event_arg,
-                                             am_alignment, am_align_offset);
-    m_entities.push_back(sender);
+    uct_test::create_entity(rx_headroom, err_handler, eager_cb, rndv_cb,
+                            eager_arg, rndv_arg, async_event_cb,
+                            async_event_arg, am_alignment, am_align_offset);
 
     if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
-        sender->connect(0, *sender, 0);
+        sender().connect(0, sender(), 0);
     } else {
-        entity *receiver = uct_test::create_entity(rx_headroom, err_handler,
-                                                   eager_cb, rndv_cb, eager_arg,
-                                                   rndv_arg, async_event_cb,
-                                                   async_event_arg, am_alignment,
-                                                   am_align_offset);
-        m_entities.push_back(receiver);
-
-        sender->connect(0, *receiver, 0);
+        uct_test::create_entity(rx_headroom, err_handler, eager_cb, rndv_cb,
+                                eager_arg, rndv_arg, async_event_cb,
+                                async_event_arg, am_alignment, am_align_offset);
+        sender().connect(0, receiver(), 0);
     }
-
 }
 
-uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
-    entity *new_ent = new entity(*GetParam(), m_iface_config, &params,
-                                 m_md_config);
-    return new_ent;
+entity& uct_test::create_entity(uct_iface_params_t &params) {
+    m_entities.push_back(
+            new entity(*GetParam(), m_iface_config, &params, m_md_config));
+    return *m_entities.back();
 }
 
-uct_test::entity* uct_test::create_entity() {
-    return new entity(*GetParam(), m_md_config, m_cm_config);
-}
-
-const uct_test::entity& uct_test::ent(unsigned index) const {
-    return m_entities.at(index);
+entity& uct_test::create_entity() {
+    m_entities.push_back(new entity(*GetParam(), m_md_config, m_cm_config));
+    return *m_entities.back();
 }
 
 unsigned uct_test::progress_mt() const
@@ -818,7 +807,7 @@ void uct_test::reduce_tl_send_queues()
     set_config("TCP_RCVBUF?=128");
 }
 
-uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
+entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) :
     m_resource(resource)
 {
@@ -847,7 +836,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     for (;;) {
         {
-            scoped_log_handler slh(wrap_errors_logger);
+            ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
             status = UCS_TEST_TRY_CREATE_HANDLE(uct_iface_h, m_iface,
                                                 uct_iface_close, uct_iface_open,
                                                 m_md, m_worker, params,
@@ -885,8 +874,9 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     max_conn_priv = 0;
 }
 
-uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
-                         uct_cm_config_t *cm_config) {
+entity::entity(const resource& resource, uct_md_config_t *md_config,
+               uct_cm_config_t *cm_config)
+{
     ucs_status_t         status;
     uct_component_attr_t comp_attr;
 
@@ -928,8 +918,8 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
     }
 }
 
-void uct_test::entity::mem_alloc_host(size_t length, unsigned mem_flags,
-                                      uct_allocated_memory_t *mem) const
+void entity::mem_alloc_host(size_t length, unsigned mem_flags,
+                            uct_allocated_memory_t *mem) const
 {
     void *address             = NULL;
     ucs_status_t status;
@@ -957,14 +947,13 @@ void uct_test::entity::mem_alloc_host(size_t length, unsigned mem_flags,
     ucs_assert(mem->mem_type == UCS_MEMORY_TYPE_HOST);
 }
 
-void uct_test::entity::mem_free_host(const uct_allocated_memory_t *mem) const {
+void entity::mem_free_host(const uct_allocated_memory_t *mem) const {
     if (mem->method != UCT_ALLOC_METHOD_LAST) {
         uct_iface_mem_free(mem);
     }
 }
 
-void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem,
-                                    unsigned mem_flags) const
+void entity::mem_type_reg(uct_allocated_memory_t *mem, unsigned mem_flags) const
 {
     if (md_attr().reg_mem_types & UCS_BIT(mem->mem_type)) {
         ucs_status_t status = uct_md_mem_reg(m_md, mem->address, mem->length,
@@ -974,7 +963,7 @@ void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem,
     }
 }
 
-void uct_test::entity::mem_type_dereg(uct_allocated_memory_t *mem) const {
+void entity::mem_type_dereg(uct_allocated_memory_t *mem) const {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
         (md_attr().reg_mem_types & UCS_BIT(mem->mem_type))) {
         ucs_status_t status = uct_md_mem_dereg(m_md, mem->memh);
@@ -984,8 +973,8 @@ void uct_test::entity::mem_type_dereg(uct_allocated_memory_t *mem) const {
     }
 }
 
-void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
-                                   uct_rkey_bundle *rkey_bundle) const
+void entity::rkey_unpack(const uct_allocated_memory_t *mem,
+                         uct_rkey_bundle *rkey_bundle) const
 {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
         (md_attr().flags & UCT_MD_FLAG_NEED_RKEY)) {
@@ -1009,7 +998,7 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
     }
 }
 
-void uct_test::entity::rkey_release(const uct_rkey_bundle *rkey_bundle) const
+void entity::rkey_release(const uct_rkey_bundle *rkey_bundle) const
 {
     if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
         ucs_status_t status = uct_rkey_release(m_resource.component,
@@ -1018,27 +1007,26 @@ void uct_test::entity::rkey_release(const uct_rkey_bundle *rkey_bundle) const
     }
 }
 
-unsigned uct_test::entity::progress() const {
+unsigned entity::progress() const {
     unsigned count = uct_worker_progress(m_worker);
     m_async.check_miss();
     return count;
 }
 
-bool uct_test::entity::is_caps_supported(uint64_t required_flags) {
+bool entity::is_caps_supported(uint64_t required_flags) const {
     uint64_t iface_flags = iface_attr().cap.flags;
     return ucs_test_all_flags(iface_flags, required_flags);
 }
 
-bool uct_test::entity::check_caps(uint64_t required_flags,
-                                  uint64_t invalid_flags)
+bool entity::check_caps(uint64_t required_flags, uint64_t invalid_flags) const
 {
     uint64_t iface_flags = iface_attr().cap.flags;
     return (ucs_test_all_flags(iface_flags, required_flags) &&
             !(iface_flags & invalid_flags));
 }
 
-bool uct_test::entity::check_event_caps(uint64_t required_flags,
-                                        uint64_t invalid_flags)
+bool entity::check_event_caps(uint64_t required_flags,
+                              uint64_t invalid_flags) const
 {
     uint64_t iface_event_flags = iface_attr().cap.event_flags;
     return (ucs_test_all_flags(iface_event_flags, required_flags) &&
@@ -1049,7 +1037,7 @@ bool uct_test::entity::check_event_caps(uint64_t required_flags,
              (iface_event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB)));
 }
 
-bool uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
+bool entity::check_atomics(uint64_t required_ops, atomic_mode mode) const
 {
     uint64_t amo;
 
@@ -1073,67 +1061,67 @@ bool uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
     return ucs_test_all_flags(amo, required_ops);
 }
 
-uct_md_h uct_test::entity::md() const {
+uct_md_h entity::md() const {
     return m_md;
 }
 
-const uct_md_attr_v2_t& uct_test::entity::md_attr() const {
+const uct_md_attr_v2_t& entity::md_attr() const {
     return m_md_attr;
 }
 
-uct_worker_h uct_test::entity::worker() const {
+uct_worker_h entity::worker() const {
     return m_worker;
 }
 
-uct_cm_h uct_test::entity::cm() const {
+uct_cm_h entity::cm() const {
     return m_cm;
 }
 
-const uct_cm_attr_t& uct_test::entity::cm_attr() const {
+const uct_cm_attr_t& entity::cm_attr() const {
     return m_cm_attr;
 }
 
-uct_listener_h uct_test::entity::listener() const {
+uct_listener_h entity::listener() const {
     return m_listener;
 }
 
-uct_listener_h uct_test::entity::revoke_listener() const {
+uct_listener_h entity::revoke_listener() const {
     uct_listener_h uct_listener = listener();
     m_listener.revoke();
     return uct_listener;
 }
 
-uct_iface_h uct_test::entity::iface() const {
+uct_iface_h entity::iface() const {
     return m_iface;
 }
 
-const uct_iface_attr& uct_test::entity::iface_attr() const {
+const uct_iface_attr& entity::iface_attr() const {
     return m_iface_attr;
 }
 
-const uct_iface_params& uct_test::entity::iface_params() const {
+const uct_iface_params& entity::iface_params() const {
     return m_iface_params;
 }
 
-uct_ep_h uct_test::entity::ep(unsigned index) const {
+uct_ep_h entity::ep(unsigned index) const {
     return m_eps.at(index);
 }
 
-size_t uct_test::entity::num_eps() const {
+size_t entity::num_eps() const {
     return m_eps.size();
 }
 
-uct_test::entity::eps_vec_t& uct_test::entity::eps() {
+entity::eps_vec_t& entity::eps() {
     return m_eps;
 }
 
-void uct_test::entity::reserve_ep(unsigned index) {
+void entity::reserve_ep(unsigned index) {
     if (index >= m_eps.size()) {
         m_eps.resize(index + 1);
     }
 }
 
-void uct_test::entity::connect_p2p_ep(uct_ep_h from, uct_ep_h to)
+void entity::connect_p2p_ep(uct_ep_h from, uct_ep_h to)
 {
     uct_ep_connect_to_ep_params_t param = {
         .field_mask = UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH |
@@ -1166,7 +1154,7 @@ void uct_test::entity::connect_p2p_ep(uct_ep_h from, uct_ep_h to)
     free(dev_addr);
 }
 
-void uct_test::entity::create_ep(unsigned index, unsigned path_index)
+void entity::create_ep(unsigned index, unsigned path_index)
 {
     uct_ep_h ep = NULL;
     uct_ep_params_t ep_params;
@@ -1187,7 +1175,7 @@ void uct_test::entity::create_ep(unsigned index, unsigned path_index)
     m_eps[index].reset(ep, uct_ep_destroy);
 }
 
-void uct_test::entity::destroy_ep(unsigned index) {
+void entity::destroy_ep(unsigned index) {
     if (!m_eps[index]) {
         UCS_TEST_ABORT("ep[" << index << "] does not exist");
     }
@@ -1195,7 +1183,7 @@ void uct_test::entity::destroy_ep(unsigned index) {
     m_eps[index].reset();
 }
 
-void uct_test::entity::revoke_ep(unsigned index) {
+void entity::revoke_ep(unsigned index) {
     if (!m_eps[index]) {
         UCS_TEST_ABORT("ep[" << index << "] does not exist");
     }
@@ -1203,7 +1191,7 @@ void uct_test::entity::revoke_ep(unsigned index) {
     m_eps[index].revoke();
 }
 
-void uct_test::entity::destroy_eps() {
+void entity::destroy_eps() {
     for (unsigned index = 0; index < m_eps.size(); ++index) {
         if (!m_eps[index]) {
             continue;
@@ -1213,13 +1201,13 @@ void uct_test::entity::destroy_eps() {
 }
 
 void
-uct_test::entity::connect_to_sockaddr(unsigned index,
-                                      const ucs::sock_addr_storage &remote_addr,
-                                      const ucs::sock_addr_storage *local_addr,
-                                      uct_cm_ep_resolve_callback_t resolve_cb,
-                                      uct_cm_ep_client_connect_callback_t connect_cb,
-                                      uct_ep_disconnect_cb_t disconnect_cb,
-                                      void *user_data)
+entity::connect_to_sockaddr(unsigned index,
+                            const ucs::sock_addr_storage &remote_addr,
+                            const ucs::sock_addr_storage *local_addr,
+                            uct_cm_ep_resolve_callback_t resolve_cb,
+                            uct_cm_ep_client_connect_callback_t connect_cb,
+                            uct_ep_disconnect_cb_t disconnect_cb,
+                            void *user_data)
 {
     ucs_sock_addr_t ucs_remote_addr = remote_addr.to_ucs_sock_addr();
     ucs_sock_addr_t ucs_local_addr;
@@ -1258,8 +1246,7 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
     m_eps[index].reset(ep, uct_ep_destroy);
 }
 
-void uct_test::entity::connect_to_ep(unsigned index, entity& other,
-                                     unsigned other_index)
+void entity::connect_to_ep(unsigned index, entity& other, unsigned other_index)
 {
     ucs_status_t status;
     uct_ep_h ep, remote_ep;
@@ -1291,7 +1278,8 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
     }
 }
 
-void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
+void entity::connect_to_iface(unsigned index, entity& other)
+{
     uct_device_addr_t *dev_addr;
     uct_iface_addr_t *iface_addr;
     uct_ep_params_t ep_params;
@@ -1328,7 +1316,7 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     free(dev_addr);
 }
 
-void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index)
+void entity::connect(unsigned index, entity& other, unsigned other_index)
 {
     if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         connect_to_ep(index, other, other_index);
@@ -1339,10 +1327,10 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     }
 }
 
-ucs_status_t uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
-                                      const uct_listener_params_t &params)
+ucs_status_t entity::listen(const ucs::sock_addr_storage &listen_addr,
+                            const uct_listener_params_t &params)
 {
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
 
     return UCS_TEST_TRY_CREATE_HANDLE(uct_listener_h, m_listener,
                                       uct_listener_destroy, uct_listener_create,
@@ -1350,11 +1338,11 @@ ucs_status_t uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
                                       listen_addr.get_addr_size(), &params);
 }
 
-void uct_test::entity::disconnect(uct_ep_h ep) {
+void entity::disconnect(uct_ep_h ep) {
     ASSERT_UCS_OK(uct_ep_disconnect(ep, 0));
 }
 
-void uct_test::entity::flush() const {
+void entity::flush() const {
     ucs_status_t status;
     do {
         progress();
@@ -1499,7 +1487,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource) {
     return os << resource->name();
 }
 
-uct_test::entity::async_wrapper::async_wrapper()
+entity::async_wrapper::async_wrapper()
 {
     ucs_status_t status;
 
@@ -1511,28 +1499,28 @@ uct_test::entity::async_wrapper::async_wrapper()
     ASSERT_UCS_OK(status);
 }
 
-uct_test::entity::async_wrapper::~async_wrapper()
+entity::async_wrapper::~async_wrapper()
 {
     ucs_async_context_cleanup(&m_async);
 }
 
-void uct_test::entity::async_wrapper::check_miss()
+void entity::async_wrapper::check_miss()
 {
     ucs_async_check_miss(&m_async);
 }
 
-ucs_async_context_t &uct_test::entity::async() const {
+ucs_async_context_t &entity::async() const {
     return m_async.m_async;
 }
 
-ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
+ucs_status_t uct_test::send_am_message(entity &e, uint8_t am_id, int ep_idx)
 {
     ssize_t res;
 
     if (is_caps_supported(UCT_IFACE_FLAG_AM_SHORT)) {
-        return uct_ep_am_short(e->ep(ep_idx), am_id, 0, NULL, 0);
+        return uct_ep_am_short(e.ep(ep_idx), am_id, 0, NULL, 0);
     } else {
-        res = uct_ep_am_bcopy(e->ep(ep_idx), am_id,
+        res = uct_ep_am_bcopy(e.ep(ep_idx), am_id,
                               (uct_pack_callback_t)ucs_empty_function_return_zero_int64,
                               NULL, 0);
         return (ucs_status_t)(res >= 0 ? UCS_OK : res);
@@ -1582,8 +1570,7 @@ bool uct_test::async_event_ctx::wait_for_event(entity &e, double timeout_sec) {
 void test_uct_iface_attrs::init()
 {
     uct_test::init();
-    m_e = uct_test::create_entity(0ul);
-    m_entities.push_back(m_e);
+    uct_test::create_entity(0ul);
 }
 
 void test_uct_iface_attrs::basic_iov_test()
@@ -1593,16 +1580,15 @@ void test_uct_iface_attrs::basic_iov_test()
     EXPECT_FALSE(max_iov_map.empty());
 
     if (max_iov_map.find("am")  != max_iov_map.end()) {
-        EXPECT_EQ(max_iov_map.at("am"), m_e->iface_attr().cap.am.max_iov);
+        EXPECT_EQ(max_iov_map.at("am"), e(0).iface_attr().cap.am.max_iov);
     }
     if (max_iov_map.find("tag") != max_iov_map.end()) {
-        EXPECT_EQ(max_iov_map.at("tag"), m_e->iface_attr().cap.tag.eager.max_iov);
+        EXPECT_EQ(max_iov_map.at("tag"), e(0).iface_attr().cap.tag.eager.max_iov);
     }
     if (max_iov_map.find("put") != max_iov_map.end()) {
-        EXPECT_EQ(max_iov_map.at("put"), m_e->iface_attr().cap.put.max_iov);
+        EXPECT_EQ(max_iov_map.at("put"), e(0).iface_attr().cap.put.max_iov);
     }
     if (max_iov_map.find("get") != max_iov_map.end()) {
-        EXPECT_EQ(max_iov_map.at("get"), m_e->iface_attr().cap.get.max_iov);
+        EXPECT_EQ(max_iov_map.at("get"), e(0).iface_attr().cap.get.max_iov);
     }
 }
-

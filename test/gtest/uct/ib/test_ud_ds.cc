@@ -21,23 +21,22 @@ public:
     virtual void init() {
         uct_test::init();
 
-        m_e1 = create_entity(0);
-        m_entities.push_back(m_e1);
+        create_entity(0);
+        create_entity(0);
 
-        m_e2 = create_entity(0);
-        m_entities.push_back(m_e2);
+        uct_iface_get_address(sender().iface(), (uct_iface_addr_t*)(void *)&if_adr1);
+        uct_iface_get_address(receiver().iface(), (uct_iface_addr_t*)(void *)&if_adr2);
 
-        uct_iface_get_address(m_e1->iface(), (uct_iface_addr_t*)(void *)&if_adr1);
-        uct_iface_get_address(m_e2->iface(), (uct_iface_addr_t*)(void *)&if_adr2);
-
-        ib_adr1 = (uct_ib_address_t*)malloc(ucs_derived_of(m_e1->iface(), uct_ib_iface_t)->addr_size);
-        ib_adr2 = (uct_ib_address_t*)malloc(ucs_derived_of(m_e2->iface(), uct_ib_iface_t)->addr_size);
+        ib_adr1 = (uct_ib_address_t*)malloc(
+                ucs_derived_of(sender().iface(), uct_ib_iface_t)->addr_size);
+        ib_adr2 = (uct_ib_address_t*)malloc(
+                ucs_derived_of(receiver().iface(), uct_ib_iface_t)->addr_size);
 
         ASSERT_UCS_OK(
-                uct_iface_get_device_address(m_e1->iface(),
+                uct_iface_get_device_address(sender().iface(),
                                              (uct_device_addr_t*)ib_adr1));
         ASSERT_UCS_OK(
-                uct_iface_get_device_address(m_e2->iface(),
+                uct_iface_get_device_address(receiver().iface(),
                                              (uct_device_addr_t*)ib_adr2));
     }
 
@@ -96,7 +95,6 @@ public:
     }
 
 protected:
-    entity *m_e1, *m_e2;
     uct_ib_address_t *ib_adr1, *ib_adr2;
     uct_ud_iface_addr_t if_adr1, if_adr2;
     static unsigned N;
@@ -231,15 +229,15 @@ uct_ud_ep_t *test_ud_ds::get_ep(entity *e, uct_ib_address_t *ib_addr,
 
 /* simulate creq send */
 UCS_TEST_P(test_ud_ds, cep_insert) {
-    test_cep_insert(m_e1, ib_adr1, &if_adr1, 0, 1);
-    test_cep_insert(m_e1, ib_adr2, &if_adr2, N, 1);
+    test_cep_insert(&sender(), ib_adr1, &if_adr1, 0, 1);
+    test_cep_insert(&sender(), ib_adr2, &if_adr2, N, 1);
 }
 
 /* Simulate creq send if the number of paths is 4 */
 UCS_TEST_P(test_ud_ds, cep_insert_4_paths, "IB_NUM_PATHS=4")
 {
-    test_cep_insert(m_e1, ib_adr1, &if_adr1, 0, 4);
-    test_cep_insert(m_e1, ib_adr2, &if_adr2, N, 4);
+    test_cep_insert(&sender(), ib_adr1, &if_adr1, 0, 4);
+    test_cep_insert(&sender(), ib_adr2, &if_adr2, N, 4);
 }
 
 /* Simulate creq send if the number of paths is 4 and the same address is
@@ -247,8 +245,8 @@ UCS_TEST_P(test_ud_ds, cep_insert_4_paths, "IB_NUM_PATHS=4")
 UCS_TEST_P(test_ud_ds, cep_insert_4_paths_same_addr_per_path, "IB_NUM_PATHS=4",
            "IB_LID_PATH_BITS=0")
 {
-    test_cep_insert(m_e1, ib_adr1, &if_adr1, 0, 4);
-    test_cep_insert(m_e1, ib_adr2, &if_adr2, N, 4);
+    test_cep_insert(&sender(), ib_adr1, &if_adr1, 0, 4);
+    test_cep_insert(&sender(), ib_adr2, &if_adr2, N, 4);
 }
 
 UCS_TEST_P(test_ud_ds, cep_replace) {
@@ -257,69 +255,69 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
     uct_ud_ep_t *ep;
 
     /* add N connections */
-    test_cep_insert(m_e1, ib_adr1, &if_adr1, 0, 1);
+    test_cep_insert(&sender(), ib_adr1, &if_adr1, 0, 1);
 
     /* Assume that 3 CREQs received */
-    create_and_insert_ep(m_e1, ib_adr1, &if_adr1, 0, N + 1, N, true);
-    create_and_insert_ep(m_e1, ib_adr1, &if_adr1, 0, N + 4, N + 1, true);
-    create_and_insert_ep(m_e1, ib_adr1, &if_adr1, 0, N + 5, N + 2, true);
+    create_and_insert_ep(&sender(), ib_adr1, &if_adr1, 0, N + 1, N, true);
+    create_and_insert_ep(&sender(), ib_adr1, &if_adr1, 0, N + 4, N + 1, true);
+    create_and_insert_ep(&sender(), ib_adr1, &if_adr1, 0, N + 5, N + 2, true);
 
     /* slot N is free */
-    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
-                                          &conn_sn);
+    status = uct_ud_iface_cep_get_conn_sn(iface(&sender()), ib_adr1, &if_adr1,
+                                          0, &conn_sn);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N, conn_sn);
-    create_and_insert_ep(m_e1, ib_adr1, &if_adr1, 0, conn_sn, N + 3, false);
+    create_and_insert_ep(&sender(), ib_adr1, &if_adr1, 0, conn_sn, N + 3, false);
 
     /* slot N + 1 already occupied */
-    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
-                                          &conn_sn);
+    status = uct_ud_iface_cep_get_conn_sn(iface(&sender()), ib_adr1, &if_adr1,
+                                          0, &conn_sn);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 1, conn_sn);
-    ep = get_ep(m_e1, ib_adr1, &if_adr1, 0, conn_sn, true);
+    ep = get_ep(&sender(), ib_adr1, &if_adr1, 0, conn_sn, true);
     ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
-    insert_ep(m_e1, ib_adr1, &if_adr1, 0, N, ep);
+    insert_ep(&sender(), ib_adr1, &if_adr1, 0, N, ep);
 
     /* slot N + 2 is free */
-    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
-                                          &conn_sn);
+    status = uct_ud_iface_cep_get_conn_sn(iface(&sender()), ib_adr1, &if_adr1,
+                                          0, &conn_sn);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 2, conn_sn);
-    create_and_insert_ep(m_e1, ib_adr1, &if_adr1, 0, conn_sn, N + 4, false);
+    create_and_insert_ep(&sender(), ib_adr1, &if_adr1, 0, conn_sn, N + 4, false);
 
     /* slot N + 3 is free */
-    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
-                                          &conn_sn);
+    status = uct_ud_iface_cep_get_conn_sn(iface(&sender()), ib_adr1, &if_adr1,
+                                          0, &conn_sn);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 3, conn_sn);
-    create_and_insert_ep(m_e1, ib_adr1, &if_adr1, 0, conn_sn, N + 5, false);
+    create_and_insert_ep(&sender(), ib_adr1, &if_adr1, 0, conn_sn, N + 5, false);
 
     /* slot N + 4 already occupied */
-    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
-                                          &conn_sn);
+    status = uct_ud_iface_cep_get_conn_sn(iface(&sender()), ib_adr1, &if_adr1,
+                                          0, &conn_sn);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 4, conn_sn);
-    ep = get_ep(m_e1, ib_adr1, &if_adr1, 0, conn_sn, true);
+    ep = get_ep(&sender(), ib_adr1, &if_adr1, 0, conn_sn, true);
     ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
-    insert_ep(m_e1, ib_adr1, &if_adr1, 0, N, ep);
+    insert_ep(&sender(), ib_adr1, &if_adr1, 0, N, ep);
 
     /* slot N + 5 already occupied */
-    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
-                                          &conn_sn);
+    status = uct_ud_iface_cep_get_conn_sn(iface(&sender()), ib_adr1, &if_adr1,
+                                          0, &conn_sn);
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 5, conn_sn);
-    ep = get_ep(m_e1, ib_adr1, &if_adr1, 0, conn_sn, true);
+    ep = get_ep(&sender(), ib_adr1, &if_adr1, 0, conn_sn, true);
     ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
-    insert_ep(m_e1, ib_adr1, &if_adr1, 0, N, ep);
+    insert_ep(&sender(), ib_adr1, &if_adr1, 0, N, ep);
 
     /* slot N already occupied */
-    get_ep(m_e1, ib_adr1, &if_adr1, 0, N, false);
+    get_ep(&sender(), ib_adr1, &if_adr1, 0, N, false);
 
     /* slot N + 2 already occupied */
-    get_ep(m_e1, ib_adr1, &if_adr1, 0, N + 2, false);
+    get_ep(&sender(), ib_adr1, &if_adr1, 0, N + 2, false);
 
     /* slot N + 3 already occupied */
-    get_ep(m_e1, ib_adr1, &if_adr1, 0, N + 3, false);
+    get_ep(&sender(), ib_adr1, &if_adr1, 0, N + 3, false);
 }
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud_ds)

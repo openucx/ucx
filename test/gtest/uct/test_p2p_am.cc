@@ -524,7 +524,7 @@ public:
             !strcmp(function, UCS_PP_QUOTE(uct_iface_mpool_empty_warn)))
         {
             UCS_TEST_MESSAGE << file << ":" << line << ": "
-                             << format_message(message, ap);
+                             << ucs::log::format_message(message, ap);
             return UCS_LOG_FUNC_RC_STOP;
         }
 
@@ -817,9 +817,8 @@ public:
     void test_invalid_alignment(size_t alignment, size_t align_offset,
                                 uint64_t field_mask)
     {
-        entity *dummy = uct_test::create_entity(0);
-        m_entities.push_back(dummy);
-        uct_iface_params_t params = dummy->iface_params();
+        uct_test::create_entity(0);
+        uct_iface_params_t params = e(0).iface_params();
 
         check_skip_test();
 
@@ -833,9 +832,9 @@ public:
 
         params.field_mask |= field_mask;
 
-        scoped_log_handler wrap_err(wrap_errors_logger);
+        ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
         uct_iface_h iface;
-        ucs_status_t status = uct_iface_open(dummy->md(), dummy->worker(),
+        ucs_status_t status = uct_iface_open(e(0).md(), e(0).worker(),
                                              &params, m_iface_config, &iface);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, status) << "alignment " << alignment;
     }

@@ -79,8 +79,8 @@ public:
             UCS_TEST_SKIP_R("unsupported");
         }
 
-        uct_iface_set_am_handler(receiver()->iface(), 0, am_cb, &m_recv_cnt, 0);
-        m_send_buf = new mapped_buffer(m_buf_size, 0, *sender());
+        uct_iface_set_am_handler(receiver().iface(), 0, am_cb, &m_recv_cnt, 0);
+        m_send_buf = new mapped_buffer(m_buf_size, 0, sender());
     }
 
     void flush_and_reset()
@@ -104,34 +104,25 @@ public:
     }
 
 private:
-    entity *sender() const
-    {
-        return m_e1;
-    }
-
-    entity *receiver() const
-    {
-        return m_e2;
-    }
-
     virtual void cleanup()
     {
         delete m_send_buf;
-        uct_iface_set_am_handler(receiver()->iface(), 0, NULL, NULL, 0);
+        uct_iface_set_am_handler(receiver().iface(), 0, NULL, NULL, 0);
 
         test_uct_ib::cleanup();
         test_uct_ib_with_specific_port::cleanup();
+        m_entities.clear();
 
         stats_restore();
     }
 
     ucs_status_t am_zcopy()
     {
-        auto size = sender()->iface_attr().cap.am.max_zcopy;
+        auto size = sender().iface_attr().cap.am.max_zcopy;
         size      = ucs_min(size, m_buf_size);
         uct_iov_t iov{m_send_buf->ptr(), size, m_send_buf->memh(), 0, 1};
 
-        return uct_ep_am_zcopy(sender()->ep(0), 0, m_send_buf->ptr(), 0, &iov,
+        return uct_ep_am_zcopy(sender().ep(0), 0, m_send_buf->ptr(), 0, &iov,
                                1, 0, nullptr);
     }
 

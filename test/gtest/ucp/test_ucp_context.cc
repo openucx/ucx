@@ -86,15 +86,15 @@ UCS_TEST_P(test_ucp_version, wrong_api_version) {
     ucs_status_t status;
     size_t warn_count;
     {
-        scoped_log_handler slh(hide_warns_logger);
-        warn_count = m_warnings.size();
+        ucs::log::scoped_handler slh(ucs::log::hide_warns_logger);
+        warn_count = ucs::log::warnings().size();
         status = ucp_init_version(99, 99, &get_variant_ctx_params(),
                                   config.get(), &ucph);
     }
     if (status != UCS_OK) {
         ADD_FAILURE() << "Failed to create UCP with wrong version";
     } else {
-        if (m_warnings.size() == warn_count) {
+        if (ucs::log::warnings().size() == warn_count) {
             ADD_FAILURE() << "Missing wrong version warning";
         }
         ucp_cleanup(ucph);

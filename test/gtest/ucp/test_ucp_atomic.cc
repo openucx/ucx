@@ -290,7 +290,7 @@ UCS_TEST_P(test_ucp_atomic64, fetch) {
 UCS_TEST_P(test_ucp_atomic32, misaligned_post) {
     {
         /* Test that unaligned addresses generate error */
-        scoped_log_handler slh(hide_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
         test(static_cast<send_func_t>(&test_ucp_atomic32::misaligned_post),
              UCS_BIT(UCP_ATOMIC_OP_ADD), 1);
     }
@@ -299,7 +299,7 @@ UCS_TEST_P(test_ucp_atomic32, misaligned_post) {
 UCS_TEST_P(test_ucp_atomic64, misaligned_post) {
     {
         /* Test that unaligned addresses generate error */
-        scoped_log_handler slh(hide_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
         test(static_cast<send_func_t>(&test_ucp_atomic64::misaligned_post),
              UCS_BIT(UCP_ATOMIC_OP_ADD), 1);
     }

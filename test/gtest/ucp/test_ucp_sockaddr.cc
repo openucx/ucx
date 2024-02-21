@@ -114,7 +114,7 @@ public:
                        const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_WARN) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
             if (err_str.find("failed to connect CM lane on device") !=
                 std::string::npos) {
                 UCS_TEST_MESSAGE << err_str;
@@ -131,20 +131,18 @@ public:
                         const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
-            static std::vector<std::string> stop_list;
-            if (stop_list.empty()) {
-                stop_list.push_back("no supported sockaddr auxiliary transports found for");
-                stop_list.push_back("sockaddr aux resources addresses");
-                stop_list.push_back("no peer failure handler");
-                stop_list.push_back("connection request failed on listener");
+            static std::vector<std::string> stop_list = {
+                "no supported sockaddr auxiliary transports found for",
+                "sockaddr aux resources addresses",
+                "no peer failure handler",
+                "connection request failed on listener",
                 /* when the "peer failure" error happens, it is followed by: */
-                stop_list.push_back("received event RDMA_CM_EVENT_UNREACHABLE");
-                stop_list.push_back("Connection reset by remote peer");
-                stop_list.push_back(ucs_status_string(UCS_ERR_UNREACHABLE));
-                stop_list.push_back(ucs_status_string(UCS_ERR_UNSUPPORTED));
-            }
+                "received event RDMA_CM_EVENT_UNREACHABLE",
+                "Connection reset by remote peer",
+                ucs_status_string(UCS_ERR_UNREACHABLE),
+                ucs_status_string(UCS_ERR_UNSUPPORTED) };
 
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
             for (size_t i = 0; i < stop_list.size(); ++i) {
                 if (err_str.find(stop_list[i]) != std::string::npos) {
                     UCS_TEST_MESSAGE << err_str;
@@ -264,7 +262,7 @@ public:
     ucs_status_t create_listener_wrap_err(const ucp_listener_params_t &params,
                                           ucp_listener_h &listener)
     {
-        scoped_log_handler wrap_err(wrap_errors_logger);
+        ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
         return ucp_listener_create(receiver().worker(), &params, &listener);
     }
 
@@ -577,7 +575,7 @@ public:
 
         {
             // Suppress possible reject/unreachable errors
-            scoped_log_handler slh(wrap_errors_logger);
+            ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
             send_status = request_wait(send_req, {}, 0, wakeup);
             if (!check_send_status(send_status, to, recv_req, cb_type)) {
                 return;
@@ -670,7 +668,7 @@ public:
                                bool specify_src_addr = false)
     {
         {
-            scoped_log_handler slh(detect_error_logger);
+            ucs::log::scoped_handler slh(detect_error_logger);
             client_ep_connect(0, specify_src_addr);
             if (!wait_for_server_ep(wakeup)) {
                 UCS_TEST_SKIP_R("cannot connect to server");
@@ -691,7 +689,7 @@ public:
     void connect_and_reject(bool wakeup)
     {
         {
-            scoped_log_handler slh(detect_error_logger);
+            ucs::log::scoped_handler slh(detect_error_logger);
             client_ep_connect();
             /* Check reachability with tagged send */
             send_recv(sender(), receiver(), SEND_RECV_TAG, wakeup,
@@ -754,7 +752,7 @@ public:
     {
         void *req           = e.disconnect_nb(0, 0, flags);
         ucs_time_t deadline = ucs::get_deadline();
-        scoped_log_handler slh(detect_error_logger);
+        ucs::log::scoped_handler slh(detect_error_logger);
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
@@ -776,7 +774,7 @@ public:
         void *receiver_ep_close_req = receiver().disconnect_nb(0, 0, flags);
 
         ucs_time_t deadline = ucs::get_deadline();
-        scoped_log_handler slh(detect_error_logger);
+        ucs::log::scoped_handler slh(detect_error_logger);
         while ((!is_request_completed(sender_ep_close_req) ||
                 !is_request_completed(receiver_ep_close_req)) &&
                (ucs_get_time() < deadline)) {
@@ -810,7 +808,7 @@ public:
                           const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
 
             if (err_str.find("on CM lane will not be handled since no error"
                              " callback is installed") != std::string::npos) {
@@ -998,7 +996,7 @@ protected:
         }
 
         {
-            scoped_log_handler slh(wrap_errors_logger);
+            ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
             std::vector<void*> reqs = { sreq, rreq, close_req };
             requests_wait(reqs);
         }
@@ -1175,7 +1173,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle)
     setup_unreachable_listener();
 
     {
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         client_ep_connect();
         /* allow for the unreachable event to arrive before restoring errors */
         wait_for_flag(&sender().get_err_num());
@@ -1189,7 +1187,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle_without_err_cb)
     setup_unreachable_listener();
 
     {
-        scoped_log_handler slh(detect_fail_no_err_cb);
+        ucs::log::scoped_handler slh(detect_fail_no_err_cb);
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
 
         ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
@@ -1334,7 +1332,7 @@ UCS_TEST_P(test_ucp_sockaddr_conn_request, conn_request_query_worker_id)
     conn_handler.arg = reinterpret_cast<void*>(this);
     start_listener(ucp_test_base::entity::LISTEN_CB_CUSTOM, &conn_handler);
     {
-        scoped_log_handler slh(detect_error_logger);
+        ucs::log::scoped_handler slh(detect_error_logger);
         client_ep_connect_basic(get_client_ep_params());
         send_recv(sender(), receiver(), SEND_RECV_TAG, false,
                   ucp_test_base::entity::LISTEN_CB_REJECT);
@@ -1577,7 +1575,7 @@ protected:
     {
         start_listener(cb_type());
 
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
         client_ep_connect();
         if (!wait_cm_failure && !wait_for_server_ep(false)) {
             UCS_TEST_SKIP_R("cannot connect to server");
@@ -2016,56 +2014,56 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, bidi) {
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_client_cforce) {
     listen_and_communicate(false, 0);
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
     one_sided_disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_c2s_cforce) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
     one_sided_disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_s2c_cforce) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
     one_sided_disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_cforce) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     one_sided_disconnect(sender(), UCP_EP_CLOSE_FLAG_FORCE);
     one_sided_disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_client_sforce) {
     listen_and_communicate(false, 0);
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
     one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_c2s_sforce) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
     one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_s2c_sforce) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
     one_sided_disconnect(sender());
 }
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     one_sided_disconnect(receiver(), UCP_EP_CLOSE_FLAG_FORCE);
     one_sided_disconnect(sender());
 }
@@ -2079,8 +2077,8 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
     listen(listen_cb_type);
 
     {
-        scoped_log_handler warn_slh(detect_warn_logger);
-        scoped_log_handler error_slh(detect_error_logger);
+        ucs::log::scoped_handler warn_slh(detect_warn_logger);
+        ucs::log::scoped_handler error_slh(detect_error_logger);
         client_ep_connect();
 
         if (listen_cb_type == ucp_test_base::entity::LISTEN_CB_CONN) {
@@ -2174,7 +2172,7 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
 
     start_listener(cb_type());
     {
-        scoped_log_handler slh(wrap_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
 
         client_ep_connect();
 
@@ -2307,10 +2305,12 @@ protected:
             void *rreq = NULL, *sreq = NULL;
             std::vector<void*> reqs;
 
-            ucs::auto_ptr<scoped_log_handler> slh;
+            ucs::auto_ptr<ucs::log::scoped_handler> slh;
             if (err_handling_test ||
                 (i == 0) /* to handle unreachable on 1st iteration */) {
-                slh.reset(new scoped_log_handler(wrap_errors_logger));
+                slh.reset(
+                        new ucs::log::scoped_handler(
+                                ucs::log::wrap_errors_logger));
             }
 
             if (is_exp) {
@@ -3157,7 +3157,7 @@ protected:
         }
 
         /* Ignore all errors - it is expected */
-        scoped_log_handler slh(hide_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
 
         /* Close the first sender's EP to force send operation to be completed
          * with CANCEL status */

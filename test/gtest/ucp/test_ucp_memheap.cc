@@ -84,7 +84,7 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
                            send_memh,
                            UCS_PTR_BYTE_OFFSET(memheap.ptr(), offset),
                            rkey, arg);
-        if (num_errors() > 0) {
+        if (ucs::log::num_errors() > 0) {
             break;
         }
     }

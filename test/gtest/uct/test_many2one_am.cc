@@ -21,7 +21,7 @@ public:
         unsigned length;
     } receive_desc_t;
 
-    test_many2one_am() : m_am_count(0), m_receiver(NULL) {
+    test_many2one_am() : m_am_count(0) {
     }
 
     void init() {
@@ -48,8 +48,11 @@ public:
 
         uct_test::init();
 
-        m_receiver = create_entity(sizeof(receive_desc_t));
-        m_entities.push_back(m_receiver);
+        for (unsigned i = 0; i < NUM_SENDERS; ++i) {
+            create_entity(0);
+        }
+
+        create_entity(sizeof(receive_desc_t));
 
         check_skip_test();
     }
@@ -103,7 +106,6 @@ public:
 protected:
     volatile uint32_t             m_am_count;
     std::vector<receive_desc_t*>  m_backlog;
-    entity                       *m_receiver;
 };
 
 
@@ -116,17 +118,15 @@ UCS_TEST_SKIP_COND_P(test_many2one_am, am_bcopy,
 
     ucs::ptr_vector<mapped_buffer> buffers;
     for (unsigned i = 0; i < NUM_SENDERS; ++i) {
-        entity *sender = create_entity(0);
         mapped_buffer *buffer = new mapped_buffer(
-                            sender->iface_attr().cap.am.max_bcopy, 0, *sender);
-        sender->connect(0, *m_receiver, i);
-        m_entities.push_back(sender);
+                            sender(i).iface_attr().cap.am.max_bcopy, 0, sender(i));
+        sender(i).connect(0, receiver(), i);
         buffers.push_back(buffer);
     }
 
     m_am_count = 0;
 
-    status = uct_iface_set_am_handler(m_receiver->iface(), AM_ID, am_handler,
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
                                       (void*)this, 0);
     ASSERT_UCS_OK(status);
 
@@ -138,15 +138,14 @@ UCS_TEST_SKIP_COND_P(test_many2one_am, am_bcopy,
 
         ssize_t packed_len;
         for (;;) {
-            const entity& sender = ent(sender_num + 1);
-            packed_len = uct_ep_am_bcopy(sender.ep(0), AM_ID,
+            packed_len = uct_ep_am_bcopy(sender(sender_num).ep(0), AM_ID,
                                          mapped_buffer::pack,
                                          (void*)&buffer, 0);
             if (packed_len != UCS_ERR_NO_RESOURCE) {
                 break;
             }
-            sender.progress();
-            m_receiver->progress();
+            sender(sender_num).progress();
+            receiver().progress();
         }
         if (packed_len < 0) {
             ASSERT_UCS_OK((ucs_status_t)packed_len);
@@ -157,14 +156,13 @@ UCS_TEST_SKIP_COND_P(test_many2one_am, am_bcopy,
         progress();
     }
 
-    status = uct_iface_set_am_handler(m_receiver->iface(), AM_ID,
-                                      NULL, NULL, 0);
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
     ASSERT_UCS_OK(status);
 
     check_backlog();
 
     for (unsigned i = 0; i < NUM_SENDERS; ++i) {
-        ent(i + 1).flush();
+        sender(i).flush();
     }
 
     buffers.clear();

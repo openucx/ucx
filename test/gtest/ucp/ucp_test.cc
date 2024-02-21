@@ -591,7 +591,7 @@ bool ucp_test::check_tls(const std::string& tls)
     ucp_context_h ucph;
     ucs_status_t status;
     {
-        scoped_log_handler slh(hide_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
         ucp_params_t ctx_params = {};
         ctx_params.field_mask   = UCP_PARAM_FIELD_FEATURES;
         ctx_params.features     = UCP_FEATURE_TAG |
@@ -662,7 +662,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     ucp_test::set_ucp_config(ucp_config, ss.str());
 
     {
-        scoped_log_handler slh(hide_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
         UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucp_context_h, m_ucph, ucp_cleanup,
                                             ucp_init, &local_ctx_params,
                                             ucp_config);
@@ -672,7 +672,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     for (int i = 0; i < num_workers; i++) {
         /* We could have "invalid configuration" errors only when used
            ucp_config_modify(), in which case we wanted to ignore them. */
-        scoped_log_handler slh(hide_config_warns_logger);
+        ucs::log::scoped_handler slh(hide_config_warns_logger);
         UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_workers[i].first,
                                ucp_worker_destroy, ucp_worker_create, m_ucph,
                                &local_worker_params);
@@ -697,7 +697,7 @@ void ucp_test_base::entity::connect(const entity* other,
         ASSERT_UCS_OK(status);
 
         {
-            scoped_log_handler slh(hide_errors_logger);
+            ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
 
             ucp_ep_params_t local_ep_params = ep_params;
             local_ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
@@ -708,10 +708,11 @@ void ucp_test_base::entity::connect(const entity* other,
 
         if (status == UCS_ERR_UNREACHABLE) {
             ucp_worker_release_address(other->worker(i), address);
-            UCS_TEST_SKIP_R(m_errors.empty() ? "Unreachable" : m_errors.back());
+            UCS_TEST_SKIP_R(ucs::log::errors().empty() ? "Unreachable" :
+                            ucs::log::errors().back());
         }
 
-        ASSERT_UCS_OK(status, << " (" << m_errors.back() << ")");
+        ASSERT_UCS_OK(status, << " (" << ucs::log::errors().back() << ")");
 
         if (do_set_ep) {
             set_ep(ep, i, ep_idx);
@@ -810,9 +811,11 @@ ucs_log_func_rc_t ucp_test_base::entity::hide_config_warns_logger(
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    return common_logger(UCS_LOG_LEVEL_WARN, false, m_warnings,
-                         std::numeric_limits<size_t>::max(), file, line,
-                         function, level, comp_conf, message, ap);
+    return ucs::log::common_logger(UCS_LOG_LEVEL_WARN, false,
+                                   ucs::log::warnings_raw(),
+                                   std::numeric_limits<size_t>::max(), file,
+                                   line, function, level, comp_conf, message,
+                                   ap);
 }
 
 void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
@@ -991,7 +994,7 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
 
     ucs_status_t status;
     {
-        scoped_log_handler wrap_err(wrap_errors_logger);
+        ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
         status = ucp_listener_create(worker(worker_index), &params, &listener);
     }
 

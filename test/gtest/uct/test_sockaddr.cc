@@ -22,7 +22,7 @@ extern "C" {
 
 
 class test_uct_sockaddr : public uct_test {
-    friend class uct_test::entity;
+    friend class entity;
 protected:
 
     class client_user_data;
@@ -143,10 +143,8 @@ public:
         m_listen_addr.set_port(port);
         m_connect_addr.set_port(port);
 
-        m_server = uct_test::create_entity();
-        m_entities.push_back(m_server);
-        m_client = uct_test::create_entity();
-        m_entities.push_back(m_client);
+        m_server = &uct_test::create_entity();
+        m_client = &uct_test::create_entity();
 
         m_client->max_conn_priv = m_client->cm_attr().max_conn_priv;
         m_server->max_conn_priv = m_server->cm_attr().max_conn_priv;
@@ -220,7 +218,7 @@ protected:
         }
     }
 
-    void connect(uct_test::entity &e, unsigned index,
+    void connect(entity &e, unsigned index,
                  uct_ep_disconnect_cb_t disconnect_cb,
                  const ucs::sock_addr_storage *local_addr = NULL) {
         client_user_data *user_data = new client_user_data(*this, e, index);
@@ -653,7 +651,7 @@ protected:
 
         if (reject) {
             /* wrap errors since a reject is expected */
-            scoped_log_handler slh(detect_reject_error_logger);
+            ucs::log::scoped_handler slh(detect_reject_error_logger);
 
             status = uct_listener_reject(m_server->listener(),
                                          m_delayed_conn_reqs.front());
@@ -684,7 +682,7 @@ protected:
                                    const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
             if ((strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
                 (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
                 (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0")) ||
@@ -703,7 +701,7 @@ protected:
                                const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
             if (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_REJECTED")) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
@@ -719,7 +717,7 @@ protected:
                                           const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
-            std::string err_str = format_message(message, ap);
+            std::string err_str = ucs::log::format_message(message, ap);
             if (err_str.find("duplicate call of uct_ep_disconnect") !=
                 std::string::npos) {
                 UCS_TEST_MESSAGE << err_str;
@@ -904,7 +902,7 @@ UCS_TEST_P(test_uct_sockaddr, cm_server_reject)
     m_reject_conn_request = true;
 
     /* wrap errors since a reject is expected */
-    scoped_log_handler slh(detect_reject_error_logger);
+    ucs::log::scoped_handler slh(detect_reject_error_logger);
 
     listen_and_connect();
 
@@ -979,7 +977,7 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server_port)
     m_connect_addr.set_port(htons(1));
 
     /* wrap errors since a reject is expected */
-    scoped_log_handler slh(detect_reject_error_logger);
+    ucs::log::scoped_handler slh(detect_reject_error_logger);
 
     /* client - try to connect to a non-existing port on the server side. */
     connect();
@@ -1040,7 +1038,7 @@ UCS_TEST_P(test_uct_sockaddr, ep_disconnect_err_codes)
     {
         ucs::scoped_async_lock lock(m_client->async());
         if (disconnecting) {
-            scoped_log_handler slh(detect_double_disconnect_error_logger);
+            ucs::log::scoped_handler slh(detect_double_disconnect_error_logger);
             if (m_state & TEST_STATE_CLIENT_DISCONNECTED) {
                 UCS_TEST_MESSAGE << "EXP: "
                                  << ucs_status_string(UCS_ERR_NOT_CONNECTED);
@@ -1066,7 +1064,7 @@ UCS_TEST_P(test_uct_sockaddr, ep_disconnect_err_codes)
     /* wrap errors since the client will call uct_ep_disconnect the second time
      * on the same endpoint. this ep may not be disconnected yet */
     {
-        scoped_log_handler slh(detect_double_disconnect_error_logger);
+        ucs::log::scoped_handler slh(detect_double_disconnect_error_logger);
         UCS_TEST_MESSAGE << "EXP: " << ucs_status_string(UCS_ERR_NOT_CONNECTED);
         EXPECT_EQ(UCS_ERR_NOT_CONNECTED, uct_ep_disconnect(m_client->ep(0), 0));
     }
@@ -1140,7 +1138,7 @@ UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
 
     /* wrap errors now since the client will try to connect to a non existing IP */
     {
-        scoped_log_handler slh(detect_addr_route_error_logger);
+        ucs::log::scoped_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
         connect();
         wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE, 300);
@@ -1273,7 +1271,6 @@ protected:
 UCS_TEST_P(test_uct_sockaddr_stress, many_clients_to_one_server)
 {
     int i, disconnected_eps_on_each_side, no_disconnect_eps_cnt = 0;
-    entity *client_test;
     time_t seed = time(0);
     ucs_time_t deadline;
 
@@ -1283,11 +1280,10 @@ UCS_TEST_P(test_uct_sockaddr_stress, many_clients_to_one_server)
     /* Connect */
     /* multiple clients, each on a cm of its own, connecting to the same server */
     for (i = 0; i < m_clients_num; ++i) {
-        client_test = uct_test::create_entity();
-        m_entities.push_back(client_test);
+        entity &client_test = uct_test::create_entity();
 
-        client_test->max_conn_priv  = client_test->cm_attr().max_conn_priv;
-        connect(*client_test, 0, client_disconnect_cb);
+        client_test.max_conn_priv  = client_test.cm_attr().max_conn_priv;
+        connect(client_test, 0, client_disconnect_cb);
     }
 
     /* wait for the server to connect to all the clients */

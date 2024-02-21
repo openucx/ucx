@@ -53,7 +53,8 @@ public:
     {
         ucs_time_t deadline = ucs_get_time() +
                               ucs_time_from_sec(10) * ucs::test_time_multiplier();
-        while ((ucs_get_time() < deadline) && (ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts) < sn)) {
+        while ((ucs_get_time() < deadline) &&
+               (ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts) < sn)) {
             usleep(1000);
         }
     }
@@ -80,10 +81,10 @@ int test_ud_timer::tick_count = 0;
 UCS_TEST_SKIP_COND_P(test_ud_timer, tx1,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
-    EXPECT_UCS_OK(tx(m_e1));
+    EXPECT_UCS_OK(tx(sender()));
     wait_for_rx_sn(1);
-    EXPECT_EQ(2, ep(m_e1)->tx.psn);
-    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    EXPECT_EQ(2, ep(sender())->tx.psn);
+    EXPECT_EQ(1, ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts));
 }
 
 /* multiple packets received without progress */
@@ -92,26 +93,26 @@ UCS_TEST_SKIP_COND_P(test_ud_timer, txn,
     unsigned i, N = 42;
 
     connect();
-    set_tx_win(m_e1, 1024);
+    set_tx_win(sender(), 1024);
     for (i = 0; i < N; i++) {
-        EXPECT_UCS_OK(tx(m_e1));
+        EXPECT_UCS_OK(tx(sender()));
     }
     wait_for_rx_sn(N);
-    EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
-    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    EXPECT_EQ(N+1, ep(sender())->tx.psn);
+    EXPECT_EQ(N, ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts));
 }
 
 UCS_TEST_P(test_ud_timer, ep_destroy, "UD_LINGER_TIMEOUT=1s") {
     void *ud_ep_tmp GTEST_ATTRIBUTE_UNUSED_;
     connect();
 
-    uct_ud_ep_t    *ud_ep = ep(m_e1);
+    uct_ud_ep_t    *ud_ep = ep(sender());
     uct_ud_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
                                            uct_ud_iface_t);
     uint32_t       ep_idx = ud_ep->ep_id;
     EXPECT_TRUE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 
-    m_e1->destroy_eps();
+    sender().destroy_eps();
     wait_for_ep_destroyed(iface, ep_idx);
     EXPECT_FALSE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 }
@@ -121,8 +122,7 @@ UCS_TEST_P(test_ud_timer, backoff_config) {
     ASSERT_UCS_OK(uct_config_modify(m_iface_config,
                   "UD_TIMER_BACKOFF",
                   ucs::to_string(UCT_UD_MIN_TIMER_TIMER_BACKOFF).c_str()));
-    entity *e = uct_test::create_entity(0);
-    m_entities.push_back(e);
+    uct_test::create_entity(0);
 
     {
         /* iface creation should fail with back off value less than
@@ -130,10 +130,10 @@ UCS_TEST_P(test_ud_timer, backoff_config) {
         ASSERT_UCS_OK(uct_config_modify(m_iface_config,
                       "UD_TIMER_BACKOFF",
                       ucs::to_string(UCT_UD_MIN_TIMER_TIMER_BACKOFF - 0.1).c_str()));
-        scoped_log_handler wrap_err(wrap_errors_logger);
+        ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
         uct_iface_h iface;
-        ucs_status_t status = uct_iface_open(e->md(), e->worker(),
-                                             &e->iface_params(),
+        ucs_status_t status = uct_iface_open(e(0).md(), e(0).worker(),
+                                             &e(0).iface_params(),
                                              m_iface_config, &iface);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
         EXPECT_EQ(NULL, iface);
@@ -145,7 +145,7 @@ UCS_TEST_P(test_ud_timer, backoff_config) {
 UCS_TEST_P(test_ud_timer, tick1) {
     connect();
     tick_count = 0;
-    ep(m_e1)->timer_hook = tick_counter;
+    ep(sender())->timer_hook = tick_counter;
     twait(500);
     EXPECT_EQ(0, tick_count);
 }
@@ -155,8 +155,8 @@ UCS_TEST_SKIP_COND_P(test_ud_timer, tick2,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     tick_count = 0;
-    ep(m_e1)->timer_hook = tick_counter;
-    EXPECT_UCS_OK(tx(m_e1));
+    ep(sender())->timer_hook = tick_counter;
+    EXPECT_UCS_OK(tx(sender()));
     twait(500);
     EXPECT_LT(0, tick_count);
 }
@@ -166,15 +166,15 @@ UCS_TEST_SKIP_COND_P(test_ud_timer, tick2,
 UCS_TEST_SKIP_COND_P(test_ud_timer, retransmit1,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
-    ep(m_e2)->rx.rx_hook = drop_packet;
-    EXPECT_UCS_OK(tx(m_e1));
+    ep(receiver())->rx.rx_hook = drop_packet;
+    EXPECT_UCS_OK(tx(sender()));
     short_progress_loop();
-    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
-    ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
-    EXPECT_EQ(2, ep(m_e1)->tx.psn);
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts));
+    ep(receiver())->rx.rx_hook = uct_ud_ep_null_hook;
+    EXPECT_EQ(2, ep(sender())->tx.psn);
     wait_for_rx_sn(1);
-    EXPECT_EQ(2, ep(m_e1)->tx.psn);
-    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    EXPECT_EQ(2, ep(sender())->tx.psn);
+    EXPECT_EQ(1, ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts));
 }
 
 /* retransmit many packets */
@@ -184,18 +184,18 @@ UCS_TEST_SKIP_COND_P(test_ud_timer, retransmitn,
     unsigned i, N = 42;
 
     connect();
-    set_tx_win(m_e1, 1024);
-    ep(m_e2)->rx.rx_hook = drop_packet;
+    set_tx_win(sender(), 1024);
+    ep(receiver())->rx.rx_hook = drop_packet;
     for (i = 0; i < N; i++) {
-        EXPECT_UCS_OK(tx(m_e1));
+        EXPECT_UCS_OK(tx(sender()));
     }
     short_progress_loop();
-    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
-    ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
-    EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts));
+    ep(receiver())->rx.rx_hook = uct_ud_ep_null_hook;
+    EXPECT_EQ(N + 1, ep(sender())->tx.psn);
     wait_for_rx_sn(N);
-    EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
-    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    EXPECT_EQ(N + 1, ep(sender())->tx.psn);
+    EXPECT_EQ(N, ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts));
 }
 
 
@@ -206,29 +206,29 @@ UCS_TEST_SKIP_COND_P(test_ud_timer, partial_drop,
     int orig_avail;
 
     connect();
-    set_tx_win(m_e1, 1024);
+    set_tx_win(sender(), 1024);
     packet_count = 0;
     rx_limit = 10;
-    ep(m_e2)->rx.rx_hook = rx_npackets;
+    ep(receiver())->rx.rx_hook = rx_npackets;
     for (i = 0; i < N; i++) {
-        EXPECT_UCS_OK(tx(m_e1));
+        EXPECT_UCS_OK(tx(sender()));
     }
     short_progress_loop();
-    EXPECT_EQ(rx_limit, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
-    ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
-    EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
-    orig_avail = iface(m_e1)->tx.available;
+    EXPECT_EQ(rx_limit, ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts));
+    ep(receiver())->rx.rx_hook = uct_ud_ep_null_hook;
+    EXPECT_EQ(N + 1, ep(sender())->tx.psn);
+    orig_avail = iface(receiver())->tx.available;
     /* allow only 6 outgoing packets. It will allow to get ack
      * from receiver
      */
-    iface(m_e1)->tx.available = 6;
+    iface(sender())->tx.available = 6;
     twait(500);
-    iface(m_e1)->tx.available = orig_avail-6;
+    iface(receiver())->tx.available = orig_avail - 6;
     short_progress_loop();
-    
-    EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
+
+    EXPECT_EQ(N + 1, ep(sender())->tx.psn);
     wait_for_rx_sn(N);
-    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    EXPECT_EQ(N, ucs_frag_list_sn(&ep(receiver())->rx.ooo_pkts));
 }
 #endif
 

@@ -34,31 +34,29 @@ protected:
             set_config("RC_FC_ENABLE=n");
         }
 
-        m_sender = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
-                                           send_async_event_handler, this);
-        m_entities.push_back(m_sender);
-
-        m_receiver = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
-                                             recv_async_event_handler, this);
-        m_entities.push_back(m_receiver);
+        uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
+                                send_async_event_handler, this);
+        uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
+                                recv_async_event_handler, this);
 
         check_skip_test();
 
-        m_send_async_event_ctx.wait_for_event(*m_sender, 0);
-        m_recv_async_event_ctx.wait_for_event(*m_receiver, 0);
+        m_send_async_event_ctx.wait_for_event(sender(), 0);
+        m_recv_async_event_ctx.wait_for_event(receiver(), 0);
     }
 
     void connect() {
-        m_sender->connect(0, *m_receiver, 0);
+        sender().connect(0, receiver(), 0);
         short_progress_loop(10); /* Some transports need time to become ready */
     }
 
     void disconnect() {
         flush();
-        if (m_receiver->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-            m_receiver->destroy_ep(0);
+        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+            receiver().destroy_ep(0);
         }
-        m_sender->destroy_ep(0);
+
+        sender().destroy_ep(0);
     }
 
     static void send_async_event_handler(void *arg, unsigned flags) {
@@ -103,9 +101,6 @@ protected:
 
     void run_test(entity &test_e, async_event_ctx &ctx);
 
-    entity * m_sender;
-    entity * m_receiver;
-
     unsigned m_send;
     unsigned m_recv;
 
@@ -117,7 +112,7 @@ void test_uct_cq_moderation::run_test(entity &test_e, async_event_ctx &ctx) {
     unsigned events, i;
     ucs_status_t status;
 
-    uct_iface_set_am_handler(m_receiver->iface(), 0, am_cb, this, 0);
+    uct_iface_set_am_handler(receiver().iface(), 0, am_cb, this, 0);
 
     connect();
 
@@ -140,13 +135,13 @@ void test_uct_cq_moderation::run_test(entity &test_e, async_event_ctx &ctx) {
             }
 
             do {
-                status = uct_ep_am_short(m_sender->ep(0), 0, 0, NULL, 0);
+                status = uct_ep_am_short(sender().ep(0), 0, 0, NULL, 0);
                 progress();
             } while (status == UCS_ERR_NO_RESOURCE);
             m_send++;
             ASSERT_UCS_OK(status);
         }
-        m_sender->flush();
+        sender().flush();
         UCS_TEST_MESSAGE << "iteration: " << i + 1 << ", events: " << events
                          << ", limit: " << event_limit;
         if (events <= event_limit) {
@@ -161,12 +156,12 @@ void test_uct_cq_moderation::run_test(entity &test_e, async_event_ctx &ctx) {
 
 UCS_TEST_SKIP_COND_P(test_uct_cq_moderation, send_period,
                      !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP)) {
-    run_test(*m_sender, m_send_async_event_ctx);
+    run_test(sender(), m_send_async_event_ctx);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_cq_moderation, recv_period,
                      !check_event_caps(UCT_IFACE_FLAG_EVENT_RECV)) {
-    run_test(*m_receiver, m_recv_async_event_ctx);
+    run_test(receiver(), m_recv_async_event_ctx);
 }
 
 #if HAVE_DECL_IBV_EXP_CQ_MODERATION

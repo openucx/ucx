@@ -21,7 +21,7 @@ public:
     uct_pending_req_t m_r[64];
 
     void dispatch_req(uct_pending_req_t *r) {
-        EXPECT_UCS_OK(tx(m_e1));
+        EXPECT_UCS_OK(tx(sender()));
     }
 
     void post_pending_reqs(void)
@@ -30,17 +30,17 @@ public:
 
         req_count = 0;
         me = this;
-        m_e1->connect_to_iface(0, *m_e2);
-        disable_async(m_e1);
-        disable_async(m_e2);
-        set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
+        sender().connect_to_iface(0, receiver());
+        disable_async(sender());
+        disable_async(receiver());
+        set_tx_win(sender(), UCT_UD_CA_MAX_WINDOW);
         /* ep is not connected yet */
-        EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(sender()));
 
         /* queuee some work */
         for(i = 0; i < N; i++) {
             m_r[i].func = pending_cb_dispatch;
-            EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &m_r[i], 0));
+            EXPECT_EQ(UCS_OK, uct_ep_pending_add(sender().ep(0), &m_r[i], 0));
         }
     }
 
@@ -54,7 +54,7 @@ public:
             progress();
         }
         EXPECT_EQ(N, req_count);
-        uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
+        uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
     }
 
     static const int N;
@@ -101,16 +101,16 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, async_progress,
     req_count = 0;
     connect();
 
-    set_tx_win(m_e1, 2);
-    EXPECT_UCS_OK(tx(m_e1));
+    set_tx_win(sender(), 2);
+    EXPECT_UCS_OK(tx(sender()));
 
     for(i = 0; i < N; i++) {
-        EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i], 0));
+        EXPECT_EQ(UCS_OK, uct_ep_pending_add(sender().ep(0), &r[i], 0));
     }
     twait(300);
     /* requests must not be dispatched from async progress */
     EXPECT_EQ(0, req_count);
-    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
+    uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
     EXPECT_EQ(N, req_count);
 }
 
@@ -122,17 +122,17 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, sync_progress,
     req_count = 0;
     connect();
 
-    set_tx_win(m_e1, 2);
-    EXPECT_UCS_OK(tx(m_e1));
+    set_tx_win(sender(), 2);
+    EXPECT_UCS_OK(tx(sender()));
 
     for(i = 0; i < N; i++) {
         r[i].func = pending_cb;
-        EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i], 0));
+        EXPECT_EQ(UCS_OK, uct_ep_pending_add(sender().ep(0), &r[i], 0));
     }
     wait_for_value(&req_count, N, true);
     /* requests must be dispatched from progress */
     EXPECT_EQ(N, req_count);
-    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
+    uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
     EXPECT_EQ(N, req_count);
 }
 
@@ -144,17 +144,17 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, err_busy,
     req_count = 0;
     connect();
 
-    set_tx_win(m_e1, 2);
-    EXPECT_UCS_OK(tx(m_e1));
+    set_tx_win(sender(), 2);
+    EXPECT_UCS_OK(tx(sender()));
 
     for(i = 0; i < N; i++) {
         r[i].func = pending_cb_busy;
-        EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i], 0));
+        EXPECT_EQ(UCS_OK, uct_ep_pending_add(sender().ep(0), &r[i], 0));
     }
     short_progress_loop();
     /* requests will not be dispatched from progress */
     EXPECT_EQ(0, req_count);
-    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
+    uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
     EXPECT_EQ(N, req_count);
 }
 
@@ -182,16 +182,16 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, window,
     req_count = 0;
     me = this;
     connect();
-    set_tx_win(m_e1, W+1);
+    set_tx_win(sender(), W + 1);
     for (i = 0; i < W; i ++) {
-        EXPECT_UCS_OK(tx(m_e1));
+        EXPECT_UCS_OK(tx(sender()));
     }
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(sender()));
     r.func = pending_cb_dispatch;
-    EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r, 0));
+    EXPECT_EQ(UCS_OK, uct_ep_pending_add(sender().ep(0), &r, 0));
     wait_for_value(&req_count, 1, true);
     EXPECT_EQ(1, req_count);
-    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
+    uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
 }
 
 UCS_TEST_SKIP_COND_P(test_ud_pending, tx_wqe,
@@ -203,23 +203,23 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, tx_wqe,
 
     req_count = 0;
     me = this;
-    disable_async(m_e1);
-    disable_async(m_e2);
+    disable_async(sender());
+    disable_async(receiver());
     connect();
     /* set big window */
-    set_tx_win(m_e1, 8192);
+    set_tx_win(sender(), 8192);
     i = 0;
     do {
-       status = tx(m_e1);
+       status = tx(sender());
        i++;
     } while (status == UCS_OK);
 
     r.func = pending_cb_dispatch;
-    EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r, 0));
+    EXPECT_EQ(UCS_OK, uct_ep_pending_add(sender().ep(0), &r, 0));
     wait_for_value(&req_count, 1, true);
     EXPECT_EQ(1, req_count);
     short_progress_loop();
-    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
+    uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
 }
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud_pending)

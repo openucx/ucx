@@ -16,17 +16,14 @@ public:
     void init() {
         uct_test::init();
 
-        m_e1 = uct_test::create_entity(0);
-        m_entities.push_back(m_e1);
-
-        m_e2 = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
-                                       async_event_handler, this);
-        m_entities.push_back(m_e2);
+        uct_test::create_entity(0);
+        uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
+                                async_event_handler, this);
 
         check_skip_test();
 
-        m_e1->connect(0, *m_e2, 0);
-        m_e2->connect(0, *m_e1, 0);
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
 
         /* give a chance to finish connection for some transports (ib/ud, tcp) */
         flush();
@@ -66,11 +63,11 @@ public:
 
         m_send_data = 0xdeadbeef;
         do {
-            res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64,
-                                  &m_send_data, send_flags);
-            m_e1->progress();
+            res = uct_ep_am_bcopy(sender().ep(0), 0, pack_u64, &m_send_data,
+                                  send_flags);
+            sender().progress();
             if (progress_rx) {
-                m_e2->progress();
+                receiver().progress();
             }
         } while (res == UCS_ERR_NO_RESOURCE);
         ASSERT_EQ((ssize_t)sizeof(m_send_data), res);
@@ -111,7 +108,6 @@ public:
 protected:
     static unsigned m_am_recv_count;
 
-    entity *m_e1, *m_e2;
     unsigned m_am_send_count;
     uct_test::async_event_ctx m_async_event_ctx;
     uint64_t m_send_data;
@@ -130,16 +126,16 @@ void test_uct_event::test_recv_am(unsigned arm_flags, unsigned send_flags)
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, recv_buffer, 0);
+    uct_iface_set_am_handler(receiver().iface(), 0, am_handler, recv_buffer, 0);
 
-    EXPECT_FALSE(m_async_event_ctx.wait_for_event(*m_e2, 0));
+    EXPECT_FALSE(m_async_event_ctx.wait_for_event(receiver(), 0));
 
     double time1 = measure_am_loop(count, send_flags);
 
     for (int retry = 0; ; ++retry) {
         for (unsigned i = 0; i < count; ++i) {
-            arm(m_e2, arm_flags);
-            if (m_async_event_ctx.wait_for_event(*m_e2, 0)) {
+            arm(&receiver(), arm_flags);
+            if (m_async_event_ctx.wait_for_event(receiver(), 0)) {
                 ++spurious_count;
             }
 
@@ -147,7 +143,7 @@ void test_uct_event::test_recv_am(unsigned arm_flags, unsigned send_flags)
             send_am_data(send_flags, false);
 
             /* wait for the event */
-            EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e2, 60));
+            EXPECT_TRUE(m_async_event_ctx.wait_for_event(receiver(), 60));
 
             /* recv the data */
             unsigned progress_count = 0;
@@ -180,7 +176,7 @@ void test_uct_event::test_recv_am(unsigned arm_flags, unsigned send_flags)
         ucs::safe_sleep(ucs::perf_retry_interval);
     }
 
-    m_e1->flush();
+    sender().flush();
 
     free(recv_buffer);
 }

@@ -193,7 +193,7 @@ bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
     ucs_status_t status;
 
     {
-        scoped_log_handler slh(hide_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
         status = UCP_RKEY_RESOLVE(rkey, e->ep(), rma);
     }
 
@@ -213,7 +213,7 @@ bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
     ucs_status_t status;
 
     {
-        scoped_log_handler slh(hide_errors_logger);
+        ucs::log::scoped_handler slh(ucs::log::hide_errors_logger);
         status = UCP_RKEY_RESOLVE(rkey, e->ep(), amo);
     }
 
@@ -575,7 +575,7 @@ test_ucp_mmap::import_no_md_error_handler(const char *file, unsigned line,
 {
     // Ignore errors that no suitable MDs for import as it is expected
     if (level == UCS_LOG_LEVEL_ERROR) {
-        std::string err_str = format_message(message, ap);
+        std::string err_str = ucs::log::format_message(message, ap);
         if (err_str.find("no suitable UCT memory domains to perform importing"
                          " on") != std::string::npos) {
             UCS_TEST_MESSAGE << err_str;
@@ -601,7 +601,7 @@ void test_ucp_mmap::import_memh(void *exported_memh_buf, ucp_mem_h *memh_p)
     params.exported_memh_buffer = exported_memh_buf;
 
     {
-        scoped_log_handler warn_slh(import_no_md_error_handler);
+        ucs::log::scoped_handler warn_slh(import_no_md_error_handler);
         ucs_status_t status = ucp_mem_map(receiver().ucph(), &params, memh_p);
         if (status == UCS_ERR_UNREACHABLE) {
             release_exported_memh_buf(exported_memh_buf);
@@ -992,7 +992,7 @@ UCS_TEST_P(test_ucp_rkey_compare, rkey_compare_errors)
     ucs_status_t status;
     int result;
 
-    scoped_log_handler err_handler(wrap_errors_logger);
+    ucs::log::scoped_handler err_handler(ucs::log::wrap_errors_logger);
 
     status = ucp_rkey_compare(receiver().worker(), rkey, rkey, &params, NULL);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);

@@ -14,54 +14,57 @@ void test_rc::init()
 {
     uct_test::init();
 
-    m_e1 = uct_test::create_entity(0);
-    m_entities.push_back(m_e1);
-
+    uct_test::create_entity(0);
     check_skip_test();
-
-    m_e2 = uct_test::create_entity(0);
-    m_entities.push_back(m_e2);
-
+    uct_test::create_entity(0);
     connect();
+}
+
+void test_rc::cleanup()
+{
+    uct_test::cleanup();
+    m_entities.clear();
 }
 
 void test_rc::connect()
 {
-    m_e1->connect(0, *m_e2, 0);
-    m_e2->connect(0, *m_e1, 0);
+    sender().connect(0, receiver(), 0);
+    receiver().connect(0, sender(), 0);
 
-    uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler, NULL, 0);
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
+    uct_iface_set_am_handler(sender().iface(), 0, am_dummy_handler, NULL, 0);
+    uct_iface_set_am_handler(receiver().iface(), 0, am_dummy_handler, NULL, 0);
 }
 
 // Check that iface tx ops buffer and flush comp memory pool are moderated
 // properly when we have communication ops + lots of flushes
 void test_rc::test_iface_ops(int cq_len)
 {
-    entity *e = uct_test::create_entity(0);
-    m_entities.push_back(e);
-    e->connect(0, *m_e2, 0);
+    uct_test::create_entity(0);
+    ASSERT_EQ(3u, m_entities.size());
+    entity &e1 = e(0);
+    entity &e2 = e(1);
+    entity &e3 = e(2);
+    e3.connect(0, e2, 0);
 
-    mapped_buffer sendbuf(1024, 0ul, *e);
-    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+    mapped_buffer sendbuf(1024, 0ul, e3);
+    mapped_buffer recvbuf(1024, 0ul, e2);
     uct_completion_t comp;
     comp.count = cq_len * 512; // some big value to avoid func invocation
     comp.func  = NULL;
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                            sendbuf.memh(), m_e1->iface_attr().cap.put.max_iov);
+                            sendbuf.memh(), e1.iface_attr().cap.put.max_iov);
     // For _x transports several CQEs can be consumed per WQE, post less put zcopy
     // ops, so that flush would be successful (otherwise flush will return
     // NO_RESOURCES and completion will not be added for it).
     for (int i = 0; i < cq_len / 5; i++) {
-        ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(e->ep(0), iov, iovcnt,
+        ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(e3.ep(0), iov, iovcnt,
                                                      recvbuf.addr(),
                                                      recvbuf.rkey(), &comp));
-
         // Create some stress on iface (flush mp):
         // post 10 flushes per every put.
         for (int j = 0; j < 10; j++) {
-            ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_flush(e->ep(0), 0, &comp));
+            ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_flush(e3.ep(0), 0, &comp));
         }
     }
 
@@ -81,30 +84,30 @@ UCS_TEST_SKIP_COND_P(test_rc, stress_iface_ops,
 }
 
 UCS_TEST_P(test_rc, tx_cq_moderation) {
-    unsigned tx_mod   = ucs_min(rc_iface(m_e1)->config.tx_moderation / 4, 8);
-    int16_t init_rsc  = rc_ep(m_e1)->txqp.available;
+    unsigned tx_mod   = ucs_min(rc_iface(sender())->config.tx_moderation / 4, 8);
+    int16_t init_rsc  = rc_ep(sender())->txqp.available;
 
-    send_am_messages(m_e1, tx_mod, UCS_OK);
+    send_am_messages(sender(), tx_mod, UCS_OK);
 
-    int16_t rsc = rc_ep(m_e1)->txqp.available;
+    int16_t rsc = rc_ep(sender())->txqp.available;
 
     EXPECT_LE(rsc, init_rsc);
 
     short_progress_loop(100);
 
-    EXPECT_EQ(rsc, rc_ep(m_e1)->txqp.available);
+    EXPECT_EQ(rsc, rc_ep(sender())->txqp.available);
 
     flush();
 
-    EXPECT_EQ(init_rsc, rc_ep(m_e1)->txqp.available);
+    EXPECT_EQ(init_rsc, rc_ep(sender())->txqp.available);
 }
 
 UCS_TEST_P(test_rc, flush_fc, "FLUSH_MODE?=fc") {
-    send_am_messages(m_e1, 1, UCS_OK);
+    send_am_messages(sender(), 1, UCS_OK);
 
     ucs_status_t status;
     do {
-        status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+        status = uct_ep_flush(sender().ep(0), 0, NULL);
         short_progress_loop();
         if (status != UCS_ERR_NO_RESOURCE) {
             ASSERT_UCS_OK_OR_INPROGRESS(status);
@@ -132,13 +135,13 @@ protected:
 UCS_TEST_P(test_rc_max_wr, send_limit)
 {
     /* first 32 messages should be OK */
-    send_am_messages(m_e1, 32, UCS_OK);
+    send_am_messages(sender(), 32, UCS_OK);
 
     /* next message - should fail */
-    send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
+    send_am_messages(sender(), 1, UCS_ERR_NO_RESOURCE);
 
     progress_loop();
-    send_am_messages(m_e1, 1, UCS_OK);
+    send_am_messages(sender(), 1, UCS_OK);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
@@ -180,13 +183,10 @@ public:
         uct_test::init();
 
         uct_iface_params_t params = iface_params();
-        m_entity                  = uct_test::create_entity(params);
+        m_entity                  = &uct_test::create_entity(params);
 
         params.features    |= UCT_IFACE_FEATURE_FLUSH_REMOTE;
-        m_entity_flush_rkey = uct_test::create_entity(params);
-
-        m_entities.push_back(m_entity);
-        m_entities.push_back(m_entity_flush_rkey);
+        m_entity_flush_rkey = &uct_test::create_entity(params);
     }
 
     using map_size_t = std::map<std::string, std::pair<size_t, size_t>>;
@@ -261,35 +261,35 @@ public:
     }
 
     void cleanup() {
-        uct_test::cleanup();
+        test_rc::cleanup();
         stats_restore();
     }
 
 #ifdef ENABLE_STATS
-    uint64_t get_no_reads_stat_counter(entity *e) {
-        uct_rc_iface_t *iface = ucs_derived_of(e->iface(), uct_rc_iface_t);
+    uint64_t get_no_reads_stat_counter(entity &e) {
+        uct_rc_iface_t *iface = ucs_derived_of(e.iface(), uct_rc_iface_t);
 
         return UCS_STATS_GET_COUNTER(iface->stats, UCT_RC_IFACE_STAT_NO_READS);
     }
 #endif
 
-    ssize_t reads_available(entity *e) {
+    ssize_t reads_available(entity &e) {
         return rc_iface(e)->tx.reads_available;
     }
 
-    void post_max_reads(entity *e, const mapped_buffer &sendbuf,
+    void post_max_reads(entity &e, const mapped_buffer &sendbuf,
                         const mapped_buffer &recvbuf) {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), e->iface_attr().cap.get.max_iov);
+                                sendbuf.memh(), e.iface_attr().cap.get.max_iov);
 
         int i = 0;
         ucs_status_t status;
         do {
             if (i++ % 2) {
-                status = uct_ep_get_zcopy(e->ep(0), iov, iovcnt, recvbuf.addr(),
+                status = uct_ep_get_zcopy(e.ep(0), iov, iovcnt, recvbuf.addr(),
                                           recvbuf.rkey(), &m_comp);
             } else {
-                status = uct_ep_get_bcopy(e->ep(0), (uct_unpack_callback_t)memcpy,
+                status = uct_ep_get_bcopy(e.ep(0), (uct_unpack_callback_t)memcpy,
                                           sendbuf.ptr(), sendbuf.length(),
                                           recvbuf.addr(), recvbuf.rkey(), &m_comp);
             }
@@ -302,9 +302,9 @@ public:
     void add_pending_ams(pending_send_request_t *reqs, int num_reqs) {
         for (int i = 0; i < num_reqs; ++i) {
             reqs[i].uct.func = pending_cb_send_am;
-            reqs[i].ep       = m_e1->ep(0);
+            reqs[i].ep       = sender().ep(0);
             reqs[i].cb_count = i;
-            ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &reqs[i].uct, 0));
+            ASSERT_UCS_OK(uct_ep_pending_add(sender().ep(0), &reqs[i].uct, 0));
         }
     }
 
@@ -355,59 +355,59 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_ops_limit,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
                                  UCT_IFACE_FLAG_GET_BCOPY))
 {
-    mapped_buffer sendbuf(1024, 0ul, *m_e1);
-    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+    mapped_buffer sendbuf(1024, 0ul, sender());
+    mapped_buffer recvbuf(1024, 0ul, receiver());
 
-    post_max_reads(m_e1, sendbuf, recvbuf);
+    post_max_reads(sender(), sendbuf, recvbuf);
 
 #ifdef ENABLE_STATS
-    EXPECT_GT(get_no_reads_stat_counter(m_e1), 0ul);
+    EXPECT_GT(get_no_reads_stat_counter(sender()), 0ul);
 #endif
 
     // Check that it is possible to add to pending if get returns NO_RESOURCE
     // due to lack of get credits
     uct_pending_req_t pend_req;
     pend_req.func = NULL; // Make valgrind happy
-    EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
-    uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+    EXPECT_EQ(UCS_OK, uct_ep_pending_add(sender().ep(0), &pend_req, 0));
+    uct_ep_pending_purge(sender().ep(0), NULL, NULL);
 
     flush();
-    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(sender()));
 }
 
 // Check that get function fails for messages bigger than MAX_GET_ZCOPY value
 UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_size_limit,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
 {
-    EXPECT_EQ(m_max_get_zcopy, m_e1->iface_attr().cap.get.max_zcopy);
+    EXPECT_EQ(m_max_get_zcopy, sender().iface_attr().cap.get.max_zcopy);
 
-    mapped_buffer buf(m_max_get_zcopy + 1, 0ul, *m_e1);
+    mapped_buffer buf(m_max_get_zcopy + 1, 0ul, sender());
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf.ptr(), buf.length(), buf.memh(),
-                            m_e1->iface_attr().cap.get.max_iov);
+                            sender().iface_attr().cap.get.max_iov);
 
-    scoped_log_handler wrap_err(wrap_errors_logger);
-    ucs_status_t status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt,
+    ucs::log::scoped_handler wrap_err(ucs::log::wrap_errors_logger);
+    ucs_status_t status = uct_ep_get_zcopy(sender().ep(0), iov, iovcnt,
                                            buf.addr(), buf.rkey(), &m_comp);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 
     flush();
-    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(sender()));
 }
 
 // Check that get size value is trimmed by the actual maximum IB msg size
 UCS_TEST_SKIP_COND_P(test_rc_get_limit, invalid_get_size,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
 {
-    size_t max_ib_msg = uct_ib_iface_port_attr(&rc_iface(m_e1)->super)->max_msg_sz;
+    size_t max_ib_msg = uct_ib_iface_port_attr(
+            &rc_iface(sender())->super)->max_msg_sz;
 
     modify_config("RC_MAX_GET_ZCOPY", ucs::to_string(max_ib_msg + 1).c_str());
 
-    scoped_log_handler wrap_warn(hide_warns_logger);
-    entity *e = uct_test::create_entity(0);
-    m_entities.push_back(e);
+    ucs::log::scoped_handler wrap_warn(ucs::log::hide_warns_logger);
+    uct_test::create_entity(0);
 
-    EXPECT_EQ(m_max_get_zcopy, m_e1->iface_attr().cap.get.max_zcopy);
+    EXPECT_EQ(m_max_get_zcopy, sender().iface_attr().cap.get.max_zcopy);
 }
 
 // Check that gets resource counter is not affected/changed when the get
@@ -416,26 +416,26 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
                                  UCT_IFACE_FLAG_AM_BCOPY))
 {
-    unsigned max_get_bytes = reads_available(m_e1);
+    unsigned max_get_bytes = reads_available(sender());
     ucs_status_t status;
 
     do {
-        status = send_am_message(m_e1, 0, 0);
+        status = send_am_message(sender(), 0, 0);
     } while (status == UCS_OK);
 
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
-    EXPECT_EQ(max_get_bytes, reads_available(m_e1));
+    EXPECT_EQ(max_get_bytes, reads_available(sender()));
 
-    mapped_buffer buf(1024, 0ul, *m_e1);
+    mapped_buffer buf(1024, 0ul, sender());
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf.ptr(), buf.length(), buf.memh(),
-                            m_e1->iface_attr().cap.get.max_iov);
+                            sender().iface_attr().cap.get.max_iov);
 
-    status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, buf.addr(), buf.rkey(),
+    status = uct_ep_get_zcopy(sender().ep(0), iov, iovcnt, buf.addr(), buf.rkey(),
                               &m_comp);
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
-    EXPECT_EQ(max_get_bytes, reads_available(m_e1));
+    EXPECT_EQ(max_get_bytes, reads_available(sender()));
 #ifdef ENABLE_STATS
-    EXPECT_EQ(get_no_reads_stat_counter(m_e1), 0ul);
+    EXPECT_EQ(get_no_reads_stat_counter(sender()), 0ul);
 #endif
 
     flush();
@@ -452,13 +452,13 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
                                  UCT_IFACE_FLAG_AM_ZCOPY))
 
 {
-    mapped_buffer sendbuf(1024, 0ul, *m_e1);
-    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+    mapped_buffer sendbuf(1024, 0ul, sender());
+    mapped_buffer recvbuf(1024, 0ul, receiver());
 
-    post_max_reads(m_e1, sendbuf, recvbuf);
+    post_max_reads(sender(), sendbuf, recvbuf);
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), 1, sendbuf.memh(), 1);
-    uct_ep_h ep = m_e1->ep(0);
+    uct_ep_h ep = sender().ep(0);
 
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_short(ep, NULL, 0, 0, 0));
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_bcopy(ep, NULL, NULL, 0, 0));
@@ -514,7 +514,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
     }
 
     flush();
-    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(sender()));
 }
 
 // Check that outstanding get ops purged gracefully when ep is closed.
@@ -523,19 +523,19 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
                                  UCT_IFACE_FLAG_GET_BCOPY))
 {
-    mapped_buffer sendbuf(1024, 0ul, *m_e1);
-    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+    mapped_buffer sendbuf(1024, 0ul, sender());
+    mapped_buffer recvbuf(1024, 0ul, receiver());
 
-    post_max_reads(m_e1, sendbuf, recvbuf);
+    post_max_reads(sender(), sendbuf, recvbuf);
 
-    scoped_log_handler hide_warn(hide_warns_logger);
+    ucs::log::scoped_handler hide_warn(ucs::log::hide_warns_logger);
 
     unsigned flags      = UCT_FLUSH_FLAG_CANCEL;
     ucs_time_t deadline = ucs::get_deadline();
     ucs_status_t status;
     do {
-        ASSERT_EQ(1ul, m_e1->num_eps());
-        status = uct_ep_flush(m_e1->ep(0), flags, NULL);
+        ASSERT_EQ(1ul, sender().num_eps());
+        status = uct_ep_flush(sender().ep(0), flags, NULL);
         progress();
         if ((flags & UCT_FLUSH_FLAG_CANCEL) && (status != UCS_ERR_NO_RESOURCE)) {
             ASSERT_UCS_OK_OR_INPROGRESS(status);
@@ -545,9 +545,9 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
     } while (((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) &&
              (ucs_get_time() < deadline));
 
-    m_e1->destroy_eps();
+    sender().destroy_eps();
     flush();
-    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(sender()));
 }
 
 // Check that it is not possible to send while not all pendings are dispatched
@@ -564,16 +564,16 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_pending,
     volatile uint64_t sn = 0;
     ucs_status_t status;
 
-    uct_iface_set_am_handler(m_e2->iface(), AM_CHECK_ORDER_ID,
+    uct_iface_set_am_handler(receiver().iface(), AM_CHECK_ORDER_ID,
                              am_handler_ordering, (void*)&sn, 0);
 
-    mapped_buffer sendbuf(1024, 0ul, *m_e1);
-    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+    mapped_buffer sendbuf(1024, 0ul, sender());
+    mapped_buffer recvbuf(1024, 0ul, receiver());
 
-    post_max_reads(m_e1, sendbuf, recvbuf);
+    post_max_reads(sender(), sendbuf, recvbuf);
 
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_am_short(m_e1->ep(0), AM_CHECK_ORDER_ID, 0, NULL, 0));
+              uct_ep_am_short(sender().ep(0), AM_CHECK_ORDER_ID, 0, NULL, 0));
 
     const uint64_t num_pend = 3;
     pending_send_request_t reqs[num_pend];
@@ -581,7 +581,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_pending,
 
     do {
         progress();
-        status = uct_ep_am_short(m_e1->ep(0), AM_CHECK_ORDER_ID, num_pend,
+        status = uct_ep_am_short(sender().ep(0), AM_CHECK_ORDER_ID, num_pend,
                                  NULL, 0);
     } while (status != UCS_OK);
 
@@ -589,7 +589,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_pending,
     EXPECT_EQ(num_pend, sn);
 
     flush();
-    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(sender()));
 }
 
 UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_comp_cb,
@@ -601,29 +601,29 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_comp_cb,
     volatile uint64_t sn    = 0;
     const uint64_t num_pend = 3;
 
-    uct_iface_set_am_handler(m_e2->iface(), AM_CHECK_ORDER_ID,
+    uct_iface_set_am_handler(receiver().iface(), AM_CHECK_ORDER_ID,
                              am_handler_ordering, (void*)&sn, 0);
 
-    mapped_buffer sendbuf(1024, 0ul, *m_e1);
-    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+    mapped_buffer sendbuf(1024, 0ul, sender());
+    mapped_buffer recvbuf(1024, 0ul, receiver());
 
     am_completion_t comp;
     comp.uct.func       = get_comp_cb;
     comp.uct.count      = 1;
     comp.uct.status     = UCS_OK;
-    comp.ep             = m_e1->ep(0);
+    comp.ep             = sender().ep(0);
     comp.cb_count       = num_pend;
-    ucs_status_t status = uct_ep_get_bcopy(m_e1->ep(0),
+    ucs_status_t status = uct_ep_get_bcopy(sender().ep(0),
                                            (uct_unpack_callback_t)memcpy,
                                            sendbuf.ptr(), sendbuf.length(),
                                            recvbuf.addr(), recvbuf.rkey(),
                                            &comp.uct);
     ASSERT_FALSE(UCS_STATUS_IS_ERR(status));
 
-    post_max_reads(m_e1, sendbuf, recvbuf);
+    post_max_reads(sender(), sendbuf, recvbuf);
 
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              uct_ep_am_short(m_e1->ep(0), AM_CHECK_ORDER_ID, 0, NULL, 0));
+              uct_ep_am_short(sender().ep(0), AM_CHECK_ORDER_ID, 0, NULL, 0));
 
     pending_send_request_t reqs[num_pend];
     add_pending_ams(reqs, num_pend);
@@ -632,7 +632,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_comp_cb,
     EXPECT_EQ(num_pend - 1, sn);
 
     flush();
-    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(sender()));
 }
 
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_get_limit)
@@ -661,10 +661,10 @@ public:
         return UCS_OK;
     }
 
-    void send_recv(uct_ep_h ep, entity *ent, size_t length)
+    void send_recv(uct_ep_h ep, entity &ent, size_t length)
     {
         /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(ent->iface(), 0, recv_handler, &length, 0);
+        uct_iface_set_am_handler(ent.iface(), 0, recv_handler, &length, 0);
 
         /* send the data */
         ssize_t packed_size = uct_ep_am_bcopy(ep, 0, send_pack_cb, &length, 0);
@@ -681,7 +681,7 @@ size_t test_rc_ece_auto::m_recv_count = 0;
 
 UCS_TEST_P(test_rc_ece_auto, send_recv)
 {
-    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy);
+    send_recv(sender().ep(0), receiver(), sender().iface_attr().cap.am.max_bcopy);
 }
 
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece_auto)
@@ -696,23 +696,23 @@ void test_rc_flow_control::init()
     }
     test_rc::init();
 
-    ucs_assert(rc_iface(m_e1)->config.fc_enabled);
-    ucs_assert(rc_iface(m_e2)->config.fc_enabled);
+    ucs_assert(rc_iface(sender())->config.fc_enabled);
+    ucs_assert(rc_iface(receiver())->config.fc_enabled);
 
-    uct_iface_set_am_handler(m_e1->iface(), FLUSH_AM_ID, am_handler, NULL, 0);
-    uct_iface_set_am_handler(m_e2->iface(), FLUSH_AM_ID, am_handler, NULL, 0);
+    uct_iface_set_am_handler(sender().iface(), FLUSH_AM_ID, am_handler, NULL, 0);
+    uct_iface_set_am_handler(receiver().iface(), FLUSH_AM_ID, am_handler, NULL, 0);
 
 }
 
 void test_rc_flow_control::cleanup()
 {
     /* Restore FC state to enabled, so iface cleanup will destroy the grant mpool */
-    rc_iface(m_e1)->config.fc_enabled = 1;
-    rc_iface(m_e2)->config.fc_enabled = 1;
+    rc_iface(sender())->config.fc_enabled   = 1;
+    rc_iface(receiver())->config.fc_enabled = 1;
     test_rc::cleanup();
 }
 
-void test_rc_flow_control::send_am_and_flush(entity *e, int num_msg)
+void test_rc_flow_control::send_am_and_flush(entity &e, int num_msg)
 {
     m_am_rx_count = 0;
 
@@ -722,7 +722,7 @@ void test_rc_flow_control::send_am_and_flush(entity *e, int num_msg)
     EXPECT_EQ(m_am_rx_count, 1ul);
 }
 
-void test_rc_flow_control::validate_grant(entity *e)
+void test_rc_flow_control::validate_grant(entity &e)
 {
     wait_for_flag(&get_fc_ptr(e)->fc_wnd);
     EXPECT_GT(get_fc_ptr(e)->fc_wnd, 0);
@@ -734,22 +734,22 @@ void test_rc_flow_control::validate_grant(entity *e)
 void test_rc_flow_control::test_general(int wnd, int soft_thresh,
                                         int hard_thresh, bool is_fc_enabled)
 {
-    set_fc_attributes(m_e1, is_fc_enabled, wnd, soft_thresh, hard_thresh);
+    set_fc_attributes(sender(), is_fc_enabled, wnd, soft_thresh, hard_thresh);
 
-    send_am_messages(m_e1, wnd, UCS_OK);
-    send_am_messages(m_e1, 1, is_fc_enabled ?  UCS_ERR_NO_RESOURCE : UCS_OK);
+    send_am_messages(sender(), wnd, UCS_OK);
+    send_am_messages(sender(), 1, is_fc_enabled ?  UCS_ERR_NO_RESOURCE : UCS_OK);
 
-    validate_grant(m_e1);
-    send_am_messages(m_e1, 1, UCS_OK);
+    validate_grant(sender());
+    send_am_messages(sender(), 1, UCS_OK);
 
     if (!is_fc_enabled) {
         /* Make valgrind happy, need to enable FC for proper cleanup */
-        set_fc_attributes(m_e1, true, wnd, wnd, 1);
+        set_fc_attributes(sender(), true, wnd, wnd, 1);
     }
     flush();
 }
 
-void test_rc_flow_control::wait_fc_hard_resend(entity *e)
+void test_rc_flow_control::wait_fc_hard_resend(entity &e)
 {
 }
 
@@ -757,47 +757,47 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
 {
     /* Block send capabilities of m_e2 for fc grant to be
      * added to the pending queue. */
-    disable_entity(m_e2);
-    set_fc_attributes(m_e1, true, wnd, wnd, 1);
+    disable_entity(receiver());
+    set_fc_attributes(sender(), true, wnd, wnd, 1);
 
-    send_am_and_flush(m_e1, wnd);
+    send_am_and_flush(sender(), wnd);
 
     /* Now m_e1 should be blocked by FC window and FC grant
      * should be in pending queue of m_e2. */
-    send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
-    EXPECT_LE(get_fc_ptr(m_e1)->fc_wnd, 0);
+    send_am_messages(sender(), 1, UCS_ERR_NO_RESOURCE);
+    EXPECT_LE(get_fc_ptr(sender())->fc_wnd, 0);
 
-    wait_fc_hard_resend(m_e1);
+    wait_fc_hard_resend(sender());
 
     /* Enable send capabilities of m_e2 and send short put message to force
      * pending queue dispatch. Can't send AM message for that, because it may
      * trigger reordering assert due to disable/enable entity hack. */
-    enable_entity(m_e2);
-    set_tx_moderation(m_e2, 0);
-    EXPECT_EQ(UCS_OK, uct_ep_put_short(m_e2->ep(0), NULL, 0, 0, 0));
+    enable_entity(receiver());
+    set_tx_moderation(receiver(), 0);
+    EXPECT_EQ(UCS_OK, uct_ep_put_short(receiver().ep(0), NULL, 0, 0, 0));
 
     /* Check that m_e1 got grant */
-    validate_grant(m_e1);
-    send_am_messages(m_e1, 1, UCS_OK);
+    validate_grant(sender());
+    send_am_messages(sender(), 1, UCS_OK);
 }
 
 void test_rc_flow_control::test_flush_fc_disabled()
 {
-    set_fc_disabled(m_e1);
+    set_fc_disabled(sender());
     ucs_status_t status;
 
     /* If FC is disabled, wnd=0 should not prevent the flush */
-    get_fc_ptr(m_e1)->fc_wnd = 0;
-    status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+    get_fc_ptr(sender())->fc_wnd = 0;
+    status = uct_ep_flush(sender().ep(0), 0, NULL);
     EXPECT_EQ(UCS_OK, status);
 
     /* send active message should be OK */
-    get_fc_ptr(m_e1)->fc_wnd = 1;
-    send_am_messages(m_e1, 1, UCS_OK);
-    EXPECT_EQ(0, get_fc_ptr(m_e1)->fc_wnd);
+    get_fc_ptr(sender())->fc_wnd = 1;
+    send_am_messages(sender(), 1, UCS_OK);
+    EXPECT_EQ(0, get_fc_ptr(sender())->fc_wnd);
 
     /* flush must have resources */
-    status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+    status = uct_ep_flush(sender().ep(0), 0, NULL);
     EXPECT_FALSE(UCS_STATUS_IS_ERR(status)) << ucs_status_string(status);
 }
 
@@ -805,19 +805,19 @@ void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
 {
     pending_send_request_t reqs[num_pend_sends];
 
-    disable_entity(m_e2);
-    set_fc_attributes(m_e1, true, wnd, wnd, 1);
+    disable_entity(receiver());
+    set_fc_attributes(sender(), true, wnd, wnd, 1);
 
-    send_am_and_flush(m_e1, wnd);
+    send_am_and_flush(sender(), wnd);
 
     /* Now m2 ep should have FC grant message in the pending queue.
      * Add some user pending requests as well */
     for (int i = 0; i < num_pend_sends; i++) {
         reqs[i].uct.func    = NULL; /* make valgrind happy */
         reqs[i].purge_count = 0;
-        EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i].uct, 0), UCS_OK);
+        EXPECT_EQ(uct_ep_pending_add(receiver().ep(0), &reqs[i].uct, 0), UCS_OK);
     }
-    uct_ep_pending_purge(m_e2->ep(0), purge_cb, NULL);
+    uct_ep_pending_purge(receiver().ep(0), purge_cb, NULL);
 
     for (int i = 0; i < num_pend_sends; i++) {
         EXPECT_EQ(1, reqs[i].purge_count);
@@ -842,13 +842,13 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
 {
     int wnd = 2;
 
-    disable_entity(m_e2);
-    set_fc_attributes(m_e1, true, wnd, wnd, 1);
+    disable_entity(receiver());
+    set_fc_attributes(sender(), true, wnd, wnd, 1);
 
-    send_am_and_flush(m_e1, wnd);
+    send_am_and_flush(sender(), wnd);
 
-    m_e2->destroy_ep(0);
-    ASSERT_TRUE(ucs_arbiter_is_empty(&rc_iface(m_e2)->tx.arbiter));
+    receiver().destroy_ep(0);
+    ASSERT_TRUE(ucs_arbiter_is_empty(&rc_iface(receiver())->tx.arbiter));
 }
 
 /* Check that user callback passed to uct_ep_pending_purge is not
@@ -878,21 +878,24 @@ void test_rc_flow_control_stats::test_general(int wnd, int soft_thresh,
 {
     uint64_t v;
 
-    set_fc_attributes(m_e1, true, wnd, soft_thresh, hard_thresh);
+    set_fc_attributes(sender(), true, wnd, soft_thresh, hard_thresh);
 
-    send_am_messages(m_e1, wnd, UCS_OK);
-    send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
+    send_am_messages(sender(), wnd, UCS_OK);
+    send_am_messages(sender(), 1, UCS_ERR_NO_RESOURCE);
 
-    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_NO_CRED);
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(sender())->stats,
+                              UCT_RC_FC_STAT_NO_CRED);
     EXPECT_EQ(1ul, v);
 
-    validate_grant(m_e1);
-    send_am_messages(m_e1, 1, UCS_OK);
+    validate_grant(sender());
+    send_am_messages(sender(), 1, UCS_OK);
 
-    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_TX_HARD_REQ);
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(sender())->stats,
+                              UCT_RC_FC_STAT_TX_HARD_REQ);
     EXPECT_EQ(1ul, v);
 
-    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_RX_PURE_GRANT);
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(sender())->stats,
+                              UCT_RC_FC_STAT_RX_PURE_GRANT);
     EXPECT_EQ(1ul, v);
     flush();
 }
@@ -910,18 +913,22 @@ UCS_TEST_P(test_rc_flow_control_stats, soft_request)
     int s_thresh = 4;
     int h_thresh = 1;
 
-    set_fc_attributes(m_e1, true, wnd, s_thresh, h_thresh);
-    send_am_and_flush(m_e1, wnd - (s_thresh - 1));
+    set_fc_attributes(sender(), true, wnd, s_thresh, h_thresh);
+    send_am_and_flush(sender(), wnd - (s_thresh - 1));
 
-    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_TX_SOFT_REQ);
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(sender())->stats,
+                              UCT_RC_FC_STAT_TX_SOFT_REQ);
     EXPECT_EQ(1ul, v);
-    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_RX_SOFT_REQ);
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(receiver())->stats,
+                              UCT_RC_FC_STAT_RX_SOFT_REQ);
     EXPECT_EQ(1ul, v);
 
-    send_am_and_flush(m_e2, wnd - (s_thresh - 1));
-    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_RX_GRANT);
+    send_am_and_flush(receiver(), wnd - (s_thresh - 1));
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(sender())->stats,
+                              UCT_RC_FC_STAT_RX_GRANT);
     EXPECT_EQ(1ul, v);
-    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_TX_GRANT);
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(receiver())->stats,
+                              UCT_RC_FC_STAT_TX_GRANT);
     EXPECT_EQ(1ul, v);
 }
 
@@ -940,8 +947,8 @@ test_uct_iface_attrs::attr_map_t test_rc_iface_attrs::get_num_iov() {
         return get_num_iov_mlx5_common(0ul);
     } else {
         EXPECT_TRUE(has_transport("rc_verbs"));
-        m_e->connect(0, *m_e, 0);
-        uct_rc_verbs_ep_t *ep = ucs_derived_of(m_e->ep(0), uct_rc_verbs_ep_t);
+        e(0).connect(0, e(0), 0);
+        uct_rc_verbs_ep_t *ep = ucs_derived_of(e(0).ep(0), uct_rc_verbs_ep_t);
         uint32_t max_sge = 0; // for gcc 10 -Og
         ASSERT_UCS_OK(uct_ib_qp_max_send_sge(ep->qp, &max_sge));
 
@@ -972,7 +979,7 @@ test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
     iov_map["am"]  = UCT_IB_MLX5_AM_ZCOPY_MAX_IOV;
 
 #if IBV_HW_TM
-    if (UCT_RC_MLX5_TM_ENABLED(ucs_derived_of(m_e->iface(),
+    if (UCT_RC_MLX5_TM_ENABLED(ucs_derived_of(e(0).iface(),
                                               uct_rc_mlx5_iface_common_t))) {
         // For TAG eager zcopy iovs can use all WQE space, remaining from control
         // segment, TMH header (+ inline data segment) and AV (if relevant)
@@ -1024,7 +1031,7 @@ UCS_TEST_SKIP_COND_P(test_rc_keepalive, pending,
 {
     ucs_status_t status;
 
-    scoped_log_handler slh(wrap_errors_logger);
+    ucs::log::scoped_handler slh(ucs::log::wrap_errors_logger);
     flush();
     /* ensure that everything works as expected */
     EXPECT_EQ(0, m_err_count);
@@ -1072,25 +1079,25 @@ public:
     {
         test_rc::init();
 
-        m_buf8b = new mapped_buffer(8, 0x1, *m_e1);
-        m_buf8k = new mapped_buffer(8 * UCS_KBYTE, 0x2, *m_e1);
+        m_buf8b = new mapped_buffer(8, 0x1, sender());
+        m_buf8k = new mapped_buffer(8 * UCS_KBYTE, 0x2, sender());
     }
 
     void connect()
     {
         test_rc::connect();
 
-        m_e1->connect(0, *m_e2, 0);
-        m_e2->connect(0, *m_e1, 0);
-        m_e1->connect(1, *m_e2, 1);
-        m_e2->connect(1, *m_e1, 1);
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
+        sender().connect(1, receiver(), 1);
+        receiver().connect(1, sender(), 1);
     }
 
     bool send(int ep, void *buf)
     {
         ssize_t status;
 
-        status = uct_ep_am_bcopy(m_e1->ep(ep), 0, mapped_buffer::pack, buf, 0);
+        status = uct_ep_am_bcopy(sender().ep(ep), 0, mapped_buffer::pack, buf, 0);
         if (status == UCS_ERR_NO_RESOURCE) {
             short_progress_loop();
             return false;

@@ -16,18 +16,18 @@ public:
     virtual void init()
     {
         uct_test::init();
-        m_entities.push_back(create_entity(0));
+        create_entity(0);
     }
 
 protected:
     uct_worker_h worker(unsigned index = 0)
     {
-        return ent(index).worker();
+        return e(index).worker();
     }
 
     uct_iface_h iface(unsigned index = 0)
     {
-        return ent(index).iface();
+        return e(index).iface();
     }
 
     static unsigned count_progress(void *arg)

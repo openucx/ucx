@@ -60,7 +60,7 @@ public:
                                 tl_name);
     }
 
-    test_uct_mm() : m_e1(NULL), m_e2(NULL) {
+    test_uct_mm() {
         if (GetParam()->tl_name == "posix") {
             set_posix_config();
         }
@@ -83,16 +83,14 @@ public:
     virtual void init() {
         uct_test::init();
 
-        m_e1 = uct_test::create_entity(0);
-        m_entities.push_back(m_e1);
+        uct_test::create_entity(0);
 
         check_skip_test();
 
-        m_e2 = uct_test::create_entity(0);
-        m_entities.push_back(m_e2);
+        uct_test::create_entity(0);
 
-        m_e1->connect(0, *m_e2, 0);
-        m_e2->connect(0, *m_e1, 0);
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
     }
 
     static ucs_status_t mm_am_handler(void *arg, void *data, size_t length,
@@ -143,29 +141,31 @@ public:
         uct_mm_seg_t *seg = (uct_mm_seg_t*)memh;
         ucs_status_t status;
 
-        size_t iface_addr_len = uct_mm_md_mapper_call(md(m_e1), iface_addr_length);
+        size_t iface_addr_len =
+                uct_mm_md_mapper_call(md(&sender()), iface_addr_length);
         std::vector<uint8_t> iface_addr(iface_addr_len);
 
-        status = uct_mm_md_mapper_call(md(m_e1), iface_addr_pack, &iface_addr[0]);
+        status = uct_mm_md_mapper_call(md(&receiver()), iface_addr_pack,
+                                       &iface_addr[0]);
         ASSERT_UCS_OK(status);
 
         uct_mm_remote_seg_t rseg;
-        status = uct_mm_md_mapper_call(md(m_e2), mem_attach, seg->seg_id, size,
-                                       &iface_addr[0], &rseg);
+        status = uct_mm_md_mapper_call(md(&receiver()), mem_attach, seg->seg_id,
+                                          size, &iface_addr[0], &rseg);
         ASSERT_UCS_OK(status);
 
         test_attach_ptr(ptr, rseg.address, 0xdeadbeef11111);
 
-        uct_mm_md_mapper_call(md(m_e2), mem_detach, &rseg);
+        uct_mm_md_mapper_call(md(&receiver()), mem_detach, &rseg);
     }
 
     void test_rkey(void *ptr, uct_mem_h memh, size_t size)
     {
         ucs_status_t status;
 
-        std::vector<uint8_t> rkey_buffer(m_e1->md_attr().rkey_packed_size);
+        std::vector<uint8_t> rkey_buffer(sender().md_attr().rkey_packed_size);
 
-        status = uct_md_mkey_pack(m_e1->md(), memh, &rkey_buffer[0]);
+        status = uct_md_mkey_pack(sender().md(), memh, &rkey_buffer[0]);
         ASSERT_UCS_OK(status);
 
         uct_rkey_bundle_t rkey_ob;
@@ -186,9 +186,6 @@ public:
         test_attach(ptr, memh, size);
         test_rkey(ptr, memh, size);
     }
-
-protected:
-    entity *m_e1, *m_e2;
 };
 
 UCS_TEST_SKIP_COND_P(test_uct_mm, open_for_posix,
@@ -203,11 +200,11 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, open_for_posix,
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, mm_am_handler , recv_buffer,
+    uct_iface_set_am_handler(receiver().iface(), 0, mm_am_handler , recv_buffer,
                              0);
 
     /* send the data */
-    uct_ep_am_short(m_e1->ep(0), 0, test_mm_hdr, &send_data, sizeof(send_data));
+    uct_ep_am_short(sender().ep(0), 0, test_mm_hdr, &send_data, sizeof(send_data));
 
     /* progress sender and receiver until the receiver gets the message */
     wait_for_flag(&recv_buffer->length);
@@ -221,9 +218,9 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, open_for_posix,
 UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
                      !check_md_caps(UCT_MD_FLAG_ALLOC)) {
 
-    size_t size               = ucs_min(100000u, m_e1->md_attr().max_alloc);
+    size_t size               = ucs_min(100000u, sender().md_attr().max_alloc);
     void *address             = NULL;
-    uct_md_h md_ref           = m_e1->md();
+    uct_md_h md_ref           = sender().md();
     uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
     ucs_status_t status;
     uct_mem_alloc_params_t params;
@@ -253,19 +250,19 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
 UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
                      !check_md_caps(UCT_MD_FLAG_REG)) {
 
-    size_t size = ucs_min(100000u, m_e1->md_attr().max_reg);
+    size_t size = ucs_min(100000u, sender().md_attr().max_reg);
     ucs_status_t status;
 
     std::vector<uint8_t> buffer(size);
 
     uct_mem_h memh;
-    status = uct_md_mem_reg(m_e1->md(), &buffer[0], size, UCT_MD_MEM_ACCESS_ALL,
-                            &memh);
+    status = uct_md_mem_reg(sender().md(), &buffer[0], size,
+                            UCT_MD_MEM_ACCESS_ALL, &memh);
     ASSERT_UCS_OK(status);
 
     test_memh(&buffer[0], memh, size);
 
-    status = uct_md_mem_dereg(m_e1->md(), memh);
+    status = uct_md_mem_dereg(sender().md(), memh);
     ASSERT_UCS_OK(status);
 }
 

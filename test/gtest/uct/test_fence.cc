@@ -30,28 +30,16 @@ public:
     virtual void init() {
         uct_test::init();
 
-        entity *receiver = uct_test::create_entity(0);
-        m_entities.push_back(receiver);
-
+        uct_test::create_entity(0);
         check_skip_test();
+        uct_test::create_entity(0);
 
-        entity *sender = uct_test::create_entity(0);
-        m_entities.push_back(sender);
-
-        sender->connect(0, *receiver, 1);
-        receiver->connect(1, *sender, 0);
+        sender().connect(0, receiver(), 1);
+        receiver().connect(1, sender(), 0);
     }
 
     virtual void cleanup() {
         uct_test::cleanup();
-    }
-
-    const entity& sender() {
-        return m_entities.at(1);
-    }
-
-    const entity& receiver() {
-        return m_entities.at(0);
     }
 
     class worker {

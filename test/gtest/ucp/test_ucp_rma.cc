@@ -174,7 +174,7 @@ protected:
                       target_mem_type, mem_map_flags, is_ep_flush(), user_memh(),
                       mem_types);
 
-            if (HasFailure() || (num_errors() > 0)) {
+            if (HasFailure() || (ucs::log::num_errors() > 0)) {
                 break;
             }
         }
