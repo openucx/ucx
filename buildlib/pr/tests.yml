@@ -23,11 +23,12 @@ jobs:
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
     workspace:
-      clean: all
+      clean: outputs
     steps:
       - checkout: self
         clean: true
         fetchDepth: 100
+        retryCountOnTaskFailure: 5
 
       - bash: |
           source ./buildlib/az-helpers.sh

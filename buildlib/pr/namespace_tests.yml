@@ -6,11 +6,12 @@ jobs:
     displayName: ${{ parameters.name }} on worker
     timeoutInMinutes: 30
     workspace:
-      clean: all
+      clean: outputs
     steps:
       - checkout: self
         clean: true
         fetchDepth: 100
+        retryCountOnTaskFailure: 5
 
       - bash: |
           source buildlib/az-helpers.sh
