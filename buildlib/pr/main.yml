@@ -245,6 +245,7 @@ stages:
           - checkout: self
             clean: true
             fetchDepth: 100
+            retryCountOnTaskFailure: 5
 
           - bash: |
               ./buildlib/tools/builds.sh
@@ -393,6 +394,7 @@ stages:
           - checkout: self
             clean: true
             fetchDepth: 100
+            retryCountOnTaskFailure: 5
 
           - bash: |
               ./buildlib/tools/build_static.sh
