@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2024. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
@@ -13,7 +13,6 @@
 #endif
 
 #include "perftest.h"
-#include "perftest_mad.h"
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
@@ -296,24 +295,18 @@ err:
     exit(EXIT_FAILURE);
 }
 
-static void sock_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                            void *arg, const char *extra_info, int is_final,
-                            int is_multi_thread)
-{
-    struct perftest_context *ctx = arg;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, extra_info,
-                   ctx->flags, is_final, ctx->server_addr == NULL,
-                   is_multi_thread);
-}
+static ucs_status_t sock_rte_setup(void *arg);
+static void sock_rte_cleanup(void *arg);
 
 static ucx_perf_rte_t sock_rte = {
-    .group_size    = sock_rte_group_size,
-    .group_index   = sock_rte_group_index,
-    .barrier       = sock_rte_barrier,
-    .post_vec      = sock_rte_post_vec,
-    .recv          = sock_rte_recv,
-    .exchange_vec  = (ucx_perf_rte_exchange_vec_func_t)ucs_empty_function,
-    .report        = sock_rte_report,
+    .setup        = sock_rte_setup,
+    .cleanup      = sock_rte_cleanup,
+    .group_size   = sock_rte_group_size,
+    .group_index  = sock_rte_group_index,
+    .barrier      = sock_rte_barrier,
+    .post_vec     = sock_rte_post_vec,
+    .recv         = sock_rte_recv,
+    .exchange_vec = (ucx_perf_rte_exchange_vec_func_t)ucs_empty_function,
 };
 
 static ucs_status_t setup_sock_rte_loopback(struct perftest_context *ctx)
@@ -336,12 +329,6 @@ static ucs_status_t setup_sock_rte_loopback(struct perftest_context *ctx)
     ctx->sock_rte_group.recvfd    = connfds[1];
 
     return UCS_OK;
-}
-
-void release_msg_size_list(perftest_params_t *params)
-{
-    free(params->super.msg_size_list);
-    params->super.msg_size_list = NULL;
 }
 
 static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
@@ -510,8 +497,9 @@ out:
     return status;
 }
 
-static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
+static ucs_status_t sock_rte_setup(void *arg)
 {
+    struct perftest_context *ctx = arg;
     ucs_status_t status;
 
     if (ctx->params.super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
@@ -526,22 +514,20 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 
     ctx->params.super.rte_group  = &ctx->sock_rte_group;
     ctx->params.super.rte        = &sock_rte;
-    ctx->params.super.report_arg = ctx;
 
     return UCS_OK;
 }
 
-static ucs_status_t cleanup_sock_rte(struct perftest_context *ctx)
+static void sock_rte_cleanup(void *arg)
 {
-    sock_rte_group_t *rte_group = &ctx->sock_rte_group;
+    struct perftest_context *ctx = arg;
+    sock_rte_group_t *rte_group  = &ctx->sock_rte_group;
 
     close(rte_group->sendfd);
 
     if (rte_group->sendfd != rte_group->recvfd) {
         close(rte_group->recvfd);
     }
-
-    return UCS_OK;
 }
 
 #if defined (HAVE_MPI)
@@ -682,32 +668,29 @@ static void mpi_rte_recv(void *rte_group, unsigned src, void *buffer, size_t max
     } while (status.MPI_TAG != 1);
 }
 
-static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                           void *arg, const char *extra_info, int is_final,
-                           int is_multi_thread)
+static ucs_status_t mpi_rte_setup(void *arg);
+static void mpi_rte_cleanup(void *arg);
+
+static ucx_perf_rte_t mpi_rte = {
+    .setup        = mpi_rte_setup,
+    .cleanup      = mpi_rte_cleanup,
+    .group_size   = mpi_rte_group_size,
+    .group_index  = mpi_rte_group_index,
+    .barrier      = mpi_rte_barrier,
+    .post_vec     = mpi_rte_post_vec,
+    .recv         = mpi_rte_recv,
+    .exchange_vec = (void*)ucs_empty_function,
+};
+
+static ucs_status_t mpi_rte_setup(void *arg)
 {
     struct perftest_context *ctx = arg;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, extra_info,
-                   ctx->flags, is_final, ctx->server_addr == NULL,
-                   is_multi_thread);
-}
-#endif
-
-static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
-{
-#if defined (HAVE_MPI)
-    static ucx_perf_rte_t mpi_rte = {
-        .group_size    = mpi_rte_group_size,
-        .group_index   = mpi_rte_group_index,
-        .barrier       = mpi_rte_barrier,
-        .post_vec      = mpi_rte_post_vec,
-        .recv          = mpi_rte_recv,
-        .exchange_vec  = (void*)ucs_empty_function,
-        .report        = mpi_rte_report,
-    };
-
     int size, rank;
     void *buffer;
+
+    if (!ctx->mpi) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     ucs_trace_func("");
 
@@ -743,14 +726,11 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 
     ctx->params.super.rte_group  = NULL;
     ctx->params.super.rte        = &mpi_rte;
-    ctx->params.super.report_arg = ctx;
-#endif
     return UCS_OK;
 }
 
-static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
+static void mpi_rte_cleanup(void *UCS_V_UNUSED arg)
 {
-#if defined (HAVE_MPI)
     void *buffer;
     int size;
 
@@ -758,9 +738,9 @@ static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
     ucs_assert(buffer != NULL);
     ucs_assertv(size == MPI_RTE_BSEND_BUFFER_SIZE, "size=%d", size);
     free(buffer);
-#endif
-    return UCS_OK;
 }
+
+#endif /* defined (HAVE_MPI) */
 
 static ucs_status_t check_system(struct perftest_context *ctx)
 {
@@ -822,26 +802,35 @@ static void ctx_free(struct perftest_context *ctx)
     free(ctx->params.super.msg_size_list);
 }
 
+UCS_LIST_HEAD(rte_list);
+
+static void initialize_plugins(void)
+{
+#if defined (HAVE_MPI)
+    ucs_list_add_tail(&rte_list, &mpi_rte.list);
+#endif
+    ucs_list_add_tail(&rte_list, &sock_rte.list);
+}
+
 static ucs_status_t setup_rte(struct perftest_context *ctx)
 {
-    if (ctx->mad_port != NULL) {
-        return setup_mad_rte(ctx);
-    } else if (ctx->mpi) {
-        return setup_mpi_rte(ctx);
-    } else {
-        return setup_sock_rte(ctx);
+    ucs_status_t status;
+    ucx_perf_rte_t *entry;
+
+    ucs_list_for_each(entry, &rte_list, list) {
+        status = entry->setup(ctx);
+        if (status != UCS_ERR_UNSUPPORTED) {
+            return status;
+        }
     }
+
+    ucs_error("No supported RTE found");
+    return UCS_ERR_UNSUPPORTED;
 }
 
 static void cleanup_rte(struct perftest_context *ctx)
 {
-    if (ctx->mad_port != NULL) {
-        cleanup_mad_rte(ctx);
-    } else if (ctx->mpi) {
-        cleanup_mpi_rte(ctx);
-    } else {
-        cleanup_sock_rte(ctx);
-    }
+    ctx->params.super.rte->cleanup(ctx);
 }
 
 int main(int argc, char **argv)
@@ -874,6 +863,8 @@ int main(int argc, char **argv)
 #else
     mpi_initialized = 0;
 #endif
+
+    initialize_plugins();
 
     /* Parse command line */
     status = parse_opts(&ctx, mpi_initialized, argc, argv);

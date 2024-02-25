@@ -1953,8 +1953,9 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
         ucx_perf_funcs[params->api].barrier(perf);
         if (status == UCS_OK) {
             ucx_perf_calc_result(perf, result);
-            rte_call(perf, report, result, perf->params.report_arg,
-                     perf->extra_info, 1, 0);
+            perf->params.report_func(perf->params.rte_group, result,
+                                     perf->params.report_arg, perf->extra_info,
+                                     1, 0);
         }
     } else {
         status = ucx_perf_thread_spawn(perf, result);
@@ -1996,6 +1997,7 @@ void ucx_perf_report(ucx_perf_context_t *perf)
 
     ucx_perf_get_time(perf);
     ucx_perf_calc_result(perf, &result);
-    rte_call(perf, report, &result, perf->params.report_arg, "", 0, 0);
+    perf->params.report_func(perf->params.rte_group, &result,
+                             perf->params.report_arg, "", 0, 0);
     perf->prev = perf->current;
 }

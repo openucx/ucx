@@ -130,6 +130,8 @@ typedef struct ucx_perf_result {
 
 typedef void (*ucx_perf_rte_progress_cb_t)(void *arg);
 
+typedef ucs_status_t (*ucx_perf_rte_setup_func_t)(void *arg);
+typedef void (*ucx_perf_rte_cleanup_func_t)(void *arg);
 typedef unsigned (*ucx_perf_rte_group_size_func_t)(void *rte_group);
 typedef unsigned (*ucx_perf_rte_group_index_func_t)(void *rte_group);
 typedef void (*ucx_perf_rte_barrier_func_t)(void *rte_group,
@@ -141,15 +143,18 @@ typedef void (*ucx_perf_rte_post_vec_func_t)(void *rte_group,
 typedef void (*ucx_perf_rte_recv_func_t)(void *rte_group, unsigned src,
                                          void *buffer, size_t max, void *req);
 typedef void (*ucx_perf_rte_exchange_vec_func_t)(void *rte_group, void *req);
-typedef void (*ucx_perf_rte_report_func_t)(void *rte_group,
-                                           const ucx_perf_result_t *result,
-                                           void *arg, const char *extra_info,
-                                           int is_final, int is_multi_thread);
+
 
 /**
  * RTE used to bring-up the test
  */
 typedef struct ucx_perf_rte {
+    /* @return UCS_OK, UCS_ERR_UNSUPPORTED or actual error */
+    ucx_perf_rte_setup_func_t        setup;
+
+    /* Cleanup on successfully setup RTE */
+    ucx_perf_rte_cleanup_func_t      cleanup;
+
     /* @return Group size */
     ucx_perf_rte_group_size_func_t   group_size;
 
@@ -164,11 +169,19 @@ typedef struct ucx_perf_rte {
     ucx_perf_rte_recv_func_t         recv;
     ucx_perf_rte_exchange_vec_func_t exchange_vec;
 
-    /* Handle results */
-    ucx_perf_rte_report_func_t       report;
+    /* List of supported RTE */
+    ucs_list_link_t                  list;
 
 } ucx_perf_rte_t;
 
+
+/**
+ * Common report function
+ */
+typedef void (*ucx_perf_report_func_t)(void *rte_group,
+                                       const ucx_perf_result_t *result,
+                                       void *arg, const char *extra_info,
+                                       int is_final, int is_multi_thread);
 
 /**
  * Describes a performance test.
@@ -204,6 +217,8 @@ typedef struct ucx_perf_params {
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
+
+    ucx_perf_report_func_t report_func;     /* Report function callback */
     void                   *report_arg;     /* Custom argument for report function */
 
     struct {
