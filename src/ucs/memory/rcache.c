@@ -827,8 +827,12 @@ ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
     return UCS_OK;
 }
 
-/* Lock must be held */
-static ucs_status_t
+/* Lock must be held
+ * Old ASAN versions reports buffer underflow false-positive during access to
+ * `region` through `ucs_list_link_t` entry. Newer ASAN versions don't
+ * report this issue (e.g. standard ASAN on Ubuntu 22.04).
+ */
+static ucs_status_t UCS_F_NO_SANITIZE_ADDRESS
 ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
                          ucs_pgt_addr_t *end, size_t *alignment, int *prot,
                          int *merged, ucs_rcache_region_t **region_p)

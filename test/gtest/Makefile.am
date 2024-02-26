@@ -27,8 +27,15 @@ export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
 export UCX_LOG_PRINT_ENABLE
 
-export LSAN_OPTIONS=suppressions=$(top_srcdir)/contrib/lsan.supp
+if HAVE_ASAN
+export LSAN_OPTIONS=suppressions=$(abs_top_srcdir)/contrib/lsan.supp
 export ASAN_OPTIONS=protect_shadow_gap=0
+
+# LD_PRELOAD puts ASAN first in initial library list which is required for
+# correct ASAN work.
+ASAN_LD_PRELOAD=$(shell ldconfig -p | grep libasan.so | tr ' ' '\n' | grep /)
+TEST_ENV=LD_PRELOAD=$(ASAN_LD_PRELOAD):$(LD_PRELOAD)
+endif
 
 GTEST_ARGS = \
 	--gtest_filter=$(GTEST_FILTER) \
@@ -320,14 +327,14 @@ list: gtest
 #
 test: ucx gtest
 	@rm -f core.*
-	$(LAUNCHER) stdbuf -e0 -o0 $(abs_builddir)/gtest $(GTEST_ARGS)
+	$(LAUNCHER) env $(TEST_ENV) stdbuf -e0 -o0 $(abs_builddir)/gtest $(GTEST_ARGS)
 
 #
 # Run unit tests with GDB
 #
 test_gdb: ucx gtest
 	echo -e 'r\ninit-if-undefined $$_exitcode=-1\nif $$_exitcode>=0\n\tq\nend' > .gdbcommands
-	$(LAUNCHER) env UCX_HANDLE_ERRORS=none \
+	$(LAUNCHER) env $(TEST_ENV) UCX_HANDLE_ERRORS=none \
 		gdb -x .gdbcommands --args $(GDB_ARGS) \
 			$(abs_builddir)/gtest $(GTEST_ARGS)
 
@@ -335,6 +342,6 @@ test_gdb: ucx gtest
 # Run unit tests with valgrind
 #
 test_valgrind: ucx gtest
-	$(LAUNCHER) env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
+	$(LAUNCHER) env $(TEST_ENV) LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
 	stdbuf -e0 -o0 valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
 endif
