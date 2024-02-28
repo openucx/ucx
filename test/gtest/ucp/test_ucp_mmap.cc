@@ -897,6 +897,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         is_dummy = (size == 0);
         test_rkey_management(memh, is_dummy, is_tl_rdma());
 
+        ptr.detach();
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
     }
