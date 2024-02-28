@@ -9,6 +9,7 @@
 %bcond_with    ugni
 %bcond_with    xpmem
 %bcond_with    vfs
+%bcond_with    mad
 
 Name: ucx
 Version: @VERSION@
@@ -57,6 +58,9 @@ BuildRequires: fuse3-devel
 %endif
 %if "%{debug}" == "1"
 BuildRequires: valgrind-devel
+%endif
+%if %{with mad}
+BuildRequires: libibmad-devel libibumad-devel
 %endif
 
 %description
@@ -112,6 +116,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg xpmem xpmem \
            %_with_arg vfs fuse3 \
            %_with_arg ugni ugni \
+           %_with_arg mad mad \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -242,6 +247,20 @@ hardware-offloaded data transfer.
 
 %files ib
 %{_libdir}/ucx/libuct_ib.so.*
+%endif
+
+%if %{with mad}
+%package mad
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX Infiniband MAD support
+Group: System Environment/Libraries
+
+%description mad
+Provide Infiniband MAD support for UCX. Enables running perftest using
+Infiniband datagrams for out-of-band communications.
+
+%files mad
+%{_libdir}/ucx/libucx_perftest_mad.so.*
 %endif
 
 %if %{with knem}
