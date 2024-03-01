@@ -504,16 +504,20 @@ size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
 static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
                                                        void * restrict src)
 {
-#if defined( __SSE4_2__)
-    UCS_WORD_COPY(__m128i, dst, __m128i, src, MLX5_SEND_WQE_BB);
-#elif defined(__ARM_NEON)
+#if defined(__ARM_NEON)
     vst4q_u64(dst, vld4q_u64(src));
 #else
+#if defined(__SSE4_2__)
+    typedef __m128i uct_ib_mlx5_send_wqe_bb_block_t;
+#else
+    typedef uint8_t uct_ib_mlx5_send_wqe_bb_block_t;
+#endif
+    /* Prevent compiler to replace by memmove() */
     typedef struct {
-        uint8_t data[MLX5_SEND_WQE_BB];
+        uct_ib_mlx5_send_wqe_bb_block_t
+                data[MLX5_SEND_WQE_BB / sizeof(uct_ib_mlx5_send_wqe_bb_block_t)];
     } UCS_S_PACKED uct_ib_mlx5_send_wqe_bb_t;
 
-    /* Prevent the compiler to replace by memmove() */
     UCS_WORD_COPY(uct_ib_mlx5_send_wqe_bb_t, dst,
                   uct_ib_mlx5_send_wqe_bb_t, src,
                   MLX5_SEND_WQE_BB);
