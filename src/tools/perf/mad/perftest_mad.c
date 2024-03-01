@@ -536,7 +536,7 @@ static ucs_status_t perftest_mad_accept(perftest_mad_rte_group_t *rte_group,
     ucs_status_t status;
     uint8_t buf[4096];
     int lid;
-    unsigned needed_flags;
+    perftest_params_local_backup_t params_backup;
 
     release_msg_size_list(&ctx->params);
 
@@ -551,10 +551,9 @@ static ucs_status_t perftest_mad_accept(perftest_mad_rte_group_t *rte_group,
     lid = rte_group->dst_port.lid;
     ucs_debug("MAD: accept: remote lid:%d/0x%02x", lid, lid);
 
-    /* Import receive params, preserving passed flags */
-    needed_flags = ctx->params.super.flags & UCX_PERF_TEST_FLAG_ERR_HANDLING;
+    perftest_params_local_backup(&ctx->params, &params_backup);
     memcpy(&ctx->params, buf, sizeof(ctx->params));
-    ctx->params.super.flags |= needed_flags;
+    perftest_params_local_restore(&ctx->params, &params_backup);
 
     /* Import received message size list */
     size = sizeof(*ctx->params.super.msg_size_list) *

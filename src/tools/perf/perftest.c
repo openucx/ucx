@@ -345,7 +345,7 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
     int ret;
     char service[8];
     char err_str[64];
-    unsigned needed_flags;
+    perftest_params_local_backup_t params_backup;
 
     ucs_snprintf_safe(service, sizeof(service), "%u", ctx->port);
     memset(&hints, 0, sizeof(hints));
@@ -425,18 +425,19 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
     }
 
     if (ctx->server_addr == NULL) {
+        perftest_params_local_backup(&ctx->params, &params_backup);
+
         /* release the memory for the list of the message sizes allocated
          * during the initialization of the default testing parameters */
         release_msg_size_list(&ctx->params);
 
-        needed_flags = ctx->params.super.flags &
-                       UCX_PERF_TEST_FLAG_ERR_HANDLING;
         ret = safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
         if (ret) {
             status = UCS_ERR_IO_ERROR;
             goto err_close_connfd;
         }
-        ctx->params.super.flags |= needed_flags;
+
+        perftest_params_local_restore(&ctx->params, &params_backup);
 
         if (ctx->params.super.msg_size_cnt != 0) {
             ctx->params.super.msg_size_list =
