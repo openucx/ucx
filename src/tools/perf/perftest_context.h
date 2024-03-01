@@ -9,6 +9,7 @@
 
 #include "api/libperf.h"
 #include "lib/libperf_int.h"
+#include <ucs/sys/string.h>
 
 
 #define MAX_BATCH_FILES         32
@@ -60,10 +61,45 @@ struct perftest_context {
 };
 
 
-static inline void release_msg_size_list(perftest_params_t *params)
+static inline void
+perftest_params_release_msg_size_list(perftest_params_t *params)
 {
     free(params->super.msg_size_list);
     params->super.msg_size_list = NULL;
+}
+
+
+static inline ucs_status_t
+perftest_params_merge(perftest_params_t *dst, const perftest_params_t *src)
+{
+    char uct_dev_name[UCT_DEVICE_NAME_MAX];
+    unsigned needed_flags;
+
+    /* backup required dst parameters */
+    ucs_strncpy_safe(uct_dev_name, dst->super.uct.dev_name,
+                     UCT_DEVICE_NAME_MAX);
+    needed_flags = (dst->super.flags & UCX_PERF_TEST_FLAG_ERR_HANDLING);
+
+    perftest_params_release_msg_size_list(dst);
+
+    memcpy(dst, src, sizeof(*src));
+
+    if (dst->super.msg_size_cnt != 0) {
+        dst->super.msg_size_list = calloc(dst->super.msg_size_cnt,
+                                          sizeof(*dst->super.msg_size_list));
+        if (dst->super.msg_size_list == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        memcpy(dst->super.msg_size_list, src->super.msg_size_list,
+               src->super.msg_size_cnt * sizeof(*src->super.msg_size_list));
+    }
+
+    /* restore required overwritten parameters */
+    ucs_strncpy_safe(dst->super.uct.dev_name, uct_dev_name,
+                     UCT_DEVICE_NAME_MAX);
+    dst->super.flags |= needed_flags;
+    return UCS_OK;
 }
 
 
