@@ -43,6 +43,12 @@
 
 #define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
 
+#define UCP_WORKER_PROMOTE_CAPACITY     20
+#define UCP_WORKER_PROMOTE_THRESHOLD    10
+#define UCP_WORKER_REMOVE_THRESHOLD     0.2
+#define UCP_WORKER_EXP_DECAY_MULTIPLIER 0.8
+#define UCP_WORKER_EXP_DECAY_ADDER      0.2
+
 
 #define UCP_WIFACE_FMT "iface %p (" UCT_TL_RESOURCE_DESC_FMT ")"
 #define UCP_WIFACE_ARG(_wiface) \
@@ -2418,6 +2424,7 @@ void ucp_worker_track_ep_usage(ucp_request_t *req)
 {
     static unsigned sample_count_per_round = 100000;
     ucp_worker_h worker;
+    ucs_time_t now;
 
     if (ucs_likely((req->send.ep->worker->usage_tracker.iter_count++ %
                     UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0)) {
@@ -2425,7 +2432,9 @@ void ucp_worker_track_ep_usage(ucp_request_t *req)
     }
 
     worker = req->send.ep->worker;
-    if (ucs_likely((ucs_get_time() - worker->usage_tracker.last_round) <
+    now    = ucs_get_time();
+
+    if (ucs_likely((now - worker->usage_tracker.last_round) <
                    worker->context->config.ext.dynamic_tl_switch_interval)) {
         return;
     }
@@ -2441,7 +2450,7 @@ void ucp_worker_track_ep_usage(ucp_request_t *req)
     if (ucs_unlikely((worker->usage_tracker.sample_count %
                       sample_count_per_round) == 0)) {
         ucs_usage_tracker_progress(worker->usage_tracker.handle);
-        worker->usage_tracker.last_round = ucs_get_time();
+        worker->usage_tracker.last_round = now;
     }
 }
 
@@ -2449,27 +2458,29 @@ static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
 {
     ucs_usage_tracker_params_t params = {0};
     ucs_status_t status;
+    ucs_usage_tracker_h handle;
 
     if (worker->context->config.ext.dynamic_tl_switch_interval ==
         UCS_TIME_INFINITY) {
         return UCS_OK;
     }
 
-    params.promote_capacity = 20;
-    params.promote_thresh   = 10;
-    params.remove_thresh    = 0.2;
-    params.exp_decay.m      = 0.8;
-    params.exp_decay.c      = 0.2;
+    params.promote_capacity = UCP_WORKER_PROMOTE_CAPACITY;
+    params.promote_thresh   = UCP_WORKER_PROMOTE_THRESHOLD;
+    params.remove_thresh    = UCP_WORKER_REMOVE_THRESHOLD;
+    params.exp_decay.m      = UCP_WORKER_EXP_DECAY_MULTIPLIER;
+    params.exp_decay.c      = UCP_WORKER_EXP_DECAY_ADDER;
     params.promote_cb       =
             (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
     params.demote_cb        =
             (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
 
-    status = ucs_usage_tracker_create(&params, &worker->usage_tracker.handle);
+    status = ucs_usage_tracker_create(&params, &handle);
     if (status != UCS_OK) {
         return status;
     }
 
+    worker->usage_tracker.handle       = handle;
     worker->usage_tracker.iter_count   = 0;
     worker->usage_tracker.sample_count = 0;
     worker->usage_tracker.last_round   = ucs_get_time();
@@ -3561,8 +3572,8 @@ static unsigned ucp_worker_keepalive_progress(void *arg)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
 
-    if ((worker->keepalive.iter_count++ %
-         UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0) {
+    if (ucs_likely((worker->keepalive.iter_count++ %
+                    UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0)) {
         return 0;
     }
 

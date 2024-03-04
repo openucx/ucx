@@ -367,8 +367,8 @@ typedef struct ucp_worker {
     struct {
         ucs_usage_tracker_h          handle;              /* Usage tracker handle */
         unsigned                     iter_count;          /* Number of progress iterations to skip,
-                                                           * used to minimize call of ucs_get_time */
-        unsigned                     sample_count;        /* Number of samples taken in each round */
+                                                           * used to minimize calls to ucs_get_time */
+        unsigned                     sample_count;        /* Number of samples to take in each round */
         ucs_time_t                   last_round;          /* Last round timestamp */
     } usage_tracker;
 } ucp_worker_t;
