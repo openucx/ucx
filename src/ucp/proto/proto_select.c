@@ -420,7 +420,8 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
 
         /* Add all candidates as children */
         UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(child_proto_idx, proto_mask) {
-            proto       = &ucs_array_elem(&proto_init->protocols, proto_idx);
+            proto       = &ucs_array_elem(&proto_init->protocols,
+                                          child_proto_idx);
             child_range = ucp_proto_caps_range_find(&proto->caps, range_start);
             ucp_proto_perf_node_add_child(range->node, child_range->node);
         }
