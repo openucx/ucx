@@ -46,6 +46,10 @@ ucp_proto_bcopy_send_func_status(ssize_t packed_size)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_msg_multi_request_init(ucp_request_t *req)
 {
+    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
+        return;
+    }
+
     req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
 }
 
