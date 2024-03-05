@@ -23,9 +23,6 @@
 #define UCP_PROTO_RNDV_OP_ID_MASK \
     (UCS_BIT(UCP_OP_ID_RNDV_SEND) | UCS_BIT(UCP_OP_ID_RNDV_RECV))
 
-/* Varinants priv buffer are located right after the proto priv structure */
-#define UCP_PROTO_RNDV_GET_VARIANT_PRIV(_priv) \
-        UCS_PTR_BYTE_OFFSET(_priv, sizeof(*_priv))
 
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
@@ -129,15 +126,10 @@ void
 ucp_proto_rndv_set_variant_config(const ucp_proto_init_params_t *init_params,
                                   const ucp_proto_init_elem_t *proto,
                                   const ucp_proto_select_param_t *select_param,
-                                  ucp_proto_config_t *cfg);
+                                  void *priv, ucp_proto_config_t *cfg);
 
 void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
                                ucp_lane_index_t lane);
-
-void ucp_proto_rndv_variant_query(ucp_worker_h worker,
-                                  ucp_proto_config_t variant_config,
-                                  const void *variant_priv, size_t msg_length,
-                                  ucp_proto_query_attr_t *proto_attr);
 
 void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
                               ucp_proto_query_attr_t *attr);

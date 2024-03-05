@@ -10,6 +10,7 @@
 #include "proto.h"
 
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/array.h>
 
 
 /**
@@ -38,6 +39,17 @@
 /** Maximal length of ucp_proto_select_param_str() */
 #define UCP_PROTO_SELECT_PARAM_STR_MAX 128
 
+
+typedef struct {
+    ucp_proto_id_t   proto_id;
+    size_t           priv_offset;
+    size_t           priv_size;
+    size_t           cfg_thresh; /* Configured protocol threshold */
+    unsigned         cfg_priority; /* Priority of configuration */
+    ucp_proto_caps_t caps;
+} ucp_proto_init_elem_t;
+
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_init_elems_t, unsigned, ucp_proto_init_elem_t);
 
 /**
  * Key for looking up protocol configuration by operation parameters
@@ -114,6 +126,9 @@ typedef struct {
     /* Estimated performance for the selected protocols */
     ucp_proto_perf_range_t           *perf_ranges;
 
+    /* All the initialized protocols that can be chosen */
+    ucp_proto_init_elems_t            init_protos;
+
     /* Private configuration area for the selected protocols */
     void                             *priv_buf;
 } ucp_proto_select_elem_t;
@@ -175,18 +190,6 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
                              ucp_worker_cfg_index_t ep_cfg_index,
                              ucp_worker_cfg_index_t rkey_cfg_index,
                              const ucp_proto_select_param_t *select_param);
-
-
-ucs_status_t
-ucp_proto_select_init_protocols(ucp_worker_h worker,
-                                ucp_worker_cfg_index_t ep_cfg_index,
-                                ucp_worker_cfg_index_t rkey_cfg_index,
-                                const ucp_proto_select_param_t *select_param,
-                                ucp_proto_select_init_protocols_t *proto_init);
-
-
-void ucp_proto_select_cleanup_protocols(
-        ucp_proto_select_init_protocols_t *proto_init);
 
 
 const ucp_proto_threshold_elem_t*

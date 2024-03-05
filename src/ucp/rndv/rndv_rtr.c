@@ -218,13 +218,9 @@ static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
                                      ucp_proto_query_attr_t *attr)
 {
     const ucp_proto_rndv_rtr_priv_t *rpriv = params->priv;
-    void *remote_proto_priv;
 
-    remote_proto_priv = UCP_PROTO_RNDV_GET_VARIANT_PRIV(rpriv);
-    ucp_proto_rndv_variant_query(params->worker,
-                                 rpriv->super.remote_proto_config,
-                                 remote_proto_priv, params->msg_length,
-                                 attr);
+    ucp_proto_config_query(params->worker, &rpriv->super.remote_proto_config,
+                           params->msg_length, attr);
     attr->is_estimation = 1;
     attr->lane_map      = UCS_BIT(rpriv->super.lane);
 }
@@ -440,13 +436,9 @@ ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
 {
     const ucp_proto_rndv_rtr_priv_t *rpriv = params->priv;
     ucp_proto_query_attr_t remote_attr;
-    void *remote_proto_priv;
 
-    remote_proto_priv = UCP_PROTO_RNDV_GET_VARIANT_PRIV(rpriv);
-    ucp_proto_rndv_variant_query(params->worker,
-                                 rpriv->super.remote_proto_config,
-                                 remote_proto_priv, params->msg_length,
-                                 &remote_attr);
+    ucp_proto_config_query(params->worker, &rpriv->super.remote_proto_config,
+                           params->msg_length, &remote_attr);
 
     attr->is_estimation  = 1;
     attr->max_msg_length = remote_attr.max_msg_length;

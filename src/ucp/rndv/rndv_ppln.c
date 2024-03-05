@@ -26,16 +26,10 @@ enum {
 
 /* Private data for pipeline protocol */
 typedef struct {
-    /* Ack configuration */
-    ucp_proto_rndv_ack_priv_t ack;
-    /* Fragment size */
-    size_t                    frag_size;
-    /* Fragment proto config */
-    ucp_proto_config_t        frag_proto_cfg;
-    /* Fragment proto min length */
-    size_t                    frag_proto_min_length;
-    /* Fragment proto priv buffer */
-    uint8_t                   frag_proto_priv[];
+    ucp_proto_rndv_ack_priv_t ack;                   /* Ack configuration */
+    size_t                    frag_size;             /* Fragment size */
+    ucp_proto_config_t        frag_proto_cfg;        /* Frag proto config */
+    size_t                    frag_proto_min_length; /* Frag proto min length */
 } ucp_proto_rndv_ppln_priv_t;
 
 
@@ -50,17 +44,18 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         .super = *init_params,
         .flags = 0
     };
-    ucp_proto_select_init_protocols_t proto_init;
+    const ucp_proto_select_elem_t *select_elem;
     const ucp_proto_perf_range_t *frag_range;
+    ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_init_params_t ppln_params;
     ucp_proto_select_param_t sel_param;
+    ucp_proto_select_t *proto_select;
     ucs_linear_func_t ppln_overhead;
     ucp_proto_init_elem_t *proto;
     ucp_proto_caps_t ppln_caps;
     char frag_size_str[32];
     void *frag_proto_priv;
     ucs_status_t status;
-    size_t priv_size;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
@@ -77,10 +72,20 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     sel_param.op_attr     = ucp_proto_select_op_attr_pack(
             UCP_OP_ATTR_FLAG_MULTI_SEND);
 
-    status = ucp_proto_select_init_protocols(worker, init_params->ep_cfg_index,
-                                             init_params->rkey_cfg_index,
-                                             &sel_param, &proto_init);
-    if (status != UCS_OK) {
+    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
+                                        init_params->rkey_cfg_index,
+                                        &rkey_cfg_index);
+    if (proto_select == NULL) {
+        status = UCS_OK;
+        goto out;
+    }
+
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
+                                               init_params->ep_cfg_index,
+                                               init_params->rkey_cfg_index,
+                                               &sel_param);
+    if (select_elem == NULL) {
+        status = UCS_ERR_UNSUPPORTED;
         goto out;
     }
 
@@ -90,7 +95,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     ppln_caps.cfg_priority = 0;
 
     /* Add each proto as a separate variant */
-    ucs_array_for_each(proto, &proto_init.protocols) {
+    ucs_array_for_each(proto, &select_elem->init_protos) {
         /* Skip empty variants and reconfig proto */
         if ((proto->caps.num_ranges == 0) || (proto->proto_id == 0)) {
             continue;
@@ -106,8 +111,10 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
                                       sizeof(frag_size_str)),
                   UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
 
+        frag_proto_priv = UCS_PTR_BYTE_OFFSET(select_elem->priv_buf,
+                                              proto->priv_offset);
         ucp_proto_rndv_set_variant_config(init_params, proto,
-                                          &sel_param,
+                                          &sel_param, frag_proto_priv,
                                           &rpriv->frag_proto_cfg);
 
         /* Add the single range of the pipeline protocol to ppln_caps */
@@ -119,11 +126,6 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         /* Initialize private data */
         rpriv->frag_size             = frag_range->max_length;
         rpriv->frag_proto_min_length = proto->caps.min_length;
-        frag_proto_priv              = &ucs_array_elem(&proto_init.priv_buf,
-                                                       proto->priv_offset);
-        /* Copy remote priv after CTRL msg priv and adjust priv_size */
-        memcpy(rpriv->frag_proto_priv, frag_proto_priv, proto->priv_size);
-        priv_size = sizeof(*rpriv) + proto->priv_size;
 
         /* Add ATS overhead */
         ppln_overhead = ucs_linear_func_make(
@@ -139,10 +141,9 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
                                    proto->cfg_priority,
                                    init_params->caps, init_params->priv,
-                                   priv_size);
+                                   sizeof(*rpriv));
     }
 
-    ucp_proto_select_cleanup_protocols(&proto_init);
 out:
     if (status != UCS_OK) {
         ucs_debug("error during rndv ppln probing, status \"%s\"",
@@ -158,15 +159,13 @@ static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
 
     if (params->msg_length <= rpriv->frag_size) {
         /* Message is smaller than fragment size */
-        ucp_proto_rndv_variant_query(params->worker, rpriv->frag_proto_cfg,
-                                     rpriv->frag_proto_priv, params->msg_length,
-                                     attr);
+        ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
+                               params->msg_length, attr);
         attr->max_msg_length = rpriv->frag_size;
     } else {
         /* Message is large and fragmented to frag_size */
-        ucp_proto_rndv_variant_query(params->worker, rpriv->frag_proto_cfg,
-                                     rpriv->frag_proto_priv, rpriv->frag_size,
-                                     &frag_attr);
+        ucp_proto_config_query(params->worker, &rpriv->frag_proto_cfg,
+                               rpriv->frag_size, &frag_attr);
 
         attr->max_msg_length = SIZE_MAX;
         attr->is_estimation  = 0;
@@ -253,7 +252,6 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_rndv_ppln_priv_t *rpriv;
     ucp_datatype_iter_t next_iter;
-    ucp_proto_config_t *frag_cfg;
     ucs_status_t status;
     ucp_request_t *freq;
     size_t next_frag, msg_left;
@@ -302,9 +300,7 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
 
         /* Need to remove `rpriv` constness since `frag_proto_priv` cannot
          * be assigned before */
-        frag_cfg       = &((ucp_proto_rndv_ppln_priv_t *)rpriv)->frag_proto_cfg;
-        frag_cfg->priv = rpriv->frag_proto_priv;
-        ucp_proto_request_set_proto(freq, frag_cfg,
+        ucp_proto_request_set_proto(freq, &rpriv->frag_proto_cfg,
                                     freq->send.state.dt_iter.length);
 
         ucp_trace_req(req, "send freq %p offset %zu size %zu", freq,

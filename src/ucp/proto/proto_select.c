@@ -15,10 +15,18 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/dt/dt.h>
-#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/dynamic_bitmap.h>
 
 #include <ucp/core/ucp_worker.inl>
+
+
+/* Parameters structure for initializing protocols for a selection parameter */
+struct ucp_proto_probe_ctx {
+    ucs_array_s(size_t, uint8_t) priv_buf;
+    ucp_proto_init_elems_t       protocols;
+};
+
+typedef ucp_proto_probe_ctx_t ucp_proto_select_init_protocols_t;
 
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_ranges_t, unsigned, ucp_proto_perf_range_t);
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_thresh_t, unsigned,
@@ -193,7 +201,7 @@ out:
     return status;
 }
 
-ucs_status_t
+static ucs_status_t
 ucp_proto_select_init_protocols(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t ep_cfg_index,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
@@ -202,7 +210,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
 {
     ucp_proto_caps_t proto_caps = {};
     UCS_STRING_BUFFER_ONSTACK(strb, UCP_PROTO_CONFIG_STR_MAX);
-    uint8_t proto_priv[UCP_PROTO_PRIV_MAX];
+    void *proto_priv = ucs_alloca(UCP_PROTO_PRIV_MAX);
     ucp_proto_init_params_t init_params;
     ucs_status_t status;
     size_t priv_size;
@@ -297,7 +305,7 @@ void ucp_proto_select_caps_cleanup(ucp_proto_caps_t *caps)
     ucp_proto_select_caps_reset(caps);
 }
 
-void
+static void
 ucp_proto_select_cleanup_protocols(ucp_proto_select_init_protocols_t *proto_init)
 {
     ucp_proto_init_elem_t *init_elem;
@@ -403,7 +411,7 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
 
         /* Add all candidates as children */
         UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(child_proto_idx, proto_mask) {
-            proto       = &ucs_array_elem(&proto_init->protocols, proto_idx);
+            proto       = &ucs_array_elem(&proto_init->protocols, child_proto_idx);
             child_range = ucp_proto_caps_range_find(&proto->caps, range_start);
             ucp_proto_perf_node_add_child(range->node, child_range->node);
         }
@@ -484,6 +492,8 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
     select_elem->priv_buf    = ucs_array_extract_buffer(&proto_init->priv_buf);
     select_elem->perf_ranges = ucs_array_extract_buffer(&perf_ranges);
     select_elem->thresholds  = ucs_array_extract_buffer(&thresholds);
+    select_elem->init_protos = proto_init->protocols;
+    ucs_array_init_dynamic(&proto_init->protocols);
 
     return UCS_OK;
 
@@ -615,6 +625,7 @@ ucp_proto_select_elem_cleanup(ucp_proto_select_elem_t *select_elem)
     ucs_free(select_elem->perf_ranges);
     ucs_free((void*)select_elem->thresholds);
     ucs_free(select_elem->priv_buf);
+    ucs_array_cleanup_dynamic(&select_elem->init_protos);
 }
 
 static void ucp_proto_select_cache_reset(ucp_proto_select_t *proto_select)
