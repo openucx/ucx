@@ -404,17 +404,12 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
     /* Initialize 'rpriv' structure */
     ucp_proto_rndv_ctrl_init_priv(params, lane);
 
-    status = ucp_proto_rndv_ctrl_range_init(params, &ctrl_perf);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     /* Init remote proto */
     remote_select_param = ucp_proto_rndv_remote_select_param_init(params);
     status              = ucp_proto_rndv_ctrl_init_remote_protocols(
             params, &remote_select_param, rpriv->md_map, &remote_proto_init);
     if (status != UCS_OK) {
-        goto out_deref_perf_node;
+        goto out;
     }
 
     /* Add variants for each remote proto */
@@ -465,11 +460,18 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
             }
         }
 
+        /* Create separate CTRL message perf node for each variant */
+        status = ucp_proto_rndv_ctrl_range_init(params, &ctrl_perf);
+        if (status != UCS_OK) {
+            break;
+        }
+
         ucp_proto_common_init_base_caps(&params->super, min_length);
 
         status = ucp_proto_rndv_ctrl_add_remote_variant(params, &ctrl_perf,
                                                         remote_caps->ranges,
                                                         min_length, max_length);
+        ucp_proto_perf_node_deref(&ctrl_perf.node);
         if (status != UCS_OK) {
             break;
         }
@@ -480,8 +482,6 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
     }
 
     ucp_proto_select_cleanup_protocols(&remote_proto_init);
-out_deref_perf_node:
-    ucp_proto_perf_node_deref(&ctrl_perf.node);
 out:
     if (status != UCS_OK) {
         ucs_debug("error during probing %s, status \"%s\"",
