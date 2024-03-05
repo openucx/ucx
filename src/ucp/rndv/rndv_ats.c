@@ -24,7 +24,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *init_params)
 
     *init_params->priv_size = sizeof(ucp_proto_rndv_ack_priv_t);
 
-    caps.cfg_thresh   = 0;
+    caps.cfg_thresh   = UCS_MEMUNITS_AUTO;
     caps.cfg_priority = 1;
     caps.min_length   = 0;
     caps.num_ranges   = 1;

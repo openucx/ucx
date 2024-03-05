@@ -23,7 +23,7 @@
 
 
 /* Maximal size of protocol private data */
-#define UCP_PROTO_PRIV_MAX          1024
+#define UCP_PROTO_PRIV_MAX          2048
 
 
 /* Maximal number of protocols in total */
@@ -60,10 +60,6 @@ typedef struct ucp_proto_perf_node ucp_proto_perf_node_t;
 
 /* Key for selecting a protocol */
 typedef struct ucp_proto_select_param ucp_proto_select_param_t;
-
-
-/* Context for probing a protocol for a specific selection key */
-typedef struct ucp_proto_probe_ctx ucp_proto_probe_ctx_t;
 
 
 /* Protocol stage ID */
@@ -170,6 +166,26 @@ typedef struct {
     ucp_proto_perf_range_t  ranges[UCP_PROTO_MAX_PERF_RANGES];
 
 } ucp_proto_caps_t;
+
+
+typedef struct {
+    ucp_proto_id_t   proto_id;
+    size_t           priv_offset;
+    size_t           priv_size;
+    size_t           cfg_thresh; /* Configured protocol threshold */
+    unsigned         cfg_priority; /* Priority of configuration */
+    ucp_proto_caps_t caps;
+} ucp_proto_init_elem_t;
+
+
+/* Parameters structure for initializing protocols for a selection parameter */
+typedef struct {
+    ucs_array_s(size_t, uint8_t)                 priv_buf;
+    ucs_array_s(unsigned, ucp_proto_init_elem_t) protocols;
+} ucp_proto_probe_ctx_t;
+
+
+typedef ucp_proto_probe_ctx_t ucp_proto_select_init_protocols_t;
 
 
 /**

@@ -149,8 +149,8 @@ ucp_proto_t ucp_tag_rndv_offload_proto = {
  * It can be used when real rndv offload is not supported (e.g. for non-contig
  * or very large messages) or when it is enabled by protocol selection.
  */
-static ucs_status_t
-ucp_tag_rndv_offload_sw_proto_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_tag_rndv_offload_sw_proto_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_worker_h worker                      = init_params->worker;
     ucp_context_h context                    = worker->context;
@@ -190,11 +190,12 @@ ucp_tag_rndv_offload_sw_proto_init(const ucp_proto_init_params_t *init_params)
 
     if (!ucp_tag_rndv_check_op_id(init_params) ||
         !ucp_ep_config_key_has_tag_lane(init_params->ep_config_key)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_rndv_ctrl_init(&params,
-                                    init_params->ep_config_key->tag_lane);
+    *init_params->priv_size = sizeof(ucp_proto_rndv_ctrl_priv_t);
+
+    ucp_proto_rndv_ctrl_probe(&params, init_params->ep_config_key->tag_lane);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_offload_sw_proto_progress, (self),
@@ -229,7 +230,7 @@ ucp_proto_t ucp_tag_rndv_offload_sw_proto = {
     .name     = "tag/rndv/offload_sw",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_tag_rndv_offload_sw_proto_init,
+    .probe    = ucp_tag_rndv_offload_sw_proto_probe,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_tag_rndv_offload_sw_proto_progress},
     .abort    = ucp_proto_rndv_rts_abort,

@@ -177,6 +177,18 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
                              const ucp_proto_select_param_t *select_param);
 
 
+ucs_status_t
+ucp_proto_select_init_protocols(ucp_worker_h worker,
+                                ucp_worker_cfg_index_t ep_cfg_index,
+                                ucp_worker_cfg_index_t rkey_cfg_index,
+                                const ucp_proto_select_param_t *select_param,
+                                ucp_proto_select_init_protocols_t *proto_init);
+
+
+void ucp_proto_select_cleanup_protocols(
+        ucp_proto_select_init_protocols_t *proto_init);
+
+
 const ucp_proto_threshold_elem_t*
 ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
                                  size_t msg_length);
