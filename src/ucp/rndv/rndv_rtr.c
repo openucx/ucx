@@ -400,7 +400,8 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     size_t frag_size;
     ucp_md_index_t md_index;
 
-    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 1)) {
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 1) ||
+        (init_params->rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
