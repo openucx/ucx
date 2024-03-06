@@ -188,6 +188,13 @@ stages:
     jobs:
     - template: static_checks.yml
 
+  - stage: MAD_Tests
+    dependsOn: [Static_check]
+    jobs:
+    - template: mad_tests.yml
+      parameters:
+        HCA: "mlx5_0:1"
+
   - stage: Build
     dependsOn: [Static_check]
     jobs:

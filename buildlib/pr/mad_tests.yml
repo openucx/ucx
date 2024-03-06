@@ -1,0 +1,87 @@
+parameters:
+  HCA:
+
+jobs:
+  - job: Server_Up
+    pool:
+      name: MLNX
+      demands: mad_server
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - bash: ./contrib/test_mad.sh run_mad_server
+        env:
+          HCA: ${{ parameters.HCA }}
+        displayName: Server Up
+
+      - task: Bash@3
+        name: Set_Vars
+        inputs:
+          targetType: "inline"
+          script: ./contrib/test_mad.sh set_vars
+        env:
+          HCA: ${{ parameters.HCA }}
+        displayName: Set Vars
+
+  - job: Test_LID
+    dependsOn: Server_Up
+    timeoutInMinutes: 10
+    pool:
+      name: MLNX
+      demands: mad_client
+    variables:
+      LID: $[ dependencies.Server_Up.outputs['Set_Vars.LID'] ]
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - bash: ./contrib/test_mad.sh run_mad_test_lid
+        env:
+          HCA: ${{ parameters.HCA }}
+          LID: $(LID)
+        displayName: Test LID
+
+  - job: Server_Restart
+    dependsOn: Test_LID
+    pool:
+      name: MLNX
+      demands: mad_server
+    steps:
+      - checkout: none
+      - bash: ./contrib/test_mad.sh srv_restart
+        displayName: Server Restart
+
+  - job: Test_GUID
+    dependsOn:
+      - Server_Up
+      - Server_Restart
+    timeoutInMinutes: 10
+    pool:
+      name: MLNX
+      demands: mad_client
+    variables:
+      GUID: $[ dependencies.Server_Up.outputs['Set_Vars.GUID'] ]
+    steps:
+      - checkout: none
+      - bash: |
+          ./contrib/test_mad.sh run_mad_test_guid
+        env:
+          HCA: ${{ parameters.HCA }}
+          GUID: $(GUID)
+        displayName: Test GUID
+
+  - job: Server_Stop
+    dependsOn: Test_GUID
+    condition: always()
+    pool:
+      name: MLNX
+      demands: mad_server
+    steps:
+      - checkout: none
+      - bash: ./contrib/test_mad.sh srv_stop
+        displayName: Server Stop
