@@ -246,6 +246,7 @@ ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
                             ucp_lane_index_t max_lanes,
+                            const ucp_lane_index_t *lanes_order,
                             ucp_lane_map_t exclude_map,
                             ucp_lane_index_t *lanes);
 

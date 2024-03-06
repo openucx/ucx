@@ -393,7 +393,8 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         const ucp_proto_init_params_t *params, uct_ep_operation_t memtype_op,
         unsigned flags, ptrdiff_t max_iov_offs, size_t min_iov,
         ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-        ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
+        ucp_lane_index_t max_lanes, const ucp_lane_index_t *lanes_order,
+        ucp_lane_map_t exclude_map,
         ucp_lane_index_t *lanes)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
@@ -401,18 +402,27 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     const ucp_ep_config_key_t *ep_config_key     = params->ep_config_key;
     const ucp_rkey_config_key_t *rkey_config_key = params->rkey_config_key;
     const ucp_proto_select_param_t *select_param = params->select_param;
+    ucp_lane_index_t default_order[UCP_MAX_LANES];
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane, num_lanes;
     const uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
-    ucp_lane_map_t lane_map;
     char lane_desc[64];
     size_t max_iov;
+    int idx;
 
     if (max_lanes == 0) {
         return 0;
+    }
+
+    if (lanes_order == NULL) {
+        memset(default_order, UCP_NULL_LANE, sizeof(default_order));
+        for (lane = 0; lane < ep_config_key->num_lanes; ++lane) {
+            default_order[lane] = lane;
+        }
+        lanes_order = default_order;
     }
 
     ucp_proto_select_info_str(params->worker, params->rkey_cfg_index,
@@ -433,10 +443,14 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         goto out;
     }
 
-    lane_map = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
-    ucs_for_each_bit(lane, lane_map) {
-        if (num_lanes >= max_lanes) {
+    for (idx = 0; idx < ep_config_key->num_lanes; ++idx) {
+        lane = lanes_order[idx];
+        if ((lane == UCP_NULL_LANE) || (num_lanes >= max_lanes)) {
             break;
+        }
+
+        if (UCS_BIT(lane) & exclude_map) {
+            continue;
         }
 
         ucs_assert(lane < UCP_MAX_LANES);
@@ -582,6 +596,7 @@ ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
                             ucp_lane_index_t max_lanes,
+                            const ucp_lane_index_t *lanes_order,
                             ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes)
 {
     ucp_lane_index_t lane_index, lane, num_lanes, num_valid_lanes;
@@ -591,7 +606,14 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     num_lanes = ucp_proto_common_find_lanes_internal(
             &params->super, params->memtype_op, params->flags,
             params->max_iov_offs, params->min_iov, lane_type, tl_cap_flags,
-            max_lanes, exclude_map, lanes);
+            max_lanes, lanes_order, exclude_map, lanes);
+
+    /* Try with default lanes order */
+    max_lanes -= num_lanes;
+    num_lanes  = ucp_proto_common_find_lanes_internal(
+            &params->super, params->memtype_op, params->flags,
+            params->max_iov_offs, params->min_iov, lane_type, tl_cap_flags,
+            max_lanes, NULL, exclude_map, lanes);
 
     num_valid_lanes = 0;
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {
@@ -636,7 +658,7 @@ ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params)
     num_lanes = ucp_proto_common_find_lanes_internal(
             params, UCT_EP_OP_LAST, UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
             UCP_PROTO_COMMON_OFFSET_INVALID, 1, UCP_LANE_TYPE_AM,
-            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, &lane);
+            UCT_IFACE_FLAG_AM_BCOPY, 1, NULL, 0, &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s", params->proto_name);
         return UCP_NULL_LANE;

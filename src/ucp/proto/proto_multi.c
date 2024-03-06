@@ -11,9 +11,9 @@
 #include "proto_init.h"
 #include "proto_debug.h"
 #include "proto_common.inl"
-#include "proto_debug.h"
 #include "proto_multi.inl"
 
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 
@@ -24,6 +24,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 {
     ucp_context_h context         = params->super.super.worker->context;
     const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
+    const ucp_lane_index_t *lanes_order = NULL;
     ucp_proto_perf_node_t *lanes_perf_nodes[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t *lane_perf, perf;
@@ -45,11 +46,15 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if (ucp_proto_init_check_op(&params->super.super, UCP_PROTO_RNDV_OP_ID_MASK)) {
+        lanes_order = params->super.super.ep_config_key->rma_bw_lanes;
+    }
+
     /* Find first lane */
     num_lanes = ucp_proto_common_find_lanes(&params->super,
                                             params->first.lane_type,
-                                            params->first.tl_cap_flags, 1, 0,
-                                            lanes);
+                                            params->first.tl_cap_flags, 1, 
+                                            lanes_order, 0, lanes);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s", params->super.super.proto_name);
         return UCS_ERR_NO_ELEM;
@@ -60,7 +65,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                              params->middle.lane_type,
                                              params->middle.tl_cap_flags,
                                              UCP_PROTO_MAX_LANES - 1,
-                                             UCS_BIT(lanes[0]), lanes + 1);
+                                             lanes_order, UCS_BIT(lanes[0]),
+                                             lanes + 1);
 
     /* Get bandwidth of all lanes and max_bandwidth */
     max_bandwidth = 0;
