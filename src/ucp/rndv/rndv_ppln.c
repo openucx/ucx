@@ -37,6 +37,7 @@ static void
 ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
     static const double frag_overhead            = 30e-9;
+    ucs_status_t status                          = UCS_OK;
     ucp_worker_h worker                          = init_params->worker;
     ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
@@ -55,7 +56,6 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_caps_t ppln_caps;
     char frag_size_str[32];
     void *frag_proto_priv;
-    ucs_status_t status;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
