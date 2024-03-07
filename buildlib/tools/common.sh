@@ -226,6 +226,22 @@ get_active_ib_devices() {
 }
 
 #
+# Filter in BlueField IB devices from the device list
+#
+get_ib_bf_devices() {
+	ib_devices=$@
+	for ibdev_port in $ib_devices
+	do
+		ibdev=${ibdev_port%:*}
+		port=${ibdev_port#*:}
+		if ibv_devinfo -d $ibdev -i $port | grep -q 'vendor_part_id:\s*41692'
+		then
+			echo "$ibdev_port"
+		fi
+	done
+}
+
+#
 # Check host state
 #
 check_machine() {

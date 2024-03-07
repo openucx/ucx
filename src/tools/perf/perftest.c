@@ -195,9 +195,10 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.am_hdr_size   = 0;
-    params->super.ucp.is_daemon_mode  = 0;
-    params->super.ucp.dmn_local_addr  = empty_addr;
-    params->super.ucp.dmn_remote_addr = empty_addr;
+    params->super.ucp.dmn_info.is_daemon_mode  = 0;
+    params->super.ucp.dmn_info.is_keep_alive   = 0;
+    params->super.ucp.dmn_info.dmn_local_addr  = empty_addr;
+    params->super.ucp.dmn_info.dmn_remote_addr = empty_addr;
     strcpy(params->super.uct.dev_name, TL_RESOURCE_NAME_NONE);
     strcpy(params->super.uct.tl_name,  TL_RESOURCE_NAME_NONE);
 

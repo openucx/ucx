@@ -1,0 +1,4 @@
+#
+# UCP daemon basic
+#
+ucp_daemon_bw                        -t ucp_am_bw -w 0 -n 10000 -s 8192

@@ -262,10 +262,28 @@ static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
     return UCS_OK;
 }
 
+static size_t get_test_count(FILE *batch_file)
+{
+    size_t test_count = 0;
+
+#define MAX_ARG_SIZE 2048
+    char buf[MAX_ARG_SIZE];
+
+    while (fgets(buf, sizeof(buf) - 1, batch_file) != NULL) {
+        if ((buf[0] != '#') && (strtok(buf, " \t\n\r"))) {
+            ++test_count;
+        }
+    };
+
+    fseek(batch_file, 0, SEEK_SET);
+    return test_count;
+}
+
 static ucs_status_t run_test_recurs(struct perftest_context *ctx,
                                     const perftest_params_t *parent_params,
                                     unsigned depth)
 {
+    size_t test_count = 0;
     perftest_params_t params;
     ucx_perf_result_t result;
     ucs_status_t status;
@@ -290,6 +308,10 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
+    if (parent_params->super.ucp.dmn_info.is_daemon_mode) {
+        test_count = get_test_count(batch_file);
+    }
+
     line_num = 0;
     do {
         status = clone_params(&params, parent_params);
@@ -301,6 +323,15 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
                                  &line_num, &params,
                                  &ctx->test_names[depth]);
         if (status == UCS_OK) {
+            if (parent_params->super.ucp.dmn_info.is_daemon_mode) {
+                /* Keep daemon alive until the last test execution begins.
+                 * For the very last run take the keepalive value from the
+                 * parent config */
+                params.super.ucp.dmn_info.is_keep_alive =
+                    (--test_count == 0) ?
+                        parent_params->super.ucp.dmn_info.is_keep_alive : 1;
+            }
+
             run_test_recurs(ctx, &params, depth + 1);
             free(ctx->test_names[depth]);
             ctx->test_names[depth] = NULL;
