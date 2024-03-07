@@ -498,7 +498,7 @@ public:
 
         wait_send_window(1);
 
-        if (m_perf.params.ucp.is_daemon_mode) {
+        if (m_perf.params.ucp.dmn_info.is_daemon_mode) {
             status = send_daemon_req(buffer, length);
             goto out;
         }

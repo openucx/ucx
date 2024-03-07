@@ -51,6 +51,7 @@ struct perftest_context {
     unsigned                     num_cpus;
     unsigned                     cpus[MAX_CPUS];
     unsigned                     flags;
+    ucp_perf_daemon_info_t       dmn_info;
 
     unsigned                     num_batch_files;
     char                         *batch_files[MAX_BATCH_FILES];
