@@ -95,7 +95,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     ppln_caps.cfg_priority = 0;
 
     /* Add each proto as a separate variant */
-    ucs_array_for_each(proto, &select_elem->init_protos) {
+    ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
         /* Skip empty variants and reconfig proto */
         if ((proto->caps.num_ranges == 0) || (proto->proto_id == 0)) {
             continue;
@@ -111,8 +111,8 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
                                       sizeof(frag_size_str)),
                   UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
 
-        frag_proto_priv = UCS_PTR_BYTE_OFFSET(select_elem->priv_buf,
-                                              proto->priv_offset);
+        frag_proto_priv = &ucs_array_elem(&select_elem->proto_init.priv_buf,
+                                          proto->priv_offset);
         ucp_proto_rndv_set_variant_config(init_params, proto,
                                           &sel_param, frag_proto_priv,
                                           &rpriv->frag_proto_cfg);

@@ -20,14 +20,6 @@
 #include <ucp/core/ucp_worker.inl>
 
 
-/* Parameters structure for initializing protocols for a selection parameter */
-struct ucp_proto_probe_ctx {
-    ucs_array_s(size_t, uint8_t) priv_buf;
-    ucp_proto_init_elems_t       protocols;
-};
-
-typedef ucp_proto_probe_ctx_t ucp_proto_select_init_protocols_t;
-
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_ranges_t, unsigned, ucp_proto_perf_range_t);
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_thresh_t, unsigned,
                        ucp_proto_threshold_elem_t);
@@ -489,10 +481,10 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
     ucs_assert_always(!ucs_array_is_empty(&thresholds));
 
     /* Set pointer to priv buffer (to release it during cleanup) */
-    select_elem->priv_buf    = ucs_array_extract_buffer(&proto_init->priv_buf);
     select_elem->perf_ranges = ucs_array_extract_buffer(&perf_ranges);
     select_elem->thresholds  = ucs_array_extract_buffer(&thresholds);
-    select_elem->init_protos = proto_init->protocols;
+    select_elem->proto_init  = *proto_init;
+    ucs_array_init_dynamic(&proto_init->priv_buf);
     ucs_array_init_dynamic(&proto_init->protocols);
 
     return UCS_OK;
@@ -624,8 +616,7 @@ ucp_proto_select_elem_cleanup(ucp_proto_select_elem_t *select_elem)
     } while ((range++)->max_length < SIZE_MAX);
     ucs_free(select_elem->perf_ranges);
     ucs_free((void*)select_elem->thresholds);
-    ucs_free(select_elem->priv_buf);
-    ucs_array_cleanup_dynamic(&select_elem->init_protos);
+    ucp_proto_select_cleanup_protocols(&select_elem->proto_init);
 }
 
 static void ucp_proto_select_cache_reset(ucp_proto_select_t *proto_select)

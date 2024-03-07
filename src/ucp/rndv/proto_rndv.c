@@ -384,6 +384,7 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
     ucp_proto_rndv_ctrl_priv_t *rpriv          = init_params->priv;
+    const ucp_proto_select_init_protocols_t *remote_proto_init;
     ucp_proto_perf_range_t ctrl_perf, *last_range;
     ucp_proto_select_param_t remote_select_param;
     ucp_proto_select_elem_t *remote_proto_select;
@@ -411,9 +412,10 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
     if (status != UCS_OK) {
         goto out;
     }
+    remote_proto_init = &remote_proto_select->proto_init;
 
     /* Add variants for each remote proto */
-    ucs_array_for_each(remote_proto, &remote_proto_select->init_protos) {
+    ucs_array_for_each(remote_proto, &remote_proto_init->protocols) {
         remote_caps = &remote_proto->caps;
         /* Skip empty variants and reconfig proto */
         if ((remote_caps->num_ranges == 0) || (remote_proto->proto_id == 0)) {
@@ -428,8 +430,8 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
-        remote_priv = UCS_PTR_BYTE_OFFSET(remote_proto_select->priv_buf,
-                                          remote_proto->priv_offset);
+        remote_priv = &ucs_array_elem(&remote_proto_init->priv_buf,
+                                      remote_proto->priv_offset);
         ucp_proto_rndv_set_variant_config(init_params, remote_proto,
                                           &remote_select_param, remote_priv,
                                           &rpriv->remote_proto_config);

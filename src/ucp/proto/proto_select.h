@@ -49,7 +49,13 @@ typedef struct {
     ucp_proto_caps_t caps;
 } ucp_proto_init_elem_t;
 
-UCS_ARRAY_DECLARE_TYPE(ucp_proto_init_elems_t, unsigned, ucp_proto_init_elem_t);
+/* Parameters structure for initializing protocols for a selection parameter */
+struct ucp_proto_probe_ctx {
+    ucs_array_s(size_t, uint8_t)                 priv_buf;
+    ucs_array_s(unsigned, ucp_proto_init_elem_t) protocols;
+};
+
+typedef ucp_proto_probe_ctx_t ucp_proto_select_init_protocols_t;
 
 /**
  * Key for looking up protocol configuration by operation parameters
@@ -121,16 +127,13 @@ typedef struct {
  */
 typedef struct {
     /* Array of which protocol to use for different message sizes */
-    const ucp_proto_threshold_elem_t *thresholds;
+    const ucp_proto_threshold_elem_t  *thresholds;
 
     /* Estimated performance for the selected protocols */
-    ucp_proto_perf_range_t           *perf_ranges;
+    ucp_proto_perf_range_t            *perf_ranges;
 
     /* All the initialized protocols that can be chosen */
-    ucp_proto_init_elems_t            init_protos;
-
-    /* Private configuration area for the selected protocols */
-    void                             *priv_buf;
+    ucp_proto_select_init_protocols_t proto_init;
 } ucp_proto_select_elem_t;
 
 
