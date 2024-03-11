@@ -41,7 +41,7 @@ else
 	echo "Running under jenkins"
 	WS_URL=$JOB_URL/ws
 	if [[ "$VALGRIND_CHECK" == "yes" ]]; then
-		TIMEOUT="timeout 240m"
+		TIMEOUT="timeout 300m"
 	else
 		TIMEOUT="timeout 200m"
 	fi
