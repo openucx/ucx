@@ -9,7 +9,7 @@ run_mad_server() {
     setup
     srv_stop
     funcname
-    sudo -E bash -c 'envsubst < "buildlib/tools/ucx_perftest.template" \
+    sudo -E bash -c 'envsubst < "contrib/ucx_perftest.service" \
         > /etc/systemd/system/ucx_perftest.service'
     sudo systemctl daemon-reload
     sudo systemctl start ucx_perftest
