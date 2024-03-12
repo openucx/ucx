@@ -213,6 +213,52 @@ ucs_status_t init_test_params(perftest_params_t *params)
     return UCS_OK;
 }
 
+void free_test_params(perftest_params_t *params)
+{
+    free(params->super.msg_size_list);
+    params->super.msg_size_list = NULL;
+}
+
+static ucs_status_t merge_test_params(struct perftest_context *ctx)
+{
+    const int is_uct          = ctx->params.super.api == UCX_PERF_API_UCT;
+    void *local_rte_group     = ctx->params.super.rte_group;
+    ucx_perf_rte_t *local_rte = ctx->params.super.rte;
+    unsigned needed_flags;
+    char local_dev_name[UCT_DEVICE_NAME_MAX];
+    ucs_status_t status;
+
+    if (ctx->server_addr != NULL) {
+        return UCS_OK;
+    }
+
+    if (ctx->params.super.api != ctx->peer_params.super.api) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    needed_flags = ctx->params.super.flags & UCX_PERF_TEST_FLAG_ERR_HANDLING;
+    if (is_uct) {
+        strncpy(local_dev_name, ctx->params.super.uct.dev_name,
+                UCT_DEVICE_NAME_MAX);
+    }
+
+    free_test_params(&ctx->params);
+    status = clone_test_params(&ctx->params, &ctx->peer_params);
+    if (status != UCS_OK) {
+        return UCS_OK;
+    }
+
+    ctx->params.super.flags |= needed_flags;
+    if (is_uct) {
+        strncpy(ctx->params.super.uct.dev_name, local_dev_name,
+                UCT_DEVICE_NAME_MAX);
+    }
+
+    ctx->params.super.rte       = local_rte;
+    ctx->params.super.rte_group = local_rte_group;
+    return UCS_OK;
+}
+
 static unsigned sock_rte_group_size(void *rte_group)
 {
     sock_rte_group_t *group = rte_group;
@@ -345,7 +391,6 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
     int ret;
     char service[8];
     char err_str[64];
-    unsigned needed_flags;
 
     ucs_snprintf_safe(service, sizeof(service), "%u", ctx->port);
     memset(&hints, 0, sizeof(hints));
@@ -425,32 +470,25 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
     }
 
     if (ctx->server_addr == NULL) {
-        /* release the memory for the list of the message sizes allocated
-         * during the initialization of the default testing parameters */
-        release_msg_size_list(&ctx->params);
-
-        needed_flags = ctx->params.super.flags &
-                       UCX_PERF_TEST_FLAG_ERR_HANDLING;
-        ret = safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
+        ret = safe_recv(connfd, &ctx->peer_params, sizeof(ctx->peer_params),
+                        NULL, NULL);
         if (ret) {
             status = UCS_ERR_IO_ERROR;
             goto err_close_connfd;
         }
-        ctx->params.super.flags |= needed_flags;
 
-        if (ctx->params.super.msg_size_cnt != 0) {
-            ctx->params.super.msg_size_list =
-                    calloc(ctx->params.super.msg_size_cnt,
-                           sizeof(*ctx->params.super.msg_size_list));
-            if (NULL == ctx->params.super.msg_size_list) {
+        if (ctx->peer_params.super.msg_size_cnt != 0) {
+            ctx->peer_params.super.msg_size_list =
+                    calloc(ctx->peer_params.super.msg_size_cnt,
+                           sizeof(*ctx->peer_params.super.msg_size_list));
+            if (NULL == ctx->peer_params.super.msg_size_list) {
                 status = UCS_ERR_NO_MEMORY;
                 goto err_close_connfd;
             }
 
-            ret = safe_recv(connfd, ctx->params.super.msg_size_list,
-                            sizeof(*ctx->params.super.msg_size_list) *
-                            ctx->params.super.msg_size_cnt,
-                            NULL, NULL);
+            ret = safe_recv(connfd, ctx->peer_params.super.msg_size_list,
+                            sizeof(*ctx->peer_params.super.msg_size_list) *
+                            ctx->peer_params.super.msg_size_cnt, NULL, NULL);
             if (ret) {
                 status = UCS_ERR_IO_ERROR;
                 goto err_close_connfd;
@@ -800,7 +838,8 @@ static ucs_status_t check_system(struct perftest_context *ctx)
 
 static void ctx_free(struct perftest_context *ctx)
 {
-    free(ctx->params.super.msg_size_list);
+    free_test_params(&ctx->params);
+    free_test_params(&ctx->peer_params);
 }
 
 UCS_LIST_HEAD(rte_list);
@@ -811,6 +850,37 @@ static void initialize_plugins(void)
     ucs_list_add_tail(&rte_list, &mpi_rte.list);
 #endif
     ucs_list_add_tail(&rte_list, &sock_rte.list);
+}
+
+static ucs_status_t initialize_context(struct perftest_context *ctx,
+                                       int mpi_initialized)
+{
+    ucs_status_t status;
+
+    ucx_perf_global_init(); /* initialize memory types */
+
+    status = init_test_params(&ctx->params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = init_test_params(&ctx->peer_params);
+    if (status != UCS_OK) {
+        goto free_params;
+    }
+
+    ctx->server_addr     = NULL;
+    ctx->num_batch_files = 0;
+    ctx->port            = 13337;
+    ctx->af              = AF_INET;
+    ctx->flags           = 0;
+    ctx->mpi             = mpi_initialized;
+    ctx->mad_port        = NULL;
+    return UCS_OK;
+
+free_params:
+    free_test_params(&ctx->params);
+    return status;
 }
 
 static ucs_status_t setup_rte(struct perftest_context *ctx)
@@ -866,9 +936,13 @@ int main(int argc, char **argv)
 #endif
 
     initialize_plugins();
+    status = initialize_context(&ctx, mpi_initialized);
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     /* Parse command line */
-    status = parse_opts(&ctx, mpi_initialized, argc, argv);
+    status = parse_opts(&ctx, argc, argv);
     if (status != UCS_OK) {
         ret = (status == UCS_ERR_CANCELED) ? 0 : -127;
         goto out;
@@ -877,7 +951,7 @@ int main(int argc, char **argv)
     status = check_system(&ctx);
     if (status != UCS_OK) {
         ret = -1;
-        goto out_msg_size_list;
+        goto out_ctx_free;
     }
 
     status = setup_rte(&ctx);
@@ -885,7 +959,12 @@ int main(int argc, char **argv)
         ucs_error("failed to setup RTE transport: %s",
                   ucs_status_string(status));
         ret = -1;
-        goto out_msg_size_list;
+        goto out_ctx_free;
+    }
+
+    status = merge_test_params(&ctx);
+    if (status != UCS_OK) {
+        goto out_cleanup_rte;
     }
 
     /* Run the test */
@@ -899,7 +978,7 @@ int main(int argc, char **argv)
 
 out_cleanup_rte:
     cleanup_rte(&ctx);
-out_msg_size_list:
+out_ctx_free:
     ctx_free(&ctx);
 out:
     if (mpi_initialized) {

@@ -43,6 +43,7 @@ typedef struct perftest_params {
 
 struct perftest_context {
     perftest_params_t            params;
+    perftest_params_t            peer_params;
     const char                   *server_addr;
     uint16_t                     port;
     sa_family_t                  af;
@@ -58,13 +59,6 @@ struct perftest_context {
 
     sock_rte_group_t             sock_rte_group;
 };
-
-
-static inline void release_msg_size_list(perftest_params_t *params)
-{
-    free(params->super.msg_size_list);
-    params->super.msg_size_list = NULL;
-}
 
 
 extern ucs_list_link_t rte_list;
