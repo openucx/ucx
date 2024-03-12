@@ -65,6 +65,8 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
                               unsigned *num_tl_devices_p)
 {
     uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
+    uct_tl_device_resource_t *tl_devices;
+    unsigned num_tl_devices;
     ucs_status_t status;
 
     if (strcmp(mlx5_md->super.name, UCT_IB_MD_NAME(mlx5)) ||
@@ -75,13 +77,14 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
     }
 
     status = uct_ib_device_query_ports(&mlx5_md->super.dev,
-                                       UCT_IB_DEVICE_FLAG_MLX5_PRM, tl_devices_p,
-                                       num_tl_devices_p);
+                                       UCT_IB_DEVICE_FLAG_MLX5_PRM, &tl_devices,
+                                       &num_tl_devices);
     if (status != UCS_OK) {
         return status;
     }
 
     /* TODO: del to enable GGA in UCP */
+    ucs_free(tl_devices);
     return UCS_ERR_NO_DEVICE;
 }
 
