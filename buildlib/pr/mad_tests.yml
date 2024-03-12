@@ -8,7 +8,7 @@ jobs:
           demands: mad_client
     pool:
       name: MLNX
-      demands: ${{ parameters.demands }}
+      demands: $(demands)
     workspace:
       clean: outputs
     steps:
@@ -52,11 +52,7 @@ jobs:
       LID: $[ dependencies.Server_Up.outputs['Set_Vars.LID'] ]
     steps:
       - checkout: none
-      - bash: |
-          source ./contrib/test_mad.sh
-          run_mad_test_lid
-        env:
-          LID: $(LID)
+      - bash: $(Build.SourcesDirectory)/install/bin/ucx_perftest -t tag_bw -e -K "$(HCA)" -e lid:"$(LID)"
         displayName: Test LID
 
   - job: Server_Restart
@@ -84,11 +80,7 @@ jobs:
       GUID: $[ dependencies.Server_Up.outputs['Set_Vars.GUID'] ]
     steps:
       - checkout: none
-      - bash: |
-          source ./contrib/test_mad.sh
-          run_mad_test_guid
-        env:
-          GUID: $(GUID)
+      - bash: $(Build.SourcesDirectory)/install/bin/ucx_perftest -t tag_bw -e -K "$(HCA)" -e guid:"$(GUID)"
         displayName: Test GUID
 
   - job: Server_Stop
