@@ -1,6 +1,7 @@
 #!/bin/bash
 set -exE -o pipefail
 
+export HCA="mlx5_0:1"
 cd "$BUILD_SOURCESDIRECTORY"
 
 run_mad_server() {
@@ -8,7 +9,6 @@ run_mad_server() {
     setup
     srv_stop
     funcname
-    export HCA="$HCA"
     sudo -E bash -c 'envsubst < "buildlib/tools/ucx_perftest.template" \
         > /etc/systemd/system/ucx_perftest.service'
     sudo systemctl daemon-reload

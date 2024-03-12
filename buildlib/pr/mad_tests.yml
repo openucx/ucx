@@ -1,6 +1,3 @@
-parameters:
-  HCA:
-
 jobs:
   - job: Server_Up
     pool:
@@ -14,8 +11,6 @@ jobs:
         fetchDepth: 100
         retryCountOnTaskFailure: 5
       - bash: ./contrib/test_mad.sh run_mad_server
-        env:
-          HCA: ${{ parameters.HCA }}
         displayName: Server Up
 
       - task: Bash@3
@@ -23,8 +18,6 @@ jobs:
         inputs:
           targetType: "inline"
           script: ./contrib/test_mad.sh set_vars
-        env:
-          HCA: ${{ parameters.HCA }}
         displayName: Set Vars
 
   - job: Test_LID
@@ -42,7 +35,6 @@ jobs:
         retryCountOnTaskFailure: 5
       - bash: ./contrib/test_mad.sh run_mad_test_lid
         env:
-          HCA: ${{ parameters.HCA }}
           LID: $(LID)
         displayName: Test LID
 
@@ -71,7 +63,6 @@ jobs:
       - bash: |
           ./contrib/test_mad.sh run_mad_test_guid
         env:
-          HCA: ${{ parameters.HCA }}
           GUID: $(GUID)
         displayName: Test GUID
 
