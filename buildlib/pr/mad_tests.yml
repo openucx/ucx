@@ -10,14 +10,18 @@ jobs:
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
-      - bash: ./contrib/test_mad.sh run_mad_server
+      - bash: |
+          source ./contrib/test_mad.sh
+          run_mad_server
         displayName: Server Up
 
       - task: Bash@3
         name: Set_Vars
         inputs:
           targetType: "inline"
-          script: ./contrib/test_mad.sh set_vars
+          script: |
+            source ./contrib/test_mad.sh
+            set_vars
         displayName: Set Vars
 
   - job: Test_LID
@@ -33,7 +37,9 @@ jobs:
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
-      - bash: ./contrib/test_mad.sh run_mad_test_lid
+      - bash: |
+          source ./contrib/test_mad.sh
+          run_mad_test_lid
         env:
           LID: $(LID)
         displayName: Test LID
@@ -45,7 +51,9 @@ jobs:
       demands: mad_server
     steps:
       - checkout: none
-      - bash: ./contrib/test_mad.sh srv_restart
+      - bash: |
+          source ./contrib/test_mad.sh
+          srv_restart
         displayName: Server Restart
 
   - job: Test_GUID
@@ -61,7 +69,8 @@ jobs:
     steps:
       - checkout: none
       - bash: |
-          ./contrib/test_mad.sh run_mad_test_guid
+          source ./contrib/test_mad.sh
+          run_mad_test_guid
         env:
           GUID: $(GUID)
         displayName: Test GUID
@@ -74,5 +83,7 @@ jobs:
       demands: mad_server
     steps:
       - checkout: none
-      - bash: ./contrib/test_mad.sh srv_stop
+      - bash: |
+          source ./contrib/test_mad.sh
+          srv_stop
         displayName: Server Stop
