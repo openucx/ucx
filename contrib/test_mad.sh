@@ -33,7 +33,6 @@ setup() {
 
 set_vars() {
     set +x
-    echo "##vso[task.setvariable variable=HCA;isOutput=true]$HCA"
     # Replace ':' with space for 'ibstat' format
     HCA=${HCA/:/ }
     # shellcheck disable=SC2086
@@ -44,6 +43,16 @@ set_vars() {
     echo "GUID: $GUID"
     echo "##vso[task.setvariable variable=LID;isOutput=true]$LID"
     echo "##vso[task.setvariable variable=GUID;isOutput=true]$GUID"
+}
+
+run_mad_test_lid() {
+    funcname
+    "$PWD"/install/bin/ucx_perftest -t tag_bw -e -K "$HCA" -e lid:"$LID"
+}
+
+run_mad_test_guid() {
+    funcname
+    "$PWD"/install/bin/ucx_perftest -t tag_bw -e -K "$HCA" guid:"$GUID"
 }
 
 srv_start() {

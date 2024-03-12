@@ -1,5 +1,6 @@
 jobs:
   - job: SetupServer
+    displayName: Setup Server
     pool:
       name: MLNX
       demands: mad_server
@@ -17,6 +18,7 @@ jobs:
         displayName: Setup Server
 
   - job: SetupClient
+    displayName: Setup Client
     pool:
       name: MLNX
       demands: mad_client
@@ -68,7 +70,11 @@ jobs:
       LID: $[ dependencies.ServerUp.outputs['Set_Vars.LID'] ]
     steps:
       - checkout: none
-      - bash: $(Build.SourcesDirectory)/install/bin/ucx_perftest -t tag_bw -e -K "$(HCA)" -e lid:"$(LID)"
+      - bash: |
+          source ./contrib/test_mad.sh
+          run_mad_test_lid
+        env:
+          LID: $(LID)
         displayName: Test LID
 
   - job: ServerRestart
@@ -86,7 +92,9 @@ jobs:
         displayName: Server Restart
 
   - job: TestGuid
-    dependsOn: ServerRestart
+    dependsOn:
+      - ServerUp
+      - ServerRestart
     displayName: Test Guid
     timeoutInMinutes: 10
     pool:
@@ -96,7 +104,11 @@ jobs:
       GUID: $[ dependencies.ServerUp.outputs['Set_Vars.GUID'] ]
     steps:
       - checkout: none
-      - bash: $(Build.SourcesDirectory)/install/bin/ucx_perftest -t tag_bw -e -K "$(HCA)" -e guid:"$(GUID)"
+      - bash: |
+          source ./contrib/test_mad.sh
+          run_mad_test_guid
+        env:
+          GUID: $(GUID)
         displayName: Test GUID
 
   - job: ServerStop
