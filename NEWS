@@ -13,8 +13,14 @@
 
 ## 1.16.0-rc4 (February 21, 2024)
 ### Bugfixes:
-#### UCT
-* Fixed Infiniband posting error when compiler optimizes code with memmove()
+#### UCP
+* Disabled rendezvous pipeline protocol selection when using non-contiguous buffer
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixed mlx5 WQE posting error due to compiler memory copy optimizations
+#### GPU (CUDA, ROCM)
+* Fixed cuda_ipc transport being disabled if a CUDA device is not set during initialization
+#### UCM
+* Fixed compilation error when building on PPC64
 #### Packaging
 * Fixed already existing target error when using cmake find_package(ucx) twice
 
