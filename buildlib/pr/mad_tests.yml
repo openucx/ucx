@@ -20,9 +20,11 @@ jobs:
           source ./contrib/test_mad.sh
           setup
           build_ucx
+        displayName: Setup
 
-  - job: Server_Up
+  - job: ServerUp
     dependsOn: Setup
+    displayName: Server Up
     pool:
       name: MLNX
       demands: mad_server
@@ -42,21 +44,23 @@ jobs:
             set_vars
         displayName: Set Vars
 
-  - job: Test_LID
-    dependsOn: Server_Up
+  - job: TestLid
+    dependsOn: ServerUp
+    displayName: Test Lid
     timeoutInMinutes: 10
     pool:
       name: MLNX
       demands: mad_client
     variables:
-      LID: $[ dependencies.Server_Up.outputs['Set_Vars.LID'] ]
+      LID: $[ dependencies.ServerUp.outputs['Set_Vars.LID'] ]
     steps:
       - checkout: none
       - bash: $(Build.SourcesDirectory)/install/bin/ucx_perftest -t tag_bw -e -K "$(HCA)" -e lid:"$(LID)"
         displayName: Test LID
 
-  - job: Server_Restart
-    dependsOn: Test_LID
+  - job: ServerRestart
+    dependsOn: TestLid
+    displayName: Server Restart
     pool:
       name: MLNX
       demands: mad_server
@@ -68,23 +72,25 @@ jobs:
           srv_start
         displayName: Server Restart
 
-  - job: Test_GUID
+  - job: TestGuid
     dependsOn:
-      - Server_Up
-      - Server_Restart
+      - ServerUp
+      - ServerRestart
+    displayName: Test Guid
     timeoutInMinutes: 10
     pool:
       name: MLNX
       demands: mad_client
     variables:
-      GUID: $[ dependencies.Server_Up.outputs['Set_Vars.GUID'] ]
+      GUID: $[ dependencies.ServerUp.outputs['Set_Vars.GUID'] ]
     steps:
       - checkout: none
       - bash: $(Build.SourcesDirectory)/install/bin/ucx_perftest -t tag_bw -e -K "$(HCA)" -e guid:"$(GUID)"
         displayName: Test GUID
 
-  - job: Server_Stop
-    dependsOn: Test_GUID
+  - job: ServerStop
+    dependsOn: TestGuid
+    displayName: Server Stop
     condition: always()
     pool:
       name: MLNX
