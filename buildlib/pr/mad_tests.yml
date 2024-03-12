@@ -1,8 +1,14 @@
 jobs:
-  - job: Server_Up
+  - job: Setup
+    strategy:
+      matrix:
+        Server:
+          demands: mad_server
+        Client:
+          demands: mad_client
     pool:
       name: MLNX
-      demands: mad_server
+      demands: ${{ parameters.demands }}
     workspace:
       clean: outputs
     steps:
@@ -10,6 +16,17 @@ jobs:
         clean: true
         fetchDepth: 100
         retryCountOnTaskFailure: 5
+      - bash: |
+          source ./contrib/test_mad.sh
+          setup
+          build_ucx
+
+  - job: Server_Up
+    pool:
+      name: MLNX
+      demands: mad_server
+    steps:
+      - checkout: none
       - bash: |
           source ./contrib/test_mad.sh
           run_mad_server
@@ -33,10 +50,7 @@ jobs:
     variables:
       LID: $[ dependencies.Server_Up.outputs['Set_Vars.LID'] ]
     steps:
-      - checkout: self
-        clean: true
-        fetchDepth: 100
-        retryCountOnTaskFailure: 5
+      - checkout: none
       - bash: |
           source ./contrib/test_mad.sh
           run_mad_test_lid

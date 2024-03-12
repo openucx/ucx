@@ -5,8 +5,6 @@ export HCA="mlx5_0:1"
 cd "$BUILD_SOURCESDIRECTORY"
 
 run_mad_server() {
-    build_ucx
-    setup
     srv_stop
     funcname
     sudo -E bash -c 'envsubst < "contrib/ucx_perftest.service" \
@@ -48,8 +46,6 @@ set_vars() {
 }
 
 run_mad_test_lid() {
-    build_ucx
-    setup
     funcname
     "$PWD"/install/bin/ucx_perftest -t tag_bw -e -K "$HCA" -e lid:"$LID"
 }
