@@ -10,8 +10,7 @@ run_mad_server() {
     sudo -E bash -c 'envsubst < "contrib/ucx_perftest.service" \
         > /etc/systemd/system/ucx_perftest.service'
     sudo systemctl daemon-reload
-    sudo systemctl start ucx_perftest
-    sudo systemctl status ucx_perftest
+    srv_start
 }
 
 build_ucx() {
@@ -55,9 +54,8 @@ run_mad_test_guid() {
     "$PWD"/install/bin/ucx_perftest -t tag_bw -e -K "$HCA" guid:"$GUID"
 }
 
-srv_restart() {
+srv_start() {
     funcname
-    sudo systemctl stop ucx_perftest
     sudo systemctl start ucx_perftest
     sudo systemctl status ucx_perftest
 }

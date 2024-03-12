@@ -1,0 +1,23 @@
+[Unit]
+Description=UCX Perftest running in agent mode
+Requires=multi-user.target
+After=multi-user.target
+ 
+[Service]
+Type=simple
+Environment=UCX_KEEPALIVE_INTERVAL=2
+Environment=UCX_DC_MLX5_TIMEOUT=5
+Environment=UCX_RC_VERBS_TIMEOUT=5
+Environment=UCX_RC_MLX5_TIMEOUT=5
+Environment=UCX_UD_VERBS_TIMEOUT=5
+Environment=UCX_UD_MLX5_TIMEOUT=5
+Environment=UCX_RDMA_CM_TIMEOUT=5
+Restart=always
+RestartSec=500ms
+User=root
+Group=root
+StartLimitInterval=10s
+StartLimitBurst=100
+StandardOutput="${PWD}"/ucx_perftest.log
+StandardError="${PWD}"/ucx_perftest.log
+ExecStart="${PWD}"/install/bin/ucx_perftest -e -K "${HCA}"

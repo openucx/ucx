@@ -22,6 +22,7 @@ jobs:
           build_ucx
 
   - job: Server_Up
+    dependsOn: Setup
     pool:
       name: MLNX
       demands: mad_server
@@ -67,7 +68,8 @@ jobs:
       - checkout: none
       - bash: |
           source ./contrib/test_mad.sh
-          srv_restart
+          srv_stop
+          srv_start
         displayName: Server Restart
 
   - job: Test_GUID
