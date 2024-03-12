@@ -1,14 +1,8 @@
 jobs:
-  - job: Setup
-    strategy:
-      matrix:
-        Server:
-          demands: mad_server
-        Client:
-          demands: mad_client
+  - job: SetupServer
     pool:
       name: MLNX
-      demands: $(demands)
+      demands: mad_server
     workspace:
       clean: outputs
     steps:
@@ -20,10 +14,27 @@ jobs:
           source ./contrib/test_mad.sh
           setup
           build_ucx
-        displayName: Setup
+        displayName: Setup Server
+
+  - job: SetupClient
+    pool:
+      name: MLNX
+      demands: mad_client
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+      - bash: |
+          source ./contrib/test_mad.sh
+          setup
+          build_ucx
+        displayName: Setup Client
 
   - job: ServerUp
-    dependsOn: Setup
+    dependsOn: SetupServer
     displayName: Server Up
     pool:
       name: MLNX
@@ -45,7 +56,9 @@ jobs:
         displayName: Set Vars
 
   - job: TestLid
-    dependsOn: ServerUp
+    dependsOn:
+      - ServerUp
+      - SetupClient
     displayName: Test Lid
     timeoutInMinutes: 10
     pool:
@@ -73,9 +86,7 @@ jobs:
         displayName: Server Restart
 
   - job: TestGuid
-    dependsOn:
-      - ServerUp
-      - ServerRestart
+    dependsOn: ServerRestart
     displayName: Test Guid
     timeoutInMinutes: 10
     pool:

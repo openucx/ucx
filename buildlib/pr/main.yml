@@ -189,7 +189,7 @@ stages:
     - template: static_checks.yml
 
   - stage: MadTests
-    dependsOn: [Static_check]
+    # dependsOn: [Static_check]
     displayName: Mad Tests
     jobs:
     - template: mad_tests.yml
