@@ -965,6 +965,7 @@ int main(int argc, char **argv)
 
     status = merge_test_params(&ctx);
     if (status != UCS_OK) {
+        ret = -1;
         goto out_cleanup_rte;
     }
 
