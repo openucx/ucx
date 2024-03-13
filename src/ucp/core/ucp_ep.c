@@ -500,8 +500,6 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
         --worker->num_all_eps;
     }
 
-    ucp_ep_deactivate_worker_ifaces(ep);
-
     ucp_worker_keepalive_remove_ep(ep);
     ucp_ep_release_id(ep);
     ucs_list_del(&ep->ext->ep_list);
@@ -757,6 +755,7 @@ void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker)
         ucs_debug("memtype ep %p: destroy", ep);
         ucs_assert(ep->flags & UCP_EP_FLAG_INTERNAL);
 
+        ucp_ep_deactivate_worker_ifaces(ep);
         ucp_ep_destroy_internal(ep);
         worker->mem_type_ep[mem_type] = NULL;
     }
@@ -905,6 +904,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     return UCS_OK;
 
 err_cleanup_lanes:
+    ucp_ep_deactivate_worker_ifaces(ep);
     ucp_ep_cleanup_lanes(ep);
 err_delete:
     ucp_ep_delete(ep);
@@ -1029,6 +1029,7 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     if (status == UCS_OK) {
         *ep_p = ep;
     } else {
+        ucp_ep_deactivate_worker_ifaces(ep);
         ucp_ep_destroy_internal(ep);
     }
 
@@ -1157,6 +1158,7 @@ out:
     return status;
 
 err_destroy_ep:
+    ucp_ep_deactivate_worker_ifaces(ep);
     ucp_ep_destroy_internal(ep);
     goto out_free_address;
 }
@@ -1610,6 +1612,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     }
 
     ucp_ep_match_remove_ep(worker, ep);
+    ucp_ep_deactivate_worker_ifaces(ep);
     ucp_ep_destroy_internal(ep);
 }
 

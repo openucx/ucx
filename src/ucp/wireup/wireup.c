@@ -739,6 +739,9 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     return;
 
 err_set_ep_failed:
+    if (ep_created) {
+        ucp_ep_deactivate_worker_ifaces(ep);
+    }
     ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
 }
 
@@ -877,6 +880,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 out_cleanup_lanes:
     ucp_ep_cleanup_lanes(reply_ep);
 out_delete_ep:
+    ucp_ep_deactivate_worker_ifaces(reply_ep);
     ucp_ep_delete(reply_ep);
 }
 
