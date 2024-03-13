@@ -938,6 +938,7 @@ int main(int argc, char **argv)
     initialize_plugins();
     status = initialize_context(&ctx, mpi_initialized);
     if (status != UCS_OK) {
+        ret = -1;
         goto out;
     }
 
@@ -945,7 +946,7 @@ int main(int argc, char **argv)
     status = parse_opts(&ctx, argc, argv);
     if (status != UCS_OK) {
         ret = (status == UCS_ERR_CANCELED) ? 0 : -127;
-        goto out;
+        goto out_ctx_free;
     }
 
     status = check_system(&ctx);
