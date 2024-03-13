@@ -266,16 +266,16 @@ ucp_proto_rndv_ctrl_init_priv(const ucp_proto_rndv_ctrl_init_params_t *params,
     ucp_proto_rndv_ctrl_get_md_map(params, &rpriv->md_map, &rpriv->sys_dev_map,
                                    rpriv->sys_dev_distance);
 
-    rpriv->lane             = lane;
-    rpriv->packed_rkey_size = ucp_rkey_packed_size(
-            init_params->worker->context, rpriv->md_map,
-            init_params->select_param->sys_dev, rpriv->sys_dev_map);
-
     /* Use only memory domains for which the unpacking of the remote key was
      * successful */
     if (init_params->rkey_config_key != NULL) {
         rpriv->md_map &= ~init_params->rkey_config_key->unreachable_md_map;
     }
+
+    rpriv->lane             = lane;
+    rpriv->packed_rkey_size = ucp_rkey_packed_size(
+            init_params->worker->context, rpriv->md_map,
+            init_params->select_param->sys_dev, rpriv->sys_dev_map);
 }
 
 ucs_status_t
@@ -425,7 +425,7 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
         last_range = remote_caps->ranges + (remote_caps->num_ranges - 1);
         max_length = ucs_min(params->super.max_length, last_range->max_length);
         min_length = ucs_max(params->super.min_length,
-                              remote_proto->caps.min_length);
+                             remote_proto->caps.min_length);
         if (max_length < min_length) {
             continue;
         }

@@ -61,8 +61,10 @@ typedef struct ucp_proto_perf_node ucp_proto_perf_node_t;
 /* Key for selecting a protocol */
 typedef struct ucp_proto_select_param ucp_proto_select_param_t;
 
+
 /* Context for probing a protocol for a specific selection key */
 typedef struct ucp_proto_probe_ctx ucp_proto_probe_ctx_t;
+
 
 /* Protocol stage ID */
 enum {
