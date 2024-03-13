@@ -651,7 +651,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
             break;
         case 'P':
 #ifdef HAVE_MPI
-            ctx->mpi &= atoi(optarg);
+            ctx->mpi = (ctx->mpi && atoi(optarg));
             break;
 #endif
         case 'h':
