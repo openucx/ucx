@@ -1559,6 +1559,8 @@ static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
         if (status != UCS_OK) {
             goto err_destroy_eps;
         }
+
+        ucp_worker_release_address(worker, worker_attr.address);
     }
 
     /* Global default ep will point to the ep of the 1st thread */
@@ -1572,7 +1574,6 @@ static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
 err_destroy_eps:
     ucp_perf_test_destroy_self_eps(perf);
 out:
-    ucp_worker_release_address(worker, worker_attr.address);
     return status;
 }
 
