@@ -645,7 +645,7 @@ static void uct_ib_mlx5_devx_reg_symmetric(uct_ib_mlx5_md_t *md,
     /* Best effort, only allocate in the range below the atomic keys. */
     while (md->smkey_index < md->super.mkey_by_name_reserve.size) {
         status = uct_ib_mlx5_devx_reg_ksm_data_contig(
-                md, memh, address, 0,
+                md, memh, address, (uint64_t)address,
                 (memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC),
                 md->super.mkey_by_name_reserve.base + md->smkey_index,
                 "symmetric-key", &memh->mrs[UCT_IB_MR_DEFAULT], &smkey_mr,
@@ -2092,8 +2092,9 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     }
 
     ucs_assert(!(memh->super.flags & UCT_IB_MEM_MULTITHREADED));
-    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh, memh->address, 0, 0,
-                                                  0, "exported-key",
+    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh, memh->address,
+                                                  (uint64_t)memh->address, 0, 0,
+                                                  "exported-key",
                                                   &memh->mrs[UCT_IB_MR_DEFAULT],
                                                   &cross_mr, &exported_lkey);
     if (status != UCS_OK) {
