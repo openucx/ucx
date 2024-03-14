@@ -251,7 +251,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_contig(
     /* FW requires indirect atomic MR address and length to be aligned
      * to max supported atomic argument size */
     ksm_address = ucs_align_down_pow2((uint64_t)address, UCT_IB_MD_MAX_MR_SIZE);
-    ksm_iova_base = memh->dm != NULL ? (uint64_t)memh->address : ksm_address;
+    ksm_iova_base = //ksm_address; 
+    memh->dm != NULL ? (uint64_t)memh->address : ksm_address;
     ksm_iova      = ksm_iova_base + iova_offset;
     ksm_length  = mr_length + (uint64_t)address - ksm_address;
     ksm_length  = ucs_align_up(ksm_length, md->super.dev.atomic_align);
@@ -434,10 +435,12 @@ uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md,
 {
     uct_ib_mlx5_devx_mr_t *mr = &memh->mrs[mr_type];
     void *address             = uct_ib_mlx5_devx_memh_base_address(memh);
+    uint64_t iova_base = memh->dm != NULL ? (uint64_t)memh->address : (uint64_t)address;
+    uint64_t iova      = iova_base + iova_offset;
 
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
         return uct_ib_mlx5_devx_reg_ksm_data_mt(md, address,
-                                                (uint64_t)address + iova_offset,
+                                                iova,
                                                 atomic, mkey_index, reason,
                                                 mr->ksm_data, mr_p, mkey);
     } else {
