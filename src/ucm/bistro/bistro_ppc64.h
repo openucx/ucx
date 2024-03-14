@@ -41,6 +41,14 @@ ucs_status_t ucm_bistro_patch_toc(void *func_ptr, void *hook,
                                   ucm_bistro_restore_point_t **rp,
                                   uint64_t toc);
 
+/* Empty lock implementation */
+typedef struct {
+} UCS_S_PACKED ucm_bistro_lock_t;
+
+static inline void ucm_bistro_patch_lock(void * UCS_V_UNUSED dst)
+{
+}
+
 static inline ucs_status_t
 ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
                  void **orig_func_p, ucm_bistro_restore_point_t **rp)
