@@ -93,6 +93,13 @@
 /* Aligned variable */
 #define UCS_V_ALIGNED(_align) __attribute__((aligned(_align)))
 
+/* Disable address sanitizer */
+#ifdef __SANITIZE_ADDRESS__
+#  define UCS_F_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
+#else
+#  define UCS_F_NO_SANITIZE_ADDRESS
+#endif
+
 /* Used for labels */
 #define UCS_EMPTY_STATEMENT {}
 

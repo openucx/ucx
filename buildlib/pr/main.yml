@@ -159,6 +159,9 @@ resources:
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: centos8_cuda11_asan
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed23-cuda11_asan:1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu16_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
@@ -420,7 +423,7 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 0
-        container: ubuntu22_cuda12
+        container: centos8_cuda11_asan
         asan_check: yes
     - template: tests.yml
       parameters:
