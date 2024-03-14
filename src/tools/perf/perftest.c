@@ -198,8 +198,9 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.ucp.is_daemon_mode  = 0;
     params->super.ucp.dmn_local_addr  = empty_addr;
     params->super.ucp.dmn_remote_addr = empty_addr;
-    strcpy(params->super.uct.dev_name, TL_RESOURCE_NAME_NONE);
-    strcpy(params->super.uct.tl_name,  TL_RESOURCE_NAME_NONE);
+    strncpy(params->super.uct.dev_name, TL_RESOURCE_NAME_NONE,
+            UCT_DEVICE_NAME_MAX);
+    strncpy(params->super.uct.tl_name, TL_RESOURCE_NAME_NONE, UCT_TL_NAME_MAX);
 
     params->super.msg_size_list = calloc(params->super.msg_size_cnt,
                                          sizeof(*params->super.msg_size_list));
