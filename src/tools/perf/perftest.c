@@ -229,7 +229,7 @@ static ucs_status_t merge_test_params(struct perftest_context *ctx)
     char local_dev_name[UCT_DEVICE_NAME_MAX];
     ucs_status_t status;
 
-    if (ctx->server_addr != NULL) {
+    if ((ctx->server_addr != NULL) || ctx->mpi) {
         return UCS_OK;
     }
 
