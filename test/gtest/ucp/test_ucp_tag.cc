@@ -545,7 +545,7 @@ protected:
                 proto_config = &value.thresholds[idx].proto_config;
                 /* Skip check that rndv is disabled for tag offload use case.
                  * With tag offload rndv protocol might still be used for large
-                 * messages, because of HWTM limitation for eager transfers. */
+                 * messages, because of HWTM limit for eager transfers. */
                 if((m_test_offload) &&
                    (value.thresholds[idx].max_msg_length >= m_tag_min_rndv)) {
                     continue;
@@ -559,7 +559,7 @@ protected:
                 EXPECT_EQ(proto_config->cfg_thresh, cfg_thresh);
                 EXPECT_NE(nullptr, strstr(proto_config->proto->name, "rndv"));
             } else if (!m_test_offload) {
-                /*Skip offload because of HWTM limitation for eager transfers.*/
+                /* Skip offload because of HWTM limit for eager transfers. */
                 EXPECT_NE(proto_config->cfg_thresh, cfg_thresh);
                 EXPECT_EQ(nullptr, strstr(proto_config->proto->name, "rndv"));
             }

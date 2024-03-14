@@ -289,6 +289,7 @@ ucp_proto_rndv_ctrl_range_init(const ucp_proto_rndv_ctrl_init_params_t *params,
     ucs_status_t status;
 
     ctrl_perf->node = ucp_proto_perf_node_new_data(params->ctrl_msg_name, "");
+    ucp_proto_perf_node_add_child(ctrl_perf->node, params->unpack_perf_node);
 
     /* Set send_overheads to the time to send and receive RTS message */
     status = ucp_proto_rndv_ctrl_perf(&params->super.super, rpriv->lane,
@@ -316,7 +317,7 @@ ucp_proto_rndv_ctrl_range_init(const ucp_proto_rndv_ctrl_init_params_t *params,
 
 /* Copy performance ranges from the remote protocol add CTRL overheads */
 ucs_status_t
-ucp_proto_rndv_ctrl_add_remote_variant(
+ucp_proto_rndv_ctrl_init_parallel_stages(
         const ucp_proto_rndv_ctrl_init_params_t *params,
         ucp_proto_perf_range_t *ctrl_range,
         ucp_proto_perf_range_t *remote_range,
@@ -460,17 +461,18 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
         /* Create separate CTRL message perf node for each variant */
         status = ucp_proto_rndv_ctrl_range_init(params, &ctrl_perf);
         if (status != UCS_OK) {
-            break;
+            continue;
         }
 
         ucp_proto_common_init_base_caps(&params->super, min_length);
 
-        status = ucp_proto_rndv_ctrl_add_remote_variant(params, &ctrl_perf,
-                                                        remote_caps->ranges,
-                                                        min_length, max_length);
+        status = ucp_proto_rndv_ctrl_init_parallel_stages(params, &ctrl_perf,
+                                                          remote_caps->ranges,
+                                                          min_length,
+                                                          max_length);
         ucp_proto_perf_node_deref(&ctrl_perf.node);
         if (status != UCS_OK) {
-            break;
+            continue;
         }
 
         ucp_proto_select_add_proto(init_params, cfg_thresh, cfg_priority,
