@@ -31,9 +31,6 @@ ucs_status_t uct_cuda_ipc_ep_put_zcopy(uct_ep_h tl_ep,
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp);
 
-ucs_status_t uct_cuda_ipc_ep_check(const uct_ep_h tl_ep, unsigned flags,
-                                   uct_completion_t *comp);
-
 int uct_cuda_ipc_ep_is_connected(const uct_ep_h tl_ep,
                                  const uct_ep_is_connected_params_t *params);
 

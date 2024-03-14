@@ -67,9 +67,6 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
 ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
                              uct_completion_t *comp);
 
-ucs_status_t uct_mm_ep_check(uct_ep_h tl_ep, unsigned flags,
-                             uct_completion_t *comp);
-
 ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags);
 

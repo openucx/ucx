@@ -49,7 +49,7 @@ static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_scopy_ep_t, params);
 
     self->remote_pid = uct_cma_ep_get_remote_pid(params->iface_addr);
-    return uct_ep_keepalive_init(&self->keepalive, self->remote_pid);
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cma_ep_t)
@@ -135,15 +135,5 @@ ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
     ucs_assert(ret <= remote_iov.iov_len);
 
     *length_p = ret;
-    return UCS_OK;
-}
-
-ucs_status_t uct_cma_ep_check(const uct_ep_h tl_ep, unsigned flags,
-                              uct_completion_t *comp)
-{
-    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
-
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
-    uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->remote_pid, flags, comp);
     return UCS_OK;
 }
