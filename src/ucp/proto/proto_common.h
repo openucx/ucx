@@ -311,4 +311,6 @@ void ucp_proto_reset_fatal_not_implemented(ucp_request_t *req);
 
 void ucp_proto_fatal_invalid_stage(ucp_request_t *req, const char *func_name);
 
+void ucp_proto_common_tl_perf_reset(ucp_proto_common_tl_perf_t *tl_perf);
+
 #endif

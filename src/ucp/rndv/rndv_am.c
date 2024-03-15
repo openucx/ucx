@@ -132,6 +132,7 @@ ucp_proto_rndv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .first_min_size      = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
@@ -209,6 +210,7 @@ ucp_rndv_am_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY   |
                                UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+        .first_min_size      = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };

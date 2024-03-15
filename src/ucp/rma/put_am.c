@@ -98,6 +98,7 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .max_lanes           = 1,
         .initial_reg_md_map  = 0,
+        .first_min_size      = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .first.lane_type     = UCP_LANE_TYPE_AM,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,

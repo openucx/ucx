@@ -1485,7 +1485,16 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_seg_size, multi, has_transport("self"))
     test_am_different_seg_sizes(seg_size() * 2);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_seg_size)
+/* Different segments sizes are not supported with UCP AM, because:
+ * - max_am_header_size is fetched from worker attributes and is based
+ *   on local iface capabilities (smallest is taken)
+ * - when connecting peer with smaller segment size, ep adjusts its caps
+ *   (e.g. am.max_bcopy), but the user may already queired larger size
+ *   for max_am_hdr from the worker
+ *
+ * TODO: Enable these tests when the issue above is fixed
+ * UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_seg_size)
+ */
 
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx_reply {
@@ -1526,9 +1535,8 @@ private:
 
 /* Skip tests for ud_v and ud_x because of unstable reproducible failures during
  * roce on worker CI jobs. The test fails with invalid am_bcopy length. */
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
-                     is_proto_enabled() && has_any_transport({"ud_v", "ud_x"}),
-                     "ZCOPY_THRESH=-1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
+           "RNDV_THRESH=-1")
 {
     test_datatypes([&]() {
         test_am(1);
@@ -1537,9 +1545,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, short_bcopy_send,
     });
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_dts, zcopy_send,
-                     is_proto_enabled() && has_any_transport({"ud_v", "ud_x"}),
-                     "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, zcopy_send, "ZCOPY_THRESH=1", "RNDV_THRESH=-1")
 {
     skip_no_am_lane_caps(UCT_IFACE_FLAG_AM_ZCOPY, "am_zcopy is not supported");
     test_datatypes([&]() {
