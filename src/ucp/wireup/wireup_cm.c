@@ -510,6 +510,8 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
             goto err;
         }
 
+        ucp_ep_activate_worker_ifaces(ep);
+
         ep->am_lane = key.am_lane;
 
         status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);
@@ -1294,7 +1296,6 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     }
 
 err_destroy_ep:
-    ucp_ep_deactivate_worker_ifaces(ep);
     ucp_ep_destroy_internal(ep);
 out_free_request:
     ucs_free(conn_request->remote_dev_addr);

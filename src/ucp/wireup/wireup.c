@@ -610,7 +610,6 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     int send_reply            = 0;
     unsigned ep_init_flags    = ucp_ep_err_mode_init_flags(msg->err_mode);
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
-    int ep_created            = 0;
     ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
@@ -642,7 +641,6 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                 return;
             }
 
-            ep_created = 1;
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
             if (!ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
@@ -691,10 +689,6 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         goto err_set_ep_failed;
     }
 
-    if (ep_created) {
-        ucp_ep_activate_worker_ifaces(ep);
-    }
-
     ucp_wireup_match_p2p_lanes(ep, remote_address, addr_indices, lanes2remote);
 
     /* Send a reply if remote side does not have ep_ptr (active-active flow) or
@@ -739,9 +733,6 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     return;
 
 err_set_ep_failed:
-    if (ep_created) {
-        ucp_ep_deactivate_worker_ifaces(ep);
-    }
     ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
 }
 
@@ -854,8 +845,6 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         return;
     }
 
-    ucp_ep_activate_worker_ifaces(reply_ep);
-
     /* Initialize lanes of the reply EP */
     status = ucp_wireup_init_lanes(reply_ep, ep_init_flags, &ucp_tl_bitmap_max,
                                    remote_address, addr_indices);
@@ -880,7 +869,6 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 out_cleanup_lanes:
     ucp_ep_cleanup_lanes(reply_ep);
 out_delete_ep:
-    ucp_ep_deactivate_worker_ifaces(reply_ep);
     ucp_ep_delete(reply_ep);
 }
 
@@ -1619,8 +1607,14 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ucs_fatal("endpoint reconfiguration not supported yet");
     }
 
+    if (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        ucp_ep_deactivate_worker_ifaces(ep);
+    }
+
     ep->cfg_index = new_cfg_index;
     ep->am_lane   = key.am_lane;
+
+    ucp_ep_activate_worker_ifaces(ep);
 
     snprintf(str, sizeof(str), "ep %p", ep);
     ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, str,

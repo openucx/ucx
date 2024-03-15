@@ -755,7 +755,6 @@ void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker)
         ucs_debug("memtype ep %p: destroy", ep);
         ucs_assert(ep->flags & UCP_EP_FLAG_INTERNAL);
 
-        ucp_ep_deactivate_worker_ifaces(ep);
         ucp_ep_destroy_internal(ep);
         worker->mem_type_ep[mem_type] = NULL;
     }
@@ -797,6 +796,8 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
         return status;
     }
 
+    ucp_ep_activate_worker_ifaces(ep);
+
     ep->am_lane = key.am_lane;
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
@@ -837,7 +838,6 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
-    ucp_ep_activate_worker_ifaces(ep);
     ucp_ep_get_tl_bitmap(&ucp_ep_config(ep)->key, &ep_tl_bitmap);
     ucp_tl_bitmap_validate(&ep_tl_bitmap, local_tl_bitmap);
 
@@ -883,8 +883,6 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
-    ucp_ep_activate_worker_ifaces(ep);
-
     if (UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0) &
         UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID) {
         wireup_ep->flags |= UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID;
@@ -904,7 +902,6 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     return UCS_OK;
 
 err_cleanup_lanes:
-    ucp_ep_deactivate_worker_ifaces(ep);
     ucp_ep_cleanup_lanes(ep);
 err_delete:
     ucp_ep_delete(ep);
@@ -1029,7 +1026,6 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     if (status == UCS_OK) {
         *ep_p = ep;
     } else {
-        ucp_ep_deactivate_worker_ifaces(ep);
         ucp_ep_destroy_internal(ep);
     }
 
@@ -1158,7 +1154,6 @@ out:
     return status;
 
 err_destroy_ep:
-    ucp_ep_deactivate_worker_ifaces(ep);
     ucp_ep_destroy_internal(ep);
     goto out_free_address;
 }
@@ -1426,6 +1421,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
         ucs_error("ep %p: failed to allocate memory for discarding lanes"
                   " argument", ep);
         ucp_ep_cleanup_lanes(ep); /* Just close all UCT endpoints */
+        
         ucp_ep_reqs_purge(ep, discard_status);
         return;
     }
@@ -1586,6 +1582,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
         ucp_ep_unprogress_uct_ep(ep, uct_ep, ucp_ep_get_rsc_index(ep, lane));
         uct_ep_destroy(uct_ep);
     }
+
+    ucp_ep_deactivate_worker_ifaces(ep);
 }
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
@@ -1612,7 +1610,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     }
 
     ucp_ep_match_remove_ep(worker, ep);
-    ucp_ep_deactivate_worker_ifaces(ep);
     ucp_ep_destroy_internal(ep);
 }
 
