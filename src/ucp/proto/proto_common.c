@@ -647,6 +647,15 @@ ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params)
     return lane;
 }
 
+void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
+                                const ucp_proto_caps_t *proto_caps,
+                                const void *priv, size_t priv_size)
+{
+    ucp_proto_select_add_proto(&params->super, params->cfg_thresh,
+                               params->cfg_priority, proto_caps, priv,
+                               priv_size);
+}
+
 void ucp_proto_request_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,

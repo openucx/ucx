@@ -25,11 +25,10 @@
  */
 #define UCP_PROTO_MSGLEN_EPSILON   0.5
 
-void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
+void ucp_proto_common_add_ppln_range(ucp_proto_caps_t *caps,
                                      const ucp_proto_perf_range_t *frag_range,
                                      size_t max_length)
 {
-    ucp_proto_caps_t *caps             = init_params->caps;
     ucp_proto_perf_range_t *ppln_range = &caps->ranges[caps->num_ranges];
     size_t frag_size                   = frag_range->max_length;
     ucs_linear_func_t *ppln_perf       = ppln_range->perf;
@@ -76,10 +75,9 @@ void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
 }
 
 void ucp_proto_common_init_base_caps(
-        const ucp_proto_common_init_params_t *params, size_t min_length)
+        const ucp_proto_common_init_params_t *params, ucp_proto_caps_t *caps,
+        size_t min_length)
 {
-    ucp_proto_caps_t *caps = params->super.caps;
-
     caps->cfg_thresh   = params->cfg_thresh;
     caps->cfg_priority = params->cfg_priority;
     caps->min_length   = ucs_max(params->min_length, min_length);
@@ -188,13 +186,11 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
 }
 
 ucs_status_t
-ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
-                               size_t range_start, size_t range_end,
-                               size_t frag_size, double bias,
+ucp_proto_init_parallel_stages(const char *proto_name, size_t range_start,
+                               size_t range_end, size_t frag_size, double bias,
                                const ucp_proto_perf_range_t **stages,
-                               unsigned num_stages)
+                               unsigned num_stages, ucp_proto_caps_t *caps)
 {
-    ucp_proto_caps_t *caps      = params->caps;
     ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
     UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_perf_envelope_t, concave, 16);
     UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_perf_list_t, stage_list, 16);
@@ -253,11 +249,10 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
         range             = &caps->ranges[caps->num_ranges];
         range->max_length = elem->max_length;
         if (fabs(bias) > UCP_PROTO_PERF_EPSILON) {
-            range->node   = ucp_proto_perf_node_new_data(params->proto_name,
-                                                         "bias %f", bias);
+            range->node = ucp_proto_perf_node_new_data(proto_name, "bias %f",
+                                                       bias);
         } else {
-            range->node   = ucp_proto_perf_node_new_data(params->proto_name,
-                                                         "");
+            range->node = ucp_proto_perf_node_new_data(proto_name, "");
         }
 
         /* "single" performance estimation is sum of "stages" with the bias */
@@ -640,9 +635,10 @@ ucp_proto_init_single_frag_ranges(const ucp_proto_common_init_params_t *params,
                                   const ucp_proto_common_tl_perf_t *tl_perf,
                                   ucp_proto_perf_node_t *const tl_perf_node,
                                   ucp_md_map_t reg_md_map, size_t range_start,
-                                  size_t frag_size)
+                                  size_t frag_size, ucp_proto_caps_t *caps)
 {
-    int empty_msg = (frag_size == 0);
+    const char *proto_name = ucp_proto_id_field(params->super.proto_id, name);
+    int empty_msg          = (frag_size == 0);
     ucp_proto_perf_range_t xfer_perf, send_perf, recv_perf;
     const ucp_proto_perf_range_t *parallel_stages[3];
     ucs_status_t status;
@@ -669,8 +665,9 @@ ucp_proto_init_single_frag_ranges(const ucp_proto_common_init_params_t *params,
     parallel_stages[2] = &recv_perf;
 
     /* Add ranges representing sending single fragment */
-    status = ucp_proto_init_parallel_stages(&params->super, range_start, frag_size,
-                                            frag_size, 0.0, parallel_stages, 3);
+    status = ucp_proto_init_parallel_stages(proto_name, range_start, frag_size,
+                                            frag_size, 0.0, parallel_stages, 3,
+                                            caps);
 
     ucp_proto_perf_node_deref(&recv_perf.node);
 out_deref_send_perf:
@@ -701,9 +698,8 @@ ucs_status_t
 ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
                            ucp_proto_perf_node_t *const tl_perf_node,
-                           ucp_md_map_t reg_md_map)
+                           ucp_md_map_t reg_md_map, ucp_proto_caps_t *caps)
 {
-    ucp_proto_caps_t *caps = params->super.caps;
     size_t frag_size;
     ucs_status_t status;
 
@@ -716,13 +712,13 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
               UCP_PROTO_TIME_ARG(tl_perf->latency));
 
     /* Initialize capabilities */
-    ucp_proto_common_init_base_caps(params, tl_perf->min_length);
+    ucp_proto_common_init_base_caps(params, caps, tl_perf->min_length);
 
     /* Add range representing sending empty message */
     if (caps->min_length == 0) {
         status = ucp_proto_init_single_frag_ranges(params, tl_perf,
-                                                   tl_perf_node, reg_md_map,
-                                                   0, 0);
+                                                   tl_perf_node, reg_md_map, 0,
+                                                   0, caps);
         if (status != UCS_OK) {
             return status;
         }
@@ -744,7 +740,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     /* Add ranges representing sending single fragment */
     status = ucp_proto_init_single_frag_ranges(params, tl_perf, tl_perf_node,
                                                reg_md_map, caps->min_length,
-                                               frag_size);
+                                               frag_size, caps);
     if (status != UCS_OK) {
         return status;
     }
@@ -753,7 +749,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
        not the max length and the protocol supports fragmentation */
     if ((frag_size < params->max_length) &&
         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
-        ucp_proto_common_add_ppln_range(&params->super,
+        ucp_proto_common_add_ppln_range(caps,
                                         &caps->ranges[caps->num_ranges - 1],
                                         params->max_length);
     }
