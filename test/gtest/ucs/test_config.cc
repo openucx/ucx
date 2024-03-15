@@ -14,6 +14,8 @@ extern "C" {
 
 #define TEST_CONFIG_DIR  TOP_SRCDIR "/test/gtest/ucs"
 #define TEST_CONFIG_FILE "ucx_test.conf"
+#define TEST_ENV_PREFIX  "UCXGTEST_"
+
 
 typedef enum {
     COLOR_RED,
@@ -310,7 +312,7 @@ protected:
         car_opts(const car_opts& orig) : m_max(orig.m_max)
         {
             /* reset 'm_opts' to suppress Coverity warning that fields are not
-             * initialized in the constructor */ 
+             * initialized in the constructor */
             memset(&m_opts, 0, sizeof(m_opts));
 
             m_value = new char[m_max];
@@ -593,9 +595,9 @@ UCS_TEST_F(test_config, set_get_with_env_prefix) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1("UCX_COLOR", "black");
     /* coverity[tainted_string_argument] */
-    ucs::scoped_setenv env2("TEST_UCX_COLOR", "white");
+    ucs::scoped_setenv env2(TEST_ENV_PREFIX "UCX_COLOR", "white");
 
-    car_opts opts("TEST_" UCS_DEFAULT_ENV_PREFIX, NULL);
+    car_opts opts(TEST_ENV_PREFIX UCS_DEFAULT_ENV_PREFIX, NULL);
     EXPECT_EQ(COLOR_WHITE, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
               std::string(opts.get("COLOR")));
@@ -639,15 +641,15 @@ UCS_TEST_F(test_config, unused) {
     }
 
     {
-        const std::string unused_var2 = "TEST_UNUSED_VAR2";
+        const std::string unused_var2 = TEST_ENV_PREFIX "UNUSED_VAR2";
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv env2(unused_var2.c_str(), "unused");
 
         config_err_exp_str.push_back(warn_str + ": " + unused_var2);
         scoped_log_handler log_handler(config_error_handler);
-        car_opts opts("TEST_", NULL);
+        car_opts opts(TEST_ENV_PREFIX, NULL);
 
-        ucs_config_parser_print_env_vars_once("TEST_");
+        ucs_config_parser_print_env_vars_once(TEST_ENV_PREFIX);
 
         config_err_exp_str.pop_back();
     }
@@ -668,13 +670,13 @@ UCS_TEST_F(test_config, dump_hidden) {
 
 UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
     /* aliases must be counted here */
-    test_config_print_opts(
-        UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN | UCS_CONFIG_PRINT_DOC,
-        41u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN |
+                                   UCS_CONFIG_PRINT_DOC,
+                           41u);
 
-    test_config_print_opts(
-        UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN | UCS_CONFIG_PRINT_DOC,
-        41u, "TEST_");
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN |
+                                   UCS_CONFIG_PRINT_DOC,
+                           41u, TEST_ENV_PREFIX);
 }
 
 UCS_TEST_F(test_config, deprecated) {
@@ -896,7 +898,7 @@ UCS_TEST_F(test_config, test_config_file) {
 UCS_TEST_F(test_config, test_config_file_parse_files) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv ucx_config_dir("UCX_CONFIG_DIR", TEST_CONFIG_DIR);
-    
+
     car_opts_t opts;
     ucs_status_t status;
 
