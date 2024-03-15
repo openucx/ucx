@@ -1042,23 +1042,20 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
     uct_ib_mlx5_devx_umr_t *item, *tmp;
     ucs_status_t status;
 
+    /* Destroy UMR mkey hash if present */
     if (NULL != md->umr_mkey_hash) {
-        if (kh_size(md->umr_mkey_hash) != 0) {
-            ucs_trace("%s: UMR mkey hash has %d elements",
-                      uct_ib_device_name(ibdev), kh_size(md->umr_mkey_hash));
-        }
+        ucs_trace("%s: destroy UMR mkey hash with %d elements",
+                  uct_ib_device_name(ibdev), kh_size(md->umr_mkey_hash));
 
-        /* Destroy umr_mkey_hash content */
         kh_foreach_value(md->umr_mkey_hash, mkey_alias, {
-            /* Deregister each alias (value) */
-            ucs_trace("%s: deregistered UMR mkey alias %p lkey 0x%x",
+            ucs_trace("%s: destroy UMR mkey alias %p lkey 0x%x",
                       uct_ib_device_name(ibdev), mkey_alias.cross_mr,
                       mkey_alias.lkey);
 
             status = uct_ib_mlx5_devx_obj_destroy(mkey_alias.cross_mr,
                                                   "MKEY_ALIAS");
             if (UCS_OK != status) {
-                ucs_error("%s: failed to deregister UMR alias %p lkey 0x%x: %m",
+                ucs_error("%s: failed to destroy UMR alias %p lkey 0x%x: %m",
                           uct_ib_device_name(ibdev), mkey_alias.cross_mr,
                           mkey_alias.lkey);
             }
@@ -1066,35 +1063,29 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
 
         kh_destroy(umr_mkey_map, md->umr_mkey_hash);
         md->umr_mkey_hash = NULL;
-        ucs_trace("%s: destroyed umr_mkey_hash", uct_ib_device_name(ibdev));
     }
 
+    /* Destroy UMR mkey pool if not empty */
     if (!ucs_list_is_empty(&md->umr_mkey_pool)) {
-        ucs_trace("%s: UMR mkey pool has %lu elements",
+        ucs_trace("%s: destroy UMR mkey pool with %lu elements",
                   uct_ib_device_name(ibdev),
                   ucs_list_length(&md->umr_mkey_pool));
-    }
 
-    /* Destroy umr_mkey_pool */
-    ucs_list_for_each_safe(item, tmp, &md->umr_mkey_pool, super) {
-        /* Deregister each indirect mkey */
-        ucs_trace("%s: deregistered UMR mkey %p lkey 0x%x",
-                  uct_ib_device_name(ibdev), item->umr_mkey,
-                  item->umr_mkey->lkey);
-        if (mlx5dv_destroy_mkey(item->umr_mkey) != 0) {
-            ucs_error("%s: failed to destroy UMR mkey %p lkey 0x%x: %m",
+        ucs_list_for_each_safe(item, tmp, &md->umr_mkey_pool, super) {
+            ucs_trace("%s: destroy UMR mkey %p lkey 0x%x",
                       uct_ib_device_name(ibdev), item->umr_mkey,
                       item->umr_mkey->lkey);
+
+            if (mlx5dv_destroy_mkey(item->umr_mkey) != 0) {
+                ucs_error("%s: failed to destroy UMR mkey %p lkey 0x%x: %m",
+                        uct_ib_device_name(ibdev), item->umr_mkey,
+                        item->umr_mkey->lkey);
+            }
+
+            ucs_list_del(&item->super);
+            free(item);
         }
-
-        ucs_list_del(&item->super);
-        free(item);
-        ucs_trace("%s: deleted UMR mr from pool (%ld)",
-                  uct_ib_device_name(ibdev),
-                  ucs_list_length(&md->umr_mkey_pool));
     }
-
-    ucs_trace("%s: destroyed UMR mkey pool", uct_ib_device_name(ibdev));
 
     if (NULL != md->umr_qp) {
         if (ibv_destroy_qp(md->umr_qp) != 0) {
