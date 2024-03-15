@@ -511,7 +511,6 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
         }
 
         ucp_ep_activate_worker_ifaces(ep);
-
         ep->am_lane = key.am_lane;
 
         status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);

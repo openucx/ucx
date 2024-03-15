@@ -797,7 +797,6 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ucp_ep_activate_worker_ifaces(ep);
-
     ep->am_lane = key.am_lane;
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
@@ -1421,7 +1420,6 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
         ucs_error("ep %p: failed to allocate memory for discarding lanes"
                   " argument", ep);
         ucp_ep_cleanup_lanes(ep); /* Just close all UCT endpoints */
-        
         ucp_ep_reqs_purge(ep, discard_status);
         return;
     }
