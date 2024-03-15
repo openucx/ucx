@@ -1044,8 +1044,8 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
 
     if (NULL != md->umr_mkey_hash) {
         if (kh_size(md->umr_mkey_hash) != 0) {
-            ucs_info("%s: UMR mkey hash has %d elements",
-                     uct_ib_device_name(ibdev), kh_size(md->umr_mkey_hash));
+            ucs_trace("%s: UMR mkey hash has %d elements",
+                      uct_ib_device_name(ibdev), kh_size(md->umr_mkey_hash));
         }
 
         /* Destroy umr_mkey_hash content */
@@ -1070,9 +1070,9 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
     }
 
     if (!ucs_list_is_empty(&md->umr_mkey_pool)) {
-        ucs_info("%s: UMR mkey pool has %lu elements",
-                 uct_ib_device_name(ibdev),
-                 ucs_list_length(&md->umr_mkey_pool));
+        ucs_trace("%s: UMR mkey pool has %lu elements",
+                  uct_ib_device_name(ibdev),
+                  ucs_list_length(&md->umr_mkey_pool));
     }
 
     /* Destroy umr_mkey_pool */
