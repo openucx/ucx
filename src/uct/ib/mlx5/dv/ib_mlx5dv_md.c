@@ -12,6 +12,7 @@
 
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
+#include <ucs/time/time.h>
 
 /* max log value to store in uint8_t */
 #define UCT_IB_MLX5_MD_MAX_DCI_CHANNELS 8
@@ -156,8 +157,10 @@ uct_ib_mlx5_devx_reg_ksm_data_mt(uct_ib_mlx5_md_t *md, void *address,
                                  uct_ib_mlx5_devx_ksm_data_t *ksm_data,
                                  struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
 {
-    void *mr_address = address;
-    size_t list_size = ksm_data->mr_num;
+    size_t chunk_size   = md->super.config.mt_reg_chunk;
+    size_t padding      = (uintptr_t)address % chunk_size; /* before first mr */
+    void* mr_address    = UCS_PTR_BYTE_OFFSET(address, -padding);
+    size_t list_size    = ksm_data->mr_num;
     ucs_status_t status;
     struct ibv_mr **mr;
     char *in;
@@ -175,7 +178,7 @@ uct_ib_mlx5_devx_reg_ksm_data_mt(uct_ib_mlx5_md_t *md, void *address,
     ucs_carray_for_each(mr, ksm_data->mrs, ksm_data->mr_num) {
         uct_ib_mlx5_devx_klm_entry_set(&klm, mr - ksm_data->mrs, mr_address,
                                        *mr);
-        mr_address = UCS_PTR_BYTE_OFFSET(mr_address, (*mr)->length);
+        mr_address = UCS_PTR_BYTE_OFFSET(mr_address, chunk_size);
     }
 
     if ((void*)iova != address) {
@@ -186,9 +189,10 @@ uct_ib_mlx5_devx_reg_ksm_data_mt(uct_ib_mlx5_md_t *md, void *address,
     }
     ucs_log_indent(-1);
 
-    status = uct_ib_mlx5_devx_reg_ksm(md, iova, ksm_data->length, atomic,
+    status = uct_ib_mlx5_devx_reg_ksm(md, iova - padding,
+                                      ksm_data->length + padding, atomic,
                                       mkey_index, reason, list_size,
-                                      ksm_data->mrs[0]->length, in, mr_p, mkey);
+                                      chunk_size, in, mr_p, mkey);
     ucs_free(in);
 
     uct_ib_mlx5_devx_ksm_log(md, address, ksm_data->length, iova, atomic, 1,
@@ -528,11 +532,16 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_mlx5_md_t *md, void *address, size_t length,
                         uint64_t access_flags, uint32_t *mkey_p,
                         uct_ib_mlx5_devx_ksm_data_t **ksm_data_p)
 {
-    size_t chunk = md->super.config.mt_reg_chunk;
-    int mr_num   = ucs_div_round_up(length, chunk);
+    size_t chunk_size    = md->super.config.mt_reg_chunk;
+    size_t atomic_prefix = (uintptr_t)address % md->super.dev.atomic_align;
+    void* prefix_address = (void*)((uintptr_t)address - atomic_prefix);
+    size_t padding       = ucs_padding((uintptr_t)prefix_address, chunk_size);
     uct_ib_mlx5_devx_ksm_data_t *ksm_data;
     ucs_status_t status;
     int dmabuf_fd;
+    int mr_num;
+
+    length += atomic_prefix;
 
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_KSM) ||
         (is_atomic && !(md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS))) {
@@ -546,8 +555,15 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_mlx5_md_t *md, void *address, size_t length,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    ucs_trace("multithreaded register memory %p..%p chunks %d", address,
-              UCS_PTR_BYTE_OFFSET(address, length), mr_num);
+    mr_num = ucs_div_round_up(length - padding, chunk_size);
+    if (padding > 0) {
+        ++mr_num;
+    }
+
+    ucs_trace("multithreaded register memory %p..%p chunks %d origin addr %p "
+              "atomic align %d prefix length %ld",
+              prefix_address,  UCS_PTR_BYTE_OFFSET(prefix_address, length),
+              mr_num, address, md->super.dev.atomic_align, atomic_prefix);
 
     ksm_data = ucs_malloc((mr_num * sizeof(*ksm_data->mrs)) + sizeof(*ksm_data),
                           "ksm_data");
@@ -559,13 +575,14 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_mlx5_md_t *md, void *address, size_t length,
     ksm_data->mr_num = mr_num;
     ksm_data->length = length;
 
-    status = uct_ib_md_handle_mr_list_mt(&md->super, address, length, params,
-                                         access_flags, ksm_data->mrs);
+    status = uct_ib_md_handle_mr_list_mt(&md->super, prefix_address, length, params,
+                                         access_flags, mr_num, ksm_data->mrs);
     if (status != UCS_OK) {
         goto err_free;
     }
 
-    status = uct_ib_mlx5_devx_reg_ksm_data_mt(md, address, (uint64_t)address,
+    status = uct_ib_mlx5_devx_reg_ksm_data_mt(md, prefix_address,
+                                              (uint64_t)prefix_address,
                                               is_atomic, 0, "multi-thread-key",
                                               ksm_data, &ksm_data->dvmr,
                                               mkey_p);
@@ -578,7 +595,7 @@ uct_ib_mlx5_devx_reg_mt(uct_ib_mlx5_md_t *md, void *address, size_t length,
 
 err_dereg:
     uct_ib_md_handle_mr_list_mt(&md->super, address, length, NULL, 0,
-                                ksm_data->mrs);
+                                mr_num, ksm_data->mrs);
 err_free:
     ucs_free(ksm_data);
 err:
@@ -600,8 +617,9 @@ uct_ib_mlx5_devx_dereg_mt(uct_ib_mlx5_md_t *md,
         return status;
     }
 
-    status = uct_ib_md_handle_mr_list_mt(&md->super, 0, ksm_data->length, NULL,
-                                         0, ksm_data->mrs);
+    status = uct_ib_md_handle_mr_list_mt(&md->super, ksm_data->mrs[0]->addr,
+                                         ksm_data->length, NULL, 0,
+                                         ksm_data->mr_num, ksm_data->mrs);
     if (status == UCS_ERR_UNSUPPORTED) {
         /* Fallback to direct deregistration */
         ucs_carray_for_each(mr, ksm_data->mrs, ksm_data->mr_num) {
