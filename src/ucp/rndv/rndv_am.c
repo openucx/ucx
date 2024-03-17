@@ -137,7 +137,8 @@ ucp_proto_rndv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
@@ -161,7 +162,7 @@ ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_rndv_am_bcopy_progress},
     .abort    = ucp_proto_rndv_am_bcopy_abort,
-    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_request_bcopy_reset
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_rndv_am_zcopy_send_func(
@@ -238,5 +239,5 @@ ucp_proto_t ucp_rndv_am_zcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_rndv_am_zcopy_proto_progress},
     .abort    = ucp_rndv_am_zcopy_proto_abort,
-    .reset    = ucp_am_proto_request_zcopy_reset
+    .reset    = ucp_proto_request_zcopy_reset
 };

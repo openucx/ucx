@@ -407,6 +407,8 @@ struct ucp_request {
             /* For rendezvous receive with new protocols: selected protocol for
                fetching remote data */
             const ucp_proto_config_t *proto_rndv_config;
+            /* Internal rndv request for rendezvous receive */
+            const ucp_request_t      *proto_rndv_request;
 #endif
 
             union {

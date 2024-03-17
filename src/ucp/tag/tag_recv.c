@@ -72,7 +72,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
                   tag, tag_mask);
 
 #if ENABLE_DEBUG_DATA
-    req->recv.proto_rndv_config = NULL;
+    req->recv.proto_rndv_config  = NULL;
+    req->recv.proto_rndv_request = NULL;
 #endif
 
     /* First, check the fast path case - single fragment

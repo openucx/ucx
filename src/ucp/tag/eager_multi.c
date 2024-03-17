@@ -65,7 +65,8 @@ static void ucp_proto_eager_bcopy_multi_common_probe(
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
@@ -186,8 +187,11 @@ void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
 {
+    if (!(req->flags & UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED)) {
+        ucp_send_request_id_alloc(req);
+    }
+
     ucp_proto_msg_multi_request_init(req);
-    ucp_send_request_id_alloc(req);
 }
 
 static ucs_status_t

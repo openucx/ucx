@@ -112,6 +112,19 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_probe(&params);
 }
 
+static void ucp_proto_get_offload_reset(ucp_request_t *req)
+{
+    /* get_am protocol will use this field after reset, so it must be
+     * initialized */
+    req->send.state.completed_size = 0;
+}
+
+static ucs_status_t ucp_proto_get_offload_bcopy_reset(ucp_request_t *req)
+{
+    ucp_proto_get_offload_reset(req);
+    return ucp_proto_request_bcopy_reset(req);
+}
+
 ucp_proto_t ucp_get_offload_bcopy_proto = {
     .name     = "get/bcopy",
     .desc     = UCP_PROTO_COPY_OUT_DESC,
@@ -120,7 +133,7 @@ ucp_proto_t ucp_get_offload_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_bcopy_progress},
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_request_bcopy_reset
+    .reset    = ucp_proto_get_offload_bcopy_reset
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -204,6 +217,12 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_probe(&params);
 }
 
+static ucs_status_t ucp_proto_get_offload_zcopy_reset(ucp_request_t *req)
+{
+    ucp_proto_get_offload_reset(req);
+    return ucp_proto_request_zcopy_reset(req);
+}
+
 ucp_proto_t ucp_get_offload_zcopy_proto = {
     .name     = "get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
@@ -212,5 +231,5 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_get_offload_zcopy_progress},
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = ucp_proto_request_zcopy_reset
+    .reset    = ucp_proto_get_offload_zcopy_reset
 };

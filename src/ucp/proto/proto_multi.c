@@ -41,6 +41,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
 
+    if ((ucp_proto_select_op_flags(params->super.super.select_param) &
+         UCP_PROTO_SELECT_OP_FLAG_RESUME) &&
+        !(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_RESUME)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (!ucp_proto_common_init_check_err_handling(&params->super)) {
         return UCS_ERR_UNSUPPORTED;
     }
