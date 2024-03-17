@@ -80,6 +80,9 @@ if HAVE_DEVX
 libuct_ib_la_SOURCES += \
 	rc/accel/rc_mlx5_devx.c \
 	rc/accel/gga_mlx5.c
+
+noinst_HEADERS += \
+	rc/accel/gga_mlx5.h
 endif # HAVE_DEVX
 
 endif # HAVE_TL_RC

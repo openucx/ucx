@@ -121,6 +121,12 @@ typedef enum {
 } uct_ib_mr_type_t;
 
 
+enum {
+    UCT_IB_PACKED_MKEY_FLAG_EXPORTED = UCS_BIT(0),
+    UCT_IB_PACKED_MKEY_FLAG_GGA      = UCS_BIT(1)
+};
+
+
 /**
  * IB memory domain.
  */
@@ -162,6 +168,7 @@ typedef struct uct_ib_md {
 typedef struct uct_ib_md_packed_mkey {
     uint32_t lkey;
     uint16_t vhca_id;
+    uint8_t  flags;
 } UCS_S_PACKED uct_ib_md_packed_mkey_t;
 
 

@@ -13,6 +13,13 @@
 #include <uct/ib/rc/accel/rc_mlx5.h>
 
 
+typedef struct {                        
+    uct_ib_md_packed_mkey_t packed_mkey;
+    uct_ib_mlx5_devx_mem_t  *memh;      
+    uct_rkey_bundle_t       rkey_ob;    
+} uct_gga_mlx5_rkey_handle_t;           
+
+
 /**
  * GGA mlx5 interface configuration
  */
@@ -65,16 +72,73 @@ ucs_status_t uct_ib_mlx5_gga_md_open(struct ibv_device *ibv_device,
 {
     ucs_status_t status;
 
-    if (md_config->devx == UCS_NO) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     status = uct_ib_mlx5_devx_md_open(ibv_device, md_config, md_p);
     if (status != UCS_OK) {
         return status;
     }
 
     (*md_p)->name = UCT_IB_MD_NAME(gga);
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_mlx5_gga_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                          void *address, size_t length,
+                          const uct_md_mkey_pack_params_t *params,
+                          void *mkey_buffer)
+{
+    uct_md_mkey_pack_params_t gga_params = *params;
+    ucs_status_t status;
+    uct_ib_md_packed_mkey_t *mkey;
+
+    gga_params.field_mask |= UCT_MD_MKEY_PACK_FIELD_FLAGS;
+    gga_params.flags      |= UCT_MD_MKEY_PACK_FLAG_EXPORT;
+
+    status = uct_ib_mlx5_devx_mkey_pack(uct_md, uct_memh, address, length,
+                                        &gga_params, mkey_buffer);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    mkey = (uct_ib_md_packed_mkey_t*)mkey_buffer;
+    ucs_assert(mkey->flags & UCT_IB_PACKED_MKEY_FLAG_EXPORTED);
+    mkey->flags |= UCT_IB_PACKED_MKEY_FLAG_GGA;
+
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_ib_mlx5_gga_rkey_unpack(const uct_ib_md_packed_mkey_t *mkey,
+                            uct_rkey_t *rkey_p, void **handle_p)
+{
+    uct_rkey_bundle_t *rkey_bundle;
+    uct_gga_mlx5_rkey_handle_t *rkey_handle;
+
+    ucs_assert(mkey->flags & UCT_IB_PACKED_MKEY_FLAG_EXPORTED);
+
+    rkey_bundle = ucs_malloc(sizeof(*rkey_bundle), "gga_rkey_bundle");
+    if (rkey_bundle == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    rkey_handle = ucs_malloc(sizeof(*rkey_handle), "gga_rkey_handle");
+    if (rkey_handle == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    rkey_handle->packed_mkey    = *mkey;
+    /* memh and rkey_ob will be initialized on demand */
+    rkey_handle->memh           = NULL;
+    rkey_handle->rkey_ob.rkey   = UCT_INVALID_RKEY;
+    rkey_handle->rkey_ob.handle = NULL;
+    rkey_handle->rkey_ob.type   = NULL;
+
+    rkey_bundle->handle      = rkey_handle;
+    rkey_bundle->rkey        = (uintptr_t)rkey_bundle;
+    rkey_bundle->type        = NULL;
+
+    *rkey_p   = rkey_bundle->rkey;
+    *handle_p = rkey_bundle->handle;
     return UCS_OK;
 }
 
@@ -88,7 +152,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_gga_md_ops = {
         .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
         .mem_attach         = uct_ib_mlx5_devx_mem_attach,
         .mem_advise         = uct_ib_mem_advise,
-        .mkey_pack          = uct_ib_mlx5_devx_mkey_pack,
+        .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
         .detect_memory_type = ucs_empty_function_return_unsupported,
     },
     .open = uct_ib_mlx5_gga_md_open,
