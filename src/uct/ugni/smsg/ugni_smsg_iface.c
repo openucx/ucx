@@ -14,7 +14,7 @@
 #include <uct/ugni/base/ugni_md.h>
 #include <uct/ugni/base/ugni_device.h>
 #include <ucs/arch/cpu.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 
 
 extern ucs_class_t UCS_CLASS_DECL_NAME(uct_ugni_smsg_iface_t);

@@ -16,6 +16,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <sys/shm.h>
 #include <sys/un.h>
