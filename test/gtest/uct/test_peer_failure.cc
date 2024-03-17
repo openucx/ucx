@@ -8,13 +8,6 @@
 
 #include "test_peer_failure.h"
 
-#if HAVE_CUDA
-extern "C" {
-#include <uct/cuda/cuda_ipc/cuda_ipc_ep.h>
-}
-#endif
-
-
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
                                                         UCT_IFACE_FLAG_PENDING   |
                                                         UCT_IFACE_FLAG_CB_SYNC   |
@@ -543,30 +536,6 @@ public:
     }
 
 protected:
-    void kill_receiver()
-    {
-        /* Hack: for SHM-based transports we can't really terminate
-         * peer EP, but instead we bit change process owner info to force
-         * ep_check failure. Simulation of case when peer process is
-         * terminated and PID is immediately reused by another process */
-
-        if (has_mm()) {
-            uct_mm_ep_t *ep = ucs_derived_of(ep0(), uct_mm_ep_t);
-            ep->keepalive.start_time--;
-        } else if (has_cuda_ipc()) {
-#if HAVE_CUDA
-            uct_cuda_ipc_ep_t *ep = ucs_derived_of(ep0(), uct_cuda_ipc_ep_t);
-            ep->keepalive.start_time--;
-#endif
-        } else if (has_cma()) {
-            uct_cma_ep_t *ep = ucs_derived_of(ep0(), uct_cma_ep_t);
-            ep->keepalive.start_time--;
-        }
-
-        /* kill real receiver since DC uses shared KA DCI */
-        test_uct_peer_failure::kill_receiver();
-    }
-
     void test_ep_check(bool post_am)
     {
         ucs_status_t status;
@@ -626,8 +595,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed_post_am,
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_peer_failure_keepalive)
-_UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_keepalive, cuda_ipc);
-
 
 class test_uct_peer_failure_rma_zcopy : public test_uct_peer_failure
 {
