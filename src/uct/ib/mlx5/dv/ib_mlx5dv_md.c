@@ -237,10 +237,9 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_addr(
  * that were registered in single-threaded mode.
  */
 static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_contig(
-        uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh, void *address,
-        uint64_t iova, int atomic, uint32_t mkey_index, const char *reason,
-        uct_ib_mlx5_devx_mr_t *mr, struct mlx5dv_devx_obj **mr_p,
-        uint32_t *mkey)
+        uct_ib_mlx5_md_t *md, void *address, uint64_t iova, int atomic,
+        uint32_t mkey_index, const char *reason, uct_ib_mlx5_devx_mr_t *mr,
+        struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
 {
     size_t mr_length = mr->super.ib->length;
     uint64_t ksm_address;
@@ -452,9 +451,9 @@ uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md,
                                                 atomic, mkey_index, reason,
                                                 mr->ksm_data, mr_p, mkey);
     } else {
-        return uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh, address, iova,
-                                                    atomic, mkey_index, reason,
-                                                    mr, mr_p, mkey);
+        return uct_ib_mlx5_devx_reg_ksm_data_contig(md, address, iova, atomic,
+                                                    mkey_index, reason, mr,
+                                                    mr_p, mkey);
     }
 }
 
@@ -645,7 +644,7 @@ static void uct_ib_mlx5_devx_reg_symmetric(uct_ib_mlx5_md_t *md,
     /* Best effort, only allocate in the range below the atomic keys. */
     while (md->smkey_index < md->super.mkey_by_name_reserve.size) {
         status = uct_ib_mlx5_devx_reg_ksm_data_contig(
-                md, memh, address, (uint64_t)address,
+                md, address, (uint64_t)address,
                 (memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC),
                 md->super.mkey_by_name_reserve.base + md->smkey_index,
                 "symmetric-key", &memh->mrs[UCT_IB_MR_DEFAULT], &smkey_mr,
@@ -2092,7 +2091,7 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     }
 
     ucs_assert(!(memh->super.flags & UCT_IB_MEM_MULTITHREADED));
-    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh, memh->address,
+    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh->address,
                                                   (uint64_t)memh->address, 0, 0,
                                                   "exported-key",
                                                   &memh->mrs[UCT_IB_MR_DEFAULT],
