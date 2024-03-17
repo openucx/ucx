@@ -792,15 +792,16 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
         status = ucp_memh_rcache_get(context->rcache, reg_address, reg_length,
                                      reg_align, mem_type, reg_md_map, uct_flags,
                                      alloc_name, &memh);
-
-        ucs_assert(memh->mem_type == mem_type);
-        ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
-        ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
     }
 
     if (status != UCS_OK) {
         goto out;
     }
+
+    ucs_assert(memh->mem_type == mem_type);
+    ucs_assert((context->rcache) == NULL ||
+            ((ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0) &&
+            (ucs_padding(ucp_memh_length(memh), reg_align) == 0)));
 
     ucs_trace(
             "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
