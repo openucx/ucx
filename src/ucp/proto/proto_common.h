@@ -259,6 +259,11 @@ ucp_lane_index_t
 ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
+void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
+                                const ucp_proto_caps_t *proto_caps,
+                                const void *priv, size_t priv_size);
+
+
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
 
 

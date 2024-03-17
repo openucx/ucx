@@ -48,13 +48,21 @@ ucp_tag_rndv_offload_proto_init(const ucp_proto_init_params_t *init_params)
        .lane_type           = UCP_LANE_TYPE_TAG,
        .tl_cap_flags        = UCT_IFACE_FLAG_TAG_RNDV_ZCOPY
     };
+    ucs_status_t status;
 
     if (!ucp_tag_rndv_check_op_id(init_params) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_single_init(&params);
+    status = ucp_proto_single_init(&params, params.super.super.caps,
+                                   params.super.super.priv);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *init_params->priv_size = sizeof(ucp_proto_single_priv_t);
+    return UCS_OK;
 }
 
 static void

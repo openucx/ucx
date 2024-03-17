@@ -19,8 +19,8 @@
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
-                                  ucp_proto_multi_priv_t *mpriv,
-                                  size_t *priv_size_p)
+                                  ucp_proto_caps_t *caps,
+                                  ucp_proto_multi_priv_t *mpriv)
 {
     ucp_context_h context         = params->super.super.worker->context;
     const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
@@ -213,10 +213,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(lane_map));
 
-    /* Fill the size of private data according to number of used lanes */
-    *priv_size_p = sizeof(ucp_proto_multi_priv_t) +
-                   (mpriv->num_lanes * sizeof(*lpriv));
-
     /* After this block, 'perf_node' and 'lane_perf_nodes[]' have extra ref */
     if (mpriv->num_lanes == 1) {
         perf_node = lanes_perf_nodes[ucs_ffs64(lane_map)];
@@ -231,8 +227,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     status = ucp_proto_common_init_caps(&params->super, &perf, perf_node,
-                                        reg_md_map);
-
+                                        reg_md_map, caps);
     /* Deref unused nodes */
     for (i = 0; i < num_lanes; ++i) {
         ucp_proto_perf_node_deref(&lanes_perf_nodes[lanes[i]]);
@@ -242,6 +237,28 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     return status;
 }
 
+size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv)
+{
+    return ucs_offsetof(ucp_proto_multi_priv_t, lanes) +
+           (mpriv->num_lanes *
+            ucs_field_sizeof(ucp_proto_multi_priv_t, lanes[0]));
+}
+
+void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
+{
+    ucp_proto_multi_priv_t mpriv;
+    ucp_proto_caps_t caps;
+    ucs_status_t status;
+
+    status = ucp_proto_multi_init(params, &caps, &mpriv);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    ucp_proto_common_add_proto(&params->super, &caps, &mpriv,
+                               ucp_proto_multi_priv_size(&mpriv));
+}
+
 static const ucp_ep_config_key_lane_t *
 ucp_proto_multi_ep_lane_cfg(const ucp_proto_query_params_t *params,
                             ucp_lane_index_t lane_index)
@@ -249,10 +266,12 @@ ucp_proto_multi_ep_lane_cfg(const ucp_proto_query_params_t *params,
     const ucp_proto_multi_priv_t *mpriv = params->priv;
     const ucp_proto_multi_lane_priv_t *lpriv;
 
-    ucs_assert(lane_index < mpriv->num_lanes);
+    ucs_assertv(lane_index < mpriv->num_lanes, "proto=%s lane_index=%d",
+                params->proto->name, lane_index);
     lpriv = &mpriv->lanes[lane_index];
 
-    ucs_assert(lpriv->super.lane < UCP_MAX_LANES);
+    ucs_assertv(lpriv->super.lane < UCP_MAX_LANES, "proto=%s lane=%d",
+                params->proto->name, lpriv->super.lane);
     return &params->ep_config_key->lanes[lpriv->super.lane];
 }
 

@@ -1258,8 +1258,8 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
     m_eps[index].reset(ep, uct_ep_destroy);
 }
 
-void uct_test::entity::connect_to_ep(unsigned index, entity& other,
-                                     unsigned other_index)
+void uct_test::entity::connect_to_ep(unsigned index, entity &other,
+                                     unsigned other_index, unsigned path_index)
 {
     ucs_status_t status;
     uct_ep_h ep, remote_ep;
@@ -1271,8 +1271,10 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
     }
 
     other.reserve_ep(other_index);
-    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                           UCT_EP_PARAM_FIELD_PATH_INDEX;
     ep_params.iface      = other.m_iface;
+    ep_params.path_index = path_index;
     status               = uct_ep_create(&ep_params, &remote_ep);
     ASSERT_UCS_OK(status);
     other.m_eps[other_index].reset(remote_ep, uct_ep_destroy);
@@ -1291,7 +1293,9 @@ void uct_test::entity::connect_to_ep(unsigned index, entity& other,
     }
 }
 
-void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
+void uct_test::entity::connect_to_iface(unsigned index, entity &other,
+                                        unsigned path_index)
+{
     uct_device_addr_t *dev_addr;
     uct_iface_addr_t *iface_addr;
     uct_ep_params_t ep_params;
@@ -1312,12 +1316,14 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     status = uct_iface_get_address(other.iface(), iface_addr);
     ASSERT_UCS_OK(status);
 
-    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
                            UCT_EP_PARAM_FIELD_DEV_ADDR |
-                           UCT_EP_PARAM_FIELD_IFACE_ADDR;
+                           UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                           UCT_EP_PARAM_FIELD_PATH_INDEX;
     ep_params.iface      = iface();
     ep_params.dev_addr   = dev_addr;
     ep_params.iface_addr = iface_addr;
+    ep_params.path_index = path_index;
 
     status = uct_ep_create(&ep_params, &ep);
     ASSERT_UCS_OK(status);

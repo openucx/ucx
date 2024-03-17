@@ -146,13 +146,13 @@ private:
         mlx5_qp(entity &e) : qp(e) {}
 
         uint32_t qp_num() const {
-            uct_rc_mlx5_ep_t *ep = (uct_rc_mlx5_ep_t *)m_e.ep(0);
+            uct_rc_mlx5_base_ep_t *ep = (uct_rc_mlx5_base_ep_t*)m_e.ep(0);
             return ep->tx.wq.super.qp_num;
         }
 
         void to_err() {
-            uct_ib_iface_t   *iface = (uct_ib_iface_t *)m_e.iface();
-            uct_rc_mlx5_ep_t *ep    = (uct_rc_mlx5_ep_t *)m_e.ep(0);
+            uct_ib_iface_t *iface     = (uct_ib_iface_t*)m_e.iface();
+            uct_rc_mlx5_base_ep_t *ep = (uct_rc_mlx5_base_ep_t*)m_e.ep(0);
 
             uct_ib_mlx5_modify_qp_state(iface, &ep->tx.wq.super, IBV_QPS_ERR);
         }

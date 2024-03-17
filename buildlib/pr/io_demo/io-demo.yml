@@ -17,6 +17,7 @@ jobs:
         clean: true
         fetchDepth: 100
         displayName: Checkout
+        retryCountOnTaskFailure: 5
       - bash: |
           set -eEx
           ./autogen.sh

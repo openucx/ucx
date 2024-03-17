@@ -5,7 +5,7 @@ parameters:
 jobs:
   - job: ${{ parameters.name }}
     workspace:
-      clean: all
+      clean: outputs
 
     pool:
       name: MLNX
@@ -22,6 +22,7 @@ jobs:
       - checkout: self
         fetchDepth: 100
         clean: true
+        retryCountOnTaskFailure: 5
         displayName: Checkout
       - bash: |
           set -xeE

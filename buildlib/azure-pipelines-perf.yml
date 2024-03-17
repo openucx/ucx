@@ -36,10 +36,12 @@ stages:
           - checkout: self
             clean: true
             fetchDepth: 10
+            retryCountOnTaskFailure: 5
 
           - checkout: PerfX
             clean: true
             fetchDepth: 1
+            retryCountOnTaskFailure: 5
 
           - bash: |
               set -xeE

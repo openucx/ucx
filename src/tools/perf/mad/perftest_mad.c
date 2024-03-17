@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2023. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2023-2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -7,9 +7,6 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-
-#include "perftest_mad.h"
-#include "perftest.h"
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
@@ -28,6 +25,8 @@
 #include <infiniband/mad.h>
 #include <infiniband/umad.h>
 #include <infiniband/umad_types.h>
+
+#include "../perftest_context.h"
 
 #define PERFTEST_RTE_CLASS      (IB_VENDOR_RANGE2_START_CLASS + 0x10)
 #define PERFTEST_RTE_MAD_QP_NUM 1 /* Don't use MAD on QP0 to not disturb SMI */
@@ -375,25 +374,18 @@ rte_mad_recv(void *rte_group, unsigned src, void *buffer, size_t max, void *req)
     }
 }
 
-static void rte_mad_report(void *rte_group, const ucx_perf_result_t *result,
-                           void *arg, const char *extra_info, int is_final,
-                           int is_multi_thread)
-{
-    struct perftest_context *ctx = arg;
-
-    print_progress(ctx->test_names, ctx->num_batch_files, result, extra_info,
-                   ctx->flags, is_final, ctx->server_addr == NULL,
-                   is_multi_thread);
-}
+static ucs_status_t rte_mad_setup(void *arg);
+static void rte_mad_cleanup(void *arg);
 
 static ucx_perf_rte_t mad_rte = {
+    .setup        = rte_mad_setup,
+    .cleanup      = rte_mad_cleanup,
     .group_size   = rte_mad_group_size,
     .group_index  = rte_mad_group_index,
     .barrier      = rte_mad_barrier,
     .post_vec     = rte_mad_post_vec,
     .recv         = rte_mad_recv,
-    .exchange_vec = (ucx_perf_rte_exchange_vec_func_t)ucs_empty_function,
-    .report       = rte_mad_report,
+    .exchange_vec = (ucx_perf_rte_exchange_vec_func_t)ucs_empty_function
 };
 
 static struct ibmad_port *perftest_mad_open(char *ca, int ca_port)
@@ -633,12 +625,17 @@ static ucs_status_t perftest_mad_parse_ca_and_port(const char *mad_port,
     return UCS_OK;
 }
 
-ucs_status_t setup_mad_rte(struct perftest_context *ctx)
+static ucs_status_t rte_mad_setup(void *arg)
 {
+    struct perftest_context *ctx = arg;
     perftest_mad_rte_group_t *rte_group;
     ucs_status_t status;
     int ca_port;
     char ca[32];
+
+    if (ctx->mad_port == NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     status = perftest_mad_parse_ca_and_port(ctx->mad_port, ca, sizeof(ca),
                                             &ca_port);
@@ -686,7 +683,6 @@ ucs_status_t setup_mad_rte(struct perftest_context *ctx)
 
     ctx->params.super.rte_group  = rte_group;
     ctx->params.super.rte        = &mad_rte;
-    ctx->params.super.report_arg = ctx;
 
     if (rte_group->is_server) {
         ctx->flags |= TEST_FLAG_PRINT_TEST;
@@ -703,8 +699,9 @@ err:
     return UCS_ERR_NO_DEVICE;
 }
 
-ucs_status_t cleanup_mad_rte(struct perftest_context *ctx)
+static void rte_mad_cleanup(void *arg)
 {
+    struct perftest_context *ctx    = arg;
     perftest_mad_rte_group_t *group = ctx->params.super.rte_group;
 
     ctx->params.super.rte_group = NULL;
@@ -712,6 +709,12 @@ ucs_status_t cleanup_mad_rte(struct perftest_context *ctx)
         mad_rpc_close_port(group->mad_port);
         free(group);
     }
+}
 
-    return UCS_OK;
+UCS_STATIC_INIT {
+    ucs_list_add_head(&rte_list, &mad_rte.list);
+}
+
+UCS_STATIC_CLEANUP {
+    ucs_list_del(&mad_rte.list);
 }

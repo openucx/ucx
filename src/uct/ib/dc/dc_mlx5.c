@@ -957,6 +957,10 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
         addr->super.flags  |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;
     }
 
+    if (iface->super.super.config.max_rd_atomic == 16) {
+        addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16;
+    }
+
     return UCS_OK;
 }
 
@@ -1580,6 +1584,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(self, config, dct, DCT, status, err);
 
     ucs_assert(self->tx.num_dci_pools <= UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
+    UCS_STATIC_ASSERT((UCT_DC_MLX5_IFACE_MAX_DCI_POOLS - 1) <=
+                      UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK);
 
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self, config);

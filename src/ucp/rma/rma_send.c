@@ -250,7 +250,6 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     ucs_status_ptr_t ret;
     ucs_status_t status;
     ucp_request_t *req;
-    uint32_t attr_mask;
 
     UCP_REQUEST_CHECK_PARAM(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
@@ -261,12 +260,10 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                   buffer, count, remote_addr, rkey, ucp_ep_peer_name(ep),
                   ucp_request_param_send_callback(param));
 
-    attr_mask = param->op_attr_mask &
-                (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
-
     if (worker->context->config.ext.proto_enable) {
         status = ucp_put_send_short(ep, buffer, count, remote_addr, rkey, param);
-        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+        if (ucs_likely(status != UCS_ERR_NO_RESOURCE) ||
+            ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
             ret = UCS_STATUS_PTR(status);
             goto out_unlock;
         }
@@ -277,13 +274,13 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         req->send.rma.rkey        = rkey;
         req->send.rma.remote_addr = remote_addr;
 
-        if (ucs_likely(attr_mask == 0)) {
-            contig_length = count;
-        } else if (attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) {
+        if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE)) {
             datatype = param->datatype;
             if (UCP_DT_IS_CONTIG(datatype)) {
                 contig_length = ucp_contig_dt_length(datatype, count);
             }
+        } else {
+            contig_length = count;
         }
 
         ret = ucp_proto_request_send_op(
@@ -298,7 +295,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         }
 
         /* Fast path for a single short message */
-        if (ucs_likely(!(attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) &&
+        if (ucs_likely(!(param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) &&
                        ((ssize_t)count <= rkey->cache.max_put_short))) {
             status = UCS_PROFILE_CALL(
                     uct_ep_put_short,

@@ -115,10 +115,11 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_update_tx_res(uct_rc_iface_t *rc_iface,
-                                uct_rc_mlx5_ep_t *rc_mlx5_ep, uint16_t hw_ci)
+                                uct_rc_mlx5_base_ep_t *rc_mlx5_base_ep,
+                                uint16_t hw_ci)
 {
-    uct_ib_mlx5_txwq_t *txwq = &rc_mlx5_ep->tx.wq;
-    uct_rc_txqp_t *txqp      = &rc_mlx5_ep->super.txqp;
+    uct_ib_mlx5_txwq_t *txwq = &rc_mlx5_base_ep->tx.wq;
+    uct_rc_txqp_t *txqp      = &rc_mlx5_base_ep->super.txqp;
     uint16_t bb_num;
 
     bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) -
@@ -142,7 +143,7 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 {
     struct mlx5_cqe64 *cqe;
-    uct_rc_mlx5_ep_t *ep;
+    uct_rc_mlx5_base_ep_t *ep;
     unsigned qp_num;
     uint16_t hw_ci;
 
@@ -158,8 +159,8 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     ucs_memory_cpu_load_fence();
 
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
-                        uct_rc_mlx5_ep_t);
+    ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
+                            uct_rc_mlx5_base_ep_t);
     ucs_assert(ep != NULL);
 
     hw_ci = ntohs(cqe->wqe_counter);
@@ -260,16 +261,15 @@ static void
 uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                  ucs_status_t ep_status)
 {
-    struct mlx5_cqe64  *cqe    = arg;
-    uct_rc_iface_t     *iface  = ucs_derived_of(ib_iface, uct_rc_iface_t);
-    unsigned           qp_num  = ntohl(cqe->sop_drop_qpn) &
-                                 UCS_MASK(UCT_IB_QPN_ORDER);
-    uct_rc_mlx5_ep_t   *ep     = ucs_derived_of(uct_rc_iface_lookup_ep(iface,
-                                                                       qp_num),
-                                                uct_rc_mlx5_ep_t);
-    uint16_t           pi      = ntohs(cqe->wqe_counter);
-    ucs_log_level_t    log_lvl;
-    ucs_status_t       status;
+    struct mlx5_cqe64 *cqe = arg;
+    uct_rc_iface_t *iface  = ucs_derived_of(ib_iface, uct_rc_iface_t);
+    unsigned qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface,
+                                                                      qp_num),
+                                               uct_rc_mlx5_base_ep_t);
+    uint16_t pi               = ntohs(cqe->wqe_counter);
+    ucs_log_level_t log_lvl;
+    ucs_status_t status;
 
     if (ep == NULL) {
         ucs_diag("ignoring failure on removed qpn 0x%x wqe[%d]", qp_num, pi);
@@ -1010,10 +1010,10 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .iface_estimate_perf   = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh     = uct_rc_iface_vfs_refresh,
             .ep_query              = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-            .ep_invalidate         = uct_rc_mlx5_ep_invalidate,
+            .ep_invalidate         = uct_rc_mlx5_base_ep_invalidate,
             .ep_connect_to_ep_v2   = uct_rc_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2 = uct_rc_mlx5_iface_is_reachable_v2,
-            .ep_is_connected       = uct_rc_mlx5_ep_is_connected
+            .ep_is_connected       = uct_rc_mlx5_base_ep_is_connected
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -1022,33 +1022,33 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     },
     .init_rx         = uct_rc_mlx5_iface_init_rx,
     .cleanup_rx      = uct_rc_mlx5_iface_cleanup_rx,
-    .fc_ctrl         = uct_rc_mlx5_ep_fc_ctrl,
+    .fc_ctrl         = uct_rc_mlx5_base_ep_fc_ctrl,
     .fc_handler      = uct_rc_iface_fc_handler,
     .cleanup_qp      = uct_rc_mlx5_iface_qp_cleanup,
-    .ep_post_check   = uct_rc_mlx5_ep_post_check,
-    .ep_vfs_populate = uct_rc_mlx5_ep_vfs_populate
+    .ep_post_check   = uct_rc_mlx5_base_ep_post_check,
+    .ep_vfs_populate = uct_rc_mlx5_base_ep_vfs_populate
 };
 
 static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
-    .ep_put_short             = uct_rc_mlx5_ep_put_short,
-    .ep_put_bcopy             = uct_rc_mlx5_ep_put_bcopy,
-    .ep_put_zcopy             = uct_rc_mlx5_ep_put_zcopy,
-    .ep_get_bcopy             = uct_rc_mlx5_ep_get_bcopy,
-    .ep_get_zcopy             = uct_rc_mlx5_ep_get_zcopy,
-    .ep_am_short              = uct_rc_mlx5_ep_am_short,
-    .ep_am_short_iov          = uct_rc_mlx5_ep_am_short_iov,
-    .ep_am_bcopy              = uct_rc_mlx5_ep_am_bcopy,
-    .ep_am_zcopy              = uct_rc_mlx5_ep_am_zcopy,
-    .ep_atomic_cswap64        = uct_rc_mlx5_ep_atomic_cswap64,
-    .ep_atomic_cswap32        = uct_rc_mlx5_ep_atomic_cswap32,
-    .ep_atomic64_post         = uct_rc_mlx5_ep_atomic64_post,
-    .ep_atomic32_post         = uct_rc_mlx5_ep_atomic32_post,
-    .ep_atomic64_fetch        = uct_rc_mlx5_ep_atomic64_fetch,
-    .ep_atomic32_fetch        = uct_rc_mlx5_ep_atomic32_fetch,
+    .ep_put_short             = uct_rc_mlx5_base_ep_put_short,
+    .ep_put_bcopy             = uct_rc_mlx5_base_ep_put_bcopy,
+    .ep_put_zcopy             = uct_rc_mlx5_base_ep_put_zcopy,
+    .ep_get_bcopy             = uct_rc_mlx5_base_ep_get_bcopy,
+    .ep_get_zcopy             = uct_rc_mlx5_base_ep_get_zcopy,
+    .ep_am_short              = uct_rc_mlx5_base_ep_am_short,
+    .ep_am_short_iov          = uct_rc_mlx5_base_ep_am_short_iov,
+    .ep_am_bcopy              = uct_rc_mlx5_base_ep_am_bcopy,
+    .ep_am_zcopy              = uct_rc_mlx5_base_ep_am_zcopy,
+    .ep_atomic_cswap64        = uct_rc_mlx5_base_ep_atomic_cswap64,
+    .ep_atomic_cswap32        = uct_rc_mlx5_base_ep_atomic_cswap32,
+    .ep_atomic64_post         = uct_rc_mlx5_base_ep_atomic64_post,
+    .ep_atomic32_post         = uct_rc_mlx5_base_ep_atomic32_post,
+    .ep_atomic64_fetch        = uct_rc_mlx5_base_ep_atomic64_fetch,
+    .ep_atomic32_fetch        = uct_rc_mlx5_base_ep_atomic32_fetch,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
-    .ep_flush                 = uct_rc_mlx5_ep_flush,
-    .ep_fence                 = uct_rc_mlx5_ep_fence,
+    .ep_flush                 = uct_rc_mlx5_base_ep_flush,
+    .ep_fence                 = uct_rc_mlx5_base_ep_fence,
     .ep_check                 = uct_rc_ep_check,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
