@@ -67,9 +67,9 @@ improvements.
 1. Get latest-and-greatest OpenMPI version:
   ```
   $ git clone https://github.com/open-mpi/ompi.git
+  $ cd ompi
   $ git submodule sync
   $ git submodule update --init --recursive
-  $ cd ompi
   $ ./autogen.pl
   ```
 
