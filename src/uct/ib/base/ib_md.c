@@ -234,6 +234,7 @@ typedef struct {
     uct_ib_md_t                   *md;
     void                          *address;
     size_t                        length;
+    size_t                        first_mr_size;
     const uct_md_mem_reg_params_t *params;
     uint64_t                      access_flags;
     struct ibv_mr                 **mrs;
@@ -301,14 +302,14 @@ uct_ib_md_print_mem_reg_err_msg(const char *title, void *address, size_t length,
 void *uct_ib_md_mem_handle_thread_func(void *arg)
 {
     uct_ib_md_mem_reg_thread_t *ctx = arg;
-    size_t max_chunk                = ctx->md->config.mt_reg_chunk;
+    size_t chunk_size               = ctx->md->config.mt_reg_chunk;
     ucs_time_t UCS_V_UNUSED t0      = ucs_get_time();
+    void UCS_V_UNUSED *start        = ctx->address;
     int mr_idx                      = 0;
+    size_t length                   = ctx->first_mr_size;
     ucs_status_t status;
-    size_t length;
 
     while (ctx->length > 0) {
-        length = ucs_min(ctx->length, max_chunk);
         if (ctx->params != NULL) {
             status = uct_ib_reg_mr(ctx->md, ctx->address, length, ctx->params,
                                    ctx->access_flags, NULL, &ctx->mrs[mr_idx]);
@@ -323,12 +324,13 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
         }
         ctx->address = UCS_PTR_BYTE_OFFSET(ctx->address, length);
         ctx->length -= length;
+        length       = ucs_min(ctx->length, chunk_size);
         mr_idx++;
     }
 
-    ucs_trace("%s %p..%p took %f usec\n",
+    ucs_trace("%s %p..%p (first_mr_size %zu) took %f usec\n",
               (ctx->params != NULL) ? "reg_mr" : "dereg_mr",
-              ctx->mrs[0]->addr, ctx->address,
+              start, ctx->address, ctx->first_mr_size,
               ucs_time_to_usec(ucs_get_time() - t0));
     return UCS_STATUS_PTR(UCS_OK);
 
@@ -343,10 +345,10 @@ err:
 ucs_status_t
 uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             const uct_md_mem_reg_params_t *params,
-                            uint64_t access_flags, struct ibv_mr **mrs)
+                            uint64_t access_flags, size_t mr_num,
+                            struct ibv_mr **mrs)
 {
     size_t chunk_size = md->config.mt_reg_chunk;
-    int mr_num        = ucs_div_round_up(length, chunk_size);
     int thread_num_mrs, thread_num, thread_idx, mr_idx, cpu_id;
     ucs_sys_cpuset_t parent_set, thread_set;
     uct_ib_md_mem_reg_thread_t *ctxs, *ctx;
@@ -354,6 +356,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     pthread_attr_t attr;
     ucs_status_t status;
     void *thread_status;
+    uint64_t offset;
+    size_t padding;
     int ret;
 
     status = ucs_sys_pthread_getaffinity(&parent_set);
@@ -382,6 +386,7 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
     status = UCS_OK;
     mr_idx = 0;
     cpu_id = 0;
+    offset = 0;
     for (thread_idx = 0; thread_idx < thread_num; thread_idx++) {
         /* calculate number of mrs for each thread so each one will
          * get proportional amount */
@@ -389,12 +394,23 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                                              thread_num - thread_idx);
         ctx               = &ctxs[thread_idx];
         ctx->md           = md;
-        ctx->address      = UCS_PTR_BYTE_OFFSET(address, mr_idx * chunk_size);
-        ctx->length       = ucs_min(thread_num_mrs * chunk_size,
-                                    length - (mr_idx * chunk_size));
+        ctx->address      = UCS_PTR_BYTE_OFFSET(address, offset);
         ctx->params       = params;
         ctx->access_flags = access_flags;
         ctx->mrs          = &mrs[mr_idx];
+
+        /* First MR size can be different to align further MRs */
+        padding            = ucs_padding((uintptr_t)ctx->address, chunk_size);
+        ctx->first_mr_size = (padding > 0) ? padding : chunk_size;
+        ctx->first_mr_size = ucs_min(ctx->first_mr_size, length - offset);
+        ucs_assertv((ctx->address == address) || (padding == 0),
+                    "thread_idx=%d address=%p padding=%zu",
+                    thread_idx, address, padding);
+
+        ctx->length        = (thread_num_mrs - 1) * chunk_size +
+                             ctx->first_mr_size;
+        ctx->length        = ucs_min(ctx->length, length - offset);
+        offset            += ctx->length;
 
         if (md->config.mt_reg_bind) {
             while (!CPU_ISSET(cpu_id, &parent_set)) {
