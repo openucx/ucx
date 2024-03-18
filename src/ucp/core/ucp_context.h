@@ -169,6 +169,13 @@ typedef struct ucp_context_config {
     int                                    prefer_offload;
     /** RMA zcopy segment size */
     size_t                                 rma_zcopy_max_seg_size;
+    /** Protocol overhead */
+    double                                 proto_overhead_single;
+    double                                 proto_overhead_multi;
+    double                                 proto_overhead_rndv_offload;
+    double                                 proto_overhead_rndv_rts;
+    double                                 proto_overhead_rndv_rtr;
+    double                                 proto_overhead_sw;
 } ucp_context_config_t;
 
 

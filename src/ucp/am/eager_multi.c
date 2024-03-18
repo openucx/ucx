@@ -22,7 +22,7 @@ ucp_am_eager_multi_bcopy_proto_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 10e-9,
+        .super.overhead      = context->config.ext.proto_overhead_multi,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
         .super.min_length    = 0,
@@ -180,7 +180,7 @@ ucp_am_eager_multi_zcopy_proto_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 10e-9,
+        .super.overhead      = context->config.ext.proto_overhead_multi,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 30,
         .super.min_length    = 0,
