@@ -243,6 +243,32 @@ err:
     return status;
 }
 
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_ptr,
+                 (component, rkey, handle, remote_addr, local_addr_p),
+                 uct_component_t *component, uct_rkey_t rkey, void *handle,
+                 uint64_t remote_addr, void **local_addr_p)
+{
+    uct_cuda_ipc_rkey_t *key    = (uct_cuda_ipc_rkey_t *) rkey;
+    ucs_status_t status;
+    void *mapped_rem_addr;
+    void *mapped_addr;
+    size_t offset;
+
+    status = uct_cuda_ipc_map_memhandle(key, &mapped_addr);
+    if (status != UCS_OK) {
+        ucs_error("couldn't get memory handle bro");
+        return status;
+    }
+
+    offset          = (uintptr_t)remote_addr - (uintptr_t)key->d_bptr;
+    mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
+    ucs_assert(offset <= key->b_len);
+
+    *local_addr_p = mapped_rem_addr;
+
+    return UCS_OK;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
                  (component, rkey_buffer, rkey_p, handle_p),
                  uct_component_t *component, const void *rkey_buffer,
@@ -372,7 +398,7 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
         .md_open            = uct_cuda_ipc_md_open,
         .cm_open            = ucs_empty_function_return_unsupported,
         .rkey_unpack        = uct_cuda_ipc_rkey_unpack,
-        .rkey_ptr           = ucs_empty_function_return_unsupported,
+        .rkey_ptr           = uct_cuda_ipc_rkey_ptr,
         .rkey_release       = uct_cuda_ipc_rkey_release,
         .rkey_compare       = uct_base_rkey_compare,
         .name               = "cuda_ipc",
