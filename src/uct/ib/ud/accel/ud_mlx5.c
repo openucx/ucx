@@ -932,9 +932,10 @@ static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
     qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, pd, &qp_init_attr);
 #endif
     if (qp == NULL) {
-        ucs_error("md=%p: failed to create %s QP "
+        ucs_error("%s: md %p failed to create %s QP "
                   "TX wr:%d sge:%d inl:%d RX wr:%d sge:%d: %m",
-                  md, uct_ib_qp_type_str(qp_init_attr.qp_type),
+                  uct_ib_device_name(dev), md,
+                  uct_ib_qp_type_str(qp_init_attr.qp_type),
                   qp_init_attr.cap.max_send_wr, qp_init_attr.cap.max_send_sge,
                   qp_init_attr.cap.max_inline_data,
                   qp_init_attr.cap.max_recv_wr, qp_init_attr.cap.max_recv_sge);
