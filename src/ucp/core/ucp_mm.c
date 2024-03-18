@@ -798,17 +798,22 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
         goto out;
     }
 
-    ucs_assert(memh->mem_type == mem_type);
-    ucs_assert((context->rcache) == NULL ||
-            ((ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0) &&
-            (ucs_padding(ucp_memh_length(memh), reg_align) == 0)));
-
     ucs_trace(
             "memh_get_slow: %s address %p/%p length %zu/%zu %s md_map %" PRIx64
             " flags 0x%x",
             alloc_name, address, ucp_memh_address(memh), length,
             ucp_memh_length(memh), ucs_memory_type_names[mem_type], reg_md_map,
             uct_flags);
+
+    ucs_assertv(mem_type == memh->mem_type, "mem_type expected %s got %s",
+                ucs_memory_type_names[mem_type],
+                ucs_memory_type_names[memh->mem_type]);
+    if (context->rcache != NULL) {
+        ucs_assertv(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0,
+                    "address %p align %zu", ucp_memh_address(memh), reg_align);
+        ucs_assertv(ucs_padding(ucp_memh_length(memh), reg_align) == 0,
+                    "length %zu align %zu", ucp_memh_length(memh), reg_align);
+    }
 
     status = ucp_memh_register(context, memh, reg_md_map, uct_flags,
                                alloc_name);
