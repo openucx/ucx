@@ -277,6 +277,8 @@ uct_ib_mlx5_devx_memh_base_address(const uct_ib_mlx5_devx_mem_t *memh)
 static uint64_t uct_ib_mlx5_devx_memh_iova(const uct_ib_mlx5_devx_mem_t *memh,
                                            uint32_t iova_offset)
 {
+    uint64_t address;
+
 #if HAVE_IBV_DM
     if (memh->dm != NULL) {
         /* Device memory memory key is zero based */
@@ -284,7 +286,8 @@ static uint64_t uct_ib_mlx5_devx_memh_iova(const uct_ib_mlx5_devx_mem_t *memh,
     }
 #endif
 
-    return ((uint64_t)uct_ib_mlx5_devx_memh_base_address(memh)) + iova_offset;
+    address = (uint64_t)uct_ib_mlx5_devx_memh_base_address(memh);
+    return ucs_align_down_pow2(address, UCT_IB_MD_MAX_MR_SIZE) + iova_offset;
 }
 
 /**
@@ -447,7 +450,7 @@ uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md,
 
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
         return uct_ib_mlx5_devx_reg_ksm_data_mt(md, address,
-                                                iova,
+                                                (uint64_t)address + iova_offset,
                                                 atomic, mkey_index, reason,
                                                 mr->ksm_data, mr_p, mkey);
     } else {
