@@ -390,8 +390,8 @@ uct_ib_md_mlx5_devx_mr_lru_push(uct_ib_mlx5_md_t *md, uint32_t rkey, void *mr)
               kh_size(&md->lru_rkeys.hash), rkey, mr);
 
     if ((++md->lru_rkeys.count % md->super.config.max_idle_rkey_count) == 0) {
-        /* modulo prime number to avoid resonance with mkey */
-        md->mkey_tag = (md->mkey_tag + 1) % 251;
+        /* Increment mkey tag in order to mitigate the rkey collision risk */
+        md->mkey_tag = (md->mkey_tag + 1) % UCT_IB_MLX5_MKEY_TAG_MAX;
     }
 
     return UCS_OK;
@@ -1107,6 +1107,33 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
 }
 
 static ucs_status_t
+uct_ib_mlx5_devx_umr_mkey_create(uct_ib_mlx5_md_t *md,
+                                 struct mlx5dv_mkey **umr_mkey)
+{
+    struct mlx5dv_mkey_init_attr mkey_init_attr = {
+        .pd           = md->super.pd,
+        .create_flags = MLX5DV_MKEY_INIT_ATTR_FLAGS_INDIRECT,
+        .max_entries  = 1
+    };
+
+    *umr_mkey = mlx5dv_create_mkey(&mkey_init_attr);
+    if (*umr_mkey == NULL) {
+        ucs_error("%s: failed to create UMR mkey: %m",
+                  uct_ib_device_name(&md->super.dev));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Set marker for UMR key to distinguish it on the importer side */
+    (*umr_mkey)->lkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
+    (*umr_mkey)->rkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
+
+    ucs_trace("%s: created UMR mkey %p lkey 0x%x",
+              uct_ib_device_name(&md->super.dev), *umr_mkey, (*umr_mkey)->lkey);
+
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_ib_mlx5_devx_umr_mkey_invalidate(uct_ib_mlx5_md_t *md,
                                      uct_ib_mlx5_devx_umr_t *umr)
 {
@@ -1154,6 +1181,166 @@ destroy_mkey:
     }
     free(umr);
     return UCS_ERR_IO_ERROR;
+}
+
+static uct_ib_mlx5_devx_umr_t *
+uct_ib_mlx5_devx_umr_mkey_pool_get(uct_ib_mlx5_md_t *md, int *from_pool)
+{
+    uct_ib_mlx5_devx_umr_t *umr;
+
+    *from_pool = !ucs_list_is_empty(&md->umr_mkey_pool);
+    if (*from_pool) {
+        umr = ucs_list_extract_head(&md->umr_mkey_pool, uct_ib_mlx5_devx_umr_t,
+                                    super);
+
+        ucs_trace("%s: extracted from pool UMR mkey %p lkey 0x%x",
+                  uct_ib_device_name(&md->super.dev), umr->umr_mkey,
+                  umr->umr_mkey->lkey);
+    } else {
+        umr = ucs_malloc(sizeof(*umr), "uct_ib_mlx5_devx_umr_t");
+        if (NULL == umr) {
+            ucs_error("%s: failed to allocate UMR mkey",
+                      uct_ib_device_name(&md->super.dev));
+            return NULL;
+        }
+
+        if (uct_ib_mlx5_devx_umr_mkey_create(md, &umr->umr_mkey) != UCS_OK) {
+            ucs_free(umr);
+            return NULL;
+        }
+    }
+
+    return umr;
+}
+
+static ucs_status_t
+uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
+                               uct_ib_mlx5_devx_umr_t **umr, int *from_pool)
+{
+    uct_ib_device_t *ibdev = &md->super.dev;
+    struct ibv_mr *ib_mr   = mr->super.ib;
+    struct ibv_wc wc       = {};
+    struct ibv_mw mw       = {
+        .rkey = 0,
+        .type = IBV_MW_TYPE_1
+    };
+    struct ibv_send_wr wr  = {
+        .wr_id      = 0,
+        .next       = NULL,
+        .opcode     = IBV_WR_BIND_MW,
+        .send_flags = IBV_SEND_INLINE | IBV_SEND_SIGNALED,
+        .bind_mw    = {
+            .mw        = &mw,
+            .rkey      = 0,
+            .bind_info = {
+                .mr              = ib_mr,
+                .length          = ib_mr->length,
+                .addr            = (uint64_t)ib_mr->addr,
+                .mw_access_flags = UCT_IB_MLX5_MD_UMEM_ACCESS
+            }
+        }
+    };
+    int cq_ret;
+    struct ibv_send_wr *bad_wr;
+    uint32_t mkey;
+
+    *umr = uct_ib_mlx5_devx_umr_mkey_pool_get(md, from_pool);
+    if (NULL == *umr) {
+        goto err;
+    }
+
+    /* Set UMR lkey to be registered with given MR */
+    mkey            = (*umr)->umr_mkey->lkey;
+    mw.rkey         = mkey;
+    wr.bind_mw.rkey = mkey;
+
+    if (ibv_post_send(md->umr_qp, &wr, &bad_wr) != UCS_OK) {
+        ucs_error("%s: failed to post UMR mkey registration WR for addr %p len "
+                  "%zu lkey 0x%x: %m", uct_ib_device_name(ibdev),
+                  ib_mr->addr, ib_mr->length, ib_mr->lkey);
+
+        goto invalidate;
+    }
+
+    /* Poll for completion */
+    while ((cq_ret = ibv_poll_cq(md->umr_cq, 1, &wc)) == 0);
+
+    if (cq_ret < 0 || wc.status != IBV_WC_SUCCESS) {
+        ucs_error("%s: failed to poll CQ for UMR mkey registration for addr %p "
+                  " len %zu lkey 0x%x ret %d status %d",
+                  uct_ib_device_name(ibdev), ib_mr->addr, ib_mr->length,
+                  ib_mr->lkey, cq_ret, wc.status);
+
+        goto invalidate;
+    }
+
+    ucs_trace("%s: registered addr %p length %zu lkey 0x%x to UMR mkey %p"
+              " lkey 0x%x", uct_ib_device_name(ibdev), ib_mr->addr,
+              ib_mr->length, ib_mr->lkey, (*umr)->umr_mkey,
+              (*umr)->umr_mkey->lkey);
+
+    return UCS_OK;
+
+invalidate:
+    uct_ib_mlx5_devx_umr_mkey_invalidate(md, *umr);
+    *umr = NULL;
+err:
+    return UCS_ERR_IO_ERROR;
+}
+
+static UCS_F_ALWAYS_INLINE uint64_t
+uct_ib_mlx5_devx_umr_mkey_hash_code(const uct_ib_md_packed_mkey_t *packed_mkey)
+{
+    return (uint64_t)packed_mkey->vhca_id << 32 | packed_mkey->lkey;
+}
+
+static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_devx_is_umr_mkey(uint32_t lkey)
+{
+    return (UCT_IB_MLX5_MKEY_TAG_UMR == (lkey & 0xFF));
+}
+
+static ucs_status_t
+uct_ib_mlx5_devx_umr_mkey_hash_find(uct_ib_mlx5_md_t *md,
+                                    const uct_ib_md_packed_mkey_t *packed_mkey,
+                                    uct_ib_mlx5_devx_umr_alias_t *umr_alias)
+{
+    uint64_t input_key = uct_ib_mlx5_devx_umr_mkey_hash_code(packed_mkey);
+    khint_t k          = kh_get(umr_mkey_map, md->umr_mkey_hash, input_key);
+    if ((k == kh_end(md->umr_mkey_hash)) || (!kh_exist(md->umr_mkey_hash, k))) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    *umr_alias = kh_val(md->umr_mkey_hash, k);
+    ucs_trace("%s: found UMR mkey alias %p lkey 0x%x for lkey 0x%x in hash",
+              uct_ib_device_name(&md->super.dev), umr_alias->cross_mr,
+              umr_alias->lkey, packed_mkey->lkey);
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_mlx5_devx_umr_mkey_hash_put(uct_ib_mlx5_md_t *md,
+                                   const uct_ib_md_packed_mkey_t *packed_mkey,
+                                   const uct_ib_mlx5_devx_umr_alias_t *umr_alias)
+{
+    uint64_t input_key = uct_ib_mlx5_devx_umr_mkey_hash_code(packed_mkey);
+    int ret;
+    khint_t k;
+
+    k = kh_put(umr_mkey_map, md->umr_mkey_hash, input_key, &ret);
+    if (ret < 0) {
+        ucs_error("%s: failed to add UMR mkey alias 0x%x to hash map",
+                  uct_ib_device_name(&md->super.dev), umr_alias->lkey);
+
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    kh_val(md->umr_mkey_hash, k) = *umr_alias;
+    ucs_trace("%s: added UMR mkey alias %p lkey 0x%x for lkey 0x%x to hash",
+              uct_ib_device_name(&md->super.dev), umr_alias->cross_mr,
+              umr_alias->lkey, packed_mkey->lkey);
+
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -2269,7 +2456,6 @@ err:
 
 static ucs_status_t
 uct_ib_mlx5_devx_allow_xgvmi_access(uct_ib_mlx5_md_t *md,
-                                    uct_ib_mlx5_devx_mem_t *memh,
                                     uint32_t exported_lkey, int silent)
 {
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(allow_other_vhca_access_in)]   = {0};
@@ -2362,7 +2548,7 @@ static ucs_status_t uct_ib_mlx5_devx_xgvmi_umem_mr(uct_ib_mlx5_md_t *md,
     exported_lkey = (UCT_IB_MLX5DV_GET(create_mkey_out, out, mkey_index) << 8) |
                     md->mkey_tag;
 
-    status = uct_ib_mlx5_devx_allow_xgvmi_access(md, memh, exported_lkey, 0);
+    status = uct_ib_mlx5_devx_allow_xgvmi_access(md, exported_lkey, 0);
     if (status != UCS_OK) {
         goto err_cross_mr_destroy;
     }
@@ -2387,38 +2573,66 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
                         (md, memh), uct_ib_mlx5_md_t *md,
                         uct_ib_mlx5_devx_mem_t *memh)
 {
-    struct mlx5dv_devx_obj *cross_mr;
+    struct mlx5dv_devx_obj *cross_mr = NULL;
+    uct_ib_mlx5_devx_umr_t *umr      = NULL;
+    uct_ib_mlx5_devx_mr_t *mr        = &memh->mrs[UCT_IB_MR_DEFAULT];
     uint32_t exported_lkey;
+    int from_pool;
     ucs_status_t status;
 
     if (memh->dm != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    ucs_assertv(memh->cross_mr == NULL,
-                "memh=%p cross_mr=%p exported_lkey=0x%x", memh, memh->cross_mr,
-                memh->exported_lkey);
+    ucs_assertv((memh->umr_mr == NULL) && (memh->cross_mr == NULL),
+                "memh=%p umr_mr=%p cross_mr=%p exported_lkey=0x%x", memh,
+                memh->umr_mr, memh->cross_mr, memh->exported_lkey);
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI)) {
         goto out_umem_mr;
     }
 
-    ucs_assert(!(memh->super.flags & UCT_IB_MEM_MULTITHREADED));
-    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh->address, 0, 0, 0,
-                                                  "exported-key",
-                                                  &memh->mrs[UCT_IB_MR_DEFAULT],
-                                                  &cross_mr, &exported_lkey);
-    if (status != UCS_OK) {
-        return status;
+    /* Current bind impl (IBV_WR_BIND_MW) attaches a single KLM segment, so:
+     * - IBV_WR_BIND_MW supports the maximum region length of 2GB
+     * - IBV_WR_BIND_MW does not support multi-segment (multi-threaded) MRs
+     * For these use cases we fallback to KSM
+     */
+    if ((mr->super.ib->length > UCT_IB_MD_MAX_MR_SIZE) ||
+        (memh->super.flags & UCT_IB_MEM_MULTITHREADED)) {
+        status = uct_ib_mlx5_devx_reg_ksm_data(md, memh, UCT_IB_MR_DEFAULT, 0,
+                                               0, 0, "exported-key", &cross_mr,
+                                               &exported_lkey);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        status = uct_ib_mlx5_devx_umr_mkey_bind(md, mr, &umr, &from_pool);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        exported_lkey = umr->umr_mkey->lkey;
+
+        if (from_pool) {
+            goto out;
+        }
     }
 
-    status = uct_ib_mlx5_devx_allow_xgvmi_access(md, memh, exported_lkey, 1);
+    status = uct_ib_mlx5_devx_allow_xgvmi_access(md, exported_lkey, 1);
     if (status == UCS_OK) {
         goto out;
     }
 
     ucs_debug("%s: indirect cross gvmi not supported, fallback to DEVX UMEM",
               uct_ib_device_name(&md->super.dev));
-    mlx5dv_devx_obj_destroy(cross_mr);
+
+    if (cross_mr != NULL) {
+        mlx5dv_devx_obj_destroy(cross_mr);
+    }
+
+    if (umr != NULL) {
+        uct_ib_mlx5_devx_umr_mkey_invalidate(md, umr);
+    }
+
     md->flags &= ~UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
 
 out_umem_mr:
@@ -2426,6 +2640,7 @@ out_umem_mr:
 
 out:
     memh->cross_mr      = cross_mr;
+    memh->umr_mr        = umr;
     memh->exported_lkey = exported_lkey;
     return UCS_OK;
 }
@@ -2472,7 +2687,7 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
             return UCS_ERR_INVALID_PARAM;
         }
 
-        if (memh->cross_mr == NULL) {
+        if ((memh->cross_mr == NULL) && (memh->umr_mr == NULL)) {
             status = uct_ib_mlx5_devx_reg_exported_key(md, memh);
             if (status != UCS_OK) {
                 return status;
@@ -2551,6 +2766,7 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     ucs_status_t status;
     void *access_key;
     int ret;
+    uct_ib_mlx5_devx_umr_alias_t umr_alias;
 
     status = uct_ib_memh_alloc(&md->super, 0, 0, sizeof(*memh), 0, &ib_memh);
     if (status != UCS_OK) {
@@ -2560,6 +2776,16 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     memh      = ucs_derived_of(ib_memh, uct_ib_mlx5_devx_mem_t);
     hdr       = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, hdr);
     alias_ctx = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, alias_ctx);
+
+    /* If received mkey is UMR key, find alias in the UMR hash map */
+    if (uct_ib_mlx5_devx_is_umr_mkey(packed_mkey->lkey)) {
+        status = uct_ib_mlx5_devx_umr_mkey_hash_find(md, packed_mkey,
+                                                     &umr_alias);
+        if (UCS_OK == status) {
+            memh->super.lkey = umr_alias.lkey;
+            goto out;
+        }
+    }
 
     /* create alias */
     UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr, hdr, opcode,
@@ -2578,11 +2804,11 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     ucs_strncpy_zero(access_key, uct_ib_mkey_token,
                      UCT_IB_MLX5DV_FLD_SZ_BYTES(alias_context, access_key));
 
-    memh->cross_mr = uct_ib_mlx5_devx_obj_create(md->super.dev.ibv_context, in,
-                                                 sizeof(in), out, sizeof(out),
-                                                 "MKEY_ALIAS",
-                                                 uct_md_attach_log_lvl(flags));
-    if (memh->cross_mr == NULL) {
+    umr_alias.cross_mr = uct_ib_mlx5_devx_obj_create(md->super.dev.ibv_context,
+                                                     in, sizeof(in), out,
+                                                     sizeof(out), "MKEY_ALIAS",
+                                                     uct_md_attach_log_lvl(flags));
+    if (umr_alias.cross_mr == NULL) {
         status = UCS_ERR_IO_ERROR;
         goto err_memh_free;
     }
@@ -2595,16 +2821,24 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
         goto err_cross_mr_destroy;
     }
 
-    memh->super.lkey   = (UCT_IB_MLX5DV_GET(create_alias_obj_out, out,
-                                            hdr.obj_id) << 8) |
-                         md->mkey_tag;
+    memh->super.lkey = (UCT_IB_MLX5DV_GET(create_alias_obj_out, out,
+                                          hdr.obj_id) << 8) |
+                       md->mkey_tag;
+
+    /* If received mkey is UMR key, store alias in the UMR hash map */
+    if (uct_ib_mlx5_devx_is_umr_mkey(packed_mkey->lkey)) {
+        umr_alias.lkey = memh->super.lkey;
+        uct_ib_mlx5_devx_umr_mkey_hash_put(md, packed_mkey, &umr_alias);
+    }
+
+out:
     memh->super.rkey   = memh->super.lkey;
     memh->super.flags |= UCT_IB_MEM_IMPORTED;
     *memh_p            = ib_memh;
     return UCS_OK;
 
 err_cross_mr_destroy:
-    mlx5dv_devx_obj_destroy(memh->cross_mr);
+    mlx5dv_devx_obj_destroy(umr_alias.cross_mr);
 err_memh_free:
     ucs_free(ib_memh);
 err:
