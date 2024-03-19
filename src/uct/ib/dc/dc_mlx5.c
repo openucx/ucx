@@ -848,6 +848,7 @@ static ucs_status_t uct_dc_mlx5_iface_estimate_perf(uct_iface_h tl_iface,
                                                     uct_perf_attr_t *perf_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     ucs_status_t status;
 
     status = uct_ib_iface_estimate_perf(tl_iface, perf_attr);
@@ -857,6 +858,13 @@ static ucs_status_t uct_dc_mlx5_iface_estimate_perf(uct_iface_h tl_iface,
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
         perf_attr->max_inflight_eps = iface->tx.ndci;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
+        if (uct_ib_iface_port_attr(ib_iface)->active_speed ==
+            UCT_IB_SPEED_NDR) {
+            perf_attr->flags |= UCT_PERF_ATTR_FLAGS_TX_RX_SHARED;
+        }
     }
 
     return UCS_OK;
