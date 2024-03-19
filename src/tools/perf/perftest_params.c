@@ -17,9 +17,9 @@
 
 const struct option TEST_PARAMS_ARGS_LONG[] =
 {
-    {"daemon-local",      required_argument, 0, 'g'},
-    {"daemon-remote",     required_argument, 0, 'G'},
-    {"daemon-keep-alive", no_argument,       0, 'k'},
+    {"daemon-local",        required_argument, 0, 'g'},
+    {"daemon-remote",       required_argument, 0, 'G'},
+    {"daemon-keep-running", no_argument,       0, 'k'},
     {0, 0, 0, 0}
 };
 
@@ -698,8 +698,8 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
                 goto err;
             }
             break;
-        case 'k': /* handles daemon-keep-alive long option as well */
-            ctx->dmn_info.is_keep_alive = 1;
+        case 'k': /* handles daemon-keep-running long option as well */
+            ctx->dmn_info.is_keep_running = 1;
             break;
         case 'h':
             usage(ctx, ucs_basename(argv[0]));

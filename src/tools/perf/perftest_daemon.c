@@ -350,7 +350,7 @@ ucp_perf_daemon_send_handler(void *arg, const void *header,
 
 static void ucp_perf_daemon_cleanup_connections(ucp_perf_daemon_context_t *ctx)
 {
-    ucs_trace_data("cleaning up daemon connections");
+    ucs_trace("cleaning up daemon connections");
 
     if (NULL != ctx->send_memh) {
         /* coverity[check_return] */
@@ -376,15 +376,15 @@ ucp_perf_daemon_fin_handler(void *arg, const void *header, size_t header_length,
                             void *data, size_t length,
                             const ucp_am_recv_param_t *param)
 {
-    uint8_t keep_alive;
+    uint8_t keep_running;
 
     ucp_perf_daemon_check_am_msg(param, header_length, 0, 0,
                                  UCP_PERF_DAEMON_AM_ID_FIN);
-    ucs_assertv(length >= sizeof(keep_alive), "length=%lu", length);
+    ucs_assertv(length >= sizeof(keep_running), "length=%lu", length);
 
-    keep_alive = *(uint8_t*)data;
+    keep_running = *(uint8_t*)data;
 
-    if (keep_alive) {
+    if (keep_running) {
         ucp_perf_daemon_cleanup_connections(arg);
     } else {
         terminated = 1;
@@ -448,7 +448,7 @@ ucp_perf_daemon_peer_tx_handler(void *arg, const void *header,
 
 static void ucp_perf_daemon_cleanup(ucp_perf_daemon_context_t *ctx)
 {
-    ucs_trace_data("cleaning up daemon");
+    ucs_trace("cleaning up daemon");
 
     ucp_perf_daemon_cleanup_connections(ctx);
 

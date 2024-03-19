@@ -324,12 +324,12 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
                                  &ctx->test_names[depth]);
         if (status == UCS_OK) {
             if (parent_params->super.ucp.dmn_info.is_daemon_mode) {
-                /* Keep daemon alive until the last test execution begins.
-                 * For the very last run take the keepalive value from the
+                /* Keep daemon running until the last test execution begins.
+                 * For the very last run take the is_keep_running value from the
                  * parent config */
-                params.super.ucp.dmn_info.is_keep_alive =
+                params.super.ucp.dmn_info.is_keep_running =
                     (--test_count == 0) ?
-                        parent_params->super.ucp.dmn_info.is_keep_alive : 1;
+                        parent_params->super.ucp.dmn_info.is_keep_running : 1;
             }
 
             run_test_recurs(ctx, &params, depth + 1);

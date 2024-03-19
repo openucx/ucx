@@ -239,8 +239,8 @@ typedef struct ucx_perf_rte {
 typedef struct {
     /* Whether DPU offloading daemon is configured */
     int                     is_daemon_mode;
-    /* Whether to keep daemon alive at the end of the test run */
-    int                     is_keep_alive;
+    /* Whether to keep daemon running at the end of the test run */
+    int                     is_keep_running;
     /* IP and port of local daemon, used to offload communication */
     struct sockaddr_storage dmn_local_addr;
     /* IP and port of remote daemon, used to offload communication */
