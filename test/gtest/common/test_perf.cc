@@ -248,7 +248,7 @@ void test_perf::test_params_init(const test_spec &test,
     params.ucp.recv_datatype    = (ucp_perf_datatype_t)test.data_layout;
     params.ucp.am_hdr_size      = 0;
     params.ucp.dmn_info.is_daemon_mode  = 0;
-    params.ucp.dmn_info.is_keep_alive   = 0;
+    params.ucp.dmn_info.is_keep_running = 0;
     params.ucp.dmn_info.dmn_local_addr  = {};
     params.ucp.dmn_info.dmn_remote_addr = {};
 }
