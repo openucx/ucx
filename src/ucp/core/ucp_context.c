@@ -476,6 +476,25 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " 'n' : Select RMA/AMO lanes according to performance charasteristics",
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
 
+  {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
+                     "rndv_rts:275ns,sw:40ns",
+   "Protocol overhead", 0,
+    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+        {"single", "overhead of single-lane protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_single)},
+        {"multi", "overhead of managing multiple lanes",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_multi)},
+        {"rndv_offload", "overhead of rendezvous offload protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_offload)},
+        {"rndv_rtr", "overhead of rendezvous RTR protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rtr)},
+        {"rndv_rts", "overhead of rendezvous RTS protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rts)},
+        {"sw", "overhead of software emulation protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_sw)},
+        {NULL}
+  )},
+
   {NULL}
 };
 

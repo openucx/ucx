@@ -78,7 +78,7 @@ ucp_proto_get_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
+        .super.overhead      = context->config.ext.proto_overhead_sw,
         .super.cfg_thresh    = ucp_proto_sw_rma_cfg_thresh(
                                    context, context->config.ext.bcopy_thresh),
         .super.cfg_priority  = 20,

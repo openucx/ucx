@@ -124,7 +124,7 @@ ucp_proto_eager_bcopy_single_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 5e-9,
+        .super.overhead      = context->config.ext.proto_overhead_single,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
         .super.min_length    = 0,

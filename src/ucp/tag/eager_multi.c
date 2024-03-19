@@ -33,16 +33,18 @@ static void
 ucp_proto_eager_multi_probe_common(ucp_proto_multi_init_params_t *params,
                                    ucp_proto_id_t op_id)
 {
+    ucp_context_config_t *context_config;
+
     if (!ucp_tag_eager_check_op_id(&params->super.super, op_id, 0)) {
         return;
     }
 
-    params->super.overhead   = 10e-9; /* for multiple lanes management */
+    context_config           = &params->super.super.worker->context->config.ext;
+    params->super.overhead   = context_config->proto_overhead_multi;
     params->super.latency    = 0;
     params->first.lane_type  = UCP_LANE_TYPE_AM;
     params->middle.lane_type = UCP_LANE_TYPE_AM_BW;
-    params->max_lanes        =
-            params->super.super.worker->context->config.ext.max_eager_lanes;
+    params->max_lanes        = context_config->max_eager_lanes;
     ucp_proto_multi_probe(params);
 }
 

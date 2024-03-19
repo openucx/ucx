@@ -40,7 +40,7 @@ ucp_proto_rndv_am_init_common(ucp_proto_multi_init_params_t *params)
 
     params->super.min_length = 0;
     params->super.max_length = SIZE_MAX;
-    params->super.overhead   = 10e-9; /* for multiple lanes management */
+    params->super.overhead   = context->config.ext.proto_overhead_multi;
     params->super.latency    = 0;
     params->first.lane_type  = UCP_LANE_TYPE_AM;
     params->middle.lane_type = UCP_LANE_TYPE_AM_BW;
