@@ -318,6 +318,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
 
     max_length     = ucs_min(params->super.max_length, max_length);
     ctrl_perf.node = ucp_proto_perf_node_new_data(params->ctrl_msg_name, "");
+    ucp_proto_perf_node_add_child(ctrl_perf.node, params->unpack_perf_node);
 
     /* Set send_overheads to the time to send and receive RTS message */
     status = ucp_proto_rndv_ctrl_perf(&params->super.super, rpriv->lane,
