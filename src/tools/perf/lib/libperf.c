@@ -1521,7 +1521,8 @@ static ucs_status_t ucp_perf_test_flush_workers(ucx_perf_context_t *perf)
 static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
 {
     ucp_worker_attr_t worker_attr = {
-        .field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS
+        .field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS,
+        .address    = NULL
     };
     ucp_worker_h worker;
     ucs_status_t status;
@@ -1529,13 +1530,16 @@ static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
     ucx_perf_context_t *thread_perf;
     unsigned i;
 
-
     for (i = 0; i < perf->params.thread_count; ++i) {
         thread_perf = &perf->ucp.tctx[i].perf;
         worker      = thread_perf->ucp.worker;
+        /* coverity[use_after_free] */
         status      = UCX_PERF_VERBOSE(error, &perf->params, ucp_worker_query,
                                        worker, &worker_attr);
         if (status != UCS_OK) {
+            if (i > 0) {
+                goto err_destroy_eps;
+            }
             return status;
         }
 
@@ -1572,6 +1576,9 @@ static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
     goto out;
 
 err_destroy_eps:
+    if (worker_attr.address != NULL) {
+        ucp_worker_release_address(worker, worker_attr.address);
+    }
     ucp_perf_test_destroy_self_eps(perf);
 out:
     return status;
