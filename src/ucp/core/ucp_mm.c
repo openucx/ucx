@@ -809,11 +809,8 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                 ucs_memory_type_names[mem_type],
                 ucs_memory_type_names[memh->mem_type]);
     if (context->rcache != NULL) {
-        ucs_assertv(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) ==
-                            0,
-                    "address=%p align=%zu", ucp_memh_address(memh), reg_align);
-        ucs_assertv(ucs_padding(ucp_memh_length(memh), reg_align) == 0,
-                    "length=%zu align=%zu", ucp_memh_length(memh), reg_align);
+        ucs_ptr_check_align(ucp_memh_address(memh), ucp_memh_length(memh),
+                            reg_align);
     }
 
     status = ucp_memh_register(context, memh, reg_md_map, uct_flags,

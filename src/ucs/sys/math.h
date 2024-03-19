@@ -16,6 +16,7 @@
 #include <math.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/type/status.h>
+#include <ucs/debug/assert.h>
 
 BEGIN_C_DECLS
 
@@ -118,6 +119,15 @@ ucs_align_ptr_range(void **address_p, size_t *length_p, size_t alignment)
 
     *address_p = start;
     *length_p  = UCS_PTR_BYTE_DIFF(start, end);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucs_ptr_check_align(void *address, size_t length, size_t alignment)
+{
+    ucs_assertv(ucs_padding((intptr_t)address, alignment) == 0,
+                "address=%p align=%zu", address, alignment);
+    ucs_assertv(ucs_padding(length, alignment) == 0, "length=%zu align=%zu",
+                length, alignment);
 }
 
 /**
