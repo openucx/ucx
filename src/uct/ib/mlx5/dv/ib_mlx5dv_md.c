@@ -738,6 +738,13 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_mr(uct_ib_mlx5_md_t *md,
     }
 }
 
+static void uct_ib_mlx5_devx_mem_reset_keys(uct_ib_mlx5_devx_mem_t *memh)
+{
+    memh->exported_lkey = UCT_IB_INVALID_MKEY;
+    memh->atomic_rkey   = UCT_IB_INVALID_MKEY;
+    memh->indirect_rkey = UCT_IB_INVALID_MKEY;
+}
+
 static ucs_status_t
 uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
@@ -756,10 +763,8 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
         goto err;
     }
 
-    memh                = ucs_derived_of(ib_memh, uct_ib_mlx5_devx_mem_t);
-    memh->exported_lkey = UCT_IB_INVALID_MKEY;
-    memh->atomic_rkey   = UCT_IB_INVALID_MKEY;
-    memh->indirect_rkey = UCT_IB_INVALID_MKEY;
+    memh = ucs_derived_of(ib_memh, uct_ib_mlx5_devx_mem_t);
+    uct_ib_mlx5_devx_mem_reset_keys(memh);
 
     status = uct_ib_mlx5_devx_reg_mr(md, memh, address, length, params,
                                      UCT_IB_MR_DEFAULT, UINT64_MAX,
@@ -2251,7 +2256,9 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
         goto err;
     }
 
-    memh      = ucs_derived_of(ib_memh, uct_ib_mlx5_devx_mem_t);
+    memh = ucs_derived_of(ib_memh, uct_ib_mlx5_devx_mem_t);
+    uct_ib_mlx5_devx_mem_reset_keys(memh);
+
     hdr       = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, hdr);
     alias_ctx = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, alias_ctx);
 
