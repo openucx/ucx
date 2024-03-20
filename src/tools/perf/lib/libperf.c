@@ -1533,19 +1533,14 @@ static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
     for (i = 0; i < perf->params.thread_count; ++i) {
         thread_perf = &perf->ucp.tctx[i].perf;
         worker      = thread_perf->ucp.worker;
-        /* coverity[use_after_free] */
         status      = UCX_PERF_VERBOSE(error, &perf->params, ucp_worker_query,
                                        worker, &worker_attr);
         if (status != UCS_OK) {
-            if (i > 0) {
-                goto err_destroy_eps;
-            }
-            return status;
+            goto err_destroy_eps;
         }
 
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address    = worker_attr.address;
-
         status = UCX_PERF_VERBOSE(error, &perf->params, ucp_ep_create, worker,
                                   &ep_params, &thread_perf->ucp.self_ep);
         if (status != UCS_OK) {
@@ -1565,6 +1560,7 @@ static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
         }
 
         ucp_worker_release_address(worker, worker_attr.address);
+        worker_attr.address = NULL; /* Avoid reuse after free */
     }
 
     /* Global default ep will point to the ep of the 1st thread */
