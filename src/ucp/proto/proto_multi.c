@@ -57,7 +57,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                             params->first.tl_cap_flags, 1, 0,
                                             lanes);
     if (num_lanes == 0) {
-        ucs_trace("no lanes for %s", params->super.super.proto_name);
+        ucs_trace("no lanes for %s",
+                  ucp_proto_id_field(params->super.super.proto_id, name));
         return UCS_ERR_NO_ELEM;
     }
 
@@ -246,6 +247,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv)
 {
     return ucs_offsetof(ucp_proto_multi_priv_t, lanes) +
+
            (mpriv->num_lanes *
             ucs_field_sizeof(ucp_proto_multi_priv_t, lanes[0]));
 }

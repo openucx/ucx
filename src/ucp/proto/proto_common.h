@@ -253,13 +253,22 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_index_t *lanes);
 
 
+ucp_lane_index_t ucp_proto_common_find_lanes_internal(
+        const ucp_proto_init_params_t *params, uct_ep_operation_t memtype_op,
+        unsigned flags, ptrdiff_t max_iov_offs, size_t min_iov,
+        ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
+        ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
+        ucp_lane_index_t *lanes);
+
+
 ucp_md_map_t
 ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
                             ucp_lane_map_t lane_map);
 
 
-ucp_lane_index_t
-ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
+void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
+                                const ucp_proto_caps_t *proto_caps,
+                                const void *priv, size_t priv_size);
 
 
 void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,

@@ -26,16 +26,13 @@ ucp_rndv_am_cfg_thresh(ucp_context_t *context, size_t am_thresh)
     return cfg_thresh;
 }
 
-static ucs_status_t
-ucp_proto_rndv_am_init_common(ucp_proto_multi_init_params_t *params)
+static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
 {
-    ucp_context_h context         = params->super.super.worker->context;
-    ucp_proto_multi_priv_t *mpriv = params->super.super.priv;
-    ucs_status_t status;
+    ucp_context_h context = params->super.super.worker->context;
 
     if (!ucp_proto_rndv_op_check(&params->super.super, UCP_OP_ID_RNDV_SEND,
                                  0)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
     params->super.min_length = 0;
@@ -48,13 +45,7 @@ ucp_proto_rndv_am_init_common(ucp_proto_multi_init_params_t *params)
     params->max_lanes        = context->config.ext.max_rndv_lanes;
     params->opt_align_offs   = UCP_PROTO_COMMON_OFFSET_INVALID;
 
-    status = ucp_proto_multi_init(params, params->super.super.caps, mpriv);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    *params->super.super.priv_size = ucp_proto_multi_priv_size(mpriv);
-    return UCS_OK;
+    ucp_proto_multi_probe(params);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -121,8 +112,7 @@ static ucs_status_t ucp_proto_rndv_am_bcopy_progress(uct_pending_req_t *uct_req)
                                           ucp_proto_rndv_am_bcopy_complete);
 }
 
-static ucs_status_t
-ucp_proto_rndv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
+static void ucp_rndv_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -144,7 +134,7 @@ ucp_proto_rndv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
 
-    return ucp_proto_rndv_am_init_common(&params);
+    ucp_rndv_am_probe_common(&params);
 }
 
 static void
@@ -158,7 +148,7 @@ ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .name     = "rndv/am/bcopy",
     .desc     = "fragmented " UCP_PROTO_COPY_IN_DESC " " UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
-    .init     = ucp_proto_rndv_am_bcopy_init,
+    .probe    = ucp_rndv_am_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_rndv_am_bcopy_progress},
     .abort    = ucp_proto_rndv_am_bcopy_abort,
@@ -199,8 +189,7 @@ static ucs_status_t ucp_rndv_am_zcopy_proto_progress(uct_pending_req_t *uct_req)
                                           ucp_proto_request_zcopy_completion);
 }
 
-static ucs_status_t
-ucp_rndv_am_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
+static void ucp_rndv_am_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -221,7 +210,7 @@ ucp_rndv_am_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
-    return ucp_proto_rndv_am_init_common(&params);
+    ucp_rndv_am_probe_common(&params);
 }
 
 static void
@@ -235,7 +224,7 @@ ucp_proto_t ucp_rndv_am_zcopy_proto = {
     .name     = "rndv/am/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_rndv_am_zcopy_proto_init,
+    .probe    = ucp_rndv_am_zcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_rndv_am_zcopy_proto_progress},
     .abort    = ucp_rndv_am_zcopy_proto_abort,
