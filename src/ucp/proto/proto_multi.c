@@ -8,6 +8,8 @@
 #  include "config.h"
 #endif
 
+#include <float.h>
+
 #include "proto_init.h"
 #include "proto_debug.h"
 #include "proto_common.inl"
@@ -28,11 +30,11 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t *lane_perf, perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
-    double max_bandwidth, max_frag_ratio;
+    double max_bandwidth, max_frag_ratio, min_bandwidth;
     ucp_lane_index_t i, lane, num_lanes;
     ucp_proto_multi_lane_priv_t *lpriv;
     ucp_proto_perf_node_t *perf_node;
-    size_t max_frag, min_length;
+    size_t max_frag, min_length, min_end_offset;
     ucp_lane_map_t lane_map;
     ucp_md_map_t reg_md_map;
     uint32_t weight_sum;
@@ -93,6 +95,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     perf.sys_latency        = 0;
     lane_map                = 0;
     max_frag_ratio          = 0;
+    min_bandwidth           = DBL_MAX;
 
     for (i = 0; (i < num_lanes) && (ucs_popcount(lane_map) < params->max_lanes);
          ++i) {
@@ -121,6 +124,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         max_frag_ratio = ucs_max(max_frag_ratio,
                                  lane_perf->bandwidth / lane_perf->max_frag);
 
+        min_bandwidth = ucs_min(min_bandwidth, lane_perf->bandwidth);
+
         /* Update aggregated performance metric */
         perf.bandwidth          += lane_perf->bandwidth;
         perf.send_pre_overhead  += lane_perf->send_pre_overhead;
@@ -143,6 +148,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     perf.max_frag       = SIZE_MAX;
     perf.min_length     = 0;
     weight_sum          = 0;
+    min_end_offset      = 0;
+
     ucs_for_each_bit(lane, lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
 
@@ -208,14 +215,17 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                    lane_perf->min_length);
         perf.min_length = ucs_max(perf.min_length, min_length);
 
-        weight_sum          += lpriv->weight;
-        mpriv->min_frag      = ucs_max(mpriv->min_frag, lane_perf->min_length);
-        mpriv->max_frag_sum += lpriv->max_frag;
-        lpriv->weight_sum    = weight_sum;
-        lpriv->max_frag_sum  = mpriv->max_frag_sum;
-        lpriv->opt_align     = ucp_proto_multi_get_lane_opt_align(params, lane);
-        mpriv->align_thresh  = ucs_max(mpriv->align_thresh,
-                                       lpriv->opt_align);
+        weight_sum           += lpriv->weight;
+        min_end_offset       += lane_perf->bandwidth *
+                                context->config.ext.min_rndv_chunk_size /
+                                min_bandwidth;
+        mpriv->min_frag       = ucs_max(mpriv->min_frag, lane_perf->min_length);
+        mpriv->max_frag_sum  += lpriv->max_frag;
+        lpriv->weight_sum     = weight_sum;
+        lpriv->min_end_offset = min_end_offset;
+        lpriv->max_frag_sum   = mpriv->max_frag_sum;
+        lpriv->opt_align      = ucp_proto_multi_get_lane_opt_align(params, lane);
+        mpriv->align_thresh   = ucs_max(mpriv->align_thresh, lpriv->opt_align);
     }
     ucs_assert(mpriv->num_lanes == ucs_popcount(lane_map));
 

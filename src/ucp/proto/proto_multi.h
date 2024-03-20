@@ -78,6 +78,9 @@ typedef struct {
 
     /* Optimal alignment for zero-copy buffer address */
     size_t                       opt_align;
+
+    /* Minimal offset to reach, taking into account minimum RNDV chunk size */
+    size_t                       min_end_offset;
 } ucp_proto_multi_lane_priv_t;
 
 
