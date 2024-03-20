@@ -2064,11 +2064,6 @@ ucx_perf_funcs_t ucx_perf_funcs[] = {
 ucs_status_t ucx_perf_allocators_init(ucx_perf_context_t *perf,
                                       const ucx_perf_params_t *params)
 {
-    if ((params->send_mem_type == UCS_MEMORY_TYPE_RDMA) ||
-        (params->recv_mem_type == UCS_MEMORY_TYPE_RDMA)) {
-        return UCS_OK;
-    }
-
     ucs_debug("set send allocator by send mem type %s",
               ucs_memory_type_names[params->send_mem_type]);
     perf->send_allocator = ucx_perf_mem_type_allocators[params->send_mem_type];

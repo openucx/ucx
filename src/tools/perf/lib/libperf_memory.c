@@ -336,6 +336,41 @@ void uct_perf_test_free_mem(ucx_perf_context_t *perf)
     free(perf->uct.iov);
 }
 
+
+static void uct_perf_memtype_rdma_error()
+{
+    ucs_fatal("Can't use RDMA (infiniband device memory) in UCT perftest");
+}
+
+static ucs_status_t uct_perf_alloc_rdma(const ucx_perf_context_t *perf,
+                                        size_t length, unsigned flags,
+                                        uct_allocated_memory_t *alloc_mem)
+{
+    uct_perf_memtype_rdma_error();
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static void uct_perf_test_free_rdma(const ucx_perf_context_t *perf,
+                                    uct_allocated_memory_t *alloc_mem)
+{
+    uct_perf_memtype_rdma_error();
+}
+
+static void
+ucx_perf_memtype_rdma_memcpy_error(void *dst, ucs_memory_type_t dst_mem_type,
+                                   const void *src,
+                                   ucs_memory_type_t src_mem_type, size_t count)
+{
+    uct_perf_memtype_rdma_error();
+}
+
+static void *
+ucx_perf_memtype_rdma_memset_error(void *dst, int value, size_t count)
+{
+    uct_perf_memtype_rdma_error();
+    return NULL;
+}
+
 void ucx_perf_global_init()
 {
     static ucx_perf_allocator_t host_allocator = {
@@ -346,9 +381,19 @@ void ucx_perf_global_init()
         .memcpy    = ucx_perf_test_memcpy_host,
         .memset    = memset
     };
+
+    static ucx_perf_allocator_t rdma_allocator = {
+        .mem_type  = UCS_MEMORY_TYPE_RDMA,
+        .init      = ucs_empty_function_return_success,
+        .uct_alloc = uct_perf_alloc_rdma,
+        .uct_free  = uct_perf_test_free_rdma,
+        .memcpy    = ucx_perf_memtype_rdma_memcpy_error,
+        .memset    = ucx_perf_memtype_rdma_memset_error
+    };
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_HOST] = &host_allocator;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_RDMA] = &rdma_allocator;
 
     /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
      * alloc hooks, which are using dlsym() to get pointer to original function,

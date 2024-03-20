@@ -150,20 +150,14 @@ ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf)
 {
     ucs_status_t status;
     /* New threads need explicit device association */
-    if (perf->send_allocator != NULL) {
-        status = perf->send_allocator->init(perf);
-        if (status != UCS_OK) {
-            return status;
-        }
+    status = perf->send_allocator->init(perf);
+    if (status != UCS_OK) {
+        return status;
     }
 
     if (perf->send_allocator == perf->recv_allocator) {
         return UCS_OK;
     }
 
-    if (perf->recv_allocator != NULL) {
-        return perf->recv_allocator->init(perf);
-    }
-
-    return UCS_OK;
+    return perf->recv_allocator->init(perf);
 }
