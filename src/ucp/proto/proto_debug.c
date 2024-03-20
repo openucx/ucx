@@ -81,12 +81,13 @@ void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
                       UCP_PROTO_PERF_FUNC_BW_ARG(perf));
 }
 
-void ucp_proto_select_init_trace_caps(const ucp_proto_init_params_t *init_params)
+void ucp_proto_select_init_trace_caps(const ucp_proto_init_params_t *init_params,
+                                      const ucp_proto_caps_t *proto_caps,
+                                      const void *priv)
 {
-    ucp_proto_caps_t *proto_caps          = init_params->caps;
     ucp_proto_query_params_t query_params = {
         .proto         = ucp_protocols[init_params->proto_id],
-        .priv          = init_params->priv,
+        .priv          = priv,
         .worker        = init_params->worker,
         .select_param  = init_params->select_param,
         .ep_config_key = init_params->ep_config_key,

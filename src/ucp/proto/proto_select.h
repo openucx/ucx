@@ -165,9 +165,6 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
                                 const void *priv, size_t priv_size);
 
 
-void ucp_proto_select_caps_reset(ucp_proto_caps_t *caps);
-
-
 void ucp_proto_select_caps_cleanup(ucp_proto_caps_t *caps);
 
 
