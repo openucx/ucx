@@ -326,6 +326,13 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
         }
     }
 
+    if (params->send_mem_type == UCS_MEMORY_TYPE_RDMA) {
+        ucs_error(
+                "Memory type 'rdma' is not supported as a sending memory type, "
+                "try -m host,rdma");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     return UCS_OK;
 }
 
@@ -1520,26 +1527,27 @@ static ucs_status_t ucp_perf_test_flush_workers(ucx_perf_context_t *perf)
 
 static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
 {
-    ucp_worker_h worker = perf->ucp.tctx[0].perf.ucp.worker;
+    ucp_worker_attr_t worker_attr = {
+        .field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS,
+        .address    = NULL
+    };
+    ucp_worker_h worker;
     ucs_status_t status;
     ucp_ep_params_t ep_params;
     ucx_perf_context_t *thread_perf;
-    ucp_worker_attr_t worker_attr = {
-        .field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS
-    };
     unsigned i;
-
-    status = UCX_PERF_VERBOSE(error, &perf->params, ucp_worker_query, worker,
-                              &worker_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-    ep_params.address    = worker_attr.address;
 
     for (i = 0; i < perf->params.thread_count; ++i) {
         thread_perf = &perf->ucp.tctx[i].perf;
+        worker      = thread_perf->ucp.worker;
+        status      = UCX_PERF_VERBOSE(error, &perf->params, ucp_worker_query,
+                                       worker, &worker_attr);
+        if (status != UCS_OK) {
+            goto err_destroy_eps;
+        }
+
+        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        ep_params.address    = worker_attr.address;
         status = UCX_PERF_VERBOSE(error, &perf->params, ucp_ep_create, worker,
                                   &ep_params, &thread_perf->ucp.self_ep);
         if (status != UCS_OK) {
@@ -1557,6 +1565,9 @@ static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
         if (status != UCS_OK) {
             goto err_destroy_eps;
         }
+
+        ucp_worker_release_address(worker, worker_attr.address);
+        worker_attr.address = NULL; /* Avoid reuse after free */
     }
 
     /* Global default ep will point to the ep of the 1st thread */
@@ -1568,9 +1579,11 @@ static ucs_status_t ucp_perf_test_setup_self_endpoints(ucx_perf_context_t *perf)
     goto out;
 
 err_destroy_eps:
+    if (worker_attr.address != NULL) {
+        ucp_worker_release_address(worker, worker_attr.address);
+    }
     ucp_perf_test_destroy_self_eps(perf);
 out:
-    ucp_worker_release_address(worker, worker_attr.address);
     return status;
 }
 
@@ -2058,11 +2071,6 @@ ucx_perf_funcs_t ucx_perf_funcs[] = {
 ucs_status_t ucx_perf_allocators_init(ucx_perf_context_t *perf,
                                       const ucx_perf_params_t *params)
 {
-    if ((params->send_mem_type == UCS_MEMORY_TYPE_RDMA) ||
-        (params->recv_mem_type == UCS_MEMORY_TYPE_RDMA)) {
-        return UCS_OK;
-    }
-
     ucs_debug("set send allocator by send mem type %s",
               ucs_memory_type_names[params->send_mem_type]);
     perf->send_allocator = ucx_perf_mem_type_allocators[params->send_mem_type];
