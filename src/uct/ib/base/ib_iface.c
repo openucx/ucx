@@ -1810,6 +1810,10 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->max_inflight_eps = SIZE_MAX;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
+        perf_attr->flags = 0;
+    }
+
     return UCS_OK;
 }
 
