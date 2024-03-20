@@ -202,7 +202,7 @@ private:
     }
 
     static void mem_dereg_cb(void *context, ucs_rcache_t *rcache,
-                             ucs_rcache_region_t *r)
+                             ucs_rcache_region_t *r, uint16_t flags)
     {
         reinterpret_cast<test_rcache*>(context)->mem_dereg(
                         ucs_derived_of(r, struct region));

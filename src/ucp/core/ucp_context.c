@@ -502,6 +502,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
         {NULL}
   )},
 
+  {"GVA_ENABLE", "n",
+   "Enable Global VA infrastructure",
+   ucs_offsetof(ucp_context_config_t, gva_enable), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -1288,15 +1292,18 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
     return str;
 }
 
-
 static void ucp_free_resources(ucp_context_t *context)
 {
     ucp_rsc_index_t i;
 
     ucs_free(context->tl_rscs);
     for (i = 0; i < context->num_mds; ++i) {
+        if (context->gva_mrs[i] != NULL) {
+            uct_md_mem_dereg(context->tl_mds[i].md, context->gva_mrs[i]);
+        }
         uct_md_close(context->tl_mds[i].md);
     }
+    ucs_free(context->gva_mrs);
     ucs_free(context->tl_mds);
     ucs_free(context->tl_cmpts);
 }
@@ -1578,6 +1585,11 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                     if (md_attr->cache_mem_types & UCS_BIT(mem_type)) {
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
+
+                    if (context->config.ext.gva_enable &&
+                        (md_attr->gva_mem_types & UCS_BIT(mem_type))) {
+                        context->gva_md_map[mem_type] |= UCS_BIT(md_index);
+                    }
                 }
             }
 
@@ -1697,6 +1709,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucs_memory_type_for_each(mem_type) {
         context->reg_md_map[mem_type]           = 0;
         context->cache_md_map[mem_type]         = 0;
+        context->gva_md_map[mem_type]           = 0;
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].initialized = 0;
@@ -1775,6 +1788,15 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                              &avail_tls, dev_cfg_masks,
                                              &tl_cfg_mask, config, &aux_tls);
         if (status != UCS_OK) {
+            goto err_free_resources;
+        }
+    }
+
+    if (context->num_mds != 0) {
+        context->gva_mrs = ucs_calloc(context->num_mds, sizeof(uct_mem_h),
+                                      "gva_mds");
+        if (context->gva_mrs == NULL) {
+            status = UCS_ERR_NO_MEMORY;
             goto err_free_resources;
         }
     }

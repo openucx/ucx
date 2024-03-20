@@ -93,6 +93,9 @@ typedef ucs_status_t (*uct_md_mem_advise_func_t)(uct_md_h md,
                                                  unsigned advice);
 
 typedef ucs_status_t
+(*uct_md_mem_reg_gva_func_t)(uct_md_h md, uct_mem_h *memh_p);
+
+typedef ucs_status_t
 (*uct_md_mem_reg_func_t)(uct_md_h md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
                          uct_mem_h *memh_p);
@@ -135,6 +138,7 @@ struct uct_md_ops {
     uct_md_mem_alloc_func_t              mem_alloc;
     uct_md_mem_free_func_t               mem_free;
     uct_md_mem_advise_func_t             mem_advise;
+    uct_md_mem_reg_gva_func_t            mem_reg_gva;
     uct_md_mem_reg_func_t                mem_reg;
     uct_md_mem_dereg_func_t              mem_dereg;
     uct_md_mem_query_func_t              mem_query;

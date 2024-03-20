@@ -739,6 +739,44 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_mr(uct_ib_mlx5_md_t *md,
 }
 
 static ucs_status_t
+uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p)
+{
+    uct_ib_mlx5_md_t *md           = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    uct_md_mem_reg_params_t params = {};
+    uct_ib_mlx5_devx_mem_t *memh;
+    uct_ib_mem_t *ib_memh;
+    ucs_status_t status;
+
+    status = uct_ib_memh_alloc(&md->super, 0, 0, sizeof(*memh),
+                               sizeof(memh->mrs[0]), &ib_memh);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    memh                = ucs_derived_of(ib_memh, uct_ib_mlx5_devx_mem_t);
+    memh->exported_lkey = UCT_IB_INVALID_MKEY;
+    memh->atomic_rkey   = UCT_IB_INVALID_MKEY;
+    memh->indirect_rkey = UCT_IB_INVALID_MKEY;
+    memh->super.flags  |= UCT_IB_MEM_FLAG_ODP;
+    status              = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params,
+                                        UCT_IB_MEM_ACCESS_FLAGS | IBV_ACCESS_ON_DEMAND, NULL,
+                                        &memh->mrs[UCT_IB_MR_DEFAULT].super.ib);
+    if (status != UCS_OK) {
+        goto err_reg;
+    }
+
+    memh->super.lkey = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->lkey;
+    memh->super.rkey = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->rkey;
+    *memh_p          = memh;
+    return UCS_OK;
+
+err_reg:
+    ucs_free(ib_memh);
+err:
+    return status;
+}
+
+static ucs_status_t
 uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
                          uct_mem_h *memh_p)
@@ -1076,6 +1114,9 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     ucs_debug("%s: ODP is supported, version %d",
               uct_ib_device_name(&md->super.dev), version);
     md->super.reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    if ((version == 2) || (md_config->devx_objs == 0)) {
+        md->super.gva_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    }
     return;
 
 no_odp:
@@ -2332,6 +2373,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
         .query              = uct_ib_mlx5_devx_md_query,
         .mem_alloc          = uct_ib_mlx5_devx_device_mem_alloc,
         .mem_free           = uct_ib_mlx5_devx_device_mem_free,
+        .mem_reg_gva        = uct_ib_mlx5_devx_mem_reg_gva,
         .mem_reg            = uct_ib_mlx5_devx_mem_reg,
         .mem_dereg          = uct_ib_mlx5_devx_mem_dereg,
         .mem_attach         = uct_ib_mlx5_devx_mem_attach,

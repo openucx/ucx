@@ -55,6 +55,13 @@ enum {
 };
 
 /*
+ * Memory deregistration flags.
+ */
+enum {
+    UCS_RCACHE_MEM_DEREG_KEEP_PINNED = UCS_BIT(0) /**< Keep memory pinned */
+};
+
+/*
  * Rcache flags.
  */
 enum {
@@ -109,7 +116,8 @@ struct ucs_rcache_ops {
     * @param [in]  region     Memory region to deregister.
     */
     void                   (*mem_dereg)(void *context, ucs_rcache_t *rcache,
-                                        ucs_rcache_region_t *region);
+                                        ucs_rcache_region_t *region,
+                                        uint16_t flags);
 
     /**
      * Dump memory region information to a string buffer.

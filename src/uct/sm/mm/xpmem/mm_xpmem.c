@@ -149,7 +149,8 @@ uct_xpmem_rcache_mem_reg(void *context, ucs_rcache_t *rcache, void *arg,
 }
 
 static void uct_xpmem_rcache_mem_dereg(void *context, ucs_rcache_t *rcache,
-                                       ucs_rcache_region_t *region)
+                                       ucs_rcache_region_t *region,
+                                       uint16_t flags)
 {
     uct_xpmem_remote_region_t *xpmem_region =
                     ucs_derived_of(region, uct_xpmem_remote_region_t);

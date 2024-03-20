@@ -142,6 +142,7 @@ typedef struct uct_ib_md {
     int                      relaxed_order;
     int                      fork_init;
     uint64_t                 reg_mem_types;
+    uint64_t                 gva_mem_types;
     uint64_t                 reg_nonblock_mem_types;
     uint64_t                 cap_flags;
     char                     *name;
@@ -376,6 +377,8 @@ uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             struct ibv_mr **mrs);
 
 uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh);
+
+ucs_status_t uct_ib_verbs_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p);
 
 ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                   const uct_md_mem_reg_params_t *params,

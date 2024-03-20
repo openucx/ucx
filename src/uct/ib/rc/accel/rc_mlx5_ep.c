@@ -621,7 +621,8 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
         UCT_RC_IFACE_CHECK_FLUSH_REMOTE(
                 uct_ib_md_is_flush_rkey_valid(ep->super.flush_rkey), ep,
                 &iface->super, rcx);
-        if (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_REMOTE) {
+        if ((ep->super.flags & UCT_RC_EP_FLAG_FLUSH_REMOTE) &&
+            uct_ib_md_is_flush_rkey_valid(ep->super.flush_rkey)) {
             return uct_rc_mlx5_base_ep_flush_remote(tl_ep, comp);
         }
     }

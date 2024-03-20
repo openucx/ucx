@@ -2564,6 +2564,16 @@ ucs_status_t uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr,
 
 /**
  * @ingroup UCT_MD
+ * @brief Register global VA for zero-copy sends and remote access.
+ *
+ * @param [in]     md        Memory domain to register memory on.
+ * @param [out]    memh_p    Filled with handle for create object.
+ */
+ucs_status_t uct_md_mem_reg_gva(uct_md_h md, uct_mem_h *memh_p);
+
+
+/**
+ * @ingroup UCT_MD
  * @brief Register memory for zero-copy sends and remote access.
  *
  *  Register memory on the memory domain. In order to use this function, MD
