@@ -39,12 +39,12 @@ extern const struct option TEST_PARAMS_ARGS_LONG[];
 extern test_type_t tests[];
 
 ucs_status_t run_test(struct perftest_context *ctx);
-ucs_status_t clone_test_params(perftest_params_t *dest,
-                               const perftest_params_t *src);
+ucs_status_t clone_params(perftest_params_t *dest,
+                          const perftest_params_t *src);
 ucs_status_t check_params(const perftest_params_t *params);
-ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv);
+ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
+                        int argc, char **argv);
 ucs_status_t init_test_params(perftest_params_t *params);
-void free_test_params(perftest_params_t *params);
 ucs_status_t parse_test_params(perftest_params_t *params, char opt,
                                const char *opt_arg);
 ucs_status_t adjust_test_params(perftest_params_t *params,

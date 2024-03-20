@@ -292,7 +292,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
 
     line_num = 0;
     do {
-        status = clone_test_params(&params, parent_params);
+        status = clone_params(&params, parent_params);
         if (status != UCS_OK) {
             goto out;
         }

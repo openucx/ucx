@@ -536,6 +536,9 @@ static ucs_status_t perftest_mad_accept(perftest_mad_rte_group_t *rte_group,
     ucs_status_t status;
     uint8_t buf[4096];
     int lid;
+    perftest_params_local_backup_t params_backup;
+
+    release_msg_size_list(&ctx->params);
 
     do {
         size   = sizeof(buf);
@@ -548,19 +551,20 @@ static ucs_status_t perftest_mad_accept(perftest_mad_rte_group_t *rte_group,
     lid = rte_group->dst_port.lid;
     ucs_debug("MAD: accept: remote lid:%d/0x%02x", lid, lid);
 
-    memcpy(&ctx->peer_params, buf, sizeof(ctx->peer_params));
+    perftest_params_local_backup(&ctx->params, &params_backup);
+    memcpy(&ctx->params, buf, sizeof(ctx->params));
+    perftest_params_local_restore(&ctx->params, &params_backup);
 
     /* Import received message size list */
-    size = sizeof(*ctx->peer_params.super.msg_size_list) *
-           ctx->peer_params.super.msg_size_cnt;
+    size = sizeof(*ctx->params.super.msg_size_list) *
+           ctx->params.super.msg_size_cnt;
 
-    ctx->peer_params.super.msg_size_list = malloc(size);
-    if (ctx->peer_params.super.msg_size_list == NULL) {
+    ctx->params.super.msg_size_list = malloc(size);
+    if (ctx->params.super.msg_size_list == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    memcpy(ctx->peer_params.super.msg_size_list, buf + sizeof(ctx->peer_params),
-           size);
+    memcpy(ctx->params.super.msg_size_list, buf + sizeof(ctx->params), size);
 
     return perftest_mad_send(rte_group, &mad_magic, sizeof(mad_magic));
 }

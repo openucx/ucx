@@ -43,7 +43,6 @@ typedef struct perftest_params {
 
 struct perftest_context {
     perftest_params_t            params;
-    perftest_params_t            peer_params;
     const char                   *server_addr;
     uint16_t                     port;
     sa_family_t                  af;
@@ -59,6 +58,46 @@ struct perftest_context {
 
     sock_rte_group_t             sock_rte_group;
 };
+
+
+typedef struct perftest_params_local_backup {
+    char                 dev_name[UCT_DEVICE_NAME_MAX];
+    uint32_t             needed_flags;
+} perftest_params_local_backup_t;
+
+
+static inline void
+perftest_params_local_backup(const perftest_params_t *params,
+                             perftest_params_local_backup_t *backup)
+{
+    if (params->super.api == UCX_PERF_API_UCT) {
+        strcpy(backup->dev_name, params->super.uct.dev_name);
+    } else {
+        backup->dev_name[0] = '\0';
+    }
+
+    backup->needed_flags = params->super.flags &
+                           UCX_PERF_TEST_FLAG_ERR_HANDLING;
+}
+
+
+static inline void
+perftest_params_local_restore(perftest_params_t *params,
+                              const perftest_params_local_backup_t *backup)
+{
+    if (params->super.api == UCX_PERF_API_UCT) {
+        strcpy(params->super.uct.dev_name, backup->dev_name);
+    }
+
+    params->super.flags |= backup->needed_flags;
+}
+
+
+static inline void release_msg_size_list(perftest_params_t *params)
+{
+    free(params->super.msg_size_list);
+    params->super.msg_size_list = NULL;
+}
 
 
 extern ucs_list_link_t rte_list;

@@ -519,8 +519,8 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
     return UCS_OK;
 }
 
-ucs_status_t clone_test_params(perftest_params_t *dest,
-                               const perftest_params_t *src)
+ucs_status_t clone_params(perftest_params_t *dest,
+                          const perftest_params_t *src)
 {
     size_t msg_size_list_size;
 
@@ -602,12 +602,28 @@ static ucs_status_t parse_cpus(char *opt_arg, struct perftest_context *ctx)
     return UCS_OK;
 }
 
-ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
+ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
+                        int argc, char **argv)
 {
     ucs_status_t status;
     int c;
 
     ucs_trace_func("");
+
+    ucx_perf_global_init(); /* initialize memory types */
+
+    status = init_test_params(&ctx->params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ctx->server_addr     = NULL;
+    ctx->num_batch_files = 0;
+    ctx->port            = 13337;
+    ctx->af              = AF_INET;
+    ctx->flags           = 0;
+    ctx->mpi             = mpi_initialized;
+    ctx->mad_port        = NULL;
 
     optind = 1;
     while ((c = getopt_long(argc, argv, "p:b:6NfvIc:P:hK:" TEST_PARAMS_ARGS,
@@ -651,7 +667,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
             break;
         case 'P':
 #ifdef HAVE_MPI
-            ctx->mpi = (ctx->mpi && atoi(optarg));
+            ctx->mpi = atoi(optarg) && mpi_initialized;
             break;
 #endif
         case 'h':
@@ -689,6 +705,6 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
     return verify_daemon_params(&ctx->params.super);
 
 err:
-    free_test_params(&ctx->params);
+    release_msg_size_list(&ctx->params);
     return status;
 }
