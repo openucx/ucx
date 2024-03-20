@@ -142,6 +142,7 @@ typedef struct uct_ib_md {
     int                      relaxed_order;
     int                      fork_init;
     uint64_t                 reg_mem_types;
+    uint64_t                 gva_mem_types;
     uint64_t                 reg_nonblock_mem_types;
     uint64_t                 cap_flags;
     char                     *name;

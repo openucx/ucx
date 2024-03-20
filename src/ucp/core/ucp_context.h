@@ -173,6 +173,12 @@ typedef struct ucp_context_config {
     int                                    prefer_offload;
     /** RMA zcopy segment size */
     size_t                                 rma_zcopy_max_seg_size;
+    /** Enable global VA MR */
+    int                                    gva_enable;
+    /** Lock memory when usign global VA MR */
+    int                                    gva_mlock;
+    /** Prefetch memory when usign global VA MR */
+    int                                    gva_prefetch;
     /** Protocol overhead */
     double                                 proto_overhead_single;
     double                                 proto_overhead_multi;
@@ -280,6 +286,11 @@ typedef struct ucp_tl_md {
      * Flags mask parameter for @ref uct_md_mkey_pack_v2
      */
     unsigned               pack_flags_mask;
+
+    /**
+     * Global VA memory handle
+     */
+    uct_mem_h              gva_mr;
 } ucp_tl_md_t;
 
 
@@ -316,6 +327,9 @@ typedef struct ucp_context {
 
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
+
+    /* Map of MDs that support global VA MRs for given memory type. */
+    ucp_md_map_t                  gva_md_map[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration of a memory buffer for a given
        memory type to be exported to other processes. */

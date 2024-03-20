@@ -510,6 +510,18 @@ static ucs_config_field_t ucp_context_config_table[] = {
         {NULL}
   )},
 
+  {"GVA_ENABLE", "n",
+   "Enable Global VA infrastructure",
+   ucs_offsetof(ucp_context_config_t, gva_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"GVA_MLOCK", "y",
+   "Lock memory with mlock() when using global VA MR",
+   ucs_offsetof(ucp_context_config_t, gva_mlock), UCS_CONFIG_TYPE_BOOL},
+
+  {"GVA_PREFETCH", "y",
+   "Prefetch memory when using global VA MR",
+   ucs_offsetof(ucp_context_config_t, gva_prefetch), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -1296,13 +1308,15 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
     return str;
 }
 
-
 static void ucp_free_resources(ucp_context_t *context)
 {
     ucp_rsc_index_t i;
 
     ucs_free(context->tl_rscs);
     for (i = 0; i < context->num_mds; ++i) {
+        if (context->tl_mds[i].gva_mr != NULL) {
+            uct_md_mem_dereg(context->tl_mds[i].md, context->tl_mds[i].gva_mr);
+        }
         uct_md_close(context->tl_mds[i].md);
     }
     ucs_free(context->tl_mds);
@@ -1594,6 +1608,11 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                     if (md_attr->cache_mem_types & UCS_BIT(mem_type)) {
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
+
+                    if (context->config.ext.gva_enable &&
+                        (md_attr->gva_mem_types & UCS_BIT(mem_type))) {
+                        context->gva_md_map[mem_type] |= UCS_BIT(md_index);
+                    }
                 }
             }
 
@@ -1714,6 +1733,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         context->reg_md_map[mem_type]           = 0;
         context->reg_block_md_map[mem_type]     = 0;
         context->cache_md_map[mem_type]         = 0;
+        context->gva_md_map[mem_type]           = 0;
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].initialized = 0;
@@ -1779,7 +1799,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     /* Allocate actual array of MDs */
-    context->tl_mds = ucs_malloc(max_mds * sizeof(*context->tl_mds),
+    context->tl_mds = ucs_calloc(max_mds, sizeof(*context->tl_mds),
                                  "ucp_tl_mds");
     if (context->tl_mds == NULL) {
         status = UCS_ERR_NO_MEMORY;

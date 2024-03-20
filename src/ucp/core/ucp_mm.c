@@ -339,6 +339,10 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         ucs_assertv(md_index != memh->alloc_md_index,
                     "memh %p: md_index %u alloc_md_index %u", memh, md_index,
                     memh->alloc_md_index);
+        if (memh->uct[md_index] == context->tl_mds[md_index].gva_mr) {
+            continue;
+        }
+
         ucs_trace("de-registering memh[%d]=%p", md_index, memh->uct[md_index]);
         ucs_assert(context->tl_mds[md_index].attr.flags & UCT_MD_FLAG_REG);
 
@@ -363,6 +367,12 @@ static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
         memh->uct[md_index] = NULL;
     }
     memh->md_map &= ~md_map;
+
+    if ((memh->flags & UCP_MEMH_FLAG_MLOCKED) &&
+        (context->gva_md_map[memh->mem_type] & memh->md_map) == 0) {
+        munlock(ucp_memh_address(memh), ucp_memh_length(memh));
+        memh->flags &= ~UCP_MEMH_FLAG_MLOCKED;
+    }
 
     ucs_assert(comp.count == 1);
 }
@@ -445,6 +455,56 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     ucs_free(memh);
 }
 
+static ucs_status_t ucp_memh_register_gva(ucp_context_h context, ucp_mem_h memh,
+                                          ucp_md_map_t md_map)
+{
+    ucp_md_map_t reg_md_map = context->gva_md_map[memh->mem_type] & md_map;
+    void *address           = ucp_memh_address(memh);
+    size_t length           = ucp_memh_length(memh);
+    uct_md_mem_reg_params_t params;
+    ucp_md_index_t md_index;
+    ucs_status_t status;
+    int ret;
+
+    if (reg_md_map == 0) {
+        return UCS_OK;
+    }
+
+    params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+    params.flags      = UCT_MD_MEM_GVA;
+
+    if (context->config.ext.gva_mlock &&
+        !(memh->flags & UCP_MEMH_FLAG_MLOCKED)) {
+        ret = mlock(address, length);
+        if (ret == 0) {
+            memh->flags |= UCP_MEMH_FLAG_MLOCKED;
+        } else {
+            ucs_warn("mlock(addr=%p length=%zu) failed: %m", address, length);
+        }
+    }
+
+    ucs_for_each_bit(md_index, reg_md_map) {
+        if (context->tl_mds[md_index].gva_mr == NULL) {
+            status = uct_md_mem_reg_v2(context->tl_mds[md_index].md, NULL,
+                                       SIZE_MAX, &params,
+                                       &context->tl_mds[md_index].gva_mr);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+
+        memh->uct[md_index] = context->tl_mds[md_index].gva_mr;
+        if (context->config.ext.gva_prefetch) {
+            uct_md_mem_advise(context->tl_mds[md_index].md, memh->uct[md_index],
+                              address, length, UCT_MADV_WILLNEED);
+        }
+
+        memh->md_map |= UCS_BIT(md_index);
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t
 ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                            ucp_md_map_t md_map, unsigned uct_flags,
@@ -455,9 +515,9 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     ucp_md_index_t dmabuf_prov_md_index = context->dmabuf_mds[mem_type];
     void *address                       = ucp_memh_address(memh);
     size_t length                       = ucp_memh_length(memh);
-    ucp_md_map_t reg_md_map             = ~memh->md_map & md_map;
     ucp_md_map_t md_map_registered      = 0;
     ucp_md_map_t dmabuf_md_map          = 0;
+    ucp_md_map_t reg_md_map;
     uct_md_mem_reg_params_t reg_params;
     uct_md_mem_attr_t mem_attr;
     ucp_md_index_t md_index;
@@ -466,6 +526,12 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     size_t reg_length;
     size_t reg_align;
 
+    status = ucp_memh_register_gva(context, memh, md_map);
+    if ((status != UCS_OK) && !(uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
+        return status;
+    }
+
+    reg_md_map = ~memh->md_map & md_map;
     if (reg_md_map == 0) {
         return UCS_OK;
     }
@@ -1508,6 +1574,7 @@ static void ucp_mem_rcache_merge_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
     ucs_log_indent(+1);
     ucs_trace("merge with memh %p uct_flags 0x%x", memh, memh->uct_flags);
     reg_ctx->uct_flags |= memh->uct_flags;
+    memh->flags        &= ~UCP_MEMH_FLAG_MLOCKED;
     ucs_log_indent(-1);
 }
 
