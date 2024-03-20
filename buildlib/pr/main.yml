@@ -326,7 +326,6 @@ stages:
       parameters:
         name: BlueField
         demands: ucx_bf -equals yes
-        run_tests: no
         test_perf: 0
 
   - stage: Namespace_Tests
