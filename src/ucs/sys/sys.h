@@ -67,6 +67,9 @@ typedef cpuset_t ucs_sys_cpuset_t;
 #define UCS_SYS_FS_CPUS_PATH   UCS_SYS_FS_SYSTEM_PATH "/cpu"
 
 
+#define UCS_SYS_DMI_PRODUCT_NAME_LABEL "Product name"
+
+
 BEGIN_C_DECLS
 
 /** @file sys.h */
@@ -689,6 +692,12 @@ ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value);
  * @return 1 if built dynamically, 0 if statically.
  */
 int ucs_sys_is_dynamic_lib(void);
+
+
+/**
+ * @return Product name from DMI table.
+ */
+const char *ucs_sys_dmi_product_name();
 
 END_C_DECLS
 

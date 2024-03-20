@@ -70,6 +70,19 @@ const char *ucs_async_mode_names[] = {
 
 UCS_CONFIG_DEFINE_ARRAY(string, sizeof(char*), UCS_CONFIG_TYPE_STRING);
 
+
+typedef struct ucs_config_parse_section {
+    char name[64];
+    int  skip;
+} ucs_config_parse_section_t;
+
+
+typedef struct ucs_config_parse_arg {
+    int                        override;
+    ucs_config_parse_section_t section_info;
+} ucs_config_parse_arg_t;
+
+
 /* Fwd */
 static ucs_status_t
 ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
@@ -1512,16 +1525,68 @@ static char *ucs_config_get_value_from_config_file(const char *name)
     return kh_val(&ucs_config_file_vars, iter);
 }
 
+static int ucs_config_parse_check_filter(const char *name, const char *value)
+{
+    typedef struct {
+        const char *name;
+        const char *(*value_f)();
+    } filter_t;
+
+    static filter_t filters[] = {{UCS_CPU_VENDOR_LABEL, ucs_cpu_vendor_name},
+                                 {UCS_CPU_MODEL_LABEL, ucs_cpu_model_name},
+                                 {UCS_SYS_DMI_PRODUCT_NAME_LABEL,
+                                  ucs_sys_dmi_product_name}};
+    filter_t *filter;
+
+    ucs_carray_for_each(filter, filters, ucs_static_array_size(filters)) {
+        if ((strcmp(name, filter->name) == 0) &&
+            (fnmatch(value, filter->value_f(), FNM_CASEFOLD) != 0)) {
+            /**
+             * The value does not match the pattern for this filter. E.g.
+             * configuration file contains the line: CPU model = v1.*, and
+             * ucs_cpu_model_name() retruns "v2.0".
+             */
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void
+ucs_config_parse_set_section_info(ucs_config_parse_section_t *section_info,
+                                  const char *section, const char *name,
+                                  const char *value)
+{
+    if (strcmp(section, section_info->name) != 0) {
+        /* A new section has started. Update section name. */
+        ucs_strncpy_zero(section_info->name, section,
+                         sizeof(section_info->name));
+    } else if (section_info->skip) {
+        /* The section has already been filtered out earlier. */
+        return;
+    }
+
+    section_info->skip = ucs_config_parse_check_filter(name, value);
+}
+
 static int ucs_config_parse_config_file_line(void *arg, const char *section,
                                              const char *name,
                                              const char *value)
 {
-    khiter_t iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
-    int override  = *(int*)arg;
+    ucs_config_parse_arg_t *parse_arg        = (ucs_config_parse_arg_t*)arg;
+    ucs_config_parse_section_t *section_info = &parse_arg->section_info;
+    khiter_t iter;
     int result;
 
+    ucs_config_parse_set_section_info(section_info, section, name, value);
+    if (section_info->skip) {
+        return 1;
+    }
+
+    iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
     if (iter != kh_end(&ucs_config_file_vars)) {
-        if (override) {
+        if (parse_arg->override) {
             ucs_free(kh_val(&ucs_config_file_vars, iter));
         } else {
             ucs_error("found duplicate '%s' in config map", name);
@@ -1543,6 +1608,11 @@ static int ucs_config_parse_config_file_line(void *arg, const char *section,
 void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
                                   int override)
 {
+    ucs_config_parse_arg_t parse_arg = {
+        .override     = override,
+        .section_info = {.name = "",
+                         .skip = 0}
+    };
     char file_path[MAXPATHLEN];
     int parse_result;
     FILE* file;
@@ -1555,7 +1625,7 @@ void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
     }
 
     parse_result = ini_parse_file(file, ucs_config_parse_config_file_line,
-                                  &override);
+                                  &parse_arg);
     if (parse_result != 0) {
         ucs_warn("failed to parse config file %s: %d", file_path, parse_result);
     }
