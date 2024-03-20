@@ -4,6 +4,8 @@
  * See file LICENSE for terms.
  */
 
+#include <ucs/sys/ptr_arith.h>
+
 #include "ib_mlx5.h"
 
 typedef struct uct_ib_mlx5_wqe_ctrl_seg {

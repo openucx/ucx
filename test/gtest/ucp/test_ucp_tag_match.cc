@@ -9,6 +9,7 @@
 
 #include <common/test_helpers.h>
 extern "C" {
+#include <ucs/sys/ptr_arith.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_types.h>
 #include <ucp/rndv/proto_rndv.h>

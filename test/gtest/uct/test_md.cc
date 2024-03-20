@@ -12,6 +12,7 @@
 #include <uct/api/v2/uct_v2.h>
 extern "C" {
 #include <ucs/time/time.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/bitops.h>

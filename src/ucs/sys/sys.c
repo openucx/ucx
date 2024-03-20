@@ -13,6 +13,7 @@
 
 #include <ucs/algorithm/crc.h>
 #include <ucs/sys/checker.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
