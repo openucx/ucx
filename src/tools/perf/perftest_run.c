@@ -210,6 +210,26 @@ static void print_test_name(struct perftest_context *ctx)
     }
 }
 
+static int read_args(char *buf, char **argv, size_t argv_size)
+{
+    static const char delim[] = " \t\n\r";
+    int argc                  = 0;
+    char *p                   = strtok(buf, delim);
+
+    /* Ignore comment line (where first non-delimiter char is #) */
+    if ((NULL != p) && (*p == '#')) {
+        return 0;
+    }
+
+    while ((NULL != p) && (argc < (argv_size - 1))) {
+        argv[argc++] = p;
+        p            = strtok(NULL, delim);
+    }
+
+    argv[argc] = NULL;
+    return argc;
+}
+
 static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
                                     int *line_num, perftest_params_t *params,
                                     char** test_name_p)
@@ -220,24 +240,15 @@ static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
     char buf[MAX_ARG_SIZE];
     char error_prefix[MAX_ARG_SIZE];
     int argc;
-    char *argv[MAX_SIZE + 1];
+    char *argv[MAX_SIZE];
     int c;
-    char *p;
 
     do {
         if (fgets(buf, sizeof(buf) - 1, batch_file) == NULL) {
             return UCS_ERR_NO_ELEM;
         }
         ++(*line_num);
-
-        argc = 0;
-        p = strtok(buf, " \t\n\r");
-        while (p && (argc < MAX_SIZE)) {
-            argv[argc++] = p;
-            p = strtok(NULL, " \t\n\r");
-        }
-        argv[argc] = NULL;
-    } while ((argc == 0) || (argv[0][0] == '#'));
+    } while ((argc = read_args(buf, argv, MAX_SIZE)) == 0);
 
     ucs_snprintf_safe(error_prefix, sizeof(error_prefix),
                       "in batch file '%s' line %d: ", file_name, *line_num);
@@ -266,11 +277,13 @@ static size_t get_test_count(FILE *batch_file)
 {
     size_t test_count = 0;
 
+#define MAX_SIZE 256
 #define MAX_ARG_SIZE 2048
     char buf[MAX_ARG_SIZE];
+    char *argv[MAX_SIZE];
 
     while (fgets(buf, sizeof(buf) - 1, batch_file) != NULL) {
-        if ((buf[0] != '#') && (strtok(buf, " \t\n\r"))) {
+        if (read_args(buf, argv, MAX_SIZE) > 0) {
             ++test_count;
         }
     };
