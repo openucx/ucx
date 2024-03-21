@@ -804,24 +804,27 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
     if (context->rcache == NULL) {
         status = ucp_memh_create(context, reg_address, reg_length, mem_type,
                                  UCT_ALLOC_METHOD_LAST, 0, uct_flags, &memh);
+        if (status != UCS_OK) {
+            goto out;
+        }
     } else {
         status = ucp_memh_rcache_get(context->rcache, reg_address, reg_length,
                                      reg_align, mem_type, reg_md_map, uct_flags,
                                      alloc_name, &memh);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        if (!ucs_test_all_flags(memh->uct_flags,
+                                uct_flags & UCP_MM_UCT_ACCESS_MASK)) {
+            reg_md_map |= memh->md_map; /* Re-register previous MDs */
+            ucp_memh_dereg(context, memh, memh->md_map);
+            ucp_memh_set_uct_flags(memh, uct_flags);
+        }
 
         ucs_assert(memh->mem_type == mem_type);
         ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
         ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
-
-        if (!ucs_test_all_flags(memh->uct_flags,
-                                uct_flags & UCP_MM_UCT_ACCESS_MASK)) {
-            ucp_memh_dereg(context, memh, memh->md_map);
-            ucp_memh_set_uct_flags(memh, uct_flags);
-        }
-    }
-
-    if (status != UCS_OK) {
-        goto out;
     }
 
     ucs_trace(
