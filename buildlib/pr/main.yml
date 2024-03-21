@@ -433,6 +433,21 @@ stages:
         test_perf: 0
         container: ubuntu2204_ib
         asan_check: yes
+    - template: tests.yml
+      parameters:
+        name: roce
+        demands: ucx_roce -equals yes
+        test_perf: 0
+        container: ubuntu2204_ib
+        asan_check: yes
+    - template: tests.yml
+      parameters:
+        name: roce_proto_disable
+        demands: ucx_roce -equals yes
+        test_perf: 0
+        proto_enable: no
+        container: ubuntu2204_ib
+        asan_check: yes
 
 
   - stage: Valgrind
@@ -443,13 +458,6 @@ stages:
         name: roce
         demands: ucx_roce -equals yes
         test_perf: 0
-        valgrind_check: yes
-    - template: tests.yml
-      parameters:
-        name: roce_proto_disable
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        proto_enable: no
         valgrind_check: yes
 
 #  - stage: Cuda_compatible
