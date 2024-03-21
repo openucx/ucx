@@ -288,14 +288,13 @@ void test_ib_md::test_mkey_pack_mt(bool invalidate)
     test_mkey_pack_mt_internal(UCT_MD_MEM_ACCESS_ALL, invalidate);
 }
 
-UCS_TEST_P(test_ib_md, pack_mkey_mt, "IB_REG_MT_THRESH=128K",
-           "IB_REG_MT_CHUNK=128K")
+UCS_TEST_P(test_ib_md, pack_mkey_mt, "REG_MT_THRESH=128K", "REG_MT_CHUNK=128K")
 {
     test_mkey_pack_mt(false);
 }
 
-UCS_TEST_P(test_ib_md, pack_mkey_mt_invalidate, "IB_REG_MT_THRESH=128K",
-           "IB_REG_MT_CHUNK=128K")
+UCS_TEST_P(test_ib_md, pack_mkey_mt_invalidate, "REG_MT_THRESH=128K",
+           "REG_MT_CHUNK=128K")
 {
     test_mkey_pack_mt(true);
 }

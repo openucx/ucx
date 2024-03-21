@@ -174,8 +174,8 @@ protected:
     virtual void init() override
     {
         push_config();
-        modify_config("IB_REG_MT_THRESH", ucs::to_string(reg_mt_chunk + 1));
-        modify_config("IB_REG_MT_CHUNK", ucs::to_string(reg_mt_chunk));
+        modify_config("REG_MT_THRESH", ucs::to_string(reg_mt_chunk + 1));
+        modify_config("REG_MT_CHUNK", ucs::to_string(reg_mt_chunk));
 
         uct_p2p_mix_test::init();
 
@@ -202,7 +202,7 @@ protected:
 
 constexpr size_t uct_p2p_mix_test_mt::reg_mt_chunk;
 
-UCS_TEST_P(uct_p2p_mix_test_mt, mix1000_alloc_methods, "IB_REG_MT_BIND=y")
+UCS_TEST_P(uct_p2p_mix_test_mt, mix1000_alloc_methods, "REG_MT_BIND=y")
 {
     run(1000);
 }
