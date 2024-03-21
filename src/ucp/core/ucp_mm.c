@@ -1543,13 +1543,13 @@ void ucp_mem_rcache_cleanup(ucp_context_h context)
 }
 
 ucs_status_t
-ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx)
+ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx,
+                          ucs_memory_type_t alloc_mem_type)
 {
-    const ucs_memory_type_t alloc_mem_type = UCS_MEMORY_TYPE_HOST;
     ucs_status_t status;
     uct_allocated_memory_t mem;
 
-    if (!context->alloc_md_index_initialized) {
+    if (!context->alloc_md[alloc_mem_type].initialized) {
         status = ucp_mem_do_alloc(context, NULL, 1,
                                   UCT_MD_MEM_ACCESS_RMA |
                                           UCT_MD_MEM_FLAG_HIDE_ERRORS,
@@ -1559,13 +1559,13 @@ ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx)
             return status;
         }
 
-        context->alloc_md_index_initialized     = 1;
-        context->alloc_md_index[alloc_mem_type] =
+        context->alloc_md[alloc_mem_type].initialized = 1;
+        context->alloc_md[alloc_mem_type].md_index    =
                 ucp_mem_get_md_index(context, mem.md, mem.method);
         uct_mem_free(&mem);
     }
 
-    *md_idx = context->alloc_md_index[alloc_mem_type];
+    *md_idx = context->alloc_md[alloc_mem_type].md_index;
     return UCS_OK;
 }
 
