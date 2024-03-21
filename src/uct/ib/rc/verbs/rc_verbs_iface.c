@@ -21,6 +21,10 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
+
+#define UCT_RC_VERBS_IFACE_OVERHEAD 75e-9
+
+
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
 static uct_iface_ops_t uct_rc_verbs_iface_tl_ops;
 
@@ -32,7 +36,7 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
 };
 
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
-  {"RC_", "", NULL,
+  {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_VERBS_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
@@ -230,7 +234,9 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
-    iface_attr->overhead   = 75e-9; /* Software overhead */
+
+    /* Software overhead */
+    iface_attr->overhead = UCT_RC_VERBS_IFACE_OVERHEAD;
 
     iface_attr->ep_addr_len = uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
                                       sizeof(uct_rc_verbs_ep_flush_addr_t) :

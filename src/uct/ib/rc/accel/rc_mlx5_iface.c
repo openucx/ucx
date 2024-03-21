@@ -43,7 +43,7 @@ typedef struct uct_rc_mlx5_iface_config {
 
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
-  {"RC_", "", NULL,
+  {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_MLX5_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 

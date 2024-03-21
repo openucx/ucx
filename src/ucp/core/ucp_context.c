@@ -60,7 +60,10 @@
 
 #define UCP_AM_HANDLER_ENTRY(_id) [_id] = &ucp_am_handler_##_id,
 
-#define UCP_CPU_EST_BCOPY_BW_DEFAULT (5800 * UCS_MBYTE)
+
+#define UCP_CPU_EST_BCOPY_BW_DEFAULT_NEW (7000 * UCS_MBYTE)
+#define UCP_CPU_EST_BCOPY_BW_DEFAULT     (5800 * UCS_MBYTE)
+#define UCP_CPU_EST_BCOPY_BW_AMD         (5008 * UCS_MBYTE)
 
 #define UCP_TL_AUX_SUFFIX    "aux"
 #define UCP_TL_AUX(_tl_name) _tl_name ":" UCP_TL_AUX_SUFFIX
@@ -131,16 +134,6 @@ const char *ucp_object_versions[] = {
     [UCP_OBJECT_VERSION_LAST] = NULL
 };
 
-const size_t ucp_context_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
-    [UCS_CPU_VENDOR_UNKNOWN]     = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_INTEL]       = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_AMD]         = UCS_CPU_EST_BCOPY_BW_AMD,
-    [UCS_CPU_VENDOR_GENERIC_ARM] = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_GENERIC_PPC] = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_FUJITSU_ARM] = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,
-    [UCS_CPU_VENDOR_ZHAOXIN]     = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_NVIDIA]      = UCP_CPU_EST_BCOPY_BW_DEFAULT
-};
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
@@ -477,7 +470,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
 
   {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
-                     "rndv_rts:275ns,sw:40ns",
+                     "rndv_rts:275ns,sw:40ns,rkey_ptr:0",
    "Protocol overhead", 0,
     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
         {"single", "overhead of single-lane protocol",
@@ -492,6 +485,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
          ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rts)},
         {"sw", "overhead of software emulation protocol",
          ucs_offsetof(ucp_context_config_t, proto_overhead_sw)},
+        {"rkey_ptr", "overhead of the protocol copying from mapped remote "
+                     "memory",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rkey_ptr)},
         {NULL}
   )},
 
@@ -1907,7 +1903,10 @@ ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
 
 static double ucp_context_get_memcpy_bw()
 {
-    return ucp_context_est_bcopy_bw[ucs_arch_get_cpu_vendor()];
+    return (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD) ?
+                   UCP_CPU_EST_BCOPY_BW_AMD :
+                   UCP_CPU_EST_BCOPY_BW_DEFAULT;
+
 }
 
 static ucs_status_t ucp_fill_config(ucp_context_h context,
@@ -1948,7 +1947,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
         if (context->config.ext.proto_enable) {
-            context->config.ext.bcopy_bw = ucs_cpu_get_memcpy_bw();
+            context->config.ext.bcopy_bw = UCP_CPU_EST_BCOPY_BW_DEFAULT_NEW;
         } else {
             context->config.ext.bcopy_bw = ucp_context_get_memcpy_bw();
         }

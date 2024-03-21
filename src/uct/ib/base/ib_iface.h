@@ -31,6 +31,26 @@
 #define UCT_IB_COUNTER_SET_ID_INVALID      UINT8_MAX
 
 
+#define UCT_IB_SEND_OVERHEAD_BCOPY     "bcopy"
+#define UCT_IB_SEND_OVERHEAD_SQE       "sqe"
+#define UCT_IB_SEND_OVERHEAD_DB        "db"
+#define UCT_IB_SEND_OVERHEAD_WQE_FETCH "wqe_fetch"
+#define UCT_IB_SEND_OVERHEAD_WQE_POST  "wqe_post"
+
+
+#define UCT_IB_SEND_OVERHEAD_VALUE(_iface_overhead) \
+    UCT_IB_SEND_OVERHEAD_BCOPY ":5ns," \
+    UCT_IB_SEND_OVERHEAD_SQE ":20ns," \
+    UCT_IB_SEND_OVERHEAD_DB ":40ns," \
+    UCT_IB_SEND_OVERHEAD_WQE_FETCH ":350ns," \
+    UCT_IB_SEND_OVERHEAD_WQE_POST ":" UCS_PP_MAKE_STRING(_iface_overhead)
+
+
+#define UCT_IB_SEND_OVERHEAD_DEFAULT(_iface_overhead) \
+    UCT_IB_CONFIG_PREFIX UCT_IFACE_SEND_OVERHEAD_STR "=" \
+    UCT_IB_SEND_OVERHEAD_VALUE(_iface_overhead)
+
+
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
 typedef struct uct_ib_iface_ops      uct_ib_iface_ops_t;
@@ -131,15 +151,15 @@ typedef struct uct_ib_address_pack_params {
 /** Overhead of send operation of ib interface */
 typedef struct uct_ib_iface_send_overhead {
     /** Overhead of allocating a tx buffer */
-    ucs_time_t bcopy;
+    double bcopy;
     /** Overhead of processing a work request completion */
-    ucs_time_t cqe;
+    double cqe;
     /** Overhead of writing a doorbell to PCI */
-    ucs_time_t db;
+    double db;
     /** Overhead of fetching a wqe */
-    ucs_time_t wqe_fetch;
+    double wqe_fetch;
     /** Overhead of posting a wqe */
-    ucs_time_t wqe_post;
+    double wqe_post;
 } uct_ib_iface_send_overhead_t;
 
 
