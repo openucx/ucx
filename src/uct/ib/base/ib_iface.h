@@ -195,6 +195,10 @@ struct uct_ib_iface_config {
 
     /* IB reverse SL (default: AUTO - same value as sl) */
     unsigned long           reverse_sl;
+
+    /* IB priority SLs array, mapping SLs by priorities as index 
+       (default: AUTO - the entire array will be set to value of sl) */
+    UCS_CONFIG_ARRAY_FIELD(unsigned long, priority_sls) priority_sls;
 };
 
 
@@ -299,6 +303,7 @@ struct uct_ib_iface {
         uint8_t               port_num;
         uint8_t               sl;
         uint8_t               reverse_sl;
+        uint8_t               priority_sls[UCT_IB_SL_NUM];
         uint8_t               traffic_class;
         uint8_t               hop_limit;
         uint8_t               qp_type;
@@ -586,8 +591,9 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
 
 uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
 
-void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
-                                 const uct_ib_iface_config_t *ib_config);
+ucs_status_t
+uct_ib_iface_set_configured_sls(uct_ib_iface_t *ib_iface,
+                                const uct_ib_iface_config_t *ib_config);
 
 uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
                                           const union ibv_gid *gid);
