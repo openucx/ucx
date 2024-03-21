@@ -124,6 +124,14 @@ ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
     return params->worker->context->tl_rscs[rsc_index].tl_rsc.sys_device;
 }
 
+/* Pack/unpack local distance to make it equal to the remote one */
+static void
+ucp_proto_common_fp8_pack_unpack_distance(ucs_sys_dev_distance_t *distance)
+{
+    distance->latency   = UCS_FP8_PACK_UNPACK(LATENCY, distance->latency);
+    distance->bandwidth = UCS_FP8_PACK_UNPACK(BANDWIDTH, distance->bandwidth);
+}
+
 void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
                                         ucp_lane_index_t lane,
                                         ucs_sys_device_t sys_dev,
@@ -143,6 +151,8 @@ void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
     status     = ucs_topo_get_distance(sys_dev, tl_sys_dev, distance);
     ucs_assertv_always(status == UCS_OK, "sys_dev=%d tl_sys_dev=%d", sys_dev,
                        tl_sys_dev);
+
+    ucp_proto_common_fp8_pack_unpack_distance(distance);
 }
 
 const uct_iface_attr_t *
