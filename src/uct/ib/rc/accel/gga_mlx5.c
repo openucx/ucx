@@ -86,6 +86,7 @@ uct_gga_mlx5_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
     rkey_handle->packed_mkey    = *mkey;
     /* memh and rkey_ob will be initialized on demand */
     rkey_handle->memh           = NULL;
+    rkey_handle->md             = NULL;
     rkey_handle->rkey_ob.rkey   = UCT_INVALID_RKEY;
     rkey_handle->rkey_ob.handle = NULL;
     rkey_handle->rkey_ob.type   = NULL;
@@ -119,6 +120,7 @@ uct_gga_mlx5_rkey_handle_dereg(uct_gga_mlx5_rkey_handle_t *rkey_handle)
     }
 
     rkey_handle->memh = NULL;
+    rkey_handle->md   = NULL;
 }
 
 static ucs_status_t uct_gga_mlx5_rkey_release(uct_component_t *component,
@@ -183,7 +185,7 @@ uct_gga_mlx5_rkey_resolve(uct_ib_mlx5_md_t *md, uct_rkey_t rkey)
     status = uct_ib_mlx5_devx_mkey_pack(uct_md, (uct_mem_h)rkey_handle->memh,
                                         NULL, 0, &repack_params, &repack_mkey);
     if (status != UCS_OK) {
-        return status;
+        goto err_dereg;
     }
 
     return uct_ib_rkey_unpack(NULL, &repack_mkey,

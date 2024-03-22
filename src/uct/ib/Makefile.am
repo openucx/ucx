@@ -29,6 +29,9 @@ libuct_ib_la_SOURCES = \
 	base/ib_md.c
 
 # TODO separate module for mlx5
+noinst_HEADERS = \
+	rc/accel/gga_mlx5.h
+
 if HAVE_MLX5_DV
 libuct_ib_la_CPPFLAGS += -DUCT_IB_LIBMLX5_VER=\"$(libmlx5_ver)\"
 
@@ -81,8 +84,6 @@ libuct_ib_la_SOURCES += \
 	rc/accel/rc_mlx5_devx.c \
 	rc/accel/gga_mlx5.c
 
-noinst_HEADERS += \
-	rc/accel/gga_mlx5.h
 endif # HAVE_DEVX
 
 endif # HAVE_TL_RC

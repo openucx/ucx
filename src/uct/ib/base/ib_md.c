@@ -24,9 +24,7 @@
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <uct/api/v2/uct_v2.h>
-#if HAVE_DEVX
 #include <uct/ib/rc/accel/gga_mlx5.h> /* uct_ib_mlx5_gga_md_open */
-#endif
 #include <pthread.h>
 #ifdef HAVE_PTHREAD_NP_H
 #include <pthread_np.h>
