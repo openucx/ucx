@@ -127,6 +127,22 @@ typedef struct uct_ib_address_pack_params {
 } uct_ib_address_pack_params_t;
 
 
+
+/** Overhead of send operation of ib interface */
+typedef struct uct_ib_iface_send_overhead {
+    /** Overhead of allocating a tx buffer */
+    ucs_time_t bcopy;
+    /** Overhead of processing a work request completion */
+    ucs_time_t cqe;
+    /** Overhead of writing a doorbell to PCI */
+    ucs_time_t db;
+    /** Overhead of fetching a wqe */
+    ucs_time_t wqe_fetch;
+    /** Overhead of posting a wqe */
+    ucs_time_t wqe_post;
+} uct_ib_iface_send_overhead_t;
+
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -185,16 +201,21 @@ struct uct_ib_iface_config {
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
 
     /* IB PKEY to use */
-    unsigned                pkey;
+    unsigned                     pkey;
 
     /* Path MTU size */
-    uct_ib_mtu_t            path_mtu;
+    uct_ib_mtu_t                 path_mtu;
 
     /* QP counter set ID */
-    unsigned long           counter_set_id;
+    unsigned long                counter_set_id;
 
     /* IB reverse SL (default: AUTO - same value as sl) */
-    unsigned long           reverse_sl;
+    unsigned long                reverse_sl;
+
+    /**
+     * Estimated overhead of preparing a work request and posting it to the NIC
+     */
+    uct_ib_iface_send_overhead_t send_overhead;
 };
 
 
@@ -287,25 +308,29 @@ struct uct_ib_iface {
     uct_ib_device_gid_info_t  gid_info;
 
     struct {
-        unsigned              rx_payload_offset;   /* offset from desc to payload */
-        unsigned              rx_hdr_offset;       /* offset from desc to network header */
-        unsigned              rx_headroom_offset;  /* offset from desc to user headroom */
-        unsigned              rx_max_batch;
-        unsigned              rx_max_poll;
-        unsigned              tx_max_poll;
-        unsigned              seg_size;
-        unsigned              roce_path_factor;
-        uint8_t               max_inl_cqe[UCT_IB_DIR_LAST];
-        uint8_t               port_num;
-        uint8_t               sl;
-        uint8_t               reverse_sl;
-        uint8_t               traffic_class;
-        uint8_t               hop_limit;
-        uint8_t               qp_type;
-        uint8_t               force_global_addr;
-        uint8_t               flid_enabled;
-        enum ibv_mtu          path_mtu;
-        uint8_t               counter_set_id;
+        /* offset from desc to payload */
+        unsigned                     rx_payload_offset;
+        /* offset from desc to network header */
+        unsigned                     rx_hdr_offset;
+        /* offset from desc to user headroom */
+        unsigned                     rx_headroom_offset;
+        unsigned                     rx_max_batch;
+        unsigned                     rx_max_poll;
+        unsigned                     tx_max_poll;
+        unsigned                     seg_size;
+        unsigned                     roce_path_factor;
+        uint8_t                      max_inl_cqe[UCT_IB_DIR_LAST];
+        uint8_t                      port_num;
+        uint8_t                      sl;
+        uint8_t                      reverse_sl;
+        uint8_t                      traffic_class;
+        uint8_t                      hop_limit;
+        uint8_t                      qp_type;
+        uint8_t                      force_global_addr;
+        uint8_t                      flid_enabled;
+        enum ibv_mtu                 path_mtu;
+        uint8_t                      counter_set_id;
+        uct_ib_iface_send_overhead_t send_overhead;
     } config;
 
     uct_ib_iface_ops_t        *ops;
