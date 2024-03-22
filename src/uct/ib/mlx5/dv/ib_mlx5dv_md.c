@@ -1328,7 +1328,8 @@ uct_ib_mlx5_devx_umr_mkey_hash_put(uct_ib_mlx5_md_t *md,
     khint_t k;
 
     k = kh_put(umr_mkey_map, md->umr_mkey_hash, input_key, &ret);
-    if (ret < 0) {
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
         ucs_error("%s: failed to add UMR mkey alias 0x%x to hash map",
                   uct_ib_device_name(&md->super.dev), umr_alias->lkey);
 
