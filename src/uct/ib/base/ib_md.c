@@ -25,7 +25,7 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <uct/api/v2/uct_v2.h>
 #if HAVE_DEVX
-#include <uct/ib/rc/accel/gga_mlx5.h>
+#include <uct/ib/rc/accel/gga_mlx5.h> /* uct_ib_mlx5_gga_md_open */
 #endif
 #include <pthread.h>
 #ifdef HAVE_PTHREAD_NP_H
@@ -33,14 +33,8 @@
 #endif
 #include <sys/resource.h>
 
-#if HAVE_DEVX
-#include <uct/ib/rc/accel/gga_mlx5.h> /* uct_ib_mlx5_gga_md_open */
-#endif
-
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
-#define UCT_IB_MD_GGA_PREFIX           "gga_"
-#define UCT_IB_MD_GGA_PREFIX_LEN       4
 
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                sizeof(ucs_config_bw_spec_t),
@@ -732,8 +726,8 @@ ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
 {
     uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
-    *rkey_p     = packed_rkey;
-    *handle_p   = NULL;
+    *rkey_p   = packed_rkey;
+    *handle_p = NULL;
     ucs_trace("unpacked rkey 0x%llx: direct 0x%x atomic 0x%x",
               (unsigned long long)packed_rkey, uct_ib_md_direct_rkey(*rkey_p),
               uct_ib_md_atomic_rkey(*rkey_p));
@@ -1021,7 +1015,7 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     struct ibv_device **ib_device_list, *ib_device;
     int i, num_devices, ret, fork_init = 0;
 
-    ucs_trace("opening IB device %s/%s", md_name, md_name);
+    ucs_trace("opening IB device %s", md_name);
 
 #if !HAVE_DEVX
     if (md_config->devx == UCS_YES) {

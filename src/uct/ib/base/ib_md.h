@@ -121,12 +121,6 @@ typedef enum {
 } uct_ib_mr_type_t;
 
 
-enum {
-    UCT_IB_PACKED_MKEY_FLAG_EXPORTED = UCS_BIT(0),
-    UCT_IB_PACKED_MKEY_FLAG_GGA      = UCS_BIT(1)
-};
-
-
 /**
  * IB memory domain.
  */
