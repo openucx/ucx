@@ -269,10 +269,10 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                                   uct_pending_purge_callback_t purge_cb,
                                   void *purge_arg)
 {
-    ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
-    uct_ep_h aux_ep     = wireup_ep->aux_ep;
-    ucp_rsc_index_t rsc_index;
-    ucp_worker_h worker;
+    ucp_ep_h ucp_ep           = wireup_ep->super.ucp_ep;
+    uct_ep_h aux_ep           = wireup_ep->aux_ep;
+    ucp_rsc_index_t rsc_index = wireup_ep->aux_rsc_index;
+    ucp_worker_h worker       = ucp_ep->worker;
 
     if (aux_ep == NULL) {
         return;
@@ -284,7 +284,6 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                               purge_cb, purge_arg,
                               (ucp_send_nbx_callback_t)ucs_empty_function,
                               NULL);
-    worker = ucp_ep->worker;
     if (worker->context->config.ext.proto_enable) {
         ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker, rsc_index));
     }

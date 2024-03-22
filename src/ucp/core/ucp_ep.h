@@ -477,7 +477,7 @@ struct ucp_ep_config {
     /* Bitmap of lanes selected by the protocols */
     ucp_lane_map_t                proto_lane_map;
 
-    /* Number of endpoint using this configuration */
+    /* Number of endpoints using this configuration */
     unsigned                      ep_count;
 };
 
@@ -893,7 +893,7 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
 
 
 /**
- * Activate UCP worker interfaces corresponding to the lines selected by the
+ * Activate UCP worker interfaces corresponding to the lanes selected by the
  * protocols.
  *
  * @param [in]  ep  Endpoint object.
@@ -901,7 +901,7 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
 void ucp_ep_activate_worker_ifaces(ucp_ep_h ep);
 
 /**
- * Deactivate UCP worker interfaces corresponding to the lines selected by the
+ * Deactivate UCP worker interfaces corresponding to the lanes selected by the
  * protocols.
  *
  * @param [in]  ep  Endpoint object.
