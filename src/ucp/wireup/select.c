@@ -649,18 +649,6 @@ out:
     return UCS_OK;
 }
 
-static double ucp_wireup_fp8_pack_unpack_latency(double latency)
-{
-    ucs_fp8_t packed_lat = UCS_FP8_PACK(LATENCY, latency * UCS_NSEC_PER_SEC);
-    return UCS_FP8_UNPACK(LATENCY, packed_lat) / UCS_NSEC_PER_SEC;
-}
-
-static double ucp_wireup_fp8_pack_unpack_bw(double bandwidth)
-{
-    ucs_fp8_t packed_bw = UCS_FP8_PACK(BANDWIDTH, bandwidth);
-    return UCS_FP8_UNPACK(BANDWIDTH, packed_bw);
-}
-
 static inline double
 ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
                             const ucp_unpacked_address_t *unpacked_addr,
@@ -678,7 +666,7 @@ ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
         local_lat = ucp_wireup_iface_lat_distance_v2(wiface);
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local latency as well */
-        lat_lossy = ucp_wireup_fp8_pack_unpack_latency(local_lat);
+        lat_lossy = UCS_FP8_PACK_UNPACK(LATENCY, local_lat) / UCS_NSEC_PER_SEC;
 
         return (remote_iface_attr->lat_ovh + lat_lossy) / 2;
     }
@@ -1264,7 +1252,7 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V2) {
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local bandwidth as well */
-        local_bw = ucp_wireup_fp8_pack_unpack_bw(local_bw);
+        local_bw = UCS_FP8_PACK_UNPACK(BANDWIDTH, local_bw);
     }
 
     /* Apply dev num paths ratio after fp8 pack/unpack to make sure it is not
@@ -1488,7 +1476,7 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
     if (address->addr_version == UCP_OBJECT_VERSION_V2) {
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local bandwidth as well */
-        bw_local = ucp_wireup_fp8_pack_unpack_bw(bw_local);
+        bw_local = UCS_FP8_PACK_UNPACK(BANDWIDTH, bw_local);
     }
 
     return ucs_min(bw_local, bw_remote);
