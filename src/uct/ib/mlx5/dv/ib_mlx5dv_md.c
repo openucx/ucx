@@ -1035,12 +1035,78 @@ err:
     return status;
 }
 
+static uct_ib_mlx5_devx_umr_t *
+uct_ib_mlx5_devx_umr_mkey_create(uct_ib_mlx5_md_t *md)
+{
+    struct mlx5dv_mkey_init_attr mkey_init_attr = {
+        .pd           = md->super.pd,
+        .create_flags = MLX5DV_MKEY_INIT_ATTR_FLAGS_INDIRECT,
+        .max_entries  = 1
+    };
+    uct_ib_mlx5_devx_umr_t *umr;
+
+    umr = ucs_malloc(sizeof(*umr), "uct_ib_mlx5_devx_umr_t");
+    if (NULL == umr) {
+        ucs_error("%s: failed to allocate UMR mkey",
+                  uct_ib_device_name(&md->super.dev));
+        return NULL;
+    }
+
+    umr->umr_mkey = mlx5dv_create_mkey(&mkey_init_attr);
+    if (NULL == umr->umr_mkey) {
+        ucs_error("%s: failed to create UMR mkey: %m",
+                  uct_ib_device_name(&md->super.dev));
+        ucs_free(umr);
+        return NULL;
+    }
+
+    /* Set marker for UMR key to distinguish it on the importer side */
+    umr->umr_mkey->lkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
+    umr->umr_mkey->rkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
+
+    ucs_trace("%s: created " UCT_IB_MLX5_UMR_FMT,
+              uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
+
+    return umr;
+}
+
+static void uct_ib_mlx5_devx_umr_mkey_destroy(uct_ib_mlx5_md_t *md,
+                                              uct_ib_mlx5_devx_umr_t *umr)
+{
+    ucs_trace("%s: destroy " UCT_IB_MLX5_UMR_FMT,
+              uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
+
+    if (mlx5dv_destroy_mkey(umr->umr_mkey) != 0) {
+        ucs_error("%s: failed to destroy " UCT_IB_MLX5_UMR_FMT ": %m",
+                  uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
+    }
+
+    ucs_free(umr);
+}
+
+static void
+uct_ib_mlx5_devx_umr_mkey_alias_destroy(uct_ib_mlx5_md_t *md,
+                                        uct_ib_mlx5_devx_umr_alias_t *umr_alias)
+{
+    ucs_status_t status;
+
+    ucs_trace("%s: destroy " UCT_IB_MLX5_UMR_ALIAS_FMT,
+              uct_ib_device_name(&md->super.dev),
+              UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias));
+
+    status = uct_ib_mlx5_devx_obj_destroy(umr_alias->cross_mr, "MKEY_ALIAS");
+    if (UCS_OK != status) {
+        ucs_error("%s: failed to destroy " UCT_IB_MLX5_UMR_ALIAS_FMT ": %m",
+                  uct_ib_device_name(&md->super.dev),
+                  UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias));
+    }
+}
+
 static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
 {
     uct_ib_device_t *ibdev = &md->super.dev;
     uct_ib_mlx5_devx_umr_alias_t mkey_alias;
     uct_ib_mlx5_devx_umr_t *item, *tmp;
-    ucs_status_t status;
 
     /* Destroy UMR mkey hash if present */
     if (NULL != md->umr_mkey_hash) {
@@ -1048,17 +1114,7 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
                   uct_ib_device_name(ibdev), kh_size(md->umr_mkey_hash));
 
         kh_foreach_value(md->umr_mkey_hash, mkey_alias, {
-            ucs_trace("%s: destroy UMR mkey alias %p lkey 0x%x",
-                      uct_ib_device_name(ibdev), mkey_alias.cross_mr,
-                      mkey_alias.lkey);
-
-            status = uct_ib_mlx5_devx_obj_destroy(mkey_alias.cross_mr,
-                                                  "MKEY_ALIAS");
-            if (UCS_OK != status) {
-                ucs_error("%s: failed to destroy UMR alias %p lkey 0x%x: %m",
-                          uct_ib_device_name(ibdev), mkey_alias.cross_mr,
-                          mkey_alias.lkey);
-            }
+            uct_ib_mlx5_devx_umr_mkey_alias_destroy(md, &mkey_alias);
         });
 
         kh_destroy(umr_mkey_map, md->umr_mkey_hash);
@@ -1072,25 +1128,15 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
                   ucs_list_length(&md->umr_mkey_pool));
 
         ucs_list_for_each_safe(item, tmp, &md->umr_mkey_pool, super) {
-            ucs_trace("%s: destroy UMR mkey %p lkey 0x%x",
-                      uct_ib_device_name(ibdev), item->umr_mkey,
-                      item->umr_mkey->lkey);
-
-            if (mlx5dv_destroy_mkey(item->umr_mkey) != 0) {
-                ucs_error("%s: failed to destroy UMR mkey %p lkey 0x%x: %m",
-                        uct_ib_device_name(ibdev), item->umr_mkey,
-                        item->umr_mkey->lkey);
-            }
-
             ucs_list_del(&item->super);
-            free(item);
+            uct_ib_mlx5_devx_umr_mkey_destroy(md, item);
         }
     }
 
     if (NULL != md->umr_qp) {
         if (ibv_destroy_qp(md->umr_qp) != 0) {
             ucs_error("%s: failed to destroy UMR QP: %m",
-                    uct_ib_device_name(ibdev));
+                      uct_ib_device_name(ibdev));
         }
 
         md->umr_qp = NULL;
@@ -1099,38 +1145,11 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
     if (NULL != md->umr_cq) {
         if (ibv_destroy_cq(md->umr_cq) != 0) {
             ucs_error("%s: failed to destroy UMR CQ: %m",
-                    uct_ib_device_name(ibdev));
+                      uct_ib_device_name(ibdev));
         }
 
         md->umr_cq = NULL;
     }
-}
-
-static ucs_status_t
-uct_ib_mlx5_devx_umr_mkey_create(uct_ib_mlx5_md_t *md,
-                                 struct mlx5dv_mkey **umr_mkey)
-{
-    struct mlx5dv_mkey_init_attr mkey_init_attr = {
-        .pd           = md->super.pd,
-        .create_flags = MLX5DV_MKEY_INIT_ATTR_FLAGS_INDIRECT,
-        .max_entries  = 1
-    };
-
-    *umr_mkey = mlx5dv_create_mkey(&mkey_init_attr);
-    if (*umr_mkey == NULL) {
-        ucs_error("%s: failed to create UMR mkey: %m",
-                  uct_ib_device_name(&md->super.dev));
-        return UCS_ERR_IO_ERROR;
-    }
-
-    /* Set marker for UMR key to distinguish it on the importer side */
-    (*umr_mkey)->lkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
-    (*umr_mkey)->rkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
-
-    ucs_trace("%s: created UMR mkey %p lkey 0x%x",
-              uct_ib_device_name(&md->super.dev), *umr_mkey, (*umr_mkey)->lkey);
-
-    return UCS_OK;
 }
 
 static ucs_status_t
@@ -1152,8 +1171,8 @@ uct_ib_mlx5_devx_umr_mkey_invalidate(uct_ib_mlx5_md_t *md,
 
     ret = ibv_post_send(md->umr_qp, &wr, &bad_wr);
     if (ret != 0) {
-        ucs_error("%s: failed to invalidate indirect mkey 0x%x: %m",
-                  uct_ib_device_name(&md->super.dev), mkey);
+        ucs_error("%s: failed to invalidate " UCT_IB_MLX5_UMR_FMT ": %m",
+                  uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
         goto destroy_mkey;
     }
 
@@ -1161,25 +1180,23 @@ uct_ib_mlx5_devx_umr_mkey_invalidate(uct_ib_mlx5_md_t *md,
     while ((ret = ibv_poll_cq(md->umr_cq, 1, &wc)) == 0);
 
     if ((ret < 0) || (wc.status != IBV_WC_SUCCESS)) {
-        ucs_error("%s: failed to poll CQ for invalidating indirect mkey 0x%x "
-                  "ret %d status %d", uct_ib_device_name(&md->super.dev), mkey,
+        ucs_error("%s: failed to poll CQ for invalidating "
+                  UCT_IB_MLX5_UMR_FMT "ret %d status %d",
+                  uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr),
                   ret, wc.status);
         goto destroy_mkey;
     }
 
     /* Add UMR mkey to mkey pool for reuse & cleanup */
     ucs_list_add_head(&md->umr_mkey_pool, &umr->super);
-    ucs_trace("%s: put UMR mkey %p lkey 0x%x back to pool (%ld)",
-              uct_ib_device_name(&md->super.dev), umr->umr_mkey, mkey,
+    ucs_trace("%s: put " UCT_IB_MLX5_UMR_FMT " back to pool (%ld)",
+              uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr),
               ucs_list_length(&md->umr_mkey_pool));
+
     return UCS_OK;
 
 destroy_mkey:
-    if (mlx5dv_destroy_mkey(umr->umr_mkey) != 0) {
-        ucs_error("%s: failed to destroy UMR mkey %p lkey 0x%x: %m",
-                  uct_ib_device_name(&md->super.dev), umr->umr_mkey, mkey);
-    }
-    free(umr);
+    uct_ib_mlx5_devx_umr_mkey_destroy(md, umr);
     return UCS_ERR_IO_ERROR;
 }
 
@@ -1193,21 +1210,10 @@ uct_ib_mlx5_devx_umr_mkey_pool_get(uct_ib_mlx5_md_t *md, int *from_pool)
         umr = ucs_list_extract_head(&md->umr_mkey_pool, uct_ib_mlx5_devx_umr_t,
                                     super);
 
-        ucs_trace("%s: extracted from pool UMR mkey %p lkey 0x%x",
-                  uct_ib_device_name(&md->super.dev), umr->umr_mkey,
-                  umr->umr_mkey->lkey);
+        ucs_trace("%s: extracted from pool " UCT_IB_MLX5_UMR_FMT,
+                  uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
     } else {
-        umr = ucs_malloc(sizeof(*umr), "uct_ib_mlx5_devx_umr_t");
-        if (NULL == umr) {
-            ucs_error("%s: failed to allocate UMR mkey",
-                      uct_ib_device_name(&md->super.dev));
-            return NULL;
-        }
-
-        if (uct_ib_mlx5_devx_umr_mkey_create(md, &umr->umr_mkey) != UCS_OK) {
-            ucs_free(umr);
-            return NULL;
-        }
+        umr = uct_ib_mlx5_devx_umr_mkey_create(md);
     }
 
     return umr;
@@ -1274,10 +1280,9 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
         goto invalidate;
     }
 
-    ucs_trace("%s: registered addr %p length %zu lkey 0x%x to UMR mkey %p"
-              " lkey 0x%x", uct_ib_device_name(ibdev), ib_mr->addr,
-              ib_mr->length, ib_mr->lkey, (*umr)->umr_mkey,
-              (*umr)->umr_mkey->lkey);
+    ucs_trace("%s: registered addr %p length %zu lkey 0x%x to "
+              UCT_IB_MLX5_UMR_FMT, uct_ib_device_name(ibdev), ib_mr->addr,
+              ib_mr->length, ib_mr->lkey, UCT_IB_MLX5_UMR_ARG(*umr));
 
     return UCS_OK;
 
@@ -1311,9 +1316,9 @@ uct_ib_mlx5_devx_umr_mkey_hash_find(uct_ib_mlx5_md_t *md,
     }
 
     *umr_alias = kh_val(md->umr_mkey_hash, k);
-    ucs_trace("%s: found UMR mkey alias %p lkey 0x%x for lkey 0x%x in hash",
-              uct_ib_device_name(&md->super.dev), umr_alias->cross_mr,
-              umr_alias->lkey, packed_mkey->lkey);
+    ucs_trace("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " for lkey 0x%x in hash",
+              uct_ib_device_name(&md->super.dev),
+              UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias), packed_mkey->lkey);
 
     return UCS_OK;
 }
@@ -1330,16 +1335,17 @@ uct_ib_mlx5_devx_umr_mkey_hash_put(uct_ib_mlx5_md_t *md,
     k = kh_put(umr_mkey_map, md->umr_mkey_hash, input_key, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
         ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
-        ucs_error("%s: failed to add UMR mkey alias 0x%x to hash map",
-                  uct_ib_device_name(&md->super.dev), umr_alias->lkey);
+        ucs_error("%s: failed to add " UCT_IB_MLX5_UMR_ALIAS_FMT " to hash map",
+                  uct_ib_device_name(&md->super.dev),
+                  UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias));
 
         return UCS_ERR_NO_MEMORY;
     }
 
     kh_val(md->umr_mkey_hash, k) = *umr_alias;
-    ucs_trace("%s: added UMR mkey alias %p lkey 0x%x for lkey 0x%x to hash",
-              uct_ib_device_name(&md->super.dev), umr_alias->cross_mr,
-              umr_alias->lkey, packed_mkey->lkey);
+    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " for lkey 0x%x to hash",
+              uct_ib_device_name(&md->super.dev),
+              UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias), packed_mkey->lkey);
 
     return UCS_OK;
 }
@@ -1389,10 +1395,6 @@ uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
     }
 
     if (memh->umr_mr != NULL) {
-        ucs_trace("%s: unbind umr_mr %p with key %x",
-                  uct_ib_device_name(&md->super.dev), memh->umr_mr->umr_mkey,
-                  memh->exported_lkey);
-
         status = uct_ib_mlx5_devx_umr_mkey_invalidate(md, memh->umr_mr);
         if (status != UCS_OK) {
             return status;
@@ -2631,7 +2633,7 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     }
 
     if (umr != NULL) {
-        uct_ib_mlx5_devx_umr_mkey_invalidate(md, umr);
+        uct_ib_mlx5_devx_umr_mkey_destroy(md, umr);
     }
 
     md->flags &= ~UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI;
@@ -2839,7 +2841,7 @@ out:
     return UCS_OK;
 
 err_cross_mr_destroy:
-    mlx5dv_devx_obj_destroy(umr_alias.cross_mr);
+    uct_ib_mlx5_devx_umr_mkey_alias_destroy(md, &umr_alias);
 err_memh_free:
     ucs_free(ib_memh);
 err:
