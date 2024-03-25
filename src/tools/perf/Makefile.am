@@ -5,11 +5,12 @@
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
+# Copyright (c) Intel Corporation, 2023. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
 
-SUBDIRS = cuda rocm lib mad
+SUBDIRS = cuda rocm ze lib mad
 CC      = $(UCX_PERFTEST_CC)
 
 noinst_HEADERS = \

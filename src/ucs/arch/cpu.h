@@ -178,6 +178,13 @@ static inline int ucs_cpu_prefer_relaxed_order()
 #define UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM (12000 * UCS_MBYTE)
 
 
+#define UCS_CPU_VENDOR_LABEL "CPU vendor"
+#define UCS_CPU_MODEL_LABEL  "CPU model"
+
+
+const char *ucs_cpu_vendor_name();
+const char *ucs_cpu_model_name();
+
 END_C_DECLS
 
 #endif

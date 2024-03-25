@@ -67,12 +67,13 @@ typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
 
 
 typedef enum {
-    UCT_DC_MLX5_IFACE_ADDR_HW_TM      = UCS_BIT(0),
-    UCT_DC_MLX5_IFACE_ADDR_DC_V1      = UCS_BIT(1),
-    UCT_DC_MLX5_IFACE_ADDR_DC_V2      = UCS_BIT(2),
-    UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY = UCS_BIT(3),
-    UCT_DC_MLX5_IFACE_ADDR_DC_VERS    = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
-                                        UCT_DC_MLX5_IFACE_ADDR_DC_V2
+    UCT_DC_MLX5_IFACE_ADDR_HW_TM            = UCS_BIT(0),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V1            = UCS_BIT(1),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V2            = UCS_BIT(2),
+    UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY       = UCS_BIT(3),
+    UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16 = UCS_BIT(4),
+    UCT_DC_MLX5_IFACE_ADDR_DC_VERS          = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
+                                              UCT_DC_MLX5_IFACE_ADDR_DC_V2
 } uct_dc_mlx5_iface_addr_flags_t;
 
 

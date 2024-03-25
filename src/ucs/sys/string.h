@@ -37,6 +37,9 @@ BEGIN_C_DECLS
 #define UCS_HEXUNITS_AUTO   ((uint16_t)-2)
 
 
+#define UCS_VALUE_UNKNOWN_STR "unknown"
+
+
 /**
  * Expand a partial path to full path.
  *

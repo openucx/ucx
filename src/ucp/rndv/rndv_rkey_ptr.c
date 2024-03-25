@@ -79,8 +79,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    params.super.super.caps = &rkey_ptr_caps;
-    status = ucp_proto_single_init_priv(&params, &rpriv->spriv);
+    status = ucp_proto_single_init(&params, &rkey_ptr_caps, &rpriv->spriv);
     if (status != UCS_OK) {
         return status;
     }
@@ -250,9 +249,8 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
         return status;
     }
 
-    params.super.super.caps = &rkey_ptr_caps;
-
-    status = ucp_proto_single_init_priv(&params, &rpriv->super.spriv);
+    status = ucp_proto_single_init(&params, &rkey_ptr_caps,
+                                   &rpriv->super.spriv);
     if (status != UCS_OK) {
         return status;
     }

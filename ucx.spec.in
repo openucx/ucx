@@ -10,6 +10,7 @@
 %bcond_with    xpmem
 %bcond_with    vfs
 %bcond_with    mad
+%bcond_with    ze
 
 Name: ucx
 Version: @VERSION@
@@ -55,6 +56,9 @@ BuildRequires: pkgconfig(cray-xpmem)
 %endif
 %if %{with vfs}
 BuildRequires: fuse3-devel
+%endif
+%if %{with ze}
+BuildRequires: level-zero-devel
 %endif
 %if "%{debug}" == "1"
 BuildRequires: valgrind-devel
@@ -117,6 +121,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg vfs fuse3 \
            %_with_arg ugni ugni \
            %_with_arg mad mad \
+           %_with_arg ze ze \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -360,6 +365,20 @@ library internals, protocol objects, transports status, and more.
 %files vfs
 %{_libdir}/ucx/libucs_fuse.so.*
 %{_bindir}/ucx_vfs
+%endif
+
+%if %{with ze}
+%package ze
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX ZE GPU support
+Group: System Environment/Libraries
+
+%description ze
+Provides oneAPI Level Zero (ZE) Runtime support for UCX.
+
+%files ze
+%{_libdir}/ucx/libuct_ze.so.*
+%{_libdir}/ucx/libucm_ze.so.*
 %endif
 
 %changelog

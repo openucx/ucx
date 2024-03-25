@@ -46,7 +46,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
+        .super.overhead      = context->config.ext.proto_overhead_rndv_rtr,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
         .super.cfg_priority  = 0,
         .super.min_length    = 1,

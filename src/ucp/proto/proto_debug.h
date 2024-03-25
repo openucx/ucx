@@ -60,7 +60,7 @@ void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
 
 
 void ucp_proto_select_init_trace_caps(
-        ucp_proto_id_t proto_id, const ucp_proto_init_params_t *init_params);
+        const ucp_proto_init_params_t *init_params);
 
 
 void ucp_proto_select_info(ucp_worker_h worker,
