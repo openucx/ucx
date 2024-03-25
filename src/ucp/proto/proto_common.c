@@ -855,8 +855,8 @@ ucs_status_t ucp_proto_request_zcopy_id_reset(ucp_request_t *req)
 static void ucp_proto_stub_fatal_not_implemented(const char *func_name,
                                                  ucp_request_t *req)
 {
-    ucs_fatal("%s request %p proto %s, not implemented", func_name, req,
-              req->send.proto_config->proto->name);
+    ucs_fatal("'%s' is not implemented for protocol %s (req: %p)", func_name,
+              req->send.proto_config->proto->name, req);
 }
 
 void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,
