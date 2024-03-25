@@ -139,19 +139,10 @@ UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_alloc_methods)
 
 class uct_p2p_mix_test_mt : public uct_p2p_mix_test {
 protected:
-    bool is_page_size_aligned(const mapped_buffer &buffer)
-    {
-        return ucs_padding((size_t)buffer.reg_addr(), ucs_get_page_size()) == 0;
-    }
-
     mapped_buffer alloc_buffer(const entity &entity, size_t offset) override
     {
         mapped_buffer buf = uct_p2p_mix_test::alloc_buffer(entity, offset);
-        if (!is_page_size_aligned(buf)) {
-            UCS_TEST_SKIP_R("Skip MT registration for unaligned buffers");
-        }
-
-        auto *ib_memh = static_cast<uct_ib_mem_t*>(buf.memh());
+        auto *ib_memh     = static_cast<uct_ib_mem_t*>(buf.memh());
         EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_MULTITHREADED);
         return buf;
     }
