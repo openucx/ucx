@@ -1246,9 +1246,8 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
             }
         }
     };
-    int cq_ret;
+    int ret;
     struct ibv_send_wr *bad_wr;
-    uint32_t mkey;
 
     *umr = uct_ib_mlx5_devx_umr_mkey_pool_get(md, from_pool);
     if (NULL == *umr) {
@@ -1256,9 +1255,8 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
     }
 
     /* Set UMR lkey to be registered with given MR */
-    mkey            = (*umr)->umr_mkey->lkey;
-    mw.rkey         = mkey;
-    wr.bind_mw.rkey = mkey;
+    mw.rkey         = (*umr)->umr_mkey->lkey;
+    wr.bind_mw.rkey = (*umr)->umr_mkey->lkey;
 
     if (ibv_post_send(md->umr_qp, &wr, &bad_wr) != UCS_OK) {
         ucs_error("%s: failed to post UMR mkey registration WR for addr %p len "
@@ -1269,13 +1267,13 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
     }
 
     /* Poll for completion */
-    while ((cq_ret = ibv_poll_cq(md->umr_cq, 1, &wc)) == 0);
+    while ((ret = ibv_poll_cq(md->umr_cq, 1, &wc)) == 0);
 
-    if (cq_ret < 0 || wc.status != IBV_WC_SUCCESS) {
+    if (ret < 0 || wc.status != IBV_WC_SUCCESS) {
         ucs_error("%s: failed to poll CQ for UMR mkey registration for addr %p "
                   " len %zu lkey 0x%x ret %d status %d",
                   uct_ib_device_name(ibdev), ib_mr->addr, ib_mr->length,
-                  ib_mr->lkey, cq_ret, wc.status);
+                  ib_mr->lkey, ret, wc.status);
 
         goto invalidate;
     }
@@ -1334,17 +1332,22 @@ uct_ib_mlx5_devx_umr_mkey_hash_put(uct_ib_mlx5_md_t *md,
 
     k = kh_put(umr_mkey_map, md->umr_mkey_hash, input_key, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
-        ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
         ucs_error("%s: failed to add " UCT_IB_MLX5_UMR_ALIAS_FMT " to hash map",
                   uct_ib_device_name(&md->super.dev),
                   UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias));
 
         return UCS_ERR_NO_MEMORY;
+    } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        ucs_error("%s: " UCT_IB_MLX5_UMR_ALIAS_FMT " already exists in hash "
+                  "map", uct_ib_device_name(&md->super.dev),
+                  UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias));
+
+        return UCS_ERR_ALREADY_EXISTS;
     }
 
     kh_val(md->umr_mkey_hash, k) = *umr_alias;
-    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " for lkey 0x%x to hash",
-              uct_ib_device_name(&md->super.dev),
+    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " for lkey 0x%x to hash "
+              "map", uct_ib_device_name(&md->super.dev),
               UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias), packed_mkey->lkey);
 
     return UCS_OK;
@@ -2831,7 +2834,11 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     /* If received mkey is UMR key, store alias in the UMR hash map */
     if (uct_ib_mlx5_devx_is_umr_mkey(packed_mkey->lkey)) {
         umr_alias.lkey = memh->super.lkey;
-        uct_ib_mlx5_devx_umr_mkey_hash_put(md, packed_mkey, &umr_alias);
+
+        status = uct_ib_mlx5_devx_umr_mkey_hash_put(md, packed_mkey, &umr_alias);
+        if (UCS_OK != status) {
+            goto err_cross_mr_destroy;
+        }
     }
 
 out:
