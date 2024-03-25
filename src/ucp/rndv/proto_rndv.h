@@ -219,8 +219,6 @@ void ucp_proto_rndv_bulk_request_init_lane_idx(
 void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack);
 
 
-void ucp_proto_rndv_ppln_recv_frag_clean(ucp_request_t *freq);
-
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
                                             int abort);
 
