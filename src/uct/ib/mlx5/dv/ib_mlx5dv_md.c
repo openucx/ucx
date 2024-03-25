@@ -1079,8 +1079,10 @@ uct_ib_mlx5_devx_umr_mkey_create(uct_ib_mlx5_md_t *md)
     }
 
     /* Set marker for UMR key to distinguish it on the importer side */
-    umr->umr_mkey->lkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
-    umr->umr_mkey->rkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
+    umr->umr_mkey->lkey  |= UCT_IB_MLX5_MKEY_TAG_UMR;
+    umr->umr_mkey->rkey  |= UCT_IB_MLX5_MKEY_TAG_UMR;
+
+    umr->is_xgvmi_allowed = 0;
 
     ucs_trace("%s: created " UCT_IB_MLX5_UMR_FMT,
               uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
@@ -1219,19 +1221,18 @@ destroy_mkey:
 }
 
 static uct_ib_mlx5_devx_umr_t *
-uct_ib_mlx5_devx_umr_mkey_pool_get(uct_ib_mlx5_md_t *md, int *from_pool)
+uct_ib_mlx5_devx_umr_mkey_pool_get(uct_ib_mlx5_md_t *md)
 {
     uct_ib_mlx5_devx_umr_t *umr;
 
-    *from_pool = !ucs_list_is_empty(&md->umr_mkey_pool);
-    if (*from_pool) {
+    if (ucs_list_is_empty(&md->umr_mkey_pool)) {
+        umr = uct_ib_mlx5_devx_umr_mkey_create(md);
+    } else {
         umr = ucs_list_extract_head(&md->umr_mkey_pool, uct_ib_mlx5_devx_umr_t,
                                     super);
 
         ucs_trace("%s: extracted from pool " UCT_IB_MLX5_UMR_FMT,
                   uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
-    } else {
-        umr = uct_ib_mlx5_devx_umr_mkey_create(md);
     }
 
     return umr;
@@ -1239,7 +1240,7 @@ uct_ib_mlx5_devx_umr_mkey_pool_get(uct_ib_mlx5_md_t *md, int *from_pool)
 
 static ucs_status_t
 uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
-                               uct_ib_mlx5_devx_umr_t **umr, int *from_pool)
+                               uct_ib_mlx5_devx_umr_t **umr)
 {
     uct_ib_device_t *ibdev = &md->super.dev;
     struct ibv_mr *ib_mr   = mr->super.ib;
@@ -1267,7 +1268,7 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
     int ret;
     struct ibv_send_wr *bad_wr;
 
-    *umr = uct_ib_mlx5_devx_umr_mkey_pool_get(md, from_pool);
+    *umr = uct_ib_mlx5_devx_umr_mkey_pool_get(md);
     if (NULL == *umr) {
         goto err;
     }
@@ -1287,7 +1288,7 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
     /* Poll for completion */
     while ((ret = ibv_poll_cq(md->umr_cq, 1, &wc)) == 0);
 
-    if (ret < 0 || wc.status != IBV_WC_SUCCESS) {
+    if ((ret < 0) || (wc.status != IBV_WC_SUCCESS)) {
         ucs_error("%s: failed to poll CQ for UMR mkey registration for addr %p "
                   " len %zu lkey 0x%x ret %d status %d",
                   uct_ib_device_name(ibdev), ib_mr->addr, ib_mr->length,
@@ -2601,7 +2602,6 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     uct_ib_mlx5_devx_umr_t *umr      = NULL;
     uct_ib_mlx5_devx_mr_t *mr        = &memh->mrs[UCT_IB_MR_DEFAULT];
     uint32_t exported_lkey;
-    int from_pool;
     ucs_status_t status;
 
     if (memh->dm != NULL) {
@@ -2629,20 +2629,24 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
             return status;
         }
     } else {
-        status = uct_ib_mlx5_devx_umr_mkey_bind(md, mr, &umr, &from_pool);
+        status = uct_ib_mlx5_devx_umr_mkey_bind(md, mr, &umr);
         if (status != UCS_OK) {
             return status;
         }
 
         exported_lkey = umr->umr_mkey->lkey;
 
-        if (from_pool) {
+        if (umr->is_xgvmi_allowed) {
             goto out;
         }
     }
 
     status = uct_ib_mlx5_devx_allow_xgvmi_access(md, exported_lkey, 1);
     if (status == UCS_OK) {
+        if (NULL != umr) {
+            umr->is_xgvmi_allowed = 1;
+        }
+
         goto out;
     }
 
