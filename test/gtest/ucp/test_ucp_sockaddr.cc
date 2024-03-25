@@ -928,7 +928,7 @@ protected:
 
         listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
-        mem_buffer send_buffer(length, UCS_MEMORY_TYPE_HOST);
+        mem_buffer send_buffer(length);
         send_buffer.pattern_fill(1, length);
         void *sreq = send(sender(), send_buffer.ptr(), length,
                           send_recv_type(), scomplete_reset_data_cbx,
@@ -982,7 +982,7 @@ protected:
 
         m_sender_uct_ops.clear();
 
-        mem_buffer recv_buffer(length, UCS_MEMORY_TYPE_HOST);
+        mem_buffer recv_buffer(length);
         recv_buffer.pattern_fill(2, length);
         void *rreq = recv(receiver(), recv_buffer.ptr(), length,
                           message, rtag_complete_check_data_cbx,
@@ -3122,7 +3122,7 @@ protected:
         /* If the sumber of senders greater than 1, send the same buffer on
          * multiple connections to delay the completion of md_invalidate on
          * the closed connection */
-        mem_buffer send_buf(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer send_buf(size);
         send_buf.pattern_fill(1, size);
         for (size_t sender_idx = 0; sender_idx < num_senders; ++sender_idx) {
             ucp_send_nbx_callback_t send_cb;
@@ -3163,7 +3163,7 @@ protected:
          * with CANCEL status */
         entity_disconnect(sender());
 
-        mem_buffer extra_recv_buf(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer extra_recv_buf(size);
         extra_recv_buf.pattern_fill(2, size);
         for (size_t i = num_sends; i < messages.size(); ++i) {
             void *rreq = recv(receiver(), extra_recv_buf.ptr(), size,
@@ -3181,7 +3181,7 @@ protected:
         /* Complete receive operations */
         ucs::ptr_vector<mem_buffer> recv_bufs;
         for (size_t i = 0; i < num_sends; ++i) {
-            mem_buffer *recv_buf = new mem_buffer(size, UCS_MEMORY_TYPE_HOST);
+            mem_buffer *recv_buf = new mem_buffer(size);
             recv_buf->pattern_fill(2, size);
             recv_bufs.push_back(recv_buf);
 

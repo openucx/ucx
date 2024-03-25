@@ -421,7 +421,7 @@ public:
     }
 
     void test_ordering(size_t size, uint32_t put_flags) {
-        mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer sbuf(size);
         mapped_buffer rbuf(size, receiver());
 
         rbuf.memset(0);
