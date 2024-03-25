@@ -2766,13 +2766,13 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     const uint64_t flags = UCT_MD_MEM_ATTACH_FIELD_VALUE(params, flags,
                                                          FIELD_FLAGS, 0);
     const uct_ib_md_packed_mkey_t *packed_mkey = mkey_buffer;
+    uct_ib_mlx5_devx_umr_alias_t umr_alias     = {};
     uct_ib_mlx5_devx_mem_t *memh;
     uct_ib_mem_t *ib_memh;
     void *hdr, *alias_ctx;
     ucs_status_t status;
     void *access_key;
     int ret;
-    uct_ib_mlx5_devx_umr_alias_t umr_alias;
 
     status = uct_ib_memh_alloc(&md->super, 0, 0, sizeof(*memh), 0, &ib_memh);
     if (status != UCS_OK) {
