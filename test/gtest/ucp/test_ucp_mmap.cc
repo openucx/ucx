@@ -974,7 +974,7 @@ UCS_TEST_P(test_ucp_mmap_atomic, reuse_buffer)
 
     /* Unmap the buffer */
     ucp_rkey_destroy(rkey);
-    ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+    ASSERT_UCS_OK(ucp_mem_unmap(receiver().ucph(), memh));
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_atomic)
