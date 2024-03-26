@@ -81,12 +81,11 @@ void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
                       UCP_PROTO_PERF_FUNC_BW_ARG(perf));
 }
 
-void ucp_proto_select_init_trace_caps(
-        ucp_proto_id_t proto_id, const ucp_proto_init_params_t *init_params)
+void ucp_proto_select_init_trace_caps(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_caps_t *proto_caps          = init_params->caps;
     ucp_proto_query_params_t query_params = {
-        .proto         = ucp_protocols[proto_id],
+        .proto         = ucp_protocols[init_params->proto_id],
         .priv          = init_params->priv,
         .worker        = init_params->worker,
         .select_param  = init_params->select_param,
@@ -96,22 +95,13 @@ void ucp_proto_select_init_trace_caps(
     const UCS_V_UNUSED ucs_linear_func_t *perf;
     size_t range_start, range_end;
     ucp_proto_query_attr_t query_attr;
-    int range_index;
-    char min_length_str[64];
     char thresh_str[64];
+    int range_index;
 
     if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
         return;
     }
 
-    ucs_trace("initialized protocol %s min_length %s cfg_thresh %s",
-              init_params->proto_name,
-              ucs_memunits_to_str(proto_caps->min_length, min_length_str,
-                                  sizeof(min_length_str)),
-              ucs_memunits_to_str(proto_caps->cfg_thresh, thresh_str,
-                                  sizeof(thresh_str)));
-
-    ucs_log_indent(1);
     range_start = 0;
     for (range_index = 0; range_index < proto_caps->num_ranges; ++range_index) {
         range_start = ucs_max(range_start, proto_caps->min_length);
@@ -119,7 +109,8 @@ void ucp_proto_select_init_trace_caps(
         if (range_end > range_start) {
             query_params.msg_length = range_start;
 
-            ucp_proto_id_call(proto_id, query, &query_params, &query_attr);
+            ucp_proto_id_call(init_params->proto_id, query, &query_params,
+                              &query_attr);
 
             perf = proto_caps->ranges[range_index].perf;
             ucs_trace("range[%d] %s %s %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
@@ -130,7 +121,6 @@ void ucp_proto_select_init_trace_caps(
         }
         range_start = range_end + 1;
     }
-    ucs_log_indent(-1);
 }
 
 static void

@@ -19,27 +19,6 @@
 
 #define UCP_PROTO_RNDV_PUT_DESC "write to remote"
 
-
-enum {
-    /* Initial stage for put zcopy is sending the data */
-    UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND = UCP_PROTO_STAGE_START,
-
-    /* Initial stage for put memtype is copy the data to the fragment */
-    UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY = UCP_PROTO_STAGE_START,
-
-    /* Flush all lanes to ensure remote delivery */
-    UCP_PROTO_RNDV_PUT_STAGE_FLUSH,
-
-    /* Send ATP without fence (could be done after a flush) */
-    UCP_PROTO_RNDV_PUT_STAGE_ATP,
-
-    /* Send ATP with fence (could be done if using send lanes for ATP) */
-    UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP,
-
-    /* Memtype only: send the fragment to the remote side */
-    UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND
-};
-
 typedef struct ucp_proto_rndv_put_priv {
     uct_completion_callback_t  put_comp_cb;
     uct_completion_callback_t  atp_comp_cb;
@@ -238,7 +217,8 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
         .super.send_op       = UCT_EP_OP_PUT_ZCOPY,
         .super.memtype_op    = memtype_op,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
+                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
@@ -428,6 +408,23 @@ ucp_proto_rndv_put_zcopy_query(const ucp_proto_query_params_t *params,
                       UCP_PROTO_ZCOPY_DESC, put_desc);
 }
 
+static ucs_status_t ucp_proto_rndv_put_zcopy_reset(ucp_request_t *request)
+{
+    const ucp_proto_rndv_put_priv_t *rpriv = request->send.proto_config->priv;
+    ucp_datatype_iter_t *dt_iter           = &request->send.state.dt_iter;
+    ucp_lane_map_t acked_map;
+
+    if (request->send.rndv.put.atp_map != 0) {
+        acked_map       = request->send.rndv.put.atp_map ^ rpriv->atp_map;
+        dt_iter->offset = ucs_popcount(acked_map);
+    } else {
+        dt_iter->offset = dt_iter->length;
+    }
+
+    request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_put_zcopy_proto = {
     .name     = "rndv/put/zcopy",
     .desc     = NULL,
@@ -441,7 +438,7 @@ ucp_proto_t ucp_rndv_put_zcopy_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_put_zcopy_reset
 };
 
 

@@ -232,7 +232,6 @@ void test_ib_md::test_mkey_pack_mt_internal(unsigned access_mask,
     constexpr size_t size = UCS_MBYTE;
     unsigned pack_flags, dereg_flags;
     void *buffer;
-    int ret;
     uct_mem_h memh;
 
     if (!check_invalidate_support(access_mask)) {
@@ -243,8 +242,8 @@ void test_ib_md::test_mkey_pack_mt_internal(unsigned access_mask,
         UCS_TEST_SKIP_R("KSM is required for MT registration");
     }
 
-    ret = ucs_posix_memalign(&buffer, size, size, "mkey_pack_mt");
-    ASSERT_EQ(0, ret) << "Allocation failed";
+    buffer = ucs_malloc(size, "mkey_pack_mt");
+    ASSERT_NE(buffer, nullptr) << "Allocation failed";
 
     if (invalidate) {
         pack_flags  = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA;

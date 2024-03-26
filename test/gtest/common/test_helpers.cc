@@ -641,7 +641,9 @@ mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
 }
 
 mmap_fixed_address::~mmap_fixed_address() {
-    munmap(m_ptr, m_length);
+    if (m_ptr != NULL) {
+        munmap(m_ptr, m_length);
+    }
 }
 
 std::string compact_string(const std::string &str, size_t length)

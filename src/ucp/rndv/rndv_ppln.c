@@ -48,7 +48,6 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     const ucp_proto_perf_range_t *frag_range;
     size_t frag_min_length, frag_max_length;
     ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_init_params_t ppln_params;
     ucp_proto_select_param_t sel_param;
     ucp_proto_select_t *proto_select;
     ucs_linear_func_t ppln_overhead;
@@ -101,13 +100,11 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
               UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
 
     /* Add the single range of the pipeline protocol to ppln_caps */
-    ppln_params            = *init_params;
-    ppln_params.caps       = &ppln_caps;
     ppln_caps.cfg_thresh   = thresh_elem->proto_config.cfg_thresh;
     ppln_caps.cfg_priority = 0;
     ppln_caps.min_length   = frag_max_length + 1;
     ppln_caps.num_ranges   = 0;
-    ucp_proto_common_add_ppln_range(&ppln_params, frag_range, SIZE_MAX);
+    ucp_proto_common_add_ppln_range(&ppln_caps, frag_range, SIZE_MAX);
 
     /* Initialize private data */
     *init_params->priv_size = sizeof(*rpriv);

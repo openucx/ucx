@@ -22,42 +22,6 @@
 #include <string.h>
 
 
-static const char *cpu_model_names[] = {
-    [UCS_CPU_MODEL_UNKNOWN]            = "unknown",
-    [UCS_CPU_MODEL_INTEL_IVYBRIDGE]    = "IvyBridge",
-    [UCS_CPU_MODEL_INTEL_SANDYBRIDGE]  = "SandyBridge",
-    [UCS_CPU_MODEL_INTEL_NEHALEM]      = "Nehalem",
-    [UCS_CPU_MODEL_INTEL_WESTMERE]     = "Westmere",
-    [UCS_CPU_MODEL_INTEL_HASWELL]      = "Haswell",
-    [UCS_CPU_MODEL_INTEL_BROADWELL]    = "Broadwell",
-    [UCS_CPU_MODEL_INTEL_SKYLAKE]      = "Skylake",
-    [UCS_CPU_MODEL_INTEL_ICELAKE]      = "Icelake",
-    [UCS_CPU_MODEL_ARM_AARCH64]        = "ARM 64-bit",
-    [UCS_CPU_MODEL_AMD_NAPLES]         = "Naples",
-    [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
-    [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
-    [UCS_CPU_MODEL_AMD_GENOA]          = "Genoa",
-    [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
-    [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
-    [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui",
-    [UCS_CPU_MODEL_RV64G]              = "RV64G",
-    [UCS_CPU_MODEL_NVIDIA_GRACE]       = "Grace"
-};
-
-
-
-static const char* cpu_vendor_names[] = {
-    [UCS_CPU_VENDOR_UNKNOWN]          = "unknown",
-    [UCS_CPU_VENDOR_INTEL]            = "Intel",
-    [UCS_CPU_VENDOR_AMD]              = "AMD",
-    [UCS_CPU_VENDOR_GENERIC_ARM]      = "Generic ARM",
-    [UCS_CPU_VENDOR_GENERIC_PPC]      = "Generic PPC",
-    [UCS_CPU_VENDOR_GENERIC_RV64G]    = "Generic RV64G",
-    [UCS_CPU_VENDOR_FUJITSU_ARM]      = "Fujitsu ARM",
-    [UCS_CPU_VENDOR_ZHAOXIN]          = "Zhaoxin",
-    [UCS_CPU_VENDOR_NVIDIA]           = "Nvidia"
-};
-
 static double measure_memcpy_bandwidth(size_t size)
 {
     ucs_time_t start_time, end_time;
@@ -248,9 +212,10 @@ void print_sys_info(int print_opts)
         printf("# Timer frequency: %.3f MHz\n",
                ucs_get_cpu_clocks_per_sec() / 1e6);
         printf("# Timer accuracy: %.3f %%\n", measure_timer_accuracy() * 100);
-        printf("# CPU vendor: %s\n",
-               cpu_vendor_names[ucs_arch_get_cpu_vendor()]);
-        printf("# CPU model: %s\n", cpu_model_names[ucs_arch_get_cpu_model()]);
+        printf("# %s: %s\n", UCS_CPU_VENDOR_LABEL, ucs_cpu_vendor_name());
+        printf("# %s: %s\n", UCS_CPU_MODEL_LABEL, ucs_cpu_model_name());
+        printf("# %s: %s\n", UCS_SYS_DMI_PRODUCT_NAME_LABEL,
+               ucs_sys_dmi_product_name());
     }
 
     if (print_opts & PRINT_SYS_TOPO) {

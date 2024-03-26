@@ -112,6 +112,28 @@ typedef struct {
 /* Return rendezvous threshold for the provided configuration */
 size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params);
 
+/* rndv_put stages */
+enum {
+    /* Initial stage for put zcopy is sending the data */
+    UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND = UCP_PROTO_STAGE_START,
+
+    /* Initial stage for put memtype is copy the data to the fragment */
+    UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY = UCP_PROTO_STAGE_START,
+
+    /* Flush all lanes to ensure remote delivery */
+    UCP_PROTO_RNDV_PUT_STAGE_FLUSH,
+
+    /* Send ATP without fence (could be done after a flush) */
+    UCP_PROTO_RNDV_PUT_STAGE_ATP,
+
+    /* Send ATP with fence (could be done if using send lanes for ATP) */
+    UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP,
+
+    /* Memtype only: send the fragment to the remote side */
+    UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND
+};
+
+
 /* Initializes protocol which sends rendezvous control message using AM lane
  * (e.g. RTS and ATS). */
 ucs_status_t

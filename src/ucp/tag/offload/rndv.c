@@ -26,7 +26,7 @@ ucp_tag_rndv_offload_proto_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_single_init_params_t params = {
        .super.super         = *init_params,
        .super.latency       = 0,
-       .super.overhead      = 40e-9,
+       .super.overhead      = context->config.ext.proto_overhead_rndv_offload,
        .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
        .super.cfg_priority  = 60,
        .super.min_length    = ucp_ep_tag_offload_min_rndv_thresh(
@@ -48,13 +48,21 @@ ucp_tag_rndv_offload_proto_init(const ucp_proto_init_params_t *init_params)
        .lane_type           = UCP_LANE_TYPE_TAG,
        .tl_cap_flags        = UCT_IFACE_FLAG_TAG_RNDV_ZCOPY
     };
+    ucs_status_t status;
 
     if (!ucp_tag_rndv_check_op_id(init_params) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_single_init(&params);
+    status = ucp_proto_single_init(&params, params.super.super.caps,
+                                   params.super.super.priv);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *init_params->priv_size = sizeof(ucp_proto_single_priv_t);
+    return UCS_OK;
 }
 
 static void
@@ -157,7 +165,7 @@ ucp_tag_rndv_offload_sw_proto_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
+        .super.overhead      = context->config.ext.proto_overhead_rndv_offload,
         .super.cfg_thresh    = ucp_proto_rndv_thresh(init_params),
         .super.cfg_priority  = 60,
         .super.min_length    = ucp_ep_tag_offload_min_rndv_thresh(

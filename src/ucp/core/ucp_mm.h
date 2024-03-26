@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -225,12 +226,18 @@ static UCS_F_ALWAYS_INLINE size_t ucp_memh_length(const ucp_mem_h memh)
 #define UCP_MEM_IS_HOST(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_HOST)
 #define UCP_MEM_IS_ROCM(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ROCM)
 #define UCP_MEM_IS_CUDA(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA)
+#define UCP_MEM_IS_ZE_HOST(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ZE_HOST)
+#define UCP_MEM_IS_ZE_DEVICE(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ZE_DEVICE)
 #define UCP_MEM_IS_CUDA_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA_MANAGED)
 #define UCP_MEM_IS_ROCM_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ROCM_MANAGED)
+#define UCP_MEM_IS_ZE_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ZE_MANAGED)
 #define UCP_MEM_IS_ACCESSIBLE_FROM_CPU(_mem_type) \
     (UCS_BIT(_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)
-#define UCP_MEM_IS_GPU(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA || \
-                                   (_mem_type) == UCS_MEMORY_TYPE_CUDA_MANAGED || \
-                                   (_mem_type) == UCS_MEMORY_TYPE_ROCM)
+#define UCP_MEM_IS_GPU(_mem_type) (UCS_BIT(_mem_type) & \
+                                   (UCS_BIT(UCS_MEMORY_TYPE_CUDA) | \
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED) | \
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM) | \
+                                    UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) | \
+                                    UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED)))
 
 #endif

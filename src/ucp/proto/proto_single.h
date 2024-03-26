@@ -24,12 +24,12 @@ typedef struct {
 } ucp_proto_single_init_params_t;
 
 
-ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params);
+ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
+                                   ucp_proto_caps_t *caps,
+                                   ucp_proto_single_priv_t *spriv);
 
 
-ucs_status_t
-ucp_proto_single_init_priv(const ucp_proto_single_init_params_t *params,
-                           ucp_proto_single_priv_t *spriv);
+void ucp_proto_single_probe(const ucp_proto_single_init_params_t *params);
 
 
 void ucp_proto_single_query(const ucp_proto_query_params_t *params,

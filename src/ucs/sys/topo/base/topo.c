@@ -743,6 +743,14 @@ static const ucs_topo_pci_info_t ucs_topo_pci_info[] = {
      .ctrl_overhead = 16,
      .encoding      = 128,
      .decoding      = 130},
+    {.name          = "gen5",
+     .bw_gbps       = 32,
+     .payload       = 256,
+     .tlp_overhead  = 26,
+     .ctrl_ratio    = 4,
+     .ctrl_overhead = 16,
+     .encoding      = 128,
+     .decoding      = 130},
 };
 
 double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)

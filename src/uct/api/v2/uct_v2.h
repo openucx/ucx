@@ -93,9 +93,22 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
 
     /** Enable @ref uct_perf_attr_t::max_inflight_eps */
-    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10)
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10),
+
+    /** Enable @ref uct_perf_attr_t::flags */
+    UCT_PERF_ATTR_FIELD_FLAGS              = UCS_BIT(11)
 };
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Flags of supported performance attributes functionalities
+ *
+ * This is used in @ref uct_perf_attr_t::flags.
+ */
+typedef enum {
+    /** TX operations can depend on unrelated RX operation completion */
+    UCT_PERF_ATTR_FLAGS_TX_RX_SHARED = UCS_BIT(0)
+} uct_perf_attr_flags_t;
 
 /**
  * @ingroup UCT_RESOURCE
@@ -187,6 +200,11 @@ typedef struct {
      * This field is set by the UCT layer.
      */
     size_t              max_inflight_eps;
+
+    /**
+     * Performance characteristics of the network interface.
+     */
+    uint64_t            flags;
 } uct_perf_attr_t;
 
 

@@ -1,0 +1,12 @@
+#
+# Copyright (C) Intel Corporation, 2023. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+Name: @PACKAGE@-ze
+Description: Unified Communication X Library ZE module
+Version: @VERSION@
+Libs:
+Libs.private:
+

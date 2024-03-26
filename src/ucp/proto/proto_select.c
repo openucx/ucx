@@ -420,7 +420,8 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
 
         /* Add all candidates as children */
         UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(child_proto_idx, proto_mask) {
-            proto       = &ucs_array_elem(&proto_init->protocols, proto_idx);
+            proto       = &ucs_array_elem(&proto_init->protocols,
+                                          child_proto_idx);
             child_range = ucp_proto_caps_range_find(&proto->caps, range_start);
             ucp_proto_perf_node_add_child(range->node, child_range->node);
         }
@@ -716,6 +717,8 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
     ucp_proto_id_t proto_id                       = init_params->proto_id;
     ucp_proto_init_elem_t *init_elem;
     const char *proto_name;
+    char min_length_str[64];
+    char thresh_str[64];
     size_t priv_offset;
 
     proto_name = ucp_proto_id_field(proto_id, name);
@@ -731,7 +734,17 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
                     proto_name);
     }
 
-    ucp_proto_select_init_trace_caps(proto_id, init_params);
+    ucs_trace("added protocol %s min_length %s cfg_thresh %s cfg_priority %d "
+              "priv_size %zu",
+              init_params->proto_name,
+              ucs_memunits_to_str(proto_caps->min_length, min_length_str,
+                                  sizeof(min_length_str)),
+              ucs_memunits_to_str(cfg_thresh, thresh_str, sizeof(thresh_str)),
+              cfg_priority, priv_size);
+
+    ucs_log_indent(1);
+    ucp_proto_select_init_trace_caps(init_params);
+    ucs_log_indent(-1);
 
     /* Copy private data */
     priv_offset = ucs_array_length(&proto_init->priv_buf);
