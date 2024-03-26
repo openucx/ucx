@@ -1167,11 +1167,43 @@ static void uct_ib_mlx5_devx_umr_free(uct_ib_mlx5_md_t *md)
 }
 
 static ucs_status_t
+uct_ib_mlx5_devx_umr_post_sync(uct_ib_mlx5_md_t *md, struct ibv_send_wr *wr,
+                               uct_ib_mlx5_devx_umr_t *umr, const char *desc)
+{
+    struct ibv_wc wc = {};
+    struct ibv_send_wr *bad_wr;
+    int ret;
+
+    ret = ibv_post_send(md->umr_qp, wr, &bad_wr);
+    if (ret != 0) {
+        ucs_error("%s: failed to post WR to UMR QP operation '%s' for "
+                  UCT_IB_MLX5_UMR_FMT " : %m",
+                  uct_ib_device_name(&md->super.dev), desc,
+                  UCT_IB_MLX5_UMR_ARG(umr));
+
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Poll for completion */
+    while ((ret = ibv_poll_cq(md->umr_cq, 1, &wc)) == 0);
+
+    if ((ret < 0) || (wc.status != IBV_WC_SUCCESS)) {
+        ucs_error("%s: failed to poll CQ operation '%s' for "
+                  UCT_IB_MLX5_UMR_FMT ": ret %d status %d",
+                  uct_ib_device_name(&md->super.dev), desc,
+                  UCT_IB_MLX5_UMR_ARG(umr), ret, wc.status);
+
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_ib_mlx5_devx_umr_mkey_invalidate(uct_ib_mlx5_md_t *md,
                                      uct_ib_mlx5_devx_umr_t *umr)
 {
     uint32_t mkey         = umr->umr_mkey->lkey;
-    struct ibv_wc wc      = {};
     struct ibv_send_wr wr = {
         .wr_id           = 0,
         .next            = NULL,
@@ -1180,25 +1212,12 @@ uct_ib_mlx5_devx_umr_mkey_invalidate(uct_ib_mlx5_md_t *md,
         .send_flags      = IBV_SEND_INLINE | IBV_SEND_SIGNALED,
         .invalidate_rkey = mkey
     };
-    int ret;
-    struct ibv_send_wr *bad_wr;
+    ucs_status_t status;
 
-    ret = ibv_post_send(md->umr_qp, &wr, &bad_wr);
-    if (ret != 0) {
-        ucs_error("%s: failed to invalidate " UCT_IB_MLX5_UMR_FMT ": %m",
-                  uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
-        goto destroy_mkey;
-    }
-
-    /* Poll for completion */
-    while ((ret = ibv_poll_cq(md->umr_cq, 1, &wc)) == 0);
-
-    if ((ret < 0) || (wc.status != IBV_WC_SUCCESS)) {
-        ucs_error("%s: failed to poll CQ for invalidating "
-                  UCT_IB_MLX5_UMR_FMT "ret %d status %d",
-                  uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr),
-                  ret, wc.status);
-        goto destroy_mkey;
+    status = uct_ib_mlx5_devx_umr_post_sync(md, &wr, umr, "UMR invalidation");
+    if (status != UCS_OK) {
+        uct_ib_mlx5_devx_umr_mkey_destroy(md, umr);
+        return status;
     }
 
     /* Add UMR mkey to mkey pool for reuse & cleanup */
@@ -1208,10 +1227,6 @@ uct_ib_mlx5_devx_umr_mkey_invalidate(uct_ib_mlx5_md_t *md,
               ucs_list_length(&md->umr_mkey_pool));
 
     return UCS_OK;
-
-destroy_mkey:
-    uct_ib_mlx5_devx_umr_mkey_destroy(md, umr);
-    return UCS_ERR_IO_ERROR;
 }
 
 static uct_ib_mlx5_devx_umr_t *
@@ -1238,7 +1253,6 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
 {
     uct_ib_device_t *ibdev = &md->super.dev;
     struct ibv_mr *ib_mr   = mr->super.ib;
-    struct ibv_wc wc       = {};
     struct ibv_mw mw       = {
         .rkey = 0,
         .type = IBV_MW_TYPE_1
@@ -1259,36 +1273,22 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
             }
         }
     };
-    int ret;
-    struct ibv_send_wr *bad_wr;
+    ucs_status_t status;
 
     *umr = uct_ib_mlx5_devx_umr_mkey_pool_get(md);
     if (NULL == *umr) {
-        goto err;
+        return UCS_ERR_IO_ERROR;
     }
 
     /* Set UMR lkey to be registered with given MR */
     mw.rkey         = (*umr)->umr_mkey->lkey;
     wr.bind_mw.rkey = (*umr)->umr_mkey->lkey;
 
-    if (ibv_post_send(md->umr_qp, &wr, &bad_wr) != UCS_OK) {
-        ucs_error("%s: failed to post UMR mkey registration WR for addr %p len "
-                  "%zu lkey 0x%x: %m", uct_ib_device_name(ibdev),
-                  ib_mr->addr, ib_mr->length, ib_mr->lkey);
-
-        goto invalidate;
-    }
-
-    /* Poll for completion */
-    while ((ret = ibv_poll_cq(md->umr_cq, 1, &wc)) == 0);
-
-    if ((ret < 0) || (wc.status != IBV_WC_SUCCESS)) {
-        ucs_error("%s: failed to poll CQ for UMR mkey registration for addr %p "
-                  " len %zu lkey 0x%x ret %d status %d",
-                  uct_ib_device_name(ibdev), ib_mr->addr, ib_mr->length,
-                  ib_mr->lkey, ret, wc.status);
-
-        goto invalidate;
+    status = uct_ib_mlx5_devx_umr_post_sync(md, &wr, *umr, "UMR registration");
+    if (status != UCS_OK) {
+        uct_ib_mlx5_devx_umr_mkey_invalidate(md, *umr);
+        *umr = NULL;
+        return status;
     }
 
     ucs_trace("%s: registered addr %p length %zu lkey 0x%x to "
@@ -1296,12 +1296,6 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
               ib_mr->length, ib_mr->lkey, UCT_IB_MLX5_UMR_ARG(*umr));
 
     return UCS_OK;
-
-invalidate:
-    uct_ib_mlx5_devx_umr_mkey_invalidate(md, *umr);
-    *umr = NULL;
-err:
-    return UCS_ERR_IO_ERROR;
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
