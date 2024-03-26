@@ -1078,12 +1078,6 @@ uct_ib_mlx5_devx_umr_mkey_create(uct_ib_mlx5_md_t *md)
         return NULL;
     }
 
-    /* Set marker for UMR key to distinguish it on the importer side */
-    umr->umr_mkey->lkey  |= UCT_IB_MLX5_MKEY_TAG_UMR;
-    umr->umr_mkey->rkey  |= UCT_IB_MLX5_MKEY_TAG_UMR;
-
-    umr->is_xgvmi_allowed = 0;
-
     ucs_trace("%s: created " UCT_IB_MLX5_UMR_FMT,
               uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr));
 
@@ -1316,9 +1310,27 @@ uct_ib_mlx5_devx_umr_mkey_hash_code(const uct_ib_md_packed_mkey_t *packed_mkey)
     return (uint64_t)packed_mkey->vhca_id << 32 | packed_mkey->lkey;
 }
 
-static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_devx_is_umr_mkey(uint32_t lkey)
+/*
+ * Indicate that given mkey is an UMR mkey and XGVMI enabled.
+ */
+static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_devx_umr_mkey_is_xgvmi(uint32_t lkey)
 {
     return (UCT_IB_MLX5_MKEY_TAG_UMR == (lkey & 0xFF));
+}
+
+/*
+ * Mark UMR mkey as XGVMI enabled by setting mkey tag (8 LSB in mkey).
+ * This serves for 2 purposes:
+ *  1. On the exporter side - to identify that the mkey is XGVMI enabled, and
+ *     therefore avoiding repetitive XGVMI enablement.
+ *  2. On the importer side - to identify that received rkey is UMR based, and
+ *     therefore should be looked up and stored in UMR alias hash map
+ */
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_devx_umr_mkey_set_xgvmi(uct_ib_mlx5_devx_umr_t *umr)
+{
+    umr->umr_mkey->lkey  |= UCT_IB_MLX5_MKEY_TAG_UMR;
+    umr->umr_mkey->rkey  |= UCT_IB_MLX5_MKEY_TAG_UMR;
 }
 
 static ucs_status_t
@@ -2636,7 +2648,8 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
 
         exported_lkey = umr->umr_mkey->lkey;
 
-        if (umr->is_xgvmi_allowed) {
+        /* Return if mkey is already marked as XGVMI */
+        if (uct_ib_mlx5_devx_umr_mkey_is_xgvmi(exported_lkey)) {
             goto out;
         }
     }
@@ -2644,7 +2657,8 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     status = uct_ib_mlx5_devx_allow_xgvmi_access(md, exported_lkey, 1);
     if (status == UCS_OK) {
         if (NULL != umr) {
-            umr->is_xgvmi_allowed = 1;
+            /* Mark mkey as XGVMI allowed */
+            uct_ib_mlx5_devx_umr_mkey_set_xgvmi(umr);
         }
 
         goto out;
@@ -2806,7 +2820,7 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     alias_ctx = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, alias_ctx);
 
     /* If received mkey is UMR key, find alias in the UMR hash map */
-    if (uct_ib_mlx5_devx_is_umr_mkey(packed_mkey->lkey)) {
+    if (uct_ib_mlx5_devx_umr_mkey_is_xgvmi(packed_mkey->lkey)) {
         status = uct_ib_mlx5_devx_umr_mkey_hash_find(md, packed_mkey,
                                                      &umr_alias);
         if (UCS_OK == status) {
@@ -2854,7 +2868,7 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
                        md->mkey_tag;
 
     /* If received mkey is UMR key, store alias in the UMR hash map */
-    if (uct_ib_mlx5_devx_is_umr_mkey(packed_mkey->lkey)) {
+    if (uct_ib_mlx5_devx_umr_mkey_is_xgvmi(packed_mkey->lkey)) {
         umr_alias.lkey = memh->super.lkey;
 
         status = uct_ib_mlx5_devx_umr_mkey_hash_put(md, packed_mkey, &umr_alias);

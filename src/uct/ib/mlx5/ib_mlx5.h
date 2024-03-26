@@ -251,7 +251,6 @@ typedef union {
 typedef struct {
     ucs_list_link_t    super;
     struct mlx5dv_mkey *umr_mkey;
-    int                is_xgvmi_allowed;
 } uct_ib_mlx5_devx_umr_t;
 
 
