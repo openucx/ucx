@@ -4,9 +4,9 @@
  * See file LICENSE for terms.
  */
 
-#include <ucs/sys/ptr_arith.h>
-
 #include "ib_mlx5.h"
+
+#include <ucs/sys/ptr_arith.h>
 
 typedef struct uct_ib_mlx5_wqe_ctrl_seg {
     __be32      opmod_idx_opcode;

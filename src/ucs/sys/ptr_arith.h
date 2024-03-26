@@ -7,8 +7,8 @@
 #ifndef UCS_PTR_ARITH_H
 #define UCS_PTR_ARITH_H
 
-#include "math.h"
 #include "compiler_def.h"
+
 #include <ucs/debug/assert.h>
 
 #include <stddef.h>
@@ -16,27 +16,22 @@
 
 BEGIN_C_DECLS
 
-/** @file ptr_arith.h */
-
 
 #define ucs_padding(_n, _alignment) \
-    ( ((_alignment) - (_n) % (_alignment)) % (_alignment) )
+    (((_alignment) - (_n) % (_alignment)) % (_alignment))
 
 
-#define ucs_align_down(_n, _alignment) \
-    ( (_n) - ((_n) % (_alignment)) )
+#define ucs_align_down(_n, _alignment) ((_n) - ((_n) % (_alignment)))
 
 
-#define ucs_align_up(_n, _alignment) \
-    ( (_n) + ucs_padding(_n, _alignment) )
+#define ucs_align_up(_n, _alignment) ((_n) + ucs_padding(_n, _alignment))
 
 
-#define ucs_align_down_pow2(_n, _alignment) \
-    ( (_n) & ~((_alignment) - 1) )
+#define ucs_align_down_pow2(_n, _alignment) ((_n) & ~((_alignment)-1))
 
 
 #define ucs_align_up_pow2(_n, _alignment) \
-    ucs_align_down_pow2((_n) + (_alignment) - 1, _alignment)
+    ucs_align_down_pow2((_n) + (_alignment)-1, _alignment)
 
 
 #define ucs_align_down_pow2_ptr(_ptr, _alignment) \
@@ -51,7 +46,8 @@ BEGIN_C_DECLS
     ({ \
         ucs_typeof(_n) pow2; \
         ucs_assert((_n) >= 1); \
-        for (pow2 = 1; pow2 < (_n); pow2 <<= 1); \
+        for (pow2 = 1; pow2 < (_n); pow2 <<= 1) \
+            ; \
         pow2; \
     })
 
@@ -59,12 +55,11 @@ BEGIN_C_DECLS
 #define ucs_rounddown_pow2(_n) (ucs_roundup_pow2(_n + 1) / 2)
 
 
-#define ucs_roundup_pow2_or0(_n) \
-    ( ((_n) == 0) ? 0 : ucs_roundup_pow2(_n) )
+#define ucs_roundup_pow2_or0(_n) (((_n) == 0) ? 0 : ucs_roundup_pow2(_n))
 
 
 /* Return values: 0 - aligned, non-0 - unaligned */
-#define ucs_check_if_align_pow2(_n, _p) ((_n) & ((_p) - 1))
+#define ucs_check_if_align_pow2(_n, _p) ((_n) & ((_p)-1))
 
 
 /* Return values: off-set from the alignment */

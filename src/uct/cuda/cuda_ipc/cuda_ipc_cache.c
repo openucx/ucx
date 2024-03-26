@@ -15,7 +15,7 @@
 #include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/datastruct/khash.h>
 
 

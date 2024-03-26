@@ -11,7 +11,7 @@
 #include "ugni_rdma_ep.h"
 #include "ugni_rdma_iface.h"
 #include <uct/ugni/base/ugni_device.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 
 #define UCT_CHECK_PARAM_IOV(_iov, _iovcnt, _buffer, _length, _memh) \
     void     *_buffer; \

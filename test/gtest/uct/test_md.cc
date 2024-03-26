@@ -17,7 +17,6 @@ extern "C" {
 #include <ucs/sys/string.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/atomic.h>
-#include <ucs/sys/math.h>
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #endif

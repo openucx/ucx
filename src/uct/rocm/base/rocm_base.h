@@ -9,7 +9,6 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
-#include <ucs/sys/math.h>
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 

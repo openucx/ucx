@@ -15,7 +15,7 @@
 #include <limits.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucm/api/ucm.h>
