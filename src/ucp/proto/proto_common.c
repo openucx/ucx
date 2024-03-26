@@ -128,7 +128,8 @@ ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
 static void
 ucp_proto_common_fp8_pack_unpack_distance(ucs_sys_dev_distance_t *distance)
 {
-    distance->latency   = UCS_FP8_PACK_UNPACK(LATENCY, distance->latency);
+    double nsec         = distance->latency * UCS_NSEC_PER_SEC;
+    distance->latency   = UCS_FP8_PACK_UNPACK(LATENCY, nsec) / UCS_NSEC_PER_SEC;
     distance->bandwidth = UCS_FP8_PACK_UNPACK(BANDWIDTH, distance->bandwidth);
 }
 
