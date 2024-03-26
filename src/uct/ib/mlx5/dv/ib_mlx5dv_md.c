@@ -1203,14 +1203,13 @@ static ucs_status_t
 uct_ib_mlx5_devx_umr_mkey_invalidate(uct_ib_mlx5_md_t *md,
                                      uct_ib_mlx5_devx_umr_t *umr)
 {
-    uint32_t mkey         = umr->umr_mkey->lkey;
     struct ibv_send_wr wr = {
         .wr_id           = 0,
         .next            = NULL,
         .num_sge         = 0,
         .opcode          = IBV_WR_LOCAL_INV,
         .send_flags      = IBV_SEND_INLINE | IBV_SEND_SIGNALED,
-        .invalidate_rkey = mkey
+        .invalidate_rkey = umr->umr_mkey->lkey
     };
     ucs_status_t status;
 
@@ -1251,13 +1250,12 @@ static ucs_status_t
 uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
                                uct_ib_mlx5_devx_umr_t **umr)
 {
-    uct_ib_device_t *ibdev = &md->super.dev;
-    struct ibv_mr *ib_mr   = mr->super.ib;
-    struct ibv_mw mw       = {
+    struct ibv_mr *ib_mr  = mr->super.ib;
+    struct ibv_mw mw      = {
         .rkey = 0,
         .type = IBV_MW_TYPE_1
     };
-    struct ibv_send_wr wr  = {
+    struct ibv_send_wr wr = {
         .wr_id      = 0,
         .next       = NULL,
         .opcode     = IBV_WR_BIND_MW,
@@ -1292,8 +1290,9 @@ uct_ib_mlx5_devx_umr_mkey_bind(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mr_t *mr,
     }
 
     ucs_trace("%s: registered addr %p length %zu lkey 0x%x to "
-              UCT_IB_MLX5_UMR_FMT, uct_ib_device_name(ibdev), ib_mr->addr,
-              ib_mr->length, ib_mr->lkey, UCT_IB_MLX5_UMR_ARG(*umr));
+              UCT_IB_MLX5_UMR_FMT, uct_ib_device_name(&md->super.dev),
+              ib_mr->addr, ib_mr->length, ib_mr->lkey,
+              UCT_IB_MLX5_UMR_ARG(*umr));
 
     return UCS_OK;
 }
