@@ -1203,7 +1203,7 @@ uct_ib_mlx5_devx_umr_mkey_invalidate(uct_ib_mlx5_md_t *md,
 
     /* Add UMR mkey to mkey pool for reuse & cleanup */
     ucs_list_add_head(&md->umr_mkey_pool, &umr->super);
-    ucs_trace("%s: put " UCT_IB_MLX5_UMR_FMT " back to pool (%ld)",
+    ucs_trace("%s: put " UCT_IB_MLX5_UMR_FMT " into pool (%ld)",
               uct_ib_device_name(&md->super.dev), UCT_IB_MLX5_UMR_ARG(umr),
               ucs_list_length(&md->umr_mkey_pool));
 
@@ -1326,11 +1326,12 @@ static UCS_F_ALWAYS_INLINE int uct_ib_mlx5_devx_umr_mkey_is_xgvmi(uint32_t lkey)
  *  2. On the importer side - to identify that received rkey is UMR based, and
  *     therefore should be looked up and stored in UMR alias hash map
  */
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE uint32_t
 uct_ib_mlx5_devx_umr_mkey_set_xgvmi(uct_ib_mlx5_devx_umr_t *umr)
 {
-    umr->umr_mkey->lkey  |= UCT_IB_MLX5_MKEY_TAG_UMR;
-    umr->umr_mkey->rkey  |= UCT_IB_MLX5_MKEY_TAG_UMR;
+    umr->umr_mkey->lkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
+    umr->umr_mkey->rkey |= UCT_IB_MLX5_MKEY_TAG_UMR;
+    return umr->umr_mkey->lkey;
 }
 
 static ucs_status_t
@@ -1345,9 +1346,10 @@ uct_ib_mlx5_devx_umr_mkey_hash_find(uct_ib_mlx5_md_t *md,
     }
 
     *umr_alias = kh_val(md->umr_mkey_hash, k);
-    ucs_trace("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " for lkey 0x%x in hash",
+    ucs_trace("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x in hash",
               uct_ib_device_name(&md->super.dev),
-              UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias), packed_mkey->lkey);
+              UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
+              uct_ib_mlx5_mkey_index(packed_mkey->lkey));
 
     return UCS_OK;
 }
@@ -1377,9 +1379,10 @@ uct_ib_mlx5_devx_umr_mkey_hash_put(uct_ib_mlx5_md_t *md,
     }
 
     kh_val(md->umr_mkey_hash, k) = *umr_alias;
-    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " for lkey 0x%x to hash "
+    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x to hash "
               "map", uct_ib_device_name(&md->super.dev),
-              UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias), packed_mkey->lkey);
+              UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
+              uct_ib_mlx5_mkey_index(packed_mkey->lkey));
 
     return UCS_OK;
 }
@@ -2658,7 +2661,7 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     if (status == UCS_OK) {
         if (NULL != umr) {
             /* Mark mkey as XGVMI allowed */
-            uct_ib_mlx5_devx_umr_mkey_set_xgvmi(umr);
+            exported_lkey = uct_ib_mlx5_devx_umr_mkey_set_xgvmi(umr);
         }
 
         goto out;

@@ -254,8 +254,9 @@ typedef struct {
 } uct_ib_mlx5_devx_umr_t;
 
 
-#define UCT_IB_MLX5_UMR_FMT "UMR mkey %p lkey 0x%x"
-#define UCT_IB_MLX5_UMR_ARG(umr) (umr)->umr_mkey, (umr)->umr_mkey->lkey
+#define UCT_IB_MLX5_UMR_FMT "UMR mkey %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ARG(umr) \
+    (umr)->umr_mkey, uct_ib_mlx5_mkey_index((umr)->umr_mkey->lkey)
 
 
 /* Data structure to hold the UMR mkey alias on the DPU item in the hash map */
@@ -265,9 +266,9 @@ typedef struct {
 } uct_ib_mlx5_devx_umr_alias_t;
 
 
-#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p lkey 0x%x"
+#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x"
 #define UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias) \
-    (umr_alias)->cross_mr, (umr_alias)->lkey
+    (umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((umr_alias)->lkey)
 
 
 /* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
