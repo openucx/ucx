@@ -399,7 +399,7 @@ err_deref_perf_node:
     return status;
 }
 
-static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
+ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         const ucp_proto_init_params_t *params, uct_ep_operation_t memtype_op,
         unsigned flags, ptrdiff_t max_iov_offs, size_t min_iov,
         ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
@@ -431,7 +431,8 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
 
     num_lanes = 0;
     ucs_trace("selecting up to %d/%d lanes for %s %s", max_lanes,
-              ep_config_key->num_lanes, params->proto_name,
+              ep_config_key->num_lanes,
+              ucp_proto_id_field(params->proto_id, name),
               ucs_string_buffer_cstr(&sel_param_strb));
     ucs_log_indent(1);
 
@@ -462,7 +463,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         /* Check if lane type matches */
         if ((lane_type != UCP_LANE_TYPE_LAST) &&
             !(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
-            ucs_trace("%s: no %s in name types", lane_desc,
+            ucs_trace("%s: no %s in lane types", lane_desc,
                       ucp_lane_type_info[lane_type].short_name);
             continue;
         }
@@ -635,26 +636,6 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     }
 
     return num_valid_lanes;
-}
-
-ucp_lane_index_t
-ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params)
-{
-    ucp_lane_index_t lane = UCP_NULL_LANE;
-    ucp_lane_index_t num_lanes;
-
-    num_lanes = ucp_proto_common_find_lanes_internal(
-            params, UCT_EP_OP_LAST, UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
-            UCP_PROTO_COMMON_OFFSET_INVALID, 1, UCP_LANE_TYPE_AM,
-            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, &lane);
-    if (num_lanes == 0) {
-        ucs_debug("no active message lane for %s", params->proto_name);
-        return UCP_NULL_LANE;
-    }
-
-    ucs_assert(num_lanes == 1);
-
-    return lane;
 }
 
 void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,

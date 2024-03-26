@@ -33,7 +33,8 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
                                             params->tl_cap_flags, 1,
                                             params->super.exclude_map, &lane);
     if (num_lanes == 0) {
-        ucs_trace("no lanes for %s", params->super.super.proto_name);
+        ucs_trace("no lanes for %s",
+                  ucp_proto_id_field(params->super.super.proto_id, name));
         return UCS_ERR_NO_ELEM;
     }
 
