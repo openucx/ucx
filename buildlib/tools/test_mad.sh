@@ -1,13 +1,12 @@
 #!/bin/bash
 set -exE -o pipefail
 
-export HCA="mlx5_0:1"
 cd "$BUILD_SOURCESDIRECTORY"
 
 run_mad_server() {
     srv_stop
     funcname
-    sudo -E bash -c 'envsubst < "contrib/ucx_perftest.service" \
+    sudo -E bash -c 'envsubst < "buildlib/tools/ucx_perftest.service" \
         > /etc/systemd/system/ucx_perftest.service'
     sudo systemctl daemon-reload
     srv_start
@@ -74,5 +73,12 @@ funcname() {
     echo "==== Running: ${FUNCNAME[1]} ===="
     set -x
 }
+
+detect_first_active_port() {
+    HCA="$(ibv_devinfo | awk '/hca_id:/ {hca=$2} /port:/ {port=$2} /PORT_ACTIVE/ {print hca ":" port; exit}')"
+    export HCA
+}
+
+detect_first_active_port
 
 "$@"

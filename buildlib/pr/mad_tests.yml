@@ -12,7 +12,7 @@ jobs:
         fetchDepth: 100
         retryCountOnTaskFailure: 5
       - bash: |
-          source ./contrib/test_mad.sh
+          source ./buildlib/tools/test_mad.sh
           setup
           build_ucx
         displayName: Setup Server
@@ -30,7 +30,7 @@ jobs:
         fetchDepth: 100
         retryCountOnTaskFailure: 5
       - bash: |
-          source ./contrib/test_mad.sh
+          source ./buildlib/tools/test_mad.sh
           setup
           build_ucx
         displayName: Setup Client
@@ -44,7 +44,7 @@ jobs:
     steps:
       - checkout: none
       - bash: |
-          source ./contrib/test_mad.sh
+          source ./buildlib/tools/test_mad.sh
           run_mad_server
         displayName: Server Up
 
@@ -53,7 +53,7 @@ jobs:
         inputs:
           targetType: "inline"
           script: |
-            source ./contrib/test_mad.sh
+            source ./buildlib/tools/test_mad.sh
             set_vars
         displayName: Set Vars
 
@@ -71,7 +71,7 @@ jobs:
     steps:
       - checkout: none
       - bash: |
-          source ./contrib/test_mad.sh
+          source ./buildlib/tools/test_mad.sh
           run_mad_test_lid
         env:
           LID: $(LID)
@@ -86,7 +86,7 @@ jobs:
     steps:
       - checkout: none
       - bash: |
-          source ./contrib/test_mad.sh
+          source ./buildlib/tools/test_mad.sh
           srv_stop
           srv_start
         displayName: Server Restart
@@ -105,7 +105,7 @@ jobs:
     steps:
       - checkout: none
       - bash: |
-          source ./contrib/test_mad.sh
+          source ./buildlib/tools/test_mad.sh
           run_mad_test_guid
         env:
           GUID: $(GUID)
@@ -121,6 +121,6 @@ jobs:
     steps:
       - checkout: none
       - bash: |
-          source ./contrib/test_mad.sh
+          source ./buildlib/tools/test_mad.sh
           srv_stop
         displayName: Server Stop

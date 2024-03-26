@@ -1,0 +1,16 @@
+[Unit]
+Description=UCX Perftest running in agent mode
+Requires=multi-user.target
+After=multi-user.target
+ 
+[Service]
+Type=simple
+Restart=always
+RestartSec=500ms
+User=root
+Group=root
+StartLimitInterval=10s
+StartLimitBurst=100
+StandardOutput=journal+console
+StandardError=inherit
+ExecStart="${PWD}"/install/bin/ucx_perftest -e -K "${HCA}"
