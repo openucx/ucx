@@ -97,7 +97,7 @@ public:
      * SIZE_MAX is returned */
     static size_t get_bar1_free_size();
 
-    mem_buffer(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
+    mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
     virtual ~mem_buffer();
 
