@@ -199,13 +199,15 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     status = uct_mm_md_mapper_ops(md)->query(&attach_shm_file);
     ucs_assert_always(status == UCS_OK);
 
-    if (!attach_shm_file) {
+    if (attach_shm_file) {
         /*
          * Only MM transports with attaching to SHM file can support error
          * handling mechanisms (e.g. EP checking) to check if a peer was down,
          * there is no safe way to check a process existence (touching a shared
          * memory block of a peer leads to "bus" error in case of a peer is
          * down) */
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
+    } else {
         iface_attr->cap.flags &= ~UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     }
 
@@ -492,7 +494,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_pending_purge         = uct_mm_ep_pending_purge,
     .ep_flush                 = uct_mm_ep_flush,
     .ep_fence                 = uct_sm_ep_fence,
-    .ep_check                 = ucs_empty_function_return_unsupported,
+    .ep_check                 = uct_mm_ep_check,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_mm_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
     .iface_flush              = uct_mm_iface_flush,

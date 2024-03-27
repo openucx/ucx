@@ -536,6 +536,25 @@ public:
     }
 
 protected:
+    void kill_receiver()
+    {
+        /* Hack: for SHM-based transports we can't really terminate
+         * peer EP, but instead we bit change process owner info to force
+         * ep_check failure. Simulation of case when peer process is
+         * terminated and PID is immediately reused by another process */
+
+        if (has_mm()) {
+            uct_mm_ep_t *ep = ucs_derived_of(ep0(), uct_mm_ep_t);
+            ep->keepalive.start_time--;
+        } else if (has_cma()) {
+            uct_cma_ep_t *ep = ucs_derived_of(ep0(), uct_cma_ep_t);
+            ep->keepalive.start_time--;
+        }
+
+        /* kill real receiver since DC uses shared KA DCI */
+        test_uct_peer_failure::kill_receiver();
+    }
+
     void test_ep_check(bool post_am)
     {
         ucs_status_t status;
