@@ -124,6 +124,17 @@ struct ucs_rcache_ops {
     void                   (*dump_region)(void *context, ucs_rcache_t *rcache,
                                           ucs_rcache_region_t *region,
                                           char *buf, size_t max);
+    /**
+     * Release unstackable registrations in memory region.
+     * New operations should not start on this region.
+     * In-flight operations are still possible.
+     *
+     * @param [in]  context   User context, as passed to @ref ucs_rcache_create
+     * @param [in]  rcache    Pointer to the registration cache.
+     * @param [in]  region    Memory region to release.
+     */
+    void                (*unstack_region)(void *context, ucs_rcache_t *rcache,
+                                          ucs_rcache_region_t *region);
 };
 
 
