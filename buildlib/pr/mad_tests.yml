@@ -13,9 +13,18 @@ jobs:
         retryCountOnTaskFailure: 5
       - bash: |
           source ./buildlib/tools/test_mad.sh
-          setup
-          build_ucx
+          node_setup
+          build_ucx_in_docker
+          docker_run_srv
         displayName: Setup Server
+      - task: Bash@3
+        name: Set_Vars
+        inputs:
+          targetType: "inline"
+          script: |
+            source ./buildlib/tools/test_mad.sh
+            set_vars
+        displayName: Set Vars
 
   - job: SetupClient
     displayName: Setup Client
@@ -31,35 +40,13 @@ jobs:
         retryCountOnTaskFailure: 5
       - bash: |
           source ./buildlib/tools/test_mad.sh
-          setup
+          node_setup
           build_ucx
         displayName: Setup Client
 
-  - job: ServerUp
-    dependsOn: SetupServer
-    displayName: Server Up
-    pool:
-      name: MLNX
-      demands: mad_server
-    steps:
-      - checkout: none
-      - bash: |
-          source ./buildlib/tools/test_mad.sh
-          run_mad_server
-        displayName: Server Up
-
-      - task: Bash@3
-        name: Set_Vars
-        inputs:
-          targetType: "inline"
-          script: |
-            source ./buildlib/tools/test_mad.sh
-            set_vars
-        displayName: Set Vars
-
   - job: TestLid
     dependsOn:
-      - ServerUp
+      - SetupServer
       - SetupClient
     displayName: Test Lid
     timeoutInMinutes: 10
@@ -67,7 +54,7 @@ jobs:
       name: MLNX
       demands: mad_client
     variables:
-      LID: $[ dependencies.ServerUp.outputs['Set_Vars.LID'] ]
+      LID: $[ dependencies.SetupServer.outputs['Set_Vars.LID'] ]
     steps:
       - checkout: none
       - bash: |
@@ -86,14 +73,14 @@ jobs:
     steps:
       - checkout: none
       - bash: |
+          docker stop ucx_perftest_$(Build.BuildId)
           source ./buildlib/tools/test_mad.sh
-          srv_stop
-          srv_start
+          docker_run_srv
         displayName: Server Restart
 
   - job: TestGuid
     dependsOn:
-      - ServerUp
+      - SetupServer
       - ServerRestart
     displayName: Test Guid
     timeoutInMinutes: 10
@@ -101,7 +88,7 @@ jobs:
       name: MLNX
       demands: mad_client
     variables:
-      GUID: $[ dependencies.ServerUp.outputs['Set_Vars.GUID'] ]
+      GUID: $[ dependencies.SetupServer.outputs['Set_Vars.GUID'] ]
     steps:
       - checkout: none
       - bash: |
@@ -121,6 +108,5 @@ jobs:
     steps:
       - checkout: none
       - bash: |
-          source ./buildlib/tools/test_mad.sh
-          srv_stop
+          docker stop ucx_perftest_$(Build.BuildId)
         displayName: Server Stop
