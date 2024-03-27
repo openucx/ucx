@@ -23,6 +23,11 @@
 #define UCP_RCACHE_LOOKUP_FUNC ucs_linear_func_make(50.0e-9, 0)
 
 
+/* Mask of UCT memory flags that need make sure are present when reusing an
+   existing region */
+#define UCP_MM_UCT_ACCESS_MASK UCT_MD_MEM_ACCESS_ALL
+
+
 /**
  * Memory handle flags.
  */
@@ -51,6 +56,7 @@ enum {
 typedef struct ucp_mem {
     ucs_rcache_region_t super;
     uint8_t             flags;          /* Memory handle flags */
+    unsigned            uct_flags;      /* UCT memory registration flags */
     ucp_context_h       context;        /* UCP context that owns a memory handle */
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
