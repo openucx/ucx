@@ -9,6 +9,7 @@
 
 #include "rcache.h"
 
+#include <ucs/datastruct/lockless_sync.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats.h>
 #include <ucs/type/spinlock.h>
@@ -70,7 +71,7 @@ struct ucs_rcache {
     ucs_pgtable_t       pgtable;         /**< page table to hold the regions */
 
 
-    ucs_spinlock_t      lock;            /**< Protects 'mp', 'inv_q' and 'gc_list'.
+    ucs_spinlock_t      lock;            /**< Protects 'mp' and 'inv_q'
                                               This is a separate lock because we
                                               may want to invalidate regions
                                               while the page table lock is held by
@@ -89,7 +90,8 @@ struct ucs_rcache {
 
     unsigned long       num_regions;     /**< Total number of managed regions */
     size_t              total_size;      /**< Total size of registered memory */
-    size_t              unreleased_size; /**< Total size of the regions in gc_list and in inv_q */
+    size_t              inv_q_size;      /**< Size of the regions in inv_q */
+    size_t              gc_size;         /**< Size of the regions in gc_list */
 
     struct {
         ucs_spinlock_t  lock;            /**< Lock for this structure */
@@ -132,8 +134,7 @@ size_t ucs_rcache_distribution_get_num_bins();
 
 
 void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
-                                     ucs_rcache_region_t *region,
-                                     int drop_lock);
+                                     ucs_rcache_region_t *region);
 
 
 void ucs_rcache_region_log(const char *file, int line, const char *function,

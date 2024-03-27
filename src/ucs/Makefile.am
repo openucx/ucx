@@ -41,6 +41,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/khash.h \
 	datastruct/linear_func.h \
 	datastruct/list.h \
+	datastruct/lockless_sync_def.h \
 	datastruct/mpool.h \
 	datastruct/mpool_set.h \
 	datastruct/pgtable.h \
@@ -101,7 +102,8 @@ noinst_HEADERS = \
 	datastruct/bitmap.h \
 	datastruct/dynamic_bitmap.h \
 	datastruct/frag_list.h \
-        datastruct/lru.h \
+	datastruct/lockless_sync.h \
+	datastruct/lru.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.inl \
 	datastruct/mpool_set.inl \

@@ -321,7 +321,7 @@ uct_rocm_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
         return status;
     }
 
-    ucs_assert(rregion->refcount > 0);
+    ucs_assert(rregion->lls.refcount > 0);
     memh    = &ucs_derived_of(rregion, uct_rocm_copy_rcache_region_t)->memh;
     *memh_p = memh;
     return UCS_OK;
