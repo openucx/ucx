@@ -201,10 +201,9 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
-                                          UCT_IFACE_FLAG_EP_CHECK               |
-                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
-                                          UCT_IFACE_FLAG_PENDING                |
-                                          UCT_IFACE_FLAG_GET_ZCOPY              |
+                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                          UCT_IFACE_FLAG_PENDING          |
+                                          UCT_IFACE_FLAG_GET_ZCOPY        |
                                           UCT_IFACE_FLAG_PUT_ZCOPY;
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                           UCT_IFACE_FLAG_EVENT_RECV      |
@@ -353,7 +352,7 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = uct_cuda_ipc_ep_check,
+    .ep_check                 = ucs_empty_function_return_unsupported,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_ep_t),
     .iface_flush              = uct_cuda_ipc_iface_flush,
