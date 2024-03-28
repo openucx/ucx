@@ -135,7 +135,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, devx_objs),
      UCS_CONFIG_TYPE_BITMAP(uct_ib_devx_objs)},
 
-    {"REG_MT_THRESH", "4G",
+    {"REG_MT_THRESH", "inf",
      "Minimal MR size to be register using multiple parallel threads.\n"
      "Number of threads used will be determined by number of CPUs which "
      "registering thread is bound to by hard affinity.",
