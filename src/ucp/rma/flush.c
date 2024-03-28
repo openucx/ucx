@@ -25,12 +25,12 @@ ucp_ep_flush_request_update_uct_comp(ucp_request_t *req, int diff,
                 &req->send.state.uct_comp, req->send.state.uct_comp.count,
                 diff);
     ucs_assertv(!(req->send.flush.started_lanes & new_started_lanes),
-                "req=%p started_lanes=0x%x new_started_lanes=0x%x", req,
+                "req=%p started_lanes=0x%lx new_started_lanes=0x%lx", req,
                 req->send.flush.started_lanes, new_started_lanes);
 
     ucp_trace_req(req,
                   "flush update ep %p comp_count %d->%d num_lanes %d->%d "
-                  "started_lanes 0x%x->0x%x",
+                  "started_lanes 0x%lx->0x%lx",
                   req->send.ep, req->send.state.uct_comp.count,
                   req->send.state.uct_comp.count + diff,
                   req->send.flush.num_lanes, ucp_ep_num_lanes(req->send.ep),
@@ -98,10 +98,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         req->send.flush.num_lanes = num_lanes;
     }
 
-    ucp_trace_req(req,
-                  "progress ep=%p flush flags=0x%x started_lanes=0x%x count=%d",
-                  ep, ep->flags, req->send.flush.started_lanes,
-                  req->send.state.uct_comp.count);
+    ucp_trace_req(
+            req, "progress ep=%p flush flags=0x%x started_lanes=0x%lx count=%d",
+            ep, ep->flags, req->send.flush.started_lanes,
+            req->send.state.uct_comp.count);
 
     while (req->send.flush.started_lanes < all_lanes) {
 
@@ -229,11 +229,11 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
             (ucp_ep_config(ep)->p2p_lanes &&
              ep->worker->context->config.ext.proto_request_reset)) {
             ucs_assertv(!req->send.flush.started_lanes,
-                        "req=%p flush started_lanes=0x%x", req,
+                        "req=%p flush started_lanes=0x%lx", req,
                         req->send.flush.started_lanes);
         } else {
             ucs_assertv(!(UCS_BIT(req->send.lane) & req->send.flush.started_lanes),
-                        "req=%p lane=%d started_lanes=0x%x", req, req->send.lane,
+                        "req=%p lane=%d started_lanes=0x%lx", req, req->send.lane,
                         req->send.flush.started_lanes);
 
             /* Only lanes connected to iface can be started/flushed before
@@ -241,7 +241,7 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
              * without cm mode */
             ucs_assertv(!(req->send.flush.started_lanes &
                           ucp_ep_config(ep)->p2p_lanes),
-                        "req=%p flush started_lanes=0x%x p2p_lanes=0x%x", req,
+                        "req=%p flush started_lanes=0x%lx p2p_lanes=0x%lx", req,
                         req->send.flush.started_lanes,
                         ucp_ep_config(ep)->p2p_lanes);
         }
@@ -348,7 +348,8 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
     int num_comps = req->send.flush.num_lanes -
                     ucs_popcount(req->send.flush.started_lanes);
 
-    ucp_trace_req(req, "fast-forward flush, comp-=%d num_lanes %d started 0x%x",
+    ucp_trace_req(req,
+                  "fast-forward flush, comp-=%d num_lanes %d started 0x%lx",
                   num_comps, req->send.flush.num_lanes,
                   req->send.flush.started_lanes);
 

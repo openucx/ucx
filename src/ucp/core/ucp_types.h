@@ -40,8 +40,8 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 
 /* Lanes */
-#define UCP_MAX_LANES                16
-#define UCP_MAX_FAST_PATH_LANES      5
+#define UCP_MAX_LANES                64
+#define UCP_MAX_FAST_PATH_LANES      64
 #define UCP_MAX_SLOW_PATH_LANES      (UCP_MAX_LANES - UCP_MAX_FAST_PATH_LANES)
 
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
