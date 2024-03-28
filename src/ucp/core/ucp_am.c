@@ -867,7 +867,8 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
                       const ucp_memtype_thresh_t *max_eager_short,
                       const ucp_request_param_t *param)
 {
-    if (ucs_unlikely(flags & UCP_AM_SEND_FLAG_RNDV)) {
+    if (ucs_unlikely((flags & UCP_AM_SEND_FLAG_RNDV) ||
+                     ucp_proto_is_progress_wrapper_enabled(ep->worker))) {
         return UCS_ERR_NO_RESOURCE;
     }
 

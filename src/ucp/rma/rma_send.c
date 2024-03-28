@@ -222,7 +222,8 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
     uct_rkey_t tl_rkey;
 
     if (ucs_unlikely(param->op_attr_mask & (UCP_OP_ATTR_FIELD_DATATYPE |
-                                            UCP_OP_ATTR_FLAG_NO_IMM_CMPL))) {
+                                            UCP_OP_ATTR_FLAG_NO_IMM_CMPL) ||
+                     ucp_proto_is_progress_wrapper_enabled(ep->worker))) {
         return UCS_ERR_NO_RESOURCE;
     }
 

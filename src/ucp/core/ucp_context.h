@@ -137,6 +137,8 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
+    /** Time period between dynamic transport switching rounds */
+    ucs_time_t                             dynamic_tl_switch_interval;
     /** Defines whether resolving remote endpoint ID is required or not when
      *  creating a local endpoint */
     ucs_on_off_auto_value_t                resolve_remote_ep_id;

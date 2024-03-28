@@ -413,6 +413,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_context_config_t, keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
+  {"DYNAMIC_TL_SWITCH_INTERVAL", "3s",
+   "Time interval between dynamic transport switching rounds. Must be\n"
+   "non-zero value. use 'inf' to disable this feature.",
+   ucs_offsetof(ucp_context_config_t, dynamic_tl_switch_interval),
+   UCS_CONFIG_TYPE_TIME_UNITS},
+
   {"RESOLVE_REMOTE_EP_ID", "n",
    "Defines whether resolving remote endpoint ID is required or not when\n"
    "creating a local endpoint. 'auto' means resolving remote endpoint ID only\n"
@@ -2085,6 +2091,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (context->config.ext.keepalive_interval == 0) {
         ucs_error("UCX_KEEPALIVE_INTERVAL value must be greater than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
+    if (context->config.ext.dynamic_tl_switch_interval == 0) {
+        ucs_error("UCX_DYNAMIC_TL_SWITCH_INTERVAL value must be greater than "
+                  "0");
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
     }
