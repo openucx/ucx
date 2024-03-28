@@ -11,7 +11,8 @@ SUBDIRS = profiling
 SUBDIRS += iodemo
 
 if HAVE_CXX11
-SUBDIRS += sockaddr
+SUBDIRS += sockaddr \
+           file_transfer_demo
 endif
 
 noinst_PROGRAMS = \
