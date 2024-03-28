@@ -133,7 +133,7 @@ size_t ucs_rcache_distribution_get_num_bins();
 
 void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
                                      ucs_rcache_region_t *region,
-                                     int drop_lock);
+                                     unsigned flags);
 
 
 void ucs_rcache_region_log(const char *file, int line, const char *function,

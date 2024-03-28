@@ -59,6 +59,7 @@ uct_rocm_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->alloc_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->detect_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->gva_mem_types          = 0;
     md_attr->dmabuf_mem_types       = 0;
     if (md->have_dmabuf) {
         md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_ROCM);
@@ -370,7 +371,8 @@ uct_rocm_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
 }
 
 static void uct_rocm_copy_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
-                                              ucs_rcache_region_t *rregion)
+                                              ucs_rcache_region_t *rregion,
+                                              uint16_t flags)
 {
     uct_rocm_copy_md_t *md = context;
     uct_rocm_copy_rcache_region_t *region;

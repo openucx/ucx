@@ -752,9 +752,9 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (flags & UCT_FLUSH_FLAG_REMOTE) {
-        UCT_RC_IFACE_CHECK_FLUSH_REMOTE(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY,
-                                        ep, &iface->super.super, dcx);
-        if (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE) {
+        if (ucs_test_all_flags(ep->flags,
+                               UCT_DC_MLX5_EP_FLAG_FLUSH_REMOTE |
+                                       UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY)) {
             return uct_dc_mlx5_ep_flush_remote(ep, comp);
         }
     }
