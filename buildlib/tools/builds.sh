@@ -200,45 +200,41 @@ build_ugni() {
 #
 # Build CUDA
 #
+
 build_cuda() {
-	if [[ $CONTAINER == *"rocm"* ]]; then
-		echo "==== Not building with cuda flags ===="
-		return
-	fi
+    if [[ $CONTAINER == *"rocm"* ]]; then
+        echo "==== Not building with cuda flags ===="
+        return
+    fi
 
-	if az_module_load $CUDA_MODULE
-	then
-		if az_module_load $GDRCOPY_MODULE
-		then
-			echo "==== Build with enable cuda, gdr_copy ===="
-			${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
-			$MAKEP
-			make_clean distclean
+    if az_module_load $GDRCOPY_MODULE; then
+        export CPATH=/usr/local/cuda/include:${CPATH}
+        export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}
+        export LIBRARY_PATH=/usr/local/cuda/lib64:${LIBRARY_PATH}
+        echo "==== CHECK ENV ===="
+		env
 
-			echo "==== Build with enable cuda, gdr_copy by ./configure parameter ===="
-			# Use path to CUDA instead of loading CUDA as module, to check
-			# GDRCopy subcomponent does not include CUDA headers
-			cuda_path=$(dirname $(dirname $(which nvcc)))
-			az_module_unload $CUDA_MODULE
-			${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda=$cuda_path --with-gdrcopy
-			$MAKEP
-			make_clean distclean
-			az_module_load $CUDA_MODULE
+        echo "==== Build with enable cuda, gdr_copy ===="
+        ${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
+        $MAKEP
+        make_clean distclean
 
-			az_module_unload $GDRCOPY_MODULE
-		fi
+        echo "==== Build with enable cuda, gdr_copy by ./configure parameter ===="
+        # As CUDA is pre-installed, directly use its path
+        cuda_path='/usr/local/cuda'
+        ${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda=$cuda_path --with-gdrcopy
+        $MAKEP
+        make_clean distclean
 
-		echo "==== Build with enable cuda, w/o gdr_copy ===="
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
-		$MAKEP
+        az_module_unload $GDRCOPY_MODULE
+    fi
 
-		az_module_unload $CUDA_MODULE
+    echo "==== Build with enable cuda, w/o gdr_copy ===="
+    ${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
+    $MAKEP
 
-		echo "==== Running test_link_map with cuda build but no cuda module ===="
-		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
-	else
-		echo "==== Not building with cuda flags ===="
-	fi
+    echo "==== Running test_link_map with cuda build but no cuda module ===="
+    env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
 }
 
 #
