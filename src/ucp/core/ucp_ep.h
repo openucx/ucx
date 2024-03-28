@@ -473,6 +473,12 @@ struct ucp_ep_config {
 
     /* Bitmap of preregistration for am_bw lanes */
     ucp_md_map_t                  am_bw_prereg_md_map;
+
+    /* Bitmap of lanes selected by the protocols */
+    ucp_lane_map_t                proto_lane_map;
+
+    /* Number of endpoints using this configuration */
+    unsigned                      ep_count;
 };
 
 
@@ -884,5 +890,22 @@ ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes);
+
+
+/**
+ * Activate UCP worker interfaces corresponding to the lanes selected by the
+ * protocols.
+ *
+ * @param [in]  ep  Endpoint object.
+ */
+void ucp_ep_activate_worker_ifaces(ucp_ep_h ep);
+
+/**
+ * Deactivate UCP worker interfaces corresponding to the lanes selected by the
+ * protocols.
+ *
+ * @param [in]  ep  Endpoint object.
+ */
+void ucp_ep_deactivate_worker_ifaces(ucp_ep_h ep);
 
 #endif

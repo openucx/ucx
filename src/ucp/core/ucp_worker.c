@@ -725,14 +725,8 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
               worker->num_active_ifaces);
 
     if (!force) {
-        ucs_assertv(worker->context->config.ext.proto_enable ||
-                    (wiface->activate_count > 0), UCP_WIFACE_FMT " acount=%u",
-                    UCP_WIFACE_ARG(wiface), wiface->activate_count);
-
-        if (wiface->activate_count == 0) {
-            /* The interface has not been activated. */
-            return;
-        }
+        ucs_assertv(wiface->activate_count > 0, UCP_WIFACE_FMT,
+                    UCP_WIFACE_ARG(wiface));
 
         if (--wiface->activate_count > 0) {
             /* The interface is not completely deactivated yet. */

@@ -796,6 +796,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
         return status;
     }
 
+    ucp_ep_activate_worker_ifaces(ep);
     ep->am_lane = key.am_lane;
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
@@ -1330,21 +1331,22 @@ ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps, uct_ep_h failed_ep)
 void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
                               ucp_rsc_index_t rsc_index)
 {
+    ucp_worker_h worker                 = ep->worker;
+    ucp_context_h context               = worker->context;
+    const ucp_context_config_t *ctx_cfg = &context->config.ext;
     ucp_worker_iface_t *wiface;
 
-    if ((rsc_index == UCP_NULL_RESOURCE) ||
-        !ep->worker->context->config.ext.adaptive_progress ||
+    if ((rsc_index == UCP_NULL_RESOURCE) || !ctx_cfg->adaptive_progress ||
         /* Do not unprogress an already failed lane */
-        ucp_is_uct_ep_failed(uct_ep) ||
-        ucp_wireup_ep_test(uct_ep)) {
+        ucp_is_uct_ep_failed(uct_ep) || ucp_wireup_ep_test(uct_ep) ||
+        ctx_cfg->proto_enable) {
         return;
     }
 
-    wiface = ucp_worker_iface(ep->worker, rsc_index);
-    ucs_debug("ep %p: unprogress iface %p " UCT_TL_RESOURCE_DESC_FMT,
-              ep, wiface->iface,
-              UCT_TL_RESOURCE_DESC_ARG(
-              &(ep->worker->context->tl_rscs[rsc_index].tl_rsc)));
+    wiface = ucp_worker_iface(worker, rsc_index);
+    ucs_debug("ep %p: unprogress iface %p " UCT_TL_RESOURCE_DESC_FMT, ep,
+              wiface->iface,
+              UCT_TL_RESOURCE_DESC_ARG(&(context->tl_rscs[rsc_index].tl_rsc)));
     ucp_worker_iface_unprogress_ep(wiface);
 }
 
@@ -1578,6 +1580,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
         ucp_ep_unprogress_uct_ep(ep, uct_ep, ucp_ep_get_rsc_index(ep, lane));
         uct_ep_destroy(uct_ep);
     }
+
+    ucp_ep_deactivate_worker_ifaces(ep);
 }
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
@@ -3770,4 +3774,45 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes)
     }
 
     return UCS_OK;
+}
+
+static void
+ucp_ep_for_each_proto_lane(ucp_ep_h ep,
+                           void wiface_process(ucp_worker_iface_t *))
+{
+    ucp_lane_index_t lane;
+    ucp_worker_iface_t *wiface;
+
+    ucs_for_each_bit(lane, ucp_ep_config(ep)->proto_lane_map) {
+        wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
+        wiface_process(wiface);
+    }
+}
+
+void ucp_ep_activate_worker_ifaces(ucp_ep_h ep)
+{
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+
+    ucs_trace("activate wifaces ep %p config index %u ep count %u", ep,
+              ep->cfg_index, ep_config->ep_count);
+    if (ep_config->ep_count++ > 0) {
+        return;
+    }
+
+    ucp_ep_for_each_proto_lane(ep, ucp_worker_iface_progress_ep);
+}
+
+void ucp_ep_deactivate_worker_ifaces(ucp_ep_h ep)
+{
+    ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+
+    ucs_trace("deactivate wifaces ep %p config index %u ep count %u", ep,
+              ep->cfg_index, ep_config->ep_count);
+    ucs_assertv(ep_config->ep_count > 0, "ep %p config index %u", ep,
+                ep->cfg_index);
+    if (--ep_config->ep_count > 0) {
+        return;
+    }
+
+    ucp_ep_for_each_proto_lane(ep, ucp_worker_iface_unprogress_ep);
 }
