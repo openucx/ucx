@@ -247,6 +247,35 @@ typedef union {
 } uct_ib_mlx5_devx_mr_t;
 
 
+/* Data structure to hold the UMR MR (on the host) item in the mkey pool */
+typedef struct {
+    ucs_list_link_t    super;
+    struct mlx5dv_mkey *umr_mkey;
+} uct_ib_mlx5_devx_umr_t;
+
+
+#define UCT_IB_MLX5_UMR_FMT "UMR mkey %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ARG(umr) \
+    (umr)->umr_mkey, uct_ib_mlx5_mkey_index((umr)->umr_mkey->lkey)
+
+
+/* Data structure to hold the UMR mkey alias on the DPU item in the hash map */
+typedef struct {
+    struct mlx5dv_devx_obj *cross_mr;
+    uint32_t               lkey;
+} uct_ib_mlx5_devx_umr_alias_t;
+
+
+#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias) \
+    (umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((umr_alias)->lkey)
+
+
+/* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
+/* Note the hash key here is: gvmi_id << 32 | mkey (both uint32_t) */
+KHASH_MAP_INIT_INT64(umr_mkey_map, uct_ib_mlx5_devx_umr_alias_t);
+
+
 typedef struct {
     uct_ib_mem_t            super;
     void                    *address;
@@ -254,6 +283,7 @@ typedef struct {
     struct mlx5dv_devx_obj  *indirect_dvmr;
     struct mlx5dv_devx_umem *umem;
     struct mlx5dv_devx_obj  *cross_mr;
+    uct_ib_mlx5_devx_umr_t  *umr_mr;
     struct mlx5dv_devx_obj  *smkey_mr;
     struct mlx5dv_devx_obj  *dm_addr_dvmr;
 #if HAVE_IBV_DM
@@ -302,6 +332,19 @@ typedef struct uct_ib_mlx5_mem_lru_entry {
 
 KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
 
+
+/**
+ * We increment mkey tag (8 LSB of the mkey) for each newly created mkey, in
+ * order to reduce the probability of reusing the same mkey value.
+ * This constant is the modulo for the mkey tag increment.
+ */
+#define UCT_IB_MLX5_MKEY_TAG_MAX    251
+
+/**
+ * Indicate that exported key is indirect UMR mkey.
+ */
+#define UCT_IB_MLX5_MKEY_TAG_UMR    UCT_IB_MLX5_MKEY_TAG_MAX
+
 #endif
 
 
@@ -330,6 +373,17 @@ typedef struct uct_ib_mlx5_md {
 
     /* Cached values of counter set id per port */
     uint8_t                  port_counter_set_ids[UCT_IB_DEV_MAX_PORTS];
+
+    /* CQ for indirect (UMR) mkeys */
+    struct ibv_cq            *umr_cq;
+    /* QP for indirect (UMR) mkeys */
+    struct ibv_qp            *umr_qp;
+
+    /* Indirect (UMR) mkey pool (on the host) */
+    ucs_list_link_t          umr_mkey_pool;
+
+    /* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
+    khash_t(umr_mkey_map)    *umr_mkey_hash;
 #endif
     struct {
         size_t dc;
