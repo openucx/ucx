@@ -22,7 +22,7 @@
 #include <ucp/core/ucp_request.inl>
 
 
-UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h, const ucp_rsc_index_t*);
+UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h);
 
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(ucp_wireup_ep_t, uct_ep_t);
@@ -199,7 +199,7 @@ static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
 
 
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
-                                ucp_ep_h, const ucp_rsc_index_t*);
+                                ucp_ep_h);
 
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
                            ucp_rsc_index_t rsc_index, int is_p2p)
@@ -346,8 +346,7 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
 }
 
 
-UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
-                    const ucp_rsc_index_t *dst_rsc_indices)
+UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 {
     static uct_iface_ops_t ops = {
         .ep_connect_to_ep    = ucp_wireup_ep_connect_to_ep,
@@ -378,7 +377,6 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
         .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_no_resource,
         .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_no_resource
     };
-    ucp_lane_index_t lane;
 
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
 
@@ -388,12 +386,6 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
     self->flags         = 0;
     ucs_queue_head_init(&self->pending_q);
     UCS_STATIC_BITMAP_RESET_ALL(&self->cm_resolve_tl_bitmap);
-
-    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
-        self->dst_rsc_indices[lane] = (dst_rsc_indices != NULL) ?
-                                      dst_rsc_indices[lane] :
-                                      UCP_NULL_RESOURCE;
-    }
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
     ucp_worker_flush_ops_count_add(ucp_ep->worker, +1);
@@ -467,25 +459,27 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
 
     ucs_assert(wireup_ep != NULL);
 
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
-                               UCT_EP_PARAM_FIELD_PATH_INDEX;
-    uct_ep_params.path_index = path_index;
-    uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
-    status = uct_ep_create(&uct_ep_params, &next_ep);
-    if (status != UCS_OK) {
-        /* make Coverity happy */
-        ucs_assert(next_ep == NULL);
-        goto err;
+    if (wireup_ep->super.uct_ep == NULL) {
+        uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                                   UCT_EP_PARAM_FIELD_PATH_INDEX;
+        uct_ep_params.path_index = path_index;
+        uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
+        status                   = uct_ep_create(&uct_ep_params, &next_ep);
+        if (status != UCS_OK) {
+            /* make Coverity happy */
+            ucs_assert(next_ep == NULL);
+            goto err;
+        }
+
+        ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1, rsc_index);
+
+        ucs_debug("ep %p: wireup_ep %p created next_ep %p to %s "
+                  "using " UCT_TL_RESOURCE_DESC_FMT,
+                  ucp_ep, wireup_ep, wireup_ep->super.uct_ep,
+                  ucp_ep_peer_name(ucp_ep),
+                  UCT_TL_RESOURCE_DESC_ARG(
+                          &worker->context->tl_rscs[rsc_index].tl_rsc));
     }
-
-    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1, rsc_index);
-
-    ucs_debug("ep %p: wireup_ep %p created next_ep %p to %s "
-              "using " UCT_TL_RESOURCE_DESC_FMT,
-              ucp_ep, wireup_ep, wireup_ep->super.uct_ep,
-              ucp_ep_peer_name(ucp_ep),
-              UCT_TL_RESOURCE_DESC_ARG(
-                      &worker->context->tl_rscs[rsc_index].tl_rsc));
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
@@ -523,6 +517,22 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
     ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1, rsc_index);
     ucs_debug("ep %p: wireup_ep %p set next_ep %p", wireup_ep->super.ucp_ep,
               wireup_ep, wireup_ep->super.uct_ep);
+}
+
+uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    uct_ep_h wireup_msg_ep;
+
+    if ((wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) ||
+        (wireup_ep->aux_ep == NULL)) {
+        wireup_msg_ep = ucp_wireup_ep_extract_next_ep(&wireup_ep->super.super);
+    } else {
+        wireup_msg_ep     = wireup_ep->aux_ep;
+        wireup_ep->aux_ep = NULL;
+    }
+
+    ucs_assert(wireup_msg_ep != NULL);
+    return wireup_msg_ep;
 }
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)
