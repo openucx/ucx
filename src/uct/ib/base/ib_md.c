@@ -24,6 +24,7 @@
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <uct/api/v2/uct_v2.h>
+#include <uct/ib/rc/accel/gga_mlx5.h> /* uct_ib_mlx5_gga_md_open */
 #include <pthread.h>
 #ifdef HAVE_PTHREAD_NP_H
 #include <pthread_np.h>
@@ -47,7 +48,7 @@ static const char *uct_ib_devx_objs[] = {
     NULL
 };
 
-static ucs_config_field_t uct_ib_md_config_table[] = {
+ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
@@ -187,7 +188,6 @@ extern uct_tl_t UCT_TL_NAME(rc_verbs);
 extern uct_tl_t UCT_TL_NAME(rc_mlx5);
 extern uct_tl_t UCT_TL_NAME(ud_verbs);
 extern uct_tl_t UCT_TL_NAME(ud_mlx5);
-extern uct_tl_t UCT_TL_NAME(gga_mlx5);
 
 static uct_tl_t *uct_ib_tls[] = {
 #ifdef HAVE_TL_DC
@@ -198,9 +198,6 @@ static uct_tl_t *uct_ib_tls[] = {
 #endif
 #if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
     &UCT_TL_NAME(rc_mlx5),
-#ifdef HAVE_DEVX
-    &UCT_TL_NAME(gga_mlx5),
-#endif
 #endif
 #ifdef HAVE_TL_UD
     &UCT_TL_NAME(ud_verbs),
@@ -737,9 +734,9 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
-                                       const void *rkey_buffer,
-                                       uct_rkey_t *rkey_p, void **handle_p)
+ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p)
 {
     uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
@@ -808,9 +805,9 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     return uct_ib_device_is_supported(device);
 }
 
-static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
-                                              uct_md_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p)
+ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
+                                       uct_md_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p)
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     int num_resources = 0;
@@ -1022,6 +1019,7 @@ uct_ib_md_set_pci_bw(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
     md->pci_bw = md->dev.pci_bw;
 }
 
+
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
@@ -1080,17 +1078,24 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
         uct_ib_fork_warn_enable();
     }
 
-    for (i = 0; i < ucs_static_array_size(uct_ib_ops); i++) {
-        status = uct_ib_ops[i]->ops->open(ib_device, md_config, &md);
-        if (status == UCS_OK) {
-            ucs_debug("%s: md open by '%s' is successful", md_name,
+    if (component == &uct_ib_component) {
+        for (i = 0; i < ucs_static_array_size(uct_ib_ops); i++) {
+            status = uct_ib_ops[i]->ops->open(ib_device, md_config, &md);
+            if (status == UCS_OK) {
+                ucs_debug("%s: md open by '%s' is successful", md_name,
+                          uct_ib_ops[i]->name);
+                break;
+            } else if (status != UCS_ERR_UNSUPPORTED) {
+                goto out_free_dev_list;
+            }
+            ucs_debug("%s: md open by '%s' failed, trying next", md_name,
                       uct_ib_ops[i]->name);
-            break;
-        } else if (status != UCS_ERR_UNSUPPORTED) {
+        }
+    } else {
+        status = uct_ib_mlx5_gga_md_open(ib_device, md_config, &md);
+        if (status != UCS_ERR_UNSUPPORTED) {
             goto out_free_dev_list;
         }
-        ucs_debug("%s: md open by '%s' failed, trying next", md_name,
-                  uct_ib_ops[i]->name);
     }
 
     if (status != UCS_OK) {
