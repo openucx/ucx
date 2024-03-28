@@ -561,6 +561,70 @@ run_ucx_perftest() {
 	fi
 }
 
+start_daemon() {
+	daemon_exe="$1"
+
+	# Find daemon port
+	dmn_port="$server_port"
+	step_server_port
+
+	# Mandatory options to run the daemon
+	dmn_env="UCX_MAX_RNDV_LANES=1 UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=get_zcopy"
+
+	# Run the daemon
+	env $dmn_env $daemon_exe -p $dmn_port &
+
+	# Return the daemon pid and port
+	eval "$2=$!"
+	eval "$3=$dmn_port"
+}
+
+#
+# Run UCX performance daemon test
+#
+run_ucx_perftest_daemon() {
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+	ucx_perftest_daemon="$ucx_inst/bin/ucx_perftest_daemon"
+	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_daemon"
+
+	devices="$(get_active_ib_devices)"
+	devices="$(get_ib_bf_devices $devices)"
+
+	my_devices=$(get_my_tasks $devices)
+	for ucx_dev in $my_devices
+	do
+		echo "==== Running ucx_perftest_daemon kit on $ucx_dev ===="
+		export UCX_NET_DEVICES=$ucx_dev,lo
+
+		# We explicitly disable cuda transport, because it's not p2p and therefore
+		# imposes INVALIDATE_RMA flag for all lanes (@see ucp_ep_config_init).
+		# However invalidating of imported rkeys is not supported by the daemon.
+		# TODO: Should we support invalidation of imported keys?
+		# Normally cuda_ipc cannot be used to communicate between host and DPU,
+		# unless we run both processes on host for testing purposes.
+		export UCX_TLS=^cuda
+
+		# Start client and server daemons
+		start_daemon $ucx_perftest_daemon server_dmn_pid server_dmn_port
+		start_daemon $ucx_perftest_daemon client_dmn_pid client_dmn_port
+
+		ucp_client_args="-g 127.0.0.1:$client_dmn_port -G 127.0.0.1:$server_dmn_port -k $(hostname)"
+
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
+
+		# Kill the daemons
+		kill -9 $client_dmn_pid
+		kill -9 $server_dmn_pid
+		wait $client_dmn_pid || true
+		wait $server_dmn_pid || true
+
+		unset UCX_TLS
+		unset UCX_NET_DEVICES
+	done
+}
+
 #
 # Test malloc hooks with mpi
 #
@@ -1087,6 +1151,7 @@ run_tests() {
 	do_distributed_task 2 4 test_init_mt
 	do_distributed_task 3 4 run_ucp_client_server
 	do_distributed_task 0 4 test_no_cuda_context
+	do_distributed_task 1 4 run_ucx_perftest_daemon
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello

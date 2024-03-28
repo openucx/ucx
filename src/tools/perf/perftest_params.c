@@ -17,8 +17,9 @@
 
 const struct option TEST_PARAMS_ARGS_LONG[] =
 {
-    {"daemon-local",  required_argument, 0, 'g'},
-    {"daemon-remote", required_argument, 0, 'G'},
+    {"daemon-local",        required_argument, 0, 'g'},
+    {"daemon-remote",       required_argument, 0, 'G'},
+    {"daemon-keep-running", no_argument,       0, 'k'},
     {0, 0, 0, 0}
 };
 
@@ -267,21 +268,10 @@ static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
     return UCS_OK;
 }
 
-static ucs_status_t verify_daemon_params(ucx_perf_params_t *params)
+static ucs_status_t check_daemon_params(const ucx_perf_params_t *params)
 {
-    struct sockaddr_storage *local_addr  = &params->ucp.dmn_local_addr;
-    struct sockaddr_storage *remote_addr = &params->ucp.dmn_remote_addr;
-
-    /* Return if both daemon addresses are not configured */
-    if ((0 == local_addr->ss_family) && (0 == remote_addr->ss_family)) {
+    if (!params->ucp.dmn_info.is_daemon_mode) {
         return UCS_OK;
-    }
-
-    /* If only one address is specified, use it in both cases */
-    if (0 == local_addr->ss_family) {
-        memcpy(local_addr, remote_addr, sizeof(*local_addr));
-    } else if (0 == remote_addr->ss_family) {
-        memcpy(remote_addr, local_addr, sizeof(*remote_addr));
     }
 
     if ((params->ucp.send_datatype != UCP_PERF_DATATYPE_CONTIG) ||
@@ -312,7 +302,29 @@ static ucs_status_t verify_daemon_params(ucx_perf_params_t *params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    params->ucp.is_daemon_mode = 1;
+    return UCS_OK;
+}
+
+static ucs_status_t init_daemon_params(struct perftest_context *ctx)
+{
+    struct sockaddr_storage *local_addr  = &ctx->dmn_info.dmn_local_addr;
+    struct sockaddr_storage *remote_addr = &ctx->dmn_info.dmn_remote_addr;
+
+    /* Return if both daemon addresses are not configured */
+    if ((0 == local_addr->ss_family) && (0 == remote_addr->ss_family)) {
+        return UCS_OK;
+    }
+
+    /* If only one address is specified, use it in both cases */
+    if (0 == local_addr->ss_family) {
+        memcpy(local_addr, remote_addr, sizeof(*local_addr));
+    } else if (0 == remote_addr->ss_family) {
+        memcpy(remote_addr, local_addr, sizeof(*remote_addr));
+    }
+
+    ctx->dmn_info.is_daemon_mode = 1;
+    memcpy(&ctx->params.super.ucp.dmn_info, &ctx->dmn_info,
+           sizeof(ctx->dmn_info));
     return UCS_OK;
 }
 
@@ -489,12 +501,6 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'z':
         params->super.flags |= UCX_PERF_TEST_FLAG_PREREG;
         return UCS_OK;
-    case 'g': /* handles daemon-local long option as well */
-        return ucs_sock_ipportstr_to_sockaddr(opt_arg, DEFAULT_DAEMON_PORT,
-                                              &params->super.ucp.dmn_local_addr);
-    case 'G': /* handles daemon-remote long option as well */
-        return ucs_sock_ipportstr_to_sockaddr(opt_arg, DEFAULT_DAEMON_PORT,
-                                              &params->super.ucp.dmn_remote_addr);
     default:
        return UCS_ERR_INVALID_PARAM;
     }
@@ -539,6 +545,13 @@ ucs_status_t clone_params(perftest_params_t *dest,
 
 ucs_status_t check_params(const perftest_params_t *params)
 {
+    ucs_status_t status;
+
+    status = check_daemon_params(&params->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     switch (params->super.api) {
     case UCX_PERF_API_UCT:
         if (!strcmp(params->super.uct.dev_name, TL_RESOURCE_NAME_NONE)) {
@@ -624,9 +637,10 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     ctx->flags           = 0;
     ctx->mpi             = mpi_initialized;
     ctx->mad_port        = NULL;
+    memset(&ctx->dmn_info, 0, sizeof(ctx->dmn_info));
 
     optind = 1;
-    while ((c = getopt_long(argc, argv, "p:b:6NfvIc:P:hK:" TEST_PARAMS_ARGS,
+    while ((c = getopt_long(argc, argv, "p:b:6NfvIc:P:hK:g:G:k" TEST_PARAMS_ARGS,
                             TEST_PARAMS_ARGS_LONG, NULL)) != -1) {
         switch (c) {
         case 'p':
@@ -670,6 +684,23 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
             ctx->mpi = atoi(optarg) && mpi_initialized;
             break;
 #endif
+        case 'g': /* handles daemon-local long option as well */
+            status = ucs_sock_ipportstr_to_sockaddr(
+                optarg, DEFAULT_DAEMON_PORT, &ctx->dmn_info.dmn_local_addr);
+            if (status != UCS_OK) {
+                goto err;
+            }
+            break;
+        case 'G': /* handles daemon-remote long option as well */
+            status = ucs_sock_ipportstr_to_sockaddr(
+                optarg, DEFAULT_DAEMON_PORT, &ctx->dmn_info.dmn_remote_addr);
+            if (status != UCS_OK) {
+                goto err;
+            }
+            break;
+        case 'k': /* handles daemon-keep-running long option as well */
+            ctx->dmn_info.is_keep_running = 1;
+            break;
         case 'h':
             usage(ctx, ucs_basename(argv[0]));
             status = UCS_ERR_CANCELED;
@@ -702,7 +733,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
         }
     }
 
-    return verify_daemon_params(&ctx->params.super);
+    return init_daemon_params(ctx);
 
 err:
     release_msg_size_list(&ctx->params);

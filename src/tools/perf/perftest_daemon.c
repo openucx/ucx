@@ -83,6 +83,7 @@ ucp_perf_daemon_ep_close(ucp_perf_daemon_context_t *ctx, ucp_ep_h ep)
 
 static void ucp_perf_daemon_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
+    ucs_error("error handler called with status %s", ucs_status_string(status));
     terminated = 1;
 }
 
@@ -298,7 +299,7 @@ ucp_perf_daemon_init_handler(void *arg, const void *header,
 
     /* Peer EP must not be initialized on receiving HOST_INIT message.
      * Otherwise it means that daemon was already initialized from host. For now
-     * we don't support multiple host processes, or connection reestablishment
+     * we don't support multiple host processes
      */
     if (ctx->peer_ep != NULL) {
         ucs_error("duplicate daemon init req");
@@ -347,15 +348,48 @@ ucp_perf_daemon_send_handler(void *arg, const void *header,
     return UCS_OK;
 }
 
+static void ucp_perf_daemon_cleanup_connections(ucp_perf_daemon_context_t *ctx)
+{
+    ucs_trace("cleaning up daemon connections");
+
+    if (NULL != ctx->send_memh) {
+        /* coverity[check_return] */
+        ucp_mem_unmap(ctx->context, ctx->send_memh);
+        ctx->send_memh = NULL;
+    }
+
+    if (NULL != ctx->recv_memh) {
+        /* coverity[check_return] */
+        ucp_mem_unmap(ctx->context, ctx->recv_memh);
+        ctx->recv_memh = NULL;
+    }
+
+    ucp_perf_daemon_ep_close(ctx, ctx->peer_ep);
+    ctx->peer_ep = NULL;
+
+    ucp_perf_daemon_ep_close(ctx, ctx->host_ep);
+    ctx->host_ep = NULL;
+}
+
 static ucs_status_t
 ucp_perf_daemon_fin_handler(void *arg, const void *header, size_t header_length,
                             void *data, size_t length,
                             const ucp_am_recv_param_t *param)
 {
+    uint8_t keep_running;
+
     ucp_perf_daemon_check_am_msg(param, header_length, 0, 0,
                                  UCP_PERF_DAEMON_AM_ID_FIN);
+    ucs_assertv(length >= sizeof(keep_running), "length=%lu", length);
 
-    terminated = 1;
+    keep_running = *(uint8_t*)data;
+
+    if (keep_running) {
+        ucp_perf_daemon_cleanup_connections(arg);
+    } else {
+        terminated = 1;
+    }
+
     return UCS_OK;
 }
 
@@ -369,6 +403,11 @@ ucp_perf_daemon_peer_init_handler(void *arg, const void *header,
 
     ucp_perf_daemon_check_am_msg(param, header_length, 1, 0,
                                  UCP_PERF_DAEMON_AM_ID_PEER_INIT);
+
+    if (ctx->peer_ep != NULL) {
+        ucs_error("duplicate peer init req");
+        return UCS_ERR_ALREADY_EXISTS;
+    }
 
     ctx->peer_ep = param->reply_ep;
     return UCS_OK;
@@ -409,18 +448,10 @@ ucp_perf_daemon_peer_tx_handler(void *arg, const void *header,
 
 static void ucp_perf_daemon_cleanup(ucp_perf_daemon_context_t *ctx)
 {
-    if (NULL != ctx->send_memh) {
-        /* coverity[check_return] */
-        ucp_mem_unmap(ctx->context, ctx->send_memh);
-    }
+    ucs_trace("cleaning up daemon");
 
-    if (NULL != ctx->recv_memh) {
-        /* coverity[check_return] */
-        ucp_mem_unmap(ctx->context, ctx->recv_memh);
-    }
+    ucp_perf_daemon_cleanup_connections(ctx);
 
-    ucp_perf_daemon_ep_close(ctx, ctx->peer_ep);
-    ucp_perf_daemon_ep_close(ctx, ctx->host_ep);
     ucp_listener_destroy(ctx->listener);
     ucp_worker_destroy(ctx->worker);
     ucp_cleanup(ctx->context);
