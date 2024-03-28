@@ -216,6 +216,7 @@ typedef struct uct_dc_dci {
     uint8_t                       path_index; /* Path index */
     uint8_t                       next_channel_index; /* next DCI channel index
                                                          to be used by EP */
+    uint8_t                       initialized;
 } uct_dc_dci_t;
 
 
@@ -247,6 +248,23 @@ typedef struct uct_dc_mlx5_ep_fc_entry {
 
 KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
 
+enum uct_dc_mlx5_dci_config_flags {
+    UCT_DC_MLX5_DCI_CONFIG_KEEPALIVE           = UCS_BIT(0),
+    UCT_DC_MLX5_DCI_CONFIG_PORT_AFFINITY       = UCS_BIT(1),
+    UCT_DC_MLX5_DCI_CONFIG_MAX_RD_ATOMIC_IS_64 = UCS_BIT(2)
+};
+
+typedef union uct_dc_mlx5_dci_config {
+    struct {
+        uint8_t sl;
+        uint8_t path_index;
+        uint8_t flags;
+        uint8_t padding[5];
+    } key;
+    uint64_t u64;
+} UCS_S_PACKED uct_dc_mlx5_dci_config_t;
+
+KHASH_MAP_INIT_INT64(uct_dc_mlx5_config_hash, uint8_t);
 
 /* DCI pool
  * same array is used to store DCI's to allocate and DCI's to release:
@@ -269,6 +287,9 @@ typedef struct {
     int8_t        release_stack_top; /* releasing dci's stack,
                                         points to last DCI to release
                                         or -1 if no DCI's to release */
+    uint8_t       capacity;
+    uint8_t       size;
+    uint64_t      config_key;
 } uct_dc_mlx5_dci_pool_t;
 
 
@@ -320,6 +341,8 @@ struct uct_dc_mlx5_iface {
         uint8_t                   av_fl_mlid;
 
         uint8_t                   num_dci_channels;
+
+        uint8_t                   dci_counter;
     } tx;
 
     struct {
@@ -327,6 +350,8 @@ struct uct_dc_mlx5_iface {
 
         uint8_t                   port_affinity;
     } rx;
+
+    khash_t(uct_dc_mlx5_config_hash) dc_config_hash;
 
     uint8_t                       version_flag;
 
@@ -377,15 +402,35 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
 
 void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
 
+ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
+                                          uint8_t pool_index, uint8_t dci_index,
+                                          uint8_t path_index,
+                                          int full_handshake);
+
+ucs_status_t
+uct_dc_mlx5_iface_create_dci_pool(uct_dc_mlx5_iface_t *iface,
+                                  const uct_dc_mlx5_dci_config_t *config,
+                                  uint8_t pool_size, uint8_t *pool_index_p);
+
+/**
+ * Checks whether dci pool config is present in dc_config_hash and returns 
+ * the matching pool index or creates a new one
+*/
+ucs_status_t
+uct_dc_mlx5_dci_pool_get_or_create(uct_dc_mlx5_iface_t *iface,
+                                   const uct_dc_mlx5_dci_config_t *dci_config,
+                                   uint8_t *pool_index_p);
+
 #if HAVE_DEVX
 
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface);
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface);
 
-ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
-                                                uct_ib_mlx5_qp_t *qp,
-                                                uint8_t path_index);
+ucs_status_t
+uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
+                                   uct_ib_mlx5_qp_t *qp,
+                                   const uct_dc_mlx5_dci_config_t *dci_config);
 
 #else
 
@@ -402,7 +447,8 @@ uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface)
 }
 
 static UCS_F_MAYBE_UNUSED ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(
-        uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *qp, uint8_t path_index)
+        uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *qp,
+        const uct_dc_mlx5_dci_config_t *dci_config)
 {
     return UCS_ERR_UNSUPPORTED;
 }
@@ -419,12 +465,11 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 }
 #endif
 
-static UCS_F_ALWAYS_INLINE uint8_t
-uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE size_t 
+uct_dc_mlx5_iface_max_total_dcis(uct_dc_mlx5_iface_t *iface)
 {
-    return (iface->tx.ndci * iface->tx.num_dci_pools) +
-        ((iface->flags & UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE) ?
-         UCT_DC_MLX5_KEEPALIVE_NUM_DCIS : 0);
+    return (iface->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS) +
+           UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
 }
 
 /* TODO:
@@ -444,9 +489,10 @@ uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
     }
 
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ndci   = uct_dc_mlx5_iface_total_ndci(iface);
+    ndci   = uct_dc_mlx5_iface_max_total_dcis(iface);
     for (i = 0; i < ndci; i++) {
-        if (iface->tx.dcis[i].txwq.super.qp_num == qp_num) {
+        if (iface->tx.dcis[i].initialized &&
+            (iface->tx.dcis[i].txwq.super.qp_num == qp_num)) {
             return i;
         }
     }
@@ -487,6 +533,9 @@ uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
     uct_rc_txqp_t *txqp;
 
+    if (!iface->tx.dcis[dci_index].initialized) {
+        return 0;
+    }
     txqp = &iface->tx.dcis[dci_index].txqp;
     return uct_rc_txqp_available(txqp) < (int16_t)iface->tx.bb_max;
 }
@@ -510,6 +559,11 @@ static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_is_dci_keepalive(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
     return dci_index == iface->keepalive_dci;
+}
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_dc_mlx5_dci_config_get_max_rd_atomic(const uct_dc_mlx5_dci_config_t *dci_config) {
+    return dci_config->key.flags & UCT_DC_MLX5_DCI_CONFIG_MAX_RD_ATOMIC_IS_64 ? 64 : 16;
 }
 
 #endif

@@ -449,10 +449,8 @@ UCS_TEST_P(test_dc, pool_indices)
     modify_config("IB_NUM_PATHS", std::to_string(max_dci_pools).c_str());
 
     entity *rand_e        = create_rand_entity();
-    uint8_t num_dci_pools = dc_iface(rand_e)->tx.num_dci_pools;
-    bool used_last_pool   = false;
 
-    EXPECT_EQ(num_dci_pools, max_dci_pools);
+    bool used_last_pool   = false;
 
     /* Create an ep for each pool */
     for (int i = 0; i < max_dci_pools; i++) {
@@ -462,6 +460,9 @@ UCS_TEST_P(test_dc, pool_indices)
             used_last_pool = true;
         }
     }
+
+    uint8_t num_dci_pools = dc_iface(rand_e)->tx.num_dci_pools;
+    EXPECT_EQ(num_dci_pools, max_dci_pools);
 
     EXPECT_TRUE(used_last_pool);
 }

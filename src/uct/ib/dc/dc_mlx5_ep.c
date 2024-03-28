@@ -1244,11 +1244,14 @@ static void uct_dc_mlx5_ep_keepalive_cleanup(uct_dc_mlx5_ep_t *ep)
 
 UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
                     const uct_dc_mlx5_iface_addr_t *if_addr,
-                    uct_ib_mlx5_base_av_t *av, uint8_t path_index)
+                    uct_ib_mlx5_base_av_t *av, uint8_t path_index,
+                    const uct_dc_mlx5_dci_config_t *dci_config)
 {
     const uct_dc_mlx5_iface_flush_addr_t *flush_addr =
             ucs_derived_of(if_addr, uct_dc_mlx5_iface_flush_addr_t);
     uint32_t remote_dctn;
+    uint8_t pool_index;
+    ucs_status_t status;
 
     ucs_trace_func("");
 
@@ -1259,20 +1262,18 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
 
     self->av.dqp_dct      = av->dqp_dct | htonl(remote_dctn);
     self->av.rlid         = av->rlid;
-    self->flags           = path_index % iface->tx.num_dci_pools;
+
+    status = uct_dc_mlx5_dci_pool_get_or_create(iface, dci_config, &pool_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+    self->flags = pool_index % UCT_DC_MLX5_IFACE_MAX_DCI_POOLS;
 
     if (if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY) {
         self->flush_rkey_hi = flush_addr->flush_rkey_hi;
         self->flags        |= UCT_DC_MLX5_EP_FLAG_FLUSH_RKEY;
     } else {
         self->flush_rkey_hi = 0;
-    }
-
-    if ((iface->super.super.config.max_rd_atomic == 16) !=
-        !!(if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16)) {
-        ucs_error("max_rd_attomic values do not match on peers (local is %u), "
-                  "set UCX_RC_MAX_RD_ATOMIC=16 to resolve this issue.",
-                  iface->super.super.config.max_rd_atomic);
     }
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
@@ -1315,6 +1316,10 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
 
+    if (!iface->tx.dcis[self->dci].initialized) {
+        return;
+    }
+
     /* TODO should be removed by flush */
     uct_rc_txqp_purge_outstanding(&iface->super.super,
                                   &iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED,
@@ -1324,19 +1329,22 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_dc_mlx5_ep_t, uct_base_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
-                          const uct_dc_mlx5_iface_addr_t *,
-                          uct_ib_mlx5_base_av_t *, uint8_t);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_ep_t, uct_ep_t, uct_dc_mlx5_iface_t*,
+                          const uct_dc_mlx5_iface_addr_t*,
+                          uct_ib_mlx5_base_av_t*, uint8_t,
+                          const uct_dc_mlx5_dci_config_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_dc_mlx5_ep_t, uct_ep_t);
 
 UCS_CLASS_INIT_FUNC(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *iface,
                     const uct_dc_mlx5_iface_addr_t *if_addr,
                     uct_ib_mlx5_base_av_t *av, uint8_t path_index,
-                    struct mlx5_grh_av *grh_av)
+                    struct mlx5_grh_av *grh_av,
+                    const uct_dc_mlx5_dci_config_t *dc_config)
 {
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_dc_mlx5_ep_t, iface, if_addr, av, path_index);
+    UCS_CLASS_CALL_SUPER_INIT(uct_dc_mlx5_ep_t, iface, if_addr, av, path_index,
+                              dc_config);
 
     self->super.flags |= UCT_DC_MLX5_EP_FLAG_GRH;
     memcpy(&self->grh_av, grh_av, sizeof(*grh_av));
@@ -1349,10 +1357,10 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_grh_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_grh_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
-                          const uct_dc_mlx5_iface_addr_t *,
-                          uct_ib_mlx5_base_av_t *, uint8_t,
-                          struct mlx5_grh_av *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_grh_ep_t, uct_ep_t, uct_dc_mlx5_iface_t*,
+                          const uct_dc_mlx5_iface_addr_t*,
+                          uct_ib_mlx5_base_av_t*, uint8_t, struct mlx5_grh_av*,
+                          const uct_dc_mlx5_dci_config_t*);
 
 /* TODO:
    currently pending code supports only dcs policy
@@ -1777,7 +1785,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
 ucs_status_t
 uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uint64_t dummy             = 0;
     ucs_status_t status;
