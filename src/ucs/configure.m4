@@ -300,6 +300,21 @@ AS_IF([test "x$enable_builtin_memcpy" != xno],
 	  [AC_DEFINE([ENABLE_BUILTIN_MEMCPY], [0], [Enable builtin memcpy])]
   )
 
+#
+# Enable non temporal buffer transfer
+#
+AC_ARG_ENABLE([nt-buffer-transfer],
+	AS_HELP_STRING([--enable-nt-buffer-transfer],
+	               [Enable non temporal buffer transfer routine, default: YES]),
+	[],
+	[enable_nt_buffer_transfer=yes])
+
+AS_IF([test "x$enable_nt_buffer_transfer" != xno],
+	  [AS_MESSAGE([enabling non temporal buffer transfer])
+	   AC_DEFINE([ENABLE_NT_BUFFER_TRANSFER], [1], [Enable non temporal buffer transfer])],
+	  [AC_DEFINE([ENABLE_NT_BUFFER_TRANSFER], [0], [Enable non temporal buffer transfer])]
+  )
+
 AC_CHECK_FUNCS([__clear_cache], [], [])
 AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])
 

@@ -2,6 +2,7 @@
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
  * Copyright (C) Huawei Technologies Co., Ltd. 2023. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2023. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 

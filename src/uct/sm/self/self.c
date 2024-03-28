@@ -302,6 +302,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
+    ucs_arch_memcpy_hint_t hint = UCS_ARCH_MEMCPY_NT_NONE;
     uct_self_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_self_iface_t);
     uct_self_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_self_ep_t);
     size_t total_length;
@@ -313,7 +314,7 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     UCT_CHECK_LENGTH(total_length, 0, iface->send_size, "am_short");
 
     send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
-    uct_am_short_fill_data(send_buffer, header, payload, length);
+    uct_am_short_fill_data(send_buffer, header, payload, length, hint);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, total_length);
     uct_self_iface_sendrecv_am(iface, id, send_buffer, total_length, "SHORT");

@@ -269,7 +269,9 @@ static inline void *memcpy_aarch64_sve(void *dest, const void *src, size_t len)
 }
 #endif
 
-static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
+static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len,
+                                       ucs_arch_memcpy_hint_t hint,
+                                       size_t total_len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
     return __memcpy_thunderx2(dst, src, len);

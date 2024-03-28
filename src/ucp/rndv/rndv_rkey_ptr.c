@@ -1,5 +1,6 @@
 /**
  * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (C) 2023, Advanced Micro Devices, Inc. All rights reserved.
  *
  * See file LICENSE for terms.
  */

@@ -11,6 +11,11 @@
 #include <sys/time.h>
 #include <stdint.h>
 
+typedef enum {
+    UCS_ARCH_MEMCPY_NT_NONE = 0,
+    UCS_ARCH_MEMCPY_NT_SOURCE = UCS_BIT(0),
+    UCS_ARCH_MEMCPY_NT_DEST = UCS_BIT(1),
+} ucs_arch_memcpy_hint_t;
 
 static inline uint64_t ucs_arch_generic_read_hres_clock(void)
 {
