@@ -264,7 +264,8 @@ enum ucp_ep_params_field {
     /**< Connection request field */
     UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
     UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7), /**< Endpoint name */
-    UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8)  /**< Local socket Address */
+    UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8), /**< Local socket Address */
+    UCP_EP_PARAM_FIELD_NUM_PRIORITIES    = UCS_BIT(9)  /**< Required number of message priority levels */
 };
 
 
@@ -451,8 +452,9 @@ enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER   = UCS_BIT(3), /**< Maximum header size
                                                              used by UCP AM API */
     UCP_WORKER_ATTR_FIELD_NAME            = UCS_BIT(4), /**< UCP worker name */
-    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5)  /**< Maximum size of
+    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5), /**< Maximum size of
                                                              info string */
+    UCP_WORKER_ATTR_FIELD_MAX_PRIORITIES  = UCS_BIT(6)  /**< Max number of message priorities */
 };
 
 
@@ -734,12 +736,13 @@ typedef enum {
                                                         operation, fail if the
                                                         operation cannot be
                                                         completed immediately */
-    UCP_OP_ATTR_FLAG_MULTI_SEND     = UCS_BIT(19)  /**< optimize for bandwidth of
+    UCP_OP_ATTR_FLAG_MULTI_SEND     = UCS_BIT(19),  /**< optimize for bandwidth of
                                                         multiple in-flight operations,
                                                         rather than for the latency
                                                         of a single operation.
                                                         This flag and UCP_OP_ATTR_FLAG_FAST_CMPL
                                                         are mutually exclusive. */
+    UCP_OP_ATTR_FIELD_PRIORITY      = UCS_BIT(20)   /**< Active message priority field */
 } ucp_op_attr_t;
 
 
@@ -1262,6 +1265,11 @@ typedef struct ucp_worker_attr {
      * Maximum debug string size that can be filled with @ref ucp_request_query.
      */
     size_t                max_debug_string;
+
+    /**
+     * Maximum available message priority levels
+     */
+    unsigned              max_priorities;
 } ucp_worker_attr_t;
 
 
@@ -1819,6 +1827,12 @@ typedef struct {
      */
     ucp_mem_h memh;
 
+    /**
+     * Enumerated value, indicates message priority, priority is not guaranteed 
+     * and depends on the capabilities of the selected transport,
+     * ordering across messages with different priorities are also not guaranteed.
+     */
+    unsigned  priority;
 } ucp_request_param_t;
 
 
