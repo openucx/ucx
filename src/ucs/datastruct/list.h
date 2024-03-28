@@ -216,9 +216,9 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
  */
 #define ucs_list_extract_head(_head, _type, _member) \
     ({ \
-        ucs_list_link_t *tmp = (_head)->next; \
-        ucs_list_del(tmp); \
-        ucs_container_of(tmp, _type, _member); \
+        ucs_list_link_t *_tmp = (_head)->next; \
+        ucs_list_del(_tmp); \
+        ucs_container_of(_tmp, _type, _member); \
     })
 
 END_C_DECLS
