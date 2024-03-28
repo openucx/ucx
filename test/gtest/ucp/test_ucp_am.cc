@@ -17,6 +17,7 @@
 #include "ucp_test.h"
 
 extern "C" {
+#include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/mpool.inl>
@@ -1848,7 +1849,9 @@ private:
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    test_am_send_recv_memtype(64 * UCS_KBYTE);
+    ucp_context_config_t *cfg = &sender().worker()->context->config.ext;
+    size_t size               = cfg->rndv_frag_size[UCS_MEMORY_TYPE_HOST] + 1;
+    test_am_send_recv_memtype(size);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);
