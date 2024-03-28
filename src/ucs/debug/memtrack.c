@@ -15,7 +15,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #ifdef HAVE_MALLOC_H

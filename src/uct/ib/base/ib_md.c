@@ -16,8 +16,8 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
-#include <ucs/sys/math.h>
 #include <ucs/sys/module.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
 #include <ucm/api/ucm.h>

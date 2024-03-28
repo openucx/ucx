@@ -4,6 +4,7 @@
 * See file LICENSE for terms.
 */
 
+#include <ucs/sys/ptr_arith.h>
 #include <uct/test_p2p_rma.h>
 #include <uct/test_p2p_mix.h>
 
