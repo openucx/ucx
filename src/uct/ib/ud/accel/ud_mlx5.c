@@ -32,8 +32,11 @@
 #include <uct/ib/ud/base/ud_inl.h>
 
 
+#define UCT_UD_MLX5_IFACE_OVERHEAD 80e-9
+
+
 static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
-  {"UD_", "", NULL,
+  {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_MLX5_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_ud_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
@@ -627,7 +630,7 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead = 80e-9; /* Software overhead */
+    iface_attr->overhead = UCT_UD_MLX5_IFACE_OVERHEAD; /* Software overhead */
 
     return UCS_OK;
 }

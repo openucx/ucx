@@ -248,6 +248,9 @@ enum {
     UCT_CHECK_PARAM((_flags) == 0, "Unsupported flags: %x", (_flags));
 
 
+#define UCT_IFACE_SEND_OVERHEAD_STR "SEND_OVERHEAD"
+
+
 /**
  * Declare classes for structures defined in api/tl.h
  */

@@ -383,6 +383,7 @@ AC_CONFIG_FILES([
                  cmake/ucx-config-version.cmake
                  cmake/ucx-config.cmake
                  cmake/ucx-targets.cmake
+                 config/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

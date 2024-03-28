@@ -44,8 +44,9 @@ static const char *uct_dct_affinity_policy_names[] = {
 
 /* DC specific parameters, expecting DC_ prefix */
 ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
-    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=y;", NULL,
-     ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
+    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=y;"
+            UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_MLX5_IFACE_OVERHEAD),
+     NULL, ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
 
     /* Since long timeout will block SRQ in case of network failure on single
