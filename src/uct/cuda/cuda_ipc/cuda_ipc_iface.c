@@ -79,8 +79,10 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
     return uct_iface_is_reachable_params_addrs_valid(params) &&
+#if !HAVE_CUDA_FABRIC
            (ucs_get_system_id() == *((const uint64_t*)params->device_addr)) &&
            (getpid() != *(pid_t*)params->iface_addr) &&
+#endif
            uct_iface_scope_is_reachable(tl_iface, params);
 }
 
@@ -560,7 +562,12 @@ uct_cuda_ipc_query_devices(
         uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
         unsigned *num_tl_devices_p)
 {
-    return uct_cuda_base_query_devices_common(md, UCT_DEVICE_TYPE_SHM,
+#if HAVE_CUDA_FABRIC
+    uct_device_type_t dev_type = UCT_DEVICE_TYPE_NET;
+#else
+    uct_device_type_t dev_type = UCT_DEVICE_TYPE_SHM;
+#endif
+    return uct_cuda_base_query_devices_common(md, dev_type,
                                               tl_devices_p, num_tl_devices_p);
 }
 

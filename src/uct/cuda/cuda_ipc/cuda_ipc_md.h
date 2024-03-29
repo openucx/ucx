@@ -52,11 +52,34 @@ typedef struct {
 } uct_cuda_ipc_memh_t;
 
 
+#if HAVE_CUDA_FABRIC
+typedef enum uct_cuda_ipc_key_handle {
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR = 0,
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY,
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM,
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL
+} uct_cuda_ipc_key_handle_t;
+
+
+typedef struct uct_cuda_ipc_md_handle {
+    union {
+        CUipcMemHandle    legacy; /* Legacy IPC handle */
+        CUmemFabricHandle vmm;    /* VMM export handle */
+        CUmemFabricHandle mempool;/* MallocAsync handle */
+    } handle;
+    CUmemPoolPtrExportData ptr;
+    uct_cuda_ipc_key_handle_t handle_type;
+} uct_cuda_ipc_md_handle_t;
+#else
+typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
+#endif
+
+
 /**
  * @brief cudar ipc region registered for exposure
  */
 typedef struct {
-    CUipcMemHandle  ph;      /* Memory handle of GPU memory */
+    uct_cuda_ipc_md_handle_t  ph;      /* Memory handle of GPU memory */
     CUdeviceptr     d_bptr;  /* Allocation base address */
     size_t          b_len;   /* Allocation size */
     ucs_list_link_t link;
@@ -67,7 +90,7 @@ typedef struct {
  * @brief cuda ipc remote key for put/get
  */
 typedef struct {
-    CUipcMemHandle  ph;      /* Memory handle of GPU memory */
+    uct_cuda_ipc_md_handle_t  ph;      /* Memory handle of GPU memory */
     pid_t           pid;     /* PID as key to resolve peer_map hash */
     CUdeviceptr     d_bptr;  /* Allocation base address */
     size_t          b_len;   /* Allocation size */

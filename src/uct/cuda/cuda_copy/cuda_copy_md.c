@@ -291,14 +291,80 @@ err:
 }
 
 static ucs_status_t
+uct_cuda_copy_detect_vmm(void *address, CUmemorytype *cuda_mem_type,
+                         unsigned *is_vmm_allocation)
+{
+#if HAVE_CUDA_FABRIC
+    CUmemAllocationProp prop = {};
+    CUresult cu_err;
+    CUmemGenericAllocationHandle alloc_handle;
+
+    /* Check if memory is allocated using VMM API and see if host memory needs
+     * to be treated as pinned device memory */
+    cu_err = cuMemRetainAllocationHandle(&alloc_handle, (void*)address);
+    if (cu_err == CUDA_SUCCESS) {
+        *is_vmm_allocation = 1;
+        if (*cuda_mem_type == CU_MEMORYTYPE_HOST) {
+            cu_err = cuMemGetAllocationPropertiesFromHandle(&prop, alloc_handle);
+            if (cu_err != CUDA_SUCCESS) {
+                cuMemRelease(alloc_handle);
+                return UCS_ERR_INVALID_ADDR;
+            }
+
+            /* if location type is NUMA or NUMA_CURRENT the memory is EGM and can be
+             * potentially accessed by copy engines */
+            if ((prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA) ||
+                (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT)) {
+                *cuda_mem_type = CU_MEMORYTYPE_DEVICE;
+            } else {
+                cuMemRelease(alloc_handle);
+                return UCS_ERR_INVALID_ADDR;
+            }
+        }
+
+        cu_err = cuMemRelease(alloc_handle);
+        if (cu_err != CUDA_SUCCESS) {
+            return UCS_ERR_INVALID_ADDR;
+        }
+    }
+#endif
+    return UCS_OK;
+}
+static void
+uct_cuda_copy_set_sync_memops(void *address, unsigned is_vmm_allocation)
+{
+    unsigned value = 1;
+    CUresult cu_err;
+
+#if HAVE_CUDA_FABRIC
+    if (is_vmm_allocation) {
+        cu_err = cuCtxSetFlags(CU_CTX_SYNC_MEMOPS);
+        if (cu_err != CUDA_SUCCESS) {
+            ucs_warn("cuCtxSetFlags(CU_CTX_SYNC_MEMOPS) for %p error: %s",
+                     address, uct_cuda_base_cu_get_error_string(cu_err));
+        }
+    } else
+#endif
+    {
+        cu_err = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                       (CUdeviceptr)address);
+        if (cu_err != CUDA_SUCCESS) {
+            ucs_warn("cuPointerSetAttribute(%p, SYNC_MEMOPS) error: %s",
+                     address, uct_cuda_base_cu_get_error_string(cu_err));
+        }
+    }
+}
+
+static ucs_status_t
 uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
                                   size_t length, ucs_memory_info_t *mem_info)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 4
-    CUmemorytype cuda_mem_mype = (CUmemorytype)0;
+    CUmemorytype cuda_mem_type = (CUmemorytype)0;
     uint32_t is_managed        = 0;
     CUdevice cuda_device       = -1;
     CUcontext cuda_mem_ctx     = NULL;
+    unsigned is_vmm_allocation = 0;
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     CUdeviceptr base_address;
@@ -306,9 +372,10 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     size_t total_bytes;
     int32_t pref_loc;
     CUresult cu_err;
+    ucs_status_t status;
 
     attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
-    attr_data[0] = &cuda_mem_mype;
+    attr_data[0] = &cuda_mem_type;
     attr_type[1] = CU_POINTER_ATTRIBUTE_IS_MANAGED;
     attr_data[1] = &is_managed;
     attr_type[2] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
@@ -318,24 +385,26 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
 
     cu_err = cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
                                     attr_data, (CUdeviceptr)address);
-    if ((cu_err != CUDA_SUCCESS) || (cuda_mem_mype != CU_MEMORYTYPE_DEVICE)) {
+    if (cu_err != CUDA_SUCCESS) {
         /* pointer not recognized */
         return UCS_ERR_INVALID_ADDR;
     }
 
-    if (is_managed || (cuda_mem_ctx == NULL)) {
+    status = uct_cuda_copy_detect_vmm((void*)address, &cuda_mem_type,
+                                      &is_vmm_allocation);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (cuda_mem_type != CU_MEMORYTYPE_DEVICE) {
+        /* pointer not recognized */
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    if (is_managed) {
         /* is_managed: cuMemGetAddress range does not support managed memory so
          * use provided address and length as base address and alloc length
-         * respectively.
-         *
-         * cuda_mem_ctx == NULL: currently virtual/stream-ordered CUDA
-         * allocations are typed as `UCS_MEMORY_TYPE_CUDA_MANAGED`. This may
-         * change in the future. Ideally checking for
-         * `CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE` would be better
-         * here, but due to a bug in the driver `cudaMalloc` also returns false
-         * in that case. Therefore, checking whether the allocation was not
-         * allocated in a context should also allows us to identify
-         * virtual/stream-ordered CUDA allocations. */
+         * respectively */
         mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
 
         cu_err =
@@ -367,6 +436,9 @@ uct_cuda_copy_md_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     }
 
     mem_info->type = UCS_MEMORY_TYPE_CUDA;
+
+    /* Synchronize future DMA operations */
+    uct_cuda_copy_set_sync_memops((void*)address, is_vmm_allocation);
 
     /* Extending the registration range is disable by configuration */
     if (md->config.alloc_whole_reg == UCS_CONFIG_OFF) {
@@ -459,11 +531,9 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
         .alloc_length = length
     };
     uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
-    unsigned value         = 1;
     uintptr_t base_address, aligned_start, aligned_end;
     ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
-    CUresult cu_err;
 
     if (!(mem_attr->field_mask &
           (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE | UCT_MD_MEM_ATTR_FIELD_SYS_DEV |
@@ -479,14 +549,6 @@ uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address, size_t length,
                                                    &addr_mem_info);
         if (status != UCS_OK) {
             return status;
-        }
-
-        /* Synchronize for DMA */
-        cu_err = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
-                                       (CUdeviceptr)address);
-        if (cu_err != CUDA_SUCCESS) {
-            ucs_warn("cuPointerSetAttribute(%p, SYNC_MEMOPS) error: %s",
-                     address, uct_cuda_base_cu_get_error_string(cu_err));
         }
 
         ucs_memtype_cache_update(addr_mem_info.base_address,
