@@ -393,6 +393,7 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_rtr_priv_t *rpriv = init_params->priv;
     const uint64_t rndv_modes        = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
     ucp_context_h context            = init_params->worker->context;
+    ucs_memory_type_t frag_mem_type  = context->config.ext.rndv_frag_mem_type;
     ucp_proto_perf_node_t *unpack_perf_node;
     ucs_linear_func_t unpack_time;
     ucp_md_map_t md_map, dummy_md_map;
@@ -400,7 +401,8 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     size_t frag_size;
     ucp_md_index_t md_index;
 
-    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 1)) {
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 1) ||
+        (init_params->rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -410,25 +412,23 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     }
 
     status = ucp_proto_init_buffer_copy_time(
-            init_params->worker, "rtr/mtype unpack", UCS_MEMORY_TYPE_HOST,
+            init_params->worker, "rtr/mtype unpack", frag_mem_type,
             init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
             &unpack_time, &unpack_perf_node);
     if (status != UCS_OK) {
         return status;
     }
 
-    /* Make sure that key of the md used to allocate a bounce buffer will be
-     * packed to the RTR rkey
-     */
-    status = ucp_mm_get_alloc_md_index(context, &md_index);
-    if (status != UCS_OK) {
-        return status;
+    status = ucp_mm_get_alloc_md_index(context, &md_index, frag_mem_type);
+    if ((status != UCS_OK) || (md_index == UCP_NULL_RESOURCE)) {
+        md_map = 0;
+    } else {
+        md_map = UCS_BIT(md_index);
     }
 
-    md_map = UCS_BIT(md_index);
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
                                             unpack_time, unpack_perf_node,
-                                            md_map, UCS_MEMORY_TYPE_HOST,
+                                            md_map, frag_mem_type,
                                             UCS_SYS_DEVICE_ID_UNKNOWN);
     ucp_proto_perf_node_deref(&unpack_perf_node);
 

@@ -23,6 +23,11 @@
 #define UCP_RCACHE_LOOKUP_FUNC ucs_linear_func_make(50.0e-9, 0)
 
 
+/* Mask of UCT memory flags that need make sure are present when reusing an
+   existing region */
+#define UCP_MM_UCT_ACCESS_MASK UCT_MD_MEM_ACCESS_ALL
+
+
 /**
  * Memory handle flags.
  */
@@ -51,6 +56,7 @@ enum {
 typedef struct ucp_mem {
     ucs_rcache_region_t super;
     uint8_t             flags;          /* Memory handle flags */
+    unsigned            uct_flags;      /* UCT memory registration flags */
     ucp_context_h       context;        /* UCP context that owns a memory handle */
     uct_alloc_method_t  alloc_method;   /* Method used to allocate the memory */
     ucs_sys_device_t    sys_dev;        /* System device index */
@@ -178,7 +184,7 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
 void ucp_mem_rcache_cleanup(ucp_context_h context);
 
 /**
- * Get memory domain index that is used to allocate host memory type.
+ * Get memory domain index that is used to allocate certain memory type.
  *
  * @param [in]  context UCP context containing memory domain indexes to use for
  *                      the memory allocation.
@@ -188,7 +194,8 @@ void ucp_mem_rcache_cleanup(ucp_context_h context);
  * @return Error code as defined by @ref ucs_status_t.
  */
 ucs_status_t
-ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idx);
+ucp_mm_get_alloc_md_index(ucp_context_h context, ucp_md_index_t *md_idxi,
+                          ucs_memory_type_t alloc_mem_type);
 
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)

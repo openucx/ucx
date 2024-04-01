@@ -278,6 +278,14 @@ typedef struct ucp_tl_md {
 } ucp_tl_md_t;
 
 
+typedef struct ucp_context_alloc_md_index {
+    int            initialized;
+    /* Index of memory domain that is used to allocate memory of the given type
+     * using ucp_memh_alloc(). */
+    ucp_md_index_t md_index;
+} ucp_context_alloc_md_index_t;
+
+
 /**
  * UCP context
  */
@@ -288,10 +296,7 @@ typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_md_index_t                num_mds;    /* Number of memory domains */
 
-    /* Index of memory domain that is used to allocate memory of the given type
-     * using ucp_memh_alloc(). */
-    int                           alloc_md_index_initialized;
-    ucp_md_index_t                alloc_md_index[UCS_MEMORY_TYPE_LAST];
+    ucp_context_alloc_md_index_t  alloc_md[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration for given memory type,
        ucp_mem_map() will register memory for all those domains. */
