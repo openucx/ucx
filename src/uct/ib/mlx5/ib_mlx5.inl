@@ -6,6 +6,8 @@
 
 #include "ib_mlx5.h"
 
+#include <ucs/sys/ptr_arith.h>
+
 typedef struct uct_ib_mlx5_wqe_ctrl_seg {
     __be32      opmod_idx_opcode;
     __be32      qpn_ds;

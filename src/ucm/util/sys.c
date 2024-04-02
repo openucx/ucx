@@ -20,6 +20,7 @@
 #include <ucm/malloc/malloc_hook.h>
 #include <ucs/type/init_once.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <linux/mman.h>
 #include <sys/mman.h>
 #include <pthread.h>

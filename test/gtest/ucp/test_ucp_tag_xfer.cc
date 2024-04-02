@@ -14,6 +14,7 @@ extern "C" {
 #include <ucp/core/ucp_resource.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/queue.h>
+#include <ucs/sys/ptr_arith.h>
 #include <uct/base/uct_iface.h>
 }
 

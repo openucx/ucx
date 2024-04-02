@@ -130,6 +130,7 @@ noinst_HEADERS = \
 	sys/sys.h \
 	sys/iovec.h \
 	sys/iovec.inl \
+	sys/ptr_arith.h \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \

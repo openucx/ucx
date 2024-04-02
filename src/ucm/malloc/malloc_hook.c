@@ -30,6 +30,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/spinlock.h>

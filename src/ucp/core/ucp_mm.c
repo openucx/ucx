@@ -815,16 +815,17 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
             goto out;
         }
 
+        ucs_assertv(mem_type == memh->mem_type, "mem_type=%s got memh->mem_type=%s",
+                    ucs_memory_type_names[mem_type],
+                    ucs_memory_type_names[memh->mem_type]);
+        ucs_ptr_check_align(ucp_memh_address(memh), ucp_memh_length(memh),
+                            reg_align);
         if (!ucs_test_all_flags(memh->uct_flags,
                                 uct_flags & UCP_MM_UCT_ACCESS_MASK)) {
             reg_md_map |= memh->md_map; /* Re-register previous MDs */
             ucp_memh_dereg(context, memh, memh->md_map);
             ucp_memh_set_uct_flags(memh, uct_flags);
         }
-
-        ucs_assert(memh->mem_type == mem_type);
-        ucs_assert(ucs_padding((intptr_t)ucp_memh_address(memh), reg_align) == 0);
-        ucs_assert(ucs_padding(ucp_memh_length(memh), reg_align) == 0);
     }
 
     ucs_trace(
