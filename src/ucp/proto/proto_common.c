@@ -12,6 +12,7 @@
 #include "proto_common.inl"
 
 #include <ucp/am/ucp_am.inl>
+#include <ucp/wireup/wireup.h>
 #include <uct/api/v2/uct_v2.h>
 
 
@@ -128,8 +129,7 @@ ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
 static void
 ucp_proto_common_fp8_pack_unpack_distance(ucs_sys_dev_distance_t *distance)
 {
-    double nsec         = distance->latency * UCS_NSEC_PER_SEC;
-    distance->latency   = UCS_FP8_PACK_UNPACK(LATENCY, nsec) / UCS_NSEC_PER_SEC;
+    distance->latency   = ucp_wireup_fp8_pack_unpack_latency(distance->latency);
     distance->bandwidth = UCS_FP8_PACK_UNPACK(BANDWIDTH, distance->bandwidth);
 }
 
