@@ -47,12 +47,12 @@ bench: $(GOTMPDIR)
 	$(GO) env -w GO111MODULE=off ; \
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} $(GO) test -v --tags=$(GOTAGS) -bench=.
 
-goperftest: $(GOTMPDIR)
+goperftest: build
 	$(GO) env -w GO111MODULE=off ; \
 	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
 	$(GO) build --tags=$(GOTAGS) -o ${GOTMPDIR}/goperftest
 
-run-perftest:
+run-perftest: goperftest
 	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} ${GOTMPDIR}/goperftest ${ARGS}
 
