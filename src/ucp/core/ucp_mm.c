@@ -777,17 +777,59 @@ static size_t ucp_memh_reg_align(ucp_context_h context, ucp_md_map_t reg_md_map)
     return reg_align;
 }
 
+static ucs_status_t
+ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
+                   size_t align, ucs_memory_type_t mem_type,
+                   ucp_md_map_t reg_md_map, unsigned uct_flags,
+                   const char *alloc_name, ucp_mem_h *memh_p)
+{
+    ucs_status_t status;
+    ucp_mem_h memh;
+
+    if (context->rcache == NULL) {
+        return ucp_memh_create(context, address, length, mem_type,
+                               UCT_ALLOC_METHOD_LAST, 0, uct_flags, memh_p);
+    }
+
+    for (;;) {
+        status = ucp_memh_rcache_get(context->rcache, address, length, align,
+                                     mem_type, reg_md_map, uct_flags,
+                                     alloc_name, &memh);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ucs_assertv(mem_type == memh->mem_type,
+                    "mem_type=%s got memh->mem_type=%s",
+                    ucs_memory_type_names[mem_type],
+                    ucs_memory_type_names[memh->mem_type]);
+        ucs_ptr_check_align(ucp_memh_address(memh), ucp_memh_length(memh),
+                            align);
+
+        if (ucs_test_all_flags(memh->uct_flags,
+                               uct_flags & UCP_MM_UCT_ACCESS_MASK)) {
+            *memh_p = memh;
+            return UCS_OK;
+        }
+
+        /* Invalidate the mismatching region and get a new one */
+        ucs_rcache_region_invalidate(context->rcache, &memh->super,
+                                     ucs_empty_function, NULL);
+        ucp_memh_put(memh);
+    }
+}
+
 ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
                                size_t length, ucs_memory_type_t mem_type,
                                ucp_md_map_t reg_md_map, unsigned uct_flags,
                                const char *alloc_name, ucp_mem_h *memh_p)
 {
-    ucp_mem_h memh = NULL; /* To suppress compiler warning */
+    size_t reg_align = ucp_memh_reg_align(context, reg_md_map);
+    ucs_memory_info_t mem_info;
+    ucs_status_t status;
     void *reg_address;
     size_t reg_length;
-    ucs_status_t status;
-    ucs_memory_info_t mem_info;
-    size_t reg_align;
+    ucp_mem_h memh;
 
     if (context->config.ext.reg_whole_alloc_bitmap & UCS_BIT(mem_type)) {
         ucp_memory_detect_internal(context, address, length, &mem_info);
@@ -798,34 +840,12 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
         reg_length  = length;
     }
 
-    reg_align = ucp_memh_reg_align(context, reg_md_map);
-
     UCP_THREAD_CS_ENTER(&context->mt_lock);
-    if (context->rcache == NULL) {
-        status = ucp_memh_create(context, reg_address, reg_length, mem_type,
-                                 UCT_ALLOC_METHOD_LAST, 0, uct_flags, &memh);
-        if (status != UCS_OK) {
-            goto out;
-        }
-    } else {
-        status = ucp_memh_rcache_get(context->rcache, reg_address, reg_length,
-                                     reg_align, mem_type, reg_md_map, uct_flags,
-                                     alloc_name, &memh);
-        if (status != UCS_OK) {
-            goto out;
-        }
-
-        ucs_assertv(mem_type == memh->mem_type, "mem_type=%s got memh->mem_type=%s",
-                    ucs_memory_type_names[mem_type],
-                    ucs_memory_type_names[memh->mem_type]);
-        ucs_ptr_check_align(ucp_memh_address(memh), ucp_memh_length(memh),
-                            reg_align);
-        if (!ucs_test_all_flags(memh->uct_flags,
-                                uct_flags & UCP_MM_UCT_ACCESS_MASK)) {
-            reg_md_map |= memh->md_map; /* Re-register previous MDs */
-            ucp_memh_dereg(context, memh, memh->md_map);
-            ucp_memh_set_uct_flags(memh, uct_flags);
-        }
+    status = ucp_memh_find_slow(context, reg_address, reg_length, reg_align,
+                                mem_type, reg_md_map, uct_flags, alloc_name,
+                                &memh);
+    if (status != UCS_OK) {
+        goto out;
     }
 
     ucs_trace(
