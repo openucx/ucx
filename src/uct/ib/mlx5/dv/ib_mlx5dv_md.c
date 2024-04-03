@@ -241,7 +241,7 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_addr(
  * that were registered in single-threaded mode.
  */
 static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_contig(
-        uct_ib_mlx5_md_t *md, void *address, uint32_t iova_offset, int atomic,
+        uct_ib_mlx5_md_t *md, void *address, uint64_t iova, int atomic,
         uint32_t mkey_index, const char *reason, uct_ib_mlx5_devx_mr_t *mr,
         struct mlx5dv_devx_obj **mr_p, uint32_t *mkey)
 {
@@ -254,7 +254,7 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm_data_contig(
     /* FW requires indirect atomic MR address and length to be aligned
      * to max supported atomic argument size */
     ksm_address = ucs_align_down_pow2((uint64_t)address, UCT_IB_MD_MAX_MR_SIZE);
-    ksm_iova    = ksm_address + iova_offset;
+    ksm_iova    = ksm_address - (uint64_t)address + iova;
     ksm_length  = mr_length + (uint64_t)address - ksm_address;
     ksm_length  = ucs_align_up(ksm_length, md->super.dev.atomic_align);
 
@@ -436,16 +436,16 @@ uct_ib_mlx5_devx_reg_ksm_data(uct_ib_mlx5_md_t *md,
 {
     uct_ib_mlx5_devx_mr_t *mr = &memh->mrs[mr_type];
     void *address             = uct_ib_mlx5_devx_memh_base_address(memh);
+    uint64_t iova             = (uint64_t)memh->address + iova_offset;
 
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
-        return uct_ib_mlx5_devx_reg_ksm_data_mt(md, address,
-                                                (uint64_t)address + iova_offset,
-                                                atomic, mkey_index, reason,
+        return uct_ib_mlx5_devx_reg_ksm_data_mt(md, address, iova, atomic,
+                                                mkey_index, reason,
                                                 mr->ksm_data, mr_p, mkey);
     } else {
-        return uct_ib_mlx5_devx_reg_ksm_data_contig(md, address, iova_offset,
-                                                    atomic, mkey_index, reason,
-                                                    mr, mr_p, mkey);
+        return uct_ib_mlx5_devx_reg_ksm_data_contig(md, address, iova, atomic,
+                                                    mkey_index, reason, mr,
+                                                    mr_p, mkey);
     }
 }
 
@@ -650,7 +650,7 @@ static void uct_ib_mlx5_devx_reg_symmetric(uct_ib_mlx5_md_t *md,
     /* Best effort, only allocate in the range below the atomic keys. */
     while (md->smkey_index < md->super.mkey_by_name_reserve.size) {
         status = uct_ib_mlx5_devx_reg_ksm_data_contig(
-                md, address, 0,
+                md, address, (uint64_t)address,
                 (memh->super.flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC),
                 md->super.mkey_by_name_reserve.base + md->smkey_index,
                 "symmetric-key", &memh->mrs[UCT_IB_MR_DEFAULT], &smkey_mr,
@@ -2097,7 +2097,8 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
     }
 
     ucs_assert(!(memh->super.flags & UCT_IB_MEM_MULTITHREADED));
-    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh->address, 0, 0, 0,
+    status = uct_ib_mlx5_devx_reg_ksm_data_contig(md, memh->address,
+                                                  (uint64_t)memh->address, 0, 0,
                                                   "exported-key",
                                                   &memh->mrs[UCT_IB_MR_DEFAULT],
                                                   &cross_mr, &exported_lkey);
