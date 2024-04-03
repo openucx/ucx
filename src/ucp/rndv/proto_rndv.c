@@ -578,7 +578,8 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
         parallel_stages[0] = &ack_range;
         parallel_stages[1] = &input_caps->ranges[i];
 
-        status = ucp_proto_init_parallel_stages(name, min_length,
+        status = ucp_proto_init_parallel_stages(init_params->proto_name,
+                                                min_length,
                                                 ack_range.max_length, SIZE_MAX,
                                                 0, parallel_stages, 2,
                                                 init_params->caps);
