@@ -666,7 +666,7 @@ ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
         local_lat = ucp_wireup_iface_lat_distance_v2(wiface);
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local latency as well */
-        lat_lossy = UCS_FP8_PACK_UNPACK(LATENCY, local_lat) / UCS_NSEC_PER_SEC;
+        lat_lossy = ucp_wireup_fp8_pack_unpack_latency(local_lat);
 
         return (remote_iface_attr->lat_ovh + lat_lossy) / 2;
     }
