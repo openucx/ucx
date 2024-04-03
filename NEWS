@@ -11,6 +11,16 @@
 ### Features:
 ### Bugfixes:
 
+## 1.16.0-rc5 (April 02, 2024)
+### Features:
+#### UCS
+* Added support for PCIe gen5 bandwidth detection
+### Bugfixes:
+#### UCP
+* Fixed rndv_put transport selection for device to device scenario
+#### RDMA CORE (IB, ROCE, etc.)
+* Disabled MR multithreading registration
+
 ## 1.16.0-rc4 (February 21, 2024)
 ### Bugfixes:
 #### UCP
