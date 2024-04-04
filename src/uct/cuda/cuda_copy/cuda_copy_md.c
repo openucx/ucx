@@ -294,42 +294,48 @@ static ucs_status_t
 uct_cuda_copy_detect_vmm(void *address, CUmemorytype *cuda_mem_type,
                          unsigned *is_vmm_allocation)
 {
+    ucs_status_t status = UCS_OK;
 #if HAVE_CUDA_FABRIC
     CUmemAllocationProp prop = {};
-    CUresult cu_err;
     CUmemGenericAllocationHandle alloc_handle;
 
     /* Check if memory is allocated using VMM API and see if host memory needs
      * to be treated as pinned device memory */
-    cu_err = cuMemRetainAllocationHandle(&alloc_handle, (void*)address);
-    if (cu_err == CUDA_SUCCESS) {
-        *is_vmm_allocation = 1;
-        if (*cuda_mem_type == CU_MEMORYTYPE_HOST) {
-            cu_err = cuMemGetAllocationPropertiesFromHandle(&prop, alloc_handle);
-            if (cu_err != CUDA_SUCCESS) {
-                cuMemRelease(alloc_handle);
-                return UCS_ERR_INVALID_ADDR;
-            }
-
-            /* if location type is NUMA or NUMA_CURRENT the memory is EGM and can be
-             * potentially accessed by copy engines */
-            if ((prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA) ||
-                (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT)) {
-                *cuda_mem_type = CU_MEMORYTYPE_DEVICE;
-            } else {
-                cuMemRelease(alloc_handle);
-                return UCS_ERR_INVALID_ADDR;
-            }
-        }
-
-        cu_err = cuMemRelease(alloc_handle);
-        if (cu_err != CUDA_SUCCESS) {
-            return UCS_ERR_INVALID_ADDR;
-        }
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuMemRetainAllocationHandle(&alloc_handle, (void*)address));
+    if (status != UCS_OK) {
+        status = UCS_OK;
+        goto ret;
     }
+
+    *is_vmm_allocation = 1;
+    if (*cuda_mem_type != CU_MEMORYTYPE_HOST) {
+        goto mem_release;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuMemGetAllocationPropertiesFromHandle(&prop, alloc_handle));
+    if (status != UCS_OK) {
+        status = UCS_ERR_INVALID_ADDR;
+        goto mem_release;
+    }
+
+    /* if location type is HOST the memory can be potentially accessed by CEs */
+    if ((prop.location.type == CU_MEM_LOCATION_TYPE_HOST) ||
+        (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA) ||
+        (prop.location.type == CU_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT)) {
+        *cuda_mem_type = CU_MEMORYTYPE_DEVICE;
+    } else {
+        status = UCS_ERR_INVALID_ADDR;
+    }
+
+mem_release:
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemRelease(alloc_handle));
+ret:
 #endif
-    return UCS_OK;
+    return status;
 }
+
 static void
 uct_cuda_copy_set_sync_memops(void *address, unsigned is_vmm_allocation)
 {
