@@ -137,10 +137,11 @@ protected:
         entity(const resource& resource, uct_md_config_t *md_config,
                uct_cm_config_t *cm_config);
 
-        void mem_alloc_host(size_t length, unsigned mem_flags,
-                            uct_allocated_memory_t *mem) const;
+        void mem_alloc(size_t length, unsigned mem_flags,
+                       uct_allocated_memory_t *mem,
+                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST) const;
 
-        void mem_free_host(const uct_allocated_memory_t *mem) const;
+        void mem_free(const uct_allocated_memory_t *mem) const;
 
         void mem_type_reg(uct_allocated_memory_t *mem, unsigned flags) const;
 
@@ -241,6 +242,10 @@ protected:
 
     class mapped_buffer {
     public:
+        mapped_buffer(size_t size, const entity &entity, size_t offset = 0,
+                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                      unsigned mem_flags = UCT_MD_MEM_ACCESS_ALL);
+
         mapped_buffer(size_t size, uint64_t seed, const entity &entity,
                       size_t offset = 0,
                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
