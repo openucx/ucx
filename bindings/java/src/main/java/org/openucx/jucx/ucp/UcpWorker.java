@@ -143,7 +143,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * Blocking progress for request until it's not completed.
      */
     public void progressRequest(UcpRequest request) throws Exception {
-        while (!request.isCompleted()) {
+        while ((request != null) && !request.isCompleted()) {
             progress();
         }
     }
