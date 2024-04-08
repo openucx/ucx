@@ -1450,7 +1450,8 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                               UCT_TL_RESOURCE_DESC_ARG(
                                       &context->tl_rscs[rsc_index].tl_rsc),
                               dev->sys_dev, dev->num_paths, num_ep_addrs,
-                              md_flags, iface_attr->cap.flags,
+                              md_flags,
+                              iface_attr->cap.flags & UCP_ADDRESS_IFACE_FLAGS,
                               iface_attr->bandwidth.dedicated / UCS_MBYTE,
                               iface_attr->bandwidth.shared / UCS_MBYTE,
                               iface_attr->overhead * 1e9,
@@ -1813,7 +1814,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
             ucp_address_trace(unpack_flags,
                               "unpack addr[%d] : sysdev %d paths %d eps %u"
-                              " tl_iface_flags 0x%" PRIx64 " bw %.2f/nMBs"
+                              " tl_flags 0x%" PRIx64 " bw %.2f/nMBs"
                               " ovh %.0fns lat_ovh %.0fns dev_priority %d"
                               " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
                               "/0x%" PRIx64,
