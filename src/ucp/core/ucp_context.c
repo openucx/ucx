@@ -16,6 +16,7 @@
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/string_set.h>
@@ -475,6 +476,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "page registration may be deferred until it is accessed by the CPU or a transport.",
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+  {"POPULATE_NONBLOCK_MEMTYPES", "try",
+   "Populate nonblocking registration for memory types based on architecture\n"
+   "detection. To manually populate such memory types, set this env var to no\n"
+   "and use UCX_REG_NONBLOCK_MEM_TYPES.",
+   ucs_offsetof(ucp_context_config_t, populate_nb_mem_types), UCS_CONFIG_TYPE_TERNARY},
 
   {"PREFER_OFFLOAD", "y",
    "Prefer transports capable of remote memory access for RMA and AMO operations.\n"
@@ -1952,6 +1959,15 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     ucs_debug("estimated number of endpoints per node is %d",
               context->config.est_num_ppn);
+
+    if (context->config.ext.populate_nb_mem_types != UCS_NO) {
+        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_NVIDIA_GRACE) {
+            context->config.ext.reg_nb_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_HOST);
+            context->config.ext.reg_nb_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+            ucs_trace("Detected Grace CPU and adding host, cuda_managed memory "
+                      "to nonblocking registration memory types");
+        }
+    }
 
     if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */

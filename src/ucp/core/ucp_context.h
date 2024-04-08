@@ -165,6 +165,8 @@ typedef struct ucp_context_config {
     char                                   *proto_info_dir;
     /** Memory types that perform non-blocking registration by default */
     uint64_t                               reg_nb_mem_types;
+    /** Toggle population of nonblocking registration memory types */
+    ucs_ternary_auto_value_t               populate_nb_mem_types;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
     /** RMA zcopy segment size */
