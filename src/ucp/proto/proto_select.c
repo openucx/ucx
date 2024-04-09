@@ -550,22 +550,16 @@ ucp_proto_select_wiface_activate(ucp_worker_h worker,
                                  const ucp_proto_select_elem_t *select_elem,
                                  ucp_worker_cfg_index_t ep_cfg_index)
 {
+    ucp_ep_config_t *ep_config;
     ucp_lane_map_t lane_map;
-    ucp_ep_config_key_t *ep_config_key;
-    ucp_lane_index_t lane;
-    ucp_rsc_index_t rsc_index;
-    ucp_worker_iface_t *wiface;
 
-    lane_map      = ucp_proto_select_get_lane_map(worker, select_elem);
-    ep_config_key = &ucs_array_elem(&worker->ep_config, ep_cfg_index).key;
-    ucs_for_each_bit(lane, lane_map) {
-        ucs_assertv(lane < UCP_MAX_LANES,
-                    "lane=%" PRIu8 ", lane_map=0x%" PRIx16, lane, lane_map);
-        rsc_index = ep_config_key->lanes[lane].rsc_index;
-        wiface    = ucp_worker_iface(worker, rsc_index);
-        ucp_worker_iface_progress_ep(wiface);
-        wiface->flags |= UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE;
-    }
+    ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
+    lane_map  = ucp_proto_select_get_lane_map(worker, select_elem) &
+                ~ep_config->proto_lane_map;
+    ucp_wiface_process_for_each_lane(worker, ep_config, lane_map,
+                                     ucp_worker_iface_progress_ep);
+
+    ep_config->proto_lane_map |= lane_map;
 }
 
 static ucs_status_t
