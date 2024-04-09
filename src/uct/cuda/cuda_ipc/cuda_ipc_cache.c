@@ -79,13 +79,10 @@ uct_cuda_ipc_get_rem_mpool_cache(CUmemFabricHandle *fabric_handle,
 {
     ucs_status_t status = UCS_OK;
     CUmemoryPool *mpool;
-    CUresult cuerr;
     khiter_t khiter;
     int khret;
 
     ucs_recursive_spin_lock(&uct_cuda_ipc_rem_mpool_cache.lock);
-
-    *key_present = 0;
 
     khiter = kh_put(cuda_ipc_rem_mpool_cache,
                     &uct_cuda_ipc_rem_mpool_cache.hash, fabric_handle, &khret);
@@ -98,14 +95,14 @@ uct_cuda_ipc_get_rem_mpool_cache(CUmemFabricHandle *fabric_handle,
             goto err;
         }
 
-        cuerr = cuMemPoolImportFromShareableHandle(mpool, (void *)fabric_handle,
-                                                   CU_MEM_HANDLE_TYPE_FABRIC, 0);
-        if (cuerr != CUDA_SUCCESS) {
-            status = UCS_ERR_NO_RESOURCE;
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportFromShareableHandle(
+               mpool, (void *)fabric_handle, CU_MEM_HANDLE_TYPE_FABRIC, 0));
+        if (status != UCS_OK) {
             goto err;
         }
         kh_val(&uct_cuda_ipc_rem_mpool_cache.hash, khiter) = mpool;
         *imported_mpool = mpool;
+        *key_present    = 0;
     } else if (khret == UCS_KH_PUT_KEY_PRESENT) {
         *imported_mpool = kh_val(&uct_cuda_ipc_rem_mpool_cache.hash, khiter);
         *key_present    = 1;
@@ -168,111 +165,135 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_trace("%s: cuda ipc cache purged", cache->name);
 }
 
-static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_rkey_t *key,
-                                                CUdeviceptr *mapped_addr)
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh,
+                                   CUdeviceptr *mapped_addr)
 {
     CUresult cuerr;
-    ucs_status_t status;
+
+    cuerr = cuIpcOpenMemHandle(mapped_addr, memh,
+                               CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
+    if (cuerr != CUDA_SUCCESS) {
+        ucs_debug("cuIpcOpenMemHandle() failed: %s",
+                  uct_cuda_base_cu_get_error_string(cuerr));
+        return (cuerr == CUDA_ERROR_ALREADY_MAPPED) ?
+            UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 #if HAVE_CUDA_FABRIC
-    CUmemAllocationHandleType fabric_type = CU_MEM_HANDLE_TYPE_FABRIC;
-    CUmemoryPool *imported_mpool          = 0;
-    int key_present;
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key,
+                                CUdeviceptr *mapped_addr)
+{
+    CUmemAccessDesc access_desc = {};
+    ucs_status_t status;
     CUdeviceptr dptr;
-    CUmemAccessDesc access_desc;
     CUmemGenericAllocationHandle handle;
 
-    ucs_trace("key handle type %u", key->ph.handle_type);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemImportFromShareableHandle(&handle,
+                (void*)&key->ph.handle.vmm, CU_MEM_HANDLE_TYPE_FABRIC));
+    if (status != UCS_OK) {
+        return status;
+    }
 
-    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
-        cuerr = cuIpcOpenMemHandle(mapped_addr, key->ph.handle.legacy,
-                                   CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
-        if (cuerr == CUDA_SUCCESS) {
-            status = UCS_OK;
-        } else {
-            ucs_debug("cuIpcOpenMemHandle() failed: %s",
-                      uct_cuda_base_cu_get_error_string(cuerr));
-            status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ?
-                     UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
-        }
-    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
-        cuerr = cuMemImportFromShareableHandle(&handle, (void*)&key->ph.handle.vmm, fabric_type);
-        if (cuerr != CUDA_SUCCESS) {
-            return UCS_ERR_NO_RESOURCE;
-        }
+    status =
+        UCT_CUDADRV_FUNC_LOG_ERR(cuMemAddressReserve(&dptr, key->b_len, 0, 0, 0));
+    if (status != UCS_OK) {
+        goto release_handle;
+    }
 
-        cuerr = cuMemAddressReserve(&dptr, key->b_len, 0, 0, 0);
-        if (cuerr != CUDA_SUCCESS) {
-            cuMemRelease(handle);
-            return UCS_ERR_NO_RESOURCE;
-        }
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemMap(dptr, key->b_len, 0, handle, 0));
+    if (status != UCS_OK) {
+        goto release_va_range;
+    }
 
-        cuerr = cuMemMap(dptr, key->b_len, 0, handle, 0);
-        if (cuerr != CUDA_SUCCESS) {
-            cuMemAddressFree(dptr, key->b_len);
-            cuMemRelease(handle);
-            return UCS_ERR_NO_RESOURCE;
-        }
+    cuCtxGetDevice(&access_desc.location.id);
 
-        memset(&access_desc, 0, sizeof(access_desc));
+    access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemSetAccess(dptr, key->b_len, &access_desc, 1));
+    if (status != UCS_OK) {
+        cuMemUnmap(dptr, key->b_len);
+        goto release_va_range;
+    }
+
+    *mapped_addr = dptr;
+
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
+
+release_va_range:
+    cuMemAddressFree(dptr, key->b_len);
+release_handle:
+    cuMemRelease(handle);
+
+    return status;
+}
+
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_mempool(const uct_cuda_ipc_rkey_t *key,
+                                    CUdeviceptr *mapped_addr)
+{
+    CUmemoryPool *imported_mpool = 0;
+    int key_present              = 0;
+    CUmemAccessDesc access_desc  = {};
+    CUdeviceptr dptr;
+    ucs_status_t status;
+
+    status =
+        uct_cuda_ipc_get_rem_mpool_cache((CUmemFabricHandle*)&key->ph.handle.mempool,
+                &imported_mpool, &key_present);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_assert(imported_mpool != NULL);
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportPointer(&dptr,
+                *imported_mpool, (CUmemPoolPtrExportData*)&key->ph.ptr));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (!key_present) {
         cuCtxGetDevice(&access_desc.location.id);
         access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
         access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
 
-        cuerr = cuMemSetAccess(dptr, key->b_len, &access_desc, 1);
-        if (cuerr != CUDA_SUCCESS) {
-            cuMemUnmap(dptr, key->b_len);
-            cuMemAddressFree(dptr, key->b_len);
-            return UCS_ERR_NO_RESOURCE;
-        }
-
-        *mapped_addr = dptr;
-        status       = UCS_OK;
-    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
-        status =
-            uct_cuda_ipc_get_rem_mpool_cache((CUmemFabricHandle*)&key->ph.handle.mempool,
-                                             &imported_mpool, &key_present);
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolSetAccess(*imported_mpool,
+                    &access_desc, 1));
         if (status != UCS_OK) {
-            return UCS_ERR_NO_RESOURCE;
+            return status;
         }
-
-        ucs_assert(imported_mpool != NULL);
-
-        cuerr = cuMemPoolImportPointer(&dptr, *imported_mpool, (CUmemPoolPtrExportData*)&key->ph.ptr);
-        if (cuerr != CUDA_SUCCESS) {
-            return UCS_ERR_NO_RESOURCE;
-        }
-
-        if (!key_present) {
-            memset(&access_desc, 0, sizeof(access_desc));
-            cuCtxGetDevice(&access_desc.location.id);
-            access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-            access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-
-            cuerr = cuMemPoolSetAccess(*imported_mpool, &access_desc, 1);
-            if (cuerr != CUDA_SUCCESS) {
-                return UCS_ERR_NO_RESOURCE;
-            }
-        }
-
-        *mapped_addr = dptr;
-        status       = UCS_OK;
-    } else {
-        status = UCS_ERR_NO_RESOURCE;
     }
-#else
-    cuerr = cuIpcOpenMemHandle(mapped_addr, key->ph,
-                               CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
-    if (cuerr == CUDA_SUCCESS) {
-        status = UCS_OK;
-    } else {
-        ucs_debug("cuIpcOpenMemHandle() failed: %s",
-                  uct_cuda_base_cu_get_error_string(cuerr));
-        status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_ERR_ALREADY_EXISTS :
-                                                        UCS_ERR_INVALID_PARAM;
-    }
+
+    *mapped_addr = dptr;
+
+    return UCS_OK;
+}
 #endif
 
-    return status;
+static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_rkey_t *key,
+                                                CUdeviceptr *mapped_addr)
+{
+#if HAVE_CUDA_FABRIC
+    ucs_trace("key handle type %u", key->ph.handle_type);
+
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy, mapped_addr);
+    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+        return uct_cuda_ipc_open_memhandle_vmm(key, mapped_addr);
+    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
+        return uct_cuda_ipc_open_memhandle_mempool(key, mapped_addr);
+    } else {
+        return UCS_ERR_NO_RESOURCE;
+    }
+#else
+    return uct_cuda_ipc_open_memhandle_legacy(key->ph, mapped_addr);
+#endif
 }
 
 static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
@@ -342,6 +363,29 @@ err_unlock:
     return status;
 }
 
+ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
+{
+    ucs_status_t status;
+#if HAVE_CUDA_FABRIC
+    if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemUnmap(
+                    (CUdeviceptr)region->mapped_addr, region->key.b_len));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAddressFree(
+                    (CUdeviceptr)region->mapped_addr, region->key.b_len));
+    } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcCloseMemHandle(
+                    (CUdeviceptr)region->mapped_addr));
+    } else {
+        status = UCS_OK;
+    }
+#else
+     status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcCloseMemHandle(
+                 (CUdeviceptr)region->mapped_addr));
+#endif
+
+     return status;
+}
+
 ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
                                           void *mapped_addr, int cache_enabled)
 {
@@ -374,8 +418,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
         ucs_assert(region->mapped_addr == mapped_addr);
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+        status = uct_cuda_ipc_close_memhandle(region);
         ucs_free(region);
     }
 
@@ -435,8 +478,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
             }
 
             /* close memhandle */
-            UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+            uct_cuda_ipc_close_memhandle(region);
             ucs_free(region);
         }
     }

@@ -58,9 +58,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
 #if HAVE_CUDA_FABRIC
-    ucs_log_level_t log_level             = UCS_LOG_LEVEL_ERROR;
     CUmemAllocationHandleType fabric_type = CU_MEM_HANDLE_TYPE_FABRIC;
-    CUresult cu_err;
     CUmemGenericAllocationHandle handle;
     CUmemoryPool mempool;
     int allowed_handle_types;
@@ -73,37 +71,37 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 
     memset(key, 0, sizeof(*key));
 
-    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
-                                          (CUdeviceptr)addr),
-                     UCS_LOG_LEVEL_ERROR);
+    UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
+                (CUdeviceptr)addr));
 
 #if HAVE_CUDA_FABRIC
     /* cuda_ipc can handle VMM, mallocasync, and legacy pinned device so need to
      * pack appropriate handle */
-    cu_err = cuMemRetainAllocationHandle(&handle, addr);
-    if (cu_err != CUDA_SUCCESS) {
-        cu_err = cuPointerGetAttribute(&mempool, CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE,
-                                       (CUdeviceptr)addr);
-        if (cu_err == CUDA_SUCCESS) {
-            cu_err = cuPointerGetAttribute(&allowed_handle_types,
-                                           CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES,
-                                           (CUdeviceptr)addr);
-            if ((cu_err != CUDA_SUCCESS) ||
+    status =
+        UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr), UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&mempool,
+                    CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE, (CUdeviceptr)addr));
+        if (status == UCS_OK) {
+            status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(
+                        &allowed_handle_types,
+                        CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES,
+                        (CUdeviceptr)addr));
+            if ((status != UCS_OK) ||
                 (!(allowed_handle_types | fabric_type))) {
                 return UCS_ERR_NO_RESOURCE;
             }
 
             status =
-                UCT_CUDADRV_FUNC(cuMemPoolExportToShareableHandle((void *)&key->ph.handle.mempool,
-                                                                  mempool, fabric_type, 0),
-                                 log_level);
+                UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
+                            (void *)&key->ph.handle.mempool, mempool,
+                            fabric_type, 0));
             if (UCS_OK != status) {
                 return status;
             }
 
-            status = UCT_CUDADRV_FUNC(cuMemPoolExportPointer(&key->ph.ptr,
-                                                             (CUdeviceptr)key->d_bptr),
-                                      log_level);
+            status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportPointer(&key->ph.ptr,
+                        (CUdeviceptr)key->d_bptr));
             if (UCS_OK != status) {
                 return status;
             }
@@ -112,8 +110,9 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
             ucs_trace("packed mempool handle and export pointer for %p", addr);
         } else {
             /* legacy IPC */
-            status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)addr),
-                                      log_level);
+            status =
+                UCT_CUDADRV_FUNC_LOG_ERR(cuIpcGetMemHandle(&key->ph.handle.legacy,
+                            (CUdeviceptr)addr));
             if (UCS_OK != status) {
                 return status;
             }
@@ -123,14 +122,14 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         }
     } else {
         status =
-            UCT_CUDADRV_FUNC(cuMemExportToShareableHandle(&key->ph.handle.vmm, handle,
-                                                          fabric_type,
-                                                          0), log_level);
+            UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(&key->ph.handle.vmm, handle,
+                        fabric_type, 0));
         if (UCS_OK != status) {
+            cuMemRelease(handle);
             return status;
         }
 
-        status = UCT_CUDADRV_FUNC(cuMemRelease(handle), log_level);
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
         if (UCS_OK != status) {
             return status;
         }
