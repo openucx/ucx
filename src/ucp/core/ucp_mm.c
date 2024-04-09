@@ -304,6 +304,8 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
     if (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) {
         if (params->flags & UCP_MEM_MAP_NONBLOCK) {
             flags |= UCT_MD_MEM_FLAG_NONBLOCK;
+        } else if (params->flags & UCP_MEM_MAP_LOCK) {
+            flags |= UCT_MD_MEM_FLAG_LOCK;
         }
 
         if (params->flags & UCP_MEM_MAP_FIXED) {
@@ -470,7 +472,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         return UCS_OK;
     }
 
-    if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
+    if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+        !(uct_flags & UCT_MD_MEM_FLAG_LOCK)) {
         uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
     }
 
@@ -1021,6 +1024,13 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     } else if ((!(flags & UCP_MEM_MAP_ALLOCATE) &&
                 (flags & UCP_MEM_MAP_FIXED))) {
         ucs_error("wrong combination of flags when address is defined");
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (ucs_test_all_flags(flags, UCP_MEM_MAP_NONBLOCK | UCP_MEM_MAP_LOCK)) {
+        ucs_error("wrong combination of flags "
+                  "UCP_MEM_MAP_NONBLOCK and UCP_MEM_MAP_LOCK");
         status = UCS_ERR_INVALID_PARAM;
         goto out;
     }
