@@ -195,7 +195,7 @@ try_load_cuda_env() {
     # Check gdrcopy
     if [ -w "/dev/gdrdrv" ]
     then
-        az_module_load dev/gdrcopy2.3.1-1_cuda12.2.2 && have_gdrcopy=yes
+        az_module_load dev/gdrcopy2.4.1_cuda12.2.2 && have_gdrcopy=yes
     fi
 
     # Set CUDA_VISIBLE_DEVICES
