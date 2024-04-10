@@ -68,6 +68,8 @@ improvements.
   ```
   $ git clone https://github.com/open-mpi/ompi.git
   $ cd ompi
+  $ git submodule sync
+  $ git submodule update --init --recursive
   $ ./autogen.pl
   ```
 
