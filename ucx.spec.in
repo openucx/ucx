@@ -147,6 +147,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %doc README AUTHORS NEWS
 %{!?_licensedir:%global license %%doc}
 %license LICENSE
+%{_sysconfdir}/ucx/ucx.conf
 
 %files devel
 %{_includedir}/uc*
