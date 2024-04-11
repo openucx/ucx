@@ -11,7 +11,6 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.inl>
-#include <ucp/wireup/wireup_ep.h>
 
 #include "rma.inl"
 
