@@ -1270,9 +1270,9 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
 
     if ((iface->super.super.config.max_rd_atomic == 16) !=
         !!(if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16)) {
-        ucs_error("max_rd_attomic values do not match on peers (local is %u), "
-                  "set UCX_RC_MAX_RD_ATOMIC=16 to resolve this issue.",
-                  iface->super.super.config.max_rd_atomic);
+        ucs_diag("max_rd_atomic values do not match on peers (local is %u), "
+                 "set UCX_DC_MLX5_MAX_RD_ATOMIC=16 to resolve this issue.",
+                 iface->super.super.config.max_rd_atomic);
     }
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
