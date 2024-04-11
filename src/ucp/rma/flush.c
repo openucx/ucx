@@ -73,21 +73,8 @@ static int uct_ep_flush_is_needed(const ucp_ep_h ep, ucp_lane_index_t lane)
         return 1;
     }
 
-    if (ep->flags & UCP_EP_FLAG_INTERNAL) {
-        return 1;
-    }
-
-    if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
-        return 1;
-    }
-
-    if (ucp_ep_config(ep)->key.wireup_msg_lane == lane) {
-        return 1;
-    }
-
     wiface = ucp_worker_iface(worker, ucp_ep_get_rsc_index(ep, lane));
-    return (wiface == NULL) ||
-           (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
+    return (wiface == NULL) || (wiface->activate_count > 0);
 }
 
 static void ucp_ep_flush_progress(ucp_request_t *req)
