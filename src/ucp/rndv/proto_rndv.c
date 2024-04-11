@@ -380,7 +380,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
         min_length = range_max_length - 1;
     } while ((remote_range++)->max_length < max_length);
 
-    status = UCS_OK;
+    status = (caps->num_ranges > 0) ? UCS_OK : UCS_ERR_UNSUPPORTED;
 
 out_deref_perf_node:
     ucp_proto_perf_node_deref(&ctrl_perf.node);

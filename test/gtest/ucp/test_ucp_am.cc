@@ -1565,6 +1565,16 @@ public:
         modify_config("RNDV_THRESH", std::to_string(RNDV_THRESH));
     }
 
+    virtual void init() override {
+        test_ucp_am_nbx::init();
+
+        if (!supports_caps(UCT_IFACE_FLAG_GET_ZCOPY) &&
+            !supports_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            ucp_test::cleanup();
+            UCS_TEST_SKIP_R("rndv unsupported");
+        }
+    }
+
     ucs_status_t am_data_handler(const void *header, size_t header_length,
                                  void *data, size_t length,
                                  const ucp_am_recv_param_t *rx_param)
@@ -1680,11 +1690,19 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
 {
+    if (!supports_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv_get unsupported");
+    }
+
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
 {
+    if (!supports_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv_put unsupported");
+    }
+
     test_am_send_recv(64 * UCS_KBYTE);
 }
 

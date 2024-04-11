@@ -20,6 +20,9 @@ extern "C" {
 
 #include <iostream>
 
+#define UCP_TEST_TAG_RNDV_GENERIC(test_case_name, test_name, ...) \
+    UCS_TEST_SKIP_COND_P(test_case_name, test_name, !supports_generic(), \
+                         "RNDV_THRESH=1000", __VA_ARGS__)
 
 class test_ucp_tag_xfer : public test_ucp_tag {
 public:
@@ -111,6 +114,13 @@ public:
 
     bool is_err_handling() const {
         return get_variant_value() == VARIANT_ERR_HANDLING;
+    }
+
+    // Only rndv through AM supports generic datatype
+    bool supports_generic() const {
+        return (get_variant_value() == VARIANT_DEFAULT) ||
+               (get_variant_value() == VARIANT_RNDV_AM_BCOPY) ||
+               (get_variant_value() == VARIANT_RNDV_AM_ZCOPY);
     }
 
     void skip_err_handling() const {
@@ -808,199 +818,210 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_rndv_probe, "RNDV_THRE
 
 /* rndv send_generic_recv_generic am_rndv with bcopy on the sender side */
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv) {
     test_run_xfer(false, false, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv_truncated, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv_truncated) {
     test_run_xfer(false, false, true, false, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_sync_rndv, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_generic_exp_sync_rndv) {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_run_xfer(false, false, true, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_sync_rndv_truncated,
-           "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_generic_recv_generic_exp_sync_rndv_truncated) {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_run_xfer(false, false, true, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_rndv, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_generic_unexp_rndv) {
     test_run_xfer(false, false, false, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_rndv_truncated, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_generic_recv_generic_unexp_rndv_truncated) {
     test_run_xfer(false, false, false, false, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_sync_rndv, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_generic_unexp_sync_rndv) {
     test_run_xfer(false, false, false, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_sync_rndv_truncated,
-           "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_generic_recv_generic_unexp_sync_rndv_truncated) {
     test_run_xfer(false, false, false, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv_probe, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv_probe) {
     test_xfer_probe(false, false, true, false);
 }
 
 /* rndv send_generic_recv_contig am_rndv with bcopy on the sender side */
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv) {
     test_run_xfer(false, true, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv_truncated, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv_truncated) {
     test_run_xfer(false, true, true, false, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync_rndv, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync_rndv) {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_run_xfer(false, true, true, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync_rndv_truncated,
-           "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_generic_recv_contig_exp_sync_rndv_truncated) {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_run_xfer(false, true, true, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_rndv, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_contig_unexp_rndv) {
     test_run_xfer(false, true, false, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_rndv_truncated, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_generic_recv_contig_unexp_rndv_truncated) {
     test_run_xfer(false, true, false, false, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync_rndv, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync_rndv) {
     test_run_xfer(false, true, false, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync_rndv_truncated,
-           "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_generic_recv_contig_unexp_sync_rndv_truncated) {
     test_run_xfer(false, true, false, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv_probe, "RNDV_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv_probe) {
     test_xfer_probe(false, true, true, false);
 }
 
 /* rndv send_contig_recv_generic am_rndv with bcopy on the sender side */
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv, "RNDV_THRESH=1000",
-                                                                 "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv,
+                          "ZCOPY_THRESH=1248576") {
     test_run_xfer(true, false, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_truncated,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_exp_rndv_truncated,
+                          "ZCOPY_THRESH=1248576") {
     test_run_xfer(true, false, true, false, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv,
+                          "ZCOPY_THRESH=1248576") {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_run_xfer(true, false, true, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_truncated,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_exp_sync_rndv_truncated,
+                          "ZCOPY_THRESH=1248576") {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_run_xfer(true, false, true, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_rndv,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_unexp_rndv,
+                          "ZCOPY_THRESH=1248576") {
     test_run_xfer(true, false, false, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_rndv_truncated,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_unexp_rndv_truncated,
+                          "ZCOPY_THRESH=1248576") {
     test_run_xfer(true, false, false, false, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv,
+                         "ZCOPY_THRESH=1248576") {
     test_run_xfer(true, false, false, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv_truncated,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_unexp_sync_rndv_truncated,
+                          "ZCOPY_THRESH=1248576") {
     test_run_xfer(true, false, false, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe, "RNDV_THRESH=1000",
-                                                                       "ZCOPY_THRESH=1248576") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe,
+                          "ZCOPY_THRESH=1248576") {
     test_xfer_probe(true, false, true, false);
 }
 
 /* rndv send_contig_recv_generic am_rndv with zcopy on the sender side */
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_zcopy, "RNDV_THRESH=1000",
-                                                                       "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_zcopy,
+                          "ZCOPY_THRESH=1000") {
     test_run_xfer(true, false, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_truncated_zcopy,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_exp_rndv_truncated_zcopy,
+                          "ZCOPY_THRESH=1000") {
     test_run_xfer(true, false, true, false, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_zcopy,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_zcopy,
+                          "ZCOPY_THRESH=1000") {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_run_xfer(true, false, true, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_truncated_zcopy,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_exp_sync_rndv_truncated_zcopy,
+                          "ZCOPY_THRESH=1000") {
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
     test_run_xfer(true, false, true, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_rndv_zcopy,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_unexp_rndv_zcopy,
+                          "ZCOPY_THRESH=1000") {
     test_run_xfer(true, false, false, false, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_rndv_truncated_zcopy,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_unexp_rndv_truncated_zcopy,
+                          "ZCOPY_THRESH=1000") {
     test_run_xfer(true, false, false, false, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv_zcopy,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv_zcopy,
+                          "ZCOPY_THRESH=1000") {
     test_run_xfer(true, false, false, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv_truncated_zcopy,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_unexp_sync_rndv_truncated_zcopy,
+                          "ZCOPY_THRESH=1000") {
     test_run_xfer(true, false, false, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy, "RNDV_THRESH=1000",
-                                                                             "ZCOPY_THRESH=1000") {
+UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
+                          send_contig_recv_generic_exp_rndv_probe_zcopy,
+                          "ZCOPY_THRESH=1000") {
     test_xfer_probe(true, false, true, false);
 }
 

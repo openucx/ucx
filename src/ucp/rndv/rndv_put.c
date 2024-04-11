@@ -204,7 +204,7 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
         .super.super         = *init_params,
         .super.overhead      = 0,
         .super.latency       = 0,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,
         .super.min_length    = 0,
         .super.max_length    = max_length,
@@ -240,6 +240,7 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
                                  support_ppln) ||
+        !ucp_proto_rndv_mode_check(context, rndv_modes) ||
         !ucp_proto_common_init_check_err_handling(&params.super)) {
         return UCS_ERR_UNSUPPORTED;
     }

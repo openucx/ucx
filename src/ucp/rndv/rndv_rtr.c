@@ -35,7 +35,7 @@ typedef struct {
 
 static ucs_status_t
 ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
-                               uint64_t rndv_modes, size_t max_length,
+                               size_t max_length,
                                ucs_linear_func_t unpack_time,
                                ucp_proto_perf_node_t *unpack_perf_node,
                                ucp_md_map_t md_map,
@@ -47,7 +47,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = context->config.ext.proto_overhead_rndv_rtr,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,
         .super.min_length    = 1,
         .super.max_length    = max_length,
@@ -199,8 +199,6 @@ static ucs_status_t ucp_proto_rndv_rtr_progress(uct_pending_req_t *self)
 static ucs_status_t
 ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
 {
-    const uint64_t rndv_modes        = UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY) |
-                                       UCS_BIT(UCP_RNDV_MODE_AM);
     ucp_proto_rndv_rtr_priv_t *rpriv = init_params->priv;
     ucs_status_t status;
 
@@ -208,7 +206,7 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, SIZE_MAX,
+    status = ucp_proto_rndv_rtr_common_init(init_params, SIZE_MAX,
                                             UCS_LINEAR_FUNC_ZERO, NULL, 0,
                                             init_params->select_param->mem_type,
                                             init_params->select_param->sys_dev);
@@ -391,7 +389,6 @@ static ucs_status_t
 ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_rndv_rtr_priv_t *rpriv = init_params->priv;
-    const uint64_t rndv_modes        = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
     ucp_context_h context            = init_params->worker->context;
     ucs_memory_type_t frag_mem_type  = context->config.ext.rndv_frag_mem_type;
     ucp_proto_perf_node_t *unpack_perf_node;
@@ -426,7 +423,7 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
         md_map = UCS_BIT(md_index);
     }
 
-    status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
+    status = ucp_proto_rndv_rtr_common_init(init_params, frag_size,
                                             unpack_time, unpack_perf_node,
                                             md_map, frag_mem_type,
                                             UCS_SYS_DEVICE_ID_UNKNOWN);

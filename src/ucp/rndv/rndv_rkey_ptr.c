@@ -50,7 +50,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
     uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_RKEY_PTR);
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,
         .super.overhead      = ucp_proto_rndv_rkey_ptr_overhead(),
         .super.latency       = 0,
@@ -75,6 +75,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
+        !ucp_proto_rndv_mode_check(context, rndv_modes) ||
         !ucp_proto_common_init_check_err_handling(&params.super)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -214,7 +215,7 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.overhead      = 0,
         .super.latency       = 0,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,
         .super.min_length    = 0,
         .super.min_iov       = 0,
@@ -239,6 +240,7 @@ ucp_proto_rndv_rkey_ptr_mtype_init(const ucp_proto_init_params_t *init_params)
 
     if (!context->config.ext.rndv_shm_ppln_enable ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND, 1) ||
+        !ucp_proto_rndv_mode_check(context, rndv_modes) ||
         !ucp_proto_common_init_check_err_handling(&params.super)) {
         return UCS_ERR_UNSUPPORTED;
     }
