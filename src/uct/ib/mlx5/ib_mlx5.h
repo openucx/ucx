@@ -192,6 +192,8 @@ enum {
     UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI       = UCS_BIT(13),
     /* Device supports symmetric key creation */
     UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(14),
+    /* Device supports DMA MMO */
+    UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(15),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
@@ -984,6 +986,49 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
     return 0;
 }
 
+#endif
+
+/**
+ * DEVX MD API
+ */
+#if HAVE_DEVX
+void uct_ib_mlx5_devx_md_close(uct_md_h tl_md);
+
+ucs_status_t
+uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr);
+
+ucs_status_t
+uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
+         void **address_p, ucs_memory_type_t mem_type,
+                                  unsigned flags, const char *alloc_name,
+                                  uct_mem_h *memh_p);
+
+ucs_status_t
+uct_ib_mlx5_devx_device_mem_free(uct_md_h uct_md, uct_mem_h tl_memh);
+
+ucs_status_t
+uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
+                         const uct_md_mem_reg_params_t *params,
+                         uct_mem_h *memh_p);
+
+ucs_status_t
+uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
+                           const uct_md_mem_dereg_params_t *params);
+
+ucs_status_t
+uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md, const void *mkey_buffer,
+                            uct_md_mem_attach_params_t *params,
+                            uct_mem_h *memh_p);
+
+ucs_status_t
+uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                           void *address, size_t length,
+                           const uct_md_mkey_pack_params_t *params,
+                           void *mkey_buffer);
+
+ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
+                                      const uct_ib_md_config_t *md_config,
+                                      uct_ib_md_t **p_md);
 #endif
 
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);

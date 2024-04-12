@@ -62,7 +62,7 @@ static const char *uct_ib_iface_addr_types[] = {
 };
 
 ucs_config_field_t uct_ib_iface_config_table[] = {
-  {"", "", NULL,
+  {"", "ALLOC=thp,mmap,heap", NULL,
    ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
   {"SEG_SIZE", "8192",
@@ -204,6 +204,22 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {"REVERSE_SL", "auto",
    "Reverse Service level. 'auto' will set the same value of sl\n",
    ucs_offsetof(uct_ib_iface_config_t, reverse_sl), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"SEND_OVERHEAD", UCS_VALUE_AUTO_STR,
+   "Estimated overhead of preparing a work request, posting it to the NIC,\n"
+   "and finalizing an operation",
+   0, UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME_UNITS,
+    {"bcopy", "estimated overhead of allocating a tx buffer",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.bcopy)},
+    {"cqe", "estimated overhead of processing a work request completion",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.cqe)},
+    {"db", "estimated overhead of writing a doorbell to PCI",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.db)},
+    {"wqe_fetch", "estimated overhead of fetching a wqe",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_fetch)},
+    {"wqe_post", "estimated overhead of posting a wqe",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_post)},
+    {NULL})},
 
   {NULL}
 };
@@ -1093,9 +1109,10 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
     if (qp == NULL) {
         uct_ib_check_memlock_limit_msg(
                 UCS_LOG_LEVEL_ERROR,
-                "iface=%p: failed to create %s QP "
-                "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
-                iface, uct_ib_qp_type_str(attr->qp_type), attr->cap.max_send_wr,
+                "%s: iface %p failed to create %s QP "
+                "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
+                uct_ib_device_name(dev), iface,
+                uct_ib_qp_type_str(attr->qp_type), attr->cap.max_send_wr,
                 attr->cap.max_send_sge, attr->cap.max_inline_data,
                 attr->max_inl_cqe[UCT_IB_DIR_TX], attr->cap.max_recv_wr,
                 attr->cap.max_recv_sge, attr->max_inl_cqe[UCT_IB_DIR_RX]);
@@ -1105,10 +1122,10 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
     attr->cap  = attr->ibv.cap;
     *qp_p      = qp;
 
-    ucs_debug("iface=%p: created %s QP 0x%x on %s:%d "
+    ucs_debug("%s: iface %p created %s QP 0x%x on %s:%d "
               "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
-              iface, uct_ib_qp_type_str(attr->qp_type), qp->qp_num,
-              uct_ib_device_name(dev), iface->config.port_num,
+              uct_ib_device_name(dev), iface, uct_ib_qp_type_str(attr->qp_type),
+              qp->qp_num, uct_ib_device_name(dev), iface->config.port_num,
               attr->cap.max_send_wr, attr->cap.max_send_sge,
               attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
               attr->cap.max_recv_wr, attr->cap.max_recv_sge,
@@ -1286,6 +1303,46 @@ out_mask_info_failed:
     return UCS_OK;
 }
 
+static unsigned uct_ib_iface_gid_index(uct_ib_iface_t *iface,
+                                       unsigned long cfg_gid_index)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uint8_t port_num     = iface->config.port_num;
+    int gid_tbl_len      = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
+    unsigned gid_index   = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
+    uct_ib_device_gid_info_t gid_info;
+    ucs_status_t status;
+    uint32_t oui;
+
+    if (cfg_gid_index != UCS_ULUNITS_AUTO) {
+        return cfg_gid_index;
+    }
+
+    if (!iface->config.flid_enabled ||
+        (gid_tbl_len <= UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX)) {
+        goto out;
+    }
+
+    status = uct_ib_device_query_gid_info(
+                          dev->ibv_context, uct_ib_device_name(dev), port_num,
+                          UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX, &gid_info);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (uct_ib_iface_gid_extract_flid(&gid_info.gid) == 0) {
+        goto out;
+    }
+
+    oui = be32toh(gid_info.gid.global.interface_id & 0xffffff) >> 8;
+    if (oui == UCT_IB_GUID_OPENIB_OUI) {
+        gid_index = UCT_IB_DEVICE_ROUTABLE_FLID_GID_INDEX;
+    }
+
+out:
+    return gid_index;
+}
+
 static ucs_status_t
 uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
                            const uct_ib_iface_config_t *config)
@@ -1307,10 +1364,8 @@ uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
             goto out;
         }
     } else {
-        gid_info->gid_index             = (cfg_gid_index ==
-                                           UCS_ULUNITS_AUTO) ?
-                                          UCT_IB_MD_DEFAULT_GID_INDEX :
-                                          cfg_gid_index;
+        gid_info->gid_index             = uct_ib_iface_gid_index(iface,
+                                                                 cfg_gid_index);
         gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         gid_info->roce_info.addr_family = 0;
     }
@@ -1442,6 +1497,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.qp_type            = init_attr->qp_type;
     self->config.flid_enabled       = config->flid_enabled;
     uct_ib_iface_set_path_mtu(self, config);
+
+    self->config.send_overhead = config->send_overhead;
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("IB transports do not support multi-threaded worker");
@@ -1711,13 +1768,15 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
-    uct_ep_operation_t op  = UCT_ATTR_VALUE(PERF, perf_attr, operation,
-                                            OPERATION, UCT_EP_OP_LAST);
-    const double wqe_fetch = 350e-9;
-    double send_pre_overhead, send_post_overhead;
+    uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
+    uct_ep_operation_t op    = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                              OPERATION, UCT_EP_OP_LAST);
+    const double wqe_fetch   = 350e-9;
+    double send_pre_overhead, send_pre_overhead_bcopy, send_post_overhead;
     double send_post_overhead_zcopy;
     uct_iface_attr_t iface_attr;
     ucs_status_t status;
+    uct_ib_iface_send_overhead_t *send_overhead;
 
     status = uct_iface_query(iface, &iface_attr);
     if (status != UCS_OK) {
@@ -1732,23 +1791,27 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         break;
     default:
         send_pre_overhead        = iface_attr.overhead;
-        /* Doorbell write effect on CPU operations pipeline */
         send_post_overhead       = 40e-9;
-        /* Completion for every operation */
         send_post_overhead_zcopy = 20e-9;
     }
+    send_pre_overhead_bcopy = 5e-9;
+    send_overhead           = &ib_iface->config.send_overhead;
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
-        perf_attr->send_pre_overhead = send_pre_overhead;
+        perf_attr->send_pre_overhead = ucs_time_units_to_sec(
+                send_overhead->wqe_post, send_pre_overhead);
         if (uct_ep_op_is_bcopy(op)) {
-            perf_attr->send_pre_overhead += 5e-9; /* Allocate send desc */
+            perf_attr->send_pre_overhead += ucs_time_units_to_sec(
+                    send_overhead->bcopy, send_pre_overhead_bcopy);
         }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
-        perf_attr->send_post_overhead = send_post_overhead;
+        perf_attr->send_post_overhead =
+                ucs_time_units_to_sec(send_overhead->db, send_post_overhead);
         if (uct_ep_op_is_zcopy(op)) {
-            perf_attr->send_post_overhead += send_post_overhead_zcopy;
+            perf_attr->send_post_overhead += ucs_time_units_to_sec(
+                    send_overhead->cqe, send_post_overhead_zcopy);
         }
     }
 
@@ -1763,12 +1826,17 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         perf_attr->latency = iface_attr.latency;
         if (uct_ep_op_is_bcopy(op) || uct_ep_op_is_zcopy(op)) {
-            perf_attr->latency.c += wqe_fetch;
+            perf_attr->latency.c +=
+                    ucs_time_units_to_sec(send_overhead->wqe_fetch, wqe_fetch);
         }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
         perf_attr->max_inflight_eps = SIZE_MAX;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
+        perf_attr->flags = 0;
     }
 
     return UCS_OK;

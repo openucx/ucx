@@ -13,6 +13,7 @@
 
 #include <ucs/algorithm/crc.h>
 #include <ucs/sys/checker.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
@@ -48,6 +49,7 @@
 #define UCS_PROCCESS_STAT_FMT      "/proc/%d/stat"
 #define UCS_PROCESS_NS_FIRST       0xF0000000U
 #define UCS_PROCESS_NS_NET_DFLT    0xF0000080U
+#define UCS_DMI_PRODUCT_NAME_FILE  "/sys/devices/virtual/dmi/id/product_name"
 
 #define UCS_NS_INFO_ITEM(_id, _name, _dflt) \
     [_id] = {.name = (_name), .dflt = (_dflt), .value = (_dflt), \
@@ -1647,4 +1649,24 @@ ucs_status_t ucs_sys_read_sysfs_file(const char *dev_name,
     }
 
     return UCS_OK;
+}
+
+const char *ucs_sys_dmi_product_name()
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static char product_name[128];
+    ssize_t nread;
+
+    UCS_INIT_ONCE(&init_once) {
+        nread = ucs_read_file_str(product_name, sizeof(product_name), 1,
+                                  UCS_DMI_PRODUCT_NAME_FILE);
+        if (nread >= 0) {
+            ucs_strtrim(product_name);
+        } else {
+            ucs_strncpy_zero(product_name, UCS_VALUE_UNKNOWN_STR,
+                             sizeof(product_name));
+        }
+    }
+
+    return product_name;
 }

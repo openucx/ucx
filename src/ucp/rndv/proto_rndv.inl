@@ -243,20 +243,28 @@ ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
     size_t total_offset = ucp_proto_rndv_request_total_offset(req);
     size_t total_length = ucp_proto_rndv_request_total_length(req);
     size_t max_frag_sum = rpriv->mpriv.max_frag_sum;
-    size_t lane_offset, max_payload, scaled_length;
+    size_t lane_offset, max_payload, weight_end_offset, end_offset;
 
     if (ucs_likely(total_length < max_frag_sum)) {
-        /* Each lane sends less than its maximal fragment size */
-        scaled_length = ucp_proto_multi_scaled_length(lpriv->weight_sum,
-                                                      total_length);
+        /**
+         * Each lane sends less than its maximal fragment size but more than the
+         * minimal chunk size
+         */
+        weight_end_offset = ucp_proto_multi_scaled_length(lpriv->weight_sum,
+                                                          total_length);
+        end_offset        = ucs_max(weight_end_offset, lpriv->min_end_offset);
 
-        ucs_assertv(scaled_length >= total_offset,
-                    "req=%p scaled_length=%zu total_offset=%zu "
-                    "total_length=%zu weight_sum=%zu%% ",
-                    req, scaled_length, total_offset, total_length,
+        ucs_assertv(end_offset >= total_offset,
+                    "req=%p weight_end_offset=%zu min_end_offset=%zu "
+                    "total_offset=%zu total_length=%zu weight_sum=%zu%% ",
+                    req, weight_end_offset, lpriv->min_end_offset, total_offset,
+                    total_length,
                     ucp_proto_multi_scaled_length(lpriv->weight_sum, 100));
-
-        max_payload = scaled_length - total_offset;
+        /**
+         * max_payload is later capped by remaining request length when
+         * advancing datatype iterator
+         */
+        max_payload = end_offset - total_offset;
     } else {
         /* Send in round-robin fashion, each lanes sends its maximal size */
         lane_offset = total_offset % max_frag_sum;

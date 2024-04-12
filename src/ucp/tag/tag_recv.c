@@ -60,8 +60,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
         ucp_tag_t tag_mask, ucp_request_t *req, ucp_recv_desc_t *rdesc,
         const ucp_request_param_t *param, const char *debug_name)
 {
-    uint32_t req_flags = (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
-                         UCP_REQUEST_FLAG_CALLBACK : 0;
     ucp_request_queue_t *req_queue;
     size_t hdr_len, recv_len;
     ucs_status_t status;
@@ -72,7 +70,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
                   tag, tag_mask);
 
 #if ENABLE_DEBUG_DATA
-    req->recv.proto_rndv_config = NULL;
+    req->recv.proto_rndv_config  = NULL;
+    req->recv.proto_rndv_request = NULL;
 #endif
 
     /* First, check the fast path case - single fragment
@@ -102,37 +101,25 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
 
         req->status = status;
         UCS_PROFILE_REQUEST_EVENT(req, "complete_imm_tag_recv", 0);
-
-        if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
-            return ucp_request_prevent_imm_cmpl(param, req, recv,
-                                                &req->recv.tag.info);
-        }
-
-        if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_RECV_INFO) &&
-            (status == UCS_OK)) {
-            *param->recv_info.tag_info = req->recv.tag.info;
-        }
-
-        ucp_request_put_param(param, req);
-        return UCS_STATUS_PTR(status);
+        goto out_completed;
     }
 
     /* TODO: allocate request only in case if flag
      * UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is not set */
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
         status = UCS_ERR_NO_RESOURCE;
-        goto err;
+        goto out_request_put;
     }
 
     /* Initialize receive request */
-    req->status             = UCS_OK;
-    req->recv.worker        = worker;
-    req->flags              = UCP_REQUEST_FLAG_RECV_TAG | req_flags;
+    req->status      = UCS_OK;
+    req->flags       = UCP_REQUEST_FLAG_RECV_TAG;
+    req->recv.worker = worker;
 
     status = ucp_datatype_iter_init_unpack(worker->context, buffer, count,
                                            &req->recv.dt_iter, param);
     if (status != UCS_OK) {
-        goto err;
+        goto out_request_put;
     }
 
     if (req->recv.dt_iter.dt_class != UCP_DATATYPE_CONTIG) {
@@ -142,16 +129,28 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
     req->recv.op_attr       = param->op_attr_mask;
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
-    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-        req->recv.tag.cb = param->cb.recv;
-        req->user_data   = ucp_request_param_user_data(param);
-    }
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.tag.info.sender_tag = 0;
     }
 
-    if (ucs_unlikely(rdesc == NULL)) {
+    if (ucs_likely(rdesc != NULL)) {
+        /* Matched */
+        if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV)) {
+            ucp_tag_rndv_matched(worker, req,
+                                 ucp_tag_rndv_rts_from_rdesc(rdesc),
+                                 rdesc->length);
+            UCP_WORKER_STAT_RNDV(worker, RX_UNEXP, 1);
+            ucp_recv_desc_release(rdesc);
+        } else {
+            ucp_tag_recv_eager_multi(worker, req, rdesc);
+        }
+
+        if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+            status = req->status;
+            goto out_completed;
+        }
+    } else {
         /* Not found on unexpected, wait until it arrives. */
         req_queue = ucp_tag_exp_get_queue(&worker->tm, tag, tag_mask);
 
@@ -163,22 +162,25 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t ucp_tag_recv_common(
 
         ucs_trace_req("%s returning expected request %p (%p)", debug_name, req,
                       req + 1);
-        return req + 1;
     }
 
-    /* Check rendezvous case */
-    if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV)) {
-        ucp_tag_rndv_matched(worker, req, ucp_tag_rndv_rts_from_rdesc(rdesc),
-                             rdesc->length);
-        UCP_WORKER_STAT_RNDV(worker, RX_UNEXP, 1);
-        ucp_recv_desc_release(rdesc);
-    } else {
-        ucp_tag_recv_eager_multi(worker, req, rdesc);
-    }
-
+    ucp_request_set_callback_param(param, recv, req, recv.tag);
     return req + 1;
 
-err:
+out_completed:
+    if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
+        /* coverity[address_free] */
+        /* coverity[offset_free] */
+        return ucp_request_prevent_imm_cmpl(param, req, recv,
+                                            &req->recv.tag.info);
+    }
+
+    if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_RECV_INFO) &&
+        (status == UCS_OK)) {
+        *param->recv_info.tag_info = req->recv.tag.info;
+    }
+
+out_request_put:
     ucp_request_put_param(param, req);
     return UCS_STATUS_PTR(status);
 }

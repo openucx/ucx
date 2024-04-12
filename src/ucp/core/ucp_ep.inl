@@ -19,8 +19,7 @@
 
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
 {
-    ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
-    return &ucs_array_elem(&ep->worker->ep_config, ep->cfg_index);
+    return ucp_worker_ep_config(ep->worker, ep->cfg_index);
 }
 
 static UCS_F_ALWAYS_INLINE uct_ep_h ucp_ep_get_fast_lane(ucp_ep_h ep,
@@ -249,6 +248,13 @@ static inline int
 ucp_ep_config_key_has_cm_lane(const ucp_ep_config_key_t *config_key)
 {
     return config_key->cm_lane != UCP_NULL_LANE;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_config_is_inter_node(const ucp_ep_config_key_t *config_key)
+{
+    return !(config_key->flags & (UCP_EP_CONFIG_KEY_FLAG_SELF |
+                                  UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE));
 }
 
 static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)

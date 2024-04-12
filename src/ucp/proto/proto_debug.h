@@ -22,7 +22,7 @@
 /* Format string to display a protocol performance function bandwidth */
 #define UCP_PROTO_PERF_FUNC_BW_FMT "%.2f"
 #define UCP_PROTO_PERF_FUNC_BW_ARG(_perf_func) \
-    (1.0 / ((_perf_func)->m * UCS_MBYTE))
+    ((_perf_func)->m != 0.0) ? (1.0 / ((_perf_func)->m * UCS_MBYTE)) : INFINITY
 
 /* Format string to display a protocol performance function */
 #define UCP_PROTO_PERF_FUNC_FMT(_perf_var) " " #_perf_var ": " \
@@ -60,7 +60,7 @@ void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
 
 
 void ucp_proto_select_init_trace_caps(
-        ucp_proto_id_t proto_id, const ucp_proto_init_params_t *init_params);
+        const ucp_proto_init_params_t *init_params);
 
 
 void ucp_proto_select_info(ucp_worker_h worker,

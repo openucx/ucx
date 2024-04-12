@@ -3638,24 +3638,27 @@ ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
  *
  * This routine initiates a storage of contiguous block of data that is
  * described by the local address @a buffer in the remote contiguous memory
- * region described by @a remote_addr address and the @ref ucp_rkey_h "memory
- * handle" @a rkey.  The routine returns immediately and @b does @b not
- * guarantee re-usability of the source address @e buffer. If the operation is
- * completed immediately the routine return UCS_OK, otherwise UCS_INPROGRESS
- * or an error is returned to user. If the put operation completes immediately,
- * the routine returns UCS_OK and the call-back routine @a param.cb.send is
- * @b not invoked. If the operation is @b not completed immediately and no
- * error is reported, then the UCP library will schedule invocation of the
- * call-back routine @a param.cb.send upon completion of the put operation.
- * In other words, the completion of a put operation can be signaled by the
- * return code or execution of the call-back.
+ * region described by @a remote_addr address and the
+ * @ref ucp_rkey_h "memory handle" rkey.  The routine returns immediately and
+ * @b does @b not guarantee re-usability of the source address @e buffer. If
+ * the operation is completed immediately the routine return UCS_OK, otherwise
+ * UCS_INPROGRESS or an error is returned to user. If the put operation
+ * completes immediately, the routine returns UCS_OK and the call-back routine
+ * @a param.cb.send is @b not invoked. If the operation is @b not completed
+ * immediately and no error is reported, then the UCP library will schedule
+ * invocation of the call-back routine @a param.cb.send upon completion of
+ * the put operation. In other words, the completion of a put operation can be
+ * signaled by the return code or execution of the call-back.
  * Immediate completion signals can be fine-tuned via the
  * @ref ucp_request_param_t.op_attr_mask field in the
  * @ref ucp_request_param_t structure. The values of this field
  * are a bit-wise OR of the @ref ucp_op_attr_t enumeration.
  *
- * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
- * in order to guarantee re-usability of the source address @e buffer.
+ * @note The completion of a put operation signals the local @e buffer can be
+ * reused. The completion of the operation on the remote address requires use
+ * of @ref ucp_worker_flush_nbx "ucp_worker_flush_nbx()" or
+ * @ref ucp_ep_flush_nbx "ucp_ep_flush_nbx()", after completion of which the
+ * data in @e remote_addr is guaranteed to be available.
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local source address.
@@ -3707,6 +3710,12 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  *
  * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
  * in order to guarantee re-usability of the source address @e buffer.
+ * @note The completion of a get operation signals the local @e buffer holds the
+ * the expected data and that both local @e buffer and remote @e remote_addr are
+ * safe to be reused, unlike with @ref ucp_put_nbx "ucp_put_nbx" where the use
+ * of @ref ucp_worker_flush_nbx "ucp_worker_flush_nbx()" or
+ * @ref ucp_ep_flush_nbx "ucp_ep_flush_nbx()" is required before the remote data
+ * is available.
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local destination address.

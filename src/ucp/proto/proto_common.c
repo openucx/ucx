@@ -12,6 +12,7 @@
 #include "proto_common.inl"
 
 #include <ucp/am/ucp_am.inl>
+#include <ucp/wireup/wireup.h>
 #include <uct/api/v2/uct_v2.h>
 
 
@@ -124,6 +125,14 @@ ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
     return params->worker->context->tl_rscs[rsc_index].tl_rsc.sys_device;
 }
 
+/* Pack/unpack local distance to make it equal to the remote one */
+static void
+ucp_proto_common_fp8_pack_unpack_distance(ucs_sys_dev_distance_t *distance)
+{
+    distance->latency   = ucp_wireup_fp8_pack_unpack_latency(distance->latency);
+    distance->bandwidth = UCS_FP8_PACK_UNPACK(BANDWIDTH, distance->bandwidth);
+}
+
 void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
                                         ucp_lane_index_t lane,
                                         ucs_sys_device_t sys_dev,
@@ -143,6 +152,8 @@ void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
     status     = ucs_topo_get_distance(sys_dev, tl_sys_dev, distance);
     ucs_assertv_always(status == UCS_OK, "sys_dev=%d tl_sys_dev=%d", sys_dev,
                        tl_sys_dev);
+
+    ucp_proto_common_fp8_pack_unpack_distance(distance);
 }
 
 const uct_iface_attr_t *
@@ -647,6 +658,15 @@ ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params)
     return lane;
 }
 
+void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
+                                const ucp_proto_caps_t *proto_caps,
+                                const void *priv, size_t priv_size)
+{
+    ucp_proto_select_add_proto(&params->super, params->cfg_thresh,
+                               params->cfg_priority, proto_caps, priv,
+                               priv_size);
+}
+
 void ucp_proto_request_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
@@ -715,7 +735,9 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
     }
 }
 
-ucs_status_t ucp_proto_request_init(ucp_request_t *req)
+ucs_status_t
+ucp_proto_request_init(ucp_request_t *req,
+                       const ucp_proto_select_param_t *select_param)
 {
     ucp_ep_h ep         = req->send.ep;
     ucp_worker_h worker = ep->worker;
@@ -736,40 +758,32 @@ ucs_status_t ucp_proto_request_init(ucp_request_t *req)
     }
 
     /* Select from protocol hash according to saved request parameters */
-    return ucp_proto_request_lookup_proto(
-            worker, ep, req, proto_select, rkey_cfg_index,
-            &req->send.proto_config->select_param, msg_length);
-}
-
-/**
- * Current implementation of @ref ucp_proto_t::reset supports only the case
- * that no data was sent yet.
- *
- * @param req   request to check
- */
-void ucp_proto_request_check_reset_state(const ucp_request_t *req)
-{
-    ucs_assertv_always(
-            ucp_datatype_iter_is_begin(&req->send.state.dt_iter),
-            "request %p: cannot reset the state after sending %zu bytes", req,
-            req->send.state.dt_iter.offset);
+    return ucp_proto_request_lookup_proto(worker, ep, req, proto_select,
+                                          rkey_cfg_index, select_param,
+                                          msg_length);
 }
 
 void ucp_proto_request_restart(ucp_request_t *req)
 {
+    const ucp_proto_config_t *proto_config = req->send.proto_config;
+    ucp_proto_select_param_t select_param  = proto_config->select_param;
     ucs_status_t status;
 
     ucp_trace_req(req, "proto %s at stage %d restarting",
-                  req->send.proto_config->proto->name, req->send.proto_stage);
+                  proto_config->proto->name, req->send.proto_stage);
 
-    ucp_proto_request_check_reset_state(req);
-    status = req->send.proto_config->proto->reset(req);
+    status = proto_config->proto->reset(req);
     if (status != UCS_OK) {
         ucs_assert_always(status == UCS_ERR_CANCELED);
         return;
     }
 
-    status = ucp_proto_request_init(req);
+    /* Select a protocol with resume request support */
+    if (!ucp_datatype_iter_is_begin(&req->send.state.dt_iter)) {
+        select_param.op_id_flags |= UCP_PROTO_SELECT_OP_FLAG_RESUME;
+    }
+
+    status = ucp_proto_request_init(req, &select_param);
     if (status == UCS_OK) {
         ucp_request_send(req);
     } else {
@@ -842,8 +856,8 @@ ucs_status_t ucp_proto_request_zcopy_id_reset(ucp_request_t *req)
 static void ucp_proto_stub_fatal_not_implemented(const char *func_name,
                                                  ucp_request_t *req)
 {
-    ucs_fatal("%s request %p proto %s, not implemented", func_name, req,
-              req->send.proto_config->proto->name);
+    ucs_fatal("'%s' is not implemented for protocol %s (req: %p)", func_name,
+              req->send.proto_config->proto->name, req);
 }
 
 void ucp_proto_abort_fatal_not_implemented(ucp_request_t *req,

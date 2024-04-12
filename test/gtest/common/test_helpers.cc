@@ -641,7 +641,9 @@ mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
 }
 
 mmap_fixed_address::~mmap_fixed_address() {
-    munmap(m_ptr, m_length);
+    if (m_ptr != NULL) {
+        munmap(m_ptr, m_length);
+    }
 }
 
 std::string compact_string(const std::string &str, size_t length)
@@ -792,6 +794,15 @@ ucs_sock_addr_t sock_addr_storage::to_ucs_sock_addr() const {
 std::string sock_addr_storage::to_str() const {
     char str[UCS_SOCKADDR_STRING_LEN];
     return ucs_sockaddr_str(get_sock_addr_ptr(), str, sizeof(str));
+}
+
+std::string sock_addr_storage::to_ip_str() const {
+    char str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    status = ucs_sockaddr_get_ipstr(get_sock_addr_ptr(), str, sizeof(str));
+    ASSERT_UCS_OK(status);
+    return str;
 }
 
 const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {

@@ -17,6 +17,12 @@
                                                         uct_rc_mlx5_iface_common_t)
 
 
+#define UCT_RC_MLX5_BASE_EP_DECL(_tl_ep, _iface, _ep) \
+    uct_rc_mlx5_base_ep_t *_ep = ucs_derived_of(_tl_ep, uct_rc_mlx5_base_ep_t); \
+    uct_rc_mlx5_iface_common_t *_iface = ucs_derived_of(_tl_ep->iface, \
+                                                        uct_rc_mlx5_iface_common_t)
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_ep_fence_put(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
                          uct_rkey_t *rkey, uint64_t *addr, uint16_t offset)
@@ -1801,4 +1807,3 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
     }
     return UCS_OK;
 }
-

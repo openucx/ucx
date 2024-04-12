@@ -13,7 +13,7 @@
 
 #include <ucs/arch/cpu.h>
 #include <ucs/profile/profile.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 
 
 typedef struct {

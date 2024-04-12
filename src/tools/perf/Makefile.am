@@ -1,20 +1,21 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2024. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 # Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
+# Copyright (c) Intel Corporation, 2023. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
 
-SUBDIRS = cuda rocm lib
+SUBDIRS = cuda rocm ze lib mad
 CC      = $(UCX_PERFTEST_CC)
 
 noinst_HEADERS = \
 	perftest.h \
-	perftest_mad.h \
+	perftest_context.h \
 	api/libperf.h
 
 bin_PROGRAMS = ucx_perftest ucx_perftest_daemon
@@ -24,17 +25,9 @@ ucx_perftest_SOURCES = \
 	perftest_run.c \
 	perftest_params.c
 
-if HAVE_MAD
-ucx_perftest_SOURCES += \
-	perftest_mad.c
-endif
-
 ucx_perftest_CPPFLAGS = $(BASE_CPPFLAGS)
-ucx_perftest_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS) $(MAD_CFLAGS)
-ucx_perftest_LDFLAGS  = \
-	$(LDFLAGS_DYNAMIC_LIST_DATA) \
-	$(MAD_LDFLAGS) \
-	$(MAD_LIBS)
+ucx_perftest_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS)
+ucx_perftest_LDFLAGS  = $(LDFLAGS_DYNAMIC_LIST_DATA)
 
 ucx_perftest_LDADD    = \
 	$(abs_top_builddir)/src/uct/libuct.la \

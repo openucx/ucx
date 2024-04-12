@@ -8,9 +8,11 @@
 #define UCS_ARRAY_H_
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/status.h>
 #include <stddef.h>
+#include <limits.h>
 
 BEGIN_C_DECLS
 
@@ -25,7 +27,8 @@ BEGIN_C_DECLS
     struct { \
         _value_type *buffer; \
         _index_type length; \
-        _index_type capacity; \
+        _index_type capacity : ((CHAR_BIT * sizeof(_index_type)) - 1); \
+        uint8_t     is_fixed : 1; \
     }
 
 
@@ -47,7 +50,7 @@ BEGIN_C_DECLS
  * calling @ref ucs_array_cleanup_dynamic()
  */
 #define UCS_ARRAY_DYNAMIC_INITIALIZER \
-    { NULL, 0, 0 }
+    { NULL, 0, 0, 0 }
 
 
 /**
@@ -67,7 +70,7 @@ BEGIN_C_DECLS
  * @endcode
  */
 #define UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
-    { (_buffer), 0, ucs_array_init_fixed_capacity(_capacity) }
+    { (_buffer), 0, (_capacity), 1 }
 
 
 /**
@@ -82,9 +85,7 @@ BEGIN_C_DECLS
 #define UCS_ARRAY_ALLOC_ONSTACK(_array_type, _capacity) \
     ({ \
         typedef ucs_typeof(*((_array_type*)NULL)->buffer) value_t; \
-        UCS_STATIC_ASSERT((_capacity) * sizeof(value_t) <= \
-                          UCS_ALLOCA_MAX_SIZE); \
-        (value_t*)alloca((_capacity) * sizeof(value_t)); \
+        (value_t*)ucs_alloca((_capacity) * sizeof(value_t)); \
     })
 
 
@@ -112,13 +113,6 @@ BEGIN_C_DECLS
 
 
 /**
- * Helper function to initialize capacity field of a fixed-size array.
- */
-#define ucs_array_init_fixed_capacity(_capacity) \
-    (((_capacity) & UCS_ARRAY_CAP_MASK) | UCS_ARRAY_CAP_FLAG_FIXED)
-
-
-/**
  * Initialize a dynamic array. Such array can grow automatically to accommodate
  * for more elements.
  *
@@ -129,6 +123,7 @@ BEGIN_C_DECLS
         (_array)->buffer   = NULL; \
         (_array)->length   = 0; \
         (_array)->capacity = 0; \
+        (_array)->is_fixed = 0; \
     }
 
 
@@ -141,9 +136,14 @@ BEGIN_C_DECLS
  */
 #define ucs_array_init_fixed(_array, _buffer, _capacity) \
     { \
+        ucs_assertv((_capacity) <= ucs_array_max_capacity(_array), \
+                    "capacity=%zu is out of range [0, %zu]", \
+                    (size_t)(_capacity), \
+                    (size_t)ucs_array_max_capacity(_array)); \
         (_array)->buffer   = (_buffer); \
         (_array)->length   = 0; \
-        (_array)->capacity = ucs_array_init_fixed_capacity(_capacity); \
+        (_array)->capacity = (_capacity); \
+        (_array)->is_fixed = 1; \
     }
 
 
@@ -188,6 +188,7 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
     ({ \
         ucs_status_t _reserve_status; \
         size_t _capacity; \
+        UCS_STATIC_ASSERT(ucs_is_unsigned_type(ucs_typeof((_array)->length))); \
         \
         if (ucs_likely((_min_capacity)) <= ucs_array_capacity(_array)) { \
             ucs_array_old_buffer_set_null((void**)(_old_buffer_p)); \
@@ -198,6 +199,7 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
             _capacity       = (_array)->capacity; \
             _reserve_status = ucs_array_grow((void**)&(_array)->buffer, \
                                              &_capacity, _min_capacity, \
+                                             ucs_array_max_capacity(_array), \
                                              sizeof(*(_array)->buffer), \
                                              (void**)(_old_buffer_p), \
                                              UCS_PP_MAKE_STRING(_array)); \
@@ -277,7 +279,7 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  */
 #define ucs_array_resize(_array, _new_length, _init_value, _failed_actions) \
     { \
-        ucs_typeof((_array)->capacity) _extend_index; \
+        ucs_typeof((_array)->length) _extend_index; \
         ucs_status_t _extend_status; \
         \
         _extend_status = ucs_array_reserve(_array, _new_length); \
@@ -314,14 +316,24 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  * @return Current capacity of the array
  */
 #define ucs_array_capacity(_array) \
-    ((_array)->capacity & UCS_ARRAY_CAP_MASK)
+    ((_array)->capacity)
+
+
+/**
+ * @return Maximum capacity of the array type.
+ *
+ * Since we borrow one bit from the capacity to indicate whether the array is
+ * fixed-size or not, the maximum capacity range is reduced by 1 bit.
+ */
+#define ucs_array_max_capacity(_array) \
+    UCS_MASK_SAFE((CHAR_BIT * sizeof((_array)->length)) - 1)
 
 
 /**
  * @return Whether this is a fixed-length array
  */
 #define ucs_array_is_fixed(_array) \
-    ((_array)->capacity & UCS_ARRAY_CAP_FLAG_FIXED)
+    ((_array)->is_fixed)
 
 
 /**
@@ -425,15 +437,11 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
                         ucs_array_length(_array))
 
 
-/* Internal flag to distinguish between fixed/dynamic array */
-#define UCS_ARRAY_CAP_FLAG_FIXED   UCS_BIT(0)
-#define UCS_ARRAY_CAP_MASK         (~UCS_ARRAY_CAP_FLAG_FIXED)
-
-
 /* Internal helper function */
 ucs_status_t ucs_array_grow(void **buffer_p, size_t *capacity_p,
-                            size_t min_capacity, size_t value_size,
-                            void **old_buffer_p, const char *array_name);
+                            size_t min_capacity, size_t max_capacity,
+                            size_t value_size, void **old_buffer_p,
+                            const char *array_name);
 
 
 /* Internal helper function */

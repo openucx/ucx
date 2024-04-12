@@ -5,7 +5,7 @@ parameters:
 jobs:
   - job: ${{ parameters.name }}
     workspace:
-      clean: all
+      clean: outputs
 
     pool:
       name: MLNX
@@ -16,6 +16,7 @@ jobs:
       fetchDepth: 100
       clean: true
       displayName: Checkout
+      retryCountOnTaskFailure: 5
     - bash: |
         set -x
         # Standard go pre-commit: https://github.com/golang/go/blob/release-branch.go1.1/misc/git/pre-commit
@@ -39,7 +40,7 @@ jobs:
         check_gpu ${{ parameters.name }}
         az_init_modules
         az_module_load dev/go-latest
-        try_load_cuda_env
+        load_cuda_env
         ./autogen.sh
         mkdir build
         cd build
@@ -52,7 +53,7 @@ jobs:
         set -xeE
         source buildlib/az-helpers.sh
         az_init_modules
-        try_load_cuda_env
+        load_cuda_env
         az_module_load dev/go-latest
         make -C build/bindings/go test
       displayName: Run go tests
@@ -60,7 +61,7 @@ jobs:
         set -xeE
         source buildlib/az-helpers.sh
         az_init_modules
-        try_load_cuda_env
+        load_cuda_env
         az_module_load dev/go-latest
         go_port=$((30000 + $(AZP_AGENT_ID) * 100))
         args="-p=$go_port"

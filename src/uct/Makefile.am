@@ -3,10 +3,11 @@
 # Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (c) The University of Tennesse and the University of Tennessee
 #               Research Foundation. 2016.  ALL RIGHTS RESERVED.
+# Copyright (C) Intel Corporation, 2023. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
-SUBDIRS = . cuda ib rocm sm ugni
+SUBDIRS = . cuda ib rocm sm ugni ze
 
 lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS)

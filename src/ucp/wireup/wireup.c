@@ -273,7 +273,7 @@ err:
 static ucp_tl_bitmap_t
 ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
 {
-    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
+    ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_lane_index_t lane;
 
     ucs_for_each_bit(lane, lane_map) {
@@ -282,7 +282,7 @@ ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
             continue;
         }
 
-        UCS_BITMAP_SET(tl_bitmap, ucp_ep_get_rsc_index(ep, lane));
+        UCS_STATIC_BITMAP_SET(&tl_bitmap, ucp_ep_get_rsc_index(ep, lane));
     }
 
     return tl_bitmap;
@@ -609,7 +609,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     uint64_t remote_uuid      = remote_address->uuid;
     int send_reply            = 0;
     unsigned ep_init_flags    = ucp_ep_err_mode_init_flags(msg->err_mode);
-    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
+    ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
@@ -1017,24 +1017,12 @@ static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
     /* Activate worker iface if: a) new protocol selection logic is disabled; or
      * b) stream support is requested, because stream API does not support new
      * protocol selection logic; or c) lane is used for checking a connection
-     * state; or d) the endpoint is a mem-type ep; or e) iface was activated
-     * before (some ep was created and later destroyed). The last check is
-     * needed to workaround the following problem with proto v2:
-     * 1. ep is created using some ep config
-     * 2. Some protocols are selected for some operations and this enables
-     *    progress for the affected lanes
-     * 3. ep is destroyed and progress is disabled for all corresponding ifaces
-     * 4. New ep is created with the same ep config used during step n1
-     * 5. Progress is not enabled, because protocols selection for these
-     *    parameters (and ep config) was already done on step n2.
-     * TODO: Reconsider this approach when progress enabling scheme changes. */
-
+     * state; or d) the endpoint is a mem-type ep. */
     return !context->config.ext.proto_enable ||
            (context->config.features & UCP_FEATURE_STREAM) ||
            (ucp_ep_config(ep)->key.keepalive_lane == lane) ||
            (ucp_ep_config(ep)->key.wireup_msg_lane == lane) ||
-           (ep->flags & UCP_EP_FLAG_INTERNAL) ||
-           (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
+           (ep->flags & UCP_EP_FLAG_INTERNAL);
 }
 
 static ucs_status_t
@@ -1291,7 +1279,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     unsigned num_dst_mds;
 
     ae_dst_md_map = 0;
-    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, rsc_index) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         ucp_unpacked_address_for_each(ae, remote_address) {
             if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae)) {
                 ae_dst_md_map         |= UCS_BIT(ae->md_index);
@@ -1518,12 +1506,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices)
 {
-    ucp_worker_h worker                  = ep->worker;
-    ucp_tl_bitmap_t tl_bitmap            = UCS_BITMAP_AND(*local_tl_bitmap,
-                                                          worker->context->tl_bitmap,
-                                                          UCP_MAX_RESOURCES);
-    ucp_rsc_index_t cm_idx               = UCP_NULL_RESOURCE;
-    ucp_tl_bitmap_t current_tl_bitmap;
+    ucp_worker_h worker    = ep->worker;
+    ucp_rsc_index_t cm_idx = UCP_NULL_RESOURCE;
+    ucp_tl_bitmap_t tl_bitmap, current_tl_bitmap;
     ucp_rsc_index_t rsc_idx;
     ucp_lane_map_t connect_lane_bitmap;
     ucp_ep_config_key_t key;
@@ -1533,7 +1518,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     char str[32];
     ucs_queue_head_t replay_pending_queue;
 
-    ucs_assert(!UCS_BITMAP_IS_ZERO_INPLACE(&tl_bitmap));
+    tl_bitmap = UCS_STATIC_BITMAP_AND(*local_tl_bitmap,
+                                      worker->context->tl_bitmap);
+    ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
 
     ucs_trace("ep %p: initialize lanes", ep);
     ucs_log_indent(1);
@@ -1550,18 +1537,18 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
      */
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
         !ucp_ep_has_cm_lane(ep)) {
-        UCS_BITMAP_CLEAR(&current_tl_bitmap);
+        UCS_STATIC_BITMAP_RESET_ALL(&current_tl_bitmap);
         for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
             rsc_idx = ucp_ep_config(ep)->key.lanes[lane].rsc_index;
-            UCS_BITMAP_SET(current_tl_bitmap, rsc_idx);
-            ucs_assertv(
-                UCS_BITMAP_GET(tl_bitmap, rsc_idx),
-                "resource that was chosen previously is unavailable: tl_rscs[%d]="
-                UCT_TL_RESOURCE_DESC_FMT, rsc_idx,
-                UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_idx].tl_rsc)
-            );
+            UCS_STATIC_BITMAP_SET(&current_tl_bitmap, rsc_idx);
+            ucs_assertv(UCS_STATIC_BITMAP_GET(tl_bitmap, rsc_idx),
+                        "resource that was chosen previously is unavailable: "
+                        "tl_rscs[%d]=" UCT_TL_RESOURCE_DESC_FMT,
+                        rsc_idx,
+                        UCT_TL_RESOURCE_DESC_ARG(
+                                &worker->context->tl_rscs[rsc_idx].tl_rsc));
         }
-        UCS_BITMAP_AND_INPLACE(&tl_bitmap, current_tl_bitmap);
+        UCS_STATIC_BITMAP_AND_INPLACE(&tl_bitmap, current_tl_bitmap);
     }
 
     status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
@@ -1621,8 +1608,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ucs_fatal("endpoint reconfiguration not supported yet");
     }
 
-    ep->cfg_index = new_cfg_index;
-    ep->am_lane   = key.am_lane;
+    ucp_ep_set_cfg_index(ep, new_cfg_index);
+    ep->am_lane = key.am_lane;
 
     snprintf(str, sizeof(str), "ep %p", ep);
     ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, str,
@@ -1672,7 +1659,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     rsc_index = ucp_wireup_ep_get_aux_rsc_index(
             ucp_ep_get_lane(ep, ucp_ep_get_wireup_msg_lane(ep)));
     if (rsc_index != UCP_NULL_RESOURCE) {
-        UCS_BITMAP_SET(tl_bitmap, rsc_index);
+        UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_index);
     }
 
     ucs_debug("ep %p: send wireup request (flags=0x%x)", ep, ep->flags);
@@ -1814,7 +1801,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
-        UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl, &context->tl_bitmap) {
             rsc = &context->tl_rscs[tl];
             if (ae->tl_name_csum == rsc->tl_name_csum) {
                 snprintf(p, end - p, " "UCT_TL_RESOURCE_DESC_FMT,

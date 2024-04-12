@@ -209,8 +209,11 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
      * stream sequentialization */
     rkey->dev_num = peer_idx;
 
-    UCT_CUDA_IPC_GET_DEVICE(this_device);
     UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuCtxGetDevice(&this_device)) != UCS_OK) {
+        status = UCS_ERR_UNREACHABLE;
+        goto err;
+    }
 
     accessible = &mdc->md->peer_accessible_cache[peer_idx * num_devices + this_device];
     if (*accessible == UCS_TRY) { /* unchecked, add to cache */

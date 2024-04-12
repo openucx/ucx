@@ -57,7 +57,10 @@ typedef enum {
     UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE  = UCS_BIT(8),
 
     /* Supports error handling */
-    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9)
+    UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  = UCS_BIT(9),
+
+    /* Supports starting the request when its datatype iterator offset is > 0 */
+    UCP_PROTO_COMMON_INIT_FLAG_RESUME        = UCS_BIT(10),
 } ucp_proto_common_init_flags_t;
 
 
@@ -259,6 +262,11 @@ ucp_lane_index_t
 ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
+void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
+                                const ucp_proto_caps_t *proto_caps,
+                                const void *priv, size_t priv_size);
+
+
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
 
 
@@ -284,7 +292,9 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
-ucs_status_t ucp_proto_request_init(ucp_request_t *req);
+ucs_status_t
+ucp_proto_request_init(ucp_request_t *req,
+                       const ucp_proto_select_param_t *select_param);
 
 void ucp_proto_request_check_reset_state(const ucp_request_t *req);
 

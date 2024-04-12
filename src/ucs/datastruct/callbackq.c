@@ -63,7 +63,7 @@ struct ucs_callbackq_priv {
     uint64_t                                          fast_remove_mask;
 
     /* Callback ID to index mapping */
-    ucs_array_s(int, unsigned)                        idxs;
+    ucs_array_s(unsigned, unsigned)                   idxs;
 
     /* Index of first free item in the freelist */
     int                                               free_idx_id;

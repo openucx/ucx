@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -112,6 +113,9 @@ static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_ROCM]         = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_RDMA]         = 0,
+    [UCS_MEMORY_TYPE_ZE_HOST]      = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ZE_DEVICE]    = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ZE_MANAGED]   = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -122,6 +126,9 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_ROCM]         = 128,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 128,
     [UCS_MEMORY_TYPE_RDMA]         = 0,
+    [UCS_MEMORY_TYPE_ZE_HOST]      = 128,
+    [UCS_MEMORY_TYPE_ZE_DEVICE]    = 128,
+    [UCS_MEMORY_TYPE_ZE_MANAGED]   = 128,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -152,7 +159,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
    "Memory types which have whole allocations registered.\n"
-   "Allowed memory types: cuda, rocm, rocm-managed",
+   "Allowed memory types: cuda, rocm, rocm-managed, ze-host, ze-device, ze-managed",
    ucs_offsetof(ucp_context_config_t, reg_whole_alloc_bitmap),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
@@ -166,8 +173,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_THRESH", UCS_VALUE_AUTO_STR,
-   "Threshold for switching from eager to rendezvous protocol",
-   ucs_offsetof(ucp_context_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+   "Threshold for switching from eager to rendezvous protocol", 0,
+    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_MEMUNITS,
+        {"intra", "threshold for intra-node communication",
+         ucs_offsetof(ucp_context_config_t, rndv_intra_thresh)},
+        {"inter", "threshold for inter-node communication",
+         ucs_offsetof(ucp_context_config_t, rndv_inter_thresh)},
+        {NULL}
+  )},
 
   {"RNDV_SEND_NBR_THRESH", "256k",
    "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"
@@ -337,7 +350,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RNDV_FRAG_MEM_TYPE", "host",
    "Memory type of fragments used for RNDV pipeline protocol.\n"
-   "Allowed memory types is one of: host, cuda, rocm",
+   "Allowed memory types is one of: host, cuda, rocm, ze-host, ze-device",
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_type),
    UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
@@ -470,6 +483,25 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " 'n' : Select RMA/AMO lanes according to performance charasteristics",
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
 
+  {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
+                     "rndv_rts:275ns,sw:40ns",
+   "Protocol overhead", 0,
+    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+        {"single", "overhead of single-lane protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_single)},
+        {"multi", "overhead of managing multiple lanes",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_multi)},
+        {"rndv_offload", "overhead of rendezvous offload protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_offload)},
+        {"rndv_rtr", "overhead of rendezvous RTR protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rtr)},
+        {"rndv_rts", "overhead of rendezvous RTS protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rts)},
+        {"sw", "overhead of software emulation protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_sw)},
+        {NULL}
+  )},
+
   {NULL}
 };
 
@@ -511,6 +543,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - tcp     : sockets over TCP/IP.\n"
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
    " - rocm    : ROCm (AMD GPU) memory support.\n"
+   " - ze      : ZE (Intel GPU) memory support.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
@@ -525,7 +558,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "  [a-z] - matches one character from the range given in the bracket.",
    ucs_offsetof(ucp_config_t, protos), UCS_CONFIG_TYPE_ALLOW_LIST},
 
-  {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
+  {"ALLOC_PRIO", "md:sysv,md:posix,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
    "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
    "specified memory domain for allocation. NAME can be either a UCT component\n"
@@ -595,6 +628,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
+  { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { NULL }
 };
 
@@ -612,7 +646,7 @@ const char *ucp_feature_str[] = {
 
 
 const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
-const ucp_tl_bitmap_t ucp_tl_bitmap_min = UCS_BITMAP_ZERO;
+const ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0}};
 
 
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
@@ -1245,7 +1279,7 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
     p    = str;
     endp = str + max_str_len;
 
-    UCS_BITMAP_FOR_EACH_BIT(*tl_bitmap, i) {
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(i, tl_bitmap) {
         ucs_snprintf_zero(p, endp - p, "%s ",
                           context->tl_rscs[i].tl_rsc.tl_name);
         p += strlen(p);
@@ -1405,13 +1439,13 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
          * sockaddr CMs bitmap. Save the cmpt_idx for the client/server usage
          * later */
         cm_cmpts_bitmap_safe = cm_cmpts_bitmap;
-        UCS_BITMAP_FOR_EACH_BIT(cm_cmpts_bitmap_safe, cmpt_idx) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(cmpt_idx, &cm_cmpts_bitmap_safe) {
             if (!strcmp(sockaddr_cm_names[cm_idx], "*") ||
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
                          UCT_COMPONENT_NAME_MAX)) {
                 context->config.cm_cmpt_idxs[context->config.num_cm_cmpts++] = cmpt_idx;
-                UCS_BITMAP_UNSET(cm_cmpts_bitmap, cmpt_idx);
+                UCS_STATIC_BITMAP_RESET(&cm_cmpts_bitmap, cmpt_idx);
             }
         }
     }
@@ -1661,13 +1695,12 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->export_md_map            = 0;
 
     ucs_memory_type_for_each(mem_type) {
-        context->reg_md_map[mem_type]     = 0;
-        context->cache_md_map[mem_type]   = 0;
-        context->dmabuf_mds[mem_type]     = UCP_NULL_RESOURCE;
-        context->alloc_md_index[mem_type] = UCP_NULL_RESOURCE;
+        context->reg_md_map[mem_type]           = 0;
+        context->cache_md_map[mem_type]         = 0;
+        context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
+        context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
+        context->alloc_md[mem_type].initialized = 0;
     }
-
-    context->alloc_md_index_initialized = 0;
 
     ucs_string_set_init(&avail_tls);
     UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
@@ -1706,7 +1739,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto out_release_components;
     }
 
-    UCS_BITMAP_CLEAR(&context->config.cm_cmpts_bitmap);
+    UCS_STATIC_BITMAP_RESET_ALL(&context->config.cm_cmpts_bitmap);
 
     max_mds = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
@@ -1722,7 +1755,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         }
 
         if (context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) {
-            UCS_BITMAP_SET(context->config.cm_cmpts_bitmap, i);
+            UCS_STATIC_BITMAP_SET(&context->config.cm_cmpts_bitmap, i);
         }
 
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
@@ -1752,8 +1785,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
      * Then the worker will open all available transport resources and will
      * select only the best ones for each particular device.
      */
-    UCS_BITMAP_MASK(&context->tl_bitmap,
-                    config->ctx.unified_mode ? 0 : context->num_tls);
+    UCS_STATIC_BITMAP_MASK(&context->tl_bitmap,
+                           config->ctx.unified_mode ? 0 : context->num_tls);
 
     /* Warn about devices and transports which were specified explicitly in the
      * configuration, but are not available
@@ -2424,13 +2457,13 @@ ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
 {
     ucp_rsc_index_t tl_idx;
 
-    UCS_BITMAP_CLEAR(tl_bitmap);
-    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_idx) {
+    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
         if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
             continue;
         }
 
-        UCS_BITMAP_SET(*tl_bitmap, tl_idx);
+        UCS_STATIC_BITMAP_SET(tl_bitmap, tl_idx);
     }
 }
 
@@ -2440,10 +2473,10 @@ ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
 {
     ucp_rsc_index_t tl_idx;
 
-    UCS_BITMAP_CLEAR(tl_bitmap);
-    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_idx) {
+    UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
         if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
-            UCS_BITMAP_SET(*tl_bitmap, tl_idx);
+            UCS_STATIC_BITMAP_SET(tl_bitmap, tl_idx);
         }
     }
 }
@@ -2451,9 +2484,10 @@ ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
 void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
                             const ucp_tl_bitmap_t *tl_bitmap_super)
 {
-    ucs_assert_always(UCS_BITMAP_IS_ZERO(UCP_TL_BITMAP_AND_NOT(*tl_bitmap,
-                                                               *tl_bitmap_super),
-                                         UCP_MAX_RESOURCES));
+    ucp_tl_bitmap_t b = UCS_STATIC_BITMAP_AND(*tl_bitmap,
+                                              UCS_STATIC_BITMAP_NOT(
+                                                      *tl_bitmap_super));
+    ucs_assert_always(UCS_STATIC_BITMAP_IS_ZERO(b));
 }
 
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)

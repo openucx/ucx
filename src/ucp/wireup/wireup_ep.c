@@ -271,16 +271,22 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
 {
     ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
     uct_ep_h aux_ep     = wireup_ep->aux_ep;
+    ucp_worker_h worker = ucp_ep->worker;
+    ucp_rsc_index_t rsc_index;
 
     if (aux_ep == NULL) {
         return;
     }
 
     ucp_wireup_ep_disown(&wireup_ep->super.super, aux_ep);
-    ucp_worker_discard_uct_ep(ucp_ep, aux_ep, wireup_ep->aux_rsc_index,
-                              ep_flush_flags, purge_cb, purge_arg,
+    rsc_index = wireup_ep->aux_rsc_index;
+    ucp_worker_discard_uct_ep(ucp_ep, aux_ep, rsc_index, ep_flush_flags,
+                              purge_cb, purge_arg,
                               (ucp_send_nbx_callback_t)ucs_empty_function,
                               NULL);
+    if (worker->context->config.ext.proto_enable) {
+        ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker, rsc_index));
+    }
 }
 
 static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
@@ -387,7 +393,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep,
     self->pending_count = 0;
     self->flags         = 0;
     ucs_queue_head_init(&self->pending_q);
-    UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
+    UCS_STATIC_BITMAP_RESET_ALL(&self->cm_resolve_tl_bitmap);
 
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         self->dst_rsc_indices[lane] = (dst_rsc_indices != NULL) ?

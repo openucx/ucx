@@ -62,6 +62,10 @@ typedef struct ucp_proto_perf_node ucp_proto_perf_node_t;
 typedef struct ucp_proto_select_param ucp_proto_select_param_t;
 
 
+/* Context for probing a protocol for a specific selection key */
+typedef struct ucp_proto_probe_ctx ucp_proto_probe_ctx_t;
+
+
 /* Protocol stage ID */
 enum {
     /* Initial stage. All protocols start from this stage. */
@@ -148,10 +152,19 @@ typedef struct {
  * UCP protocol capabilities (per operation parameters)
  */
 typedef struct {
-    size_t                  cfg_thresh;   /* Configured protocol threshold */
-    unsigned                cfg_priority; /* Priority of configuration */
-    size_t                  min_length;   /* Minimal message size */
-    unsigned                num_ranges;   /* Number of entries in 'ranges' */
+    /* Configured protocol threshold
+       NOTE will be removed when all protocols implement probe() instead of init() */
+    size_t                  cfg_thresh;
+
+    /* Priority of configuration
+       NOTE will be removed when all protocols implement probe() instead of init() */
+    unsigned                cfg_priority;
+
+    /* Minimal message size */
+    size_t                  min_length;
+
+    /* Number of entries in 'ranges' */
+    unsigned                num_ranges;
 
     /* Performance estimation function for different message sizes */
     ucp_proto_perf_range_t  ranges[UCP_PROTO_MAX_PERF_RANGES];
@@ -172,14 +185,26 @@ typedef struct {
     const ucp_ep_config_key_t      *ep_config_key;   /* Endpoint configuration */
     const ucp_rkey_config_key_t    *rkey_config_key; /* Remote key configuration,
                                                         may be NULL */
+    ucp_proto_id_t                 proto_id;         /* Initial protocol ID */
     const char                     *proto_name;      /* Name of the initialized
                                                         protocol, for debugging */
+    ucp_proto_probe_ctx_t          *ctx;             /* Selection context for
+                                                        adding a protocol instance */
 
     /* Output parameters */
     void                           *priv;       /* Pointer to priv buffer */
     size_t                         *priv_size;  /* Occupied size in priv buffer */
     ucp_proto_caps_t               *caps;       /* Protocol capabilities */
 } ucp_proto_init_params_t;
+
+
+/**
+ * Initialize protocol-specific configuration and estimate protocol performance
+ * as function of message size.
+ *
+ * @param [in]  params   Protocol initialization parameters.
+ */
+typedef void (*ucp_proto_probe_func_t)(const ucp_proto_init_params_t *params);
 
 
 /**
@@ -281,8 +306,18 @@ struct ucp_proto {
     const char               *name; /* Protocol name */
     const char               *desc; /* Protocol description */
     unsigned                 flags; /* Protocol flags for special handling */
-    ucp_proto_init_func_t    init;  /* Initialization function */
-    ucp_proto_query_func_t   query; /* Query protocol information */
+
+    /* Probe and add protocol instances */
+    ucp_proto_probe_func_t   probe;
+
+    /*
+     * Initialization function
+     * TODO remove after all protocols are using probe
+     */
+    ucp_proto_init_func_t    init;
+
+    /* Query protocol information */
+    ucp_proto_query_func_t   query;
 
     /* Initial UCT progress function, can be changed during the protocol
      * request lifetime to implement different stages

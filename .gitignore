@@ -48,6 +48,7 @@ ucx*tar.gz
 src/tools/info/build_config.h
 src/tools/info/ucx_info
 src/tools/perf/ucx_perftest
+src/tools/perf/ucx_perftest_daemon
 src/tools/profile/ucx_read_profile
 test/apps/test_dlopen_cfg_print
 test/apps/test_link_map
@@ -76,6 +77,8 @@ test-driver
 src/ucp/api/ucp_version.h
 src/ucp/core/ucp_version.c
 test/mpi/run_mpi.sh
+test/mpi/shmem_pingpong
+test/mpi/test_memhooks
 *.tap
 valgrind.xml
 tags

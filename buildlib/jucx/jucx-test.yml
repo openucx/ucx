@@ -5,8 +5,8 @@ parameters:
 jobs:
   - job: ${{ parameters.name }}
     workspace:
-      clean: all
-      
+      clean: outputs
+
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
@@ -22,6 +22,7 @@ jobs:
       - checkout: self
         fetchDepth: 100
         clean: true
+        retryCountOnTaskFailure: 5
         displayName: Checkout
       - bash: |
           set -xeE
@@ -30,7 +31,7 @@ jobs:
           az_init_modules
           az_module_load dev/mvn
           az_module_load dev/jdk-${JAVA_VERSION}
-          try_load_cuda_env
+          load_cuda_env
           ./autogen.sh
           ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
             --with-java --enable-gtest=no --with-cuda=$have_cuda
@@ -42,7 +43,7 @@ jobs:
           set -xeE
           source buildlib/az-helpers.sh
           az_init_modules
-          try_load_cuda_env
+          load_cuda_env
           az_module_load dev/mvn
           az_module_load dev/jdk-${JAVA_VERSION}
 

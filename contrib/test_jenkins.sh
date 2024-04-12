@@ -9,20 +9,21 @@
 #
 #
 # Environment variables set by Jenkins CI:
-#  - WORKSPACE           : path to work dir
-#  - BUILD_NUMBER        : jenkins build number
-#  - JOB_URL             : jenkins job url
-#  - EXECUTOR_NUMBER     : number of executor within the test machine
-#  - JENKINS_RUN_TESTS   : whether to run unit tests
-#  - RUN_TESTS           : same as JENKINS_RUN_TESTS, but for Azure
-#  - JENKINS_TEST_PERF   : whether to validate performance
-#  - JENKINS_NO_VALGRIND : set this to disable valgrind tests
+#  - WORKSPACE         : path to work dir
+#  - BUILD_NUMBER      : azure build number
+#  - JOB_URL           : azure job url
+#  - EXECUTOR_NUMBER   : number of executor within the test machine
+#  - RUN_TESTS         : whether to run unit tests
+#  - TEST_PERF         : whether to validate performance
+#  - ASAN_CHECK        : set to enable Address Sanitizer instrumentation build
+#  - VALGRIND_CHECK    : set to enable running tests with Valgrind
 #
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
 #  - worker   : number of current parallel executor
 #
 
+source $(dirname $0)/../buildlib/az-helpers.sh
 source $(dirname $0)/../buildlib/tools/common.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
@@ -32,29 +33,19 @@ if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
-	JENKINS_RUN_TESTS=yes
-	JENKINS_TEST_PERF=1
+	RUN_TESTS=yes
+	TEST_PERF=1
 	TIMEOUT=""
-	TIMEOUT_VALGRIND=""
 else
-	echo "Running under jenkins"
+	echo "Running under azure"
 	WS_URL=$JOB_URL/ws
-	TIMEOUT="timeout 200m"
-	TIMEOUT_VALGRIND="timeout 240m"
+	if [[ "$VALGRIND_CHECK" == "yes" ]]; then
+		TIMEOUT="timeout 300m"
+	else
+		TIMEOUT="timeout 200m"
+	fi
 fi
 
-
-#
-# Set affinity to 2 cores according to Jenkins executor number.
-# Affinity is inherited from agent in Azure CI.
-# TODO: remove or rename after CI migration.
-#
-if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
-then
-	AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-else
-	AFFINITY=""
-fi
 
 have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 have_strace=$(strace -V || true)
@@ -162,7 +153,7 @@ slice_affinity() {
 	n=$1
 
 	# get affinity mask of the current process
-	compact_cpulist=$($AFFINITY bash -c 'taskset -cp $$' | cut -d: -f2)
+	compact_cpulist=$(bash -c 'taskset -cp $$' | cut -d: -f2)
 	cpulist=$(expand_cpulist ${compact_cpulist})
 
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
@@ -474,11 +465,11 @@ run_ucx_perftest() {
 		then
 			# Run UCP performance test
 			which mpirun
-			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $ucx_perftest $ucp_test_args
 
 			# Run UCP loopback performance test
 			which mpirun
-			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args "-l"
+			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $ucx_perftest $ucp_test_args "-l"
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
@@ -580,7 +571,7 @@ test_malloc_hooks_mpi() {
 		do
 			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
 			which mpirun
-			$MPIRUN -np 1 $AFFINITY \
+			$MPIRUN -np 1 \
 				./test/mpi/test_memhooks -t $tname -m ${mode}
 		done
 
@@ -588,7 +579,7 @@ test_malloc_hooks_mpi() {
 		ucm_lib=$PWD/src/ucm/.libs/libucm.so
 		ls -l $ucm_lib
 		which mpirun
-		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
+		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib \
 			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
 	done
 }
@@ -748,7 +739,7 @@ test_init_mt() {
 	$MAKEP
 	for ((i=0;i<10;++i))
 	do
-		OMP_NUM_THREADS=$num_threads $AFFINITY timeout 5m ./test/apps/test_init_mt
+		OMP_NUM_THREADS=$num_threads timeout 5m ./test/apps/test_init_mt
 	done
 }
 
@@ -818,7 +809,7 @@ test_malloc_hook() {
 
 test_no_cuda_context() {
 	echo "==== Running no CUDA context test ===="
-	if [ -x ./test/apps/test_no_cuda_ctx ]
+	if [ "X$have_cuda" == "Xyes" ] && [ -x ./test/apps/test_no_cuda_ctx ]
 	then
 		./test/apps/test_no_cuda_ctx
 	fi
@@ -867,7 +858,7 @@ run_malloc_hook_gtest() {
 	# GTEST_SHARD_INDEX/GTEST_TOTAL_SHARDS should NOT be set
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		UCX_IB_RCACHE=n \
 		MALLOC_TRIM_THRESHOLD_=-1 \
 		MALLOC_MMAP_THRESHOLD_=-1 \
@@ -875,21 +866,87 @@ run_malloc_hook_gtest() {
 			make -C test/gtest test
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		MALLOC_MMAP_THRESHOLD_=16384 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 			make -C test/gtest test
 
 	echo "==== Running cuda hooks, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
 
 	echo "==== Running cuda hooks with far jump, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		UCM_BISTRO_FORCE_FAR_JUMP=y \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
+}
+
+set_gtest_common_test_flags() {
+	export GTEST_RANDOM_SEED=0
+	export GTEST_SHUFFLE=1
+	# Run UCT tests for TCP over fastest device only
+	export GTEST_UCT_TCP_FASTEST_DEV=1
+	export OMP_NUM_THREADS=4
+}
+
+set_gtest_make_test_flags() {
+	set_gtest_common_test_flags
+
+	# Distribute the tests among the workers
+	export GTEST_SHARD_INDEX=$worker
+	export GTEST_TOTAL_SHARDS=$nworkers
+	# Report TOP-20 longest test at the end of testing
+	export GTEST_REPORT_LONGEST_TESTS=20
+
+	GTEST_EXTRA_ARGS=""
+	if [ "$TEST_PERF" == 1 ] && [[ "$VALGRIND_CHECK" != "yes" ]]
+	then
+		# Check performance with 10 retries and 2 seconds interval
+		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
+	fi
+	export GTEST_EXTRA_ARGS
+}
+
+unset_test_flags() {
+	unset OMP_NUM_THREADS
+
+	unset GTEST_EXTRA_ARGS
+	unset GTEST_REPORT_LONGEST_TESTS
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_SHARD_INDEX
+	unset GTEST_UCT_TCP_FASTEST_DEV
+	unset GTEST_SHUFFLE
+	unset GTEST_RANDOM_SEED
+}
+
+run_specific_tests() {
+	set_gtest_common_test_flags
+
+	# Run specific tests
+	do_distributed_task 1 4 run_malloc_hook_gtest
+	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
+	do_distributed_task 3 4 test_memtrack
+
+	unset_test_flags
+}
+
+#
+# Run the test suite (gtest)
+# Arguments: <compiler-name> <make-target> [configure-flags]
+#
+run_gtest_make() {
+	compiler_name=$1
+	make_target=$2
+
+	set_gtest_make_test_flags
+
+	# Run all tests
+	echo "==== Running make -C test/gtest $make_target, $compiler_name compiler ===="
+	$TIMEOUT make -C test/gtest $make_target
+
+	unset_test_flags
 }
 
 #
@@ -899,62 +956,8 @@ run_malloc_hook_gtest() {
 run_gtest() {
 	compiler_name=$1
 
-	export GTEST_RANDOM_SEED=0
-	export GTEST_SHUFFLE=1
-	# Run UCT tests for TCP over fastest device only
-	export GTEST_UCT_TCP_FASTEST_DEV=1
-	export OMP_NUM_THREADS=4
-
-	# Run specific tests
-	do_distributed_task 1 4 run_malloc_hook_gtest
-	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
-	do_distributed_task 3 4 test_memtrack
-
-	# Distribute the tests among the workers
-	export GTEST_SHARD_INDEX=$worker
-	export GTEST_TOTAL_SHARDS=$nworkers
-	# Report TOP-20 longest test at the end of testing
-	export GTEST_REPORT_LONGEST_TESTS=20
-
-	GTEST_EXTRA_ARGS=""
-	if [ "$JENKINS_TEST_PERF" == 1 ]
-	then
-		# Check performance with 10 retries and 2 seconds interval
-		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
-	fi
-	export GTEST_EXTRA_ARGS
-
-	# Run all tests
-	echo "==== Running unit tests, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT make -C test/gtest test
-
-	unset GTEST_EXTRA_ARGS
-
-	# Run valgrind tests
-	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
-	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
-	then
-		echo "==== Running valgrind tests, $compiler_name compiler ===="
-
-		# Load newer valgrind if naative is older than 3.10
-		if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV
-		then
-			module load tools/valgrind-3.12.0
-		fi
-
-		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
-		module unload tools/valgrind-3.12.0
-	else
-		echo "==== Not running valgrind tests with $compiler_name compiler ===="
-	fi
-
-	unset GTEST_REPORT_LONGEST_TESTS
-	unset GTEST_TOTAL_SHARDS
-	unset GTEST_SHARD_INDEX
-	unset OMP_NUM_THREADS
-	unset GTEST_UCT_TCP_FASTEST_DEV
-	unset GTEST_SHUFFLE
-	unset GTEST_RANDOM_SEED
+	run_specific_tests
+	run_gtest_make $compiler_name test
 }
 
 run_gtest_armclang() {
@@ -1010,7 +1013,7 @@ run_gtest_release() {
 	# - Unexpected RNDV test, to cover rkey handling in tag offload flow
 	#   (see GH #3827 for details)
 	env GTEST_FILTER=\*test_obj_size\*:\*test_ucp_tag_match.rndv_rts_unexp\* \
-		$AFFINITY $TIMEOUT make -C test/gtest test
+		$TIMEOUT make -C test/gtest test
 
 	unset OMP_NUM_THREADS
 	unset GTEST_SHARD_INDEX
@@ -1068,9 +1071,6 @@ set_ucx_common_test_env() {
 run_tests() {
 	export UCX_PROTO_REQUEST_RESET=y
 
-	# load cuda env only if GPU available for remaining tests
-	try_load_cuda_env
-
 	# all are running mpi tests
 	run_mpi_tests
 
@@ -1119,10 +1119,28 @@ run_asan_check() {
 	run_gtest "default"
 }
 
+run_valgrind_check() {
+	if [[ $(uname -m) =~ "aarch" ]] || [[ $(uname -m) =~ "ppc" ]]; then
+		echo "==== Skip valgrind tests on `uname -m` ===="
+		return
+	fi
+
+	# Load newer valgrind if native is older than 3.10
+	if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV; then
+		echo "load new valgrind"
+		module load tools/valgrind-3.12.0
+	fi
+
+	echo "==== Run valgrind tests ===="
+	build devel --enable-gtest
+	run_gtest_make "default" test_valgrind
+	module unload tools/valgrind-3.12.0
+}
+
 prepare
 try_load_cuda_env
 
-if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
+if [ "$RUN_TESTS" == "yes" ]
 then
     check_machine
     set_ucx_common_test_env
@@ -1131,6 +1149,8 @@ then
         run_test_proto_disable
     elif [[ "$ASAN_CHECK" == "yes" ]]; then
         run_asan_check
+    elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
+        run_valgrind_check
     else
         run_tests
     fi

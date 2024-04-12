@@ -113,8 +113,9 @@ ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
     }
 
     tl_bitmap = worker->context->tl_bitmap;
-    ucs_assert(UCS_BITMAP_GET(tl_bitmap, rsc_index));
-    return worker->ifaces[UCS_BITMAP_POPCOUNT_UPTO_INDEX(tl_bitmap, rsc_index)];
+    ucs_assert(UCS_STATIC_BITMAP_GET(tl_bitmap, rsc_index));
+    return worker->ifaces[UCS_STATIC_BITMAP_POPCOUNT_UPTO_INDEX(tl_bitmap,
+                                                                rsc_index)];
 }
 
 /**
@@ -262,5 +263,16 @@ ucp_worker_default_address_pack_flags(ucp_worker_h worker)
             _action; \
         } \
     }
+
+
+/**
+ * @return endpoint configuration by configuration index
+ */
+static inline ucp_ep_config_t
+*ucp_worker_ep_config(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
+{
+    ucs_assert(cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    return &ucs_array_elem(&worker->ep_config, cfg_index);
+}
 
 #endif

@@ -25,6 +25,8 @@ public:
 
     static const std::vector<ucs_memory_type_t>& supported_mem_types();
 
+    static bool is_mem_type_supported(ucs_memory_type_t mem_type);
+
     /* allocate buffer of a given memory type */
     static void *allocate(size_t size, ucs_memory_type_t mem_type);
 
@@ -87,6 +89,9 @@ public:
 
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
+
+    /* returns whether ROCM device supports hipMallocPitch */
+    static bool is_rocm_malloc_pitch_supported();
 
     /* Return free memory on the BAR1 / GPU. If GPU is not used
      * SIZE_MAX is returned */

@@ -12,11 +12,11 @@
 #include <uct/api/v2/uct_v2.h>
 extern "C" {
 #include <ucs/time/time.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/atomic.h>
-#include <ucs/sys/math.h>
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #endif
@@ -592,9 +592,8 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
     void *address;
     uct_mem_h memh;
 
-    for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
-        ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
-        if (!(md_attr().reg_mem_types & UCS_BIT(mem_type_id))) {
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        if (!(md_attr().reg_mem_types & UCS_BIT(mem_type))) {
             UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
                              << "registration is not supported by "
                              << GetParam().md_name;
@@ -634,17 +633,15 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
     ucs_status_t status;
     void *ptr;
 
-    for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
-        ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
-        if (!(md_attr().reg_mem_types & UCS_BIT(mem_type_id))) {
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        if (!(md_attr().reg_mem_types & UCS_BIT(mem_type))) {
             UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
                              << " registration is not supported by "
                              << GetParam().md_name;
             continue;
         }
         for (size_t size = 4 * UCS_KBYTE; size <= 4 * UCS_MBYTE; size *= 2) {
-            alloc_memory(&ptr, size, NULL,
-                         static_cast<ucs_memory_type_t>(mem_type_id));
+            alloc_memory(&ptr, size, NULL, mem_type);
 
             ucs_time_t start_time = ucs_get_time();
             ucs_time_t end_time = start_time;
@@ -1191,6 +1188,10 @@ UCS_TEST_P(test_cuda, sparse_regions)
     if (!(md_attr().cache_mem_types & md_attr().reg_mem_types &
           UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
         UCS_TEST_SKIP_R("not caching CUDA registration");
+    }
+
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
     }
 
     /* create contiguous CUDA registrations list */

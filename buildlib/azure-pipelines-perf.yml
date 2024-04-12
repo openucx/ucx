@@ -21,7 +21,7 @@ resources:
     type: github
     name: Mellanox-lab/PerfX
     endpoint: Mellanox-lab
-    ref: master
+    ref: refs/tags/v1.0.1
 
 stages:
   - stage: Prepare
@@ -36,10 +36,12 @@ stages:
           - checkout: self
             clean: true
             fetchDepth: 10
+            retryCountOnTaskFailure: 5
 
           - checkout: PerfX
             clean: true
             fetchDepth: 1
+            retryCountOnTaskFailure: 5
 
           - bash: |
               set -xeE

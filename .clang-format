@@ -67,7 +67,9 @@ SpaceBeforeParens: ControlStatementsExceptForEachMacros
 SpaceBeforeAssignmentOperators: true
 SpaceAfterCStyleCast: false
 SortIncludes: false
-ForEachMacros: ['_UCS_BITMAP_FOR_EACH_WORD',
+ForEachMacros: ['UCS_STATIC_BITMAP_FOR_EACH_BIT',
+                'UCS_DYNAMIC_BITMAP_FOR_EACH_BIT',
+                'UCS_STATIC_BITMAP_FOR_EACH_BIT',
                 'FOR_EACH_ENTITY',
                 'ucs_carray_for_each',
                 'kh_foreach',

@@ -23,7 +23,7 @@ class ucp_perf_test_runner {
 public:
     typedef uint8_t psn_t;
 
-    static const unsigned AM_ID     = 1;
+    static const unsigned AM_ID     = UCP_PERF_AM_ID;
     static const ucp_tag_t TAG      = 0x1337a880u;
     static const ucp_tag_t TAG_MASK = (FLAGS & UCX_PERF_TEST_FLAG_TAG_WILDCARD) ?
                                       0 : (ucp_tag_t)-1;
@@ -47,7 +47,11 @@ public:
 
         ucs_assert_always(m_max_outstanding > 0);
 
-        set_am_handler(am_data_handler, this, UCP_AM_FLAG_WHOLE_MSG);
+        set_am_handler(AM_ID, am_data_handler, this, UCP_AM_FLAG_WHOLE_MSG);
+        set_am_handler(UCP_PERF_DAEMON_AM_ID_SEND_CMPL,
+                       am_daemon_send_ack_handler, this, UCP_AM_FLAG_WHOLE_MSG);
+        set_am_handler(UCP_PERF_DAEMON_AM_ID_RECV_CMPL,
+                       am_daemon_recv_ack_handler, this, UCP_AM_FLAG_WHOLE_MSG);
 
         if (CMD == UCX_PERF_CMD_ADD) {
             m_atomic_op = UCP_ATOMIC_OP_ADD;
@@ -64,17 +68,20 @@ public:
 
     ~ucp_perf_test_runner()
     {
-        set_am_handler(NULL, this, 0);
+        set_am_handler(UCP_PERF_DAEMON_AM_ID_RECV_CMPL, NULL, NULL, 0);
+        set_am_handler(UCP_PERF_DAEMON_AM_ID_SEND_CMPL, NULL, NULL, 0);
+        set_am_handler(AM_ID, NULL, NULL, 0);
     }
 
-    void set_am_handler(ucp_am_recv_callback_t cb, void *arg, unsigned flags)
+    void set_am_handler(unsigned id, ucp_am_recv_callback_t cb, void *arg,
+                        unsigned flags)
     {
         if (CMD == UCX_PERF_CMD_AM) {
-            ucp_am_handler_param_t param;
+            ucp_am_handler_param_t param = {};
             param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
                                UCP_AM_HANDLER_PARAM_FIELD_CB |
                                UCP_AM_HANDLER_PARAM_FIELD_ARG;
-            param.id         = AM_ID;
+            param.id         = id;
             param.cb         = cb;
             param.arg        = arg;
 
@@ -326,6 +333,36 @@ public:
         return UCS_OK;
     }
 
+    static ucs_status_t
+    am_daemon_send_ack_handler(void *arg, const void *header,
+                               size_t header_length, void *data, size_t length,
+                               const ucp_am_recv_param_t *param)
+    {
+        ucp_perf_test_runner *test = (ucp_perf_test_runner*)arg;
+
+        ucs_assertv(length == 0ul, "length=%zu", length);
+        ucs_assert(!(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV));
+
+        test->send_completed();
+
+        return UCS_OK;
+    }
+
+    static ucs_status_t
+    am_daemon_recv_ack_handler(void *arg, const void *header,
+                               size_t header_length, void *data, size_t length,
+                               const ucp_am_recv_param_t *param)
+    {
+        ucp_perf_test_runner *test = (ucp_perf_test_runner*)arg;
+
+        ucs_assertv(length == 0ul, "length=%zu", length);
+        ucs_assert(!(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV));
+
+        test->recv_completed();
+
+        return UCS_OK;
+    }
+
     void UCS_F_ALWAYS_INLINE send_started()
     {
         ++m_sends_outstanding;
@@ -427,6 +464,28 @@ public:
         }
     }
 
+    UCS_F_ALWAYS_INLINE ucs_status_t send_daemon_req(void *buffer,
+                                                     unsigned length)
+    {
+        ucp_ep_h ep               = m_perf.ucp.ep;
+        ucp_request_param_t param = {
+            .op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS,
+            .flags        = UCP_AM_SEND_FLAG_EAGER
+        };
+        ucs_status_ptr_t req;
+
+        ucs_assertv(CMD == UCX_PERF_CMD_AM, "cmd %d", CMD);
+
+        req = ucp_am_send_nbx(ep, UCP_PERF_DAEMON_AM_ID_SEND_REQ, NULL, 0,
+                              &m_perf.ucp.daemon_req,
+                              sizeof(m_perf.ucp.daemon_req), &param);
+        if (UCS_PTR_IS_PTR(req)) {
+            ucp_request_free(req);
+        }
+
+        return UCS_PTR_STATUS(req);
+    }
+
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(ucp_ep_h ep, void *buffer, unsigned length, ucp_datatype_t datatype,
          psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false)
@@ -435,8 +494,14 @@ public:
                                                 &m_send_params;
         uint64_t value             = 0;
         void *request;
+        ucs_status_t status;
 
         wait_send_window(1);
+
+        if (m_perf.params.ucp.is_daemon_mode) {
+            status = send_daemon_req(buffer, length);
+            goto out;
+        }
 
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
@@ -493,8 +558,11 @@ public:
             ucp_request_release(request);
         }
 
+        status = UCS_OK;
+
+    out:
         send_started();
-        return UCS_OK;
+        return status;
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
