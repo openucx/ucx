@@ -234,7 +234,7 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 	*recvInfoPtr = recvInfo
 
 	if params != nil {
-		(&requestParams).SetMemType(params)
+		setMemType(params, &requestParams)
 
 		if params.Cb != nil {
 			cbId = register(params.Cb)
@@ -306,7 +306,7 @@ func (w *UcpWorker) RecvAmDataNonBlocking(dataDesc *UcpAmData, recvBuffer unsafe
 	*recvInfoPtr = &length
 
 	if params != nil {
-		(&requestParams).SetMemType(params)
+		setMemType(params, &requestParams)
 
 		if params.Cb != nil {
 			cbId = register(params.Cb)
