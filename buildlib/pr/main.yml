@@ -258,6 +258,15 @@ stages:
               long_test: $(long_test)
               test_static: $(test_static)
 
+  - stage: ucx_perftest_mad_rte
+    dependsOn: [Static_check]
+    displayName: ucx_perftest over MAD RTE
+    lockBehavior: sequential
+    variables:
+      - group: concurrency_lock
+    jobs:
+    - template: mad_tests.yml
+
   - stage: WireCompat
     dependsOn: [Static_check]
     jobs:
