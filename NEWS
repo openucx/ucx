@@ -11,35 +11,7 @@
 ### Features:
 ### Bugfixes:
 
-## 1.16.0-rc5 (April 02, 2024)
-### Features:
-#### UCS
-* Added support for PCIe gen5 bandwidth detection
-### Bugfixes:
-#### UCP
-* Fixed rndv_put transport selection for device to device scenario
-#### RDMA CORE (IB, ROCE, etc.)
-* Disabled MR multithreading registration
-
-## 1.16.0-rc4 (February 21, 2024)
-### Bugfixes:
-#### UCP
-* Disabled rendezvous pipeline protocol selection when using non-contiguous buffer
-#### RDMA CORE (IB, ROCE, etc.)
-* Fixed mlx5 WQE posting error due to compiler memory copy optimizations
-#### GPU (CUDA, ROCM)
-* Fixed cuda_ipc transport being disabled if a CUDA device is not set during initialization
-#### UCM
-* Fixed compilation error when building on PPC64
-#### Packaging
-* Fixed already existing target error when using cmake find_package(ucx) twice
-
-## 1.16.0-rc3 (February 20, 2024)
-### Bugfixes:
-#### UCP
-* Fixed crash in rendezvous protocol rkey pack after failed memory registration
-
-## 1.16.0-rc2 (January 21, 2024)
+## 1.16.0 (April 15, 2024)
 ### Features:
 #### UCP
 * Added tag offload rendezvous protocol in new infrastructure
@@ -86,6 +58,7 @@
 * Added support for VLAN over channel bonding interface
 * Added LRU cache and Usage Tracker datastructures
 * Improved cross-NUMA device detection
+* Added support for PCIe gen5 bandwidth detection
 #### Build
 * Added LCOV coverage report as a build option
 * Added binutils 2.40 library dependencies
@@ -125,6 +98,9 @@
 * Fixed memory corruption by proper memh handling in tag offload rendezvous
 * Changed default allocator to not use reserved huge pages
 * Fixed rndv put protocol to avoid early completion
+* Fixed rndv_put transport selection for device to device scenario
+* Disabled rendezvous pipeline protocol selection when using non-contiguous buffer
+* Fixed crash in rendezvous protocol rkey pack after failed memory registration
 #### RDMA CORE (IB, ROCE, etc.)
 * Fixed compilation failure when DevX is explicitly disabled 
 * Fixed crash when using PCIe relaxed ordering
@@ -133,6 +109,8 @@
 * Fixed assertion failure when configured with UCX_IB_ADDR_TYPE=ib_global
 * Fixed overwritten MD attribute capabilities when querying a device
 * Fixed ibv_reg_mr error by registering memory in rcache callback
+* Disabled MR multithreading registration
+* Fixed mlx5 WQE posting error due to compiler memory copy optimizations
 #### TCP
 * Fixed assymetric lanes selection issue due to inconsistent device listing 
 #### GPU (CUDA, ROCM)
@@ -140,6 +118,7 @@
 * Fixed values of D2H_THRESH and latencey params
 * Fixed Cuda memory support for iov datatype
 * Increased max number of agents in ROCm
+* Fixed cuda_ipc transport being disabled if a CUDA device is not set during initialization
 #### Shared Memoey
 * Fixed posix and cma transport selection by enhancing reachability checks
 * Fixed UGNI build failure
@@ -153,6 +132,7 @@
 * Fixed floating point division by zero during protocols initialization
 #### UCM
 * Fixed occasional crash in bisto hooks by adding a lock before hooking
+* Fixed compilation error when building on PPC64
 #### Java
 * Fixed go tests by setting CUDA device before allocating CUDA memory
 * Fixed perftest error detection and hanging issue
@@ -164,6 +144,8 @@
 * Fixed ROCm building and testing
 * Removed libnvidia-compute version dependency
 * Removed libibmad/libumad from default build configuration to avoid runtime dependency
+#### Packaging
+* Fixed already existing target error when using cmake find_package(ucx) twice
 
 ## 1.15.0 (September 28, 2023)
 ### Features:
