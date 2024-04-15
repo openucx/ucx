@@ -1565,12 +1565,20 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             }
 
             ucs_memory_type_for_each(mem_type) {
-                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
-                    continue;
-                }
-
                 if (md_attr->flags & UCT_MD_FLAG_REG) {
+                    if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+                        !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
+                        if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
+                            /* Keep map of MDs supporting blocking registration
+                             * if non-blocking registration is requested for the
+                             * given memory type. In some cases blocking
+                             * registration maybe required anyway (e.g. internal
+                             * staging buffers for rndv pipeline protocols). */
+                            context->reg_block_md_map[mem_type] |= UCS_BIT(md_index);
+                        }
+                        continue;
+                    }
+
                     if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
                     }
@@ -1696,6 +1704,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
     ucs_memory_type_for_each(mem_type) {
         context->reg_md_map[mem_type]           = 0;
+        context->reg_block_md_map[mem_type]     = 0;
         context->cache_md_map[mem_type]         = 0;
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
