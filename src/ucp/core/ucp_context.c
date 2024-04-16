@@ -471,8 +471,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
 
   {"REG_NONBLOCK_MEM_TYPES", "",
-   "Perform only non-blocking memory registration for these memory types:\n"
-   "page registration may be deferred until it is accessed by the CPU or a transport.",
+   "Perform only non-blocking memory registration for these memory types.\n"
+   "Non-blocking registration means that the page registration may be\n"
+   "deferred until it is accessed by the CPU or a transport.",
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
