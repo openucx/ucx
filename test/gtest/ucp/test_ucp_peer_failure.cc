@@ -645,6 +645,12 @@ protected:
 
         test_ucp_peer_failure::init();
 
+        if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY) ||
+            !support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            cleanup();
+            UCS_TEST_SKIP_R("rndv unsupported");
+        }
+
         receiver().connect(&sender(), get_ep_params());
         sender().connect(&receiver(), get_ep_params());
         set_am_handler(receiver());

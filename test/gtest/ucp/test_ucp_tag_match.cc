@@ -589,6 +589,16 @@ public:
             modify_config("MAX_RNDV_LANES", "3");
         }
         test_ucp_tag_match::init();
+
+        if (rndv_scheme() == RNDV_SCHEME_GET_ZCOPY &&
+            !support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+            UCS_TEST_SKIP_R("rndv get unsupported");
+        }
+
+        if (rndv_scheme() == RNDV_SCHEME_PUT_ZCOPY &&
+            !support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            UCS_TEST_SKIP_R("rndv get unsupported");
+        }
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {

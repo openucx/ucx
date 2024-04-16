@@ -74,6 +74,18 @@ public:
         modify_config("MAX_RNDV_LANES", num_lanes_str);
 
         test_ucp_tag::init();
+
+        if (get_variant_value() == VARIANT_RNDV_PUT_ZCOPY) {
+            if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+                cleanup();
+                UCS_TEST_SKIP_R("rndv put unsupported");
+            }
+        } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
+            if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+                cleanup();
+                UCS_TEST_SKIP_R("rndv get unsupported");
+            }
+        }
     }
 
     virtual void cleanup()
@@ -952,7 +964,7 @@ UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer,
 }
 
 UCP_TEST_TAG_RNDV_GENERIC(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv,
-                         "ZCOPY_THRESH=1248576") {
+                          "ZCOPY_THRESH=1248576") {
     test_run_xfer(true, false, false, true, false);
 }
 

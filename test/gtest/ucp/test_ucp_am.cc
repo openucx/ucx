@@ -1568,8 +1568,8 @@ public:
     virtual void init() override {
         test_ucp_am_nbx::init();
 
-        if (!supports_caps(UCT_IFACE_FLAG_GET_ZCOPY) &&
-            !supports_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY) &&
+            !support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
             ucp_test::cleanup();
             UCS_TEST_SKIP_R("rndv unsupported");
         }
@@ -1690,7 +1690,7 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
 {
-    if (!supports_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+    if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
         UCS_TEST_SKIP_R("rndv_get unsupported");
     }
 
@@ -1699,7 +1699,7 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
 {
-    if (!supports_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+    if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
         UCS_TEST_SKIP_R("rndv_put unsupported");
     }
 

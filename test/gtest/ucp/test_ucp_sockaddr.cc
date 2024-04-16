@@ -2729,6 +2729,9 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
            am_rndv_64k_recv_prereg_single_rndv_get_zcopy_lane, "RNDV_THRESH=0",
            "MAX_RNDV_LANES=1", "RNDV_SCHEME=get_zcopy")
 {
+    if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv get unsupported");
+    }
     /* The test checks that memory registration won't happen during RNDV GET
      * Zcopy if a memory buffer was preregistered */
     test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, false, true);
@@ -2738,6 +2741,9 @@ UCS_TEST_P(test_ucp_sockaddr_protocols,
            am_rndv_64k_recv_prereg_single_rndv_put_zcopy_lane, "RNDV_THRESH=0",
            "MAX_RNDV_LANES=1", "RNDV_SCHEME=put_zcopy")
 {
+    if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv put unsupported");
+    }
     /* The test checks that memory registration won't happen during RNDV GET
      * Zcopy if a memory buffer was preregistered */
     test_am_send_recv(64 * UCS_KBYTE, 0, 2 /* warmup + test */, true, false);
@@ -2749,6 +2755,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols,
                      "RNDV_THRESH=0", "MAX_RNDV_LANES=1",
                      "RNDV_SCHEME=put_zcopy", "PROTO_ENABLE=n")
 {
+    // if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+    //     UCS_TEST_SKIP_R("rndv put unsupported");
+    // }
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_short_reset,
@@ -3064,12 +3073,18 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp,
 UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_get_scheme,
            "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
 {
+    if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv get unsupported");
+    }
     test_tag_send_recv(64 * UCS_KBYTE, false, false);
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_put_scheme,
            "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy")
 {
+    if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv put unsupported");
+    }
     test_tag_send_recv(64 * UCS_KBYTE, false, false);
 }
 
@@ -3201,6 +3216,9 @@ private:
 UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender, tag_rndv_killed_sender,
            "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
 {
+    if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv get unsupported");
+    }
     do_tag_rndv_killed_sender_test(1);
 }
 
@@ -3208,6 +3226,9 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
            tag_rndv_killed_sender_4_extra_senders, "RNDV_THRESH=0",
            "RNDV_SCHEME=get_zcopy")
 {
+    if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv get unsupported");
+    }
     do_tag_rndv_killed_sender_test(5);
 }
 
@@ -3217,6 +3238,9 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 {
     size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
                                     ucs::test_time_multiplier());
+    if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv get unsupported");
+    }
     do_tag_rndv_killed_sender_test(1, 128, num_sends);
 }
 
@@ -3226,6 +3250,9 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 {
     size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
                                     ucs::test_time_multiplier());
+    if (!support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv get unsupported");
+    }
     do_tag_rndv_killed_sender_test(4, 128, num_sends);
 }
 

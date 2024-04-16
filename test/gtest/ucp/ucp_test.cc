@@ -462,13 +462,10 @@ int ucp_test::get_variant_thread_type() const {
     return GetParam().variant.thread_type;
 }
 
-bool ucp_test::supports_caps(uint64_t caps) const {
-    for (const auto &entity : entities()) {
-        if (!entity->has_lane_with_caps(caps)) {
-            return false;
-        }
-    }
-    return true;
+bool ucp_test::support_caps(uint64_t caps) const {
+    return std::all_of(
+            entities().begin(), entities().end(),
+            [caps] (const entity *e) { return e->has_lane_with_caps(caps); });
 }
 
 void ucp_test::add_variant_value(std::vector<ucp_test_variant_value>& values,

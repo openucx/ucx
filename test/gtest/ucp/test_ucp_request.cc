@@ -570,6 +570,10 @@ UCS_TEST_P(test_proto_reset, rndv_put, "RNDV_THRESH=0", "RNDV_SCHEME=put_zcopy",
            "RMA_ZCOPY_MAX_SEG_SIZE=1024")
 {
     skip_no_pending_rma();
+    if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv put unsupported");
+    }
+
     reset_protocol(TAG);
 }
 
