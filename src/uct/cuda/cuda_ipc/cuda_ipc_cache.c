@@ -376,6 +376,9 @@ ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcCloseMemHandle(
                     (CUdeviceptr)region->mapped_addr));
     } else {
+        /* Ideally we call cuMemFreeAsync on imported pointer region here but
+         * handles can be closed after device context has been destroyed which
+         * would cause cuMemFreeAsync to fail for a given stream */
         status = UCS_OK;
     }
 #else
@@ -633,6 +636,7 @@ UCS_STATIC_CLEANUP {
 #if HAVE_CUDA_FABRIC
     CUmemoryPool *mpool;
     kh_foreach_value(&uct_cuda_ipc_rem_mpool_cache.hash, mpool, {
+        cuMemPoolDestroy(*mpool);
         ucs_free(mpool);
     })
     kh_destroy_inplace(cuda_ipc_rem_mpool_cache, &uct_cuda_ipc_rem_mpool_cache.hash);
