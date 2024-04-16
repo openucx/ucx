@@ -883,7 +883,9 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
                          int access_mode, char *name)
 {
-    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    struct ibv_context *ibv_context = md->super.dev.ibv_context;
+    const ucs_log_level_t level     = silent ? UCS_LOG_LEVEL_DEBUG :
+                                               UCS_LOG_LEVEL_ERROR;
     ucs_status_t status;
     void *buf;
     int ret;
@@ -904,10 +906,12 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     }
 
     mem->size = size;
-    mem->mem  = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size,
-                                     access_mode);
+    mem->mem  = mlx5dv_devx_umem_reg(ibv_context, buf, size, access_mode);
     if (mem->mem == NULL) {
-        uct_ib_check_memlock_limit_msg(level, "mlx5dv_devx_umem_reg()");
+        uct_ib_check_memlock_limit_msg(
+                ibv_context, level,
+                "mlx5dv_devx_umem_reg(size=%zu access=0x%x)", size,
+                access_mode);
         status = UCS_ERR_NO_MEMORY;
         goto err_dofork;
     }

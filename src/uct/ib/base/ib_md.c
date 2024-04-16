@@ -1358,18 +1358,17 @@ void uct_ib_md_free(uct_ib_md_t *md)
 void uct_ib_md_ece_check(uct_ib_md_t *md)
 {
 #if HAVE_DECL_IBV_SET_ECE
-    uct_ib_device_t *dev = &md->dev;
-    struct ibv_pd *pd    = md->pd;
-    struct ibv_ece ece   = {};
+    struct ibv_context *ibv_context = md->dev.ibv_context;
+    struct ibv_pd *pd               = md->pd;
+    struct ibv_ece ece              = {};
     struct ibv_qp *dummy_qp;
     struct ibv_cq *cq;
     struct ibv_qp_init_attr qp_init_attr;
 
-    cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
+    cq = ibv_create_cq(ibv_context, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_cq()",
-                                       uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         return;
     }
 
@@ -1384,9 +1383,8 @@ void uct_ib_md_ece_check(uct_ib_md_t *md)
 
     dummy_qp = ibv_create_qp(pd, &qp_init_attr);
     if (dummy_qp == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_qp()",
-                                       uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_qp(RC)");
         goto free_cq;
     }
 

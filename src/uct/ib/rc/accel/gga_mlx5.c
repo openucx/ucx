@@ -222,8 +222,9 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
     }
 
     status = uct_ib_device_query_ports(&mlx5_md->super.dev,
-                                       UCT_IB_DEVICE_FLAG_MLX5_PRM, &tl_devices,
-                                       &num_tl_devices);
+                                       UCT_IB_DEVICE_FLAG_SRQ |
+                                       UCT_IB_DEVICE_FLAG_MLX5_PRM,
+                                       &tl_devices, &num_tl_devices);
     if (status != UCS_OK) {
         return status;
     }

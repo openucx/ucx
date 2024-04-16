@@ -50,7 +50,7 @@ void uct_ib_mlx5dv_dct_qp_init_attr(uct_ib_qp_init_attr_t *qp_attr,
 }
 
 ucs_status_t
-uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
+uct_ib_mlx5dv_qp_tmp_objs_create(struct ibv_pd *pd,
                                  uct_ib_mlx5dv_qp_tmp_objs_t *qp_tmp_objs,
                                  int silent)
 {
@@ -58,10 +58,9 @@ uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
     ucs_log_level_t level             = silent ? UCS_LOG_LEVEL_DEBUG :
                                                  UCS_LOG_LEVEL_ERROR;
 
-    qp_tmp_objs->cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
+    qp_tmp_objs->cq = ibv_create_cq(pd->context, 1, NULL, NULL, 0);
     if (qp_tmp_objs->cq == NULL) {
-        uct_ib_check_memlock_limit_msg(level, "%s: ibv_create_cq()",
-                                       uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(pd->context, level, "ibv_create_cq()");
         goto out;
     }
 
@@ -69,8 +68,7 @@ uct_ib_mlx5dv_qp_tmp_objs_create(uct_ib_device_t *dev, struct ibv_pd *pd,
     srq_attr.attr.max_wr  = 1;
     qp_tmp_objs->srq      = ibv_create_srq(pd, &srq_attr);
     if (qp_tmp_objs->srq == NULL) {
-        uct_ib_check_memlock_limit_msg(level, "%s: ibv_create_srq()",
-                                       uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(pd->context, level, "ibv_create_srq()");
         goto out_destroy_cq;
     }
 
