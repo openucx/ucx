@@ -301,14 +301,15 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_alloc_handle_t *alloc_handle)
 #endif
 }
 
-static ucs_status_t uct_cuda_copy_mem_alloc(uct_md_h md, size_t *length_p,
+static ucs_status_t uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p,
                                             void **address_p,
                                             ucs_memory_type_t mem_type,
                                             unsigned flags,
                                             const char *alloc_name,
                                             uct_mem_h *memh_p)
 {
-    ucs_status_t status;
+    uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
+    ucs_status_t status    = UCS_OK;
     uct_cuda_copy_alloc_handle_t *alloc_handle;
 
     if ((mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) &&
