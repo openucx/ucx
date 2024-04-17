@@ -463,9 +463,10 @@ int ucp_test::get_variant_thread_type() const {
 }
 
 bool ucp_test::support_caps(uint64_t caps) const {
-    return std::all_of(
-            entities().begin(), entities().end(),
-            [caps] (const entity *e) { return e->has_lane_with_caps(caps); });
+    auto has_caps = [caps] (const entity *e) {
+        return (e->ep() == NULL) || e->has_lane_with_caps(caps);
+    };
+    return std::all_of(entities().begin(), entities().end(), has_caps);
 }
 
 void ucp_test::add_variant_value(std::vector<ucp_test_variant_value>& values,
@@ -1171,10 +1172,15 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
     ucp_worker_h worker = this->worker();
     ucp_lane_index_t lane;
     uct_iface_attr_t *iface_attr;
+    ucp_rsc_index_t rsc_index;
 
-    for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; lane++) {
-        iface_attr = ucp_worker_iface_get_attr(worker,
-                                               ucp_ep_get_rsc_index(ep, lane));
+    for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; lane++) {\
+        rsc_index  = ucp_ep_get_rsc_index(ep, lane);
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (ucs_test_all_flags(iface_attr->cap.flags, caps)) {
             return true;
         }

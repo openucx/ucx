@@ -928,6 +928,11 @@ protected:
 
         listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
+        if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY) &&
+            !support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+            UCS_TEST_SKIP_R("rndv put unsupported");
+        }
+
         mem_buffer send_buffer(length, UCS_MEMORY_TYPE_HOST);
         send_buffer.pattern_fill(1, length);
         void *sreq = send(sender(), send_buffer.ptr(), length,
@@ -2755,9 +2760,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols,
                      "RNDV_THRESH=0", "MAX_RNDV_LANES=1",
                      "RNDV_SCHEME=put_zcopy", "PROTO_ENABLE=n")
 {
-    // if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
-    //     UCS_TEST_SKIP_R("rndv put unsupported");
-    // }
+    if (!support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        UCS_TEST_SKIP_R("rndv put unsupported");
+    }
     test_am_send_recv(64 * UCS_KBYTE, 0, 2, true, true);
 }
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_protocols, am_short_reset,

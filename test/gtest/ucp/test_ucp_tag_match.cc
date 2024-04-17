@@ -995,6 +995,19 @@ public:
         modify_config("RNDV_ALIGN_THRESH", "0");
         modify_config("RNDV_SCHEME", rndv_schemes[rndv_scheme()]);
         test_ucp_tag_match::init();
+
+        if (rndv_scheme() == RNDV_SCHEME_GET_ZCOPY &&
+            support_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+            return;
+        }
+
+        if (rndv_scheme() == RNDV_SCHEME_PUT_ZCOPY &&
+            support_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            return;
+        }
+
+        test_ucp_tag_match::cleanup();
+        UCS_TEST_SKIP_R("rndv caps unsupported");
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
