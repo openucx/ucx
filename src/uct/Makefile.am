@@ -20,6 +20,7 @@ nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \
 	api/uct_def.h \
 	api/uct.h \
+	api/v2/uct_v2.h \
 	api/version.h
 
 noinst_HEADERS = \
