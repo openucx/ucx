@@ -123,9 +123,8 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
-                                       "%s: mlx5dv_create_cq(cqe=%d)",
-                                       uct_ib_device_name(dev), cq_attr.cqe);
+        uct_ib_check_memlock_limit_msg(dev->ibv_context, UCS_LOG_LEVEL_ERROR,
+                                       "mlx5dv_create_cq(cqe=%d)", cq_attr.cqe);
         return UCS_ERR_IO_ERROR;
     }
 

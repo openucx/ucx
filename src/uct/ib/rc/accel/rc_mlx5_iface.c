@@ -323,7 +323,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_mlx5_md_t *md               = uct_ib_mlx5_iface_md(ib_iface);
     ucs_status_t status;
 #if HAVE_DEVX
-    uct_ib_device_t *dev               = &md->super.dev;
+    struct ibv_context *ibv_context    = md->super.dev.ibv_context;
     struct mlx5dv_qp_init_attr dv_attr = {};
     uint64_t cookie;
 
@@ -365,12 +365,11 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_common_fill_dv_qp_attr(iface, &attr->super.ibv, &dv_attr,
                                        UCS_BIT(UCT_IB_DIR_TX) |
                                        UCS_BIT(UCT_IB_DIR_RX));
-    qp->verbs.qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
+    qp->verbs.qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, ibv_context,
                                            &attr->super.ibv, &dv_attr);
     if (qp->verbs.qp == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
-                                       "%s: mlx5dv_create_qp("UCT_IB_IFACE_FMT")",
-                                       uct_ib_device_name(dev),
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_ERROR,
+                                       "mlx5dv_create_qp(" UCT_IB_IFACE_FMT ")",
                                        UCT_IB_IFACE_ARG(ib_iface));
         status = UCS_ERR_IO_ERROR;
         goto err;
@@ -1089,7 +1088,7 @@ uct_rc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
         return UCS_ERR_NO_DEVICE;
     }
 
-    flags = UCT_IB_DEVICE_FLAG_MLX5_PRM |
+    flags = UCT_IB_DEVICE_FLAG_SRQ | UCT_IB_DEVICE_FLAG_MLX5_PRM |
             (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB);
     return uct_ib_device_query_ports(&ib_md->dev, flags, tl_devices_p,
                                      num_tl_devices_p);

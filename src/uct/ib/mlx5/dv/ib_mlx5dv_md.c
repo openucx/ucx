@@ -1168,9 +1168,8 @@ uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_cq()",
-                                       ibv_get_device_name(ibv_device));
+        uct_ib_check_memlock_limit_msg(ctx, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         goto close_ctx;
     }
 
@@ -1900,6 +1899,7 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
     struct ibv_qp_init_attr qp_init_attr              = {};
     struct ibv_qp_attr qp_attr                        = {};
+    uct_ib_device_t *dev                              = &md->super.dev;
     uint8_t *counter_set_id;
     struct ibv_qp *dummy_qp;
     struct ibv_cq *dummy_cq;
@@ -1911,11 +1911,10 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
         return *counter_set_id;
     }
 
-    dummy_cq = ibv_create_cq(md->super.dev.ibv_context, 1, NULL, NULL, 0);
+    dummy_cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
     if (dummy_cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_cq()",
-                                       uct_ib_device_name(&md->super.dev));
+        uct_ib_check_memlock_limit_msg(dev->ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         goto err;
     }
 
@@ -1929,9 +1928,8 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
 
     dummy_qp = ibv_create_qp(md->super.pd, &qp_init_attr);
     if (dummy_qp == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_qp()",
-                                       uct_ib_device_name(&md->super.dev));
+        uct_ib_check_memlock_limit_msg(dev->ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_qp(RC)");
         goto err_free_cq;
     }
 
@@ -1943,8 +1941,7 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
                         IBV_QP_ACCESS_FLAGS);
     if (ret) {
         ucs_diag("failed to modify dummy QP 0x%x to INIT on %s:%d: %m",
-                 dummy_qp->qp_num, uct_ib_device_name(&md->super.dev),
-                 port_num);
+                 dummy_qp->qp_num, uct_ib_device_name(dev), port_num);
         goto err_destroy_qp;
     }
 
@@ -1955,7 +1952,7 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
     if (ret) {
         ucs_diag("mlx5dv_devx_qp_query(%s:%d, DUMMY_QP, QPN=0x%x) failed, "
                  "syndrome 0x%x: %m",
-                 uct_ib_device_name(&md->super.dev), port_num, dummy_qp->qp_num,
+                 uct_ib_device_name(dev), port_num, dummy_qp->qp_num,
                  UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
         goto err_destroy_qp;
     }
@@ -1965,8 +1962,8 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
     ibv_destroy_qp(dummy_qp);
     ibv_destroy_cq(dummy_cq);
 
-    ucs_debug("counter_set_id on %s:%d is 0x%x",
-              uct_ib_device_name(&md->super.dev), port_num, *counter_set_id);
+    ucs_debug("counter_set_id on %s:%d is 0x%x", uct_ib_device_name(dev),
+              port_num, *counter_set_id);
     return *counter_set_id;
 
 err_destroy_qp:
@@ -1975,8 +1972,8 @@ err_free_cq:
     ibv_destroy_cq(dummy_cq);
 err:
     *counter_set_id = 0;
-    ucs_debug("using zero counter_set_id on %s:%d",
-              uct_ib_device_name(&md->super.dev), port_num);
+    ucs_debug("using zero counter_set_id on %s:%d", uct_ib_device_name(dev),
+              port_num);
     return 0;
 }
 
@@ -2383,7 +2380,7 @@ static void uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
         goto out;
     }
 
-    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, pd, &qp_tmp_objs, 1);
+    status = uct_ib_mlx5dv_qp_tmp_objs_create(pd, &qp_tmp_objs, 1);
     if (status != UCS_OK) {
         goto out_dealloc_pd;
     }

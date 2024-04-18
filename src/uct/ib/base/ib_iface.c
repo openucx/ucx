@@ -1108,11 +1108,10 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
 #endif
     if (qp == NULL) {
         uct_ib_check_memlock_limit_msg(
-                UCS_LOG_LEVEL_ERROR,
-                "%s: iface %p failed to create %s QP "
+                dev->ibv_context, UCS_LOG_LEVEL_ERROR,
+                "iface %p failed to create %s QP "
                 "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
-                uct_ib_device_name(dev), iface,
-                uct_ib_qp_type_str(attr->qp_type), attr->cap.max_send_wr,
+                iface, uct_ib_qp_type_str(attr->qp_type), attr->cap.max_send_wr,
                 attr->cap.max_send_sge, attr->cap.max_inline_data,
                 attr->max_inl_cqe[UCT_IB_DIR_TX], attr->cap.max_recv_wr,
                 attr->cap.max_recv_sge, attr->max_inl_cqe[UCT_IB_DIR_RX]);
@@ -1138,25 +1137,25 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
+    struct ibv_context *ibv_context = uct_ib_iface_device(iface)->ibv_context;
+    unsigned cq_size                = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_EX
     struct ibv_cq_init_attr_ex cq_attr = {};
 
     uct_ib_fill_cq_attr(&cq_attr, init_attr, iface, preferred_cpu, cq_size);
 
-    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(dev->ibv_context, &cq_attr));
+    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(ibv_context, &cq_attr));
     if (!cq && ((errno == EOPNOTSUPP) || (errno == ENOSYS)))
 #endif
     {
         iface->config.max_inl_cqe[dir] = 0;
-        cq = ibv_create_cq(dev->ibv_context, cq_size, NULL, iface->comp_channel,
+        cq = ibv_create_cq(ibv_context, cq_size, NULL, iface->comp_channel,
                            preferred_cpu);
     }
 
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_ERROR,
                                        "ibv_create_cq(cqe=%d)", cq_size);
         return UCS_ERR_IO_ERROR;
     }
