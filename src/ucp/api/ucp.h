@@ -2892,7 +2892,7 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr);
  *                          The format of the string is: "<size>[,<type>]".
  *                          For example:
  *                           - "32768"   : allocate 32 kilobytes of host memory.
- *                           - "1m,cuda" : allocate 1 megabayte of cuda memory.
+ *                           - "1m,cuda" : allocate 1 megabyte of cuda memory.
  * @param [in] context      The context on which the memory is mapped.
  * @param [in] stream       Output stream on which to print the information.
  */
