@@ -76,11 +76,12 @@ static int uct_ep_flush_is_needed(const ucp_ep_h ep, ucp_lane_index_t lane)
     return (wiface == NULL) || (wiface->activate_count > 0);
 }
 
-static ucs_status_t ucp_request_uct_ep_flush(ucp_request_t *req)
+static ucs_status_t
+ucp_request_uct_ep_flush(ucp_request_t *req, ucp_lane_index_t lane)
 {
-    ucp_lane_index_t lane = req->send.lane;
-    ucp_ep_h ep           = req->send.ep;
-    uct_ep_h uct_ep       = ucp_ep_get_lane(ep, lane);
+    ucp_ep_h ep        = req->send.ep;
+    uct_ep_h uct_ep    = ucp_ep_get_lane(ep, lane);
+    unsigned uct_flags = req->send.flush.uct_flags;
     ucs_status_t status;
 
     if (!uct_ep_flush_is_needed(ep, lane)) {
@@ -88,10 +89,9 @@ static ucs_status_t ucp_request_uct_ep_flush(ucp_request_t *req)
         return UCS_OK;
     }
 
-    status = uct_ep_flush(uct_ep, req->send.flush.uct_flags,
-                          &req->send.state.uct_comp);
+    status = uct_ep_flush(uct_ep, uct_flags, &req->send.state.uct_comp);
     ucp_trace_req(req, "ep %p flush lane[%d]=%p flags 0x%x: %s", ep, lane,
-                  uct_ep, req->send.flush.uct_flags, ucs_status_string(status));
+                  uct_ep, uct_flags, ucs_status_string(status));
     return status;
 }
 
@@ -151,7 +151,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                                  UCS_STATUS_PTR(UCS_ERR_CANCELED));
         }
 
-        status = ucp_request_uct_ep_flush(req);
+        status = ucp_request_uct_ep_flush(req, lane);
         if (status == UCS_OK) {
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
         } else if (status == UCS_INPROGRESS) {
@@ -304,7 +304,7 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     ucs_assertv(lane != UCP_NULL_LANE, "ep=%p flush_req=%p lane=%d",
                 ep, req, lane);
 
-    status = ucp_request_uct_ep_flush(req);
+    status = ucp_request_uct_ep_flush(req, lane);
     if (status == UCS_OK) {
         ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
     } else if (status == UCS_INPROGRESS) {
