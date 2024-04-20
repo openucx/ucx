@@ -29,11 +29,12 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
     ucp_lane_index_t lane;
     ucs_status_t status;
 
-    num_lanes = ucp_proto_common_find_lanes(&params->super, params->lane_type,
-                                            params->tl_cap_flags, 1,
-                                            params->super.exclude_map, &lane);
+    num_lanes = ucp_proto_common_find_lanes_with_min_frag(
+            &params->super, params->lane_type, params->tl_cap_flags, 1,
+            params->super.exclude_map, &lane);
     if (num_lanes == 0) {
-        ucs_trace("no lanes for %s", params->super.super.proto_name);
+        ucs_trace("no lanes for %s",
+                  ucp_proto_id_field(params->super.super.proto_id, name));
         return UCS_ERR_NO_ELEM;
     }
 

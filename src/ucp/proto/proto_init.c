@@ -78,10 +78,8 @@ void ucp_proto_common_init_base_caps(
         const ucp_proto_common_init_params_t *params, ucp_proto_caps_t *caps,
         size_t min_length)
 {
-    caps->cfg_thresh   = params->cfg_thresh;
-    caps->cfg_priority = params->cfg_priority;
-    caps->min_length   = ucs_max(params->min_length, min_length);
-    caps->num_ranges   = 0;
+    caps->min_length = ucs_max(params->min_length, min_length);
+    caps->num_ranges = 0;
 }
 
 static int ucp_proto_perf_range_is_zero(const ucp_proto_perf_range_t *range)
