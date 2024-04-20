@@ -478,6 +478,14 @@ static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, st
     return UCS_OK;
 }
 
+static inline void uct_ib_destroy_cq(struct ibv_cq *cq, const char *desc)
+{
+    int ret = ibv_destroy_cq(cq);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_cq(%s) failed with error %d: %m", desc, ret);
+    }
+}
+
 void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event);
 
 #endif
