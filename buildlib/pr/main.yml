@@ -258,6 +258,15 @@ stages:
               long_test: $(long_test)
               test_static: $(test_static)
 
+  - stage: ucx_perftest_mad_rte
+    dependsOn: [Static_check]
+    displayName: ucx_perftest over MAD RTE
+    lockBehavior: sequential
+    variables:
+      - group: concurrency_lock
+    jobs:
+    - template: mad_tests.yml
+
   - stage: WireCompat
     dependsOn: [Static_check]
     jobs:
@@ -449,16 +458,6 @@ stages:
         container: ubuntu2204_ib
         asan_check: yes
 
-
-  - stage: Valgrind
-    dependsOn: [Static_check]
-    jobs:
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        valgrind_check: yes
 
 #  - stage: Cuda_compatible
 #    dependsOn: [Static_check]

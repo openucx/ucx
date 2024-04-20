@@ -502,11 +502,14 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     }
 
     ucs_for_each_bit(md_index, reg_md_map) {
-        ucs_assertv(context->reg_md_map[mem_type] & UCS_BIT(md_index),
-                    "mem_type=%s md[%d]=%s reg_md_map=0x%" PRIx64,
+        ucs_assertv((context->reg_md_map[mem_type] |
+                     context->reg_block_md_map[mem_type]) & UCS_BIT(md_index),
+                    "mem_type=%s md[%d]=%s reg_md_map=0x%" PRIx64
+                    " reg_block_md_map=0x%" PRIx64,
                     ucs_memory_type_names[mem_type], md_index,
                     context->tl_mds[md_index].rsc.md_name,
-                    context->reg_md_map[mem_type]);
+                    context->reg_md_map[mem_type],
+                    context->reg_block_md_map[mem_type]);
 
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
         if (dmabuf_md_map & UCS_BIT(md_index)) {
@@ -722,11 +725,18 @@ static ucs_status_t ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh,
                                           const char *alloc_name)
 {
     ucs_memory_type_t mem_type = memh->mem_type;
-    ucp_md_map_t reg_md_map    = context->reg_md_map[mem_type] & ~memh->md_map;
-    ucp_md_map_t cache_md_map  = context->cache_md_map[mem_type] & reg_md_map;
+    ucp_md_map_t reg_md_map    = context->reg_md_map[mem_type];
     void *address              = ucp_memh_address(memh);
     size_t length              = ucp_memh_length(memh);
+    ucp_md_map_t cache_md_map;
     ucs_status_t status;
+
+    if (uct_flags & UCT_MD_MEM_FLAG_LOCK) {
+        reg_md_map |= context->reg_block_md_map[mem_type];
+    }
+
+    reg_md_map  &= ~memh->md_map;
+    cache_md_map = context->cache_md_map[mem_type] & reg_md_map;
 
     if (context->rcache == NULL) {
         status = ucp_memh_register(context, memh, reg_md_map, uct_flags,
@@ -1280,8 +1290,8 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
     /* payload; need to get default flags from ucp_mem_map_params2uct_flags() */
     status = ucp_memh_alloc(context, NULL, frag_size * num_elems, mem_type,
-                            UCT_MD_MEM_ACCESS_RMA, ucs_mpool_name(mp),
-                            &chunk_hdr->memh);
+                            UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK,
+                            ucs_mpool_name(mp), &chunk_hdr->memh);
     if (status != UCS_OK) {
         return status;
     }

@@ -883,7 +883,9 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
                          int access_mode, char *name)
 {
-    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    struct ibv_context *ibv_context = md->super.dev.ibv_context;
+    const ucs_log_level_t level     = silent ? UCS_LOG_LEVEL_DEBUG :
+                                               UCS_LOG_LEVEL_ERROR;
     ucs_status_t status;
     void *buf;
     int ret;
@@ -904,10 +906,12 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     }
 
     mem->size = size;
-    mem->mem  = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size,
-                                     access_mode);
+    mem->mem  = mlx5dv_devx_umem_reg(ibv_context, buf, size, access_mode);
     if (mem->mem == NULL) {
-        uct_ib_check_memlock_limit_msg(level, "mlx5dv_devx_umem_reg()");
+        uct_ib_check_memlock_limit_msg(
+                ibv_context, level,
+                "mlx5dv_devx_umem_reg(size=%zu access=0x%x)", size,
+                access_mode);
         status = UCS_ERR_NO_MEMORY;
         goto err_dofork;
     }
@@ -986,6 +990,49 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
     return 0;
 }
 
+#endif
+
+/**
+ * DEVX MD API
+ */
+#if HAVE_DEVX
+void uct_ib_mlx5_devx_md_close(uct_md_h tl_md);
+
+ucs_status_t
+uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr);
+
+ucs_status_t
+uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
+         void **address_p, ucs_memory_type_t mem_type,
+                                  unsigned flags, const char *alloc_name,
+                                  uct_mem_h *memh_p);
+
+ucs_status_t
+uct_ib_mlx5_devx_device_mem_free(uct_md_h uct_md, uct_mem_h tl_memh);
+
+ucs_status_t
+uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
+                         const uct_md_mem_reg_params_t *params,
+                         uct_mem_h *memh_p);
+
+ucs_status_t
+uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
+                           const uct_md_mem_dereg_params_t *params);
+
+ucs_status_t
+uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md, const void *mkey_buffer,
+                            uct_md_mem_attach_params_t *params,
+                            uct_mem_h *memh_p);
+
+ucs_status_t
+uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                           void *address, size_t length,
+                           const uct_md_mkey_pack_params_t *params,
+                           void *mkey_buffer);
+
+ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
+                                      const uct_ib_md_config_t *md_config,
+                                      uct_ib_md_t **p_md);
 #endif
 
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);

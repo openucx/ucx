@@ -739,10 +739,10 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_mr(uct_ib_mlx5_md_t *md,
     }
 }
 
-static ucs_status_t uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md,
-                                                size_t length, unsigned flags,
-                                                size_t mr_size,
-                                                uct_ib_mlx5_devx_mem_t **memh_p)
+static ucs_status_t
+uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md, size_t length,
+                            unsigned flags, size_t mr_size,
+                            uct_ib_mlx5_devx_mem_t **memh_p)
 {
     uct_ib_mlx5_devx_mem_t *memh;
     uct_ib_mem_t *ib_memh;
@@ -763,7 +763,7 @@ static ucs_status_t uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
                          uct_mem_h *memh_p)
@@ -895,7 +895,7 @@ uct_ib_mlx5_devx_dereg_keys(uct_ib_mlx5_md_t *md, uct_ib_mlx5_devx_mem_t *memh)
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_mlx5_devx_mem_dereg(uct_md_h uct_md,
                            const uct_md_mem_dereg_params_t *params)
 {
@@ -1168,9 +1168,8 @@ uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_cq()",
-                                       ibv_get_device_name(ibv_device));
+        uct_ib_check_memlock_limit_msg(ctx, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         goto close_ctx;
     }
 
@@ -1337,7 +1336,7 @@ static int uct_ib_mlx5_check_uar(uct_ib_mlx5_md_t *md)
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
                                   void **address_p, ucs_memory_type_t mem_type,
                                   unsigned flags, const char *alloc_name,
@@ -1439,7 +1438,7 @@ err_free_memh:
 #endif
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_mlx5_devx_device_mem_free(uct_md_h uct_md, uct_mem_h tl_memh)
 {
 #if HAVE_IBV_DM
@@ -1522,9 +1521,9 @@ static void uct_ib_mlx5dv_check_dm_ksm_reg(uct_ib_mlx5_md_t *md)
 #endif
 }
 
-static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
-                                             const uct_ib_md_config_t *md_config,
-                                             uct_ib_md_t **p_md)
+ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
+                                      const uct_ib_md_config_t *md_config,
+                                      uct_ib_md_t **p_md)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
@@ -1860,7 +1859,7 @@ static void uct_ib_mlx5_devx_cleanup_flush_mr(uct_ib_mlx5_md_t *md)
     }
 }
 
-static void uct_ib_mlx5_devx_md_close(uct_md_h tl_md)
+void uct_ib_mlx5_devx_md_close(uct_md_h tl_md)
 {
     uct_ib_mlx5_md_t *md    = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     struct ibv_context *ctx = md->super.dev.ibv_context;
@@ -1900,6 +1899,7 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
     struct ibv_qp_init_attr qp_init_attr              = {};
     struct ibv_qp_attr qp_attr                        = {};
+    uct_ib_device_t *dev                              = &md->super.dev;
     uint8_t *counter_set_id;
     struct ibv_qp *dummy_qp;
     struct ibv_cq *dummy_cq;
@@ -1911,11 +1911,10 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
         return *counter_set_id;
     }
 
-    dummy_cq = ibv_create_cq(md->super.dev.ibv_context, 1, NULL, NULL, 0);
+    dummy_cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
     if (dummy_cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_cq()",
-                                       uct_ib_device_name(&md->super.dev));
+        uct_ib_check_memlock_limit_msg(dev->ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         goto err;
     }
 
@@ -1929,9 +1928,8 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
 
     dummy_qp = ibv_create_qp(md->super.pd, &qp_init_attr);
     if (dummy_qp == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_qp()",
-                                       uct_ib_device_name(&md->super.dev));
+        uct_ib_check_memlock_limit_msg(dev->ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_qp(RC)");
         goto err_free_cq;
     }
 
@@ -1943,8 +1941,7 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
                         IBV_QP_ACCESS_FLAGS);
     if (ret) {
         ucs_diag("failed to modify dummy QP 0x%x to INIT on %s:%d: %m",
-                 dummy_qp->qp_num, uct_ib_device_name(&md->super.dev),
-                 port_num);
+                 dummy_qp->qp_num, uct_ib_device_name(dev), port_num);
         goto err_destroy_qp;
     }
 
@@ -1955,7 +1952,7 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
     if (ret) {
         ucs_diag("mlx5dv_devx_qp_query(%s:%d, DUMMY_QP, QPN=0x%x) failed, "
                  "syndrome 0x%x: %m",
-                 uct_ib_device_name(&md->super.dev), port_num, dummy_qp->qp_num,
+                 uct_ib_device_name(dev), port_num, dummy_qp->qp_num,
                  UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
         goto err_destroy_qp;
     }
@@ -1965,8 +1962,8 @@ uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
     ibv_destroy_qp(dummy_qp);
     ibv_destroy_cq(dummy_cq);
 
-    ucs_debug("counter_set_id on %s:%d is 0x%x",
-              uct_ib_device_name(&md->super.dev), port_num, *counter_set_id);
+    ucs_debug("counter_set_id on %s:%d is 0x%x", uct_ib_device_name(dev),
+              port_num, *counter_set_id);
     return *counter_set_id;
 
 err_destroy_qp:
@@ -1975,8 +1972,8 @@ err_free_cq:
     ibv_destroy_cq(dummy_cq);
 err:
     *counter_set_id = 0;
-    ucs_debug("using zero counter_set_id on %s:%d",
-              uct_ib_device_name(&md->super.dev), port_num);
+    ucs_debug("using zero counter_set_id on %s:%d", uct_ib_device_name(dev),
+              port_num);
     return 0;
 }
 
@@ -2152,7 +2149,7 @@ uct_ib_mlx5_devx_mkey_pack_invalidate_param_check(unsigned flags)
                      UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO));
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                            void *address, size_t length,
                            const uct_md_mkey_pack_params_t *params,
@@ -2323,7 +2320,7 @@ err:
     return status;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
@@ -2383,7 +2380,7 @@ static void uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
         goto out;
     }
 
-    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, pd, &qp_tmp_objs, 1);
+    status = uct_ib_mlx5dv_qp_tmp_objs_create(pd, &qp_tmp_objs, 1);
     if (status != UCS_OK) {
         goto out_dealloc_pd;
     }

@@ -683,6 +683,14 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_UNREACHABLE;
     }
 
+    if (flags & UCT_IB_DEVICE_FLAG_SRQ) {
+        if (IBV_DEV_ATTR(dev, max_srq) == 0) {
+            ucs_trace("%s:%d does not support SRQ", uct_ib_device_name(dev),
+                      port_num);
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
+
     if (!uct_ib_device_is_port_ib(dev, port_num) && (flags & UCT_IB_DEVICE_FLAG_LINK_IB)) {
         ucs_debug("%s:%d is not IB link layer", uct_ib_device_name(dev),
                   port_num);

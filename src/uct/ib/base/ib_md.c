@@ -47,7 +47,7 @@ static const char *uct_ib_devx_objs[] = {
     NULL
 };
 
-static ucs_config_field_t uct_ib_md_config_table[] = {
+ucs_config_field_t uct_ib_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
@@ -187,7 +187,6 @@ extern uct_tl_t UCT_TL_NAME(rc_verbs);
 extern uct_tl_t UCT_TL_NAME(rc_mlx5);
 extern uct_tl_t UCT_TL_NAME(ud_verbs);
 extern uct_tl_t UCT_TL_NAME(ud_mlx5);
-extern uct_tl_t UCT_TL_NAME(gga_mlx5);
 
 static uct_tl_t *uct_ib_tls[] = {
 #ifdef HAVE_TL_DC
@@ -198,9 +197,6 @@ static uct_tl_t *uct_ib_tls[] = {
 #endif
 #if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
     &UCT_TL_NAME(rc_mlx5),
-#ifdef HAVE_DEVX
-    &UCT_TL_NAME(gga_mlx5),
-#endif
 #endif
 #ifdef HAVE_TL_UD
     &UCT_TL_NAME(ud_verbs),
@@ -737,9 +733,9 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
-                                       const void *rkey_buffer,
-                                       uct_rkey_t *rkey_p, void **handle_p)
+ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p)
 {
     uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
@@ -808,9 +804,9 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     return uct_ib_device_is_supported(device);
 }
 
-static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
-                                              uct_md_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p)
+ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
+                                       uct_md_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p)
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
     int num_resources = 0;
@@ -1022,14 +1018,91 @@ uct_ib_md_set_pci_bw(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
     md->pci_bw = md->dev.pci_bw;
 }
 
-ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
-                            const uct_md_config_t *uct_md_config, uct_md_h *md_p)
+static ucs_status_t uct_ib_component_md_open(struct ibv_device *ib_device,
+                                             const uct_ib_md_config_t *md_config,
+                                             const char *md_name,
+                                             struct uct_ib_md **md_p)
 {
-    const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
+    struct uct_ib_md *md;
+    ucs_status_t status;
+    size_t i;
+
+    UCS_STATIC_ASSERT(ucs_static_array_size(uct_ib_ops) > 0);
+
+    for (i = 0; i < ucs_static_array_size(uct_ib_ops); i++) {
+        status = uct_ib_ops[i]->ops->open(ib_device, md_config, &md);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            ucs_debug("%s: md open by '%s' failed, trying next", md_name,
+                      uct_ib_ops[i]->name);
+            continue;
+        } else if (status == UCS_OK) {
+            ucs_debug("%s: md open by '%s' is successful", md_name,
+                      uct_ib_ops[i]->name);
+            *md_p = md;
+            return UCS_OK;
+        } else {
+            return status;
+        }
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
+ucs_status_t
+uct_ib_get_device_by_name(struct ibv_device **ib_device_list, int num_devices,
+                          const char *md_name, struct ibv_device** ibv_device_p)
+{
+    int i;
+
+    for (i = 0; i < num_devices; ++i) {
+        if (!strcmp(ibv_get_device_name(ib_device_list[i]), md_name)) {
+            *ibv_device_p = ib_device_list[i];
+            return UCS_OK;
+        }
+    }
+
+    ucs_debug("IB device %s not found", md_name);
+    return UCS_ERR_NO_DEVICE;
+}
+
+ucs_status_t
+uct_ib_fork_init(const uct_ib_md_config_t *md_config, int *fork_init_p)
+{
+    int ret;
+
+    *fork_init_p = 0;
+
+    if (md_config->fork_init == UCS_NO) {
+        uct_ib_fork_warn_enable();
+        return UCS_OK;
+    }
+
+    ret = ibv_fork_init();
+    if (ret) {
+        if (md_config->fork_init == UCS_YES) {
+            ucs_error("ibv_fork_init() failed: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+
+        ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
+        uct_ib_fork_warn_enable();
+        return UCS_OK;
+    }
+
+    *fork_init_p = 1;
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_ib_md_open(uct_component_t *component, const char *md_name,
+               const uct_md_config_t *uct_md_config, uct_md_h *md_p)
+{
+    const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config,
+                                                         uct_ib_md_config_t);
     ucs_status_t status = UCS_ERR_UNSUPPORTED;
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
-    int i, num_devices, ret, fork_init = 0;
+    int num_devices, fork_init = 0;
 
     ucs_trace("opening IB device %s", md_name);
 
@@ -1049,60 +1122,29 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
         goto out;
     }
 
-    ib_device = NULL;
-    for (i = 0; i < num_devices; ++i) {
-        if (!strcmp(ibv_get_device_name(ib_device_list[i]), md_name)) {
-            ib_device = ib_device_list[i];
-            break;
-        }
-    }
-
-    if (ib_device == NULL) {
-        ucs_debug("IB device %s not found", md_name);
-        status = UCS_ERR_NO_DEVICE;
+    status = uct_ib_get_device_by_name(ib_device_list, num_devices, md_name,
+                                       &ib_device);
+    if (status != UCS_OK) {
         goto out_free_dev_list;
     }
 
-    if (md_config->fork_init != UCS_NO) {
-        ret = ibv_fork_init();
-        if (ret) {
-            if (md_config->fork_init == UCS_YES) {
-                ucs_error("ibv_fork_init() failed: %m");
-                status = UCS_ERR_IO_ERROR;
-                goto out_free_dev_list;
-            }
-            ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
-            uct_ib_fork_warn_enable();
-        } else {
-            fork_init = 1;
-        }
-    } else {
-        uct_ib_fork_warn_enable();
-    }
-
-    for (i = 0; i < ucs_static_array_size(uct_ib_ops); i++) {
-        status = uct_ib_ops[i]->ops->open(ib_device, md_config, &md);
-        if (status == UCS_OK) {
-            ucs_debug("%s: md open by '%s' is successful", md_name,
-                      uct_ib_ops[i]->name);
-            break;
-        } else if (status != UCS_ERR_UNSUPPORTED) {
-            goto out_free_dev_list;
-        }
-        ucs_debug("%s: md open by '%s' failed, trying next", md_name,
-                  uct_ib_ops[i]->name);
-    }
-
+    status = uct_ib_fork_init(md_config, &fork_init);
     if (status != UCS_OK) {
-        ucs_assert(status == UCS_ERR_UNSUPPORTED);
-        ucs_debug("Unsupported IB device %s", md_name);
+        goto out_free_dev_list;
+    }
+
+    status = uct_ib_component_md_open(ib_device, md_config, md_name, &md);
+    if (status != UCS_OK) {
+        if (status == UCS_ERR_UNSUPPORTED) {
+            ucs_debug("Unsupported IB device %s", md_name);
+        }
+
         goto out_free_dev_list;
     }
 
     /* cppcheck-suppress autoVariables */
     *md_p         = &md->super;
     md->fork_init = fork_init;
-    status        = UCS_OK;
 
 out_free_dev_list:
     ibv_free_device_list(ib_device_list);
@@ -1316,18 +1358,17 @@ void uct_ib_md_free(uct_ib_md_t *md)
 void uct_ib_md_ece_check(uct_ib_md_t *md)
 {
 #if HAVE_DECL_IBV_SET_ECE
-    uct_ib_device_t *dev = &md->dev;
-    struct ibv_pd *pd    = md->pd;
-    struct ibv_ece ece   = {};
+    struct ibv_context *ibv_context = md->dev.ibv_context;
+    struct ibv_pd *pd               = md->pd;
+    struct ibv_ece ece              = {};
     struct ibv_qp *dummy_qp;
     struct ibv_cq *cq;
     struct ibv_qp_init_attr qp_init_attr;
 
-    cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
+    cq = ibv_create_cq(ibv_context, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_cq()",
-                                       uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         return;
     }
 
@@ -1342,9 +1383,8 @@ void uct_ib_md_ece_check(uct_ib_md_t *md)
 
     dummy_qp = ibv_create_qp(pd, &qp_init_attr);
     if (dummy_qp == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG,
-                                       "%s: ibv_create_qp()",
-                                       uct_ib_device_name(dev));
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_qp(RC)");
         goto free_cq;
     }
 

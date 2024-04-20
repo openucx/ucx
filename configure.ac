@@ -10,7 +10,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 17) # Minor version. Increased for each release.
+define([ucx_ver_minor], 18) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
@@ -383,6 +383,7 @@ AC_CONFIG_FILES([
                  cmake/ucx-config-version.cmake
                  cmake/ucx-config.cmake
                  cmake/ucx-targets.cmake
+                 config/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
