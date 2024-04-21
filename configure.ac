@@ -394,7 +394,7 @@ AC_OUTPUT
 
 
 #
-# Print build condiguration
+# Print build configuration
 #
 AC_MSG_NOTICE([=========================================================])
 AS_IF([test "x$with_docs_only" = xyes],
