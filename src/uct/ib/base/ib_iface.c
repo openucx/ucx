@@ -1167,11 +1167,7 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
 void uct_ib_verbs_destroy_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir)
 {
-    int ret = ibv_destroy_cq(iface->cq[dir]);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_cq(%s) returned %d: %m",
-                 (dir == UCT_IB_DIR_RX) ? "RX" : "TX", ret);
-    }
+    uct_ib_destroy_cq(iface->cq[dir], (dir == UCT_IB_DIR_RX) ? "RX" : "TX");
 }
 
 static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)

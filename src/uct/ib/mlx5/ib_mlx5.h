@@ -247,22 +247,52 @@ typedef union {
 } uct_ib_mlx5_devx_mr_t;
 
 
+/* Data structure to hold the UMR MR (on the host) item in the mkey pool */
 typedef struct {
-    uct_ib_mem_t            super;
-    void                    *address;
-    struct mlx5dv_devx_obj  *atomic_dvmr;
-    struct mlx5dv_devx_obj  *indirect_dvmr;
-    struct mlx5dv_devx_umem *umem;
-    struct mlx5dv_devx_obj  *cross_mr;
-    struct mlx5dv_devx_obj  *smkey_mr;
-    struct mlx5dv_devx_obj  *dm_addr_dvmr;
+    ucs_list_link_t    super;
+    struct mlx5dv_mkey *mkey;
+} uct_ib_mlx5_devx_umr_mkey_t;
+
+
+#define UCT_IB_MLX5_UMR_MKEY_FMT "UMR mkey %p index 0x%x"
+#define UCT_IB_MLX5_UMR_MKEY_ARG(_umr) \
+    (_umr)->mkey, uct_ib_mlx5_mkey_index((_umr)->mkey->lkey)
+
+
+/* Data structure to hold the UMR mkey alias on the DPU item in the hash map */
+typedef struct {
+    struct mlx5dv_devx_obj *cross_mr;
+    uint32_t               lkey;
+} uct_ib_mlx5_devx_umr_alias_t;
+
+
+#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ALIAS_ARG(_umr_alias) \
+    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey)
+
+
+/* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
+/* Note the hash key here is: gvmi_id << 32 | mkey (both uint32_t) */
+KHASH_MAP_INIT_INT64(umr_mkey_map, uct_ib_mlx5_devx_umr_alias_t);
+
+
+typedef struct {
+    uct_ib_mem_t                super;
+    void                        *address;
+    struct mlx5dv_devx_obj      *atomic_dvmr;
+    struct mlx5dv_devx_obj      *indirect_dvmr;
+    struct mlx5dv_devx_umem     *umem;
+    struct mlx5dv_devx_obj      *cross_mr;
+    uct_ib_mlx5_devx_umr_mkey_t *exported_umr_mkey;
+    struct mlx5dv_devx_obj      *smkey_mr;
+    struct mlx5dv_devx_obj      *dm_addr_dvmr;
 #if HAVE_IBV_DM
-    struct ibv_dm           *dm;
+    struct ibv_dm               *dm;
 #endif
-    uint32_t                atomic_rkey;
-    uint32_t                indirect_rkey;
-    uint32_t                exported_lkey;
-    uct_ib_mlx5_devx_mr_t   mrs[];
+    uint32_t                    atomic_rkey;
+    uint32_t                    indirect_rkey;
+    uint32_t                    exported_lkey;
+    uct_ib_mlx5_devx_mr_t       mrs[];
 } uct_ib_mlx5_devx_mem_t;
 
 
@@ -302,6 +332,19 @@ typedef struct uct_ib_mlx5_mem_lru_entry {
 
 KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
 
+
+/**
+ * We increment mkey tag (8 LSB of the mkey) for each newly created mkey, in
+ * order to reduce the probability of reusing the same mkey value.
+ * This constant is the modulo for the mkey tag increment.
+ */
+#define UCT_IB_MLX5_MKEY_TAG_MAX    251
+
+/**
+ * Indicate that exported key is indirect UMR mkey.
+ */
+#define UCT_IB_MLX5_MKEY_TAG_UMR    UCT_IB_MLX5_MKEY_TAG_MAX
+
 #endif
 
 
@@ -330,6 +373,17 @@ typedef struct uct_ib_mlx5_md {
 
     /* Cached values of counter set id per port */
     uint8_t                  port_counter_set_ids[UCT_IB_DEV_MAX_PORTS];
+
+    struct {
+        /* CQ for indirect (UMR) mkeys */
+        struct ibv_cq         *cq;
+        /* QP for indirect (UMR) mkeys */
+        struct ibv_qp         *qp;
+        /* Indirect (UMR) mkey pool (on the host) */
+        ucs_list_link_t       mkey_pool;
+        /* Hash map of indirect mkey (from the host) to alias (on the DPU) */
+        khash_t(umr_mkey_map) *mkey_hash;
+    } umr;
 #endif
     struct {
         size_t dc;
@@ -878,6 +932,10 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
 void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t *cq);
 
+ucs_status_t
+uct_ib_mlx5_devx_allow_xgvmi_access(uct_ib_mlx5_md_t *md,
+                                    uint32_t exported_lkey, int silent);
+
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
@@ -1083,6 +1141,11 @@ static inline uct_ib_mlx5_md_t *uct_ib_mlx5_iface_md(uct_ib_iface_t *iface)
 static inline uint8_t uct_ib_mlx5_inl_cqe(size_t inl, size_t cqe_size)
 {
     return (inl > 0) ? (cqe_size / 2) : 0;
+}
+
+static inline const char *uct_ib_mlx5_dev_name(uct_ib_mlx5_md_t *md)
+{
+    return uct_ib_device_name(&md->super.dev);
 }
 
 #endif
