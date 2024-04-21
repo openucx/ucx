@@ -32,7 +32,6 @@ struct ibv_ravh {
 #  define UCT_DC_RNDV_HDR_LEN   0
 #endif
 
-#define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
 #define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 16
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
@@ -78,26 +77,20 @@ typedef enum {
 
 
 typedef enum {
-    /** Keepalive dci is created */
-    UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE                = UCS_BIT(0),
-
-    /** Enable full handshake for keepalive DCI */
-    UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE_FULL_HANDSHAKE = UCS_BIT(1),
-
     /** uidx is set to dci idx */
-    UCT_DC_MLX5_IFACE_FLAG_UIDX                     = UCS_BIT(2),
+    UCT_DC_MLX5_IFACE_FLAG_UIDX                     = UCS_BIT(0),
 
     /** Flow control endpoint is using a DCI in error state */
-    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3),
+    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(1),
 
     /** Enable full handshake for DCI */
-    UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE       = UCS_BIT(4),
+    UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE       = UCS_BIT(2),
 
     /** Enable full handshake for DCT */
-    UCT_DC_MLX5_IFACE_FLAG_DCT_FULL_HANDSHAKE       = UCS_BIT(5),
+    UCT_DC_MLX5_IFACE_FLAG_DCT_FULL_HANDSHAKE       = UCS_BIT(3),
 
     /** Disable PUT capability (RDMA_WRITE) */
-    UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT              = UCS_BIT(6)
+    UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT              = UCS_BIT(4)
 } uct_dc_mlx5_iface_flags_t;
 
 
@@ -333,8 +326,6 @@ struct uct_dc_mlx5_iface {
     /* iface flags, see uct_dc_mlx5_iface_flags_t */
     uint16_t                      flags;
 
-    uint8_t                       keepalive_dci;
-
     uct_ud_mlx5_iface_common_t    ud_common;
 };
 
@@ -366,8 +357,6 @@ void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci);
-
-ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
                                      uct_dc_mlx5_ep_t *ep,
@@ -422,9 +411,7 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
 {
-    return (iface->tx.ndci * iface->tx.num_dci_pools) +
-        ((iface->flags & UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE) ?
-         UCT_DC_MLX5_KEEPALIVE_NUM_DCIS : 0);
+    return iface->tx.ndci * iface->tx.num_dci_pools;
 }
 
 /* TODO:
@@ -504,12 +491,6 @@ uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci_index)
     ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci_index].txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
-}
-
-static UCS_F_ALWAYS_INLINE int
-uct_dc_mlx5_iface_is_dci_keepalive(uct_dc_mlx5_iface_t *iface, int dci_index)
-{
-    return dci_index == iface->keepalive_dci;
 }
 
 #endif
