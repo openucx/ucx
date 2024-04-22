@@ -20,6 +20,7 @@
 #include <ucm/api/ucm.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/cuda/base/cuda_iface.h>
 
 static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"", "", NULL,
@@ -107,13 +108,23 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     unsigned long d_ptr   = ((unsigned long)(char*)address);
+    int can_pin           = 0;
     ucs_log_level_t log_level;
     int ret;
+    ucs_status_t status;
 
     ucs_assert((address != NULL) && (length != 0));
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
+
+    status =
+        UCT_CUDADRV_FUNC_LOG_DEBUG(cuPointerGetAttribute(&can_pin,
+                    CU_POINTER_ATTRIBUTE_IS_LEGACY_CUDA_IPC_CAPABLE,
+                    (CUdeviceptr)address));
+    if ((status != UCS_OK) || (!can_pin)) {
+        goto err;
+    }
 
     ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mem_hndl->mh);
     if (ret) {
