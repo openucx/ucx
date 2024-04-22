@@ -98,6 +98,7 @@ uct_cuda_ipc_get_rem_mpool_cache(CUmemFabricHandle *fabric_handle,
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportFromShareableHandle(
                mpool, (void *)fabric_handle, CU_MEM_HANDLE_TYPE_FABRIC, 0));
         if (status != UCS_OK) {
+            ucs_free(mpool);
             goto err;
         }
         kh_val(&uct_cuda_ipc_rem_mpool_cache.hash, khiter) = mpool;
@@ -237,7 +238,7 @@ static ucs_status_t
 uct_cuda_ipc_open_memhandle_mempool(const uct_cuda_ipc_rkey_t *key,
                                     CUdeviceptr *mapped_addr)
 {
-    CUmemoryPool *imported_mpool = 0;
+    CUmemoryPool *imported_mpool = NULL;
     int key_present              = 0;
     CUmemAccessDesc access_desc  = {};
     CUdeviceptr dptr;
@@ -372,21 +373,19 @@ ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
                     (CUdeviceptr)region->mapped_addr, region->key.b_len));
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAddressFree(
                     (CUdeviceptr)region->mapped_addr, region->key.b_len));
-    } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcCloseMemHandle(
-                    (CUdeviceptr)region->mapped_addr));
-    } else {
+    } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
         /* Ideally we call cuMemFreeAsync on imported pointer region here but
          * handles can be closed after device context has been destroyed which
          * would cause cuMemFreeAsync to fail for a given stream */
         status = UCS_OK;
-    }
-#else
-     status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcCloseMemHandle(
-                 (CUdeviceptr)region->mapped_addr));
+    } else
 #endif
+    {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcCloseMemHandle(
+                    (CUdeviceptr)region->mapped_addr));
+    }
 
-     return status;
+    return status;
 }
 
 ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
