@@ -1835,7 +1835,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_dev_usage_count dev_count;
     ucp_wireup_select_bw_info_t bw_info;
     ucs_memory_type_t mem_type;
-    unsigned max_lanes, lanes_batch, lanes_batch_rem, lanes_batch_num;
+    unsigned max_lanes, lanes_batch;
     size_t added_lanes, added_lanes_prev;
     uint64_t md_reg_flag;
     ucp_tl_bitmap_t tl_bitmap, mem_type_tl_bitmap;
@@ -1916,10 +1916,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         max_lanes   = lanes_batch = context->config.ext.max_rndv_lanes;
     }
 
-    bw_info.max_lanes = lanes_batch;
-    lanes_batch_rem   = max_lanes % lanes_batch;
-    lanes_batch_num   = (max_lanes / lanes_batch) + (lanes_batch_rem ? 1 : 0);
-
     /* If error handling is requested we require memory invalidation
      * support to provide correct data integrity in case of error */
     if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
@@ -1982,11 +1978,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         /* Add lanes that can access the memory by short operations */
         added_lanes = 0;
 
-        while (lanes_batch_num--) {
-            added_lanes_prev = added_lanes;
-            if ((lanes_batch_num == 1) && lanes_batch_rem) {
-                bw_info.max_lanes = lanes_batch_rem;
-            }
+        while (max_lanes > 0) {
+            added_lanes_prev  = added_lanes;
+            bw_info.max_lanes = ucs_min(max_lanes, lanes_batch);
             UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
             ucs_memory_type_for_each(mem_type) {
                 UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, reg_mem_types,
@@ -2006,6 +2000,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
             if (added_lanes == added_lanes_prev) {
                 break;
             }
+            max_lanes -= bw_info.max_lanes;
         }
 
         if (added_lanes /* There are selected lanes */ ||
