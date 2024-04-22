@@ -1518,7 +1518,8 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
     /* Calculate max BW of existing lanes of the corresponding mem type */
     for (lane_desc = select_ctx->lane_descs;
      lane_desc < select_ctx->lane_descs + select_ctx->num_lanes; ++lane_desc) {
-        if (lane_desc->rsc_index != UCP_NULL_RESOURCE) {
+        if ((lane_desc->rsc_index != UCP_NULL_RESOURCE) &&
+            (lane_desc->lane_types & UCS_BIT(lane_type))) {
             md_index = context->tl_rscs[lane_desc->rsc_index].md_index;
             md_attr  = &context->tl_mds[md_index].attr;
             if (md_attr->reg_mem_types & lane_reg_mem_types) {
