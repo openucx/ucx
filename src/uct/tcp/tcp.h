@@ -400,6 +400,7 @@ typedef struct uct_tcp_iface {
         struct sockaddr_storage   ifaddr;            /* Network address */
         struct sockaddr_storage   netmask;           /* Network address mask */
         size_t                    sockaddr_len;      /* Network address length */
+        ucs_ternary_auto_value_t  ep_bind_src_addr;  /* Bind EP's FD to ifaddr */
         int                       prefer_default;    /* Prefer default gateway */
         int                       put_enable;        /* Enable PUT Zcopy operation support */
         int                       conn_nb;           /* Use non-blocking connect() */
@@ -457,6 +458,7 @@ typedef struct uct_tcp_iface_config {
         unsigned long              cnt;
         ucs_time_t                 intvl;
     } keepalive;
+    ucs_ternary_auto_value_t       ep_bind_src_addr;
 } uct_tcp_iface_config_t;
 
 
