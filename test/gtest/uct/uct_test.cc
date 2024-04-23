@@ -837,9 +837,9 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
                            uct_worker_create, &m_async.m_async,
                            UCS_THREAD_MODE_SINGLE);
 
-    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
-                           resource.component, resource.md_name.c_str(),
-                           md_config);
+    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_md_h, m_md, uct_md_close,
+                                        uct_md_open, resource.component,
+                                        resource.md_name.c_str(), md_config);
 
     m_md_attr.field_mask = UINT64_MAX;
     status               = uct_md_query_v2(m_md, &m_md_attr);
