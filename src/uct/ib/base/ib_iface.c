@@ -205,10 +205,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Reverse Service level. 'auto' will set the same value of sl\n",
    ucs_offsetof(uct_ib_iface_config_t, reverse_sl), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"SEND_OVERHEAD", UCS_VALUE_AUTO_STR,
+  {"SEND_OVERHEAD", UCT_IB_SEND_OVERHEAD_VALUE(0),
    "Estimated overhead of preparing a work request, posting it to the NIC,\n"
    "and finalizing an operation",
-   0, UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME_UNITS,
+   0, UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
     {"bcopy", "estimated overhead of allocating a tx buffer",
      ucs_offsetof(uct_ib_iface_config_t, send_overhead.bcopy)},
     {"cqe", "estimated overhead of processing a work request completion",
@@ -1766,47 +1766,27 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
     uct_ep_operation_t op    = UCT_ATTR_VALUE(PERF, perf_attr, operation,
                                               OPERATION, UCT_EP_OP_LAST);
-    const double wqe_fetch   = 350e-9;
-    double send_pre_overhead, send_pre_overhead_bcopy, send_post_overhead;
-    double send_post_overhead_zcopy;
+    const uct_ib_iface_send_overhead_t *send_overhead =
+            &ib_iface->config.send_overhead;
     uct_iface_attr_t iface_attr;
     ucs_status_t status;
-    uct_ib_iface_send_overhead_t *send_overhead;
 
     status = uct_iface_query(iface, &iface_attr);
     if (status != UCS_OK) {
         return status;
     }
 
-    switch (ucs_arch_get_cpu_vendor()) {
-    case UCS_CPU_VENDOR_FUJITSU_ARM:
-        send_pre_overhead        = 100e-9;
-        send_post_overhead       = 400e-9;
-        send_post_overhead_zcopy = 50e-9;
-        break;
-    default:
-        send_pre_overhead        = iface_attr.overhead;
-        send_post_overhead       = 40e-9;
-        send_post_overhead_zcopy = 20e-9;
-    }
-    send_pre_overhead_bcopy = 5e-9;
-    send_overhead           = &ib_iface->config.send_overhead;
-
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
-        perf_attr->send_pre_overhead = ucs_time_units_to_sec(
-                send_overhead->wqe_post, send_pre_overhead);
+        perf_attr->send_pre_overhead = send_overhead->wqe_post;
         if (uct_ep_op_is_bcopy(op)) {
-            perf_attr->send_pre_overhead += ucs_time_units_to_sec(
-                    send_overhead->bcopy, send_pre_overhead_bcopy);
+            perf_attr->send_pre_overhead += send_overhead->bcopy;
         }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
-        perf_attr->send_post_overhead =
-                ucs_time_units_to_sec(send_overhead->db, send_post_overhead);
+        perf_attr->send_post_overhead = send_overhead->db;
         if (uct_ep_op_is_zcopy(op)) {
-            perf_attr->send_post_overhead += ucs_time_units_to_sec(
-                    send_overhead->cqe, send_post_overhead_zcopy);
+            perf_attr->send_post_overhead += send_overhead->cqe;
         }
     }
 
@@ -1821,8 +1801,7 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         perf_attr->latency = iface_attr.latency;
         if (uct_ep_op_is_bcopy(op) || uct_ep_op_is_zcopy(op)) {
-            perf_attr->latency.c +=
-                    ucs_time_units_to_sec(send_overhead->wqe_fetch, wqe_fetch);
+            perf_attr->latency.c += send_overhead->wqe_fetch;
         }
     }
 
