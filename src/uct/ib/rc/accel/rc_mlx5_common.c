@@ -1194,3 +1194,35 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
 
     return nfreed;
 }
+
+void uct_rc_mlx5_iface_common_qp_cleanup(
+        uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *cleanup_ctx)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
+            cleanup_ctx->super.iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
+                                          uct_ib_mlx5_md_t);
+
+#if !HAVE_DECL_MLX5DV_INIT_OBJ
+    iface->super.rx.srq.available += uct_rc_mlx5_iface_commom_clean(
+            &iface->cq[UCT_IB_DIR_RX], &iface->rx.srq, cleanup_ctx->qp.qp_num);
+    uct_rc_mlx5_iface_common_update_cqs_ci(iface, &iface->super.super);
+#endif
+
+    uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->qp);
+    uct_ib_mlx5_qp_mmio_cleanup(&cleanup_ctx->qp, cleanup_ctx->reg);
+}
+
+ucs_status_t
+uct_rc_mlx5_iface_common_create_qp(uct_rc_mlx5_iface_common_t *iface,
+                                   uct_ib_mlx5_txwq_t *wq,
+                                   uct_ib_mlx5_qp_attr_t *attr)
+{
+    ucs_status_t status;
+
+    /* Need to create QP before super constructor to get QP number */
+    uct_rc_mlx5_iface_fill_attr(iface, attr, iface->super.config.tx_qp_len,
+                                &iface->rx.srq);
+    status = uct_rc_mlx5_iface_create_qp(iface, &wq->super, wq, attr);
+    return status;
+}

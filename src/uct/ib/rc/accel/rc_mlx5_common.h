@@ -340,6 +340,17 @@ typedef union uct_rc_mlx5_dm_copy_data {
 KHASH_INIT(uct_rc_mlx5_tag_addrs, void*, char, 0, uct_rc_mlx5_tag_addr_hash,
            kh_int64_hash_equal)
 
+
+/**
+ * RC MLX5 EP common cleanup context
+ */
+typedef struct {
+    uct_rc_iface_qp_cleanup_ctx_t super; /* Base class */
+    uct_ib_mlx5_qp_t              qp;    /* Main QP */
+    uct_ib_mlx5_mmio_reg_t        *reg;  /* Doorbell register */
+} uct_rc_mlx5_iface_common_qp_cleanup_ctx_t;
+
+
 typedef struct uct_rc_mlx5_iface_common {
     uct_rc_iface_t                     super;
     struct {
@@ -746,5 +757,13 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                  const uct_rc_iface_common_config_t *rc_config);
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq);
+
+void uct_rc_mlx5_iface_common_qp_cleanup(
+        uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *cleanup_ctx);
+
+ucs_status_t
+uct_rc_mlx5_iface_common_create_qp(uct_rc_mlx5_iface_common_t *iface,
+                                   uct_ib_mlx5_txwq_t *wq,
+                                   uct_ib_mlx5_qp_attr_t *attr);
 
 #endif

@@ -709,9 +709,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     }
 
     /* Create mempool for pending requests */
-    ucs_assert(init_attr->fc_req_size >= sizeof(uct_rc_pending_req_t));
     ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = init_attr->fc_req_size;
+    mp_params.elem_size       = ucs_max(init_attr->fc_req_size,
+                                        sizeof(uct_rc_pending_req_t));
     mp_params.alignment       = 1;
     mp_params.elems_per_chunk = 128;
     mp_params.ops             = &uct_rc_pending_mpool_ops;

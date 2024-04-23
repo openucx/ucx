@@ -302,7 +302,7 @@ out:
     uct_rc_iface_arbiter_dispatch(iface);
 }
 
-static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
 
@@ -594,7 +594,7 @@ out_mp_disabled:
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
                           const uct_rc_iface_common_config_t *rc_config)
 {
@@ -646,7 +646,7 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
     return UCS_OK;
 }
 
-static void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
+void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md              = ucs_derived_of(rc_iface->super.super.md,
@@ -660,18 +660,12 @@ uct_rc_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
 {
     uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx =
             ucs_derived_of(rc_cleanup_ctx, uct_rc_mlx5_iface_qp_cleanup_ctx_t);
+#if IBV_HW_TM
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
-            cleanup_ctx->super.iface, uct_rc_mlx5_iface_common_t);
+            cleanup_ctx->super.super.iface, uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
                                           uct_ib_mlx5_md_t);
 
-#if !HAVE_DECL_MLX5DV_INIT_OBJ
-    iface->super.rx.srq.available += uct_rc_mlx5_iface_commom_clean(
-            &iface->cq[UCT_IB_DIR_RX], &iface->rx.srq, cleanup_ctx->qp.qp_num);
-    uct_rc_mlx5_iface_common_update_cqs_ci(iface, &iface->super.super);
-#endif
-
-#if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->tm_qp);
         /* Using uct_ib_mlx5_iface_put_res_domain and not
@@ -681,8 +675,7 @@ uct_rc_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
     }
 #endif
 
-    uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->qp);
-    uct_ib_mlx5_qp_mmio_cleanup(&cleanup_ctx->qp, cleanup_ctx->reg);
+    uct_rc_mlx5_iface_common_qp_cleanup(&cleanup_ctx->super);
 }
 
 static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)

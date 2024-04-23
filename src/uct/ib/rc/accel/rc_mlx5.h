@@ -56,10 +56,8 @@ typedef struct uct_rc_mlx5_ep {
  * RC MLX5 EP cleanup context
  */
 typedef struct {
-    uct_rc_iface_qp_cleanup_ctx_t super; /* Base class */
-    uct_ib_mlx5_qp_t              qp; /* Main QP */
-    uct_ib_mlx5_qp_t              tm_qp; /* TM Rendezvous QP */
-    uct_ib_mlx5_mmio_reg_t        *reg; /* Doorbell register */
+    uct_rc_mlx5_iface_common_qp_cleanup_ctx_t   super; /* Base class */
+    uct_ib_mlx5_qp_t                            tm_qp; /* TM Rendezvous QP */
 } uct_rc_mlx5_iface_qp_cleanup_ctx_t;
 
 
@@ -82,6 +80,10 @@ typedef struct uct_rc_mlx5_ep_ext_address {
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
+
+UCS_CLASS_DECLARE(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_base_ep_t, uct_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_base_ep_t, uct_ep_t);
 
 struct mlx5_cqe64 *
 uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
@@ -229,5 +231,16 @@ unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
 
 ucs_status_t uct_rc_mlx5_iface_arm(uct_iface_h tl_iface, unsigned events);
+
+ucs_status_t
+uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
+                          const uct_rc_iface_common_config_t *rc_config);
+
+void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface);
+
+void uct_rc_mlx5_base_ep_cleanup(uct_rc_mlx5_base_ep_t *ep,
+                                 uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *ctx);
 
 #endif
