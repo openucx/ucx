@@ -1833,7 +1833,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         UCP_RNDV_MODE_GET_ZCOPY,
         UCP_RNDV_MODE_PUT_ZCOPY
     };
-    ucp_wireup_dev_usage_count dev_count;
+    ucp_wireup_dev_usage_count dev_count[UCS_MEMORY_TYPE_LAST];
     ucp_wireup_select_bw_info_t bw_info;
     ucs_memory_type_t mem_type;
     unsigned max_lanes, lanes_batch;
@@ -1875,8 +1875,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
     }
 
-    bw_info.md_map            = 0;
-    bw_info.criteria.arg      = &dev_count;
+    bw_info.md_map = 0;
 
     /* check rkey_ptr */
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
@@ -1894,6 +1893,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.criteria.title             = "obtain remote memory pointer";
         bw_info.criteria.local_cmpt_flags |= UCT_COMPONENT_FLAG_RKEY_PTR;
         bw_info.criteria.lane_type         = UCP_LANE_TYPE_RKEY_PTR;
+        bw_info.criteria.arg               = &dev_count[0];
         bw_info.max_lanes                  = 1;
 
         UCP_CONTEXT_MEM_CAP_TLS(context, UCS_MEMORY_TYPE_HOST, access_mem_types,
@@ -1988,6 +1988,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                         mem_type_tl_bitmap);
 
                 bw_info.criteria.reg_mem_types = UCS_BIT(mem_type);
+                bw_info.criteria.arg           = &dev_count[mem_type];
                 added_lanes                   += ucp_wireup_add_bw_lanes(
                                                    select_params, &bw_info,
                                                    UCP_TL_BITMAP_AND_NOT(
@@ -2002,6 +2003,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                 break;
             }
             max_lanes -= bw_info.max_lanes;
+            /* exclude am_lane in the first iteration only */
+            am_lane    = UCP_NULL_LANE;
         }
 
         if (added_lanes /* There are selected lanes */ ||
