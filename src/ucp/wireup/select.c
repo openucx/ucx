@@ -1889,7 +1889,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
          * Allow selecting additional lanes in case the remote memory will not be
          * registered with this memory domain, i.e with GPU memory.
          */
-        memset(&dev_count, 0, sizeof(dev_count));
+        memset(dev_count, 0, sizeof(dev_count));
         bw_info.local_dev_bitmap           = UINT64_MAX;
         bw_info.remote_dev_bitmap          = UINT64_MAX;
         bw_info.criteria.title             = "obtain remote memory pointer";
@@ -1905,7 +1905,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                 UCP_NULL_LANE, select_ctx, 0);
     }
 
-    memset(&dev_count, 0, sizeof(dev_count));
+    memset(dev_count, 0, sizeof(dev_count));
     bw_info.local_dev_bitmap          = UINT64_MAX;
     bw_info.remote_dev_bitmap         = UINT64_MAX;
     bw_info.criteria.title            = "high-bw remote memory access";
