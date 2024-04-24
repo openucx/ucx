@@ -174,7 +174,7 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
     req->send.proto_stage = proto_stage;
 
     /* Set pointer to progress function */
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+    if (req->send.ep->worker->context->config.progress_wrapper_enabled) {
         req->send.uct.func = ucp_request_progress_wrapper;
     } else {
         req->send.uct.func = proto->progress[proto_stage];

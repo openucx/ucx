@@ -22,6 +22,7 @@
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_common.h>
+#include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
@@ -2359,13 +2360,14 @@ ucp_ep_config_max_short(ucp_context_t *context, uct_iface_attr_t *iface_attr,
 {
     ssize_t cfg_max_short;
 
-    if (!(iface_attr->cap.flags & short_flag)) {
+    if (!(iface_attr->cap.flags & short_flag) ||
+        context->config.progress_wrapper_enabled) {
         return -1;
     }
 
     cfg_max_short = max_short - hdr_len;
 
-    if ((context->config.ext.zcopy_thresh != UCS_MEMUNITS_AUTO)) {
+    if (context->config.ext.zcopy_thresh != UCS_MEMUNITS_AUTO) {
         /* Adjust max_short if zcopy_thresh is set externally */
         ucp_ep_config_adjust_max_short(&cfg_max_short, zcopy_thresh);
     }
