@@ -175,7 +175,7 @@ UCS_TEST_P(test_dc, dcs_single) {
     /* dci 0 must be assigned to the ep */
     EXPECT_EQ(ucs_array_elem(&iface->tx.dci_pool[0].stack, 0), ep->dci);
     EXPECT_EQ(1, iface->tx.dci_pool[0].stack_top);
-    EXPECT_EQ(ep, iface->tx.dcis[ep->dci].ep);
+    EXPECT_EQ(ep, ucs_array_elem(&iface->tx.dcis, ep->dci).ep);
 
     flush();
 
@@ -205,7 +205,7 @@ UCS_TEST_P(test_dc, dcs_multi) {
         /* dci on free LIFO must be assigned to the ep */
         EXPECT_EQ(ucs_array_elem(&iface->tx.dci_pool[0].stack, i), ep->dci);
         EXPECT_EQ(i+1, iface->tx.dci_pool[0].stack_top);
-        EXPECT_EQ(ep, iface->tx.dcis[ep->dci].ep);
+        EXPECT_EQ(ep, ucs_array_elem(&iface->tx.dcis, ep->dci).ep);
     }
 
     /* this should fail because there are no free dci */
@@ -244,7 +244,7 @@ UCS_TEST_P(test_dc, dcs_ep_destroy) {
     /* dci 0 must be assigned to the ep */
     EXPECT_EQ(ucs_array_elem(&iface->tx.dci_pool[0].stack, 0), ep->dci);
     EXPECT_EQ(1, iface->tx.dci_pool[0].stack_top);
-    EXPECT_EQ(ep, iface->tx.dcis[ep->dci].ep);
+    EXPECT_EQ(ep, ucs_array_elem(&iface->tx.dcis, ep->dci).ep);
 
     m_e1->destroy_eps();
     EXPECT_EQ(1, iface->tx.dci_pool[0].stack_top);
@@ -272,7 +272,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_destroy) {
 
     EXPECT_EQ(ucs_array_elem(&iface->tx.dci_pool[0].stack, 0), ep->dci);
     EXPECT_EQ(1, iface->tx.dci_pool[0].stack_top);
-    EXPECT_EQ(ep, iface->tx.dcis[ep->dci].ep);
+    EXPECT_EQ(ep, ucs_array_elem(&iface->tx.dcis, ep->dci).ep);
 
     comp.uct_comp.count  = 1;
     comp.uct_comp.func   = uct_comp_cb;
@@ -297,7 +297,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending, "DC_NUM_DCI=1") {
     iface = dc_iface(m_e1);
 
     /* shorten test time by reducing dci QP resources */
-    iface->tx.dcis[0].txqp.available = 8;
+    ucs_array_elem(&iface->tx.dcis, 0).txqp.available = 8;
     do {
         status = uct_ep_am_short(m_e1->ep(1), 0, 0, NULL, 0);
     } while (status == UCS_OK);
@@ -346,7 +346,7 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending, "DC_NUM_DCI=1") {
 
     iface = dc_iface(m_e1);
     ep    = dc_ep(m_e1, 0);
-    iface->tx.dcis[0].txqp.available = 8;
+    ucs_array_elem(&iface->tx.dcis, 0).txqp.available = 8;
 
     do {
         status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
@@ -417,14 +417,15 @@ UCS_TEST_P(test_dc, rand_dci_pending_purge) {
             rand_e->connect_to_iface(ep_id, *m_e2);
             ep = dc_ep(rand_e, ep_id);
             EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
-            int available = iface->tx.dcis[ep->dci].txqp.available;
-            iface->tx.dcis[ep->dci].txqp.available = 0;
+            uct_dc_dci_t *dci = &ucs_array_elem(&iface->tx.dcis, ep->dci);
+            int available = dci->txqp.available;
+            dci->txqp.available = 0;
             for (int j = 0; j < num_reqs; ++j, ++idx) {
                 preq[idx].func = NULL;
                 ASSERT_UCS_OK(uct_ep_pending_add(rand_e->ep(ep_id),
                                                  &preq[idx], 0));
             }
-            iface->tx.dcis[ep->dci].txqp.available = available;
+            dci->txqp.available = available;
         }
     }
 
@@ -468,9 +469,9 @@ UCS_TEST_P(test_dc, pool_indices)
 }
 
 UCS_TEST_SKIP_COND_P(test_dc, stress_iface_ops,
-                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY), "DC_NUM_DCI=1") {
-
-    test_iface_ops(dc_iface(m_e1)->tx.dcis[0].txqp.available);
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY), "DC_NUM_DCI=1")
+{
+    test_iface_ops(ucs_array_elem(&dc_iface(m_e1)->tx.dcis, 0).txqp.available);
 }
 
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
@@ -501,7 +502,8 @@ public:
                                                     uct_dc_mlx5_iface_t);
 
         for (int i = 0; i < iface->tx.ndci; ++i) {
-            uct_rc_txqp_available_set(&iface->tx.dcis[i].txqp, 0);
+            uct_rc_txqp_available_set(&ucs_array_elem(&iface->tx.dcis, i).txqp,
+                                      0);
         }
         iface->tx.dci_pool[0].stack_top = iface->tx.ndci;
     }
@@ -511,8 +513,8 @@ public:
                                                     uct_dc_mlx5_iface_t);
 
         for (int i = 0; i < iface->tx.ndci; ++i) {
-            uct_rc_txqp_available_set(&iface->tx.dcis[i].txqp,
-                                      iface->tx.dcis[i].txwq.bb_max);
+            uct_dc_dci_t *dci = &ucs_array_elem(&iface->tx.dcis, i);
+            uct_rc_txqp_available_set(&dci->txqp, dci->txwq.bb_max);
         }
         iface->tx.dci_pool[0].stack_top = 0;
 

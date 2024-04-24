@@ -42,8 +42,8 @@ struct ibv_ravh {
 #define UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, _dci, _txqp, _txwq) \
     { \
         ucs_assert(_dci != UCT_DC_MLX5_EP_NO_DCI); \
-        _txqp = &(_iface)->tx.dcis[_dci].txqp; \
-        _txwq = &(_iface)->tx.dcis[_dci].txwq; \
+        _txqp = &ucs_array_elem(&(_iface)->tx.dcis, _dci).txqp; \
+        _txwq = &ucs_array_elem(&(_iface)->tx.dcis, _dci).txwq; \
     }
 
 /**
@@ -501,7 +501,7 @@ uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     ndci   = uct_dc_mlx5_iface_max_total_dcis(iface);
     for (i = 0; i < ndci; i++) {
-        if (iface->tx.dcis[i].txwq.super.qp_num == qp_num) {
+        if (ucs_array_elem(&iface->tx.dcis, i).txwq.super.qp_num == qp_num) {
             return i;
         }
     }
@@ -520,7 +520,8 @@ static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface,
                                        uint8_t dci_index)
 {
-    return uct_rc_txqp_available(&iface->tx.dcis[dci_index].txqp) > 0;
+    return uct_rc_txqp_available(
+                   &ucs_array_elem(&iface->tx.dcis, dci_index).txqp) > 0;
 }
 
 /* returns pending queue of eps waiting for tx resources */
@@ -540,13 +541,13 @@ uct_dc_mlx5_iface_dci_waitq(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
-    uct_rc_txqp_t *txqp;
+    uct_dc_dci_t *dci = &ucs_array_elem(&iface->tx.dcis, dci_index);
 
-    if (!uct_dc_mlx5_is_dci_valid(&iface->tx.dcis[dci_index])) {
+    if (!uct_dc_mlx5_is_dci_valid(dci)) {
         return 0;
     }
-    txqp = &iface->tx.dcis[dci_index].txqp;
-    return uct_rc_txqp_available(txqp) < (int16_t)iface->tx.bb_max;
+
+    return uct_rc_txqp_available(&dci->txqp) < (int16_t)iface->tx.bb_max;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -558,8 +559,10 @@ uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci_index)
     }
 
     ucs_trace_poll("dci %d is not flushed %d/%d", dci_index,
-                   iface->tx.dcis[dci_index].txqp.available, iface->tx.bb_max);
-    ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci_index].txqp) == 0,
+                   ucs_array_elem(&iface->tx.dcis, dci_index).txqp.available,
+                   iface->tx.bb_max);
+    ucs_assertv(uct_rc_txqp_unsignaled(
+                        &ucs_array_elem(&iface->tx.dcis, dci_index).txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
 }

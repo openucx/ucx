@@ -778,7 +778,7 @@ static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface,
     ucs_assert(num_dci_pools <= iface->tx.num_dci_pools);
 
     for (dci_index = 0; dci_index < num_dcis; dci_index++) {
-        dci = &ucs_array_elem(iface->tx.dcis, dci_index);
+        dci = &ucs_array_elem(&iface->tx.dcis, dci_index);
         if (!uct_dc_mlx5_is_dci_valid(dci)) {
             continue;
         }
@@ -1153,6 +1153,7 @@ err:
 static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
 {
     uct_dc_mlx5_ep_t *fc_ep = iface->tx.fc_ep;
+    uct_dc_dci_t *fc_dci    = &ucs_array_elem(&iface->tx.dcis, fc_ep->dci);
     uct_rc_iface_send_op_t *op;
     ucs_queue_iter_t iter;
     uct_rc_txqp_t *txqp;
@@ -1162,12 +1163,12 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
     uct_rc_fc_cleanup(&fc_ep->fc);
 
     if ((fc_ep->dci != UCT_DC_MLX5_EP_NO_DCI) &&
-        !uct_dc_mlx5_is_dci_valid(&iface->tx.dcis[fc_ep->dci])) {
+        !uct_dc_mlx5_is_dci_valid(fc_dci)) {
         goto out;
     }
 
     if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
-        txqp = &iface->tx.dcis[fc_ep->dci].txqp;
+        txqp = &fc_dci->txqp;
         ucs_queue_for_each_safe(op, iter, &txqp->outstanding, queue) {
             if (op->handler == uct_dc_mlx5_ep_fc_pure_grant_send_completion) {
                 ucs_queue_del_iter(&txqp->outstanding, iter);
@@ -1176,11 +1177,10 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
         }
     } else if (fc_ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
         /* All outstanding operations on this DCI are FC_PURE_GRANT packets */
-        txqp = &iface->tx.dcis[fc_ep->dci].txqp;
+        txqp = &fc_dci->txqp;
         uct_rc_txqp_purge_outstanding(&iface->super.super, txqp,
                                       /* complete with OK to avoid re-sending */
-                                      UCS_OK,
-                                      iface->tx.dcis[fc_ep->dci].txwq.sw_pi, 0);
+                                      UCS_OK, fc_dci->txwq.sw_pi, 0);
     }
 
 out:
@@ -1353,9 +1353,9 @@ static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
     }
 
     if (ep == NULL) {
-        uct_ib_mlx5_completion_with_err(&iface->super.super.super,
-                                        (uct_ib_mlx5_err_cqe_t*)cqe,
-                                        &iface->tx.dcis[dci_index].txwq, level);
+        uct_ib_mlx5_completion_with_err(
+                &iface->super.super.super, (uct_ib_mlx5_err_cqe_t*)cqe,
+                &ucs_array_elem(&iface->tx.dcis, dci_index).txwq, level);
         return;
     }
 
@@ -1866,12 +1866,9 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
 
 void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 {
-    uct_ib_mlx5_txwq_t *txwq = &iface->tx.dcis[dci_index].txwq;
+    uct_dc_dci_t *dci        = &ucs_array_elem(&iface->tx.dcis, dci_index);
+    uct_ib_mlx5_txwq_t *txwq = &dci->txwq;
     ucs_status_t status;
-
-    // if (!uct_dc_mlx5_is_dci_valid(&iface->tx.dcis[dci_index])) {
-    //     return;
-    // }
 
     ucs_debug("iface %p reset dci[%d] qpn 0x%x", iface, dci_index,
               txwq->super.qp_num);
@@ -1892,7 +1889,7 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
                   ucs_status_string(status));
     }
 
-    status = uct_dc_mlx5_iface_dci_connect(iface, &iface->tx.dcis[dci_index]);
+    status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {
         ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
                   iface, dci_index, txwq->super.qp_num,
