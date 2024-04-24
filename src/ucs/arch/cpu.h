@@ -152,30 +152,18 @@ static inline void ucs_clear_cache(void *start, void *end)
 #endif
 }
 
-/**
- * Get memory copy bandwidth.
- *
- * @return Memory copy bandwidth estimation based on CPU used.
- */
-double ucs_cpu_get_memcpy_bw();
-
 
 static inline int ucs_cpu_prefer_relaxed_order()
 {
     ucs_cpu_vendor_t cpu_vendor = ucs_arch_get_cpu_vendor();
     ucs_cpu_model_t cpu_model   = ucs_arch_get_cpu_model();
 
-    return (cpu_vendor == UCS_CPU_VENDOR_FUJITSU_ARM) ||
-           ((cpu_vendor == UCS_CPU_VENDOR_AMD) &&
+    return ((cpu_vendor == UCS_CPU_VENDOR_AMD) &&
             ((cpu_model == UCS_CPU_MODEL_AMD_NAPLES) ||
              (cpu_model == UCS_CPU_MODEL_AMD_ROME) ||
              (cpu_model == UCS_CPU_MODEL_AMD_MILAN) ||
              (cpu_model == UCS_CPU_MODEL_AMD_GENOA)));
 }
-
-
-#define UCS_CPU_EST_BCOPY_BW_AMD         (5008 * UCS_MBYTE)
-#define UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM (12000 * UCS_MBYTE)
 
 
 #define UCS_CPU_VENDOR_LABEL "CPU vendor"

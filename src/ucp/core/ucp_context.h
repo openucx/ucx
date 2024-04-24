@@ -176,6 +176,7 @@ typedef struct ucp_context_config {
     double                                 proto_overhead_rndv_rts;
     double                                 proto_overhead_rndv_rtr;
     double                                 proto_overhead_sw;
+    double                                 proto_overhead_rkey_ptr;
 } ucp_context_config_t;
 
 

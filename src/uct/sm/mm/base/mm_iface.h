@@ -89,8 +89,8 @@ enum {
 
 
 typedef struct uct_mm_iface_op_overhead {
-    ucs_time_t am_short;
-    ucs_time_t am_bcopy;
+    double am_short;
+    double am_bcopy;
 } uct_mm_iface_op_overhead_t;
 
 
