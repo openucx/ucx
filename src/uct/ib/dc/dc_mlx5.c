@@ -926,19 +926,16 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     const uct_dc_mlx5_iface_addr_t *addr;
-    int same_tm, same_version, same_max_rd_atomic;
+    int same_tm, same_version;
 
     addr = (const uct_dc_mlx5_iface_addr_t*)UCS_PARAM_VALUE(
             UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr, IFACE_ADDR, NULL);
     if (addr != NULL) {
-        same_tm            = (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ==
-                              UCT_RC_MLX5_TM_ENABLED(&iface->super));
-        same_version       = ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
-                             iface->version_flag);
-        same_max_rd_atomic = (iface->super.super.config.max_rd_atomic == 16) ==
-                              !!(addr->flags &
-                                       UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16);
-        if (!same_version || !same_tm || !same_max_rd_atomic) {
+        same_tm      = (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ==
+                        UCT_RC_MLX5_TM_ENABLED(&iface->super));
+        same_version = ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
+                        iface->version_flag);
+        if (!same_version || !same_tm) {
             return 0;
         }
     }
