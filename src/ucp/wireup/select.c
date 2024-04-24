@@ -57,20 +57,21 @@ typedef struct {
 
 
 typedef struct {
-    ucp_wireup_criteria_t criteria;
-    uint64_t              local_dev_bitmap;
-    uint64_t              remote_dev_bitmap;
-    ucp_md_map_t          md_map;
-    unsigned              max_lanes;
-} ucp_wireup_select_bw_info_t;
-
-
-typedef struct {
     unsigned local[UCP_MAX_RESOURCES];
     unsigned remote[UCP_MAX_RESOURCES];
     unsigned local_skip[UCP_MAX_RESOURCES];
     unsigned remote_skip[UCP_MAX_RESOURCES];
 } ucp_wireup_dev_usage_count;
+
+
+typedef struct {
+    ucp_wireup_criteria_t criteria;
+    uint64_t                   local_dev_bitmap;
+    uint64_t                   remote_dev_bitmap;
+    ucp_md_map_t               md_map;
+    unsigned                   max_lanes;
+    ucp_wireup_dev_usage_count *dev_count;
+} ucp_wireup_select_bw_info_t;
 
 
 /**
@@ -1597,7 +1598,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t skip_dev_index        = UCP_NULL_RESOURCE;
     ucp_ep_h ep                           = select_params->ep;
     ucp_context_h context                 = ep->worker->context;
-    ucp_wireup_dev_usage_count *dev_count = bw_info->criteria.arg;
+    ucp_wireup_dev_usage_count *dev_count = bw_info->dev_count;
     UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_select_info_array_t, sinfo_array,
                              UCP_MAX_LANES);
     const uct_iface_attr_t *iface_attr;
@@ -1732,6 +1733,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.remote_dev_bitmap = UINT64_MAX;
     bw_info.md_map            = 0;
     bw_info.criteria.arg      = &dev_count;
+    bw_info.dev_count         = &dev_count;
     bw_info.max_lanes         = context->config.ext.max_eager_lanes - 1;
     /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
     if (context->config.ext.proto_enable) {
@@ -1894,6 +1896,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.criteria.local_cmpt_flags |= UCT_COMPONENT_FLAG_RKEY_PTR;
         bw_info.criteria.lane_type         = UCP_LANE_TYPE_RKEY_PTR;
         bw_info.criteria.arg               = &dev_count[0];
+        bw_info.dev_count                  = &dev_count[0];
         bw_info.max_lanes                  = 1;
 
         UCP_CONTEXT_MEM_CAP_TLS(context, UCS_MEMORY_TYPE_HOST, access_mem_types,
@@ -1989,6 +1992,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
                 bw_info.criteria.reg_mem_types = UCS_BIT(mem_type);
                 bw_info.criteria.arg           = &dev_count[mem_type];
+                bw_info.dev_count              = &dev_count[mem_type];
                 added_lanes                   += ucp_wireup_add_bw_lanes(
                                                    select_params, &bw_info,
                                                    UCP_TL_BITMAP_AND_NOT(
