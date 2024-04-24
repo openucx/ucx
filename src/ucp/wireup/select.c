@@ -61,6 +61,8 @@ typedef struct {
     unsigned remote[UCP_MAX_RESOURCES];
     unsigned local_skip[UCP_MAX_RESOURCES];
     unsigned remote_skip[UCP_MAX_RESOURCES];
+    ucp_lane_index_t excl_lane;
+    ucp_rsc_index_t skip_dev_index;
 } ucp_wireup_dev_usage_count;
 
 
@@ -165,6 +167,14 @@ static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
      [UCT_ATOMIC_OP_CSWAP] = {.name = "cswap", .fetch = ""}
 };
 
+
+static void
+ucp_wireup_dev_usage_count_init(ucp_wireup_dev_usage_count *dev_count)
+{
+    memset(dev_count, 0, sizeof(*dev_count));
+    dev_count->excl_lane      = UCP_NULL_LANE;
+    dev_count->skip_dev_index = UCP_NULL_RESOURCE;
+}
 
 static const char *
 ucp_wireup_get_missing_flag_desc(uint64_t flags, uint64_t required_flags,
@@ -1591,11 +1601,10 @@ ucp_wireup_get_current_num_lanes(ucp_ep_h ep, ucp_lane_type_t type)
 static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_bw_info_t *bw_info,
-                        ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
+                        ucp_tl_bitmap_t tl_bitmap,
                         ucp_wireup_select_context_t *select_ctx,
                         unsigned allow_extra_path)
 {
-    ucp_rsc_index_t skip_dev_index        = UCP_NULL_RESOURCE;
     ucp_ep_h ep                           = select_params->ep;
     ucp_context_h context                 = ep->worker->context;
     ucp_wireup_dev_usage_count *dev_count = bw_info->dev_count;
@@ -1623,7 +1632,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
     while (ucs_array_length(&sinfo_array) < max_lanes) {
-        if (excl_lane == UCP_NULL_LANE) {
+        if (dev_count->excl_lane == UCP_NULL_LANE) {
             sinfo  = ucs_array_append_fixed(&sinfo_array);
             status = ucp_wireup_select_transport(select_ctx, select_params,
                                                  &bw_info->criteria, tl_bitmap,
@@ -1643,11 +1652,11 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
         } else {
             /* disqualify/count lane_desc_idx */
-            addr_index      = select_ctx->lane_descs[excl_lane].addr_index;
-            rsc_index       = select_ctx->lane_descs[excl_lane].rsc_index;
-            dev_index       = context->tl_rscs[rsc_index].dev_index;
-            excl_lane       = UCP_NULL_LANE;
-            skip_dev_index  = dev_index;
+            addr_index        = select_ctx->lane_descs[dev_count->excl_lane].addr_index;
+            rsc_index         = select_ctx->lane_descs[dev_count->excl_lane].rsc_index;
+            dev_index         = context->tl_rscs[rsc_index].dev_index;
+            dev_count->excl_lane      = UCP_NULL_LANE;
+            dev_count->skip_dev_index = dev_index;
         }
 
         /* Count how many times the LOCAL device is used */
@@ -1662,8 +1671,8 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         local_num_paths  = iface_attr->dev_num_paths;
         remote_num_paths = ae->dev_num_paths;
         if (allow_extra_path &&
-            ((skip_dev_index != UCP_NULL_RESOURCE) && /* clang sanitizer */
-             (skip_dev_index == dev_index))) {
+            ((dev_count->skip_dev_index != UCP_NULL_RESOURCE) && /* clang sanitizer */
+             (dev_count->skip_dev_index == dev_index))) {
             /* Allow path since we skipped one */
             local_num_paths++;
             remote_num_paths++;
@@ -1698,8 +1707,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_context_h context  = ep->worker->context;
     unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
                                                       select_ctx);
-    ucp_wireup_dev_usage_count dev_count = {};
-
+    ucp_wireup_dev_usage_count dev_count;
     ucp_lane_index_t lane_desc_idx, am_lane;
     ucp_wireup_select_bw_info_t bw_info;
     unsigned num_am_bw_lanes;
@@ -1733,7 +1741,6 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.remote_dev_bitmap = UINT64_MAX;
     bw_info.md_map            = 0;
     bw_info.criteria.arg      = &dev_count;
-    bw_info.dev_count         = &dev_count;
     bw_info.max_lanes         = context->config.ext.max_eager_lanes - 1;
     /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
     if (context->config.ext.proto_enable) {
@@ -1753,9 +1760,12 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                              ucp_tl_bitmap_max, am_lane,
-                                              select_ctx, 0);
+    ucp_wireup_dev_usage_count_init(&dev_count);
+    dev_count.excl_lane = am_lane;
+    bw_info.dev_count   = &dev_count;
+    num_am_bw_lanes     = ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                                  ucp_tl_bitmap_max,
+                                                  select_ctx, 0);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
@@ -1889,7 +1899,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
          * Allow selecting additional lanes in case the remote memory will not be
          * registered with this memory domain, i.e with GPU memory.
          */
-        memset(dev_count, 0, sizeof(dev_count));
+        ucp_wireup_dev_usage_count_init(&dev_count[0]);
         bw_info.local_dev_bitmap           = UINT64_MAX;
         bw_info.remote_dev_bitmap          = UINT64_MAX;
         bw_info.criteria.title             = "obtain remote memory pointer";
@@ -1902,10 +1912,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         UCP_CONTEXT_MEM_CAP_TLS(context, UCS_MEMORY_TYPE_HOST, access_mem_types,
                                 tl_bitmap);
         ucp_wireup_add_bw_lanes(select_params, &bw_info, tl_bitmap,
-                                UCP_NULL_LANE, select_ctx, 0);
+                                select_ctx, 0);
     }
 
-    memset(dev_count, 0, sizeof(dev_count));
     bw_info.local_dev_bitmap          = UINT64_MAX;
     bw_info.remote_dev_bitmap         = UINT64_MAX;
     bw_info.criteria.title            = "high-bw remote memory access";
@@ -1959,6 +1968,11 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
+    ucs_memory_type_for_each(mem_type) {
+        ucp_wireup_dev_usage_count_init(&dev_count[mem_type]);
+        dev_count[mem_type].excl_lane = am_lane;
+    }
+
     /* RNDV protocol can't mix different schemes, i.e. wireup has to
      * select lanes with the same iface flags depends on a requested
      * RNDV scheme.
@@ -1998,7 +2012,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                                    UCP_TL_BITMAP_AND_NOT(
                                                      mem_type_tl_bitmap,
                                                      tl_bitmap),
-                                                   am_lane, select_ctx,
+                                                   select_ctx,
                                                    allow_extra_path);
 
                 UCS_STATIC_BITMAP_OR_INPLACE(&tl_bitmap, mem_type_tl_bitmap);
@@ -2007,8 +2021,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                 break;
             }
             max_lanes -= bw_info.max_lanes;
-            /* exclude am_lane in the first iteration only */
-            am_lane    = UCP_NULL_LANE;
         }
 
         if (added_lanes /* There are selected lanes */ ||
