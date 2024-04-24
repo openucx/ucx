@@ -132,7 +132,7 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
         goto err_free_send_buffer;
     }
 
-    if (perf->params.ucp.dmn_info.is_daemon_mode) {
+    if (perf->params.ucp.is_daemon_mode) {
         memh_pack_params.field_mask = UCP_MEMH_PACK_PARAM_FIELD_FLAGS;
         memh_pack_params.flags      = UCP_MEMH_PACK_FLAG_EXPORT;
 

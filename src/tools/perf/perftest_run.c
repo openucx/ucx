@@ -210,7 +210,7 @@ static void print_test_name(struct perftest_context *ctx)
     }
 }
 
-static int read_args(char *buf, char **argv, size_t argv_size)
+static int read_batch_args(char *buf, char **argv, size_t argv_size)
 {
     static const char delim[] = " \t\n\r";
     int argc                  = 0;
@@ -248,7 +248,7 @@ static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
             return UCS_ERR_NO_ELEM;
         }
         ++(*line_num);
-    } while ((argc = read_args(buf, argv, MAX_SIZE)) == 0);
+    } while ((argc = read_batch_args(buf, argv, MAX_SIZE)) == 0);
 
     ucs_snprintf_safe(error_prefix, sizeof(error_prefix),
                       "in batch file '%s' line %d: ", file_name, *line_num);
@@ -283,7 +283,7 @@ static size_t get_test_count(FILE *batch_file)
     char *argv[MAX_SIZE];
 
     while (fgets(buf, sizeof(buf) - 1, batch_file) != NULL) {
-        if (read_args(buf, argv, MAX_SIZE) > 0) {
+        if (read_batch_args(buf, argv, MAX_SIZE) > 0) {
             ++test_count;
         }
     };
@@ -321,7 +321,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (parent_params->super.ucp.dmn_info.is_daemon_mode) {
+    if (parent_params->super.ucp.is_daemon_mode) {
         test_count = get_test_count(batch_file);
     }
 
@@ -336,13 +336,13 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
                                  &line_num, &params,
                                  &ctx->test_names[depth]);
         if (status == UCS_OK) {
-            if (parent_params->super.ucp.dmn_info.is_daemon_mode) {
+            if (parent_params->super.ucp.is_daemon_mode) {
                 /* Keep daemon running until the last test execution begins.
                  * For the very last run take the is_keep_running value from the
                  * parent config */
-                params.super.ucp.dmn_info.is_keep_running =
+                params.super.ucp.is_keep_running =
                     (--test_count == 0) ?
-                        parent_params->super.ucp.dmn_info.is_keep_running : 1;
+                        parent_params->super.ucp.is_keep_running : 1;
             }
 
             run_test_recurs(ctx, &params, depth + 1);

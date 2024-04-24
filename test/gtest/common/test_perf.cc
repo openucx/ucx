@@ -247,10 +247,10 @@ void test_perf::test_params_init(const test_spec &test,
     params.ucp.send_datatype    = (ucp_perf_datatype_t)test.data_layout;
     params.ucp.recv_datatype    = (ucp_perf_datatype_t)test.data_layout;
     params.ucp.am_hdr_size      = 0;
-    params.ucp.dmn_info.is_daemon_mode  = 0;
-    params.ucp.dmn_info.is_keep_running = 0;
-    params.ucp.dmn_info.dmn_local_addr  = {};
-    params.ucp.dmn_info.dmn_remote_addr = {};
+    params.ucp.is_daemon_mode   = 0;
+    params.ucp.is_keep_running  = 0;
+    params.ucp.dmn_local_addr   = {};
+    params.ucp.dmn_remote_addr  = {};
 }
 
 test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsigned flags,
