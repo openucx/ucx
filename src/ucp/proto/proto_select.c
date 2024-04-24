@@ -760,6 +760,11 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
     ssize_t max_short_signed;
     const uint32_t *op_attribute;
 
+    if (worker->context->config.progress_wrapper_enabled) {
+        ucp_proto_select_short_disable(proto_short);
+        return;
+    }
+
     ucp_memory_info_set_host(&mem_info);
 
     /*

@@ -405,6 +405,18 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_context_config_t, keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
+  {"DYNAMIC_TL_SWITCH_INTERVAL", "inf",
+   "Time interval between dynamic transport switching rounds. Must be\n"
+   "non-zero value. use 'inf' to disable this feature.",
+   ucs_offsetof(ucp_context_config_t, dynamic_tl_switch_interval),
+   UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"DYNAMIC_TL_PROGRESS_FACTOR", "10",
+   "Number of usage tracker rounds performed for each progress operation. Must be\n"
+   "non-zero value.",
+   ucs_offsetof(ucp_context_config_t, dynamic_tl_progress_factor),
+   UCS_CONFIG_TYPE_TIME_UNITS},
+
   {"RESOLVE_REMOTE_EP_ID", "n",
    "Defines whether resolving remote endpoint ID is required or not when\n"
    "creating a local endpoint. 'auto' means resolving remote endpoint ID only\n"
@@ -1925,6 +1937,22 @@ static double ucp_context_get_protov1_memcpy_bw()
                    UCP_CPU_EST_BCOPY_BW_DEFAULT_PROTOV1;
 }
 
+static int
+ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
+{
+    if (config->dynamic_tl_switch_interval == 0) {
+        ucs_error("UCX_DYNAMIC_TL_SWITCH_INTERVAL must be > 0");
+        return 0;
+    }
+
+    if (config->dynamic_tl_progress_factor == 0) {
+        ucs_error("UCX_DYNAMIC_TL_PROGRESS_FACTOR must be > 0");
+        return 0;
+    }
+
+    return 1;
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -2096,6 +2124,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         goto err_free_alloc_methods;
     }
 
+    if (!ucp_dynamic_tl_switch_config_valid(&context->config.ext)) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
     ucs_list_for_each(key_val, &config->cached_key_list, list) {
         status = ucp_config_cached_key_add(&context->cached_key_list,
                                            key_val->key, key_val->value);
@@ -2121,6 +2154,9 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
              ((context->config.ext.max_rma_lanes > 1) ||
               context->config.ext.proto_enable));
 
+    context->config.progress_wrapper_enabled =
+            ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
+            ucp_context_usage_tracker_enabled(context);
     return UCS_OK;
 
 err_free_key_list:
