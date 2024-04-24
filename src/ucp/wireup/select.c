@@ -1996,9 +1996,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         /* Add lanes that can access the memory by short operations */
         added_lanes = 0;
 
-        while (max_lanes > 0) {
+        while (added_lanes < max_lanes) {
             added_lanes_prev  = added_lanes;
-            bw_info.max_lanes = ucs_min(max_lanes, lanes_batch);
+            bw_info.max_lanes = ucs_min(max_lanes - added_lanes, lanes_batch);
             UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap);
             ucs_memory_type_for_each(mem_type) {
                 UCP_CONTEXT_MEM_CAP_TLS(context, mem_type, reg_mem_types,
@@ -2020,7 +2020,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
             if (added_lanes == added_lanes_prev) {
                 break;
             }
-            max_lanes -= bw_info.max_lanes;
         }
 
         if (added_lanes /* There are selected lanes */ ||
