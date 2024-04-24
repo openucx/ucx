@@ -1527,8 +1527,8 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
     const uct_md_attr_v2_t *md_attr;
 
     /* Calculate max BW of existing lanes of the corresponding mem type */
-    for (lane_desc = select_ctx->lane_descs;
-     lane_desc < select_ctx->lane_descs + select_ctx->num_lanes; ++lane_desc) {
+    ucs_carray_for_each(lane_desc, select_ctx->lane_descs,
+                        select_ctx->num_lanes) {
         if ((lane_desc->rsc_index != UCP_NULL_RESOURCE) &&
             (lane_desc->lane_types & UCS_BIT(lane_type))) {
             md_index = context->tl_rscs[lane_desc->rsc_index].md_index;
@@ -1542,7 +1542,7 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
         }
     }
 
-    /* Iterate over all elements and calculate max BW */
+    /* Update max BW based on the BW of new lanes (sinfo elements) */
     ucs_array_for_each(sinfo, sinfo_array) {
         lane_bw = ucp_wireup_get_lane_bw(worker, sinfo->rsc_index,
                                          sinfo->addr_index,
