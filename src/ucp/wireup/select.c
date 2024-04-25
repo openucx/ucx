@@ -1845,7 +1845,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         UCP_RNDV_MODE_GET_ZCOPY,
         UCP_RNDV_MODE_PUT_ZCOPY
     };
-    ucp_wireup_dev_usage_count dev_count[UCS_MEMORY_TYPE_LAST];
+    ucp_wireup_dev_usage_count *dev_count;
     ucp_wireup_select_bw_info_t bw_info;
     ucs_memory_type_t mem_type;
     unsigned max_lanes, lanes_batch;
@@ -1888,6 +1888,13 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     bw_info.md_map = 0;
+
+    dev_count = ucs_malloc(UCS_MEMORY_TYPE_LAST * sizeof(*dev_count),
+                           "rma_bw_lanes_dev_count");
+    if (dev_count == NULL) {
+        ucs_log(UCS_LOG_LEVEL_ERROR, "failed to allocate dev_count");
+        return UCS_ERR_NO_MEMORY;
+    }
 
     /* check rkey_ptr */
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
@@ -2030,6 +2037,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
+    ucs_free(dev_count);
     return UCS_OK;
 }
 
