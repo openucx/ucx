@@ -799,6 +799,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    init_attr->flags |= UCT_IB_CQ_IGNORE_OVERRUN;
+    uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, init_attr);
+
     status = uct_rc_mlx5_iface_preinit(self, tl_md, rc_config, mlx5_config,
                                        params, init_attr);
     if (status != UCS_OK) {
@@ -917,6 +920,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         self->super.config.atomic64_ext_handler = uct_rc_mlx5_common_atomic64_le_handler;
     }
 
+    self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
+                                               self->tx.bb_max / 4);
     return UCS_OK;
 
 free_events:
@@ -960,26 +965,18 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     ucs_status_t status;
 
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
-    init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.flags                 = IBV_DEVICE_TM_FLAGS(&md->super.dev) ?
+                                      UCT_IB_TM_SUPPORTED : 0;
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.qp_type               = IBV_QPT_RC;
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
                                                    max_qp_rd_atom);
-
-    uct_ib_mlx5_parse_cqe_zipping(md, &config->rc_mlx5_common.super,
-                                  &init_attr);
-
-    if (IBV_DEVICE_TM_FLAGS(&md->super.dev)) {
-        init_attr.flags  |= UCT_IB_TM_SUPPORTED;
-    }
+    init_attr.tx_moderation         = config->super.tx_cq_moderation;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
                               tl_md, worker, params, &config->super.super,
                               &config->rc_mlx5_common, &init_attr);
-
-    self->super.super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
-                                                     self->super.tx.bb_max / 4);
 
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {

@@ -286,6 +286,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.seg_size              = ib_config->seg_size;
     init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
+    init_attr.tx_moderation         = config->super.tx_cq_moderation;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
@@ -293,7 +294,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 
     self->config.tx_max_wr               = ucs_min(config->tx_max_wr,
                                                    self->super.config.tx_qp_len);
-    self->super.config.tx_moderation     = ucs_min(config->super.tx_cq_moderation,
+    self->super.config.tx_moderation     = ucs_min(self->super.config.tx_moderation,
                                                    self->config.tx_max_wr / 4);
     self->super.config.fence_mode        = (uct_rc_fence_mode_t)config->super.super.fence_mode;
     self->super.progress                 = uct_rc_verbs_iface_progress;

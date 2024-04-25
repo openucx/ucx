@@ -29,6 +29,7 @@ int ucs_empty_function_return_zero_int();
 size_t ucs_empty_function_return_zero_size_t();
 ucs_status_t ucs_empty_function_return_success();
 ucs_status_t ucs_empty_function_return_unsupported();
+ucs_status_ptr_t ucs_empty_function_return_ptr_unsupported();
 ucs_status_t ucs_empty_function_return_inprogress();
 ucs_status_t ucs_empty_function_return_no_resource();
 ucs_status_t ucs_empty_function_return_invalid_param();
