@@ -11,6 +11,7 @@
 
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/type/spinlock.h>
 
 

@@ -13,6 +13,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/checker.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 
 

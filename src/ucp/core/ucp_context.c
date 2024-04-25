@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -60,7 +61,9 @@
 
 #define UCP_AM_HANDLER_ENTRY(_id) [_id] = &ucp_am_handler_##_id,
 
-#define UCP_CPU_EST_BCOPY_BW_DEFAULT (5800 * UCS_MBYTE)
+#define UCP_CPU_EST_BCOPY_BW_DEFAULT         (7000 * UCS_MBYTE)
+#define UCP_CPU_EST_BCOPY_BW_DEFAULT_PROTOV1 (5800 * UCS_MBYTE)
+#define UCP_CPU_EST_BCOPY_BW_AMD_PROTOV1     (5008 * UCS_MBYTE)
 
 #define UCP_TL_AUX_SUFFIX    "aux"
 #define UCP_TL_AUX(_tl_name) _tl_name ":" UCP_TL_AUX_SUFFIX
@@ -112,6 +115,9 @@ static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_ROCM]         = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_RDMA]         = 0,
+    [UCS_MEMORY_TYPE_ZE_HOST]      = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ZE_DEVICE]    = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ZE_MANAGED]   = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -122,6 +128,9 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_ROCM]         = 128,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 128,
     [UCS_MEMORY_TYPE_RDMA]         = 0,
+    [UCS_MEMORY_TYPE_ZE_HOST]      = 128,
+    [UCS_MEMORY_TYPE_ZE_DEVICE]    = 128,
+    [UCS_MEMORY_TYPE_ZE_MANAGED]   = 128,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -131,16 +140,6 @@ const char *ucp_object_versions[] = {
     [UCP_OBJECT_VERSION_LAST] = NULL
 };
 
-const size_t ucp_context_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
-    [UCS_CPU_VENDOR_UNKNOWN]     = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_INTEL]       = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_AMD]         = UCS_CPU_EST_BCOPY_BW_AMD,
-    [UCS_CPU_VENDOR_GENERIC_ARM] = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_GENERIC_PPC] = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_FUJITSU_ARM] = UCS_CPU_EST_BCOPY_BW_FUJITSU_ARM,
-    [UCS_CPU_VENDOR_ZHAOXIN]     = UCP_CPU_EST_BCOPY_BW_DEFAULT,
-    [UCS_CPU_VENDOR_NVIDIA]      = UCP_CPU_EST_BCOPY_BW_DEFAULT
-};
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
@@ -152,7 +151,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
    "Memory types which have whole allocations registered.\n"
-   "Allowed memory types: cuda, rocm, rocm-managed",
+   "Allowed memory types: cuda, rocm, rocm-managed, ze-host, ze-device, ze-managed",
    ucs_offsetof(ucp_context_config_t, reg_whole_alloc_bitmap),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
@@ -343,7 +342,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RNDV_FRAG_MEM_TYPE", "host",
    "Memory type of fragments used for RNDV pipeline protocol.\n"
-   "Allowed memory types is one of: host, cuda, rocm",
+   "Allowed memory types is one of: host, cuda, rocm, ze-host, ze-device",
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_type),
    UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
@@ -406,6 +405,18 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_context_config_t, keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
+  {"DYNAMIC_TL_SWITCH_INTERVAL", "inf",
+   "Time interval between dynamic transport switching rounds. Must be\n"
+   "non-zero value. use 'inf' to disable this feature.",
+   ucs_offsetof(ucp_context_config_t, dynamic_tl_switch_interval),
+   UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"DYNAMIC_TL_PROGRESS_FACTOR", "10",
+   "Number of usage tracker rounds performed for each progress operation. Must be\n"
+   "non-zero value.",
+   ucs_offsetof(ucp_context_config_t, dynamic_tl_progress_factor),
+   UCS_CONFIG_TYPE_TIME_UNITS},
+
   {"RESOLVE_REMOTE_EP_ID", "n",
    "Defines whether resolving remote endpoint ID is required or not when\n"
    "creating a local endpoint. 'auto' means resolving remote endpoint ID only\n"
@@ -464,8 +475,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
 
   {"REG_NONBLOCK_MEM_TYPES", "",
-   "Perform only non-blocking memory registration for these memory types:\n"
-   "page registration may be deferred until it is accessed by the CPU or a transport.",
+   "Perform only non-blocking memory registration for these memory types.\n"
+   "Non-blocking registration means that the page registration may be\n"
+   "deferred until it is accessed by the CPU or a transport.",
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
@@ -477,7 +489,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
 
   {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
-                     "rndv_rts:275ns,sw:40ns",
+                     "rndv_rts:275ns,sw:40ns,rkey_ptr:0",
    "Protocol overhead", 0,
     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
         {"single", "overhead of single-lane protocol",
@@ -492,6 +504,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
          ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rts)},
         {"sw", "overhead of software emulation protocol",
          ucs_offsetof(ucp_context_config_t, proto_overhead_sw)},
+        {"rkey_ptr", "overhead of the protocol copying from mapped remote "
+                     "memory",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rkey_ptr)},
         {NULL}
   )},
 
@@ -536,6 +551,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - tcp     : sockets over TCP/IP.\n"
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
    " - rocm    : ROCm (AMD GPU) memory support.\n"
+   " - ze      : ZE (Intel GPU) memory support.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
@@ -620,6 +636,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
+  { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { NULL }
 };
 
@@ -1556,12 +1573,20 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             }
 
             ucs_memory_type_for_each(mem_type) {
-                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
-                    continue;
-                }
-
                 if (md_attr->flags & UCT_MD_FLAG_REG) {
+                    if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+                        !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
+                        if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
+                            /* Keep map of MDs supporting blocking registration
+                             * if non-blocking registration is requested for the
+                             * given memory type. In some cases blocking
+                             * registration maybe required anyway (e.g. internal
+                             * staging buffers for rndv pipeline protocols). */
+                            context->reg_block_md_map[mem_type] |= UCS_BIT(md_index);
+                        }
+                        continue;
+                    }
+
                     if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
                     }
@@ -1686,13 +1711,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->export_md_map            = 0;
 
     ucs_memory_type_for_each(mem_type) {
-        context->reg_md_map[mem_type]     = 0;
-        context->cache_md_map[mem_type]   = 0;
-        context->dmabuf_mds[mem_type]     = UCP_NULL_RESOURCE;
-        context->alloc_md_index[mem_type] = UCP_NULL_RESOURCE;
+        context->reg_md_map[mem_type]           = 0;
+        context->reg_block_md_map[mem_type]     = 0;
+        context->cache_md_map[mem_type]         = 0;
+        context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
+        context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
+        context->alloc_md[mem_type].initialized = 0;
     }
-
-    context->alloc_md_index_initialized = 0;
 
     ucs_string_set_init(&avail_tls);
     UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
@@ -1905,9 +1930,27 @@ ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
     return UCS_OK;
 }
 
-static double ucp_context_get_memcpy_bw()
+static double ucp_context_get_protov1_memcpy_bw()
 {
-    return ucp_context_est_bcopy_bw[ucs_arch_get_cpu_vendor()];
+    return (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD) ?
+                   UCP_CPU_EST_BCOPY_BW_AMD_PROTOV1 :
+                   UCP_CPU_EST_BCOPY_BW_DEFAULT_PROTOV1;
+}
+
+static int
+ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
+{
+    if (config->dynamic_tl_switch_interval == 0) {
+        ucs_error("UCX_DYNAMIC_TL_SWITCH_INTERVAL must be > 0");
+        return 0;
+    }
+
+    if (config->dynamic_tl_progress_factor == 0) {
+        ucs_error("UCX_DYNAMIC_TL_PROGRESS_FACTOR must be > 0");
+        return 0;
+    }
+
+    return 1;
 }
 
 static ucs_status_t ucp_fill_config(ucp_context_h context,
@@ -1948,9 +1991,9 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
         if (context->config.ext.proto_enable) {
-            context->config.ext.bcopy_bw = ucs_cpu_get_memcpy_bw();
+            context->config.ext.bcopy_bw = UCP_CPU_EST_BCOPY_BW_DEFAULT;
         } else {
-            context->config.ext.bcopy_bw = ucp_context_get_memcpy_bw();
+            context->config.ext.bcopy_bw = ucp_context_get_protov1_memcpy_bw();
         }
     }
     ucs_debug("estimated bcopy bandwidth is %f", context->config.ext.bcopy_bw);
@@ -2081,6 +2124,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         goto err_free_alloc_methods;
     }
 
+    if (!ucp_dynamic_tl_switch_config_valid(&context->config.ext)) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
     ucs_list_for_each(key_val, &config->cached_key_list, list) {
         status = ucp_config_cached_key_add(&context->cached_key_list,
                                            key_val->key, key_val->value);
@@ -2106,6 +2154,9 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
              ((context->config.ext.max_rma_lanes > 1) ||
               context->config.ext.proto_enable));
 
+    context->config.progress_wrapper_enabled =
+            ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ) ||
+            ucp_context_usage_tracker_enabled(context);
     return UCS_OK;
 
 err_free_key_list:

@@ -70,7 +70,6 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
  * @param [in]    proto_name    Protocol name, for debugging.
  * @param [in]    range_start   Range interval start.
  * @param [in]    range_end     Range interval end.
- * @param [in]    frag_size     Size of protocol's fragments.
  * @param [in]    bias          Performance bias (0 - no bias).
  * @param [in]    stages        Array of parallel stages performance ranges.
  * @param [in]    num_stages    Number of parallel stages in the protocol.
@@ -78,7 +77,7 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
  */
 ucs_status_t
 ucp_proto_init_parallel_stages(const char *proto_name, size_t range_start,
-                               size_t range_end, size_t frag_size, double bias,
+                               size_t range_end, double bias,
                                const ucp_proto_perf_range_t **stages,
                                unsigned num_stages, ucp_proto_caps_t *caps);
 

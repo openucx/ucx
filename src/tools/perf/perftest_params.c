@@ -705,6 +705,6 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     return verify_daemon_params(&ctx->params.super);
 
 err:
-    release_msg_size_list(&ctx->params);
+    perftest_params_release_msg_size_list(&ctx->params);
     return status;
 }

@@ -67,6 +67,26 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
     {"ERROR_HANDLING", "n", "Expose error handling support capability",
      ucs_offsetof(uct_mm_iface_config_t, error_handling), UCS_CONFIG_TYPE_BOOL},
 
+    {"SEND_OVERHEAD", UCS_PP_MAKE_STRING(UCT_MM_IFACE_OVERHEAD),
+     "Time spent after the message request has been passed to the hardware or\n"
+     "system software layers and before operation has been finalized", 0,
+     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+        {"am_short", "send overhead for short Active Message operation type",
+         ucs_offsetof(uct_mm_iface_config_t, overhead.send.am_short)},
+        {"am_bcopy", "send overhead for buffered Active Message operation type",
+         ucs_offsetof(uct_mm_iface_config_t, overhead.send.am_bcopy)},
+        {NULL})},
+
+    {"RECV_OVERHEAD", UCS_PP_MAKE_STRING(UCT_MM_IFACE_OVERHEAD),
+     "Message receive overhead time", 0,
+     UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+        {"am_short", "receive overhead for short Active Message operation type",
+         ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_short)},
+        {"am_bcopy", "receive overhead for buffered Active Message operation "
+                     "type",
+         ucs_offsetof(uct_mm_iface_config_t, overhead.recv.am_bcopy)},
+        {NULL})},
+
     {NULL}
 };
 
@@ -517,31 +537,21 @@ uct_mm_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_ep_operation_t op = UCT_ATTR_VALUE(PERF, perf_attr, operation,
                                            OPERATION, UCT_EP_OP_LAST);
-    double short_overhead, am_overhead;
+    uct_mm_iface_op_overhead_t *overhead;
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.shared = 0;
         perf_attr->bandwidth.dedicated = iface->super.config.bandwidth;
     }
 
-    switch (ucs_arch_get_cpu_vendor()) {
-    case UCS_CPU_VENDOR_FUJITSU_ARM:
-        short_overhead = 40e-9;
-        am_overhead    = 220e-9;
-        break;
-    default:
-        short_overhead = UCT_MM_IFACE_OVERHEAD;
-        am_overhead    = UCT_MM_IFACE_OVERHEAD;
-    }
-
-
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
+        overhead = &iface->config.overhead.send;
         switch (op) {
         case UCT_EP_OP_AM_SHORT:
-            perf_attr->send_pre_overhead = short_overhead;
+            perf_attr->send_pre_overhead = overhead->am_short;
             break;
         case UCT_EP_OP_AM_BCOPY:
-            perf_attr->send_pre_overhead = am_overhead;
+            perf_attr->send_pre_overhead = overhead->am_bcopy;
             break;
         default:
             perf_attr->send_pre_overhead = UCT_MM_IFACE_OVERHEAD;
@@ -550,12 +560,13 @@ uct_mm_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
+        overhead = &iface->config.overhead.recv;
         switch (op) {
         case UCT_EP_OP_AM_SHORT:
-            perf_attr->recv_overhead = short_overhead;
+            perf_attr->recv_overhead = overhead->am_short;
             break;
         case UCT_EP_OP_AM_BCOPY:
-            perf_attr->recv_overhead = am_overhead;
+            perf_attr->recv_overhead = overhead->am_bcopy;
             break;
         default:
             perf_attr->recv_overhead = UCT_MM_IFACE_OVERHEAD;
@@ -573,6 +584,10 @@ uct_mm_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
         perf_attr->max_inflight_eps = SIZE_MAX;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
+        perf_attr->flags = 0;
     }
 
     return UCS_OK;
@@ -757,6 +772,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
         goto err;
     }
 
+    self->config.overhead          = mm_config->overhead;
     self->config.fifo_size         = mm_config->fifo_size;
     self->config.fifo_elem_size    = mm_config->fifo_elem_size;
     self->config.seg_size          = mm_config->seg_size;

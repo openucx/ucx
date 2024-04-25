@@ -21,6 +21,7 @@
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/datastruct/ptr_map.h>
+#include <ucs/datastruct/usage_tracker.h>
 #include <ucs/arch/bitops.h>
 
 #include <ucs/datastruct/array.h>
@@ -121,10 +122,9 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
-    UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE       = UCS_BIT(3)  /**< Progress should be activated */
 };
 
 
@@ -364,6 +364,18 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    struct {
+        /* Usage tracker handle */
+        ucs_usage_tracker_h          handle;
+        /* Number of progress iterations passed so far (used to minimize
+         * calls to ucs_get_time) */
+        unsigned                     iter_count;
+        /* Number of rounds passed so far */
+        unsigned                     rounds_count;
+        /* Last round timestamp */
+        ucs_time_t                   last_round;
+    } usage_tracker;
 } ucp_worker_t;
 
 
@@ -413,6 +425,8 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 void ucp_worker_vfs_refresh(void *obj);
 
+void ucp_worker_track_ep_usage_always(ucp_request_t *req);
+
 ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 
 unsigned ucp_worker_discard_uct_ep_progress(void *arg);
@@ -440,5 +454,20 @@ ucp_worker_flush_ops_count_add(ucp_worker_h worker, int count)
 
     worker->flush_ops_count = flush_ops_count;
 }
+
+
+/**
+ * @brief Process corresponding UCP worker interface for each lane in the map.
+ *
+ * @param [in] worker          Worker object containing interfaces.
+ * @param [in] ep_config       Endpoint configuration containing resources.
+ * @param [in] lane_map        Map of lanes to iterate through.
+ * @param [in] wiface_process  Process method to be invoked for each wiface.
+ */
+void
+ucp_wiface_process_for_each_lane(ucp_worker_h worker,
+                                 ucp_ep_config_t *ep_config,
+                                 ucp_lane_map_t lane_map,
+                                 void (*wiface_process)(ucp_worker_iface_t*));
 
 #endif

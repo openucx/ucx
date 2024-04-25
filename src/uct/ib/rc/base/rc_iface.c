@@ -510,7 +510,8 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     srq_init_attr.srq_context    = iface;
     srq                          = ibv_create_srq(pd, &srq_init_attr);
     if (srq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR, "ibv_create_srq()");
+        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_srq()");
         return UCS_ERR_IO_ERROR;
     }
     iface->rx.srq.quota          = srq_init_attr.attr.max_wr;

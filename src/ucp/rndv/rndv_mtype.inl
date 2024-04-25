@@ -16,9 +16,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
                           ucp_md_map_t *mdesc_md_map_p, size_t *frag_size_p)
 {
-    ucp_worker_h worker        = init_params->worker;
-    ucp_context_h context      = worker->context;
-    ucs_memory_type_t mem_type = init_params->select_param->mem_type;
+    ucp_worker_h worker             = init_params->worker;
+    ucp_context_h context           = worker->context;
+    ucs_memory_type_t mem_type      = init_params->select_param->mem_type;
+    ucs_memory_type_t frag_mem_type = context->config.ext.rndv_frag_mem_type;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         (worker->mem_type_ep[mem_type] == NULL) ||
@@ -26,17 +27,20 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    *mdesc_md_map_p = context->reg_md_map[UCS_MEMORY_TYPE_HOST];
-    *frag_size_p    = context->config.ext.rndv_frag_size[UCS_MEMORY_TYPE_HOST];
+    *mdesc_md_map_p = context->reg_md_map[frag_mem_type];
+    *frag_size_p    = context->config.ext.rndv_frag_size[frag_mem_type];
+
     return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_request_init(ucp_request_t *req)
 {
-    ucp_worker_h worker = req->send.ep->worker;
+    ucp_worker_h worker             = req->send.ep->worker;
+    ucs_memory_type_t frag_mem_type =
+                                 worker->context->config.ext.rndv_frag_mem_type;
 
-    req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+    req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
                                               UCS_SYS_DEVICE_ID_UNKNOWN);
     if (req->send.rndv.mdesc == NULL) {
         return UCS_ERR_NO_MEMORY;

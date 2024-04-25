@@ -13,6 +13,7 @@
 #include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/string.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>

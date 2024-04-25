@@ -15,6 +15,7 @@
 #include "ucp_rkey.h"
 #include "ucp_request.inl"
 
+#include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
@@ -39,9 +40,13 @@
 #include <time.h>
 
 
-#define UCP_WORKER_KEEPALIVE_ITER_SKIP 32
-
 #define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
+
+#define UCP_WORKER_USAGE_TRACKER_PROMOTE_CAPACITY     20
+#define UCP_WORKER_USAGE_TRACKER_PROMOTE_THRESHOLD    10
+#define UCP_WORKER_USAGE_TRACKER_REMOVE_THRESHOLD     0.2
+#define UCP_WORKER_USAGE_TRACKER_EXP_DECAY_MULTIPLIER 0.8
+#define UCP_WORKER_USAGE_TRACKER_EXP_DECAY_ADDER      0.2
 
 
 #define UCP_WIFACE_FMT "iface %p (" UCT_TL_RESOURCE_DESC_FMT ")"
@@ -725,14 +730,8 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
               worker->num_active_ifaces);
 
     if (!force) {
-        ucs_assertv(worker->context->config.ext.proto_enable ||
-                    (wiface->activate_count > 0), UCP_WIFACE_FMT " acount=%u",
-                    UCP_WIFACE_ARG(wiface), wiface->activate_count);
-
-        if (wiface->activate_count == 0) {
-            /* The interface has not been activated. */
-            return;
-        }
+        ucs_assertv(wiface->activate_count > 0, UCP_WIFACE_FMT,
+                    UCP_WIFACE_ARG(wiface));
 
         if (--wiface->activate_count > 0) {
             /* The interface is not completely deactivated yet. */
@@ -1669,6 +1668,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     best_priority = 0;
 
     /* Select best interface for atomics device */
+    ucs_log_indent(+1);
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface     = worker->ifaces[iface_id];
         rsc_index  = wiface->rsc_index;
@@ -1688,10 +1688,14 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         }
 
         UCS_STATIC_BITMAP_SET(&supp_tls, rsc_index);
-        priority  = iface_attr->priority;
+        priority                    = iface_attr->priority;
+        dummy_ae.iface_attr.lat_ovh = ucp_wireup_iface_lat_distance_v2(wiface);
 
         score = ucp_wireup_amo_score_func(wiface, md_attr, &dummy_addr,
                                           &dummy_ae, NULL);
+
+        ucs_trace(UCT_TL_RESOURCE_DESC_FMT " atomic score %.2f priority %d",
+                  UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc), score, priority);
         if (ucp_is_scalable_transport(worker->context,
                                       iface_attr->max_num_eps) &&
             ((score > best_score) ||
@@ -1702,6 +1706,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
             best_priority = priority;
         }
     }
+    ucs_log_indent(-1);
 
     if (best_rsc == NULL) {
         ucs_debug("worker %p: no support for atomics", worker);
@@ -2419,6 +2424,74 @@ static void ucp_worker_set_max_am_header(ucp_worker_h worker)
                             ucs_min(max_am_header, UINT32_MAX) : 0ul;
 }
 
+void ucp_worker_track_ep_usage_always(ucp_request_t *req)
+{
+    ucp_worker_h worker          = req->send.ep->worker;
+    ucp_context_config_t *config = &worker->context->config.ext;
+    ucs_time_t now;
+
+    if (req->flags & UCP_REQUEST_FLAG_USAGE_TRACKED) {
+        return;
+    }
+
+    now = ucs_get_time();
+    if ((now - worker->usage_tracker.last_round) <
+        config->dynamic_tl_switch_interval) {
+        return;
+    }
+
+    req->flags |= UCP_REQUEST_FLAG_USAGE_TRACKED;
+    ucs_usage_tracker_touch_key(worker->usage_tracker.handle, req->send.ep);
+    worker->usage_tracker.last_round = now;
+    worker->usage_tracker.rounds_count++;
+
+    if ((worker->usage_tracker.rounds_count %
+         config->dynamic_tl_progress_factor) == 0) {
+        ucs_usage_tracker_progress(worker->usage_tracker.handle);
+    }
+}
+
+static ucs_status_t ucp_worker_usage_tracker_create(ucp_worker_h worker)
+{
+    ucs_usage_tracker_params_t params = {0};
+    ucs_status_t status;
+    ucs_usage_tracker_h handle;
+
+    if (!ucp_context_usage_tracker_enabled(worker->context)) {
+        return UCS_OK;
+    }
+
+    params.promote_capacity = UCP_WORKER_USAGE_TRACKER_PROMOTE_CAPACITY;
+    params.promote_thresh   = UCP_WORKER_USAGE_TRACKER_PROMOTE_THRESHOLD;
+    params.remove_thresh    = UCP_WORKER_USAGE_TRACKER_REMOVE_THRESHOLD;
+    params.exp_decay.m      = UCP_WORKER_USAGE_TRACKER_EXP_DECAY_MULTIPLIER;
+    params.exp_decay.c      = UCP_WORKER_USAGE_TRACKER_EXP_DECAY_ADDER;
+    params.promote_cb       =
+            (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
+    params.demote_cb        =
+            (ucs_usage_tracker_elem_update_cb_t)ucs_empty_function;
+
+    status = ucs_usage_tracker_create(&params, &handle);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    worker->usage_tracker.handle       = handle;
+    worker->usage_tracker.iter_count   = 0;
+    worker->usage_tracker.rounds_count = 0;
+    worker->usage_tracker.last_round   = ucs_get_time();
+    return UCS_OK;
+}
+
+static void ucp_worker_usage_tracker_destroy(ucp_worker_h worker)
+{
+    if (!ucp_context_usage_tracker_enabled(worker->context)) {
+        return;
+    }
+
+    ucs_usage_tracker_destroy(worker->usage_tracker.handle);
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -2621,9 +2694,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
+    status = ucp_worker_usage_tracker_create(worker);
+    if (status != UCS_OK) {
+        goto err_am_cleanup;
+    }
+
     *worker_p = worker;
     return UCS_OK;
 
+err_am_cleanup:
+    ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
 err_destroy_mpools:
@@ -2853,6 +2933,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
+    ucp_worker_usage_tracker_destroy(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
@@ -3112,10 +3193,11 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
         /* Make sure not missing keepalive rounds after a long time without
          * calling UCP worker progress.
          */
-        UCS_STATIC_ASSERT(ucs_is_pow2_or_zero(UCP_WORKER_KEEPALIVE_ITER_SKIP));
+        UCS_STATIC_ASSERT(
+                ucs_is_pow2_or_zero(UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT));
         worker->keepalive.iter_count =
                 ucs_align_up_pow2(worker->keepalive.iter_count,
-                                  UCP_WORKER_KEEPALIVE_ITER_SKIP);
+                                  UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT);
     }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -3485,7 +3567,8 @@ static unsigned ucp_worker_keepalive_progress(void *arg)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
 
-    if ((worker->keepalive.iter_count++ % UCP_WORKER_KEEPALIVE_ITER_SKIP) != 0) {
+    if (ucs_likely((worker->keepalive.iter_count++ %
+                    UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) != 0)) {
         return 0;
     }
 
@@ -3676,4 +3759,23 @@ static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
 #if ENABLE_DEBUG_DATA
     ucs_string_buffer_appendf(strb, " name:%s", rdesc->name);
 #endif
+}
+
+void
+ucp_wiface_process_for_each_lane(ucp_worker_h worker,
+                                 ucp_ep_config_t *ep_config,
+                                 ucp_lane_map_t lane_map,
+                                 void (*wiface_process)(ucp_worker_iface_t*))
+{
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+
+    ucs_for_each_bit(lane, lane_map) {
+        ucs_assertv(lane < UCP_MAX_LANES,
+                    "lane=%" PRIu8 ", lane_map=0x%" PRIx16, lane, lane_map);
+        rsc_index = ep_config->key.lanes[lane].rsc_index;
+        wiface    = ucp_worker_iface(worker, rsc_index);
+        wiface_process(wiface);
+    }
 }

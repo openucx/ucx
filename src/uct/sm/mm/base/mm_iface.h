@@ -16,6 +16,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <sys/shm.h>
 #include <sys/un.h>
@@ -87,6 +88,18 @@ enum {
 #define UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED      UCS_BIT(63)
 
 
+typedef struct uct_mm_iface_op_overhead {
+    double am_short;
+    double am_bcopy;
+} uct_mm_iface_op_overhead_t;
+
+
+typedef struct uct_mm_iface_overhead {
+    uct_mm_iface_op_overhead_t send;
+    uct_mm_iface_op_overhead_t recv;
+} uct_mm_iface_overhead_t;
+
+
 /**
  * MM interface configuration
  */
@@ -103,6 +116,7 @@ typedef struct uct_mm_iface_config {
     unsigned                 fifo_elem_size;      /* Size of the FIFO element size */
     int                      error_handling; /* Exposing of error handling cap */
     uct_iface_mpool_config_t mp;
+    uct_mm_iface_overhead_t  overhead;
 } uct_mm_iface_config_t;
 
 
@@ -215,11 +229,13 @@ typedef struct uct_mm_iface {
     uct_recv_desc_t         release_desc;
 
     struct {
-        unsigned            fifo_size;
-        unsigned            fifo_elem_size;
-        unsigned            seg_size;         /* size of the receive descriptor (for payload)*/
-        unsigned            fifo_max_poll;
-        uint64_t            extra_cap_flags;
+        unsigned                fifo_size;
+        unsigned                fifo_elem_size;
+        /* size of the receive descriptor (for payload) */
+        unsigned                seg_size;
+        unsigned                fifo_max_poll;
+        uint64_t                extra_cap_flags;
+        uct_mm_iface_overhead_t overhead;
     } config;
 } uct_mm_iface_t;
 

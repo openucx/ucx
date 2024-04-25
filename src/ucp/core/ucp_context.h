@@ -137,6 +137,10 @@ typedef struct ucp_context_config {
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
+    /** Time period between dynamic transport switching rounds */
+    ucs_time_t                             dynamic_tl_switch_interval;
+    /** Number of usage tracker rounds performed for each progress operation */
+    unsigned                               dynamic_tl_progress_factor;
     /** Defines whether resolving remote endpoint ID is required or not when
      *  creating a local endpoint */
     ucs_on_off_auto_value_t                resolve_remote_ep_id;
@@ -176,6 +180,7 @@ typedef struct ucp_context_config {
     double                                 proto_overhead_rndv_rts;
     double                                 proto_overhead_rndv_rtr;
     double                                 proto_overhead_sw;
+    double                                 proto_overhead_rkey_ptr;
 } ucp_context_config_t;
 
 
@@ -278,6 +283,14 @@ typedef struct ucp_tl_md {
 } ucp_tl_md_t;
 
 
+typedef struct ucp_context_alloc_md_index {
+    int            initialized;
+    /* Index of memory domain that is used to allocate memory of the given type
+     * using ucp_memh_alloc(). */
+    ucp_md_index_t md_index;
+} ucp_context_alloc_md_index_t;
+
+
 /**
  * UCP context
  */
@@ -288,14 +301,18 @@ typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_md_index_t                num_mds;    /* Number of memory domains */
 
-    /* Index of memory domain that is used to allocate memory of the given type
-     * using ucp_memh_alloc(). */
-    int                           alloc_md_index_initialized;
-    ucp_md_index_t                alloc_md_index[UCS_MEMORY_TYPE_LAST];
+    ucp_context_alloc_md_index_t  alloc_md[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration for given memory type,
        ucp_mem_map() will register memory for all those domains. */
     ucp_md_map_t                  reg_md_map[UCS_MEMORY_TYPE_LAST];
+
+    /* Map of MDs that provide blocking registration for given memory type.
+     * This map is initialized if non-blocking registration is requested for
+     * the memory type (thus reg_md_map contains only MDs supporting
+     * non-blocking registration).
+     */
+    ucp_md_map_t                  reg_block_md_map[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];
@@ -375,6 +392,9 @@ typedef struct ucp_context {
 
         /* worker_fence implementation method */
         unsigned                  worker_strong_fence;
+
+        /* Progress wrapper enabled */
+        int                       progress_wrapper_enabled;
 
         struct {
            unsigned               count;
@@ -670,6 +690,12 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
 
     mem_info->type    = mem_info_internal.type;
     mem_info->sys_dev = mem_info_internal.sys_dev;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_context_usage_tracker_enabled(ucp_context_h context)
+{
+    return context->config.ext.dynamic_tl_switch_interval != UCS_TIME_INFINITY;
 }
 
 void

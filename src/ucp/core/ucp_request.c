@@ -745,6 +745,8 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
                   req->send.state.dt_iter.offset,
                   req->send.state.dt_iter.length);
 
+    ucp_worker_track_ep_usage(req);
+
     ucs_log_indent(1);
     status = progress_cb(self);
     if (UCS_STATUS_IS_ERR(status)) {

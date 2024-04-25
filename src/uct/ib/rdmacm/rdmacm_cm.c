@@ -187,8 +187,8 @@ dummy_qp_ctx_init:
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
     if (ctx->cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
-                                       "%s: ibv_create_cq()", dev_name);
+        uct_ib_check_memlock_limit_msg(verbs, UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq()");
         return UCS_ERR_IO_ERROR;
     }
 

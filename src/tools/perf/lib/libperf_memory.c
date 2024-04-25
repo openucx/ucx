@@ -346,9 +346,19 @@ void ucx_perf_global_init()
         .memcpy    = ucx_perf_test_memcpy_host,
         .memset    = memset
     };
+    static ucx_perf_allocator_t rdma_allocator = {
+        .mem_type  = UCS_MEMORY_TYPE_RDMA,
+        .init      = ucs_empty_function_return_success,
+        .uct_alloc = (ucx_perf_uct_alloc_func_t)ucs_empty_function_do_assert,
+        .uct_free  = (ucx_perf_uct_free_func_t)ucs_empty_function_do_assert,
+        .memcpy    = (ucx_perf_memcpy_func_t)ucs_empty_function_do_assert,
+        .memset    = (ucx_perf_memset_func_t)ucs_empty_function_do_assert
+    };
+
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_HOST] = &host_allocator;
+    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_RDMA] = &rdma_allocator;
 
     /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
      * alloc hooks, which are using dlsym() to get pointer to original function,

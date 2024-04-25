@@ -17,7 +17,7 @@
 #include <ucm/bistro/bistro.h>
 #include <ucm/bistro/bistro_int.h>
 #include <ucs/type/serialize.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/time/time.h>
 #include <ucs/arch/atomic.h>
 

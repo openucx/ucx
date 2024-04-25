@@ -17,7 +17,7 @@
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/profile/profile.h>
 #include <ucs/type/class.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/api/v2/uct_v2.h>
 #include <cuda.h>

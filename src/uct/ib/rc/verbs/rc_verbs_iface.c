@@ -21,6 +21,10 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
+
+#define UCT_RC_VERBS_IFACE_OVERHEAD 75e-9
+
+
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
 static uct_iface_ops_t uct_rc_verbs_iface_tl_ops;
 
@@ -32,7 +36,7 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
 };
 
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
-  {"RC_", "", NULL,
+  {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_VERBS_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
@@ -230,7 +234,9 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
-    iface_attr->overhead   = 75e-9; /* Software overhead */
+
+    /* Software overhead */
+    iface_attr->overhead = UCT_RC_VERBS_IFACE_OVERHEAD;
 
     iface_attr->ep_addr_len = uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
                                       sizeof(uct_rc_verbs_ep_flush_addr_t) :
@@ -528,8 +534,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_vfs_populate = uct_rc_verbs_ep_vfs_populate
 };
 
-static ucs_status_t
-uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
+static ucs_status_t uct_rc_verbs_can_create_qp(struct ibv_pd *pd)
 {
     struct ibv_qp_init_attr qp_init_attr = {
         .qp_type             = IBV_QPT_RC,
@@ -544,9 +549,10 @@ uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
     struct ibv_qp *qp;
     ucs_status_t status;
 
-    cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
+    cq = ibv_create_cq(pd->context, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG, "ibv_create_cq()");
+        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_cq()");
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
@@ -556,7 +562,8 @@ uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
 
     qp = ibv_create_qp(pd, &qp_init_attr);
     if (qp == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_DEBUG, "ibv_create_qp()");
+        uct_ib_check_memlock_limit_msg(pd->context, UCS_LOG_LEVEL_DEBUG,
+                                       "ibv_create_qp(RC)");
         status = UCS_ERR_UNSUPPORTED;
         goto err_destroy_cq;
     }
@@ -579,13 +586,13 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
     ucs_status_t status;
 
     /* device does not support RC if we cannot create an RC QP */
-    status = uct_rc_verbs_can_create_qp(ib_md->dev.ibv_context, ib_md->pd);
+    status = uct_rc_verbs_can_create_qp(ib_md->pd);
     if (status != UCS_OK) {
         return status;
     }
 
-    return uct_ib_device_query_ports(&ib_md->dev, 0, tl_devices_p,
-                                     num_tl_devices_p);
+    return uct_ib_device_query_ports(&ib_md->dev, UCT_IB_DEVICE_FLAG_SRQ,
+                                     tl_devices_p, num_tl_devices_p);
 }
 
 UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,

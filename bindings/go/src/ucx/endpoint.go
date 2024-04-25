@@ -29,7 +29,7 @@ func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_requ
 			cRequestParams.user_data = unsafe.Pointer(uintptr(cbId))
 		}
 
-		cRequestParams.SetMemType(goRequestParams)
+		setMemType(goRequestParams, cRequestParams)
 	}
 
 	return cbId
