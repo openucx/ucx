@@ -291,7 +291,7 @@ typedef struct {
 } uct_dc_mlx5_dci_pool_t;
 
 
-UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uint8_t, uct_dc_dci_t);
+UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uint16_t, uct_dc_dci_t);
 
 struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t    super;
@@ -478,8 +478,7 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 static UCS_F_ALWAYS_INLINE size_t 
 uct_dc_mlx5_iface_max_total_dcis(uct_dc_mlx5_iface_t *iface)
 {
-    return (iface->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS) +
-           UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
+    return (iface->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS) - 1;
 }
 
 /* TODO:
