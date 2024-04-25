@@ -34,9 +34,10 @@ build_ucx_in_docker() {
 }
 
 docker_run_srv() {
+    local test_name="$1"
     HCA=$(detect_hca)
-    docker_stop_srv
-    docker run --rm \
+    docker run \
+        --rm \
         --detach \
         --net=host \
         --name ucx_perftest_"$BUILD_BUILDID" \
@@ -45,10 +46,13 @@ docker_run_srv() {
         -v /hpc/local:/hpc/local \
         --ulimit memlock=-1:-1 --device=/dev/infiniband/ \
         $IMAGE \
-        bash -c "${PWD}/install/bin/ucx_perftest -K ${HCA}"
+        bash -c "${PWD}/install/bin/ucx_perftest -K ${HCA} > \
+            ${PWD}/ucx_perf_srv_${test_name}_${BUILD_BUILDID}.log 2>&1"
 }
 
 docker_stop_srv() {
+    local test_name="$1"
+    cat "${PWD}/ucx_perf_srv_${test_name}_${BUILD_BUILDID}.log"
     docker stop ucx_perftest_"$BUILD_BUILDID" || true
 }
 
