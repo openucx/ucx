@@ -586,6 +586,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
+    self->config.tx_moderation  = init_attr->tx_moderation;
     self->config.tx_poll_always = config->tx.poll_always;
     self->config.tx_cq_len      = tx_cq_size;
     self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);

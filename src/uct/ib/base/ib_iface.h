@@ -251,6 +251,7 @@ typedef struct uct_ib_iface_init_attr {
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
     unsigned    max_rd_atomic;
     uint8_t     cqe_zip_sizes[UCT_IB_DIR_LAST];
+    uint16_t    tx_moderation;           /* TX CQ moderation */
 } uct_ib_iface_init_attr_t;
 
 
