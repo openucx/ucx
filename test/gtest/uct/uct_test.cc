@@ -8,6 +8,7 @@
 #include "uct/api/uct_def.h"
 #include "uct/api/v2/uct_v2.h"
 
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <common/test_helpers.h>
@@ -967,8 +968,17 @@ void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem,
                                     unsigned mem_flags) const
 {
     if (md_attr().reg_mem_types & UCS_BIT(mem->mem_type)) {
-        ucs_status_t status = uct_md_mem_reg(m_md, mem->address, mem->length,
-                                             mem_flags, &mem->memh);
+        /* Register memory respecting MD reg_alignment */
+        void *reg_address = mem->address;
+        size_t reg_length = mem->length;
+        ucs_align_ptr_range(&reg_address, &reg_length, md_attr().reg_alignment);
+
+        uct_md_mem_reg_params_t reg_params;
+        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        reg_params.flags      = mem_flags;
+
+        ucs_status_t status = uct_md_mem_reg_v2(m_md, reg_address, reg_length,
+                                                &reg_params, &mem->memh);
         ASSERT_UCS_OK(status);
         mem->md = m_md;
     }
