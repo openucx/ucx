@@ -522,7 +522,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         reg_length  = length;
 
         if (context->rcache == NULL) {
-            reg_align = ucs_max(context->tl_mds[md_index].attr.reg_alignment, 1);
+            reg_align = context->tl_mds[md_index].attr.reg_alignment;
             ucs_align_ptr_range(&reg_address, &reg_length, reg_align);
         }
 
