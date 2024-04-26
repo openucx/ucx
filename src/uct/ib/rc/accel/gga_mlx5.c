@@ -228,6 +228,31 @@ err_out:
 static UCS_CLASS_DECLARE_DELETE_FUNC(uct_gga_mlx5_iface_t, uct_iface_t);
 
 static ucs_status_t
+uct_gga_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md UCS_V_UNUSED =
+            uct_ib_mlx5_iface_md(&iface->super.super);
+
+    ucs_assert(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ);
+    *fd_p = iface->cq_event_channel->fd;
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_gga_mlx5_iface_arm(uct_iface_h tl_iface, unsigned events)
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md UCS_V_UNUSED =
+            uct_ib_mlx5_iface_md(&iface->super.super);
+
+    ucs_assert(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ);
+    return uct_rc_mlx5_iface_devx_arm(iface, events);
+}
+
+static ucs_status_t
 uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
@@ -430,8 +455,8 @@ static uct_iface_ops_t uct_gga_mlx5_iface_tl_ops = {
     .iface_progress_enable    = uct_rc_mlx5_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = (uct_iface_progress_func_t)ucs_empty_function_do_assert,
-    .iface_event_fd_get       = ucs_empty_function_return_unsupported,
-    .iface_event_arm          = ucs_empty_function_return_unsupported,
+    .iface_event_fd_get       = uct_gga_mlx5_iface_event_fd_get,
+    .iface_event_arm          = uct_gga_mlx5_iface_arm,
     .iface_close              = uct_gga_mlx5_iface_t_delete,
     .iface_query              = uct_gga_mlx5_iface_query,
     .iface_get_address        = ucs_empty_function_return_success,
