@@ -486,6 +486,24 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr)
     return UCS_OK;
 }
 
+void uct_md_base_md_query(uct_md_attr_v2_t *md_attr)
+{
+    md_attr->reg_mem_types             = 0;
+    md_attr->reg_nonblock_mem_types    = 0;
+    md_attr->cache_mem_types           = 0;
+    md_attr->detect_mem_types          = 0;
+    md_attr->alloc_mem_types           = 0;
+    md_attr->access_mem_types          = 0;
+    md_attr->dmabuf_mem_types          = 0;
+    md_attr->max_alloc                 = 0;
+    md_attr->max_reg                   = ULONG_MAX;
+    md_attr->reg_cost                  = UCS_LINEAR_FUNC_ZERO;
+    md_attr->rkey_packed_size          = 0;
+    md_attr->exported_mkey_packed_size = 0;
+    md_attr->reg_alignment             = 1;
+    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+}
+
 ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         const uct_alloc_method_t *methods,
                                         unsigned num_methods,
