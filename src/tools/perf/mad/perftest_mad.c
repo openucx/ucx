@@ -316,8 +316,10 @@ static ucs_status_t perftest_mad_barrier(perftest_mad_rte_group_t *group)
     ucs_status_t status = UCS_OK;
     unsigned value;
 
-#pragma omp barrier
-#pragma omp single copyprivate(status)
+#if _OPENMP
+#  pragma omp barrier
+#  pragma omp single copyprivate(status)
+#endif
     {
         value = ++mad_magic;
 
@@ -331,7 +333,9 @@ static ucs_status_t perftest_mad_barrier(perftest_mad_rte_group_t *group)
 
         status = perftest_mad_recv_magic(group, ~value);
     }
-#pragma omp barrier
+#if _OPENMP
+#  pragma omp barrier
+#endif
     return status;
 }
 
