@@ -1761,11 +1761,11 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     ucp_wireup_dev_usage_count_init(&dev_count);
-    dev_count.excl_lane = am_lane;
-    bw_info.dev_count   = &dev_count;
-    num_am_bw_lanes     = ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                                  ucp_tl_bitmap_max,
-                                                  select_ctx, 0);
+    dev_count.excl_lane       = am_lane;
+    bw_info.dev_count         = &dev_count;
+    num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                              ucp_tl_bitmap_max,
+                                              select_ctx, 0);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
@@ -1892,7 +1892,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     dev_count = ucs_malloc(UCS_MEMORY_TYPE_LAST * sizeof(*dev_count),
                            "rma_bw_lanes_dev_count");
     if (dev_count == NULL) {
-        ucs_log(UCS_LOG_LEVEL_ERROR, "failed to allocate dev_count");
+        ucs_error("failed to allocate dev_count");
         return UCS_ERR_NO_MEMORY;
     }
 
