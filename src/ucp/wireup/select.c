@@ -169,11 +169,13 @@ static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
 
 
 static void
-ucp_wireup_dev_usage_count_init(ucp_wireup_dev_usage_count *dev_count)
+ucp_wireup_dev_usage_count_init(ucp_wireup_dev_usage_count *dev_count,
+                                ucp_lane_index_t excl_lane,
+                                ucp_rsc_index_t skip_dev_index)
 {
     memset(dev_count, 0, sizeof(*dev_count));
-    dev_count->excl_lane      = UCP_NULL_LANE;
-    dev_count->skip_dev_index = UCP_NULL_RESOURCE;
+    dev_count->excl_lane      = excl_lane;
+    dev_count->skip_dev_index = skip_dev_index;
 }
 
 static const char *
@@ -1760,12 +1762,11 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
-    ucp_wireup_dev_usage_count_init(&dev_count);
-    dev_count.excl_lane       = am_lane;
-    bw_info.dev_count         = &dev_count;
-    num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                              ucp_tl_bitmap_max,
-                                              select_ctx, 0);
+    ucp_wireup_dev_usage_count_init(&dev_count, am_lane, UCP_NULL_RESOURCE);
+    bw_info.dev_count = &dev_count;
+    num_am_bw_lanes   = ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                                ucp_tl_bitmap_max,
+                                                select_ctx, 0);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
@@ -1900,7 +1901,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
          * Allow selecting additional lanes in case the remote memory will not be
          * registered with this memory domain, i.e with GPU memory.
          */
-        ucp_wireup_dev_usage_count_init(&dev_count_rkey_ptr);
+        ucp_wireup_dev_usage_count_init(&dev_count_rkey_ptr, UCP_NULL_LANE,
+                                        UCP_NULL_RESOURCE);
         bw_info.local_dev_bitmap           = UINT64_MAX;
         bw_info.remote_dev_bitmap          = UINT64_MAX;
         bw_info.criteria.title             = "obtain remote memory pointer";
@@ -1976,11 +1978,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucs_memory_type_for_each(mem_type) {
-        ucp_wireup_dev_usage_count_init(&dev_count[mem_type]);
-        dev_count[mem_type].excl_lane = am_lane;
-    }
-
     /* RNDV protocol can't mix different schemes, i.e. wireup has to
      * select lanes with the same iface flags depends on a requested
      * RNDV scheme.
@@ -2000,6 +1997,12 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         /* Set the new iface RMA flags */
         ucp_wireup_criteria_iface_flags_add(&bw_info.criteria, &iface_rma_flags,
                                             &peer_rma_flags);
+
+        /* Initialize device count for each memory type */
+        ucs_memory_type_for_each(mem_type) {
+            ucp_wireup_dev_usage_count_init(&dev_count[mem_type], am_lane,
+                                            UCP_NULL_RESOURCE);
+        }
 
         /* Add lanes that can access the memory by short operations */
         added_lanes = 0;
