@@ -1723,33 +1723,6 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    /* Select one lane for active messages */
-    ucp_wireup_criteria_init(&bw_info.criteria);
-    bw_info.criteria.title              = "high-bw active messages";
-    bw_info.criteria.calc_score         = ucp_wireup_am_bw_score_func;
-    bw_info.criteria.lane_type          = UCP_LANE_TYPE_AM_BW;
-    ucp_wireup_init_select_flags(&bw_info.criteria.remote_iface_flags,
-                                 UCP_ADDR_IFACE_FLAG_AM_SYNC, 0);
-    ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
-                                 UCT_IFACE_FLAG_AM_BCOPY, 0);
-    ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
-
-    if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
-                           UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-        bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
-    }
-
-    bw_info.local_dev_bitmap  = UINT64_MAX;
-    bw_info.remote_dev_bitmap = UINT64_MAX;
-    bw_info.md_map            = 0;
-    bw_info.criteria.arg      = &dev_count;
-    bw_info.max_lanes         = context->config.ext.max_eager_lanes - 1;
-    /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
-    if (context->config.ext.proto_enable) {
-        bw_info.max_lanes = ucs_max(bw_info.max_lanes,
-                                    context->config.ext.max_rndv_lanes - 1);
-    }
-
     /* am_bw_lane[0] is am_lane, so don't re-select it here */
     am_lane = UCP_NULL_LANE;
     for (lane_desc_idx = 0; lane_desc_idx < select_ctx->num_lanes; ++lane_desc_idx) {
@@ -1762,11 +1735,38 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
+    /* Select one lane for active messages */
+    ucp_wireup_criteria_init(&bw_info.criteria);
     ucp_wireup_dev_usage_count_init(&dev_count, am_lane, UCP_NULL_RESOURCE);
-    bw_info.dev_count = &dev_count;
-    num_am_bw_lanes   = ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                                ucp_tl_bitmap_max,
-                                                select_ctx, 0);
+    bw_info.criteria.title              = "high-bw active messages";
+    bw_info.criteria.calc_score         = ucp_wireup_am_bw_score_func;
+    bw_info.criteria.arg                = &dev_count;
+    bw_info.criteria.lane_type          = UCP_LANE_TYPE_AM_BW;
+    ucp_wireup_init_select_flags(&bw_info.criteria.remote_iface_flags,
+                                 UCP_ADDR_IFACE_FLAG_AM_SYNC, 0);
+    ucp_wireup_init_select_flags(&bw_info.criteria.local_iface_flags,
+                                 UCT_IFACE_FLAG_AM_BCOPY, 0);
+    ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
+
+    if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
+                           UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
+        bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
+    }
+
+    bw_info.dev_count         = &dev_count;
+    bw_info.local_dev_bitmap  = UINT64_MAX;
+    bw_info.remote_dev_bitmap = UINT64_MAX;
+    bw_info.md_map            = 0;
+    bw_info.max_lanes         = context->config.ext.max_eager_lanes - 1;
+    /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
+    if (context->config.ext.proto_enable) {
+        bw_info.max_lanes = ucs_max(bw_info.max_lanes,
+                                    context->config.ext.max_rndv_lanes - 1);
+    }
+
+    num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                              ucp_tl_bitmap_max,
+                                              select_ctx, 0);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
