@@ -258,4 +258,6 @@ static UCS_F_ALWAYS_INLINE ucs_log_level_t uct_md_attach_log_lvl(uint64_t flags)
 void uct_md_vfs_init(uct_component_h component, uct_md_h md,
                      const char *md_name);
 
+void uct_md_base_md_query(uct_md_attr_v2_t *md_attr);
+
 #endif
