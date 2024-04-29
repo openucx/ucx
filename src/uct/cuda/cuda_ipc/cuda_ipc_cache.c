@@ -371,8 +371,10 @@ ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
     if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemUnmap(
                     (CUdeviceptr)region->mapped_addr, region->key.b_len));
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAddressFree(
-                    (CUdeviceptr)region->mapped_addr, region->key.b_len));
+        if (status == UCS_OK) {
+            status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAddressFree(
+                        (CUdeviceptr)region->mapped_addr, region->key.b_len));
+        }
     } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
         /* Ideally we call cuMemFreeAsync on imported pointer region here but
          * handles can be closed after device context has been destroyed which

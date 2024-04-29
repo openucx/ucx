@@ -139,7 +139,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 #else
     status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph, (CUdeviceptr)addr),
                               UCS_LOG_LEVEL_ERROR);
-    if (status != UCS_OK) {
+    if (UCS_OK != status) {
         goto err;
     }
 #endif

@@ -269,14 +269,14 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_alloc_handle_t *alloc_handle)
                                                      alloc_handle->length, granularity,
                                                      0, 0));
     if (status != UCS_OK) {
-        return status;
+        goto addr_reserve_err;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemMap((CUdeviceptr)alloc_handle->ptr,
                                                alloc_handle->length, 0,
                                                alloc_handle->generic_handle, 0));
     if (status != UCS_OK) {
-        return status;
+        goto unmap_err;
     }
 
     access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
@@ -288,7 +288,7 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_alloc_handle_t *alloc_handle)
                                                 alloc_handle->length,
                                                 &access_desc, 1));
     if (status != UCS_OK) {
-        return status;
+        goto access_err;
     }
 
     alloc_handle->alloc_type = UCT_CUDA_ALLOC_TYPE_FABRIC;
@@ -296,6 +296,17 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_alloc_handle_t *alloc_handle)
     ucs_trace("allocated vmm fabric memory at %p of size %ld\n", alloc_handle->ptr,
                                                                  alloc_handle->length);
     return UCS_OK;
+
+access_err:
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemUnmap((CUdeviceptr)alloc_handle->ptr,
+                alloc_handle->length));
+unmap_err:
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemAddressFree((CUdeviceptr)alloc_handle->ptr,
+                alloc_handle->length));
+addr_reserve_err:
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemRelease(alloc_handle->generic_handle));
+    return UCS_ERR_NO_MEMORY;
+
 #else
     return UCS_ERR_NO_MEMORY;
 #endif
@@ -482,24 +493,15 @@ static void
 uct_cuda_copy_set_sync_memops(const void *address, unsigned is_vmm_allocation)
 {
     unsigned value = 1;
-    CUresult cu_err;
 
 #if HAVE_CUDA_FABRIC
     if (is_vmm_allocation) {
-        cu_err = cuCtxSetFlags(CU_CTX_SYNC_MEMOPS);
-        if (cu_err != CUDA_SUCCESS) {
-            ucs_warn("cuCtxSetFlags(CU_CTX_SYNC_MEMOPS) for %p error: %s",
-                     address, uct_cuda_base_cu_get_error_string(cu_err));
-        }
+        UCT_CUDADRV_FUNC_LOG_WARN(cuCtxSetFlags(CU_CTX_SYNC_MEMOPS));
     } else
 #endif
     {
-        cu_err = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
-                                       (CUdeviceptr)address);
-        if (cu_err != CUDA_SUCCESS) {
-            ucs_warn("cuPointerSetAttribute(%p, SYNC_MEMOPS) error: %s",
-                     address, uct_cuda_base_cu_get_error_string(cu_err));
-        }
+        UCT_CUDADRV_FUNC_LOG_WARN(cuPointerSetAttribute(&value,
+                    CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, (CUdeviceptr)address));
     }
 }
 
