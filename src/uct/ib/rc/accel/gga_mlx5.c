@@ -265,6 +265,7 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->device_addr_len += ucs_offsetof(uct_gga_mlx5_dev_addr_t,
                                                 ib_addr);
+    iface_attr->ep_addr_len      = sizeof(uct_gga_mlx5_ep_address_t);
     iface_attr->cap.flags = /*
                             UCT_IFACE_FLAG_PUT_ZCOPY |
                             UCT_IFACE_FLAG_GET_ZCOPY |
