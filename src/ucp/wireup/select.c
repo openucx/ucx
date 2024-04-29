@@ -1846,6 +1846,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         UCP_RNDV_MODE_PUT_ZCOPY
     };
     ucp_wireup_dev_usage_count *dev_count;
+    ucp_wireup_dev_usage_count dev_count_rkey_ptr;
     ucp_wireup_select_bw_info_t bw_info;
     ucs_memory_type_t mem_type;
     unsigned max_lanes, lanes_batch;
@@ -1889,13 +1890,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     bw_info.md_map = 0;
 
-    dev_count = ucs_malloc(UCS_MEMORY_TYPE_LAST * sizeof(*dev_count),
-                           "rma_bw_lanes_dev_count");
-    if (dev_count == NULL) {
-        ucs_error("failed to allocate dev_count");
-        return UCS_ERR_NO_MEMORY;
-    }
-
     /* check rkey_ptr */
     if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
          (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO)) {
@@ -1906,14 +1900,14 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
          * Allow selecting additional lanes in case the remote memory will not be
          * registered with this memory domain, i.e with GPU memory.
          */
-        ucp_wireup_dev_usage_count_init(&dev_count[0]);
+        ucp_wireup_dev_usage_count_init(&dev_count_rkey_ptr);
         bw_info.local_dev_bitmap           = UINT64_MAX;
         bw_info.remote_dev_bitmap          = UINT64_MAX;
         bw_info.criteria.title             = "obtain remote memory pointer";
         bw_info.criteria.local_cmpt_flags |= UCT_COMPONENT_FLAG_RKEY_PTR;
         bw_info.criteria.lane_type         = UCP_LANE_TYPE_RKEY_PTR;
-        bw_info.criteria.arg               = &dev_count[0];
-        bw_info.dev_count                  = &dev_count[0];
+        bw_info.criteria.arg               = &dev_count_rkey_ptr;
+        bw_info.dev_count                  = &dev_count_rkey_ptr;
         bw_info.max_lanes                  = 1;
 
         UCP_CONTEXT_MEM_CAP_TLS(context, UCS_MEMORY_TYPE_HOST, access_mem_types,
@@ -1973,6 +1967,13 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
             allow_extra_path      = 1;
             break;
         }
+    }
+
+    dev_count = ucs_malloc(UCS_MEMORY_TYPE_LAST * sizeof(*dev_count),
+                           "rma_bw_lanes_dev_count");
+    if (dev_count == NULL) {
+        ucs_error("failed to allocate dev_count");
+        return UCS_ERR_NO_MEMORY;
     }
 
     ucs_memory_type_for_each(mem_type) {
