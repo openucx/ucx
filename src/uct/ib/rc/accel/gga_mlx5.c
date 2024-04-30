@@ -156,7 +156,7 @@ static ucs_status_t uct_gga_mlx5_rkey_release(uct_component_t *component,
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
 
     uct_gga_mlx5_rkey_handle_dereg(rkey_handle);
-    ucs_free(handle);
+    ucs_free(rkey_handle);
     return UCS_OK;
 }
 
