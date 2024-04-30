@@ -92,7 +92,7 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                    txwq, opcode, iov, iovcnt,
                                    am_id, am_hdr, am_hdr_len,
                                    rdma_raddr, rdma_rkey,
-                                   tag, app_ctx, ib_imm_be, av_size,
+                                   tag, app_ctx, ib_imm_be, NULL, av_size,
                                    MLX5_WQE_CTRL_CQ_UPDATE | send_flags,
                                    ep->dci_channel_index,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));

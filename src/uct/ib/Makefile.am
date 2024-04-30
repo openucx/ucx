@@ -77,8 +77,13 @@ endif # HAVE_MLX5_DV
 
 if HAVE_DEVX
 libuct_ib_la_SOURCES += \
-	rc/accel/rc_mlx5_devx.c \
+	rc/accel/rc_mlx5_devx.c
+
+if HAVE_MLX5_MMO
+libuct_ib_la_SOURCES += \
 	rc/accel/gga_mlx5.c
+
+endif # HAVE_MLX5_MMO
 
 endif # HAVE_DEVX
 

@@ -21,6 +21,12 @@ extern "C" {
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 
+static std::string wrap_config_dc_str(const std::string &str)
+{
+    static const std::string dc_prefix("DC_");
+    return dc_prefix + str;
+}
+
 class test_dc : public test_rc {
 public:
     virtual void init() {
@@ -155,6 +161,9 @@ protected:
         ++m_purge_count;
     }
 
+    virtual std::string wrap_config_str(const std::string &str) const override {
+        return ::wrap_config_dc_str(str);
+    }
 };
 
 int test_dc::n_warnings         = 0;
@@ -287,7 +296,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_destroy) {
     EXPECT_EQ(0, iface->tx.dci_pool[0].stack_top);
 }
 
-UCS_TEST_P(test_dc, dcs_ep_flush_pending, "DC_NUM_DCI=1") {
+UCS_TEST_P(test_dc, dcs_ep_flush_pending, "NUM_DCI=1") {
     ucs_status_t status;
     uct_dc_mlx5_iface_t *iface;
 
@@ -336,7 +345,7 @@ UCS_TEST_P(test_dc, dcs_ep_flush_pending, "DC_NUM_DCI=1") {
 
 /* check that ep does not hold dci after purge
  */
-UCS_TEST_P(test_dc, dcs_ep_purge_pending, "DC_NUM_DCI=1") {
+UCS_TEST_P(test_dc, dcs_ep_purge_pending, "NUM_DCI=1") {
 
     ucs_status_t status;
     uct_dc_mlx5_iface_t *iface;
@@ -447,7 +456,7 @@ UCS_TEST_P(test_dc, pool_indices)
     constexpr uint8_t last_dci_pool_index = UCT_DC_MLX5_IFACE_MAX_DCI_POOLS - 1;
 
     /* Set num paths to max */
-    modify_config("IB_NUM_PATHS", std::to_string(max_dci_pools).c_str());
+    modify_config("NUM_PATHS", std::to_string(max_dci_pools));
 
     entity *rand_e      = create_rand_entity();
     bool used_last_pool = false;
@@ -468,7 +477,7 @@ UCS_TEST_P(test_dc, pool_indices)
 }
 
 UCS_TEST_SKIP_COND_P(test_dc, stress_iface_ops,
-                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY), "DC_NUM_DCI=1")
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY), "NUM_DCI=1")
 {
     test_iface_ops(ucs_array_elem(&dc_iface(m_e1)->tx.dcis, 0).txqp.available);
 }
@@ -535,6 +544,10 @@ public:
     {
         test_rc_flow_control::test_pending_grant(wnd);
         flush();
+    }
+
+    virtual std::string wrap_config_str(const std::string &str) const override {
+        return ::wrap_config_dc_str(str);
     }
 };
 
@@ -690,7 +703,7 @@ class test_dc_flow_control_with_hard_req_resend : public test_dc_flow_control
 {
 protected:
     virtual void init() {
-        modify_config("DC_FC_HARD_REQ_TIMEOUT", "0.1s");
+        modify_config("FC_HARD_REQ_TIMEOUT", "0.1s");
         test_dc_flow_control::init();
     }
 
@@ -740,9 +753,9 @@ UCT_DC_INSTANTIATE_TEST_CASE(test_dc_iface_attrs)
 class test_dc_fc_deadlock : public test_dc_flow_control {
 public:
     test_dc_fc_deadlock() {
-        modify_config("IB_TX_QUEUE_LEN", "8");
-        modify_config("RC_FC_WND_SIZE", "128");
-        modify_config("DC_TX_POLICY", "rand");
+        modify_config("TX_QUEUE_LEN", "8");
+        modify_config("FC_WND_SIZE", "128");
+        modify_config("TX_POLICY", "rand");
     }
 
 protected:
@@ -757,7 +770,7 @@ protected:
     }
 };
 
-UCS_TEST_P(test_dc_fc_deadlock, basic, "DC_NUM_DCI=1")
+UCS_TEST_P(test_dc_fc_deadlock, basic, "NUM_DCI=1")
 {
     // Send to m_e2 until dci resources are exhausted.
     // Also set FC window to 0 emulating lack of all TX resources

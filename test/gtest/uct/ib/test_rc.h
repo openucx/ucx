@@ -26,7 +26,7 @@ public:
         uct_ep_h          ep;
     } pending_send_request_t;
 
-    virtual void init();
+    virtual void init() override;
     virtual void connect();
 
     uct_rc_iface_t* rc_iface(entity *e) {
@@ -56,8 +56,12 @@ public:
     }
 
 protected:
-    entity *m_e1, *m_e2;
+    virtual std::string wrap_config_str(const std::string &str) const override {
+        const std::string prefix = has_transport("gga_mlx5") ? "GGA_" : "RC_";
+        return prefix + str;
+    }
 
+    entity *m_e1, *m_e2;
 };
 
 class test_rc_flow_control : public test_rc {

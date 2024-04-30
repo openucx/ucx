@@ -520,30 +520,36 @@ bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
 /* modify the config of all the matching environment parameters */
 void uct_test::modify_config(const std::string& name, const std::string& value,
                              modify_config_mode_t mode) {
+    const std::string full_name = wrap_config_str(name);
     ucs_status_t status = UCS_OK;
 
     if (m_cm_config != NULL) {
-        status = uct_config_modify(m_cm_config, name.c_str(), value.c_str());
+        status = uct_config_modify(m_cm_config, full_name.c_str(),
+                                   value.c_str());
         if (status == UCS_OK) {
             mode = IGNORE_IF_NOT_EXIST;
         } else if (status != UCS_ERR_NO_ELEM) {
-            UCS_TEST_ABORT("Couldn't modify cm config parameter: " << name.c_str() <<
-                           " to " << value.c_str() << ": " << ucs_status_string(status));
+            UCS_TEST_ABORT("Couldn't modify cm config parameter: " << full_name
+                           << " to " << value << ": " <<
+                           ucs_status_string(status));
         }
     }
 
     if (m_iface_config != NULL) {
-        status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
+        status = uct_config_modify(m_iface_config, full_name.c_str(),
+                                   value.c_str());
         if (status == UCS_OK) {
             mode = IGNORE_IF_NOT_EXIST;
         } else if (status != UCS_ERR_NO_ELEM) {
-            UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
-                           " to " << value.c_str() << ": " << ucs_status_string(status));
+            UCS_TEST_ABORT("Couldn't modify iface config parameter: " <<
+                           full_name << " to " << value << ": " <<
+                           ucs_status_string(status));
         }
     }
 
     if (m_md_config != NULL) {
-        status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
+        status = uct_config_modify(m_md_config, full_name.c_str(),
+                                   value.c_str());
         if (status == UCS_OK) {
             mode = IGNORE_IF_NOT_EXIST;
         }
@@ -590,6 +596,11 @@ bool uct_test::get_config(const std::string& name, std::string& value) const
 
 bool uct_test::has_transport(const std::string& tl_name) const {
     return (GetParam()->tl_name == tl_name);
+}
+
+std::string uct_test::wrap_config_str(const std::string& str) const
+{
+    return str;
 }
 
 bool uct_test::has_ud() const {
@@ -1625,16 +1636,32 @@ void test_uct_iface_attrs::basic_iov_test()
 
     EXPECT_FALSE(max_iov_map.empty());
 
-    if (max_iov_map.find("am")  != max_iov_map.end()) {
+    if (m_e->iface_attr().cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
+                                       UCT_IFACE_FLAG_AM_BCOPY |
+                                       UCT_IFACE_FLAG_AM_ZCOPY)) {
+        EXPECT_NE(max_iov_map.end(), max_iov_map.find("am"));
         EXPECT_EQ(max_iov_map.at("am"), m_e->iface_attr().cap.am.max_iov);
     }
-    if (max_iov_map.find("tag") != max_iov_map.end()) {
+
+    if (m_e->iface_attr().cap.flags & (UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                                       UCT_IFACE_FLAG_TAG_EAGER_BCOPY|
+                                       UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                                       UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)) {
+        EXPECT_NE(max_iov_map.end(), max_iov_map.find("tag"));
         EXPECT_EQ(max_iov_map.at("tag"), m_e->iface_attr().cap.tag.eager.max_iov);
     }
-    if (max_iov_map.find("put") != max_iov_map.end()) {
+
+    if (m_e->iface_attr().cap.flags & (UCT_IFACE_FLAG_PUT_SHORT |
+                                       UCT_IFACE_FLAG_PUT_BCOPY |
+                                       UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        EXPECT_NE(max_iov_map.end(), max_iov_map.find("put"));
         EXPECT_EQ(max_iov_map.at("put"), m_e->iface_attr().cap.put.max_iov);
     }
-    if (max_iov_map.find("get") != max_iov_map.end()) {
+
+    if (m_e->iface_attr().cap.flags & (UCT_IFACE_FLAG_GET_SHORT |
+                                       UCT_IFACE_FLAG_GET_BCOPY |
+                                       UCT_IFACE_FLAG_GET_ZCOPY)) {
+        EXPECT_NE(max_iov_map.end(), max_iov_map.find("get"));
         EXPECT_EQ(max_iov_map.at("get"), m_e->iface_attr().cap.get.max_iov);
     }
 }
