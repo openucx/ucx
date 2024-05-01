@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucs/debug/assert.h>
+#include <ucs/sys/ptr_arith.h>
 #include <common/test_helpers.h>
 
 #if HAVE_CUDA

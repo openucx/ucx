@@ -64,6 +64,7 @@ stages:
           - checkout: self
             fetchDepth: 100
             clean: true
+            retryCountOnTaskFailure: 5
 
           - bash: |
               set -eE

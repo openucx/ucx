@@ -121,10 +121,9 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2), /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
-    UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE       = UCS_BIT(3)  /**< Progress should be activated */
 };
 
 
@@ -440,5 +439,20 @@ ucp_worker_flush_ops_count_add(ucp_worker_h worker, int count)
 
     worker->flush_ops_count = flush_ops_count;
 }
+
+
+/**
+ * @brief Process corresponding UCP worker interface for each lane in the map.
+ *
+ * @param [in] worker          Worker object containing interfaces.
+ * @param [in] ep_config       Endpoint configuration containing resources.
+ * @param [in] lane_map        Map of lanes to iterate through.
+ * @param [in] wiface_process  Process method to be invoked for each wiface.
+ */
+void
+ucp_wiface_process_for_each_lane(ucp_worker_h worker,
+                                 ucp_ep_config_t *ep_config,
+                                 ucp_lane_map_t lane_map,
+                                 void (*wiface_process)(ucp_worker_iface_t*));
 
 #endif

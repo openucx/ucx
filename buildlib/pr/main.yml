@@ -159,6 +159,9 @@ resources:
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+    - container: centos8_cuda11_asan
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed23-cuda11_asan:1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu16_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
@@ -245,6 +248,7 @@ stages:
           - checkout: self
             clean: true
             fetchDepth: 100
+            retryCountOnTaskFailure: 5
 
           - bash: |
               ./buildlib/tools/builds.sh
@@ -253,6 +257,15 @@ stages:
               BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
               long_test: $(long_test)
               test_static: $(test_static)
+
+  - stage: ucx_perftest_mad_rte
+    dependsOn: [Static_check]
+    displayName: ucx_perftest over MAD RTE
+    lockBehavior: sequential
+    variables:
+      - group: concurrency_lock
+    jobs:
+    - template: mad_tests.yml
 
   - stage: WireCompat
     dependsOn: [Static_check]
@@ -322,6 +335,7 @@ stages:
       parameters:
         name: BlueField
         demands: ucx_bf -equals yes
+        run_tests: no
         test_perf: 0
 
   - stage: Namespace_Tests
@@ -393,6 +407,7 @@ stages:
           - checkout: self
             clean: true
             fetchDepth: 100
+            retryCountOnTaskFailure: 5
 
           - bash: |
               ./buildlib/tools/build_static.sh
@@ -418,7 +433,7 @@ stages:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 0
-        container: ubuntu22_cuda12
+        container: centos8_cuda11_asan
         asan_check: yes
     - template: tests.yml
       parameters:
@@ -427,24 +442,22 @@ stages:
         test_perf: 0
         container: ubuntu2204_ib
         asan_check: yes
-
-
-  - stage: Valgrind
-    dependsOn: [Static_check]
-    jobs:
     - template: tests.yml
       parameters:
         name: roce
         demands: ucx_roce -equals yes
         test_perf: 0
-        valgrind_check: yes
+        container: ubuntu2204_ib
+        asan_check: yes
     - template: tests.yml
       parameters:
         name: roce_proto_disable
         demands: ucx_roce -equals yes
         test_perf: 0
         proto_enable: no
-        valgrind_check: yes
+        container: ubuntu2204_ib
+        asan_check: yes
+
 
 #  - stage: Cuda_compatible
 #    dependsOn: [Static_check]

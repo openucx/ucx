@@ -30,6 +30,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            retryCountOnTaskFailure: 5
           - bash: |
               set -eE
               source ./buildlib/az-helpers.sh

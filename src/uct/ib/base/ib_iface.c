@@ -205,6 +205,22 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Reverse Service level. 'auto' will set the same value of sl\n",
    ucs_offsetof(uct_ib_iface_config_t, reverse_sl), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"SEND_OVERHEAD", UCS_VALUE_AUTO_STR,
+   "Estimated overhead of preparing a work request, posting it to the NIC,\n"
+   "and finalizing an operation",
+   0, UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME_UNITS,
+    {"bcopy", "estimated overhead of allocating a tx buffer",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.bcopy)},
+    {"cqe", "estimated overhead of processing a work request completion",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.cqe)},
+    {"db", "estimated overhead of writing a doorbell to PCI",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.db)},
+    {"wqe_fetch", "estimated overhead of fetching a wqe",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_fetch)},
+    {"wqe_post", "estimated overhead of posting a wqe",
+     ucs_offsetof(uct_ib_iface_config_t, send_overhead.wqe_post)},
+    {NULL})},
+
   {NULL}
 };
 
@@ -1092,9 +1108,9 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
 #endif
     if (qp == NULL) {
         uct_ib_check_memlock_limit_msg(
-                UCS_LOG_LEVEL_ERROR,
-                "iface=%p: failed to create %s QP "
-                "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
+                dev->ibv_context, UCS_LOG_LEVEL_ERROR,
+                "iface %p failed to create %s QP "
+                "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
                 iface, uct_ib_qp_type_str(attr->qp_type), attr->cap.max_send_wr,
                 attr->cap.max_send_sge, attr->cap.max_inline_data,
                 attr->max_inl_cqe[UCT_IB_DIR_TX], attr->cap.max_recv_wr,
@@ -1105,10 +1121,10 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
     attr->cap  = attr->ibv.cap;
     *qp_p      = qp;
 
-    ucs_debug("iface=%p: created %s QP 0x%x on %s:%d "
+    ucs_debug("%s: iface %p created %s QP 0x%x on %s:%d "
               "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
-              iface, uct_ib_qp_type_str(attr->qp_type), qp->qp_num,
-              uct_ib_device_name(dev), iface->config.port_num,
+              uct_ib_device_name(dev), iface, uct_ib_qp_type_str(attr->qp_type),
+              qp->qp_num, uct_ib_device_name(dev), iface->config.port_num,
               attr->cap.max_send_wr, attr->cap.max_send_sge,
               attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
               attr->cap.max_recv_wr, attr->cap.max_recv_sge,
@@ -1121,25 +1137,25 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
+    struct ibv_context *ibv_context = uct_ib_iface_device(iface)->ibv_context;
+    unsigned cq_size                = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_EX
     struct ibv_cq_init_attr_ex cq_attr = {};
 
     uct_ib_fill_cq_attr(&cq_attr, init_attr, iface, preferred_cpu, cq_size);
 
-    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(dev->ibv_context, &cq_attr));
+    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(ibv_context, &cq_attr));
     if (!cq && ((errno == EOPNOTSUPP) || (errno == ENOSYS)))
 #endif
     {
         iface->config.max_inl_cqe[dir] = 0;
-        cq = ibv_create_cq(dev->ibv_context, cq_size, NULL, iface->comp_channel,
+        cq = ibv_create_cq(ibv_context, cq_size, NULL, iface->comp_channel,
                            preferred_cpu);
     }
 
     if (cq == NULL) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR,
+        uct_ib_check_memlock_limit_msg(ibv_context, UCS_LOG_LEVEL_ERROR,
                                        "ibv_create_cq(cqe=%d)", cq_size);
         return UCS_ERR_IO_ERROR;
     }
@@ -1151,11 +1167,7 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
 void uct_ib_verbs_destroy_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir)
 {
-    int ret = ibv_destroy_cq(iface->cq[dir]);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_cq(%s) returned %d: %m",
-                 (dir == UCT_IB_DIR_RX) ? "RX" : "TX", ret);
-    }
+    uct_ib_destroy_cq(iface->cq[dir], (dir == UCT_IB_DIR_RX) ? "RX" : "TX");
 }
 
 static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
@@ -1481,6 +1493,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.flid_enabled       = config->flid_enabled;
     uct_ib_iface_set_path_mtu(self, config);
 
+    self->config.send_overhead = config->send_overhead;
+
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("IB transports do not support multi-threaded worker");
         return UCS_ERR_INVALID_PARAM;
@@ -1749,13 +1763,15 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
-    uct_ep_operation_t op  = UCT_ATTR_VALUE(PERF, perf_attr, operation,
-                                            OPERATION, UCT_EP_OP_LAST);
-    const double wqe_fetch = 350e-9;
-    double send_pre_overhead, send_post_overhead;
+    uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
+    uct_ep_operation_t op    = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                              OPERATION, UCT_EP_OP_LAST);
+    const double wqe_fetch   = 350e-9;
+    double send_pre_overhead, send_pre_overhead_bcopy, send_post_overhead;
     double send_post_overhead_zcopy;
     uct_iface_attr_t iface_attr;
     ucs_status_t status;
+    uct_ib_iface_send_overhead_t *send_overhead;
 
     status = uct_iface_query(iface, &iface_attr);
     if (status != UCS_OK) {
@@ -1770,23 +1786,27 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         break;
     default:
         send_pre_overhead        = iface_attr.overhead;
-        /* Doorbell write effect on CPU operations pipeline */
         send_post_overhead       = 40e-9;
-        /* Completion for every operation */
         send_post_overhead_zcopy = 20e-9;
     }
+    send_pre_overhead_bcopy = 5e-9;
+    send_overhead           = &ib_iface->config.send_overhead;
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
-        perf_attr->send_pre_overhead = send_pre_overhead;
+        perf_attr->send_pre_overhead = ucs_time_units_to_sec(
+                send_overhead->wqe_post, send_pre_overhead);
         if (uct_ep_op_is_bcopy(op)) {
-            perf_attr->send_pre_overhead += 5e-9; /* Allocate send desc */
+            perf_attr->send_pre_overhead += ucs_time_units_to_sec(
+                    send_overhead->bcopy, send_pre_overhead_bcopy);
         }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
-        perf_attr->send_post_overhead = send_post_overhead;
+        perf_attr->send_post_overhead =
+                ucs_time_units_to_sec(send_overhead->db, send_post_overhead);
         if (uct_ep_op_is_zcopy(op)) {
-            perf_attr->send_post_overhead += send_post_overhead_zcopy;
+            perf_attr->send_post_overhead += ucs_time_units_to_sec(
+                    send_overhead->cqe, send_post_overhead_zcopy);
         }
     }
 
@@ -1801,12 +1821,17 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
         perf_attr->latency = iface_attr.latency;
         if (uct_ep_op_is_bcopy(op) || uct_ep_op_is_zcopy(op)) {
-            perf_attr->latency.c += wqe_fetch;
+            perf_attr->latency.c +=
+                    ucs_time_units_to_sec(send_overhead->wqe_fetch, wqe_fetch);
         }
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
         perf_attr->max_inflight_eps = SIZE_MAX;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
+        perf_attr->flags = 0;
     }
 
     return UCS_OK;

@@ -230,4 +230,10 @@ static inline int ucp_wireup_lane_type_is_fast_path(ucp_lane_type_t lane_type)
     return ucp_wireup_lane_types_has_fast_path(UCS_BIT(lane_type));
 }
 
+static inline double ucp_wireup_fp8_pack_unpack_latency(double latency)
+{
+    return UCS_FP8_PACK_UNPACK(LATENCY, latency * UCS_NSEC_PER_SEC) /
+           UCS_NSEC_PER_SEC;
+}
+
 #endif

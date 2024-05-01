@@ -12,11 +12,11 @@
 #include <uct/api/v2/uct_v2.h>
 extern "C" {
 #include <ucs/time/time.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/atomic.h>
-#include <ucs/sys/math.h>
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #endif

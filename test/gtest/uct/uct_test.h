@@ -189,9 +189,10 @@ protected:
         void revoke_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
-        void connect_to_iface(unsigned index, entity& other);
-        void connect_to_ep(unsigned index, entity& other,
-                           unsigned other_index);
+        void connect_to_iface(unsigned index, entity &other,
+                              unsigned path_index = 0);
+        void connect_to_ep(unsigned index, entity &other, unsigned other_index,
+                           unsigned path_index = 0);
         void connect_to_sockaddr(unsigned index,
                                  const ucs::sock_addr_storage &remote_addr,
                                  const ucs::sock_addr_storage *local_addr,
@@ -478,15 +479,16 @@ protected:
 #define UCT_TEST_CMS rdmacm, tcp
 
 
+#define UCT_TEST_MM_TLS posix, sysv, xpmem
+
+
 #define UCT_TEST_NO_SELF_TLS \
     UCT_TEST_IB_TLS,         \
     ugni_rdma,               \
     ugni_udt,                \
     ugni_smsg,               \
     tcp,                     \
-    posix,                   \
-    sysv,                    \
-    xpmem,                   \
+    UCT_TEST_MM_TLS,         \
     cma,                     \
     knem
 
@@ -525,6 +527,15 @@ protected:
  */
 #define UCT_INSTANTIATE_IB_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_IB_TLS)
+
+
+/**
+ * Instantiate the parametrized test case for the MM transports.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_MM_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_MM_TLS)
 
 
 /**

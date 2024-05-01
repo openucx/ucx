@@ -13,7 +13,7 @@
 #include <limits.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
-#include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
@@ -193,8 +193,7 @@ uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucs_assert(ucs_padding((intptr_t)address, GPU_PAGE_SIZE) == 0);
-    ucs_assert(ucs_padding(length, GPU_PAGE_SIZE) == 0);
+    ucs_ptr_check_align(address, length, GPU_PAGE_SIZE);
     status = uct_gdr_copy_mem_reg_internal(uct_md, address, length, 0,
                                            mem_hndl);
     if (status != UCS_OK) {

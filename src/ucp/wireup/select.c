@@ -68,6 +68,8 @@ typedef struct {
 typedef struct {
     unsigned local[UCP_MAX_RESOURCES];
     unsigned remote[UCP_MAX_RESOURCES];
+    unsigned local_skip[UCP_MAX_RESOURCES];
+    unsigned remote_skip[UCP_MAX_RESOURCES];
 } ucp_wireup_dev_usage_count;
 
 
@@ -649,18 +651,6 @@ out:
     return UCS_OK;
 }
 
-static double ucp_wireup_fp8_pack_unpack_latency(double latency)
-{
-    ucs_fp8_t packed_lat = UCS_FP8_PACK(LATENCY, latency * UCS_NSEC_PER_SEC);
-    return UCS_FP8_UNPACK(LATENCY, packed_lat) / UCS_NSEC_PER_SEC;
-}
-
-static double ucp_wireup_fp8_pack_unpack_bw(double bandwidth)
-{
-    ucs_fp8_t packed_bw = UCS_FP8_PACK(BANDWIDTH, bandwidth);
-    return UCS_FP8_UNPACK(BANDWIDTH, packed_bw);
-}
-
 static inline double
 ucp_wireup_tl_iface_latency(const ucp_worker_iface_t *wiface,
                             const ucp_unpacked_address_t *unpacked_addr,
@@ -1233,15 +1223,15 @@ ucp_wireup_am_score_func(const ucp_worker_iface_t *wiface,
 }
 
 static double ucp_tl_iface_bandwidth_ratio(ucp_context_h context,
-                                           unsigned dev_count,
+                                           unsigned path_index,
                                            unsigned num_paths)
 {
     double ratio;
 
     if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.multi_path_ratio)) {
-        ratio = dev_count / (double)num_paths;
+        ratio = path_index / (double)num_paths;
     } else {
-        ratio = context->config.ext.multi_path_ratio * dev_count;
+        ratio = context->config.ext.multi_path_ratio * path_index;
     }
 
     return ucs_max(1e-5, 1.0 - ratio);
@@ -1251,33 +1241,46 @@ static double
 ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
                                  const ucp_unpacked_address_t *unpacked_addr,
                                  const ucp_address_entry_t *remote_addr,
-                                 unsigned *local_dev_count,
-                                 unsigned *remote_dev_count)
+                                 const ucp_wireup_dev_usage_count *dev_count)
 {
     ucp_context_h context     = wiface->worker->context;
     ucp_rsc_index_t dev_index = context->tl_rscs[wiface->rsc_index].dev_index;
     double eps                = 1e-3;
     double local_bw, remote_bw;
+    unsigned path_index;
 
     local_bw = ucp_wireup_iface_bw_distance(wiface);
 
     if (unpacked_addr->addr_version == UCP_OBJECT_VERSION_V2) {
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local bandwidth as well */
-        local_bw = ucp_wireup_fp8_pack_unpack_bw(local_bw);
+        local_bw = UCS_FP8_PACK_UNPACK(BANDWIDTH, local_bw);
     }
+
+    ucs_assertv(dev_count->local[dev_index] >= dev_count->local_skip[dev_index],
+                "dev_count->local[%u]=%u dev_count->local_skip[%u]=%u",
+                dev_index, dev_count->local[dev_index], dev_index,
+                dev_count->local_skip[dev_index]);
+    ucs_assertv(dev_count->remote[remote_addr->dev_index] >=
+                        dev_count->remote_skip[remote_addr->dev_index],
+                "dev_count->remote[%u]=%u dev_count->remote_skip[%u]=%u",
+                remote_addr->dev_index,
+                dev_count->remote[remote_addr->dev_index],
+                remote_addr->dev_index,
+                dev_count->remote_skip[remote_addr->dev_index]);
 
     /* Apply dev num paths ratio after fp8 pack/unpack to make sure it is not
      * neglected because of fp8 inaccuracy
      */
-    local_bw *= ucp_tl_iface_bandwidth_ratio(
-                   context, local_dev_count[dev_index],
-                   wiface->attr.dev_num_paths);
+    path_index = dev_count->local[dev_index] - dev_count->local_skip[dev_index],
+    local_bw  *= ucp_tl_iface_bandwidth_ratio(context, path_index,
+                                              wiface->attr.dev_num_paths);
 
-    remote_bw = remote_addr->iface_attr.bandwidth *
-                ucp_tl_iface_bandwidth_ratio(
-                    context, remote_dev_count[remote_addr->dev_index],
-                    remote_addr->dev_num_paths);
+    path_index = dev_count->remote[remote_addr->dev_index] -
+                 dev_count->remote_skip[remote_addr->dev_index];
+    remote_bw  = remote_addr->iface_attr.bandwidth *
+                 ucp_tl_iface_bandwidth_ratio(context, path_index,
+                                              remote_addr->dev_num_paths);
 
     return ucs_min(local_bw, remote_bw) + (eps * (local_bw + remote_bw));
 }
@@ -1321,11 +1324,10 @@ ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
      * a size which is likely to be used for high-bw memory access protocol, for
      * how long it would take to transfer it with a certain transport. */
     return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
-                 ucp_wireup_iface_avail_bandwidth(
-                     wiface, unpacked_addr, remote_addr, dev_count->local,
-                     dev_count->remote)) +
-                ucp_wireup_tl_iface_latency(
-                    wiface, unpacked_addr, &remote_addr->iface_attr) +
+                 ucp_wireup_iface_avail_bandwidth(wiface, unpacked_addr,
+                                                  remote_addr, dev_count)) +
+                ucp_wireup_tl_iface_latency(wiface, unpacked_addr,
+                                            &remote_addr->iface_attr) +
                 wiface->attr.overhead +
                 ucs_linear_func_apply(mem_reg_cost,
                                       UCP_WIREUP_RMA_BW_TEST_MSG_SIZE));
@@ -1458,8 +1460,7 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
     double size = ucs_min(wiface->attr.cap.am.max_bcopy,
                           remote_addr->iface_attr.seg_size);
     double t    = (size / ucp_wireup_iface_avail_bandwidth(
-                            wiface, unpacked_addr,remote_addr, dev_count->local,
-                            dev_count->remote)) +
+                            wiface, unpacked_addr, remote_addr, dev_count)) +
                   wiface->attr.overhead + remote_addr->iface_attr.overhead +
                   ucp_wireup_tl_iface_latency(wiface, unpacked_addr,
                                               &remote_addr->iface_attr);
@@ -1488,7 +1489,7 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
     if (address->addr_version == UCP_OBJECT_VERSION_V2) {
         /* FP8 is a lossy compression method, so in order to create a symmetric
          * calculation we pack/unpack the local bandwidth as well */
-        bw_local = ucp_wireup_fp8_pack_unpack_bw(bw_local);
+        bw_local = UCS_FP8_PACK_UNPACK(BANDWIDTH, bw_local);
     }
 
     return ucs_min(bw_local, bw_remote);
@@ -1566,8 +1567,10 @@ static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_bw_info_t *bw_info,
                         ucp_tl_bitmap_t tl_bitmap, ucp_lane_index_t excl_lane,
-                        ucp_wireup_select_context_t *select_ctx)
+                        ucp_wireup_select_context_t *select_ctx,
+                        unsigned allow_extra_path)
 {
+    ucp_rsc_index_t skip_dev_index       = UCP_NULL_RESOURCE;
     ucp_ep_h ep                          = select_params->ep;
     ucp_context_h context                = ep->worker->context;
     ucp_wireup_dev_usage_count dev_count = {};
@@ -1583,6 +1586,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     unsigned addr_index;
     ucp_wireup_select_info_t *sinfo;
     unsigned max_lanes;
+    unsigned local_num_paths, remote_num_paths;
 
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
@@ -1616,27 +1620,45 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
             dev_index         = context->tl_rscs[rsc_index].dev_index;
             sinfo->path_index = dev_count.local[dev_index];
 
-
         } else {
             /* disqualify/count lane_desc_idx */
             addr_index      = select_ctx->lane_descs[excl_lane].addr_index;
             rsc_index       = select_ctx->lane_descs[excl_lane].rsc_index;
             dev_index       = context->tl_rscs[rsc_index].dev_index;
             excl_lane       = UCP_NULL_LANE;
+            skip_dev_index  = dev_index;
         }
 
         /* Count how many times the LOCAL device is used */
         iface_attr = ucp_worker_iface_get_attr(ep->worker, rsc_index);
         ++dev_count.local[dev_index];
-        if (dev_count.local[dev_index] >= iface_attr->dev_num_paths) {
-            /* exclude local device if reached max concurrency level */
-            local_dev_bitmap  &= ~UCS_BIT(dev_index);
-        }
 
         /* Count how many times the REMOTE device is used */
         ae = &select_params->address->address_list[addr_index];
         ++dev_count.remote[ae->dev_index];
-        if (dev_count.remote[ae->dev_index] >= ae->dev_num_paths) {
+
+        /* Account for possible path override */
+        local_num_paths  = iface_attr->dev_num_paths;
+        remote_num_paths = ae->dev_num_paths;
+        if (allow_extra_path &&
+            ((skip_dev_index != UCP_NULL_RESOURCE) && /* clang sanitizer */
+             (skip_dev_index == dev_index))) {
+            /* Allow path since we skipped one */
+            local_num_paths++;
+            remote_num_paths++;
+
+            /* Remove that skipped path from score computation */
+            dev_count.local_skip[dev_index]      = 1;
+            dev_count.remote_skip[ae->dev_index] = 1;
+        }
+
+        if (dev_count.local[dev_index] >= local_num_paths) {
+            /* exclude local device if reached max concurrency level */
+            local_dev_bitmap &= ~UCS_BIT(dev_index);
+        }
+
+        /* Assume symmetric num_paths */
+        if (dev_count.remote[ae->dev_index] >= remote_num_paths) {
             /* exclude remote device if reached max concurrency level */
             remote_dev_bitmap &= ~UCS_BIT(ae->dev_index);
         }
@@ -1709,7 +1731,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
                                               ucp_tl_bitmap_max, am_lane,
-                                              select_ctx);
+                                              select_ctx, 0);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
@@ -1759,10 +1781,27 @@ ucp_wireup_iface_flags_unset(ucp_wireup_criteria_t *criteria,
     criteria->remote_iface_flags.optional  &= ~remote_iface_flags->optional;
 }
 
+static uint64_t
+ucp_wireup_iface_get_perf_attr_flags(const ucp_worker_iface_t *wiface)
+{
+    uct_perf_attr_t perf_attr;
+    ucs_status_t status;
+
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_FLAGS;
+    status               = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return perf_attr.flags;
+}
+
 static ucs_status_t
 ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                             ucp_wireup_select_context_t *select_ctx)
 {
+    unsigned allow_extra_path          = 0;
+    ucp_lane_index_t am_lane           = UCP_NULL_LANE;
     ucp_ep_h ep                        = select_params->ep;
     ucp_context_h context              = ep->worker->context;
     unsigned ep_init_flags             = ucp_wireup_ep_init_flags(select_params,
@@ -1779,6 +1818,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_tl_bitmap_t tl_bitmap, mem_type_tl_bitmap;
     uint8_t i;
     ucp_wireup_select_flags_t iface_rma_flags, peer_rma_flags;
+    ucp_wireup_lane_desc_t *lane_desc;
+    uint64_t flags;
+    const ucp_worker_iface_t *wiface;
 
     ucp_wireup_init_select_flags(&iface_rma_flags, 0, 0);
     ucp_wireup_init_select_flags(&peer_rma_flags, 0, 0);
@@ -1831,7 +1873,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         UCP_CONTEXT_MEM_CAP_TLS(context, UCS_MEMORY_TYPE_HOST, access_mem_types,
                                 tl_bitmap);
         ucp_wireup_add_bw_lanes(select_params, &bw_info, tl_bitmap,
-                                UCP_NULL_LANE, select_ctx);
+                                UCP_NULL_LANE, select_ctx, 0);
     }
 
     bw_info.criteria.title            = "high-bw remote memory access";
@@ -1849,6 +1891,39 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * support to provide correct data integrity in case of error */
     if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
         bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE_RMA;
+    }
+
+    /* Find if an AM lane needs to be separated from RMA operations. More lanes
+     * can cause fence calls to last longer at scale. Applications making heavy
+     * use of fence operations usually don't request the TAG feature, hence the
+     * check.
+     */
+    if (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
+        ucs_carray_for_each(lane_desc, select_ctx->lane_descs,
+                            select_ctx->num_lanes) {
+            if (!(lane_desc->lane_types & UCS_BIT(UCP_LANE_TYPE_AM))) {
+                continue;
+            }
+
+            wiface = ucp_worker_iface(ep->worker, lane_desc->rsc_index);
+            flags  = ucp_wireup_iface_get_perf_attr_flags(wiface);
+            if (!(flags & UCT_PERF_ATTR_FLAGS_TX_RX_SHARED)) {
+                continue;
+            }
+
+            am_lane = lane_desc - select_ctx->lane_descs;
+
+            /* Map AM lane to specific path_index */
+            ucs_assertv((lane_desc->path_index == 0) ||
+                                (lane_desc->path_index ==
+                                 UCP_WIREUP_PATH_INDEX_UNDEFINED),
+                        "rsc_index=%u am_lane=%u path_index=%u",
+                        lane_desc->rsc_index, am_lane, lane_desc->path_index);
+
+            lane_desc->path_index = 0;
+            allow_extra_path      = 1;
+            break;
+        }
     }
 
     /* RNDV protocol can't mix different schemes, i.e. wireup has to
@@ -1884,7 +1959,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                                select_params, &bw_info,
                                                UCP_TL_BITMAP_AND_NOT(
                                                  mem_type_tl_bitmap, tl_bitmap),
-                                               UCP_NULL_LANE, select_ctx);
+                                               am_lane, select_ctx,
+                                               allow_extra_path);
 
             UCS_STATIC_BITMAP_OR_INPLACE(&tl_bitmap, mem_type_tl_bitmap);
         }

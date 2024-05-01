@@ -19,6 +19,33 @@
 
 
 /**
+ * Helper macro to calculate the size of a protocol private data structure that
+ * extends ucp_proto_multi_priv_t, according to the actual number of lanes.
+ *
+ * @param _priv   Pointer to the private data structure.
+ * @param _mpriv  Name of the ucp_proto_multi_priv_t field in _priv.
+ *
+ * Example usage:
+ *  typedef struct { int abc; ucp_proto_multi_priv_t mpriv; } my_priv_t;
+ *       my_priv_t priv;
+ *       ...
+ *       UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&priv, mpriv);
+ */
+#define UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(_priv, _mpriv) \
+    ({ \
+        typedef ucs_typeof(*(_priv)) _type; \
+        \
+        /* Make sure _mpriv is the last field in _type */ \
+        UCS_STATIC_ASSERT((ucs_offsetof(_type, _mpriv) + \
+                           sizeof(ucp_proto_multi_priv_t)) == sizeof(_type)); \
+        \
+        /* Add actual priv size to the offset it starts at */ \
+        ucs_offsetof(_type, _mpriv) + \
+                ucp_proto_multi_priv_size(&(_priv)->_mpriv); \
+    })
+
+
+/**
  * UCP base protocol definition for multi-fragment protocols
  */
 typedef struct ucp_proto_send_multi {
@@ -51,11 +78,17 @@ typedef struct {
 
     /* Optimal alignment for zero-copy buffer address */
     size_t                       opt_align;
+
+    /* Minimal offset to reach, taking into account minimum RNDV chunk size */
+    size_t                       min_end_offset;
 } ucp_proto_multi_lane_priv_t;
 
 
 /*
  * Base class for protocols with fragmentation
+ * When part of a larger struct, must be the last field to allow a smaller size
+ * according to the actual number of lanes. The structure size can be obtained
+ * by @ref ucp_proto_multi_priv_size.
  */
 typedef struct {
     ucp_md_map_t                reg_md_map;   /* Memory domains to register on */
@@ -65,7 +98,7 @@ typedef struct {
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
     size_t                      align_thresh; /* Cached value of threshold for
                                                  enabling data split alignment */
-    ucp_proto_multi_lane_priv_t lanes[0];     /* Array of lanes */
+    ucp_proto_multi_lane_priv_t lanes[UCP_MAX_LANES]; /* Array of lanes */
 } ucp_proto_multi_priv_t;
 
 
@@ -126,8 +159,14 @@ typedef ucs_status_t (*ucp_proto_multi_lane_send_func_t)(ucp_request_t *req,
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
-                                  ucp_proto_multi_priv_t *mpriv,
-                                  size_t *priv_size_p);
+                                  ucp_proto_caps_t *caps,
+                                  ucp_proto_multi_priv_t *mpriv);
+
+
+size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv);
+
+
+void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params);
 
 
 void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,

@@ -32,12 +32,11 @@ typedef struct {
 } ucp_proto_rndv_ppln_priv_t;
 
 
-static ucs_status_t
-ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
     static const double frag_overhead            = 30e-9;
     ucp_worker_h worker                          = init_params->worker;
-    ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     ucp_proto_common_init_params_t err_params    = {
         .super = *init_params,
@@ -48,11 +47,11 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     const ucp_proto_perf_range_t *frag_range;
     size_t frag_min_length, frag_max_length;
     ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_init_params_t ppln_params;
     ucp_proto_select_param_t sel_param;
+    ucp_proto_rndv_ppln_priv_t rpriv;
     ucp_proto_select_t *proto_select;
+    ucp_proto_caps_t caps, ppln_caps;
     ucs_linear_func_t ppln_overhead;
-    ucp_proto_caps_t ppln_caps;
     char frag_size_str[32];
     ucs_status_t status;
 
@@ -60,7 +59,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
         !ucp_proto_common_init_check_err_handling(&err_params) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
     /* Select a protocol for rndv recv */
@@ -74,7 +73,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
                                         init_params->rkey_cfg_index,
                                         &rkey_cfg_index);
     if (proto_select == NULL) {
-        return UCS_OK;
+        return;
     }
 
     select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
@@ -82,47 +81,46 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
                                                init_params->rkey_cfg_index,
                                                &sel_param);
     if (select_elem == NULL) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
     /* Find the performance range of sending one fragment */
     if (!ucp_proto_select_get_valid_range(select_elem->thresholds,
                                           &frag_min_length, &frag_max_length)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
+
+    /* Initialize private data */
+    rpriv.frag_proto = *select_elem;
+    rpriv.frag_size  = frag_max_length;
 
     frag_range  = ucp_proto_perf_range_search(select_elem, frag_max_length);
     thresh_elem = ucp_proto_select_thresholds_search(select_elem,
                                                      frag_max_length);
 
     ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
-              ucs_memunits_to_str(rpriv->frag_size, frag_size_str,
+              ucs_memunits_to_str(rpriv.frag_size, frag_size_str,
                                   sizeof(frag_size_str)),
               UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
 
     /* Add the single range of the pipeline protocol to ppln_caps */
-    ppln_params            = *init_params;
-    ppln_params.caps       = &ppln_caps;
-    ppln_caps.cfg_thresh   = thresh_elem->proto_config.cfg_thresh;
-    ppln_caps.cfg_priority = 0;
-    ppln_caps.min_length   = frag_max_length + 1;
-    ppln_caps.num_ranges   = 0;
-    ucp_proto_common_add_ppln_range(&ppln_params, frag_range, SIZE_MAX);
-
-    /* Initialize private data */
-    *init_params->priv_size = sizeof(*rpriv);
-    rpriv->frag_proto       = *select_elem;
-    rpriv->frag_size        = frag_max_length;
+    ppln_caps.min_length = frag_max_length + 1;
+    ppln_caps.num_ranges = 0;
+    ucp_proto_common_add_ppln_range(&ppln_caps, frag_range, SIZE_MAX);
 
     /* Add ATS overhead */
     ppln_overhead = ucs_linear_func_make(frag_overhead,
                                          frag_overhead / frag_max_length);
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
-                                     &ppln_caps, ppln_overhead, &rpriv->ack, 0);
+                                     &ppln_caps, ppln_overhead, &rpriv.ack,
+                                     &caps);
+    if (status == UCS_OK) {
+        ucp_proto_select_add_proto(init_params,
+                                   thresh_elem->proto_config.cfg_thresh, 0,
+                                   &caps, &rpriv, sizeof(rpriv));
+    }
 
     ucp_proto_select_caps_cleanup(&ppln_caps);
-
-    return status;
 }
 
 static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
@@ -285,14 +283,14 @@ static size_t ucp_proto_rndv_ppln_pack_ack(void *dest, void *arg)
                                    req->send.rndv.ppln.ack_data_size);
 }
 
-static ucs_status_t
-ucp_proto_rndv_send_ppln_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_send_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_rndv_ppln_init(init_params);
+    ucp_proto_rndv_ppln_probe(init_params);
 }
 
 static ucs_status_t
@@ -310,7 +308,7 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
     .name     = "rndv/send/ppln",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_proto_rndv_send_ppln_init,
+    .probe    = ucp_proto_rndv_send_ppln_probe,
     .query    = ucp_proto_rndv_ppln_query,
     .progress = {
         [UCP_PROTO_RNDV_PPLN_STAGE_SEND] = ucp_proto_rndv_ppln_progress,
@@ -320,14 +318,14 @@ ucp_proto_t ucp_rndv_send_ppln_proto = {
     .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };
 
-static ucs_status_t
-ucp_proto_rndv_recv_ppln_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_recv_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    return ucp_proto_rndv_ppln_init(init_params);
+    ucp_proto_rndv_ppln_probe(init_params);
 }
 
 static ucs_status_t
@@ -363,7 +361,7 @@ ucp_proto_t ucp_rndv_recv_ppln_proto = {
     .name     = "rndv/recv/ppln",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_proto_rndv_recv_ppln_init,
+    .probe    = ucp_proto_rndv_recv_ppln_probe,
     .query    = ucp_proto_rndv_ppln_query,
     .progress = {
         [UCP_PROTO_RNDV_PPLN_STAGE_SEND] = ucp_proto_rndv_ppln_progress,

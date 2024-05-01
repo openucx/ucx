@@ -725,14 +725,8 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
               worker->num_active_ifaces);
 
     if (!force) {
-        ucs_assertv(worker->context->config.ext.proto_enable ||
-                    (wiface->activate_count > 0), UCP_WIFACE_FMT " acount=%u",
-                    UCP_WIFACE_ARG(wiface), wiface->activate_count);
-
-        if (wiface->activate_count == 0) {
-            /* The interface has not been activated. */
-            return;
-        }
+        ucs_assertv(wiface->activate_count > 0, UCP_WIFACE_FMT,
+                    UCP_WIFACE_ARG(wiface));
 
         if (--wiface->activate_count > 0) {
             /* The interface is not completely deactivated yet. */
@@ -1669,6 +1663,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     best_priority = 0;
 
     /* Select best interface for atomics device */
+    ucs_log_indent(+1);
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface     = worker->ifaces[iface_id];
         rsc_index  = wiface->rsc_index;
@@ -1688,10 +1683,14 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         }
 
         UCS_STATIC_BITMAP_SET(&supp_tls, rsc_index);
-        priority  = iface_attr->priority;
+        priority                    = iface_attr->priority;
+        dummy_ae.iface_attr.lat_ovh = ucp_wireup_iface_lat_distance_v2(wiface);
 
         score = ucp_wireup_amo_score_func(wiface, md_attr, &dummy_addr,
                                           &dummy_ae, NULL);
+
+        ucs_trace(UCT_TL_RESOURCE_DESC_FMT " atomic score %.2f priority %d",
+                  UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc), score, priority);
         if (ucp_is_scalable_transport(worker->context,
                                       iface_attr->max_num_eps) &&
             ((score > best_score) ||
@@ -1702,6 +1701,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
             best_priority = priority;
         }
     }
+    ucs_log_indent(-1);
 
     if (best_rsc == NULL) {
         ucs_debug("worker %p: no support for atomics", worker);
@@ -3676,4 +3676,23 @@ static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
 #if ENABLE_DEBUG_DATA
     ucs_string_buffer_appendf(strb, " name:%s", rdesc->name);
 #endif
+}
+
+void
+ucp_wiface_process_for_each_lane(ucp_worker_h worker,
+                                 ucp_ep_config_t *ep_config,
+                                 ucp_lane_map_t lane_map,
+                                 void (*wiface_process)(ucp_worker_iface_t*))
+{
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_index;
+    ucp_worker_iface_t *wiface;
+
+    ucs_for_each_bit(lane, lane_map) {
+        ucs_assertv(lane < UCP_MAX_LANES,
+                    "lane=%" PRIu8 ", lane_map=0x%" PRIx16, lane, lane_map);
+        rsc_index = ep_config->key.lanes[lane].rsc_index;
+        wiface    = ucp_worker_iface(worker, rsc_index);
+        wiface_process(wiface);
+    }
 }

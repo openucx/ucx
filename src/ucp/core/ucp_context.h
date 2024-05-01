@@ -169,6 +169,13 @@ typedef struct ucp_context_config {
     int                                    prefer_offload;
     /** RMA zcopy segment size */
     size_t                                 rma_zcopy_max_seg_size;
+    /** Protocol overhead */
+    double                                 proto_overhead_single;
+    double                                 proto_overhead_multi;
+    double                                 proto_overhead_rndv_offload;
+    double                                 proto_overhead_rndv_rts;
+    double                                 proto_overhead_rndv_rtr;
+    double                                 proto_overhead_sw;
 } ucp_context_config_t;
 
 
@@ -271,6 +278,14 @@ typedef struct ucp_tl_md {
 } ucp_tl_md_t;
 
 
+typedef struct ucp_context_alloc_md_index {
+    int            initialized;
+    /* Index of memory domain that is used to allocate memory of the given type
+     * using ucp_memh_alloc(). */
+    ucp_md_index_t md_index;
+} ucp_context_alloc_md_index_t;
+
+
 /**
  * UCP context
  */
@@ -281,14 +296,18 @@ typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_md_index_t                num_mds;    /* Number of memory domains */
 
-    /* Index of memory domain that is used to allocate memory of the given type
-     * using ucp_memh_alloc(). */
-    int                           alloc_md_index_initialized;
-    ucp_md_index_t                alloc_md_index[UCS_MEMORY_TYPE_LAST];
+    ucp_context_alloc_md_index_t  alloc_md[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that provide registration for given memory type,
        ucp_mem_map() will register memory for all those domains. */
     ucp_md_map_t                  reg_md_map[UCS_MEMORY_TYPE_LAST];
+
+    /* Map of MDs that provide blocking registration for given memory type.
+     * This map is initialized if non-blocking registration is requested for
+     * the memory type (thus reg_md_map contains only MDs supporting
+     * non-blocking registration).
+     */
+    ucp_md_map_t                  reg_block_md_map[UCS_MEMORY_TYPE_LAST];
 
     /* Map of MDs that require caching registrations for given memory type. */
     ucp_md_map_t                  cache_md_map[UCS_MEMORY_TYPE_LAST];

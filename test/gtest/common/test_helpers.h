@@ -358,6 +358,8 @@ public:
     mmap_fixed_address(size_t length);
     ~mmap_fixed_address();
     void* operator*() const { return m_ptr; }
+    void detach() { m_ptr = NULL; }
+
 private:
     void *m_ptr;
     size_t m_length;

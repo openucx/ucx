@@ -454,6 +454,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucs_queue_head_t tmp_pending_queue;
     ucs_status_t status;
     ucs_log_level_t fallback_log_level;
+    ucp_worker_cfg_index_t cfg_index;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -505,11 +506,12 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
         ucp_ep_realloc_lanes(ep, key.num_lanes);
 
         status = ucp_worker_get_ep_config(worker, &key, ep_init_flags,
-                                          &ep->cfg_index);
+                                          &cfg_index);
         if (status != UCS_OK) {
             goto err;
         }
 
+        ucp_ep_set_cfg_index(ep, cfg_index);
         ep->am_lane = key.am_lane;
 
         status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);

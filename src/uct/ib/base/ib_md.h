@@ -325,9 +325,6 @@ static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
     return md->flush_rkey >> 8;
 }
 
-ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
-                            const uct_md_config_t *uct_md_config, uct_md_h *md_p);
-
 void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
                                    const uct_ib_md_config_t *md_config,
                                    int is_supported);
@@ -372,7 +369,8 @@ void uct_ib_md_ece_check(uct_ib_md_t *md);
 ucs_status_t
 uct_ib_md_handle_mr_list_mt(uct_ib_md_t *md, void *address, size_t length,
                             const uct_md_mem_reg_params_t *params,
-                            uint64_t access_flags, struct ibv_mr **mrs);
+                            uint64_t access_flags, size_t mr_num,
+                            struct ibv_mr **mrs);
 
 uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh);
 
@@ -387,6 +385,21 @@ ucs_status_t uct_ib_verbs_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                                     void *address, size_t length,
                                     const uct_md_mkey_pack_params_t *params,
                                     void *mkey_buffer);
+
+ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
+                                const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                void **handle_p);
+
+ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
+                                       uct_md_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p);
+
+ucs_status_t uct_ib_get_device_by_name(struct ibv_device **ib_device_list,
+                                       int num_devices, const char *md_name,
+                                       struct ibv_device** ibv_device_p);
+
+ucs_status_t uct_ib_fork_init(const uct_ib_md_config_t *md_config,
+                              int *fork_init_p);
 
 ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
                                unsigned mem_flags, size_t memh_base_size,

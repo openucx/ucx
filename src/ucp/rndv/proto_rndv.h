@@ -69,12 +69,9 @@ typedef struct {
 typedef struct {
     ucp_proto_rndv_ack_priv_t super;
 
-    /*
-     * Multi-lane common part.
-     * Must be the last element in this struct, since it's variable-size and
-     * ends with a zero-size array.
-     */
-    ucp_proto_multi_priv_t mpriv;
+    /* Multi-lane common part. Must be the last field, see
+       @ref ucp_proto_multi_priv_t */
+    ucp_proto_multi_priv_t    mpriv;
 } ucp_proto_rndv_bulk_priv_t;
 
 
@@ -86,6 +83,9 @@ typedef struct {
 
     /* Which operation the remote peer is expected to perform */
     ucp_operation_id_t             remote_op_id;
+
+    /* Lane to send control message */
+    ucp_lane_index_t               lane;
 
     /* Time to unpack the received data */
     ucs_linear_func_t              unpack_time;
@@ -106,28 +106,49 @@ typedef struct {
 
     /* Map of mandatory mds which keys should be packed to the rkey */
     ucp_md_map_t                   md_map;
-
 } ucp_proto_rndv_ctrl_init_params_t;
 
 /* Return rendezvous threshold for the provided configuration */
 size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params);
 
+/* rndv_put stages */
+enum {
+    /* Initial stage for put zcopy is sending the data */
+    UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND = UCP_PROTO_STAGE_START,
+
+    /* Initial stage for put memtype is copy the data to the fragment */
+    UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY = UCP_PROTO_STAGE_START,
+
+    /* Flush all lanes to ensure remote delivery */
+    UCP_PROTO_RNDV_PUT_STAGE_FLUSH,
+
+    /* Send ATP without fence (could be done after a flush) */
+    UCP_PROTO_RNDV_PUT_STAGE_ATP,
+
+    /* Send ATP with fence (could be done if using send lanes for ATP) */
+    UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP,
+
+    /* Memtype only: send the fragment to the remote side */
+    UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND
+};
+
+
 /* Initializes protocol which sends rendezvous control message using AM lane
  * (e.g. RTS and ATS). */
 ucs_status_t
-ucp_proto_rndv_ctrl_am_init(const ucp_proto_rndv_ctrl_init_params_t *params);
-
-
-/* Initializes protocol which sends rendezvous control message using specified
- * lane. Can be used by tag matching offload rendezvous protocols, which use
- * tag lane for sending control messages. */
-ucs_status_t
 ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
-                         ucp_lane_index_t lane);
+                         ucp_proto_caps_t *proto_caps,
+                         ucp_proto_rndv_ctrl_priv_t *priv);
 
 
-ucs_status_t
-ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params);
+void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params);
+
+
+ucp_lane_index_t
+ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params);
+
+
+void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params);
 
 
 void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
@@ -138,18 +159,20 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
 
-ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *params,
+
+ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
                                      const char *name,
-                                     const ucp_proto_caps_t *bulk_caps,
+                                     const ucp_proto_caps_t *input_caps,
                                      ucs_linear_func_t overhead,
                                      ucp_proto_rndv_ack_priv_t *apriv,
-                                     unsigned flags);
+                                     ucp_proto_caps_t *caps);
 
 
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
-                         ucp_proto_rndv_bulk_priv_t *rpriv, const char *name,
-                         const char *ack_name, size_t *priv_size_p);
+                         const char *name, const char *ack_name,
+                         ucp_proto_rndv_bulk_priv_t *rpriv,
+                         ucp_proto_caps_t *caps);
 
 
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);

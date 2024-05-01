@@ -430,7 +430,29 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    num_vhca_ports[0x8];
     uint8_t    reserved_at_618[0x6];
     uint8_t    sw_owner_id[0x1];
-    uint8_t    reserved_at_61f[0x1e1];
+    uint8_t    reserve_not_to_use[0x1];
+    uint8_t    reserved_at_620[0x60];
+    uint8_t    sf[0x1];
+    uint8_t    reserved_at_682[0x43];
+    uint8_t    flex_parser_id_geneve_opt_0[0x4];
+    uint8_t    flex_parser_id_icmp_dw1[0x4];
+    uint8_t    flex_parser_id_icmp_dw0[0x4];
+    uint8_t    flex_parser_id_icmpv6_dw1[0x4];
+    uint8_t    flex_parser_id_icmpv6_dw0[0x4];
+    uint8_t    flex_parser_id_outer_first_mpls_over_gre[0x4];
+    uint8_t    flex_parser_id_outer_first_mpls_over_udp_label[0x4];
+
+    uint8_t    reserved_at_6e0[0x20];
+
+    uint8_t    flex_parser_id_gtpu_dw_2[0x4];
+    uint8_t    flex_parser_id_gtpu_first_ext_dw_0[0x4];
+    uint8_t    reserved_at_708[0x18];
+
+    uint8_t    reserved_at_720[0x20];
+
+    uint8_t    reserved_at_740[0x8];
+    uint8_t    dma_mmo_qp[0x1];
+    uint8_t    reserved_at_749[0xb7];
 };
 
 enum {

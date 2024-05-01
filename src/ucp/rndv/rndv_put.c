@@ -19,27 +19,6 @@
 
 #define UCP_PROTO_RNDV_PUT_DESC "write to remote"
 
-
-enum {
-    /* Initial stage for put zcopy is sending the data */
-    UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND = UCP_PROTO_STAGE_START,
-
-    /* Initial stage for put memtype is copy the data to the fragment */
-    UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY = UCP_PROTO_STAGE_START,
-
-    /* Flush all lanes to ensure remote delivery */
-    UCP_PROTO_RNDV_PUT_STAGE_FLUSH,
-
-    /* Send ATP without fence (could be done after a flush) */
-    UCP_PROTO_RNDV_PUT_STAGE_ATP,
-
-    /* Send ATP with fence (could be done if using send lanes for ATP) */
-    UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP,
-
-    /* Memtype only: send the fragment to the remote side */
-    UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND
-};
-
 typedef struct ucp_proto_rndv_put_priv {
     uct_completion_callback_t  put_comp_cb;
     uct_completion_callback_t  atp_comp_cb;
@@ -210,17 +189,16 @@ ucp_proto_rndv_put_common_request_init(ucp_request_t *req)
     ucp_proto_rndv_bulk_request_init(req, &rpriv->bulk);
 }
 
-static ucs_status_t
-ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
-                               uint64_t rndv_modes, size_t max_length,
-                               uct_ep_operation_t memtype_op, unsigned flags,
-                               ucp_md_map_t initial_reg_md_map,
-                               uct_completion_callback_t comp_cb,
-                               int support_ppln)
+static void
+ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
+                                uint64_t rndv_modes, size_t max_length,
+                                uct_ep_operation_t memtype_op, unsigned flags,
+                                ucp_md_map_t initial_reg_md_map,
+                                uct_completion_callback_t comp_cb,
+                                int support_ppln)
 {
     const size_t atp_size                = sizeof(ucp_rndv_ack_hdr_t);
     ucp_context_t *context               = init_params->worker->context;
-    ucp_proto_rndv_put_priv_t *rpriv     = init_params->priv;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.overhead      = 0,
@@ -238,7 +216,8 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
         .super.send_op       = UCT_EP_OP_PUT_ZCOPY,
         .super.memtype_op    = memtype_op,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
+                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .super.exclude_map   = 0,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
@@ -252,35 +231,33 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     };
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane_idx, lane;
+    ucp_proto_rndv_put_priv_t rpriv;
     int send_atp, use_fence;
-    size_t bulk_priv_size;
-    unsigned atp_map;
+    ucp_proto_caps_t caps;
     ucs_status_t status;
+    unsigned atp_map;
+    size_t priv_size;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND,
                                  support_ppln) ||
         !ucp_proto_common_init_check_err_handling(&params.super)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    status = ucp_proto_rndv_bulk_init(&params, &rpriv->bulk,
-                                      UCP_PROTO_RNDV_PUT_DESC,
-                                      UCP_PROTO_RNDV_ATP_NAME, &bulk_priv_size);
+    status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_PUT_DESC,
+                                      UCP_PROTO_RNDV_ATP_NAME, &rpriv.bulk,
+                                      &caps);
     if (status != UCS_OK) {
-        return status;
+        return;
     }
 
-    *init_params->priv_size = ucs_offsetof(ucp_proto_rndv_put_priv_t, bulk) +
-                              bulk_priv_size;
-
-    rpriv    = params.super.super.priv;
     send_atp = !ucp_proto_rndv_init_params_is_ppln_frag(init_params);
 
     /* Check which lanes support sending ATP */
     atp_map = 0;
-    for (lane_idx = 0; lane_idx < rpriv->bulk.mpriv.num_lanes; ++lane_idx) {
-        lane       = rpriv->bulk.mpriv.lanes[lane_idx].super.lane;
+    for (lane_idx = 0; lane_idx < rpriv.bulk.mpriv.num_lanes; ++lane_idx) {
+        lane       = rpriv.bulk.mpriv.lanes[lane_idx].super.lane;
         iface_attr = ucp_proto_common_get_iface_attr(init_params, lane);
         if (((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) &&
              (iface_attr->cap.am.max_short >= atp_size)) ||
@@ -293,7 +270,7 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     /* Use fence only if all lanes support sending ATP and flush is not forced
      */
     use_fence = send_atp && !context->config.ext.rndv_put_force_flush &&
-                (rpriv->bulk.mpriv.lane_map == atp_map);
+                (rpriv.bulk.mpriv.lane_map == atp_map);
 
     /* All lanes can send ATP - invalidate am_lane, to use mpriv->lanes.
      * Otherwise, would need to flush all lanes and send ATP on:
@@ -308,37 +285,38 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
      */
     if (use_fence) {
         /* Send fence followed by ATP on all lanes */
-        rpriv->bulk.super.lane = UCP_NULL_LANE;
-        rpriv->put_comp_cb     = comp_cb;
-        rpriv->atp_comp_cb     = NULL;
-        rpriv->stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP;
-        rpriv->flush_map       = 0;
-        rpriv->atp_map         = rpriv->bulk.mpriv.lane_map;
+        rpriv.bulk.super.lane = UCP_NULL_LANE;
+        rpriv.put_comp_cb     = comp_cb;
+        rpriv.atp_comp_cb     = NULL;
+        rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP;
+        rpriv.flush_map       = 0;
+        rpriv.atp_map         = rpriv.bulk.mpriv.lane_map;
     } else {
         /* Flush all lanes and send ATP on all supporting lanes (or control lane
          * otherwise) */
         if (send_atp) {
-            rpriv->put_comp_cb =
+            rpriv.put_comp_cb =
                     ucp_proto_rndv_put_common_flush_completion_send_atp;
-            rpriv->atp_comp_cb = comp_cb;
-            rpriv->atp_map     = (atp_map == 0) ?
-                                 UCS_BIT(rpriv->bulk.super.lane) : atp_map;
+            rpriv.atp_comp_cb = comp_cb;
+            rpriv.atp_map     = (atp_map == 0) ?
+                                UCS_BIT(rpriv.bulk.super.lane) : atp_map;
         } else {
-            rpriv->put_comp_cb = comp_cb;
-            rpriv->atp_comp_cb = NULL;
-            rpriv->atp_map     = 0;
+            rpriv.put_comp_cb = comp_cb;
+            rpriv.atp_comp_cb = NULL;
+            rpriv.atp_map     = 0;
         }
-        rpriv->stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FLUSH;
-        rpriv->flush_map       = rpriv->bulk.mpriv.lane_map;
-        ucs_assert(rpriv->flush_map != 0);
+        rpriv.stage_after_put = UCP_PROTO_RNDV_PUT_STAGE_FLUSH;
+        rpriv.flush_map       = rpriv.bulk.mpriv.lane_map;
+        ucs_assert(rpriv.flush_map != 0);
     }
 
     if (send_atp) {
-        ucs_assert(rpriv->atp_map != 0);
+        ucs_assert(rpriv.atp_map != 0);
     }
-    rpriv->atp_num_lanes = ucs_popcount(rpriv->atp_map);
+    rpriv.atp_num_lanes = ucs_popcount(rpriv.atp_map);
 
-    return UCS_OK;
+    priv_size = UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, bulk.mpriv);
+    ucp_proto_common_add_proto(&params.super, &caps, &rpriv, priv_size);
 }
 
 static const char *
@@ -404,17 +382,15 @@ static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
     ucp_proto_rndv_put_common_complete(req);
 }
 
-static ucs_status_t
-ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
-    unsigned flags = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-                     UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING;
-
-    return ucp_proto_rndv_put_common_init(init_params,
-                                          UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY),
-                                          SIZE_MAX, UCT_EP_OP_LAST, flags, 0,
-                                          ucp_proto_rndv_put_zcopy_completion,
-                                          0);
+    ucp_proto_rndv_put_common_probe(
+            init_params, UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY), SIZE_MAX,
+            UCT_EP_OP_LAST,
+            UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
+            UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+            0, ucp_proto_rndv_put_zcopy_completion, 0);
 }
 
 static void
@@ -428,11 +404,28 @@ ucp_proto_rndv_put_zcopy_query(const ucp_proto_query_params_t *params,
                       UCP_PROTO_ZCOPY_DESC, put_desc);
 }
 
+static ucs_status_t ucp_proto_rndv_put_zcopy_reset(ucp_request_t *request)
+{
+    const ucp_proto_rndv_put_priv_t *rpriv = request->send.proto_config->priv;
+    ucp_datatype_iter_t *dt_iter           = &request->send.state.dt_iter;
+    ucp_lane_map_t acked_map;
+
+    if (request->send.rndv.put.atp_map != 0) {
+        acked_map       = request->send.rndv.put.atp_map ^ rpriv->atp_map;
+        dt_iter->offset = ucs_popcount(acked_map);
+    } else {
+        dt_iter->offset = dt_iter->length;
+    }
+
+    request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_put_zcopy_proto = {
     .name     = "rndv/put/zcopy",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_proto_rndv_put_zcopy_init,
+    .probe    = ucp_proto_rndv_put_zcopy_probe,
     .query    = ucp_proto_rndv_put_zcopy_query,
     .progress = {
         [UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND] = ucp_proto_rndv_put_zcopy_send_progress,
@@ -441,7 +434,7 @@ ucp_proto_t ucp_rndv_put_zcopy_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_put_zcopy_reset
 };
 
 
@@ -531,8 +524,8 @@ static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)
     ucp_proto_rndv_ppln_send_frag_complete(req, 1);
 }
 
-static ucs_status_t
-ucp_proto_rndv_put_mtype_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     uct_completion_callback_t comp_cb;
     ucp_md_map_t mdesc_md_map;
@@ -541,7 +534,7 @@ ucp_proto_rndv_put_mtype_init(const ucp_proto_init_params_t *init_params)
 
     status = ucp_proto_rndv_mtype_init(init_params, &mdesc_md_map, &frag_size);
     if (status != UCS_OK) {
-        return status;
+        return;
     }
 
     if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
@@ -550,10 +543,10 @@ ucp_proto_rndv_put_mtype_init(const ucp_proto_init_params_t *init_params)
         comp_cb = ucp_proto_rndv_put_mtype_completion;
     }
 
-    return ucp_proto_rndv_put_common_init(init_params,
-                                          UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
-                                          frag_size, UCT_EP_OP_GET_ZCOPY, 0,
-                                          mdesc_md_map, comp_cb, 1);
+    ucp_proto_rndv_put_common_probe(init_params,
+                                    UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
+                                    frag_size, UCT_EP_OP_GET_ZCOPY, 0,
+                                    mdesc_md_map, comp_cb, 1);
 }
 
 static void
@@ -570,7 +563,7 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
     .name     = "rndv/put/mtype",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_proto_rndv_put_mtype_init,
+    .probe    = ucp_proto_rndv_put_mtype_probe,
     .query    = ucp_proto_rndv_put_mtype_query,
     .progress = {
         [UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY] = ucp_proto_rndv_put_mtype_copy_progress,

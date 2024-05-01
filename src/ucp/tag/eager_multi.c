@@ -29,26 +29,26 @@ ucp_proto_eager_set_middle_hdr(ucp_request_t *req, ucp_eager_middle_hdr_t *hdr)
     hdr->offset = req->send.state.dt_iter.offset;
 }
 
-static ucs_status_t
-ucp_proto_eager_multi_init_common(ucp_proto_multi_init_params_t *params,
-                                  ucp_proto_id_t op_id)
+static void
+ucp_proto_eager_multi_probe_common(ucp_proto_multi_init_params_t *params,
+                                   ucp_proto_id_t op_id)
 {
+    ucp_context_config_t *context_config;
+
     if (!ucp_tag_eager_check_op_id(&params->super.super, op_id, 0)) {
-        return UCS_ERR_UNSUPPORTED;
+        return;
     }
 
-    params->super.overhead   = 10e-9; /* for multiple lanes management */
+    context_config           = &params->super.super.worker->context->config.ext;
+    params->super.overhead   = context_config->proto_overhead_multi;
     params->super.latency    = 0;
     params->first.lane_type  = UCP_LANE_TYPE_AM;
     params->middle.lane_type = UCP_LANE_TYPE_AM_BW;
-    params->max_lanes        =
-            params->super.super.worker->context->config.ext.max_eager_lanes;
-
-    return ucp_proto_multi_init(params, params->super.super.priv,
-                                params->super.super.priv_size);
+    params->max_lanes        = context_config->max_eager_lanes;
+    ucp_proto_multi_probe(params);
 }
 
-static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
+static void ucp_proto_eager_bcopy_multi_common_probe(
         const ucp_proto_init_params_t *init_params, ucp_proto_id_t op_id,
         size_t hdr_size)
 {
@@ -67,14 +67,15 @@ static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
 
-    return ucp_proto_eager_multi_init_common(&params, op_id);
+    ucp_proto_eager_multi_probe_common(&params, op_id);
 }
 
 static size_t ucp_proto_eager_bcopy_pack_first(void *dest, void *arg)
@@ -95,11 +96,11 @@ static size_t ucp_proto_eager_bcopy_pack_middle(void *dest, void *arg)
     return sizeof(*hdr) + ucp_proto_multi_data_pack(pack_ctx, hdr + 1);
 }
 
-static ucs_status_t
-ucp_proto_eager_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_eager_bcopy_multi_probe(const ucp_proto_init_params_t *init_params)
 {
-    return ucp_proto_eager_bcopy_multi_common_init(
-            init_params, UCP_OP_ID_TAG_SEND, sizeof(ucp_eager_first_hdr_t));
+    ucp_proto_eager_bcopy_multi_common_probe(init_params, UCP_OP_ID_TAG_SEND,
+                                             sizeof(ucp_eager_first_hdr_t));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -131,19 +132,19 @@ ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .name     = "egr/multi/bcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_proto_eager_bcopy_multi_init,
+    .probe    = ucp_proto_eager_bcopy_multi_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_bcopy_multi_progress},
     .abort    = ucp_proto_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
-static ucs_status_t
-ucp_proto_eager_sync_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
+static void ucp_proto_eager_sync_bcopy_multi_probe(
+        const ucp_proto_init_params_t *init_params)
 {
-    return ucp_proto_eager_bcopy_multi_common_init(
-            init_params, UCP_OP_ID_TAG_SEND_SYNC,
-            sizeof(ucp_eager_sync_first_hdr_t));
+    ucp_proto_eager_bcopy_multi_common_probe(init_params,
+                                             UCP_OP_ID_TAG_SEND_SYNC,
+                                             sizeof(ucp_eager_sync_first_hdr_t));
 }
 
 static size_t ucp_eager_sync_bcopy_pack_first(void *dest, void *arg)
@@ -188,8 +189,11 @@ void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
 {
+    if (!(req->flags & UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED)) {
+        ucp_send_request_id_alloc(req);
+    }
+
     ucp_proto_msg_multi_request_init(req);
-    ucp_send_request_id_alloc(req);
 }
 
 static ucs_status_t
@@ -209,15 +213,15 @@ ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .name     = "egrsnc/multi/bcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_proto_eager_sync_bcopy_multi_init,
+    .probe    = ucp_proto_eager_sync_bcopy_multi_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_sync_bcopy_multi_progress},
     .abort    = ucp_proto_request_bcopy_id_abort,
     .reset    = ucp_proto_request_bcopy_id_reset
 };
 
-static ucs_status_t
-ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
+static void
+ucp_proto_eager_zcopy_multi_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -242,7 +246,7 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
-    return ucp_proto_eager_multi_init_common(&params, UCP_OP_ID_TAG_SEND);
+    ucp_proto_eager_multi_probe_common(&params, UCP_OP_ID_TAG_SEND);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_eager_zcopy_multi_send_func(
@@ -281,7 +285,7 @@ ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .name     = "egr/multi/zcopy",
     .desc     = UCP_PROTO_MULTI_FRAG_DESC " " UCP_PROTO_EAGER_ZCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_proto_eager_zcopy_multi_init,
+    .probe    = ucp_proto_eager_zcopy_multi_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_zcopy_multi_progress},
     .abort    = ucp_proto_request_zcopy_abort,

@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -112,6 +113,9 @@ static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_ROCM]         = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_RDMA]         = 0,
+    [UCS_MEMORY_TYPE_ZE_HOST]      = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ZE_DEVICE]    = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ZE_MANAGED]   = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -122,6 +126,9 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_ROCM]         = 128,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 128,
     [UCS_MEMORY_TYPE_RDMA]         = 0,
+    [UCS_MEMORY_TYPE_ZE_HOST]      = 128,
+    [UCS_MEMORY_TYPE_ZE_DEVICE]    = 128,
+    [UCS_MEMORY_TYPE_ZE_MANAGED]   = 128,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -152,7 +159,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
    "Memory types which have whole allocations registered.\n"
-   "Allowed memory types: cuda, rocm, rocm-managed",
+   "Allowed memory types: cuda, rocm, rocm-managed, ze-host, ze-device, ze-managed",
    ucs_offsetof(ucp_context_config_t, reg_whole_alloc_bitmap),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
@@ -343,7 +350,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RNDV_FRAG_MEM_TYPE", "host",
    "Memory type of fragments used for RNDV pipeline protocol.\n"
-   "Allowed memory types is one of: host, cuda, rocm",
+   "Allowed memory types is one of: host, cuda, rocm, ze-host, ze-device",
    ucs_offsetof(ucp_context_config_t, rndv_frag_mem_type),
    UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
 
@@ -464,8 +471,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, proto_info_dir), UCS_CONFIG_TYPE_STRING},
 
   {"REG_NONBLOCK_MEM_TYPES", "",
-   "Perform only non-blocking memory registration for these memory types:\n"
-   "page registration may be deferred until it is accessed by the CPU or a transport.",
+   "Perform only non-blocking memory registration for these memory types.\n"
+   "Non-blocking registration means that the page registration may be\n"
+   "deferred until it is accessed by the CPU or a transport.",
    ucs_offsetof(ucp_context_config_t, reg_nb_mem_types),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
@@ -475,6 +483,25 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " 'y' : Prefer transports with native RMA/AMO support (if available)\n"
    " 'n' : Select RMA/AMO lanes according to performance charasteristics",
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
+
+  {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
+                     "rndv_rts:275ns,sw:40ns",
+   "Protocol overhead", 0,
+    UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+        {"single", "overhead of single-lane protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_single)},
+        {"multi", "overhead of managing multiple lanes",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_multi)},
+        {"rndv_offload", "overhead of rendezvous offload protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_offload)},
+        {"rndv_rtr", "overhead of rendezvous RTR protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rtr)},
+        {"rndv_rts", "overhead of rendezvous RTS protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_rndv_rts)},
+        {"sw", "overhead of software emulation protocol",
+         ucs_offsetof(ucp_context_config_t, proto_overhead_sw)},
+        {NULL}
+  )},
 
   {NULL}
 };
@@ -517,6 +544,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - tcp     : sockets over TCP/IP.\n"
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
    " - rocm    : ROCm (AMD GPU) memory support.\n"
+   " - ze      : ZE (Intel GPU) memory support.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
@@ -601,6 +629,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
+  { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { NULL }
 };
 
@@ -1537,12 +1566,20 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
             }
 
             ucs_memory_type_for_each(mem_type) {
-                if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-                    !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
-                    continue;
-                }
-
                 if (md_attr->flags & UCT_MD_FLAG_REG) {
+                    if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+                        !(md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type))) {
+                        if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
+                            /* Keep map of MDs supporting blocking registration
+                             * if non-blocking registration is requested for the
+                             * given memory type. In some cases blocking
+                             * registration maybe required anyway (e.g. internal
+                             * staging buffers for rndv pipeline protocols). */
+                            context->reg_block_md_map[mem_type] |= UCS_BIT(md_index);
+                        }
+                        continue;
+                    }
+
                     if (md_attr->reg_mem_types & UCS_BIT(mem_type)) {
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
                     }
@@ -1667,13 +1704,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->export_md_map            = 0;
 
     ucs_memory_type_for_each(mem_type) {
-        context->reg_md_map[mem_type]     = 0;
-        context->cache_md_map[mem_type]   = 0;
-        context->dmabuf_mds[mem_type]     = UCP_NULL_RESOURCE;
-        context->alloc_md_index[mem_type] = UCP_NULL_RESOURCE;
+        context->reg_md_map[mem_type]           = 0;
+        context->reg_block_md_map[mem_type]     = 0;
+        context->cache_md_map[mem_type]         = 0;
+        context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
+        context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
+        context->alloc_md[mem_type].initialized = 0;
     }
-
-    context->alloc_md_index_initialized = 0;
 
     ucs_string_set_init(&avail_tls);
     UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);

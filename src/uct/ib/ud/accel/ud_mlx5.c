@@ -803,7 +803,9 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
     status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR, "ibv_create_qp()");
+        uct_ib_check_memlock_limit_msg(ib_md->super.dev.ibv_context,
+                                       UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_qp(UD)");
         return status;
     }
 
@@ -910,36 +912,46 @@ static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
     uct_ib_device_t *dev               = &md->super.dev;
     ucs_status_t status;
     struct ibv_qp *qp;
-    uct_ib_mlx5dv_qp_tmp_objs_t qp_tmp_objs;
+    struct ibv_cq *cq;
 
     if (md->dv_tx_wqe_ratio.ud != 0) {
         return UCS_OK;
     }
 
-    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, md->super.pd, &qp_tmp_objs, 0);
-    if (status != UCS_OK) {
+    cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
+    if (cq == NULL) {
+        uct_ib_check_memlock_limit_msg(dev->ibv_context, UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq()");
+        status = UCS_ERR_IO_ERROR;
         goto out;
     }
 
-    uct_ib_mlx5dv_qp_init_attr(&qp_init_attr, md->super.pd, &qp_tmp_objs,
-                               IBV_QPT_UD, 128);
+    qp_init_attr.send_cq         = cq;
+    qp_init_attr.recv_cq         = cq;
+    qp_init_attr.qp_type         = IBV_QPT_UD;
+    qp_init_attr.sq_sig_all      = 0;
+    qp_init_attr.cap.max_send_wr = 128;
+    qp_init_attr.cap.max_recv_wr = 128;
     uct_ud_mlx5_qp_update_caps(&qp_init_attr.cap);
 
 #if HAVE_DECL_IBV_CREATE_QP_EX
+    qp_init_attr.comp_mask       = IBV_QP_INIT_ATTR_PD;
+    qp_init_attr.pd              = md->super.pd;
     qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp_ex, dev->ibv_context,
                                  &qp_init_attr);
 #else
     qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, pd, &qp_init_attr);
 #endif
     if (qp == NULL) {
-        ucs_error("md=%p: failed to create %s QP "
+        ucs_error("%s: md %p failed to create %s QP "
                   "TX wr:%d sge:%d inl:%d RX wr:%d sge:%d: %m",
-                  md, uct_ib_qp_type_str(qp_init_attr.qp_type),
+                  uct_ib_device_name(dev), md,
+                  uct_ib_qp_type_str(qp_init_attr.qp_type),
                   qp_init_attr.cap.max_send_wr, qp_init_attr.cap.max_send_sge,
                   qp_init_attr.cap.max_inline_data,
                   qp_init_attr.cap.max_recv_wr, qp_init_attr.cap.max_recv_sge);
         status = UCS_ERR_IO_ERROR;
-        goto out_qp_tmp_objs_close;
+        goto out_destroy_cq;
     }
 
     status = uct_ib_mlx5dv_calc_tx_wqe_ratio(qp, qp_init_attr.cap.max_send_wr,
@@ -947,8 +959,8 @@ static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
 
     uct_ib_destroy_qp(qp);
 
-out_qp_tmp_objs_close:
-    uct_ib_mlx5dv_qp_tmp_objs_destroy(&qp_tmp_objs);
+out_destroy_cq:
+    ibv_destroy_cq(cq);
 out:
     return status;
 }

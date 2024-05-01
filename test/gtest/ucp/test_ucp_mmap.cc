@@ -897,6 +897,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         is_dummy = (size == 0);
         test_rkey_management(memh, is_dummy, is_tl_rdma());
 
+        ptr.detach();
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
     }
@@ -904,6 +905,80 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap)
 
+class test_ucp_mmap_atomic : public test_ucp_mmap {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        test_ucp_mmap::get_test_variants(variants,
+                                         UCP_FEATURE_TAG | UCP_FEATURE_AMO64);
+    }
+};
+
+/* Use a buffer for send/recv, and then reuse it for atomic operations */
+UCS_TEST_P(test_ucp_mmap_atomic, reuse_buffer)
+{
+    mem_buffer sbuf(UCS_MBYTE, UCS_MEMORY_TYPE_HOST, 1);
+    mem_buffer rbuf(UCS_MBYTE, UCS_MEMORY_TYPE_HOST);
+
+    /* Send/receive from buffers to trigger adding them to registration cache */
+    {
+        static constexpr uint64_t TAG = 0xdeadbeef;
+        ucp_request_param_t param;
+
+        param.op_attr_mask = 0;
+        auto sreq = ucp_tag_send_nbx(sender().ep(), sbuf.ptr(), sbuf.size(),
+                                     TAG, &param);
+        auto rreq = ucp_tag_recv_nbx(receiver().worker(), rbuf.ptr(),
+                                     rbuf.size(), TAG, 0, &param);
+
+        ASSERT_UCS_OK(requests_wait({sreq, rreq}));
+    }
+
+    /* Map the receive buffer for atomic operations */
+    ucp_mem_h memh;
+    ucp_rkey_h rkey;
+    {
+        ucp_mem_map_params_t params;
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = rbuf.ptr();
+        params.length     = rbuf.size();
+        params.flags      = mem_map_flags();
+
+        ASSERT_UCS_OK(ucp_mem_map(receiver().ucph(), &params, &memh));
+
+        void *rkey_buffer;
+        size_t rkey_size;
+        ASSERT_UCS_OK(ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer,
+                                    &rkey_size));
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey));
+
+        ucp_rkey_buffer_release(rkey_buffer);
+    }
+
+    /* Perform atomic operation */
+    {
+        uint64_t value = 1;
+        ucp_request_param_t param;
+
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype     = ucp_dt_make_contig(sizeof(value));
+        auto sreq = ucp_atomic_op_nbx(sender().ep(), UCP_ATOMIC_OP_ADD, &value,
+                                      1, (uintptr_t)rbuf.ptr(), rkey, &param);
+
+        param.op_attr_mask = 0;
+        auto freq          = ucp_ep_flush_nbx(sender().ep(), &param);
+
+        ASSERT_UCS_OK(requests_wait({sreq, freq}));
+    }
+
+    /* Unmap the buffer */
+    ucp_rkey_destroy(rkey);
+    ASSERT_UCS_OK(ucp_mem_unmap(receiver().ucph(), memh));
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_atomic)
 
 class test_ucp_rkey_compare : public test_ucp_mmap {
 public:

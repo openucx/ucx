@@ -16,6 +16,12 @@ extern "C" {
 class log_test : private ucs::clear_dontcopy_regions, public ucs::test {
 public:
     virtual void init() {
+#ifdef __SANITIZE_ADDRESS__
+        /* BUG: on Ubuntu22.04 if LD_PRELOAD=libasan.so
+         * grep returns 1 error code even if pattern was found
+         */
+        UCS_TEST_SKIP_R("skipping on asan");
+#endif
         /* skip because logger does not support file
          * output on valgrind
          */

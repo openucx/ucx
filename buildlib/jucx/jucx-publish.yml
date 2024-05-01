@@ -22,6 +22,7 @@ jobs:
       - checkout: self
         clean: true
         fetchDepth: 300
+        retryCountOnTaskFailure: 5
         path: "we/need/to/go/deeper"
         # ^workaround agent issue with container in root path
 

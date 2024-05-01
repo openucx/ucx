@@ -264,4 +264,15 @@ ucp_worker_default_address_pack_flags(ucp_worker_h worker)
         } \
     }
 
+
+/**
+ * @return endpoint configuration by configuration index
+ */
+static inline ucp_ep_config_t
+*ucp_worker_ep_config(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index)
+{
+    ucs_assert(cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    return &ucs_array_elem(&worker->ep_config, cfg_index);
+}
+
 #endif

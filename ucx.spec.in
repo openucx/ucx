@@ -9,6 +9,8 @@
 %bcond_with    ugni
 %bcond_with    xpmem
 %bcond_with    vfs
+%bcond_with    mad
+%bcond_with    ze
 
 Name: ucx
 Version: @VERSION@
@@ -55,8 +57,14 @@ BuildRequires: pkgconfig(cray-xpmem)
 %if %{with vfs}
 BuildRequires: fuse3-devel
 %endif
+%if %{with ze}
+BuildRequires: level-zero-devel
+%endif
 %if "%{debug}" == "1"
 BuildRequires: valgrind-devel
+%endif
+%if %{with mad}
+BuildRequires: libibmad-devel libibumad-devel
 %endif
 
 %description
@@ -112,6 +120,8 @@ Provides header files and examples for developing with UCX.
            %_with_arg xpmem xpmem \
            %_with_arg vfs fuse3 \
            %_with_arg ugni ugni \
+           %_with_arg mad mad \
+           %_with_arg ze ze \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -137,6 +147,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %doc README AUTHORS NEWS
 %{!?_licensedir:%global license %%doc}
 %license LICENSE
+%{_sysconfdir}/ucx/ucx.conf
 
 %files devel
 %{_includedir}/uc*
@@ -244,6 +255,20 @@ hardware-offloaded data transfer.
 %{_libdir}/ucx/libuct_ib.so.*
 %endif
 
+%if %{with mad}
+%package mad
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX Infiniband MAD support
+Group: System Environment/Libraries
+
+%description mad
+Provide Infiniband MAD support for UCX. Enables running perftest using
+Infiniband datagrams for out-of-band communications.
+
+%files mad
+%{_libdir}/ucx/libucx_perftest_mad.so.*
+%endif
+
 %if %{with knem}
 %package knem
 Requires: %{name}%{?_isa} = %{version}-%{release}
@@ -343,7 +368,23 @@ library internals, protocol objects, transports status, and more.
 %{_bindir}/ucx_vfs
 %endif
 
+%if %{with ze}
+%package ze
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX ZE GPU support
+Group: System Environment/Libraries
+
+%description ze
+Provides oneAPI Level Zero (ZE) Runtime support for UCX.
+
+%files ze
+%{_libdir}/ucx/libuct_ze.so.*
+%{_libdir}/ucx/libucm_ze.so.*
+%endif
+
 %changelog
+* Fri Apr 19 2024 Yossi Itigin <yosefe@nvidia.com> 1.18.0-1
+- Bump version to 1.18.0
 * Tue Oct 31 2023 Yossi Itigin <yosefe@nvidia.com> 1.17.0-1
 - Bump version to 1.17.0
 * Fri Apr 28 2023 Yossi Itigin <yosefe@nvidia.com> 1.16.0-1

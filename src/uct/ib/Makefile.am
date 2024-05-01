@@ -28,7 +28,6 @@ libuct_ib_la_SOURCES = \
 	base/ib_log.c \
 	base/ib_md.c
 
-# TODO separate module for mlx5
 if HAVE_MLX5_DV
 libuct_ib_la_CPPFLAGS += -DUCT_IB_LIBMLX5_VER=\"$(libmlx5_ver)\"
 
@@ -78,7 +77,9 @@ endif # HAVE_MLX5_DV
 
 if HAVE_DEVX
 libuct_ib_la_SOURCES += \
-	rc/accel/rc_mlx5_devx.c
+	rc/accel/rc_mlx5_devx.c \
+	rc/accel/gga_mlx5.c
+
 endif # HAVE_DEVX
 
 endif # HAVE_TL_RC

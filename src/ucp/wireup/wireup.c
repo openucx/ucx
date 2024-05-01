@@ -1060,23 +1060,11 @@ static int ucp_wireup_should_activate_wiface(ucp_worker_iface_t *wiface,
     /* Activate worker iface if: a) new protocol selection logic is disabled; or
      * b) stream support is requested, because stream API does not support new
      * protocol selection logic; or c) lane is used for checking a connection
-     * state; or d) the endpoint is a mem-type ep; or e) iface was activated
-     * before (some ep was created and later destroyed). The last check is
-     * needed to workaround the following problem with proto v2:
-     * 1. ep is created using some ep config
-     * 2. Some protocols are selected for some operations and this enables
-     *    progress for the affected lanes
-     * 3. ep is destroyed and progress is disabled for all corresponding ifaces
-     * 4. New ep is created with the same ep config used during step n1
-     * 5. Progress is not enabled, because protocols selection for these
-     *    parameters (and ep config) was already done on step n2.
-     * TODO: Reconsider this approach when progress enabling scheme changes. */
-
+     * state; or d) the endpoint is a mem-type ep. */
     return !context->config.ext.proto_enable ||
            (context->config.features & UCP_FEATURE_STREAM) ||
            (ucp_ep_config(ep)->key.keepalive_lane == lane) ||
-           (ep->flags & UCP_EP_FLAG_INTERNAL) ||
-           (wiface->flags & UCP_WORKER_IFACE_FLAG_KEEP_ACTIVE);
+           (ep->flags & UCP_EP_FLAG_INTERNAL);
 }
 
 static ucs_status_t
@@ -1705,9 +1693,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         goto out;
     }
 
-    cm_idx        = ep->ext->cm_idx;
-    ep->cfg_index = new_cfg_index;
-    ep->am_lane   = key.am_lane;
+    cm_idx = ep->ext->cm_idx;
+   ucp_ep_set_cfg_index(ep, new_cfg_index);
+    ep->am_lane = key.am_lane;
 
     snprintf(str, sizeof(str), "ep %p", ep);
     ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, str,

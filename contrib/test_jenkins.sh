@@ -10,12 +10,11 @@
 #
 # Environment variables set by Jenkins CI:
 #  - WORKSPACE         : path to work dir
-#  - BUILD_NUMBER      : jenkins build number
-#  - JOB_URL           : jenkins job url
+#  - BUILD_NUMBER      : azure build number
+#  - JOB_URL           : azure job url
 #  - EXECUTOR_NUMBER   : number of executor within the test machine
-#  - JENKINS_RUN_TESTS : whether to run unit tests
-#  - RUN_TESTS         : same as JENKINS_RUN_TESTS, but for Azure
-#  - JENKINS_TEST_PERF : whether to validate performance
+#  - RUN_TESTS         : whether to run unit tests
+#  - TEST_PERF         : whether to validate performance
 #  - ASAN_CHECK        : set to enable Address Sanitizer instrumentation build
 #  - VALGRIND_CHECK    : set to enable running tests with Valgrind
 #
@@ -34,31 +33,19 @@ if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1
 	WS_URL=file://$WORKSPACE
-	JENKINS_RUN_TESTS=yes
-	JENKINS_TEST_PERF=1
+	RUN_TESTS=yes
+	TEST_PERF=1
 	TIMEOUT=""
 else
-	echo "Running under jenkins"
+	echo "Running under azure"
 	WS_URL=$JOB_URL/ws
 	if [[ "$VALGRIND_CHECK" == "yes" ]]; then
-		TIMEOUT="timeout 240m"
+		TIMEOUT="timeout 300m"
 	else
 		TIMEOUT="timeout 200m"
 	fi
 fi
 
-
-#
-# Set affinity to 2 cores according to Jenkins executor number.
-# Affinity is inherited from agent in Azure CI.
-# TODO: remove or rename after CI migration.
-#
-if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
-then
-	AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-else
-	AFFINITY=""
-fi
 
 have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 have_strace=$(strace -V || true)
@@ -166,7 +153,7 @@ slice_affinity() {
 	n=$1
 
 	# get affinity mask of the current process
-	compact_cpulist=$($AFFINITY bash -c 'taskset -cp $$' | cut -d: -f2)
+	compact_cpulist=$(bash -c 'taskset -cp $$' | cut -d: -f2)
 	cpulist=$(expand_cpulist ${compact_cpulist})
 
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
@@ -478,11 +465,11 @@ run_ucx_perftest() {
 		then
 			# Run UCP performance test
 			which mpirun
-			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $ucx_perftest $ucp_test_args
 
 			# Run UCP loopback performance test
 			which mpirun
-			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args "-l"
+			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $ucx_perftest $ucp_test_args "-l"
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
@@ -584,7 +571,7 @@ test_malloc_hooks_mpi() {
 		do
 			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
 			which mpirun
-			$MPIRUN -np 1 $AFFINITY \
+			$MPIRUN -np 1 \
 				./test/mpi/test_memhooks -t $tname -m ${mode}
 		done
 
@@ -592,7 +579,7 @@ test_malloc_hooks_mpi() {
 		ucm_lib=$PWD/src/ucm/.libs/libucm.so
 		ls -l $ucm_lib
 		which mpirun
-		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
+		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib \
 			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
 	done
 }
@@ -752,7 +739,7 @@ test_init_mt() {
 	$MAKEP
 	for ((i=0;i<10;++i))
 	do
-		OMP_NUM_THREADS=$num_threads $AFFINITY timeout 5m ./test/apps/test_init_mt
+		OMP_NUM_THREADS=$num_threads timeout 5m ./test/apps/test_init_mt
 	done
 }
 
@@ -871,7 +858,7 @@ run_malloc_hook_gtest() {
 	# GTEST_SHARD_INDEX/GTEST_TOTAL_SHARDS should NOT be set
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		UCX_IB_RCACHE=n \
 		MALLOC_TRIM_THRESHOLD_=-1 \
 		MALLOC_MMAP_THRESHOLD_=-1 \
@@ -879,18 +866,18 @@ run_malloc_hook_gtest() {
 			make -C test/gtest test
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		MALLOC_MMAP_THRESHOLD_=16384 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 			make -C test/gtest test
 
 	echo "==== Running cuda hooks, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
 
 	echo "==== Running cuda hooks with far jump, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT env \
+	$TIMEOUT env \
 		UCM_BISTRO_FORCE_FAR_JUMP=y \
 		GTEST_FILTER='cuda_hooks.*' \
 			make -C test/gtest test
@@ -914,7 +901,7 @@ set_gtest_make_test_flags() {
 	export GTEST_REPORT_LONGEST_TESTS=20
 
 	GTEST_EXTRA_ARGS=""
-	if [ "$JENKINS_TEST_PERF" == 1 ] && [[ "$VALGRIND_CHECK" != "yes" ]]
+	if [ "$TEST_PERF" == 1 ] && [[ "$VALGRIND_CHECK" != "yes" ]]
 	then
 		# Check performance with 10 retries and 2 seconds interval
 		GTEST_EXTRA_ARGS="$GTEST_EXTRA_ARGS -p 10 -i 2.0"
@@ -957,7 +944,7 @@ run_gtest_make() {
 
 	# Run all tests
 	echo "==== Running make -C test/gtest $make_target, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT make -C test/gtest $make_target
+	$TIMEOUT make -C test/gtest $make_target
 
 	unset_test_flags
 }
@@ -1026,7 +1013,7 @@ run_gtest_release() {
 	# - Unexpected RNDV test, to cover rkey handling in tag offload flow
 	#   (see GH #3827 for details)
 	env GTEST_FILTER=\*test_obj_size\*:\*test_ucp_tag_match.rndv_rts_unexp\* \
-		$AFFINITY $TIMEOUT make -C test/gtest test
+		$TIMEOUT make -C test/gtest test
 
 	unset OMP_NUM_THREADS
 	unset GTEST_SHARD_INDEX
@@ -1153,7 +1140,7 @@ run_valgrind_check() {
 prepare
 try_load_cuda_env
 
-if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
+if [ "$RUN_TESTS" == "yes" ]
 then
     check_machine
     set_ucx_common_test_env
