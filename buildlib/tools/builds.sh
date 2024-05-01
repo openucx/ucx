@@ -303,6 +303,10 @@ build_no_devx() {
 	build_gcc --with-devx=no
 }
 
+build_no_openmp() {
+	build_gcc --disable-openmp
+}
+
 build_gcc_debug_opt() {
 	build_gcc CFLAGS=-Og CXXFLAGS=-Og
 }
@@ -408,47 +412,45 @@ build_fuse() {
 	fi
 }
 
-#
-# Do a given task and update progress indicator
-#
-do_task() {
-	amount=$1
-	shift
-	# cleanup build dir before the task
-	[ -n "${ucx_build_dir}" ] && rm -rf ${ucx_build_dir}/*
-
-	$@
-
-	echo "##vso[task.setprogress value=$PROGRESS;]Progress Indicator"
-	PROGRESS=$((PROGRESS+amount))
-}
-
-
 az_init_modules
 prepare_build
 
-[ "${long_test}" = "yes" ] && prog=5 || prog=12
-
-do_task "${prog}" build_docs
-do_task "${prog}" build_debug
-do_task "${prog}" build_prof
-do_task "${prog}" build_ugni
-do_task "${prog}" build_cuda
-do_task "${prog}" build_rocm
-do_task "${prog}" build_no_verbs
-do_task "${prog}" build_release_pkg
-do_task "${prog}" build_cmake_examples
-do_task "${prog}" build_fuse
-
+tests=('build_docs' \
+		'build_debug' \
+		'build_prof' \
+		'build_ugni' \
+		'build_cuda' \
+		'build_rocm' \
+		'build_no_verbs' \
+		'build_release_pkg' \
+		'build_cmake_examples' \
+		'build_fuse')
 if [ "${long_test}" = "yes" ]
 then
-	do_task 5 check_config_h
-	do_task 5 check_inst_headers
-	do_task 10 build_icc
-	do_task 10 build_pgi
-	do_task 10 build_gcc
-	do_task 8 build_no_devx
-	do_task 10 build_gcc_debug_opt
-	do_task 10 build_clang
-	do_task 10 build_armclang
+	tests+=('check_config_h' \
+			'check_inst_headers' \
+			'build_icc'\
+			'build_pgi' \
+			'build_gcc' \
+			'build_no_devx' \
+			'build_no_openmp' \
+			'build_gcc_debug_opt' \
+			'build_clang' \
+			'build_armclang')
 fi
+
+num_tests=${#tests[@]}
+for ((i=0;i<${num_tests};++i))
+do
+	test_name=${tests[$i]}
+
+	# update progress indicator
+	progress=$(( (i * 100) / num_tests ))
+	echo "##vso[task.setprogress value=${progress};]${test_name}"
+
+	# cleanup build dir before the task
+	[ -d "${ucx_build_dir}" ] && rm -rf ${ucx_build_dir}/*
+
+	# run the test
+	${test_name}
+done

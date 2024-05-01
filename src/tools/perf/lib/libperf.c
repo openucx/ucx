@@ -1696,16 +1696,17 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
         /* Stop when reaching the deadline */
         stop_status = (ucs_get_time() > deadline) ? UCS_OK : UCS_INPROGRESS;
 
-        if (params->thread_count == 1) {
+        /* Synchronize on whether to continue or stop the warmup phase */
+#if _OPENMP
+#  pragma omp barrier
+#  pragma omp single copyprivate(status)
+#endif
+        {
             status = ucx_perf_test_exchange_status(perf, stop_status);
-        } else {
-#pragma omp barrier
-#pragma omp single copyprivate(status)
-            /* Synchronize on whether to continue or stop the warmup phase */
-            status = ucx_perf_test_exchange_status(perf, stop_status);
-#pragma omp barrier
         }
-
+#if _OPENMP
+#  pragma omp barrier
+#endif
         if (status != UCS_INPROGRESS) {
             return status;
         }
