@@ -1109,7 +1109,7 @@ void uct_rc_mlx5_base_ep_cleanup(uct_rc_mlx5_base_ep_t *ep,
                                       &ep->tx.wq.super, IBV_QPS_ERR);
 
     /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
-       overflow. These CQ credits will be released by error CQE handler. */
+     * overflow. These CQ credits will be released by error CQE handler. */
     outstanding = ep->tx.wq.bb_max - ep->super.txqp.available;
     wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&ep->tx.wq, outstanding);
     ucs_assert(outstanding >= wqe_count);

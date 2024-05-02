@@ -1212,17 +1212,3 @@ void uct_rc_mlx5_iface_common_qp_cleanup(
     uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->qp);
     uct_ib_mlx5_qp_mmio_cleanup(&cleanup_ctx->qp, cleanup_ctx->reg);
 }
-
-ucs_status_t
-uct_rc_mlx5_iface_common_create_qp(uct_rc_mlx5_iface_common_t *iface,
-                                   uct_ib_mlx5_txwq_t *wq,
-                                   uct_ib_mlx5_qp_attr_t *attr)
-{
-    ucs_status_t status;
-
-    /* Need to create QP before super constructor to get QP number */
-    uct_rc_mlx5_iface_fill_attr(iface, attr, iface->super.config.tx_qp_len,
-                                &iface->rx.srq);
-    status = uct_rc_mlx5_iface_create_qp(iface, &wq->super, wq, attr);
-    return status;
-}

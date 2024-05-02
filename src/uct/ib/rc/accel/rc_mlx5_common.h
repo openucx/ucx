@@ -761,9 +761,4 @@ void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq);
 void uct_rc_mlx5_iface_common_qp_cleanup(
         uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *cleanup_ctx);
 
-ucs_status_t
-uct_rc_mlx5_iface_common_create_qp(uct_rc_mlx5_iface_common_t *iface,
-                                   uct_ib_mlx5_txwq_t *wq,
-                                   uct_ib_mlx5_qp_attr_t *attr);
-
 #endif
