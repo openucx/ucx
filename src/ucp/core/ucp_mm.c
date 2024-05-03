@@ -822,6 +822,10 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
             return UCS_OK;
         }
 
+        ucs_trace("memh %p uct_flags mismatch, expected 0x%x got 0x%x", memh,
+                  uct_flags & UCP_MM_UCT_ACCESS_MASK,
+                  memh->uct_flags & UCP_MM_UCT_ACCESS_MASK);
+
         /* Invalidate the mismatching region and get a new one */
         ucs_rcache_region_invalidate(context->rcache, &memh->super,
                                      ucs_empty_function, NULL);
@@ -1495,13 +1499,25 @@ static void ucp_mem_rcache_mem_dereg_cb(void *ctx, ucs_rcache_t *rcache,
     ucp_memh_dereg(context, memh, memh->md_map);
 }
 
-static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
-                                         ucs_rcache_region_t *rregion, char *buf,
-                                         size_t max)
+static void ucp_mem_rcache_merge_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
+                                    ucs_rcache_region_t *rregion)
+{
+    ucp_mem_rcache_reg_ctx_t *reg_ctx = arg;
+    ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
+
+    ucs_log_indent(+1);
+    ucs_trace("merge with memh %p uct_flags 0x%x", memh, memh->uct_flags);
+    reg_ctx->uct_flags |= memh->uct_flags;
+    ucs_log_indent(-1);
+}
+
+static void ucp_mem_rcache_dump_region_cb(void *ctx, ucs_rcache_t *rcache,
+                                          ucs_rcache_region_t *rregion,
+                                          char *buf, size_t max)
 {
     UCS_STRING_BUFFER_FIXED(strb, buf, max);
     ucp_mem_h memh        = ucs_derived_of(rregion, ucp_mem_t);
-    ucp_context_h context = rcontext;
+    ucp_context_h context = ctx;
     unsigned md_index;
 
     if (memh->md_map == 0) {
@@ -1524,6 +1540,7 @@ static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
 static ucs_rcache_ops_t ucp_mem_rcache_ops = {
     .mem_reg     = ucp_mem_rcache_mem_reg_cb,
     .mem_dereg   = ucp_mem_rcache_mem_dereg_cb,
+    .merge       = ucp_mem_rcache_merge_cb,
     .dump_region = ucp_mem_rcache_dump_region_cb
 };
 
