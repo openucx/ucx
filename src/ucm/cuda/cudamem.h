@@ -20,6 +20,9 @@ CUresult ucm_cuMemAllocPitch(CUdeviceptr *dptr, size_t *pPitch,
 CUresult ucm_cuMemAllocPitch_v2(CUdeviceptr *dptr, size_t *pPitch,
                                 size_t WidthInBytes, size_t Height,
                                 unsigned int ElementSizeBytes);
+CUresult ucm_cuMemMap(CUdeviceptr ptr, size_t size, size_t offset,
+                      CUmemGenericAllocationHandle handle,
+                      unsigned long long flags);
 #if CUDA_VERSION >= 11020
 CUresult ucm_cuMemAllocAsync(CUdeviceptr *dptr, size_t size, CUstream hStream);
 CUresult ucm_cuMemAllocFromPoolAsync(CUdeviceptr *dptr, size_t size,
@@ -29,6 +32,7 @@ CUresult ucm_cuMemFree(CUdeviceptr dptr);
 CUresult ucm_cuMemFree_v2(CUdeviceptr dptr);
 CUresult ucm_cuMemFreeHost(void *p);
 CUresult ucm_cuMemFreeHost_v2(void *p);
+CUresult ucm_cuMemUnmap(CUdeviceptr ptr, size_t size);
 CUresult ucm_cuMemFreeAsync(CUdeviceptr dptr, CUstream hStream);
 
 cudaError_t ucm_cudaFree(void *devPtr);
