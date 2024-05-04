@@ -283,11 +283,13 @@ struct ucp_request {
                             union {
                                 /* Used by rndv/put and rndv/put/frag */
                                 struct {
-                                    /* Which lanes need to flush (0 in fence mode) */
-                                    ucp_lane_map_t flush_map;
+                                    /* Next lane to flush is the first set bit
+                                       in rpriv->flush_map that's >= flush_lane */
+                                    ucp_lane_index_t flush_lane;
 
-                                    /* Which lanes need to send atp */
-                                    ucp_lane_map_t atp_map;
+                                    /* Next lane to send ATP is the first set bit
+                                       in rpriv->atp_map that's >= atp_lane */
+                                    ucp_lane_index_t atp_lane;
                                 } put;
 
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
