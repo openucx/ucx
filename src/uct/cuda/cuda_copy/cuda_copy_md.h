@@ -8,6 +8,7 @@
 
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
+#include <cuda.h>
 
 
 extern uct_component_t uct_cuda_copy_component;
@@ -17,6 +18,13 @@ typedef enum {
     UCT_CUDA_PREF_LOC_GPU,
     UCT_CUDA_PREF_LOC_LAST
 } uct_cuda_pref_loc_t;
+
+typedef enum {
+    UCT_CUDA_ALLOC_TYPE_FABRIC,
+    UCT_CUDA_ALLOC_TYPE_PINNED,
+    UCT_CUDA_ALLOC_TYPE_MANAGED,
+    UCT_CUDA_ALLOC_TYPE_LAST = UCT_CUDA_ALLOC_TYPE_MANAGED
+} uct_cuda_alloc_type_t;
 
 
 /**
@@ -31,6 +39,7 @@ typedef struct uct_cuda_copy_md {
         double                  max_reg_ratio;
         int                     dmabuf_supported;
         uct_cuda_pref_loc_t     pref_loc;
+        uct_cuda_alloc_type_t   pref_alloc;
     } config;
 } uct_cuda_copy_md_t;
 
@@ -43,7 +52,20 @@ typedef struct uct_cuda_copy_md_config {
     double                      max_reg_ratio;
     ucs_ternary_auto_value_t    enable_dmabuf;
     uct_cuda_pref_loc_t         pref_loc;
+    uct_cuda_alloc_type_t       pref_alloc;
 } uct_cuda_copy_md_config_t;
+
+/**
+ * copy alloc handle.
+ */
+typedef struct uct_cuda_copy_alloc_handle {
+    uct_cuda_alloc_type_t        alloc_type;
+    void                         *ptr;
+    size_t                       length;
+#if HAVE_CUDA_FABRIC
+    CUmemGenericAllocationHandle generic_handle;
+#endif
+} uct_cuda_copy_alloc_handle_t;
 
 
 ucs_status_t uct_cuda_copy_md_detect_memory_type(uct_md_h md,

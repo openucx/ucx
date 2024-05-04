@@ -24,16 +24,24 @@ CUresult ucm_cuMemAllocPitch_v2(CUdeviceptr *dptr, size_t *pPitch,
 CUresult ucm_cuMemAllocAsync(CUdeviceptr *dptr, size_t size, CUstream hStream);
 CUresult ucm_cuMemAllocFromPoolAsync(CUdeviceptr *dptr, size_t size,
                                      CUmemoryPool pool, CUstream hStream);
+CUresult ucm_cuMemAddressReserve(CUdeviceptr* ptr, size_t size,
+                                 size_t alignment, CUdeviceptr addr,
+                                 unsigned long long flags);
 #endif
 CUresult ucm_cuMemFree(CUdeviceptr dptr);
 CUresult ucm_cuMemFree_v2(CUdeviceptr dptr);
 CUresult ucm_cuMemFreeHost(void *p);
 CUresult ucm_cuMemFreeHost_v2(void *p);
+#if CUDA_VERSION >= 11020
 CUresult ucm_cuMemFreeAsync(CUdeviceptr dptr, CUstream hStream);
+CUresult ucm_cuMemAddressFree(CUdeviceptr ptr, size_t size);
+#endif
 
 cudaError_t ucm_cudaFree(void *devPtr);
 cudaError_t ucm_cudaFreeHost(void *ptr);
+#if CUDA_VERSION >= 11020
 cudaError_t ucm_cudaFreeAsync(void *devPtr, cudaStream_t hStream);
+#endif
 cudaError_t ucm_cudaMalloc(void **devPtr, size_t size);
 cudaError_t ucm_cudaMallocManaged(void **devPtr, size_t size, unsigned int flags);
 cudaError_t ucm_cudaMallocPitch(void **devPtr, size_t *pitch,

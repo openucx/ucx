@@ -64,6 +64,10 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
 
 
+#define UCT_CUDADRV_FUNC_LOG_WARN(_func) \
+    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_WARN)
+
+
 static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
 {
     CUcontext ctx;

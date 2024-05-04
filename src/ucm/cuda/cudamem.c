@@ -89,6 +89,9 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAllocAsync, CUresult, -1, CUdeviceptr*,
                                   size_t, CUstream)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAllocFromPoolAsync, CUresult, -1,
                                   CUdeviceptr*, size_t, CUmemoryPool, CUstream)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAddressReserve, CUresult, -1,
+                                  CUdeviceptr*, size_t, size_t, CUdeviceptr,
+                                  unsigned long long);
 #endif
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemFree, CUresult, -1, CUdeviceptr)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemFree_v2, CUresult, -1, CUdeviceptr)
@@ -97,6 +100,8 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemFreeHost_v2, CUresult, -1, void*)
 #if CUDA_VERSION >= 11020
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemFreeAsync, CUresult, -1, CUdeviceptr,
                                   CUstream)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cuMemAddressFree, CUresult, -1, CUdeviceptr,
+                                  size_t)
 #endif
 
 /* Runtime API */
@@ -178,13 +183,17 @@ UCM_CUDA_ALLOC_FUNC(cuMemAllocPitch_v2, UCS_MEMORY_TYPE_CUDA, CUresult,
                     "pitch=%p width=%zu height=%zu elem=%u", size_t*, size_t,
                     size_t, unsigned)
 #if CUDA_VERSION >= 11020
-UCM_CUDA_ALLOC_FUNC(cuMemAllocAsync, UCS_MEMORY_TYPE_CUDA_MANAGED, CUresult,
+UCM_CUDA_ALLOC_FUNC(cuMemAllocAsync, UCS_MEMORY_TYPE_CUDA, CUresult,
                     CUDA_SUCCESS, arg0, CUdeviceptr, "size=%zu stream=%p",
                     size_t, CUstream)
-UCM_CUDA_ALLOC_FUNC(cuMemAllocFromPoolAsync, UCS_MEMORY_TYPE_CUDA_MANAGED,
+UCM_CUDA_ALLOC_FUNC(cuMemAllocFromPoolAsync, UCS_MEMORY_TYPE_CUDA,
                     CUresult, CUDA_SUCCESS, arg0, CUdeviceptr,
                     "size=%zu pool=%p stream=%p", size_t, CUmemoryPool,
                     CUstream)
+UCM_CUDA_ALLOC_FUNC(cuMemAddressReserve, UCS_MEMORY_TYPE_CUDA, CUresult,
+                    CUDA_SUCCESS, arg0, CUdeviceptr,
+                    "size=%zu alignment=%zu addr=0x%llx flags=%llu", size_t,
+                    size_t, CUdeviceptr, unsigned long long)
 #endif
 UCM_CUDA_FREE_FUNC(cuMemFree, UCS_MEMORY_TYPE_CUDA, CUresult, arg0,
                    "ptr=0x%llx", CUdeviceptr)
@@ -195,8 +204,10 @@ UCM_CUDA_FREE_FUNC(cuMemFreeHost, UCS_MEMORY_TYPE_HOST, CUresult, arg0,
 UCM_CUDA_FREE_FUNC(cuMemFreeHost_v2, UCS_MEMORY_TYPE_HOST, CUresult, arg0,
                    "ptr=%p", void*)
 #if CUDA_VERSION >= 11020
-UCM_CUDA_FREE_FUNC(cuMemFreeAsync, UCS_MEMORY_TYPE_CUDA_MANAGED, CUresult, arg0,
+UCM_CUDA_FREE_FUNC(cuMemFreeAsync, UCS_MEMORY_TYPE_CUDA, CUresult, arg0,
                    "ptr=0x%llx, stream=%p", CUdeviceptr, CUstream)
+UCM_CUDA_FREE_FUNC(cuMemAddressFree, UCS_MEMORY_TYPE_CUDA, CUresult, arg0,
+                   "ptr=0x%llx, size=%zu", CUdeviceptr, size_t)
 #endif
 
 static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
@@ -208,6 +219,7 @@ static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
 #if CUDA_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cuMemAllocAsync),
     UCM_CUDA_FUNC_ENTRY(cuMemAllocFromPoolAsync),
+    UCM_CUDA_FUNC_ENTRY(cuMemAddressReserve),
 #endif
     UCM_CUDA_FUNC_ENTRY(cuMemFree),
     UCM_CUDA_FUNC_ENTRY(cuMemFree_v2),
@@ -215,6 +227,7 @@ static ucm_cuda_func_t ucm_cuda_driver_funcs[] = {
     UCM_CUDA_FUNC_ENTRY(cuMemFreeHost_v2),
 #if CUDA_VERSION >= 11020
     UCM_CUDA_FUNC_ENTRY(cuMemFreeAsync),
+    UCM_CUDA_FUNC_ENTRY(cuMemAddressFree),
 #endif
     {{NULL}, NULL}
 };
@@ -229,10 +242,10 @@ UCM_CUDA_ALLOC_FUNC(cudaMallocPitch, UCS_MEMORY_TYPE_CUDA, cudaError_t,
                     cudaSuccess, (size_t)arg1 * arg2, void*,
                     "pitch=%p width=%zu height=%zu", size_t*, size_t, size_t)
 #if CUDA_VERSION >= 11020
-UCM_CUDA_ALLOC_FUNC(cudaMallocAsync, UCS_MEMORY_TYPE_CUDA_MANAGED, cudaError_t,
+UCM_CUDA_ALLOC_FUNC(cudaMallocAsync, UCS_MEMORY_TYPE_CUDA, cudaError_t,
                     cudaSuccess, arg0, void*, "size=%zu stream=%p", size_t,
                     cudaStream_t)
-UCM_CUDA_ALLOC_FUNC(cudaMallocFromPoolAsync, UCS_MEMORY_TYPE_CUDA_MANAGED, cudaError_t,
+UCM_CUDA_ALLOC_FUNC(cudaMallocFromPoolAsync, UCS_MEMORY_TYPE_CUDA, cudaError_t,
                     cudaSuccess, arg0, void*, "size=%zu pool=%p stream=%p", size_t,
                     cudaMemPool_t, cudaStream_t)
 #endif
@@ -241,7 +254,7 @@ UCM_CUDA_FREE_FUNC(cudaFree, UCS_MEMORY_TYPE_CUDA, cudaError_t, arg0,
 UCM_CUDA_FREE_FUNC(cudaFreeHost, UCS_MEMORY_TYPE_HOST, cudaError_t, arg0,
                    "ptr=%p", void*)
 #if CUDA_VERSION >= 11020
-UCM_CUDA_FREE_FUNC(cudaFreeAsync, UCS_MEMORY_TYPE_CUDA_MANAGED, cudaError_t,
+UCM_CUDA_FREE_FUNC(cudaFreeAsync, UCS_MEMORY_TYPE_CUDA, cudaError_t,
                    arg0, "devPtr=%p, stream=%p", void*, cudaStream_t)
 #endif
 

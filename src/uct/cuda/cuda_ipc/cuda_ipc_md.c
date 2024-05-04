@@ -50,21 +50,92 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 {
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
+#if HAVE_CUDA_FABRIC
+    CUmemAllocationHandleType fabric_type = CU_MEM_HANDLE_TYPE_FABRIC;
+    CUmemGenericAllocationHandle handle;
+    CUmemoryPool mempool;
+    int allowed_handle_types;
+#endif
 
     key = ucs_malloc(sizeof(*key), "uct_cuda_ipc_lkey_t");
     if (key == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
+    memset(key, 0, sizeof(*key));
+
+    UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
+                (CUdeviceptr)addr));
+
+#if HAVE_CUDA_FABRIC
+    /* cuda_ipc can handle VMM, mallocasync, and legacy pinned device so need to
+     * pack appropriate handle */
+    status =
+        UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr), UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        /* Try legacy IPC first */
+        status =
+            UCT_CUDADRV_FUNC_LOG_DEBUG(cuIpcGetMemHandle(&key->ph.handle.legacy,
+                        (CUdeviceptr)addr));
+        if (status == UCS_OK) {
+            key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
+            ucs_trace("packed legacy handle for %p", addr);
+        } else {
+            status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&mempool,
+                        CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE, (CUdeviceptr)addr));
+            if (status == UCS_OK) {
+                status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(
+                            &allowed_handle_types,
+                            CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES,
+                            (CUdeviceptr)addr));
+                if ((status != UCS_OK) ||
+                    (!(allowed_handle_types | fabric_type))) {
+                    status = UCS_ERR_NO_RESOURCE;
+                    goto err;
+                }
+
+                status =
+                    UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportToShareableHandle(
+                                (void *)&key->ph.handle.mempool, mempool,
+                                fabric_type, 0));
+                if (UCS_OK != status) {
+                    goto err;
+                }
+
+                status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolExportPointer(&key->ph.ptr,
+                            (CUdeviceptr)key->d_bptr));
+                if (UCS_OK != status) {
+                    goto err;
+                }
+
+                key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL;
+                ucs_trace("packed mempool handle and export pointer for %p", addr);
+            }
+        }
+    } else {
+        status =
+            UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(&key->ph.handle.vmm, handle,
+                        fabric_type, 0));
+        if (UCS_OK != status) {
+            cuMemRelease(handle);
+            goto err;
+        }
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
+        if (UCS_OK != status) {
+            goto err;
+        }
+
+        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM;
+        ucs_trace("packed vmm fabric handle for %p", addr);
+    }
+#else
     status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph, (CUdeviceptr)addr),
                               UCS_LOG_LEVEL_ERROR);
     if (UCS_OK != status) {
         goto err;
     }
-
-    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
-                                          (CUdeviceptr)addr),
-                     UCS_LOG_LEVEL_ERROR);
+#endif
 
     ucs_list_add_tail(&memh->list, &key->link);
     ucs_trace("registered addr:%p/%p length:%zd dev_num:%d",

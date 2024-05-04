@@ -6,12 +6,12 @@
 if HAVE_GDR_COPY
 
 module_LTLIBRARIES              = libuct_cuda_gdrcopy.la
-libuct_cuda_gdrcopy_la_CPPFLAGS = $(BASE_CPPFLAGS) $(GDR_COPY_CPPFLAGS)
-libuct_cuda_gdrcopy_la_CFLAGS   = $(BASE_CFLAGS)
-libuct_cuda_gdrcopy_la_LDFLAGS  = $(GDR_COPY_LDFLAGS) -version-info $(SOVERSION)
+libuct_cuda_gdrcopy_la_CPPFLAGS = $(BASE_CPPFLAGS) $(GDR_COPY_CPPFLAGS) $(CUDA_CPPFLAGS)
+libuct_cuda_gdrcopy_la_CFLAGS   = $(BASE_CFLAGS) $(CUDA_CFLAGS)
+libuct_cuda_gdrcopy_la_LDFLAGS  = $(GDR_COPY_LDFLAGS) $(CUDA_LDFLAGS) -version-info $(SOVERSION)
 libuct_cuda_gdrcopy_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                                   $(top_builddir)/src/uct/cuda/libuct_cuda.la \
-                                  $(GDR_COPY_LIBS)
+                                  $(GDR_COPY_LIBS) $(CUDA_LIBS)
 
 noinst_HEADERS = \
 	gdr_copy_md.h \

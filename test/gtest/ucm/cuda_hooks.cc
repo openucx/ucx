@@ -265,7 +265,7 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocAsync) {
     /* release with cuMemFree */
     ret = cuMemAllocAsync(&dptr, 64, 0);
     ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_alloc_events((void*)dptr, 64, UCS_MEMORY_TYPE_CUDA_MANAGED);
+    check_mem_alloc_events((void*)dptr, 64, UCS_MEMORY_TYPE_CUDA);
 
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
@@ -281,6 +281,7 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocAsync) {
     check_mem_free_events((void*)dptr, 64);
 }
 #endif
+
 
 UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
     cudaError_t ret;
@@ -361,7 +362,7 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocAsync) {
     /* release with cudaFree */
     ret = cudaMallocAsync(&ptr, 64, 0);
     ASSERT_EQ(ret, cudaSuccess);
-    check_mem_alloc_events(ptr, 64, UCS_MEMORY_TYPE_CUDA_MANAGED);
+    check_mem_alloc_events(ptr, 64, UCS_MEMORY_TYPE_CUDA);
 
     ret = cudaFree(ptr);
     ASSERT_EQ(ret, cudaSuccess);
