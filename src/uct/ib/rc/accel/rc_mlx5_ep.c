@@ -1068,11 +1068,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
         }
     }
 
-    status = uct_ib_device_async_event_register(&md->super.dev,
-                                                IBV_EVENT_QP_LAST_WQE_REACHED,
-                                                self->tx.wq.super.qp_num);
-    if (status != UCS_OK) {
-        goto err_destroy_txwq_qp;
+    if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
+        status = uct_ib_device_async_event_register(&md->super.dev,
+                                                    IBV_EVENT_QP_LAST_WQE_REACHED,
+                                                    self->tx.wq.super.qp_num);
+        if (status != UCS_OK) {
+            goto err_destroy_txwq_qp;
+        }
     }
 
     status = uct_rc_iface_add_qp(&iface->super, &self->super,
@@ -1087,16 +1089,19 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 err_event_unreg:
-    uct_ib_device_async_event_unregister(&md->super.dev,
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         self->tx.wq.super.qp_num);
+    if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
+        uct_ib_device_async_event_unregister(&md->super.dev,
+                                             IBV_EVENT_QP_LAST_WQE_REACHED,
+                                             self->tx.wq.super.qp_num);
+    }
 err_destroy_txwq_qp:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;
 }
 
 void uct_rc_mlx5_base_ep_cleanup(uct_rc_mlx5_base_ep_t *ep,
-                                 uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *ctx)
+                                 uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *ctx,
+                                 int async)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
             ep->super.super.super.iface, uct_rc_mlx5_iface_common_t);
@@ -1114,7 +1119,7 @@ void uct_rc_mlx5_base_ep_cleanup(uct_rc_mlx5_base_ep_t *ep,
     wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&ep->tx.wq, outstanding);
     ucs_assert(outstanding >= wqe_count);
     uct_rc_ep_cleanup_qp(&ep->super, &ctx->super, ep->tx.wq.super.qp_num,
-                         outstanding - wqe_count);
+                         outstanding - wqe_count, async);
 }
 
 UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
@@ -1183,7 +1188,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     cleanup_ctx->super.reg = self->super.tx.wq.reg;
     cleanup_ctx->tm_qp     = self->tm_qp;
 
-    uct_rc_mlx5_base_ep_cleanup(&self->super, &cleanup_ctx->super);
+    uct_rc_mlx5_base_ep_cleanup(&self->super, &cleanup_ctx->super, 1);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_mlx5_base_ep_t);

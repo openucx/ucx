@@ -718,6 +718,10 @@ uct_ib_iface_roce_dscp(uct_ib_iface_t *iface)
     return iface->config.traffic_class >> 2;
 }
 
+int uct_ib_iface_dev_addr_is_reachable(uct_ib_iface_t *iface,
+                                       const uct_ib_address_t *ib_addr,
+                                       uct_iface_reachability_scope_t scope);
+
 #if HAVE_DECL_IBV_CREATE_CQ_EX
 static UCS_F_ALWAYS_INLINE void
 uct_ib_fill_cq_attr(struct ibv_cq_init_attr_ex *cq_attr,

@@ -232,15 +232,8 @@ ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
 
 ucs_status_t uct_rc_mlx5_iface_arm(uct_iface_h tl_iface, unsigned events);
 
-ucs_status_t
-uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
-                          const uct_rc_iface_common_config_t *rc_config);
-
-void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
-
-void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface);
-
 void uct_rc_mlx5_base_ep_cleanup(uct_rc_mlx5_base_ep_t *ep,
-                                 uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *ctx);
+                                 uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *ctx,
+                                 int async);
 
 #endif

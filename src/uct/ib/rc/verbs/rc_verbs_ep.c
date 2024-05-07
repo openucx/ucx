@@ -734,7 +734,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     cleanup_ctx->qp = self->qp;
     ucs_assert(UCS_CIRCULAR_COMPARE16(self->txcnt.pi, >=, self->txcnt.ci));
     uct_rc_ep_cleanup_qp(&self->super, &cleanup_ctx->super, self->qp->qp_num,
-                         self->txcnt.pi - self->txcnt.ci);
+                         self->txcnt.pi - self->txcnt.ci, 1);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

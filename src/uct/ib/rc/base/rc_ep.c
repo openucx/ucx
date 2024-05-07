@@ -109,7 +109,7 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
 
 void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
                           uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx,
-                          uint32_t qp_num, uint16_t cq_credits)
+                          uint32_t qp_num, uint16_t cq_credits, int async)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_rc_iface_t);
@@ -126,12 +126,16 @@ void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
     cleanup_ctx->iface      = iface;
     cleanup_ctx->qp_num     = qp_num;
     cleanup_ctx->cq_credits = cq_credits;
-    ucs_list_add_tail(&iface->qp_gc_list, &cleanup_ctx->list);
+    if (async) {
+        ucs_list_add_tail(&iface->qp_gc_list, &cleanup_ctx->list);
 
-    status = uct_ib_device_async_event_wait(&md->dev,
-                                            IBV_EVENT_QP_LAST_WQE_REACHED,
-                                            qp_num, &cleanup_ctx->super);
-    ucs_assert_always(status == UCS_OK);
+        status = uct_ib_device_async_event_wait(&md->dev,
+                                                IBV_EVENT_QP_LAST_WQE_REACHED,
+                                                qp_num, &cleanup_ctx->super);
+        ucs_assert_always(status == UCS_OK);
+    } else {
+        uct_rc_iface_qp_cleanup(cleanup_ctx);
+    }
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
