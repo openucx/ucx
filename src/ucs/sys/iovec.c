@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -10,6 +11,7 @@
 
 #include <ucs/sys/iovec.h>
 #include <ucs/sys/math.h>
+#include <ucs/arch/cpu.h>
 
 #include <string.h>
 #include <sys/uio.h>
@@ -40,10 +42,13 @@ size_t ucs_iov_copy(const struct iovec *iov, size_t iov_cnt,
         len     -= iov_offset;
 
         len = ucs_min(len, max_copy);
+
         if (dir == UCS_IOV_COPY_FROM_BUF) {
-            memcpy(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len);
+            ucs_memcpy_relaxed(iov_buf, UCS_PTR_BYTE_OFFSET(buf, copied), len,
+                               UCS_ARCH_MEMCPY_NT_SOURCE, len);
         } else if (dir == UCS_IOV_COPY_TO_BUF) {
-            memcpy(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len);
+            ucs_memcpy_relaxed(UCS_PTR_BYTE_OFFSET(buf, copied), iov_buf, len,
+                               UCS_ARCH_MEMCPY_NT_DEST, len);
         }
 
         iov_offset  = 0;

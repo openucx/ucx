@@ -1,6 +1,7 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -187,7 +188,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
 
     if (is_short) {
         uct_am_short_fill_data(uct_ugni_udt_get_spayload(desc, iface),
-                               header, payload, length);
+                               header, payload, length, UCS_ARCH_MEMCPY_NT_NONE);
         sheader->length = length + sizeof(header);
         msg_length      = sheader->length + sizeof(*sheader);
         UCT_TL_EP_STAT_OP(ucs_derived_of(ep, uct_base_ep_t), AM, SHORT, sizeof(header) + length);

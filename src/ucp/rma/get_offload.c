@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -20,7 +21,7 @@ static void ucp_proto_get_offload_bcopy_unpack(void *arg, const void *data,
                                                size_t length)
 {
     void *dest = arg;
-    ucs_memcpy_relaxed(dest, data, length);
+    ucs_memcpy_relaxed(dest, data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

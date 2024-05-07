@@ -1051,6 +1051,18 @@ run_release_mode_tests() {
 	test_ucm_hooks
 }
 
+#
+# Run nt_buffer_transfer tests
+#
+run_nt_buffer_transfer_tests() {
+    if lscpu | grep -q 'AuthenticAMD'
+    then
+	    build release --enable-gtest --enable-optimizations
+	    echo "==== Running nt_buffer_transfer tests ===="
+	    ./test/gtest/gtest --gtest_filter="test_arch.nt_buffer_transfer_*"
+    fi
+}
+
 set_ucx_common_test_env() {
 	export UCX_HANDLE_ERRORS=bt
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
@@ -1102,6 +1114,9 @@ run_tests() {
 
 	# release mode tests
 	do_distributed_task 0 4 run_release_mode_tests
+
+	# nt_buffer_transfer tests
+	do_distributed_task 0 4 run_nt_buffer_transfer_tests
 }
 
 run_test_proto_disable() {

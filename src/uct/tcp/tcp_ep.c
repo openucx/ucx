@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -1781,7 +1782,8 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     hdr->length = payload_length = length + sizeof(header);
 
     if (length <= iface->config.sendv_thresh) {
-        uct_am_short_fill_data(hdr + 1, header, payload, length);
+        uct_am_short_fill_data(hdr + 1, header, payload, length,
+                               UCS_ARCH_MEMCPY_NT_NONE);
         status = uct_tcp_ep_am_send(ep, hdr);
     } else {
         iov[0].iov_base = hdr;

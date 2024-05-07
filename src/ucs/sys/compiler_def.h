@@ -2,6 +2,7 @@
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Arm, Ltd. 2021. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -199,7 +200,11 @@
 /**
  * Prefetch cache line
  */
-#define ucs_prefetch(p)            __builtin_prefetch(p)
+#define ucs_read_prefetch(p)       __builtin_prefetch(p, 0, 3)
+#define ucs_write_prefetch(p)      __builtin_prefetch(p, 1, 3)
+
+#define ucs_nt_read_prefetch(p)    __builtin_prefetch(p, 0, 0)
+#define ucs_nt_write_prefetch(p)   __builtin_prefetch(p, 1, 0)
 
 /* Branch prediction */
 #define ucs_likely(x)              __builtin_expect(x, 1)
