@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -9,6 +10,7 @@
 
 #include "uct_worker.h"
 
+#include <ucs/arch/cpu.h>
 #include <uct/api/uct.h>
 #include <uct/base/uct_component.h>
 #include <ucs/config/parser.h>
@@ -978,7 +980,7 @@ void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
  */
 static UCS_F_ALWAYS_INLINE
 void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
-                            size_t length)
+                            size_t length, ucs_arch_memcpy_hint_t hint)
 {
     /**
      * Helper structure to fill send buffer of short messages for
@@ -992,7 +994,7 @@ void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
     packet->header = header;
     /* suppress false positive diagnostic from uct_mm_ep_am_common_send call */
     /* cppcheck-suppress ctunullpointer */
-    memcpy(packet->payload, payload, length);
+    ucs_memcpy_relaxed(packet->payload, payload, length, hint, length);
 }
 
 
