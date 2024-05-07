@@ -373,7 +373,7 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         uct_ep        = ucp_ep_get_lane(ep, lane);
         wireup_ep     = ucp_wireup_ep(uct_ep);
 
-        if ((wireup_ep == NULL) ||
+        if ((wireup_ep == NULL) || /* Non-wireup EPs should also be reused */
             (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED)) {
             remote_lane = ucp_ep_get_remote_lane(uct_ep, address_entry);
             ucs_assertv(remote_lane != UCP_NULL_LANE,
@@ -1385,8 +1385,9 @@ static void ucp_wireup_discard_uct_eps(ucp_ep_h ep, uct_ep_h *uct_eps,
     }
 }
 
-static ucp_lane_index_t ucp_wireup_all_reused(ucp_lane_index_t num_lanes,
-                                              const ucp_lane_index_t *lanes_map)
+static ucp_lane_index_t
+ucp_wireup_check_all_reused(ucp_lane_index_t num_lanes,
+                            const ucp_lane_index_t *lanes_map)
 {
     ucp_lane_index_t lane;
 
@@ -1416,7 +1417,7 @@ ucp_wireup_get_reused_lane(ucp_lane_index_t lane_idx,
 }
 
 static ucs_status_t
-ucp_wireup_uct_ep_move_pending(uct_ep_h src_ep, uct_ep_h dst_ep)
+ucp_wireup_uct_ep_move_pending_requests(uct_ep_h src_ep, uct_ep_h dst_ep)
 {
     ucs_queue_head_t tmp_q;
     ucs_status_t status;
@@ -1489,8 +1490,8 @@ static ucs_status_t ucp_wireup_set_msg_aux(ucp_ep_h ep,
         }
 
         /* Move pending messages from the selected aux lane to its wireup_ep */
-        status = ucp_wireup_uct_ep_move_pending(aux_ep,
-                                                &wireup_ep->super.super);
+        status = ucp_wireup_uct_ep_move_pending_requests(
+                aux_ep, &wireup_ep->super.super);
         if (status != UCS_OK) {
             goto err_free_ep;
         }
@@ -1561,7 +1562,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         /* wireup lane has to be selected for the old configuration */
         ucs_assert(old_key->wireup_msg_lane != UCP_NULL_LANE);
     } else {
-        if (ucp_wireup_all_reused(old_key->num_lanes, reuse_lane_map)) {
+        if (ucp_wireup_check_all_reused(old_key->num_lanes, reuse_lane_map)) {
             *connect_lane_bitmap = 0;
             return UCS_OK;
         }

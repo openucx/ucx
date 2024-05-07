@@ -1836,7 +1836,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 }
 
 static void
-ucp_ep_init_is_connected_params(uct_ep_is_connected_params_t *params,
+ucp_ep_fill_is_connected_params(uct_ep_is_connected_params_t *params,
                                 const ucp_address_entry_t *addr_entry)
 {
     params->field_mask = 0;
@@ -1863,7 +1863,7 @@ static int ucp_ep_is_lane_connected(uct_ep_h uct_ep,
         uct_ep = wireup_ep->super.uct_ep;
     }
 
-    ucp_ep_init_is_connected_params(&params, addr_entry);
+    ucp_ep_fill_is_connected_params(&params, addr_entry);
 
     if ((addr_entry->num_ep_addrs == 0) &&
         uct_ep_is_connected(uct_ep, &params)) {
@@ -1885,7 +1885,7 @@ ucp_ep_get_remote_lane(uct_ep_h uct_ep, const ucp_address_entry_t *addr_entry)
         uct_ep = wireup_ep->super.uct_ep;
     }
 
-    ucp_ep_init_is_connected_params(&params, addr_entry);
+    ucp_ep_fill_is_connected_params(&params, addr_entry);
     params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
 
     for (ep_index = 0; ep_index < addr_entry->num_ep_addrs; ++ep_index) {
