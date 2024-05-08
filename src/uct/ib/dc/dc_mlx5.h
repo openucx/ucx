@@ -278,24 +278,29 @@ typedef struct {
 UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uint16_t, uct_dc_dci_t);
 
 struct uct_dc_mlx5_iface {
-    uct_rc_mlx5_iface_common_t    super;
+    uct_rc_mlx5_iface_common_t      super;
     struct {
         /* Array of dcis */
-        uct_dc_dci_array_t        dcis;
+        uct_dc_dci_array_t           dcis;
 
-        uint8_t                   ndci;                        /* Number of DCIs */
+        /* Number of DCIs */
+        uint8_t                      ndci;
 
-        uint8_t                   port_affinity;               /* Whether to set port affinity */
+        /* Whether to set port affinity */
+        uint8_t                      port_affinity;
 
         /* LIFO is only relevant for dcs allocation policy */
-        uct_dc_mlx5_dci_pool_t    dci_pool[UCT_DC_MLX5_IFACE_MAX_DCI_POOLS];
-        uint8_t                   num_dci_pools;
+        uct_dc_mlx5_dci_pool_t       dci_pool[UCT_DC_MLX5_IFACE_MAX_DCI_POOLS];
+        uint8_t                      num_dci_pools;
 
-        uint8_t                   policy;                      /* dci selection algorithm */
-        int16_t                   available_quota;             /* if available tx is lower, let
-                                                                  another endpoint use the dci */
+        /* dci selection algorithm */
+        uint8_t                      policy;
+
+        /* if available tx is lower, let another endpoint use the dci */
+        int16_t                      available_quota;
+
         /* DCI max elements */
-        unsigned                  bb_max;
+        unsigned                     bb_max;
 
         /* Used to send grant messages for all peers */
         uct_dc_mlx5_ep_t             *fc_ep;
