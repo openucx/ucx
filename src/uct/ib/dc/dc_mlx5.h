@@ -41,8 +41,8 @@ struct ibv_ravh {
 #define UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, _dci, _txqp, _txwq) \
     { \
         ucs_assert(_dci != UCT_DC_MLX5_EP_NO_DCI); \
-        _txqp = &ucs_array_elem(&(_iface)->tx.dcis, _dci).txqp; \
-        _txwq = &ucs_array_elem(&(_iface)->tx.dcis, _dci).txwq; \
+        _txqp = &uct_dc_mlx5_iface_dci(_iface, _dci)->txqp; \
+        _txwq = &uct_dc_mlx5_iface_dci(_iface, _dci)->txwq; \
     }
 
 /**
@@ -241,19 +241,10 @@ typedef struct uct_dc_mlx5_ep_fc_entry {
 
 KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
 
-enum uct_dc_mlx5_dci_config_flags {
-    UCT_DC_MLX5_DCI_CONFIG_KEEPALIVE           = UCS_BIT(0),
-    UCT_DC_MLX5_DCI_CONFIG_MAX_RD_ATOMIC_IS_64 = UCS_BIT(1)
-};
-
-typedef union uct_dc_mlx5_dci_config {
-    struct {
-        uint8_t path_index;
-        uint8_t flags;
-        uint8_t padding[6];
-    } key;
-    uint64_t u64;
-} UCS_S_PACKED uct_dc_mlx5_dci_config_t;
+typedef struct uct_dc_mlx5_dci_config {
+    uint8_t path_index;
+    uint8_t max_rd_atomic;
+} uct_dc_mlx5_dci_config_t;
 
 KHASH_MAP_INIT_INT64(uct_dc_mlx5_config_hash, uint8_t);
 
@@ -275,12 +266,12 @@ UCS_ARRAY_DECLARE_TYPE(uct_dc_mlx5_pool_stack_t, uint8_t, uint8_t);
  */
 typedef struct {
     int8_t                   stack_top;         /* dci stack top */
-    uct_dc_mlx5_pool_stack_t stack;             /* LIFO of indexes of available dcis */
-    ucs_arbiter_t            arbiter;           /* queue of requests waiting for DCI */
     int8_t                   release_stack_top; /* releasing dci's stack,
                                                    points to last DCI to release
                                                    or -1 if no DCI's to release */
-    uint64_t                 config_key;
+    uct_dc_mlx5_pool_stack_t stack;             /* LIFO of indexes of available dcis */
+    ucs_arbiter_t            arbiter;           /* queue of requests waiting for DCI */
+    uct_dc_mlx5_dci_config_t config;
 } uct_dc_mlx5_dci_pool_t;
 
 
@@ -307,51 +298,49 @@ struct uct_dc_mlx5_iface {
         unsigned                  bb_max;
 
         /* Used to send grant messages for all peers */
-        uct_dc_mlx5_ep_t          *fc_ep;
+        uct_dc_mlx5_ep_t             *fc_ep;
 
         /* Hash of expected FC grants */
         khash_t(uct_dc_mlx5_fc_hash) fc_hash;
 
         /* Sequence number of expected FC grants */
-        uint64_t                  fc_seq;
+        uint64_t                     fc_seq;
 
         /* Timeout for sending FC_HARD_REQ when FC window is empty */
-        ucs_time_t                fc_hard_req_timeout;
+        ucs_time_t                   fc_hard_req_timeout;
 
         /* Next time when FC_HARD_REQ operations should be resent */
-        ucs_time_t                fc_hard_req_resend_time;
+        ucs_time_t                   fc_hard_req_resend_time;
 
         /* Callback ID of FC_HARD_REQ resend operation */
-        uct_worker_cb_id_t        fc_hard_req_progress_cb_id;
+        uct_worker_cb_id_t           fc_hard_req_progress_cb_id;
 
         /* Seed used for random dci allocation */
-        unsigned                  rand_seed;
+        unsigned                     rand_seed;
 
-        ucs_arbiter_callback_t    pend_cb;
+        ucs_arbiter_callback_t       pend_cb;
 
-        uint8_t                   dci_pool_release_bitmap;
+        uint8_t                      dci_pool_release_bitmap;
 
-        uint8_t                   av_fl_mlid;
+        uint8_t                      av_fl_mlid;
 
-        uint8_t                   num_dci_channels;
-
-        uint8_t                   dci_counter;
+        uint8_t                      num_dci_channels;
     } tx;
 
     struct {
-        uct_ib_mlx5_qp_t          dct;
+        uct_ib_mlx5_qp_t dct;
 
-        uint8_t                   port_affinity;
+        uint8_t          port_affinity;
     } rx;
 
     khash_t(uct_dc_mlx5_config_hash) dc_config_hash;
 
-    uint8_t                       version_flag;
+    uint8_t                          version_flag;
 
     /* iface flags, see uct_dc_mlx5_iface_flags_t */
-    uint16_t                      flags;
+    uint16_t                         flags;
 
-    uct_ud_mlx5_iface_common_t    ud_common;
+    uct_ud_mlx5_iface_common_t       ud_common;
 };
 
 
@@ -392,14 +381,7 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
 void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
 
 ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
-                                          uint8_t pool_index, uint8_t dci_index,
-                                          uint8_t path_index,
-                                          int full_handshake);
-
-ucs_status_t
-uct_dc_mlx5_iface_create_dci_pool(uct_dc_mlx5_iface_t *iface,
-                                  const uct_dc_mlx5_dci_config_t *config,
-                                  uint8_t *pool_index_p);
+                                          uint8_t dci_index, uct_dc_dci_t *dci);
 
 /**
  * Checks whether dci pool config is present in dc_config_hash and returns 
@@ -410,14 +392,18 @@ uct_dc_mlx5_dci_pool_get_or_create(uct_dc_mlx5_iface_t *iface,
                                    const uct_dc_mlx5_dci_config_t *dci_config,
                                    uint8_t *pool_index_p);
 
-static UCS_F_ALWAYS_INLINE void uct_dc_mlx5_dci_set_invalid(uct_dc_dci_t *dci)
-{
-    dci->txwq.super.qp_num = UCT_IB_INVALID_QPN;
-}
+uint32_t
+uct_dc_mlx5_dci_config_hash(const uct_dc_mlx5_dci_config_t *dci_config);
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_dc_mlx5_is_dci_valid(const uct_dc_dci_t *dci)
 {
     return dci->txwq.super.qp_num != UCT_IB_INVALID_QPN;
+}
+
+static UCS_F_ALWAYS_INLINE uct_dc_dci_t *
+uct_dc_mlx5_iface_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
+{
+    return &ucs_array_elem(&iface->tx.dcis, dci_index);
 }
 
 #if HAVE_DEVX
@@ -464,12 +450,6 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 }
 #endif
 
-static UCS_F_ALWAYS_INLINE size_t
-uct_dc_mlx5_iface_max_total_dcis(uct_dc_mlx5_iface_t *iface)
-{
-    return (iface->tx.ndci * UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
-}
-
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???
  *
@@ -487,9 +467,9 @@ uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
     }
 
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ndci   = uct_dc_mlx5_iface_max_total_dcis(iface);
+    ndci   = ucs_array_capacity(&iface->tx.dcis);
     for (i = 0; i < ndci; i++) {
-        if (ucs_array_elem(&iface->tx.dcis, i).txwq.super.qp_num == qp_num) {
+        if (uct_dc_mlx5_iface_dci(iface, i)->txwq.super.qp_num == qp_num) {
             return i;
         }
     }
@@ -509,7 +489,7 @@ uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface,
                                        uint8_t dci_index)
 {
     return uct_rc_txqp_available(
-                   &ucs_array_elem(&iface->tx.dcis, dci_index).txqp) > 0;
+                   &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp) > 0;
 }
 
 /* returns pending queue of eps waiting for tx resources */
@@ -529,7 +509,7 @@ uct_dc_mlx5_iface_dci_waitq(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
-    uct_dc_dci_t *dci = &ucs_array_elem(&iface->tx.dcis, dci_index);
+    uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface, dci_index);
 
     if (!uct_dc_mlx5_is_dci_valid(dci)) {
         return 0;
@@ -547,17 +527,12 @@ uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci_index)
     }
 
     ucs_trace_poll("dci %d is not flushed %d/%d", dci_index,
-                   ucs_array_elem(&iface->tx.dcis, dci_index).txqp.available,
+                   uct_dc_mlx5_iface_dci(iface, dci_index)->txqp.available,
                    iface->tx.bb_max);
     ucs_assertv(uct_rc_txqp_unsignaled(
-                        &ucs_array_elem(&iface->tx.dcis, dci_index).txqp) == 0,
+                        &uct_dc_mlx5_iface_dci(iface, dci_index)->txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
-}
-
-static UCS_F_ALWAYS_INLINE uint8_t
-uct_dc_mlx5_dci_config_get_max_rd_atomic(const uct_dc_mlx5_dci_config_t *dci_config) {
-    return dci_config->key.flags & UCT_DC_MLX5_DCI_CONFIG_MAX_RD_ATOMIC_IS_64 ? 64 : 16;
 }
 
 #endif

@@ -265,7 +265,7 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
     return uct_rc_ep_fence(tl_ep,
-                           &ucs_array_elem(&iface->tx.dcis, ep->dci).txwq.fi,
+                           &uct_dc_mlx5_iface_dci(iface, ep->dci)->txwq.fi,
                            ep->dci != UCT_DC_MLX5_EP_NO_DCI);
 }
 
@@ -1265,7 +1265,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
-    uct_dc_dci_t *ep_dci = &ucs_array_elem(&iface->tx.dcis, self->dci);
+    uct_dc_dci_t *dci          = uct_dc_mlx5_iface_dci(iface, self->dci);
 
     uct_dc_mlx5_ep_pending_purge(&self->super.super,
                                  uct_rc_ep_pending_purge_warn_cb, self);
@@ -1284,16 +1284,14 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
 
-    if (!uct_dc_mlx5_is_dci_valid(ep_dci)) {
+    if (!uct_dc_mlx5_is_dci_valid(dci)) {
         return;
     }
 
     /* TODO should be removed by flush */
-    uct_rc_txqp_purge_outstanding(&iface->super.super,
-                                  &ep_dci->txqp, UCS_ERR_CANCELED,
-                                  ep_dci->txwq.sw_pi, 1);
-    ucs_assert(ucs_queue_is_empty(&ep_dci->txqp.outstanding));
-    ep_dci->ep = NULL;
+    uct_rc_txqp_purge_outstanding(&iface->super.super, &dci->txqp,
+                                  UCS_ERR_CANCELED, dci->txwq.sw_pi, 1);
+    ucs_assert(ucs_queue_is_empty(&dci->txqp.outstanding));
 }
 
 UCS_CLASS_DEFINE(uct_dc_mlx5_ep_t, uct_base_ep_t);
@@ -1380,10 +1378,11 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     ucs_assert(!uct_dc_mlx5_iface_is_dci_shared(iface));
     ucs_assertv(ep->dci == UCT_DC_MLX5_EP_NO_DCI,
                 "ep %p (iface=%p) has DCI=%d (pool %d) while it is scheduled "
-                "in DCI wait queue", ep, iface, ep->dci,
-                ucs_array_elem(&iface->tx.dcis, ep->dci).pool_index);
+                "in DCI wait queue",
+                ep, iface, ep->dci,
+                uct_dc_mlx5_iface_dci(iface, ep->dci)->pool_index);
 
-    if (!uct_dc_mlx5_iface_dci_ensure_pool_size(iface, pool_index)) {
+    if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
