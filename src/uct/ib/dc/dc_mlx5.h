@@ -278,7 +278,7 @@ typedef struct {
 UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uint16_t, uct_dc_dci_t);
 
 struct uct_dc_mlx5_iface {
-    uct_rc_mlx5_iface_common_t      super;
+    uct_rc_mlx5_iface_common_t super;
     struct {
         /* Array of dcis */
         uct_dc_dci_array_t           dcis;

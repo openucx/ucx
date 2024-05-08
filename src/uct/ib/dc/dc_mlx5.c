@@ -279,7 +279,6 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
     ucs_memory_cpu_load_fence();
 
     dci_index = uct_dc_mlx5_iface_dci_find(iface, cqe);
-
     dci       = uct_dc_mlx5_iface_dci(iface, dci_index);
     ucs_assert_always(uct_dc_mlx5_is_dci_valid(dci));
     txqp      = &dci->txqp;
