@@ -260,9 +260,6 @@ struct ucp_request {
                                 struct {
                                     /* Actual lanes map */
                                     ucp_lane_map_t lanes_map_all;
-
-                                    /* Actual lanes count */
-                                    uint8_t        lanes_count;
                                 } zcopy;
 
                                 struct {
@@ -377,7 +374,6 @@ struct ucp_request {
             union {
                 ucp_lane_index_t  am_bw_index;     /* AM BW lane index */
                 ucp_lane_index_t  multi_lane_idx;  /* Index of the lane with multi-send */
-                ucp_lane_map_t    lanes_map_avail; /* Used lanes map */
             };
             uint8_t               mem_type;        /* Memory type, values are
                                                     * ucs_memory_type_t */
