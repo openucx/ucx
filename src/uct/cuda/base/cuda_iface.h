@@ -60,6 +60,10 @@ const char *uct_cuda_base_cu_get_error_string(CUresult result);
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
+#define UCT_CUDADRV_FUNC_LOG_WARN(_func) \
+    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_WARN)
+
+
 #define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
 
