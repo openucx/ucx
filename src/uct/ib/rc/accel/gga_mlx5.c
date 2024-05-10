@@ -54,9 +54,7 @@ enum {
 typedef struct {
     uint8_t         flags;
     uct_ib_uint24_t qp_num;
-    uint16_t        flush_rkey;
-    uint16_t        reserved;   /* Reserved for forward wire compatibility,
-                                 * should be 0 */
+    uint32_t        flush_rkey;
 } UCS_S_PACKED uct_gga_mlx5_ep_address_t;
 
 typedef struct {
@@ -364,13 +362,12 @@ uct_gga_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_ib_pack_uint24(gga_addr->qp_num, ep->super.tx.wq.super.qp_num);
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
         gga_addr->flags      = UCT_GGA_MLX5_EP_ADDRESS_FLAG_FLUSH_RKEY;
-        gga_addr->flush_rkey = (md->flush_rkey >> 16);
+        gga_addr->flush_rkey = md->flush_rkey;
     } else {
         gga_addr->flags      = 0;
         gga_addr->flush_rkey = 0;
     }
 
-    gga_addr->reserved = 0;
     return UCS_OK;
 }
 
@@ -410,8 +407,7 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
     ep->super.super.flush_rkey       =
             (gga_ep_addr->flags & UCT_GGA_MLX5_EP_ADDRESS_FLAG_FLUSH_RKEY) ?
-            ((uint32_t)gga_ep_addr->flush_rkey << 16) :
-            UCT_IB_MD_INVALID_FLUSH_RKEY;
+            gga_ep_addr->flush_rkey : UCT_IB_MD_INVALID_FLUSH_RKEY;
     return UCS_OK;
 }
 
