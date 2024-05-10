@@ -56,8 +56,8 @@ typedef struct uct_rc_mlx5_ep {
  * RC MLX5 EP cleanup context
  */
 typedef struct {
-    uct_rc_mlx5_iface_common_qp_cleanup_ctx_t   super; /* Base class */
-    uct_ib_mlx5_qp_t                            tm_qp; /* TM Rendezvous QP */
+    uct_rc_mlx5_iface_common_qp_cleanup_ctx_t super; /* Base class */
+    uct_ib_mlx5_qp_t                          tm_qp; /* TM Rendezvous QP */
 } uct_rc_mlx5_iface_qp_cleanup_ctx_t;
 
 
@@ -81,8 +81,9 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
 
-UCS_CLASS_DECLARE(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *);
-UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_base_ep_t, uct_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DECLARE(uct_rc_mlx5_base_ep_t, const uct_ep_params_t*);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_base_ep_t, uct_ep_t,
+                           const uct_ep_params_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_base_ep_t, uct_ep_t);
 
 struct mlx5_cqe64 *

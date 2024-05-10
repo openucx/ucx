@@ -701,8 +701,7 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     return ret;
 }
 
-static int
-uct_ib_iface_is_same_device_unpacked(
+static int uct_ib_iface_is_same_device_unpacked(
         const uct_ib_address_pack_params_t *unpacked_addr, uint16_t dlid,
         const union ibv_gid *dgid)
 {

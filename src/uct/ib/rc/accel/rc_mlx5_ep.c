@@ -1069,9 +1069,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
-        status = uct_ib_device_async_event_register(&md->super.dev,
-                                                    IBV_EVENT_QP_LAST_WQE_REACHED,
-                                                    self->tx.wq.super.qp_num);
+        status = uct_ib_device_async_event_register(
+                &md->super.dev, IBV_EVENT_QP_LAST_WQE_REACHED,
+                self->tx.wq.super.qp_num);
         if (status != UCS_OK) {
             goto err_destroy_txwq_qp;
         }
@@ -1110,8 +1110,8 @@ void uct_rc_mlx5_base_ep_cleanup(uct_rc_mlx5_base_ep_t *ep,
     uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp,
                                   UCS_ERR_CANCELED, ep->tx.wq.sw_pi, 1);
 
-    (void)uct_ib_mlx5_modify_qp_state(&iface->super.super,
-                                      &ep->tx.wq.super, IBV_QPS_ERR);
+    (void)uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
+                                      IBV_QPS_ERR);
 
     /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
      * overflow. These CQ credits will be released by error CQE handler. */

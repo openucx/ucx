@@ -710,7 +710,8 @@ public:
 };
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_tx_bufs, am_tx_max_bufs,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
     ucs_status_t status;
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,

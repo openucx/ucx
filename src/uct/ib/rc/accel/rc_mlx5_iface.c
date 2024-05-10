@@ -239,8 +239,7 @@ out:
     uct_rc_iface_arbiter_dispatch(iface);
 }
 
-static void
-uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
+static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
 

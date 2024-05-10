@@ -204,7 +204,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
     UCT_IB_MLX5DV_SET(qpc, qpc, rq_type,
                       attr->super.srq_num ? 1 /* SRQ */ :
-                      max_rx ? 0 /* RQ */ : 3 /* no RQ */);
+                      max_rx              ? 0 /* RQ */ :
+                                            3 /* no RQ */);
     UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, attr->super.srq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, send_cq->cq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, recv_cq->cq_num);

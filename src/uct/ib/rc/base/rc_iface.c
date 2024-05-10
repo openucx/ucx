@@ -772,8 +772,7 @@ void uct_rc_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx)
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
 {
     uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx = arg;
-    uct_ib_iface_t *iface                      =
-            ucs_derived_of(cleanup_ctx->iface, uct_ib_iface_t);
+    uct_ib_iface_t *iface = ucs_derived_of(cleanup_ctx->iface, uct_ib_iface_t);
 
     uct_ib_device_async_event_unregister(uct_ib_iface_device(iface),
                                          IBV_EVENT_QP_LAST_WQE_REACHED,

@@ -55,13 +55,13 @@ typedef struct {
     uint8_t         flags;
     uct_ib_uint24_t qp_num;
     uint16_t        flush_rkey;
-    uint16_t        reserved;   /* reserved for forward wire compatibility,
-                                 * should be filled by 0 */
+    uint16_t        reserved;   /* Reserved for forward wire compatibility,
+                                 * should be 0 */
 } UCS_S_PACKED uct_gga_mlx5_ep_address_t;
 
 typedef struct {
-    uint64_t         be_sys_image_guid; /* ID of xGVMI */
-    uct_ib_address_t ib_addr;           /* common IB address */
+    uint64_t         be_sys_image_guid; /* ID of GVMI. */
+    uct_ib_address_t ib_addr;           /* Common IB address. */
 } UCS_S_PACKED uct_gga_mlx5_dev_addr_t;
 
 extern ucs_config_field_t uct_ib_md_config_table[];
@@ -235,8 +235,8 @@ uct_gga_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 {
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md UCS_V_UNUSED =
-            uct_ib_mlx5_iface_md(&iface->super.super);
+    uct_ib_mlx5_md_t *md UCS_V_UNUSED = uct_ib_mlx5_iface_md(
+            &iface->super.super);
 
     ucs_assert(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ);
     *fd_p = iface->cq_event_channel->fd;
@@ -248,8 +248,8 @@ uct_gga_mlx5_iface_arm(uct_iface_h tl_iface, unsigned events)
 {
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md UCS_V_UNUSED =
-            uct_ib_mlx5_iface_md(&iface->super.super);
+    uct_ib_mlx5_md_t *md UCS_V_UNUSED = uct_ib_mlx5_iface_md(
+            &iface->super.super);
 
     ucs_assert(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ);
     return uct_rc_mlx5_iface_devx_arm(iface, events);
@@ -269,20 +269,19 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->device_addr_len += ucs_offsetof(uct_gga_mlx5_dev_addr_t,
                                                 ib_addr);
     iface_attr->ep_addr_len      = sizeof(uct_gga_mlx5_ep_address_t);
-    iface_attr->cap.flags = /*
-                            UCT_IFACE_FLAG_PUT_ZCOPY |
-                            UCT_IFACE_FLAG_GET_ZCOPY |
-                            UCT_IFACE_FLAG_PENDING   | */
-                            UCT_IFACE_FLAG_CONNECT_TO_EP |
-                            UCT_IFACE_FLAG_CB_SYNC;
+    iface_attr->cap.flags        = /*
+                                   UCT_IFACE_FLAG_PUT_ZCOPY |
+                                   UCT_IFACE_FLAG_GET_ZCOPY |
+                                   UCT_IFACE_FLAG_PENDING   | */
+                                   UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                   UCT_IFACE_FLAG_CB_SYNC;
 
     iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                   UCT_IFACE_FLAG_EVENT_FD;
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_gga_mlx5_ep_enable_mmo(uct_gga_mlx5_ep_t *ep)
+static ucs_status_t uct_gga_mlx5_ep_enable_mmo(uct_gga_mlx5_ep_t *ep)
 {
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(init2init_qp_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(init2init_qp_out)] = {};
@@ -317,7 +316,10 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
                                      UCT_GGA_MLX5_OPAQUE_BUF_LEN,
                                      IBV_ACCESS_LOCAL_WRITE);
     if (self->dma_opaque.mr == NULL) {
-        ucs_error("cannot register MMO opaque buffer: %m");
+        ucs_error("ibv_reg_mr(pd=%p, buf=%p, len=%d, 0x%x) failed to register "
+                  "DMA/MMO opaque buffer: %m", md->super.pd,
+                  self->dma_opaque.buf, UCT_GGA_MLX5_OPAQUE_BUF_LEN,
+                  IBV_ACCESS_LOCAL_WRITE);
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
@@ -347,18 +349,17 @@ static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_gga_mlx5_ep_t, uct_rc_mlx5_base_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_gga_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_gga_mlx5_ep_t, uct_ep_t, const uct_ep_params_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_gga_mlx5_ep_t, uct_ep_t);
 
 static ucs_status_t
 uct_gga_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
-    uct_gga_mlx5_ep_t *ep               = ucs_derived_of(tl_ep,
-                                                         uct_gga_mlx5_ep_t);
-    uct_rc_mlx5_iface_common_t *iface   = ucs_derived_of(
-            tl_ep->iface, uct_rc_mlx5_iface_common_t);
+    uct_gga_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_gga_mlx5_ep_t);
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_common_t);
     uct_gga_mlx5_ep_address_t *gga_addr = (uct_gga_mlx5_ep_address_t*)addr;
-    uct_ib_md_t *md                     = uct_ib_iface_md(&iface->super.super);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
 
     uct_ib_pack_uint24(gga_addr->qp_num, ep->super.tx.wq.super.qp_num);
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
@@ -379,13 +380,12 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
                                  const uct_ep_addr_t *ep_addr,
                                  const uct_ep_connect_to_ep_params_t *params)
 {
-    uct_gga_mlx5_ep_t *ep                        =
-            ucs_derived_of(tl_ep, uct_gga_mlx5_ep_t);
-    uct_rc_mlx5_iface_common_t *iface            =
+    uct_gga_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_gga_mlx5_ep_t);
+    uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_common_t);
-    const uct_gga_mlx5_dev_addr_t *gga_dev_addr  =
-            (uct_gga_mlx5_dev_addr_t*)device_addr;
-    const uct_ib_address_t *ib_addr              = &gga_dev_addr->ib_addr;
+    const uct_gga_mlx5_dev_addr_t *gga_dev_addr = (uct_gga_mlx5_dev_addr_t*)
+            device_addr;
+    const uct_ib_address_t *ib_addr = &gga_dev_addr->ib_addr;
     const uct_gga_mlx5_ep_address_t *gga_ep_addr =
             (const uct_gga_mlx5_ep_address_t*)ep_addr;
     uint32_t qp_num;
@@ -410,7 +410,8 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
     ep->super.super.flush_rkey       =
             (gga_ep_addr->flags & UCT_GGA_MLX5_EP_ADDRESS_FLAG_FLUSH_RKEY) ?
-            (gga_ep_addr->flags << 16) : UCT_IB_MD_INVALID_FLUSH_RKEY;
+            ((uint32_t)gga_ep_addr->flush_rkey << 16) :
+            UCT_IB_MD_INVALID_FLUSH_RKEY;
     return UCS_OK;
 }
 
@@ -419,8 +420,7 @@ uct_gga_mlx5_iface_get_device_address(uct_iface_h tl_iface,
                                       uct_device_addr_t *dev_addr)
 {
     uct_gga_mlx5_dev_addr_t *gga_dev_addr = (uct_gga_mlx5_dev_addr_t*)dev_addr;
-    uct_ib_iface_t *iface                 = ucs_derived_of(tl_iface,
-                                                           uct_ib_iface_t);
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
 
     gga_dev_addr->be_sys_image_guid =
             uct_ib_iface_md(iface)->dev.dev_attr.orig_attr.sys_image_guid;
@@ -468,13 +468,11 @@ static uct_iface_ops_t uct_gga_mlx5_iface_tl_ops = {
 };
 
 static int
-uct_gga_mlx5_iface_is_reachable_v2(
-        const uct_iface_h tl_iface,
-        const uct_iface_is_reachable_params_t *params)
+uct_gga_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
+                                   const uct_iface_is_reachable_params_t *params)
 {
-    uct_ib_iface_t *iface                   = ucs_derived_of(tl_iface,
-                                                             uct_ib_iface_t);
-    uct_ib_device_t *device                 = uct_ib_iface_device(iface);
+    uct_ib_iface_t *iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_ib_device_t *device = uct_ib_iface_device(iface);
     const uct_gga_mlx5_dev_addr_t *dev_addr;
     uct_iface_reachability_scope_t scope;
 
@@ -505,8 +503,7 @@ uct_gga_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
     return UCS_OK;
 }
 
-static void
-uct_gga_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *ctx)
+static void uct_gga_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *ctx)
 {
     uct_gga_mlx5_iface_qp_cleanup_ctx_t *gga_ctx =
             ucs_derived_of(ctx, uct_gga_mlx5_iface_qp_cleanup_ctx_t);
@@ -588,7 +585,7 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
     uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
 
     if (strcmp(mlx5_md->super.name, UCT_IB_MD_NAME(gga)) ||
-        !ucs_test_all_flags(mlx5_md->flags, UCT_IB_MLX5_MD_FLAG_DEVX           |
+        !ucs_test_all_flags(mlx5_md->flags, UCT_IB_MLX5_MD_FLAG_DEVX |
                                             UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI |
                                             UCT_IB_MLX5_MD_FLAG_MMO_DMA)) {
         return UCS_ERR_NO_DEVICE;
@@ -596,7 +593,7 @@ uct_gga_mlx5_query_tl_devices(uct_md_h md,
 
     return uct_ib_device_query_ports(&mlx5_md->super.dev,
                                      UCT_IB_DEVICE_FLAG_SRQ |
-                                     UCT_IB_DEVICE_FLAG_MLX5_PRM,
+                                             UCT_IB_DEVICE_FLAG_MLX5_PRM,
                                      tl_devices_p, num_tl_devices_p);
 }
 
