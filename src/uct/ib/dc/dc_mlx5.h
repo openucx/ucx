@@ -33,7 +33,8 @@ struct ibv_ravh {
 #  define UCT_DC_RNDV_HDR_LEN   0
 #endif
 
-#define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 16
+#define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS      16
+#define UCT_DC_MLX5_IFACE_INVALID_POOL_INDEX UCT_DC_MLX5_IFACE_MAX_DCI_POOLS
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
     (!!((_addr)->flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))

@@ -397,7 +397,7 @@ uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
         return 1;
     }
 
-    ucs_array_append(&pool->stack, return 0);
+    // ucs_array_append(&pool->stack, return 0);
 
     status = uct_dc_mlx5_dci_pool_append_dci(iface, pool_index);
 
