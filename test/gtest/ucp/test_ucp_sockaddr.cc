@@ -1464,7 +1464,8 @@ UCS_TEST_SKIP_COND_P(test_max_lanes, 16_lanes_reconf, !cm_use_all_devices(),
     ASSERT_EQ(16, (int)ucp_ep_num_lanes(receiver().ep()));
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, ud, "ud")
 
 class test_ucp_sockaddr_wireup_fail : public test_ucp_sockaddr_wireup {
 protected:

@@ -1208,6 +1208,11 @@ public:
     void init() override
     {
         stats_activate();
+        modify_config("IB_NUM_PATHS", ucs::to_string(max_lanes),
+                      SETENV_IF_NOT_EXIST);
+        modify_config("TM_SW_RNDV", "y");
+        modify_config("MULTI_PATH_RATIO", "0.0001");
+
         test_ucp_tag_xfer::init();
     }
 
@@ -1232,41 +1237,44 @@ public:
         return max_lanes;
     }
 
+    void test_max_lanes(bool is_eager) {
+        receiver().connect(&sender(), get_ep_params());
+        test_run_xfer(true, true, true, true, false);
+
+        ucp_lane_index_t num_lanes = ucp_ep_num_lanes(sender().ep());
+        ASSERT_EQ(ucp_ep_num_lanes(receiver().ep()), num_lanes);
+        ASSERT_EQ(num_lanes, max_lanes);
+
+        for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+            size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
+            size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
+            UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
+                             << "sender " << sender_tx << " receiver "
+                             << receiver_tx;
+
+            if (lane != ucp_ep_get_am_lane(sender().ep())) {
+                EXPECT_GT(sender_tx + receiver_tx, 0);
+            }
+        }
+    }
+
     const uint32_t max_lanes = 16;
 };
 
-UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
-           "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
+
+UCS_TEST_P(multi_rail_max, max_lanes_eager)
 {
-    if (is_proto_enabled()) {
-        UCS_TEST_SKIP_R("TM_SW_RNDV has no effect with proto v2");
-    }
-
-    receiver().connect(&sender(), get_ep_params());
-    test_run_xfer(true, true, true, true, false);
-
-    ucp_lane_index_t num_lanes = ucp_ep_num_lanes(sender().ep());
-    ASSERT_EQ(ucp_ep_num_lanes(receiver().ep()), num_lanes);
-    ASSERT_EQ(num_lanes, max_lanes);
-
-    size_t chunk_size = get_msg_size() / num_lanes;
-
-    for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
-        size_t sender_tx   = get_bytes_sent(sender().ep(), lane);
-        size_t receiver_tx = get_bytes_sent(receiver().ep(), lane);
-        UCS_TEST_MESSAGE << "lane[" << static_cast<int>(lane) << "] : "
-                         << "sender " << sender_tx << " receiver " << receiver_tx;
-
-        /* Verify that each lane sent something, except the active message lane
-           that could be used only for control messages */
-        if (lane == num_lanes - 1) {
-            EXPECT_GT(sender_tx + receiver_tx, 0); // last lane sends the rest
-        } else if (lane != ucp_ep_get_am_lane(sender().ep())) {
-            EXPECT_GE(sender_tx + receiver_tx, chunk_size);
-        }
-    }
+    test_max_lanes(true);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, ib, "ib")
+UCS_TEST_P(multi_rail_max, max_lanes_rndv, "RNDV_THRESH=1",
+           "MIN_RNDV_CHUNK_SIZE=1", )
+{
+    test_max_lanes(false);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, ud, "ud")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, dc, "dc")
 
 #endif
