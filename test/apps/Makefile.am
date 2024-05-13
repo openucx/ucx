@@ -10,10 +10,6 @@ SUBDIRS = profiling
 
 SUBDIRS += iodemo
 
-if HAVE_CXX11
-SUBDIRS += sockaddr
-endif
-
 noinst_PROGRAMS = \
 	test_ucp_dlopen \
 	test_ucp_config \
