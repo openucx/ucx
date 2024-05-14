@@ -1237,7 +1237,8 @@ public:
         return max_lanes;
     }
 
-    void test_max_lanes(bool is_eager) {
+    void test_max_lanes(bool is_eager)
+    {
         receiver().connect(&sender(), get_ep_params());
         test_run_xfer(true, true, true, true, false);
 

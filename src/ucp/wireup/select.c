@@ -1710,11 +1710,11 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.local_dev_bitmap  = UINT64_MAX;
     bw_info.remote_dev_bitmap = UINT64_MAX;
     bw_info.md_map            = 0;
-    bw_info.max_lanes         = context->config.ext.max_eager_lanes;
+    bw_info.max_lanes         = context->config.ext.max_eager_lanes - 1;
     /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
     if (context->config.ext.proto_enable) {
         bw_info.max_lanes = ucs_max(bw_info.max_lanes,
-                                    context->config.ext.max_rndv_lanes);
+                                    context->config.ext.max_rndv_lanes - 1);
     }
 
     /* am_bw_lane[0] is am_lane, so don't re-select it here */
@@ -1725,14 +1725,15 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
             /* do not continue searching since we found AM lane (and there is
              * only one AM lane) */
             am_lane = lane_desc_idx;
+            select_ctx->lane_descs[lane_desc_idx].path_index = 0;
             break;
         }
     }
-    ucs_assertv(am_lane != UCP_NULL_LANE, "am_lane=%u", am_lane);
+    ucs_assert(am_lane != UCP_NULL_LANE);
 
     num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
                                               ucp_tl_bitmap_max, am_lane,
-                                              select_ctx, 0);
+                                              select_ctx, 1);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
@@ -2386,6 +2387,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
             key->am_lane = lane;
         }
         if ((select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW))) {
+            /* First index is reserved for am_lane */
+            ucs_assert(lane != 0);
             key->am_bw_lanes[lane] = lane;
         }
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_RMA)) {
@@ -2414,7 +2417,6 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     /* Sort AM, RMA and AMO lanes according to score */
-    /* First index for AM BW lanes is reserved for am_lane */
     ucs_qsort_r(key->am_bw_lanes + 1, UCP_MAX_LANES - 1,
                 sizeof(ucp_lane_index_t), ucp_wireup_compare_lane_am_bw_score,
                 select_ctx->lane_descs);
@@ -2464,6 +2466,10 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         md_index         = context->tl_rscs[rsc_index].md_index;
         key->rma_md_map |= UCS_BIT(md_index);
     }
+
+    /* use AM lane first for eager AM transport to simplify processing single/middle
+     * msg packets */
+    key->am_bw_lanes[0] = key->am_lane;
 
     return ucp_wireup_select_set_locality_flags(select_params, addr_indices,
                                                 key);
