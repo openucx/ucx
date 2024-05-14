@@ -1733,7 +1733,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
                                               ucp_tl_bitmap_max, am_lane,
-                                              select_ctx, 1);
+                                              select_ctx, 0);
     return ((am_lane != UCP_NULL_LANE) || (num_am_bw_lanes > 0)) ? UCS_OK :
            UCS_ERR_UNREACHABLE;
 }
