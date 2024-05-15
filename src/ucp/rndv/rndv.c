@@ -519,7 +519,7 @@ static void ucp_rndv_zcopy_next_lane(ucp_request_t *rndv_req)
     ucp_lane_map_t lane_map;
     lane_map = lanes_map_all & ~UCS_MASK(rndv_req->send.multi_lane_idx + 1);
 
-    rndv_req->send.multi_lane_idx = ucs_ffs32((lane_map > 0) ? lane_map :
+    rndv_req->send.multi_lane_idx = ucs_ffs64((lane_map > 0) ? lane_map :
                                                                lanes_map_all);
 }
 
@@ -694,7 +694,7 @@ static void ucp_rndv_req_init_lanes(ucp_request_t *req,
                                     ucp_lane_map_t lanes_map)
 {
     req->send.rndv.zcopy.lanes_map_all = lanes_map;
-    req->send.multi_lane_idx           = ucs_ffs32(lanes_map);
+    req->send.multi_lane_idx           = ucs_ffs64(lanes_map);
 }
 
 static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,

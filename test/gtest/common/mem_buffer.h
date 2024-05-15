@@ -8,6 +8,7 @@
 #define GTEST_MEM_BUFFER_H_
 
 #include <ucs/memory/memory_type.h>
+#include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
 #include <stdint.h>
 #include <limits>
@@ -129,7 +130,8 @@ private:
                                      size_t length, size_t offset,
                                      const void *buffer, const void *orig_ptr)
     {
-        const uint64_t mask = UCS_MASK_SAFE(length * 8 * sizeof(char));
+        ucs_assertv(length <= 8, "length=%zu", length);
+        const uint64_t mask = UCS_MASK(length * 8 * sizeof(char));
 
         if (ucs_unlikely(actual != (expected & mask))) {
             pattern_check_failed(expected, actual, length, mask, offset,

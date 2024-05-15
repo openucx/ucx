@@ -1570,12 +1570,11 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_context_t *select_ctx,
                         unsigned allow_extra_path)
 {
-    ucp_rsc_index_t skip_dev_index       = UCP_NULL_RESOURCE;
-    ucp_ep_h ep                          = select_params->ep;
-    ucp_context_h context                = ep->worker->context;
-    ucp_wireup_dev_usage_count dev_count = {};
-    UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_select_info_array_t, sinfo_array,
-                             UCP_MAX_LANES);
+    ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_rsc_index_t skip_dev_index            = UCP_NULL_RESOURCE;
+    ucp_ep_h ep                               = select_params->ep;
+    ucp_context_h context                     = ep->worker->context;
+    ucp_wireup_dev_usage_count dev_count      = {};
     const uct_iface_attr_t *iface_attr;
     const ucp_address_entry_t *ae;
     ucs_status_t status;
@@ -1585,7 +1584,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
     ucp_wireup_select_info_t *sinfo;
-    unsigned max_lanes;
+    unsigned max_lanes, num_lanes;
     unsigned local_num_paths, remote_num_paths;
 
     local_dev_bitmap      = bw_info->local_dev_bitmap;
@@ -1605,7 +1604,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * memory registration) */
     while (ucs_array_length(&sinfo_array) < max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
-            sinfo  = ucs_array_append_fixed(&sinfo_array);
+            sinfo  = ucs_array_append(&sinfo_array, break);
             status = ucp_wireup_select_transport(select_ctx, select_params,
                                                  &bw_info->criteria, tl_bitmap,
                                                  UINT64_MAX, local_dev_bitmap,
@@ -1665,9 +1664,13 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     bw_info->criteria.arg = NULL; /* To suppress compiler warning */
+    num_lanes = ucp_wireup_add_fast_lanes(ep->worker, select_params,
+                                          &sinfo_array,
+                                          bw_info->criteria.lane_type,
+                                          select_ctx);
 
-    return ucp_wireup_add_fast_lanes(ep->worker, select_params, &sinfo_array,
-                                     bw_info->criteria.lane_type, select_ctx);
+    ucs_array_cleanup_dynamic(&sinfo_array);
+    return num_lanes;
 }
 
 static ucs_status_t

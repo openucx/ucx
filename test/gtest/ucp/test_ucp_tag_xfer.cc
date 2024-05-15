@@ -1232,10 +1232,10 @@ public:
         return max_lanes;
     }
 
-    const uint32_t max_lanes = 16;
+    const uint32_t max_lanes = 64;
 };
 
-UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
+UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
     if (is_proto_enabled()) {
@@ -1267,6 +1267,6 @@ UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=16", "TM_SW_RNDV=y",
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(multi_rail_max, rc, "rc")
 
 #endif

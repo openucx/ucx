@@ -1444,27 +1444,50 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup, compare_cm_and_wireup_configs,
     }
 }
 
-class test_max_lanes : public test_ucp_sockaddr {
+template<size_t NumLanes> class test_max_lanes : public test_ucp_sockaddr {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         get_test_variants_cm_mode(variants, UCP_FEATURE_TAG, CONN_REQ_TAG,
                                   "tag");
     }
+
+    void init() override
+    {
+        auto num_lanes_str = ucs::to_string(NumLanes);
+        modify_config("MAX_RNDV_RAILS", num_lanes_str); // for protov1
+        modify_config("IB_NUM_PATHS", num_lanes_str, SETENV_IF_NOT_EXIST);
+        modify_config("TM_SW_RNDV", "y");
+
+        test_ucp_sockaddr::init();
+    }
+
+    void test_num_lanes()
+    {
+        /* get configuration index for EP created through CM */
+        listen_and_communicate(false, SEND_DIRECTION_C2S);
+
+        ASSERT_LE(NumLanes, (int)ucp_ep_num_lanes(sender().ep()));
+        ASSERT_LE(NumLanes, (int)ucp_ep_num_lanes(receiver().ep()));
+    }
 };
 
-UCS_TEST_SKIP_COND_P(test_max_lanes, 16_lanes_reconf, !cm_use_all_devices(),
-                     "MAX_RNDV_LANES=16", "MAX_EAGER_LANES=16",
-                     "IB_NUM_PATHS?=16", "TM_SW_RNDV=y")
+using test_max_lanes_16 = test_max_lanes<16>;
+UCS_TEST_SKIP_COND_P(test_max_lanes_16, lanes_reconf, !cm_use_all_devices())
 {
-    /* get configuration index for EP created through CM */
-    listen_and_communicate(false, SEND_DIRECTION_C2S);
-
-    ASSERT_EQ(16, (int)ucp_ep_num_lanes(sender().ep()));
-    ASSERT_EQ(16, (int)ucp_ep_num_lanes(receiver().ep()));
+    test_num_lanes();
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes_16, ib, "ib")
+
+using test_max_lanes_64 = test_max_lanes<64>;
+UCS_TEST_SKIP_COND_P(test_max_lanes_64, lanes_reconf, !cm_use_all_devices())
+{
+    test_num_lanes();
+}
+
+/* TODO: Enable this test execution with UD and DC */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes_64, rc, "rc")
 
 class test_ucp_sockaddr_wireup_fail : public test_ucp_sockaddr_wireup {
 protected:

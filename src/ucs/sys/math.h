@@ -50,9 +50,6 @@ BEGIN_C_DECLS
 #define ucs_signum(_n) \
     (((_n) > (ucs_typeof(_n))0) - ((_n) < (ucs_typeof(_n))0))
 
-#define UCS_MASK_SAFE(_i) \
-    (((_i) >= 64) ? ((uint64_t)(-1)) : UCS_MASK(_i))
-
 #define ucs_div_round_up(_n, _d) \
     (((_n) + (_d) - 1) / (_d))
 

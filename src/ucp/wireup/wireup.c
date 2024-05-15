@@ -1169,7 +1169,7 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
      * create a wireup endpoint which will start connection establishment
      * protocol using an auxiliary transport.
      */
-    if (ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane)) {
+    if (ucp_ep_is_lane_p2p(ep, lane)) {
         return ucp_wireup_connect_lane_to_ep(ep, ep_init_flags, lane,
                                              path_index, rsc_index, wiface,
                                              remote_address);
@@ -1447,8 +1447,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         ucp_wireup_ep_set_aux(cm_wireup_ep,
                               ucp_wireup_ep_extract_next_ep(uct_ep),
                               old_key->lanes[reuse_lane].rsc_index,
-                              ucp_ep_config(ep)->p2p_lanes &
-                                      UCS_BIT(reuse_lane));
+                              ucp_ep_is_lane_p2p(ep, reuse_lane));
 
         /* reset the UCT EP from the previous WIREUP lane and destroy its WIREUP EP,
          * since it's not needed anymore in the new configuration, UCT EP will be
