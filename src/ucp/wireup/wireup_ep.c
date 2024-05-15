@@ -204,6 +204,9 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
                            ucp_rsc_index_t rsc_index, int is_p2p)
 {
+    ucp_worker_iface_t *wiface =
+        ucp_worker_iface(wireup_ep->super.ucp_ep->worker, rsc_index);
+
     ucs_assert(!ucp_wireup_ep_test(uct_ep));
     wireup_ep->aux_ep        = uct_ep;
     wireup_ep->aux_rsc_index = rsc_index;
@@ -211,6 +214,8 @@ void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
     if (is_p2p) {
         wireup_ep->flags |= UCP_WIREUP_EP_FLAG_AUX_P2P;
     }
+
+    ucp_worker_iface_progress_ep(wiface);
 }
 
 static ucs_status_t
@@ -253,8 +258,6 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
     }
 
     ucp_wireup_ep_set_aux(wireup_ep, uct_ep, select_info.rsc_index, 0);
-
-    ucp_worker_iface_progress_ep(wiface);
 
     ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using "
               UCT_TL_RESOURCE_DESC_FMT, ucp_ep, wireup_ep, wireup_ep->aux_ep,

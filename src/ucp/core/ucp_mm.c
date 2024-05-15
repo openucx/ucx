@@ -1822,7 +1822,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                  * given address, but an imported memory handle hasn't been
                  * removed from the RCACHE yet. So, it had refcount == 1 and
                  * now it should be 2. */
-                ucs_assertv(rregion->refcount == 2, "%u", rregion->refcount);
+                ucs_assertv(rregion->refcount == 2, "Unexpected refcount: %u. "
+                            "This may indicate that exported memory handle was "
+                            "destroyed, but imported memory handle was not",
+                            rregion->refcount);
                 ucs_rcache_region_invalidate(rcache, rregion,
                                              ucs_empty_function, NULL);
                 ucs_rcache_region_put_unsafe(rcache, rregion);

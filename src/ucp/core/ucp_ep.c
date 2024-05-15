@@ -3812,6 +3812,76 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes)
     return UCS_OK;
 }
 
+static void
+ucp_ep_select_short_init(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
+                         unsigned feature_flag, ucp_operation_id_t op_id,
+                         unsigned proto_flags, ucp_lane_index_t exp_lane,
+                         ucp_memtype_thresh_t *max_eager_short)
+{
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+    ucp_proto_select_short_t proto_short;
+
+    if (worker->context->config.features & feature_flag) {
+        ucp_proto_select_short_init(worker, &ep_config->proto_select,
+                                    cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+                                    op_id, proto_flags, &proto_short);
+
+        /* Short protocol should be either disabled, or use expected lane */
+        ucs_assertv((proto_short.max_length_host_mem < 0) ||
+                    (proto_short.lane == exp_lane),
+                    "max_length_host_mem %ld, lane %d",
+                    proto_short.max_length_host_mem, proto_short.lane);
+    } else {
+        ucp_proto_select_short_disable(&proto_short);
+    }
+
+    max_eager_short->memtype_off = proto_short.max_length_unknown_mem;
+    max_eager_short->memtype_on  = proto_short.max_length_host_mem;
+}
+
+static void ucp_ep_config_proto_init(ucp_worker_h worker,
+                                     ucp_worker_cfg_index_t cfg_index)
+{
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
+    ucp_ep_config_key_t *key   = &ep_config->key;
+
+    ucp_memtype_thresh_t *tag_max_short;
+    ucp_lane_index_t tag_exp_lane;
+    unsigned tag_proto_flags;
+
+    /* Do protocol init once per EP config and only for protov2 */
+    if ((!worker->context->config.ext.proto_enable) ||
+        (ep_config->proto_init_flags & UCP_EP_PROTO_INITIALIZED)) {
+        return;
+    }
+
+    ep_config->proto_init_flags |= UCP_EP_PROTO_INITIALIZED;
+
+    if (ucp_ep_config_key_has_tag_lane(key)) {
+        tag_proto_flags = UCP_PROTO_FLAG_TAG_SHORT;
+        tag_max_short   = &ep_config->tag.offload.max_eager_short;
+        tag_exp_lane    = key->tag_lane;
+    } else {
+        tag_proto_flags = UCP_PROTO_FLAG_AM_SHORT;
+        tag_max_short   = &ep_config->tag.max_eager_short;
+        tag_exp_lane    = key->am_lane;
+    }
+
+    ucp_ep_select_short_init(worker, cfg_index,
+                             UCP_FEATURE_TAG, UCP_OP_ID_TAG_SEND,
+                             tag_proto_flags, tag_exp_lane, tag_max_short);
+
+    ucp_ep_select_short_init(worker, cfg_index,
+                             UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
+                             UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
+                             &ep_config->am_u.max_eager_short);
+
+    ucp_ep_select_short_init(worker, cfg_index,
+                             UCP_FEATURE_AM, UCP_OP_ID_AM_SEND_REPLY,
+                             UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
+                             &ep_config->am_u.max_reply_eager_short);
+}
+
 void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
 {
     if (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
@@ -3820,4 +3890,5 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index)
 
     ep->cfg_index = cfg_index;
     ucp_ep_config_activate_worker_ifaces(ep->worker, cfg_index);
+    ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
