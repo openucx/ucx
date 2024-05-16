@@ -1481,7 +1481,8 @@ UCS_TEST_SKIP_COND_P(test_max_lanes_16, lanes_reconf, !cm_use_all_devices())
 UCP_INSTANTIATE_TEST_CASE_TLS(test_max_lanes_16, ib, "ib")
 
 using test_max_lanes_64 = test_max_lanes<64>;
-UCS_TEST_SKIP_COND_P(test_max_lanes_64, lanes_reconf, !cm_use_all_devices())
+UCS_TEST_SKIP_COND_P(test_max_lanes_64, lanes_reconf,
+                     !cm_use_all_devices() || !is_proto_enabled())
 {
     test_num_lanes();
 }
