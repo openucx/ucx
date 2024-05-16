@@ -155,7 +155,7 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    int is_skip_interface(struct ifaddrs *ifa) {
+    virtual int is_skip_interface(const struct ifaddrs *ifa) const {
         int skip = 0;
 
         if (!has_transport("tcp") && !has_transport("all") &&
@@ -618,6 +618,17 @@ public:
         EXPECT_EQ(1ul, e.get_err_num_rejected());
     }
 
+    template <typename Func>
+    void wait_progress(Func func)
+    {
+        ucs_time_t deadline = ucs::get_deadline();
+        while (!func() && (ucs_get_time() < deadline)) {
+            progress();
+        };
+
+        EXPECT_GT(deadline, ucs_get_time());
+    }
+
     virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
@@ -750,9 +761,9 @@ public:
         EXPECT_EQ(m_test_addr, attr.local_sockaddr);
     }
 
-    void one_sided_disconnect(entity &e, uint32_t flags = 0)
+    void one_sided_disconnect(entity &e, uint32_t flags = 0, int ep_index = 0)
     {
-        void *req           = e.disconnect_nb(0, 0, flags);
+        void *req           = e.disconnect_nb(0, ep_index, flags);
         ucs_time_t deadline = ucs::get_deadline();
         scoped_log_handler slh(detect_error_logger);
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
@@ -3232,3 +3243,70 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_sockaddr_protocols_err_sender,
                                         rc_no_ud, "rc_mlx5,rc_verbs")
+
+
+class test_ucp_sockaddr_iface_activate : public test_ucp_sockaddr {
+public:
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        get_test_variants_mt(variants, UCP_FEATURE_TAG,
+                             CONN_REQ_TAG | TEST_MODIFIER_CM_USE_ALL_DEVICES,
+                             "tag");
+    }
+
+    virtual int is_skip_interface(const struct ifaddrs *ifa) const
+    {
+        return test_ucp_sockaddr::is_skip_interface(ifa) ||
+               ucs::is_rdmacm_netdev(ifa->ifa_name);
+    }
+
+    bool is_any_interface_activated(entity &e) const
+    {
+        ucp_worker_h worker = e.worker();
+        for (unsigned i = 0; i < worker->num_ifaces; ++i) {
+            if (ucp_worker_iface_is_activated(worker->ifaces[i])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void client_connect_disconnect()
+    {
+        /* Check state before connection establishment */
+        EXPECT_FALSE(is_any_interface_activated(receiver()));
+        int receiver_ep_count = receiver().get_num_eps();
+
+        /* Connect sender and receiver */
+        client_ep_connect_basic(get_ep_params(), 0, false);
+        wait_progress([&] {
+            return receiver().get_num_eps() == (receiver_ep_count + 1);
+        });
+
+        /* Check state after connection establishment */
+        EXPECT_EQ(0, sender().get_err_num());
+        EXPECT_TRUE(is_any_interface_activated(sender()));
+        EXPECT_TRUE(is_any_interface_activated(receiver()));
+
+        one_sided_disconnect(sender());
+        one_sided_disconnect(receiver(), 0, receiver_ep_count);
+
+        EXPECT_FALSE(is_any_interface_activated(receiver()));
+        receiver().reset_err_num();
+
+        /* TODO: check why receiver interfaces are not deactivated on one-sided
+         * client disconnect */
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_iface_activate, iface_activate_count,
+                     !is_proto_enabled())
+{
+    listen(cb_type());
+    client_connect_disconnect();
+    client_connect_disconnect();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_iface_activate, tcp, "tcp")

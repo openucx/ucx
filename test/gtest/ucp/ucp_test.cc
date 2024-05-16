@@ -1094,6 +1094,11 @@ const size_t &ucp_test_base::entity::get_err_num() const {
     return m_err_cntr;
 }
 
+void ucp_test_base::entity::reset_err_num() {
+    m_err_cntr = 0;
+    m_rejected_cntr = 0;
+}
+
 const size_t &ucp_test_base::entity::get_accept_err_num() const {
     return m_accept_err_cntr;
 }
