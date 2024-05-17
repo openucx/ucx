@@ -284,6 +284,8 @@ stages:
             ucx_tag: v1.15.x
           ucx_1_16:
             ucx_tag: v1.16.x
+          ucx_1_17:
+            ucx_tag: v1.17.x
     - template: wire_compat.yml
       parameters:
         name: new
