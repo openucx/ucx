@@ -23,23 +23,24 @@ build_ucx() {
 
 build_ucx_in_docker() {
     docker run --rm \
+        --user "$(id -u)":"$(id -g)" \
         --name ucx_build_"$BUILD_BUILDID" \
         -e BUILD_SOURCESDIRECTORY="$BUILD_SOURCESDIRECTORY" \
         -v "$PWD":"$PWD" -w "$PWD" \
         -v /hpc/local:/hpc/local \
         $IMAGE \
         bash -c "source ./buildlib/tools/test_mad.sh && build_ucx"
-
-    sudo chown -R swx-azure-svc:ecryptfs "$PWD"
 }
 
 docker_run_srv() {
     local test_name="$1"
     HCA=$(detect_hca)
+    sudo chmod 777 /dev/infiniband/umad*
     docker run \
         --rm \
         --detach \
         --net=host \
+        --user "$(id -u)":"$(id -g)" \
         --name ucx_perftest_"$BUILD_BUILDID" \
         -e BUILD_SOURCESDIRECTORY="$BUILD_SOURCESDIRECTORY" \
         -v "$PWD":"$PWD" -w "$PWD" \
