@@ -100,6 +100,7 @@ int main(int argc, char **argv) {
 
     /* set gpu context for tests that need it */
     mem_buffer::set_device_context();
+    mem_buffer::get_bar1_free_size_nvml();
 
     int ret;
     ret = ucs::watchdog_start();
