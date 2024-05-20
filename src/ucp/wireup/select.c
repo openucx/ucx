@@ -1685,19 +1685,13 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_bw_info_t bw_info;
     unsigned num_am_bw_lanes;
 
-    bw_info.max_lanes = context->config.ext.max_eager_lanes - 1;
-    /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
-    if (context->config.ext.proto_enable) {
-        bw_info.max_lanes = ucs_max(bw_info.max_lanes,
-                                    context->config.ext.max_rndv_lanes - 1);
-    }
-
     /* Check if we need active message BW lanes */
     if (!(ucp_ep_get_context_features(ep) &
           (UCP_FEATURE_TAG | UCP_FEATURE_AM)) ||
         (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
                           UCP_EP_INIT_CREATE_AM_LANE_ONLY)) ||
-        (bw_info.max_lanes == 0)) {
+        /* TODO: Check MAX_RNDV_LANES here for rndv/am case */
+        (context->config.ext.max_eager_lanes < 2)) {
         return UCS_OK;
     }
 
@@ -1720,6 +1714,12 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.local_dev_bitmap  = UINT64_MAX;
     bw_info.remote_dev_bitmap = UINT64_MAX;
     bw_info.md_map            = 0;
+    bw_info.max_lanes         = context->config.ext.max_eager_lanes - 1;
+    /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
+    if (context->config.ext.proto_enable) {
+        bw_info.max_lanes = ucs_max(bw_info.max_lanes,
+                                    context->config.ext.max_rndv_lanes - 1);
+    }
 
     /* am_bw_lane[0] is am_lane, so don't re-select it here */
     am_lane = UCP_NULL_LANE;

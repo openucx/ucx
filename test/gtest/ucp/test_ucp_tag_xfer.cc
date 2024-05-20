@@ -63,6 +63,13 @@ public:
             modify_config("PROTO_ENABLE", "n");
         }
 
+        /* Init number of lanes according to test requirement
+         * (default is 2, for max_lanes test we use max_lanes) */
+        std::string num_lanes_str(std::to_string(num_lanes()));
+
+        modify_config("MAX_EAGER_LANES", num_lanes_str);
+        modify_config("MAX_RNDV_LANES", num_lanes_str);
+
         test_ucp_tag::init();
     }
 
@@ -1200,16 +1207,6 @@ class multi_rail_max : public test_ucp_tag_xfer {
 public:
     void init() override
     {
-        auto var = get_variant_value();
-        if ((var == VARIANT_RNDV_AM_ZCOPY || var == VARIANT_RNDV_AM_BCOPY) &&
-            (!is_proto_enabled())) {
-            UCS_TEST_SKIP_R("protov1 rndv/am doesn't respect MAX_RNDV_LANES");
-        }
-
-        std::string num_lanes_str(std::to_string(num_lanes()));
-        modify_config("IB_NUM_PATHS", num_lanes_str, SETENV_IF_NOT_EXIST);
-        modify_config("MAX_RNDV_LANES", num_lanes_str);
-
         stats_activate();
         test_ucp_tag_xfer::init();
     }
@@ -1232,15 +1229,12 @@ public:
 
     unsigned num_lanes() override
     {
-        if (get_variant_value() == VARIANT_PROTO_V1 || !is_proto_enabled()) {
-            return 16;
-        }
         return 64;
     }
 
 };
 
-UCS_TEST_P(multi_rail_max, max_lanes, "TM_SW_RNDV=y",
+UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
            "RNDV_THRESH=1", "MIN_RNDV_CHUNK_SIZE=1", "MULTI_PATH_RATIO=0.0001")
 {
     receiver().connect(&sender(), get_ep_params());
