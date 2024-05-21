@@ -200,16 +200,15 @@ UCS_TEST_F(test_bitops, is_equal) {
 
 template<typename Type> void test_mask()
 {
-    size_t bits_number = sizeof(Type) * 8;
-    Type expected      = 0;
-
+    Type expected = 0;
     /* Test extra bit (should return full mask) */
-    for (int test_value = 0; test_value < bits_number + 1; ++test_value) {
-        Type result = UCS_MASK(test_value);
-        if (test_value > 0 && test_value <= 64) {
-            expected |= UCS_BIT(test_value - 1);
+    for (size_t bit_num = 0; bit_num <= sizeof(Type)*8 + 1; ++bit_num) {
+        Type mask = UCS_MASK(bit_num);
+        if (bit_num > 0 && bit_num <= 64) {
+            expected |= UCS_BIT(bit_num - 1);
         }
-        ASSERT_EQ(result, expected) << "UCS_MASK(" << test_value << ")";
+
+        EXPECT_EQ(expected, mask) << "bit_num=" << bit_num;
     }
 }
 
