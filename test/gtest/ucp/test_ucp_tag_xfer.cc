@@ -1229,7 +1229,7 @@ public:
 
     unsigned num_lanes() override
     {
-        return 64;
+        return UCP_MAX_LANES;
     }
 
 };
@@ -1240,9 +1240,8 @@ UCS_TEST_P(multi_rail_max, max_lanes, "IB_NUM_PATHS?=64", "TM_SW_RNDV=y",
     receiver().connect(&sender(), get_ep_params());
     test_run_xfer(true, true, true, true, false);
 
-    ucp_lane_index_t current_num_lanes = ucp_ep_num_lanes(sender().ep());
-    ASSERT_EQ(ucp_ep_num_lanes(receiver().ep()), current_num_lanes);
-    ASSERT_EQ(current_num_lanes, num_lanes());
+    EXPECT_EQ(num_lanes(), ucp_ep_num_lanes(sender().ep()));
+    EXPECT_EQ(num_lanes(), ucp_ep_num_lanes(receiver().ep()));
 
     size_t bytes_sent = 0;
     for (ucp_lane_index_t lane = 0; lane < num_lanes(); ++lane) {

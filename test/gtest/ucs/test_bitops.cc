@@ -197,3 +197,32 @@ UCS_TEST_F(test_bitops, is_equal) {
     ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
     ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
 }
+
+template<typename Type>
+void test_mask() {
+    size_t bits_number = sizeof(Type) * 8;
+    Type expected      = 0;
+
+    /* Test extra bit (should return full mask) */
+    for (int test_value = 0; test_value < bits_number + 1; ++test_value) {
+        Type result = UCS_MASK(test_value);
+        if (test_value > 0 && test_value <= 64) {
+            expected |= UCS_BIT(test_value - 1);
+        }
+        if (result != expected) {
+            printf("AAAAAAA\n");
+        }
+        ASSERT_EQ(result, expected) << "UCS_MASK(" << test_value << ")";
+    }
+}
+
+UCS_TEST_F(test_bitops, mask) {
+    test_mask<int8_t>();
+    test_mask<uint8_t>();
+    test_mask<int16_t>();
+    test_mask<uint16_t>();
+    test_mask<int32_t>();
+    test_mask<uint32_t>();
+    test_mask<int64_t>();
+    test_mask<uint64_t>();
+}
