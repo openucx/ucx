@@ -202,9 +202,9 @@ template<typename Type> void test_mask()
 {
     Type expected = 0;
     /* Test extra bit (should return full mask) */
-    for (size_t bit_num = 0; bit_num <= sizeof(Type)*8 + 1; ++bit_num) {
+    for (size_t bit_num = 0; bit_num <= (sizeof(Type)*8 + 1); ++bit_num) {
         Type mask = UCS_MASK(bit_num);
-        if (bit_num > 0 && bit_num <= 64) {
+        if ((bit_num > 0) && (bit_num <= 64)) {
             expected |= UCS_BIT(bit_num - 1);
         }
 
