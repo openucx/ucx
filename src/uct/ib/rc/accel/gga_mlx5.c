@@ -54,7 +54,7 @@ enum {
 typedef struct {
     uint8_t         flags;
     uct_ib_uint24_t qp_num;
-    uint32_t        flush_rkey;
+    uct_ib_uint24_t flush_rkey;
 } UCS_S_PACKED uct_gga_mlx5_ep_address_t;
 
 typedef struct {
@@ -300,15 +300,12 @@ static ucs_status_t uct_gga_mlx5_ep_enable_mmo(uct_gga_mlx5_ep_t *ep)
 
 static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
 {
-    uct_iface_t *tl_iface = UCT_EP_PARAM_VALUE(params, iface, IFACE, NULL);
-    uct_base_iface_t *iface;
-    uct_ib_mlx5_md_t *md;
+    uct_iface_t *tl_iface   = UCT_EP_PARAM_VALUE(params, iface, IFACE, NULL);
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_ib_mlx5_md_t *md    = ucs_derived_of(iface->md, uct_ib_mlx5_md_t);
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_base_ep_t, params);
-
-    iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-    md    = ucs_derived_of(iface->md, uct_ib_mlx5_md_t);
 
     self->dma_opaque.mr = ibv_reg_mr(md->super.pd, self->dma_opaque.buf,
                                      UCT_GGA_MLX5_OPAQUE_BUF_LEN,
@@ -361,11 +358,11 @@ uct_gga_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 
     uct_ib_pack_uint24(gga_addr->qp_num, ep->super.tx.wq.super.qp_num);
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
-        gga_addr->flags      = UCT_GGA_MLX5_EP_ADDRESS_FLAG_FLUSH_RKEY;
-        gga_addr->flush_rkey = md->flush_rkey;
+        gga_addr->flags = UCT_GGA_MLX5_EP_ADDRESS_FLAG_FLUSH_RKEY;
+        uct_ib_pack_uint24(gga_addr->flush_rkey, md->flush_rkey >> 8);
     } else {
-        gga_addr->flags      = 0;
-        gga_addr->flush_rkey = 0;
+        gga_addr->flags = 0;
+        uct_ib_pack_uint24(gga_addr->flush_rkey, 0);
     }
 
     return UCS_OK;
@@ -407,7 +404,8 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
     ep->super.super.flush_rkey       =
             (gga_ep_addr->flags & UCT_GGA_MLX5_EP_ADDRESS_FLAG_FLUSH_RKEY) ?
-            gga_ep_addr->flush_rkey : UCT_IB_MD_INVALID_FLUSH_RKEY;
+            (uct_ib_unpack_uint24(gga_ep_addr->flush_rkey) << 8) :
+            UCT_IB_MD_INVALID_FLUSH_RKEY;
     return UCS_OK;
 }
 
