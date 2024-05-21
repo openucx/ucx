@@ -569,7 +569,7 @@ start_daemon() {
 	step_server_port
 
 	# Mandatory options to run the daemon
-	dmn_env="UCX_MAX_RNDV_LANES=1 UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=get_zcopy"
+	dmn_env="UCX_TCP_CM_REUSEADDR=y UCX_MAX_RNDV_LANES=1 UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=get_zcopy"
 
 	# Run the daemon
 	env $dmn_env $daemon_exe -p $dmn_port &
@@ -610,13 +610,10 @@ run_ucx_perftest_daemon() {
 		start_daemon $ucx_perftest_daemon server_dmn_pid server_dmn_port
 		start_daemon $ucx_perftest_daemon client_dmn_pid client_dmn_port
 
-		ucp_client_args="-g 127.0.0.1:$client_dmn_port -G 127.0.0.1:$server_dmn_port -k $(hostname)"
+		ucp_client_args="-g 127.0.0.1:$client_dmn_port -G 127.0.0.1:$server_dmn_port $(hostname)"
 
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 
-		# Kill the daemons
-		kill -9 $client_dmn_pid
-		kill -9 $server_dmn_pid
 		wait $client_dmn_pid || true
 		wait $server_dmn_pid || true
 

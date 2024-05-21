@@ -242,6 +242,11 @@ typedef struct {
 } ucp_perf_daemon_req_t;
 
 
+typedef struct {
+    uint8_t keep_running;
+} ucp_perf_daemon_fin_req_t;
+
+
 /**
  * Common report function
  */

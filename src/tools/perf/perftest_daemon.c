@@ -376,15 +376,13 @@ ucp_perf_daemon_fin_handler(void *arg, const void *header, size_t header_length,
                             void *data, size_t length,
                             const ucp_am_recv_param_t *param)
 {
-    uint8_t keep_running;
+    ucp_perf_daemon_fin_req_t *fin = data;
 
     ucp_perf_daemon_check_am_msg(param, header_length, 0, 0,
                                  UCP_PERF_DAEMON_AM_ID_FIN);
-    ucs_assertv(length >= sizeof(keep_running), "length=%lu", length);
+    ucs_assertv(length >= sizeof(*fin), "length=%lu", length);
 
-    keep_running = *(uint8_t*)data;
-
-    if (keep_running) {
+    if (fin->keep_running) {
         ucp_perf_daemon_cleanup_connections(arg);
     } else {
         terminated = 1;

@@ -933,7 +933,7 @@ ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index,
     ucp_request_param_t ep_close_params = {0};
     ucp_request_param_t dmn_fin_param   = {0};
     ucs_status_ptr_t req;
-    uint8_t dmn_keep_running;
+    ucp_perf_daemon_fin_req_t dmn_fin_req;
 
     if (NULL == ep) {
         return NULL;
@@ -942,10 +942,10 @@ ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index,
     if (params->ucp.is_daemon_mode) {
         dmn_fin_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
         dmn_fin_param.flags        = UCP_AM_SEND_FLAG_EAGER;
-        dmn_keep_running           = !!params->ucp.is_keep_running;
+        dmn_fin_req.keep_running   = !!params->ucp.is_keep_running;
 
         req = ucp_am_send_nbx(ep, UCP_PERF_DAEMON_AM_ID_FIN, NULL, 0,
-                              &dmn_keep_running, sizeof(dmn_keep_running),
+                              &dmn_fin_req, sizeof(dmn_fin_req),
                               &dmn_fin_param);
         if (UCS_PTR_IS_PTR(req)) {
             ucp_request_free(req);
