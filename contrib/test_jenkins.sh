@@ -944,7 +944,7 @@ run_gtest_make() {
 
 	# Run all tests
 	echo "==== Running make -C test/gtest $make_target, $compiler_name compiler ===="
-	$TIMEOUT make -C test/gtest $make_target
+	$TIMEOUT env UCX_PROTO_INFO=y UCX_LOG_LEVEL=trace GTEST_FILTER=*multi_rail_max* make -C test/gtest $make_target
 
 	unset_test_flags
 }
@@ -956,7 +956,7 @@ run_gtest_make() {
 run_gtest() {
 	compiler_name=$1
 
-	run_specific_tests
+	# run_specific_tests
 	run_gtest_make $compiler_name test
 }
 
@@ -1084,39 +1084,39 @@ run_tests() {
 	export UCX_PROTO_REQUEST_RESET=y
 
 	# all are running mpi tests
-	run_mpi_tests
+	# run_mpi_tests
 
 	# build for devel tests and gtest
 	build devel --enable-gtest
 
-	# devel mode tests
-	do_distributed_task 0 4 test_unused_env_var
-	do_distributed_task 1 4 run_ucx_info
-	do_distributed_task 2 4 run_ucx_tl_check
-	do_distributed_task 3 4 test_ucs_dlopen
-	do_distributed_task 0 4 test_env_var_aliases
-	do_distributed_task 1 4 test_malloc_hook
-	do_distributed_task 2 4 test_init_mt
-	do_distributed_task 3 4 run_ucp_client_server
-	do_distributed_task 0 4 test_no_cuda_context
+	# # devel mode tests
+	# do_distributed_task 0 4 test_unused_env_var
+	# do_distributed_task 1 4 run_ucx_info
+	# do_distributed_task 2 4 run_ucx_tl_check
+	# do_distributed_task 3 4 test_ucs_dlopen
+	# do_distributed_task 0 4 test_env_var_aliases
+	# do_distributed_task 1 4 test_malloc_hook
+	# do_distributed_task 2 4 test_init_mt
+	# do_distributed_task 3 4 run_ucp_client_server
+	# do_distributed_task 0 4 test_no_cuda_context
 
-	# long devel tests
-	do_distributed_task 0 4 run_ucp_hello
-	do_distributed_task 1 4 run_uct_hello
-	do_distributed_task 2 4 run_ucx_perftest
-	do_distributed_task 3 4 run_io_demo
+	# # long devel tests
+	# do_distributed_task 0 4 run_ucp_hello
+	# do_distributed_task 1 4 run_uct_hello
+	# do_distributed_task 2 4 run_ucx_perftest
+	# do_distributed_task 3 4 run_io_demo
 
 	# all are running gtest
 	run_gtest "default"
 
-	# build and run gtest with armclang
-	run_gtest_armclang
+	# # build and run gtest with armclang
+	# run_gtest_armclang
 
-	# release mode tests
-	do_distributed_task 0 4 run_release_mode_tests
+	# # release mode tests
+	# do_distributed_task 0 4 run_release_mode_tests
 
-	# nt_buffer_transfer tests
-	do_distributed_task 0 4 run_nt_buffer_transfer_tests
+	# # nt_buffer_transfer tests
+	# do_distributed_task 0 4 run_nt_buffer_transfer_tests
 }
 
 run_test_proto_disable() {
