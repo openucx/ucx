@@ -651,3 +651,11 @@ uct_ib_mlx5_update_cqe_zipping_stats(uct_ib_iface_t *iface,
                                  UCT_IB_IFACE_STAT_RX_COMPLETION_ZIPPED, 1);
     }
 }
+
+
+static int UCS_F_ALWAYS_INLINE
+uct_ib_mlx5_get_atomic_mode(uct_ib_iface_t *iface)
+{
+    return uct_ib_iface_device(iface)->ext_atomic_arg_sizes ?
+        UCT_IB_MLX5_ATOMIC_MODE_EXT : UCT_IB_MLX5_ATOMIC_MODE_COMP;
+}
