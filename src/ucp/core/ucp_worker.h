@@ -406,6 +406,8 @@ void ucp_worker_signal_internal(ucp_worker_h worker);
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
 
+int ucp_worker_iface_is_activated(const ucp_worker_iface_t *wiface);
+
 void ucp_worker_keepalive_add_ep(ucp_ep_h );
 
 /* EP should be removed from worker all_eps prior to call this function */

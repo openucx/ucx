@@ -156,7 +156,7 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
     char prot_c[4];
     int line_num;
     int prot;
-    char *ptr, *newline;
+    char *ptr, *newline, *orig_buffer;
     int maps_fd;
     int ret;
     int n;
@@ -188,10 +188,13 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
             }
         } else if (read_size == buffer_size - offset) {
             /* enlarge buffer */
-            buffer = ucm_orig_mremap(buffer, buffer_size, buffer_size * 2,
-                                     MREMAP_MAYMOVE, NULL);
+            orig_buffer = buffer;
+            buffer      = ucm_orig_mremap(buffer, buffer_size, buffer_size * 2,
+                                          MREMAP_MAYMOVE, NULL);
             if (buffer == MAP_FAILED) {
-                ucm_fatal("failed to allocate maps buffer(size=%zu)", buffer_size);
+                ucm_fatal("failed to reallocate buffer for reading "
+                          "/proc/self/maps from %p/%zu to size %zu: %m",
+                          orig_buffer, buffer_size, buffer_size * 2);
             }
             buffer_size *= 2;
 

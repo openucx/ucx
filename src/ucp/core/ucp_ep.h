@@ -370,6 +370,12 @@ typedef struct {
 KHASH_DECLARE(ucp_ep_peer_mem_hash, uint64_t, ucp_ep_peer_mem_data_t);
 
 
+typedef enum {
+    /* Protocol initialization was done */
+    UCP_EP_PROTO_INITIALIZED = UCS_BIT(0),
+} ucp_ep_init_flags_t;
+
+
 struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
@@ -476,6 +482,9 @@ struct ucp_ep_config {
 
     /* Bitmap of lanes selected by the protocols */
     ucp_lane_map_t                proto_lane_map;
+
+    /* EP initialization flags from @ref ucp_ep_init_flags_t */
+    unsigned                      proto_init_flags;
 
     /* Number of endpoints using this configuration */
     unsigned                      ep_count;

@@ -49,6 +49,12 @@ UCS_TEST_F(test_datatype, list_basic) {
     ucs_list_insert_after(&head, &elem0.list);
     ucs_list_insert_before(&head, &elem1.list);
 
+    EXPECT_TRUE(ucs_list_is_first(&head, &elem0.list));
+    EXPECT_FALSE(ucs_list_is_last(&head, &elem0.list));
+
+    EXPECT_FALSE(ucs_list_is_first(&head, &elem1.list));
+    EXPECT_TRUE(ucs_list_is_last(&head, &elem1.list));
+
     std::vector<elem_t*> vec;
     ucs_list_for_each(iter, &head, list) {
         vec.push_back(iter);

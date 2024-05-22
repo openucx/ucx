@@ -8,12 +8,14 @@
 
 #include <common/test.h>
 #include <common/mem_buffer.h>
+#include <unordered_map>
 
 extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_perf.h>
 #include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
@@ -343,3 +345,222 @@ UCS_TEST_P(test_perf_node, replace_null)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_perf_node, all, "all")
+
+static std::ostream &operator<<(std::ostream &os, const ucp_proto_perf_t *perf)
+{
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    ucp_proto_perf_dump(perf, &strb);
+    return os << ucs_string_buffer_cstr(&strb);
+}
+
+class test_proto_perf : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_AM);
+    }
+
+protected:
+    virtual void cleanup() override
+    {
+        if (m_perf != nullptr) {
+            ucp_proto_perf_destroy(m_perf);
+        }
+    }
+
+    ucp_proto_perf_segment_t *find_lb(size_t start) const
+    {
+        return ucp_proto_perf_find_segment_lb(m_perf, start);
+    }
+
+    void expect_empty_range(size_t start, size_t end)
+    {
+        ucp_proto_perf_segment_t *seg = find_lb(start);
+
+        EXPECT_TRUE((seg == nullptr) ||
+                    (end < ucp_proto_perf_segment_start(seg))) <<
+                    "perf=" << m_perf << " start=" << start << " end=" << end;
+    }
+
+    void expect_perf(size_t start, size_t end,
+                     ucp_proto_perf_factor_id_t factor_id,
+                     ucs_linear_func_t func)
+    {
+        ucp_proto_perf_segment_t *seg = find_lb(start);
+        ASSERT_NE(nullptr, seg);
+        EXPECT_GE(start, ucp_proto_perf_segment_start(seg));
+        EXPECT_LE(end, ucp_proto_perf_segment_end(seg));
+        EXPECT_TRUE(ucs_linear_func_is_equal(
+                func, ucp_proto_perf_segment_func(seg, factor_id), 1e-9));
+    }
+
+    void expect_perf(size_t start, size_t end,
+                     const std::unordered_map<int, ucs_linear_func_t> &factors)
+    {
+        int factor_id = UCP_PROTO_PERF_FACTOR_LOCAL_CPU;
+        for (; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
+            ucs_linear_func_t expected_perf = UCS_LINEAR_FUNC_ZERO;
+            auto entry                      = factors.find(factor_id);
+            if (entry != std::end(factors)) {
+                expected_perf = entry->second;
+            }
+            expect_perf(start, end, (ucp_proto_perf_factor_id_t)factor_id,
+                        expected_perf);
+        }
+    }
+
+protected:
+    const ucs_linear_func_t local_tl_func  = {10, 1};
+    const ucs_linear_func_t remote_tl_func = {20, 2};
+    const ucs_linear_func_t local_cpu_func = {30, 3};
+    ucp_proto_perf_t *m_perf               = nullptr;
+};
+
+UCS_TEST_P(test_proto_perf, from_caps)
+{
+    ucp_proto_caps_t caps;
+
+    caps.min_length = 1000;
+    caps.num_ranges = 2;
+
+    caps.ranges[0].max_length                       = 1999;
+    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_SINGLE] = local_tl_func;
+    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_MULTI]  = UCS_LINEAR_FUNC_ZERO;
+    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_CPU]    = UCS_LINEAR_FUNC_ZERO;
+    caps.ranges[0].node                             = NULL;
+
+    caps.ranges[1].max_length                       = 2999;
+    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_SINGLE] = UCS_LINEAR_FUNC_ZERO;
+    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_MULTI]  = UCS_LINEAR_FUNC_ZERO;
+    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_CPU]    = local_cpu_func;
+    caps.ranges[1].node                             = NULL;
+
+    ucs_status_t status = ucp_proto_perf_from_caps("test", &caps, &m_perf);
+    ASSERT_UCS_OK(status);
+    UCS_TEST_MESSAGE << m_perf;
+
+    expect_empty_range(0, 999);
+    expect_perf(1000, 1999, {{UCP_PROTO_PERF_FACTOR_SINGLE, local_tl_func}});
+    expect_perf(2000, 2999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_empty_range(3000, SIZE_MAX);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_perf, all, "all")
+
+class test_proto_perf_add_func : public test_proto_perf {
+protected:
+    virtual void init() override
+    {
+        ucs_status_t status = ucp_proto_perf_create("test", &m_perf);
+        ASSERT_UCS_OK(status);
+    }
+
+    void add_func(size_t start, size_t end,
+                  ucp_proto_perf_factor_id_t factor_id, ucs_linear_func_t func)
+    {
+        ucs_status_t status = ucp_proto_perf_add_func(m_perf, start, end,
+                                                      factor_id, func, NULL);
+        ASSERT_UCS_OK(status);
+    }
+};
+
+UCS_TEST_P(test_proto_perf_add_func, empty)
+{
+    expect_empty_range(0, SIZE_MAX);
+}
+
+UCS_TEST_P(test_proto_perf_add_func, single_func)
+{
+    add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    UCS_TEST_MESSAGE << m_perf;
+
+    expect_empty_range(0, 999);
+    expect_perf(1000, 1999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_empty_range(2000, SIZE_MAX);
+}
+
+UCS_TEST_P(test_proto_perf_add_func, intersect_first)
+{
+    /*
+     * 500   1000          1999    3000          3999  4999
+     *  |     |              |      |              |    |
+     *  +-----+-- local_tl --+      +- remote_tl --+    |
+     *        |                                         |
+     *        |                                         |
+     *        +------ local_cpu ------------------------+
+     */
+    add_func(500, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    add_func(3000, 3999, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func);
+    add_func(1000, 4999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
+    UCS_TEST_MESSAGE << m_perf;
+
+    expect_empty_range(0, 499);
+    expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(1000, 1999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(2000, 2999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_perf(3000, 3999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func}});
+    expect_perf(4000, 4999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_empty_range(5000, SIZE_MAX);
+}
+
+UCS_TEST_P(test_proto_perf_add_func, intersect_last)
+{
+    /*
+     * 500   1000         1999    3000  3499    3999
+     *  |     |             |      |      |       |
+     *  |     +- local_tl +-+      +- remote_tl --+
+     *  |                                  |
+     *  |                                  |
+     *  +----- local_cpu ------------------+
+     */
+    add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    add_func(3000, 3999, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func);
+    add_func(500, 3499, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
+    UCS_TEST_MESSAGE << m_perf;
+
+    expect_empty_range(0, 499);
+    expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_perf(1000, 1999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(2000, 2999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_perf(3000, 3499,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func}});
+    expect_perf(3500, 3999,
+                {{UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func}});
+    expect_empty_range(4000, SIZE_MAX);
+}
+
+UCS_TEST_P(test_proto_perf_add_func, intersect_middle)
+{
+    /*
+     * 500   1000                  1999   2999
+     *  |     |                      |     |
+     *  +-----+------ local_tl ------+-----+
+     *        |                      |
+     *        |                      |
+     *        +------ local_cpu -----+
+     */
+    add_func(500, 2999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
+    UCS_TEST_MESSAGE << m_perf;
+
+    expect_empty_range(0, 499);
+    expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(1000, 1999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(2000, 2999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_empty_range(3000, SIZE_MAX);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_proto_perf_add_func, all, "all")
