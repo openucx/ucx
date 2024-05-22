@@ -143,7 +143,7 @@ protected:
                          bool expected, bool sync);
 
     void test_xfer_len_offset();
-    size_t get_msg_size();
+    virtual size_t get_msg_size();
 
     /* Init number of lanes which will be used */
     virtual unsigned num_lanes()
@@ -1209,6 +1209,12 @@ public:
     {
         stats_activate();
         test_ucp_tag_xfer::init();
+    }
+
+    size_t get_msg_size() override
+    {
+        size_t raw_size = 1148544 / 20;
+        return ucs_align_up(raw_size, ucs_get_page_size() * num_lanes());
     }
 
     void cleanup() override

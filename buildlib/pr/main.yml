@@ -301,7 +301,7 @@ stages:
   #         demands: ucx_docker -equals yes
   #         container: coverity_rh7
 
-  # - stage: Tests
+  - stage: Tests
   #   dependsOn: [Static_check]
   #   jobs:
   #   - template: tests.yml
@@ -320,17 +320,17 @@ stages:
   #       name: new
   #       demands: ucx_new -equals yes
   #       test_perf: 1
-  #   - template: tests.yml
-  #     parameters:
-  #       name: roce
-  #       demands: ucx_roce -equals yes
-  #       test_perf: 0
-  #   - template: tests.yml
-  #     parameters:
-  #       name: roce_proto_disable
-  #       demands: ucx_roce -equals yes
-  #       test_perf: 0
-  #       proto_enable: no
+    - template: tests.yml
+      parameters:
+        name: roce
+        demands: ucx_roce -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: roce_proto_disable
+        demands: ucx_roce -equals yes
+        test_perf: 0
+        proto_enable: no
   #   - template: tests.yml
   #     parameters:
   #       name: BlueField
@@ -425,9 +425,9 @@ stages:
   #     - template: cuda/cuda.yml
 
 
-  - stage: AddressSanitizer
+  # - stage: AddressSanitizer
     # dependsOn: [Static_check]
-    jobs:
+    # jobs:
     # - template: tests.yml
     #   parameters:
     #     name: gpu
@@ -442,13 +442,13 @@ stages:
     #     test_perf: 0
     #     container: ubuntu2204_ib
     #     asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        container: ubuntu2204_ib
-        asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    #     container: ubuntu2204_ib
+    #     asan_check: yes
     # - template: tests.yml
     #   parameters:
     #     name: roce_proto_disable
