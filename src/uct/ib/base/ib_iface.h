@@ -629,8 +629,7 @@ uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
                                           const union ibv_gid *gid);
 
 int uct_ib_iface_dev_addr_is_reachable(uct_ib_iface_t *iface,
-                                       const uct_ib_address_t *ib_addr,
-                                       uct_iface_reachability_scope_t scope);
+                                       const uct_ib_address_t *ib_addr);
 
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"

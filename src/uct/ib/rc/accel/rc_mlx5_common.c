@@ -210,8 +210,7 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
 {
     /* prepost recvs only if quota available (recvs were not preposted
      * before) */
-    if ((iface->super.rx.srq.quota == 0) ||
-        (iface->rx.srq.type == UCT_IB_MLX5_OBJ_TYPE_NULL)) {
+    if (iface->super.rx.srq.quota == 0) {
         return;
     }
 

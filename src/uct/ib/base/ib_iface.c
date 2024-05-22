@@ -701,38 +701,32 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     return ret;
 }
 
-static int uct_ib_iface_is_same_device_unpacked(
-        const uct_ib_address_pack_params_t *unpacked_addr, uint16_t dlid,
-        const union ibv_gid *dgid)
+int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
+                                const union ibv_gid *dgid)
 {
-    if (!(unpacked_addr->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) &&
-        (dlid != unpacked_addr->lid)) {
+    uct_ib_address_pack_params_t parems;
+
+    uct_ib_address_unpack(ib_addr, &parems);
+
+    if (!(parems.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) &&
+        (dlid != parems.lid)) {
         return 0;
     }
 
     if (dgid == NULL) {
-        return !(unpacked_addr->flags &
+        return !(parems.flags &
                  (UCT_IB_ADDRESS_PACK_FLAG_ETH |
                   UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID));
     }
 
-    if (unpacked_addr->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
-        return !memcmp(dgid->raw, unpacked_addr->gid.raw,
-                       sizeof(unpacked_addr->gid.raw));
+    if (parems.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
+        return !memcmp(dgid->raw, parems.gid.raw,
+                       sizeof(parems.gid.raw));
     }
 
-    return !(unpacked_addr->flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) ||
-           (unpacked_addr->gid.global.interface_id ==
+    return !(parems.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) ||
+           (parems.gid.global.interface_id ==
             dgid->global.interface_id);
-}
-
-int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
-                                const union ibv_gid *dgid)
-{
-    uct_ib_address_pack_params_t params;
-
-    uct_ib_address_unpack(ib_addr, &params);
-    return uct_ib_iface_is_same_device_unpacked(&params, dlid, dgid);
 }
 
 static int uct_ib_iface_gid_extract_flid(const union ibv_gid *gid)
@@ -752,20 +746,12 @@ static int uct_ib_iface_is_flid_enabled(uct_ib_iface_t *iface)
 }
 
 int uct_ib_iface_dev_addr_is_reachable(uct_ib_iface_t *iface,
-                                       const uct_ib_address_t *ib_addr,
-                                       uct_iface_reachability_scope_t scope)
+                                       const uct_ib_address_t *ib_addr)
 {
     int is_local_eth = uct_ib_iface_is_roce(iface);
     uct_ib_address_pack_params_t params;
 
     uct_ib_address_unpack(ib_addr, &params);
-
-    if ((scope == UCT_IFACE_REACHABILITY_SCOPE_DEVICE) &&
-        !uct_ib_iface_is_same_device_unpacked(&params,
-                                              uct_ib_iface_port_attr(iface)->lid,
-                                              &iface->gid_info.gid)) {
-        return 0;
-    }
 
     if (/* at least one PKEY has to be with full membership */
         !((params.pkey | iface->pkey) & UCT_IB_PKEY_MEMBERSHIP_MASK) ||
@@ -814,9 +800,16 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
+    if (!uct_ib_iface_dev_addr_is_reachable(iface, device_addr)) {
+        return 0;
+    }
+
     scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
                             UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
-    return uct_ib_iface_dev_addr_is_reachable(iface, device_addr, scope);
+    return (scope == UCT_IFACE_REACHABILITY_SCOPE_NETWORK) ||
+           uct_ib_iface_is_same_device(device_addr,
+                                       uct_ib_iface_port_attr(iface)->lid,
+                                       &iface->gid_info.gid);
 }
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,

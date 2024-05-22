@@ -58,9 +58,8 @@ typedef struct {
 } UCS_S_PACKED uct_gga_mlx5_ep_address_t;
 
 typedef struct {
-    uint64_t         be_sys_image_guid; /* ID of GVMI. */
-    uct_ib_address_t ib_addr;           /* Common IB address. */
-} UCS_S_PACKED uct_gga_mlx5_dev_addr_t;
+    uint64_t be_sys_image_guid; /* ID of GVMI. */
+} UCS_S_PACKED uct_gga_mlx5_iface_addr_t;
 
 extern ucs_config_field_t uct_ib_md_config_table[];
 
@@ -264,9 +263,8 @@ uct_gga_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->device_addr_len += ucs_offsetof(uct_gga_mlx5_dev_addr_t,
-                                                ib_addr);
     iface_attr->ep_addr_len      = sizeof(uct_gga_mlx5_ep_address_t);
+    iface_attr->iface_addr_len   = sizeof(uct_gga_mlx5_iface_addr_t);
     iface_attr->cap.flags        = /*
                                    UCT_IFACE_FLAG_PUT_ZCOPY |
                                    UCT_IFACE_FLAG_GET_ZCOPY |
@@ -377,9 +375,7 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     uct_gga_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_gga_mlx5_ep_t);
     uct_rc_mlx5_iface_common_t *iface =
             ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_common_t);
-    const uct_gga_mlx5_dev_addr_t *gga_dev_addr = (uct_gga_mlx5_dev_addr_t*)
-            device_addr;
-    const uct_ib_address_t *ib_addr = &gga_dev_addr->ib_addr;
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t*)device_addr;
     const uct_gga_mlx5_ep_address_t *gga_ep_addr =
             (const uct_gga_mlx5_ep_address_t*)ep_addr;
     uint32_t qp_num;
@@ -410,15 +406,13 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 }
 
 static ucs_status_t
-uct_gga_mlx5_iface_get_device_address(uct_iface_h tl_iface,
-                                      uct_device_addr_t *dev_addr)
+uct_gga_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
 {
-    uct_gga_mlx5_dev_addr_t *gga_dev_addr = (uct_gga_mlx5_dev_addr_t*)dev_addr;
+    uct_gga_mlx5_iface_addr_t *gga_addr = (uct_gga_mlx5_iface_addr_t*)addr;
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_ib_md_t *md = uct_ib_iface_md(iface);
 
-    gga_dev_addr->be_sys_image_guid =
-            uct_ib_iface_md(iface)->dev.dev_attr.orig_attr.sys_image_guid;
-    uct_ib_iface_address_pack(iface, &gga_dev_addr->ib_addr);
+    gga_addr->be_sys_image_guid = md->dev.dev_attr.orig_attr.sys_image_guid;
     return UCS_OK;
 }
 
@@ -456,8 +450,8 @@ static uct_iface_ops_t uct_gga_mlx5_iface_tl_ops = {
     .iface_event_arm          = uct_gga_mlx5_iface_arm,
     .iface_close              = uct_gga_mlx5_iface_t_delete,
     .iface_query              = uct_gga_mlx5_iface_query,
-    .iface_get_address        = ucs_empty_function_return_success,
-    .iface_get_device_address = uct_gga_mlx5_iface_get_device_address,
+    .iface_get_address        = uct_gga_mlx5_iface_get_address,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
@@ -465,36 +459,17 @@ static int
 uct_gga_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
-    uct_ib_iface_t *iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_ib_device_t *device = uct_ib_iface_device(iface);
-    const uct_gga_mlx5_dev_addr_t *dev_addr;
-    uct_iface_reachability_scope_t scope;
+    const uct_gga_mlx5_iface_addr_t *iface_addr =
+            (const uct_gga_mlx5_iface_addr_t*)params->iface_addr;
 
-    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+    if (!uct_ib_iface_is_reachable_v2(tl_iface, params)) {
         return 0;
     }
 
-    dev_addr = (const uct_gga_mlx5_dev_addr_t*)params->device_addr;
-    if (dev_addr->be_sys_image_guid !=
-        device->dev_attr.orig_attr.sys_image_guid) {
-        return 0;
-    }
-
-    scope = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, scope, SCOPE,
-                            UCT_IFACE_REACHABILITY_SCOPE_NETWORK);
-    return uct_ib_iface_dev_addr_is_reachable(iface, &dev_addr->ib_addr, scope);
-}
-
-static ucs_status_t
-uct_gga_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
-                           const uct_rc_iface_common_config_t *rc_config)
-{
-    uct_rc_mlx5_iface_common_t *iface =
-            ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
-
-    iface->rx.srq.type    = UCT_IB_MLX5_OBJ_TYPE_NULL;
-    iface->rx.srq.srq_num = 0;
-    return UCS_OK;
+    return iface_addr->be_sys_image_guid ==
+           device->dev_attr.orig_attr.sys_image_guid;
 }
 
 static void uct_gga_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *ctx)
@@ -522,7 +497,7 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
         .handle_failure = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert_void,
     },
-    .init_rx         = uct_gga_mlx5_iface_init_rx,
+    .init_rx         = ucs_empty_function_return_success,
     .cleanup_rx      = ucs_empty_function,
     .fc_ctrl         = ucs_empty_function_return_unsupported,
     .fc_handler      = (uct_rc_iface_fc_handler_func_t)ucs_empty_function_do_assert,
@@ -530,6 +505,13 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
     .ep_post_check   = uct_rc_mlx5_base_ep_post_check,
     .ep_vfs_populate = uct_rc_mlx5_base_ep_vfs_populate
 };
+
+static void uct_gga_mlx5_iface_disable_rx(uct_rc_mlx5_iface_common_t *iface)
+{
+    iface->super.rx.srq.quota = 0;
+    iface->rx.srq.type        = UCT_IB_MLX5_OBJ_TYPE_NULL;
+    iface->rx.srq.srq_num     = 0;
+}
 
 static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                            uct_md_h tl_md, uct_worker_h worker,
@@ -552,6 +534,8 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                               &uct_gga_mlx5_iface_ops, tl_md, worker, params,
                               &config->super.super, &config->rc_mlx5_common,
                               &init_attr);
+
+    uct_gga_mlx5_iface_disable_rx(&self->super);
 
     config->super.super.fc.enable = 0; /* FC requires AM capability */
     return UCS_OK;
