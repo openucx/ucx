@@ -303,7 +303,7 @@ stages:
 
   - stage: Tests
   #   dependsOn: [Static_check]
-  #   jobs:
+    jobs:
   #   - template: tests.yml
   #     parameters:
   #       name: althca
