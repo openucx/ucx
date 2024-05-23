@@ -628,9 +628,6 @@ void uct_ib_iface_set_reverse_sl(uct_ib_iface_t *ib_iface,
 uint16_t uct_ib_iface_resolve_remote_flid(uct_ib_iface_t *iface,
                                           const union ibv_gid *gid);
 
-int uct_ib_iface_dev_addr_is_reachable(uct_ib_iface_t *iface,
-                                       const uct_ib_address_t *ib_addr);
-
 #define UCT_IB_IFACE_FMT \
     "%s:%d/%s"
 #define UCT_IB_IFACE_ARG(_iface) \
