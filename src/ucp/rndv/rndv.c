@@ -585,10 +585,11 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
     length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_zcopy, align,
                                           req->send.length, offset, length);
 
-    ucs_trace_data("req %p: offset %zu remain %zu RMA-%s to %p len %zu lane %d",
-                   req, offset, remaining,
-                   (proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) ? "GET" : "PUT",
-                   UCS_PTR_BYTE_OFFSET(req->send.buffer, offset), length, lane);
+    ucs_trace("req %p: offset %zu remain %zu RMA-%s to %p len %zu lane %d req->send.rndv.zcopy.lanes_map_all %zu lanes_count %zu chunk %zu",
+              req, offset, remaining,
+              (proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) ? "GET" : "PUT",
+              UCS_PTR_BYTE_OFFSET(req->send.buffer, offset), length, lane,
+              req->send.rndv.zcopy.lanes_map_all, lanes_count, chunk);
 
     state = req->send.state.dt;
     /* TODO: is this correct? memh array may skip MD's where
