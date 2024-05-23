@@ -574,22 +574,24 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
 
     if ((offset == 0) && (remaining > 0) && (req->send.length > ucp_mtu)) {
         length = ucp_mtu - remaining;
+        ucs_trace("req %p: ucp_mtu=%zu remaining=%zu", req, ucp_mtu, remaining);
     } else {
         lanes_count = ucs_popcount(req->send.rndv.zcopy.lanes_map_all);
         chunk       = ucs_align_up((size_t)(req->send.length /
                                             lanes_count * scale),
                                    align);
         length = ucs_min(chunk, req->send.length - offset);
+        ucs_trace("req %p: req->send.rndv.zcopy.lanes_map_all %zu lanes_count %zu chunk %zu",
+                    req, req->send.rndv.zcopy.lanes_map_all, lanes_count, chunk);
     }
 
     length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_zcopy, align,
                                           req->send.length, offset, length);
 
-    ucs_trace("req %p: offset %zu remain %zu RMA-%s to %p len %zu lane %d req->send.rndv.zcopy.lanes_map_all %zu lanes_count %zu chunk %zu",
+    ucs_trace("req %p: offset %zu remain %zu RMA-%s to %p len %zu lane %d",
               req, offset, remaining,
               (proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) ? "GET" : "PUT",
-              UCS_PTR_BYTE_OFFSET(req->send.buffer, offset), length, lane,
-              req->send.rndv.zcopy.lanes_map_all, lanes_count, chunk);
+              UCS_PTR_BYTE_OFFSET(req->send.buffer, offset), length, lane);
 
     state = req->send.state.dt;
     /* TODO: is this correct? memh array may skip MD's where
