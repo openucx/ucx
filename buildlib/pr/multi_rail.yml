@@ -1,0 +1,104 @@
+jobs:
+  - job: SetupServer
+    displayName: Setup Server
+    pool:
+      name: MLNX
+      demands: ucx_multi_rail_srv
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 1
+        retryCountOnTaskFailure: 5
+
+      - task: Bash@3
+        name: Set_Vars
+        inputs:
+          targetType: "inline"
+          script: |
+            source ./buildlib/tools/multi_rail.sh
+            set_vars
+        displayName: Set Vars
+
+      - bash: |
+          source ./buildlib/tools/multi_rail.sh
+          build_ucx_in_docker
+          docker_run_srv
+        env:
+          UCX_TCP_EP_BIND_SRC_ADDR: n
+        displayName: Setup Server
+
+  - job: SetupClient
+    displayName: Setup Client
+    pool:
+      name: MLNX
+      demands: ucx_multi_rail_client
+    workspace:
+      clean: outputs
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 1
+        retryCountOnTaskFailure: 5
+      - bash: |
+          source ./buildlib/tools/multi_rail.sh
+          build_ucx
+        displayName: Setup Client
+
+  - job: TestNegative
+    dependsOn:
+      - SetupServer
+      - SetupClient
+    displayName: Test Negative
+    timeoutInMinutes: 5
+    pool:
+      name: MLNX
+      demands: ucx_multi_rail_client
+    variables:
+      SRV_IP: $[ dependencies.SetupServer.outputs['Set_Vars.SRV_IP'] ]
+    steps:
+      - checkout: none
+      - bash: |
+          source ./buildlib/tools/multi_rail.sh
+          run_client $(SRV_IP)
+          assert negative
+        env:
+          UCX_TCP_EP_BIND_SRC_ADDR: n
+        displayName: Test Negative
+
+  - job: ServerStart
+    dependsOn: TestNegative
+    displayName: Server Start
+    pool:
+      name: MLNX
+      demands: ucx_multi_rail_srv
+    steps:
+      - checkout: none
+      - bash: |
+          source ./buildlib/tools/multi_rail.sh
+          docker_run_srv
+        env:
+          UCX_TCP_EP_BIND_SRC_ADDR: y
+        displayName: Server Start
+
+  - job: TestPositive
+    dependsOn:
+      - SetupServer
+      - ServerStart
+    displayName: Test Positive
+    timeoutInMinutes: 5
+    pool:
+      name: MLNX
+      demands: ucx_multi_rail_client
+    variables:
+      SRV_IP: $[ dependencies.SetupServer.outputs['Set_Vars.SRV_IP'] ]
+    steps:
+      - checkout: none
+      - bash: |
+          source ./buildlib/tools/multi_rail.sh
+          run_client $(SRV_IP)
+          assert positive
+        env:
+          UCX_TCP_EP_BIND_SRC_ADDR: y
+        displayName: Test Positive
