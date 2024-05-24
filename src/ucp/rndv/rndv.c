@@ -581,8 +581,8 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
                                             lanes_count * scale),
                                    align);
         length = ucs_min(chunk, req->send.length - offset);
-        ucs_trace("req %p: req->send.rndv.zcopy.lanes_map_all %zu lanes_count %zu chunk %zu",
-                    req, req->send.rndv.zcopy.lanes_map_all, lanes_count, chunk);
+        ucs_trace("req %p: req->send.rndv.zcopy.lanes_map_all %zu req->send.length %zu scale %f align %zu lanes_count %zu chunk %zu",
+                    req, req->send.rndv.zcopy.lanes_map_all, req->send.length, scale, align, lanes_count, chunk);
     }
 
     length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_zcopy, align,
