@@ -3,6 +3,7 @@
 # Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+# Copyright (C) Dandan Zhang, 2024. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -24,6 +25,7 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/aarch64/bitops.h \
 	arch/ppc64/bitops.h \
 	arch/rv64/bitops.h \
+	arch/loongarch64/bitops.h \
 	arch/x86_64/bitops.h \
 	arch/bitops.h \
 	algorithm/crc.h \
@@ -85,6 +87,7 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/x86_64/atomic.h \
 	arch/aarch64/global_opts.h \
 	arch/generic/atomic.h \
+	arch/loongarch64/global_opts.h \
 	arch/ppc64/global_opts.h \
 	arch/rv64/global_opts.h \
 	arch/global_opts.h
@@ -92,6 +95,7 @@ nobase_dist_libucs_la_HEADERS = \
 noinst_HEADERS = \
 	arch/aarch64/cpu.h \
 	arch/generic/cpu.h \
+	arch/loongarch64/cpu.h \
 	arch/ppc64/cpu.h \
 	arch/rv64/cpu.h \
 	arch/x86_64/cpu.h \
@@ -149,6 +153,8 @@ libucs_la_SOURCES = \
 	algorithm/string_distance.c \
 	arch/aarch64/cpu.c \
 	arch/aarch64/global_opts.c \
+	arch/loongarch64/cpu.c \
+	arch/loongarch64/global_opts.c \
 	arch/ppc64/timebase.c \
 	arch/ppc64/global_opts.c \
 	arch/rv64/cpu.c \
