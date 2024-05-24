@@ -134,6 +134,11 @@ static void ucp_rndv_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY
     };
 
+    if (ucp_proto_select_op_flags(init_params->select_param) &
+        UCP_PROTO_SELECT_OP_FLAG_AM_IMPORTED) {
+        return;
+    }
+
     ucp_rndv_am_probe_common(&params);
 }
 

@@ -881,15 +881,23 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
-static UCS_F_ALWAYS_INLINE uint8_t ucp_am_send_nbx_get_op_flag(uint32_t flags)
+static UCS_F_ALWAYS_INLINE uint8_t ucp_am_send_nbx_get_op_flag(uint32_t flags,
+                                                               const ucp_request_param_t *param)
 {
+    uint8_t op_flag = 0;
+
     if (flags & UCP_AM_SEND_FLAG_EAGER) {
-        return UCP_PROTO_SELECT_OP_FLAG_AM_EAGER;
+        op_flag |= UCP_PROTO_SELECT_OP_FLAG_AM_EAGER;
     } else if (flags & UCP_AM_SEND_FLAG_RNDV) {
-        return UCP_PROTO_SELECT_OP_FLAG_AM_RNDV;
+        op_flag |= UCP_PROTO_SELECT_OP_FLAG_AM_RNDV;
     }
 
-    return 0;
+    if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) &&
+        (param->memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+        op_flag |= UCP_PROTO_SELECT_OP_FLAG_AM_IMPORTED;
+    }
+
+    return op_flag;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -1026,7 +1034,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
                                         UCP_WORKER_CFG_INDEX_NULL, req, op_id,
                                         buffer, count, datatype, contig_length,
                                         param, header_length,
-                                        ucp_am_send_nbx_get_op_flag(flags));
+                                        ucp_am_send_nbx_get_op_flag(flags, param));
     } else {
         ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
                              count, flags, id, param);

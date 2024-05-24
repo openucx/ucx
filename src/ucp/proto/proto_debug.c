@@ -362,7 +362,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     };
     static const char *am_flag_names[]   = {
         [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)] = "egr",
-        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)]  = "rndv"
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)]  = "rndv",
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_IMPORTED)] = "imp"
     };
     uint32_t op_attr_mask, op_flags;
 
