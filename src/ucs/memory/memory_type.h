@@ -42,6 +42,7 @@ typedef enum ucs_memory_type {
     UCS_MEMORY_TYPE_ROCM,          /**< AMD ROCM memory */
     UCS_MEMORY_TYPE_ROCM_MANAGED,  /**< AMD ROCM managed system memory */
     UCS_MEMORY_TYPE_RDMA,          /**< RDMA device memory */
+    UCS_MEMORY_TYPE_IMPORTED,      /**< Imported memory */
     UCS_MEMORY_TYPE_ZE_HOST,       /**< Intel ZE memory (USM host) */
     UCS_MEMORY_TYPE_ZE_DEVICE,     /**< Intel ZE memory (USM device) */
     UCS_MEMORY_TYPE_ZE_MANAGED,    /**< Intel ZE managed memory (USM shared) */
