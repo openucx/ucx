@@ -282,7 +282,7 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
                                   int main(int argc, char** argv) { return f(); }
                             ]])],
                            [AC_MSG_RESULT([yes])
-                            $2="${$2} $1"],
+                            $2="$1"],
                            [AC_MSG_RESULT([no])])
          CFLAGS="$SAVE_CFLAGS"
 ])
@@ -296,6 +296,10 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-diag-error 10006],
                                  [-diag-error 10148]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
+#
+# Disable all deprecations if a finer grained approach does not work
+#
+CFLAGS_NO_DEPRECATED="-Wno-deprecated"
 
 CHECK_DEPRECATED_DECL_FLAG([-diag-disable 1478], CFLAGS_NO_DEPRECATED) # icc
 CHECK_DEPRECATED_DECL_FLAG([-Wno-deprecated-declarations], CFLAGS_NO_DEPRECATED) # gcc
@@ -562,6 +566,17 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                  [-Wno-deprecated-declarations],
                                  [-Winvalid-pch]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
+
+#
+# Intel Compiler specifics
+#
+if ! $CC -V | grep -q Intel.*Compiler; then
+    ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-language-extension-token],
+                                     [-fno-finite-math-only],
+                                     [-Wno-recommended-option],
+                                     [-Wno-c99-extensions]],
+                                     [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
+fi
 
 
 #
