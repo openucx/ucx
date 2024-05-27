@@ -362,6 +362,11 @@ stages:
           name: gpu
           demands: ucx_gpu
 
+      - template: ../jucx/jucx-test.yml
+        parameters:
+          arch: aarch64
+          demands: ucx-arm64
+
   - stage: go
     dependsOn: [Static_check]
     jobs:
