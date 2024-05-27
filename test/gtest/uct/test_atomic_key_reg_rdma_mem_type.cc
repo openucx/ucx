@@ -8,6 +8,12 @@
 
 class uct_atomic_key_reg_rdma_mem_type : public uct_amo_test {
 protected:
+    void init() override
+    {
+        modify_config("IB_DM_COUNT", "0", SKIP_IF_NOT_EXIST);
+        uct_amo_test::init();
+    }
+
     bool check_rdma_memory()
     {
         FOR_EACH_ENTITY(iter) {
