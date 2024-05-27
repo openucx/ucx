@@ -284,7 +284,10 @@ UCS_TEST_F(test_datatype, hlist_foreach_safe) {
         /* Initialize list elements with random numbers */
         std::vector<elem_t> v_elems;
         for (int i = 0; i < length; ++i) {
-            v_elems.push_back({.i = ucs::rand()});
+            elem_t e = {
+                .i = ucs::rand()
+            };
+            v_elems.push_back(e);
         }
 
         /* Add elements to the list */

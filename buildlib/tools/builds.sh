@@ -110,23 +110,32 @@ build_release_pkg() {
 	cd -
 }
 
+build_icc_check() {
+	cc=$1
+	cxx=$2
+
+	if $cc -v
+	then
+		echo "==== Build with Intel compiler $cc ===="
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=$cc CXX=$cxx
+		$MAKEP
+		make_clean distclean
+	else
+		azure_log_warning "Not building with Intel compiler $cc"
+	fi
+}
+
 #
 # Build with Intel compiler
 #
 build_icc() {
-	if az_module_load $INTEL_MODULE && icc -v
+	if az_module_load $INTEL_MODULE
 	then
-		echo "==== Build with Intel compiler ===="
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
-		$MAKEP
-		make_clean distclean
-
-		echo "==== Build with Intel compiler (clang) ===="
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
-		$MAKEP
-		make_clean distclean
+		build_icc_check icc icpc
+		build_icc_check icx icpx
+		build_icc_check clang clang++
 	else
-		azure_log_warning "Not building with Intel compiler"
+		azure_log_warning "Not building with Intel compilers"
 	fi
 	az_module_unload $INTEL_MODULE
 }

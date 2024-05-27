@@ -1462,31 +1462,19 @@ ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ct
     ucs_status_t res = UCS_OK;
     DIR *dir;
     struct dirent *entry;
-    struct dirent *entry_out;
-    size_t entry_len;
 
     dir = opendir(path);
     if (dir == NULL) {
-        return UCS_ERR_NO_ELEM; /* failed to open directory */
+        return UCS_ERR_NO_ELEM;
     }
 
-    entry_len = ucs_offsetof(struct dirent, d_name) +
-                fpathconf(dirfd(dir), _PC_NAME_MAX) + 1;
-    entry     = (struct dirent*)malloc(entry_len);
-    if (entry == NULL) {
-        res = UCS_ERR_NO_MEMORY;
-        goto failed_no_mem;
-    }
-
-    while (!readdir_r(dir, entry, &entry_out) && (entry_out != NULL)) {
+    while ((entry = readdir(dir)) != NULL) {
         res = cb(entry, ctx);
         if (res != UCS_OK) {
             break;
         }
     }
 
-    free(entry);
-failed_no_mem:
     closedir(dir);
     return res;
 }
