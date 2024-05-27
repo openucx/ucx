@@ -47,9 +47,9 @@ typedef struct {
     /* Lane for sending the "remote_op" message */
     ucp_lane_index_t        lane;
 
-    /* Which protocol the remote side is expected to use, for performance
-       estimation and reporting purpose */
-    ucp_proto_select_elem_t remote_proto;
+    /* Config of the remote protocol, which is expected to be selected by peer.
+       Used for performance estimation and reporting purpose */
+    ucp_proto_config_t      remote_proto_config;
 } ucp_proto_rndv_ctrl_priv_t;
 
 
@@ -141,7 +141,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
                          ucp_proto_rndv_ctrl_priv_t *priv);
 
 
-void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params);
+void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
+                               void *priv, size_t priv_size);
 
 
 ucp_lane_index_t
@@ -149,6 +150,13 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params);
 
 
 void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params);
+
+
+void
+ucp_proto_rndv_set_variant_config(const ucp_proto_init_params_t *init_params,
+                                  const ucp_proto_init_elem_t *proto,
+                                  const ucp_proto_select_param_t *select_param,
+                                  void *priv, ucp_proto_config_t *cfg);
 
 
 void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
