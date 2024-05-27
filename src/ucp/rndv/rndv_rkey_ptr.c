@@ -93,8 +93,12 @@ ucp_rndv_rkey_ptr_query_common(const ucp_proto_query_params_t *params,
     const ucp_proto_rndv_rkey_ptr_priv_t *rpriv = params->priv;
 
     ucp_proto_default_query(params, attr);
-    attr->lane_map = UCS_BIT(rpriv->spriv.super.lane) |
-                     UCS_BIT(rpriv->ack.lane);
+
+    ucs_assert(rpriv->spriv.super.lane != UCP_NULL_LANE);
+    attr->lane_map = UCS_BIT(rpriv->spriv.super.lane);
+    if (rpriv->ack.lane != UCP_NULL_LANE) {
+        attr->lane_map |= UCS_BIT(rpriv->ack.lane);
+    }
 }
 
 static void
