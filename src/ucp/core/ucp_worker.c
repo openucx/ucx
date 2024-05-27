@@ -1408,7 +1408,10 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     uct_config_release(iface_config);
 
     if (status != UCS_OK) {
-       goto err_free_iface;
+        ucs_error("uct_iface_open(" UCT_TL_RESOURCE_DESC_FMT ") failed: %s",
+                  UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
+                  ucs_status_string(status));
+        goto err_free_iface;
     }
 
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
