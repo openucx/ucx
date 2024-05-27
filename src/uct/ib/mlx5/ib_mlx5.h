@@ -195,9 +195,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(14),
     /* Device supports DMA MMO */
     UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(15),
+    /* Device supports XGVMI UMR workflow */
+    UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(16),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 17,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -1092,6 +1094,9 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                       const uct_ib_md_config_t *md_config,
                                       uct_ib_md_t **p_md);
+
+ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
+                                               uct_ib_mlx5_devx_mem_t *memh);
 #endif
 
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);

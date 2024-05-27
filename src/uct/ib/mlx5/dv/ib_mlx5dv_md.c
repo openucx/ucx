@@ -2303,6 +2303,11 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     md->super.name       = UCT_IB_MD_NAME(mlx5);
     md->super.vhca_id    = vhca_id;
 
+    if ((md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) &&
+        (md_config->xgvmi_umr_enable == UCS_YES)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_XGVMI_UMR;
+    }
+
     /* Zero init UMR related fields, will lazy init on first use */
     md->umr.cq        = NULL;
     md->umr.qp        = NULL;
@@ -2673,7 +2678,8 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_ib_mlx5_devx_reg_exported_key,
         * - IBV_WR_BIND_MW supports the maximum region length of 2GB
         * - IBV_WR_BIND_MW does not support multi-segment (multi-threaded) MRs
         * For these use cases we fallback to KSM */
-        if ((length > UCT_IB_MD_MAX_MR_SIZE) ||
+        if (!(md->flags & UCT_IB_MLX5_MD_FLAG_XGVMI_UMR) ||
+            (length > UCT_IB_MD_MAX_MR_SIZE) ||
             (memh->super.flags & UCT_IB_MEM_MULTITHREADED)) {
             status = uct_ib_mlx5_devx_reg_xgvmi_ksm_mr(md, memh);
         } else {

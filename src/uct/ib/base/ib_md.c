@@ -166,6 +166,10 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Number of indexes in a symmetric block. More can lead to less contention.",
      ucs_offsetof(uct_ib_md_config_t, ext.smkey_block_size), UCS_CONFIG_TYPE_UINT},
 
+    {"XGVMI_UMR_ENABLE", "y",
+     "Enable UMR optimization for XGVMI mkeys export/import.",
+     ucs_offsetof(uct_ib_md_config_t, xgvmi_umr_enable), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
