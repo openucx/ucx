@@ -639,13 +639,13 @@ out:
     }
 
     ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
-              " -> '%s' address[%d],md[%d],rsc[%u] score %.2f",
+              " -> '%s' address[%d],md[%d] score %.2f",
               ep, criteria->title,
-              UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sinfo.rsc_index].tl_rsc),
+              UCT_TL_RESOURCE_DESC_ARG(
+                      &context->tl_rscs[sinfo.rsc_index].tl_rsc),
               context->tl_rscs[sinfo.rsc_index].md_index, ucp_ep_peer_name(ep),
-              sinfo.addr_index, address->address_list[sinfo.addr_index].md_index,
-              address->address_list[sinfo.addr_index].iface_attr.dst_rsc_index,
-              sinfo.score);
+              sinfo.addr_index,
+              address->address_list[sinfo.addr_index].md_index, sinfo.score);
 
     *select_info = sinfo;
     return UCS_OK;

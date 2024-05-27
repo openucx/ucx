@@ -619,7 +619,8 @@ int uct_rc_verbs_ep_is_connected(const uct_ep_h tl_ep,
         addr_qp = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
-    return uct_rc_ep_is_connected(&ah_attr, params, qp_num, addr_qp);
+    return uct_rc_ep_is_connected(&ep->super, &ah_attr, params, qp_num,
+                                  addr_qp);
 }
 
 ucs_status_t
