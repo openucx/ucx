@@ -1725,9 +1725,11 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
             /* do not continue searching since we found AM lane (and there is
              * only one AM lane) */
             am_lane = lane_desc_idx;
+            select_ctx->lane_descs[lane_desc_idx].path_index = 0;
             break;
         }
     }
+    ucs_assert(am_lane != UCP_NULL_LANE);
 
     num_am_bw_lanes = ucp_wireup_add_bw_lanes(select_params, &bw_info,
                                               ucp_tl_bitmap_max, am_lane,
@@ -2384,9 +2386,10 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
             ucs_assert(key->am_lane == UCP_NULL_LANE);
             key->am_lane = lane;
         }
-        if ((select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW)) &&
-            (lane < UCP_MAX_LANES - 1)) {
-            key->am_bw_lanes[lane + 1] = lane;
+        if ((select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_AM_BW))) {
+            /* First index is reserved for am_lane */
+            ucs_assert(lane != 0);
+            key->am_bw_lanes[lane] = lane;
         }
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_RMA)) {
             key->rma_lanes[lane] = lane;
