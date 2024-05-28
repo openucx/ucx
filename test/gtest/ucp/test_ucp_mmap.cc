@@ -33,6 +33,16 @@ public:
         VARIANT_NO_RCACHE
     };
 
+    struct mem_chunk {
+        ucp_context_h           context;
+        ucp_mem_h               memh;
+        std::vector<ucp_rkey_h> rkeys;
+
+        mem_chunk(ucp_context_h);
+        ~mem_chunk();
+        ucp_rkey_h unpack(ucp_ep_h, ucp_md_map_t md_map = 0);
+    };
+
     static void
     get_test_variants(std::vector<ucp_test_variant>& variants,
                       uint64_t extra_features)
@@ -157,14 +167,15 @@ public:
         compare_uct_memhs(memh1, memh2);
     }
 
+    ucp_mem_h import_memh(ucp_mem_h exported_memh);
+
 protected:
     bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey);
     void test_length0(unsigned flags);
-    void test_rereg(unsigned map_flags = 0, uint64_t memh_pack_flags = 0,
-                    bool import_mem = false);
+    void test_rereg(unsigned map_flags = 0, bool import_mem = false);
     void test_rkey_management(ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
 
@@ -179,14 +190,55 @@ private:
                                const char *function, ucs_log_level_t level,
                                const ucs_log_component_config_t *comp_conf,
                                const char *message, va_list ap);
-    void import_memh(void *exported_memh_buf, ucp_mem_h *memh_p);
     void release_exported_memh_buf(void *exported_memh_buf);
-    void test_rereg_imported_mem(ucp_mem_h memh, uint64_t memh_pack_flags,
-                                 size_t size);
+    void test_rereg_imported_mem(ucp_mem_h memh, size_t size);
 
 protected:
     ucp_md_map_t m_always_equal_md_map;
 };
+
+test_ucp_mmap::mem_chunk::mem_chunk(ucp_context_h ctx) : context(ctx)
+{
+    ucp_mem_map_params_t params = {
+        .field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                      UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
+                      UCP_MEM_MAP_PARAM_FIELD_FLAGS,
+        .address    = NULL,
+        .length     = 4096,
+        .flags      = UCP_MEM_MAP_ALLOCATE,
+    };
+
+    ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh));
+}
+
+test_ucp_mmap::mem_chunk::~mem_chunk()
+{
+    for (auto &rkey : rkeys) {
+        ucp_rkey_destroy(rkey);
+    }
+
+    EXPECT_UCS_OK(ucp_mem_unmap(context, memh));
+}
+
+ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
+{
+    ucp_rkey_h rkey;
+    void *rkey_buffer;
+    size_t rkey_size;
+
+    ASSERT_UCS_OK(ucp_rkey_pack(context, memh, &rkey_buffer, &rkey_size));
+    if (md_map == 0) {
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey));
+    } else {
+        // Different MD map means different config index on proto v2
+        ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
+                                                  md_map, 0, &rkey));
+    }
+
+    ucp_rkey_buffer_release(rkey_buffer);
+    rkeys.push_back(rkey);
+    return rkey;
+}
 
 bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
 {
@@ -592,28 +644,7 @@ void test_ucp_mmap::release_exported_memh_buf(void *exported_memh_buf)
     ucp_memh_buffer_release(exported_memh_buf, &release_params);
 }
 
-void test_ucp_mmap::import_memh(void *exported_memh_buf, ucp_mem_h *memh_p)
-{
-    ucp_mem_map_params_t params;
-
-    params.field_mask           =
-            UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER;
-    params.exported_memh_buffer = exported_memh_buf;
-
-    {
-        scoped_log_handler warn_slh(import_no_md_error_handler);
-        ucs_status_t status = ucp_mem_map(receiver().ucph(), &params, memh_p);
-        if (status == UCS_ERR_UNREACHABLE) {
-            release_exported_memh_buf(exported_memh_buf);
-            UCS_TEST_SKIP_R("memory importing is unsupported");
-        }
-        ASSERT_UCS_OK(status);
-    }
-}
-
-void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
-                                            uint64_t memh_pack_flags,
-                                            size_t size)
+ucp_mem_h test_ucp_mmap::import_memh(ucp_mem_h exported_memh)
 {
     ucp_memh_pack_params_t pack_params;
     ucs_status_t status;
@@ -621,23 +652,37 @@ void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
     size_t exported_memh_buf_size;
 
     pack_params.field_mask = UCP_MEMH_PACK_PARAM_FIELD_FLAGS;
-    pack_params.flags      = memh_pack_flags;
+    pack_params.flags      = UCP_MEMH_PACK_FLAG_EXPORT;
 
-    status = ucp_memh_pack(memh, &pack_params, &exported_memh_buf,
+    status = ucp_memh_pack(exported_memh, &pack_params, &exported_memh_buf,
                            &exported_memh_buf_size);
-    if ((status == UCS_ERR_UNSUPPORTED) &&
-        (pack_params.flags & UCP_MEMH_PACK_FLAG_EXPORT)) {
+    if (status == UCS_ERR_UNSUPPORTED) {
         UCS_TEST_SKIP_R("memory exporting is unsupported");
     }
     ASSERT_UCS_OK(status);
 
-    ucp_mem_h imp_memh;
-    import_memh(exported_memh_buf, &imp_memh);
+    ucp_mem_map_params_t params;
+    params.field_mask           =
+            UCP_MEM_MAP_PARAM_FIELD_EXPORTED_MEMH_BUFFER;
+    params.exported_memh_buffer = exported_memh_buf;
 
-    ucp_mem_h test_imp_memh;
-    import_memh(exported_memh_buf, &test_imp_memh);
+    ucp_mem_h imported_memh;
+    scoped_log_handler warn_slh(import_no_md_error_handler);
+    status = ucp_mem_map(receiver().ucph(), &params, &imported_memh);
+    if (status == UCS_ERR_UNREACHABLE) {
+        release_exported_memh_buf(exported_memh_buf);
+        UCS_TEST_SKIP_R("memory importing is unsupported");
+    }
 
     release_exported_memh_buf(exported_memh_buf);
+    ASSERT_UCS_OK(status);
+    return imported_memh;
+}
+
+void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh, size_t size)
+{
+    ucp_mem_h imp_memh      = import_memh(memh);
+    ucp_mem_h test_imp_memh = import_memh(memh);
 
     if (size == 0) {
         EXPECT_EQ(memh, test_imp_memh);
@@ -649,16 +694,11 @@ void test_ucp_mmap::test_rereg_imported_mem(ucp_mem_h memh,
         compare_memhs(test_imp_memh, imp_memh);
     }
 
-    status = ucp_mem_unmap(receiver().ucph(), test_imp_memh);
-    ASSERT_UCS_OK(status);
-
-    status = ucp_mem_unmap(receiver().ucph(), imp_memh);
-    ASSERT_UCS_OK(status);
+    ASSERT_UCS_OK(ucp_mem_unmap(receiver().ucph(), test_imp_memh));
+    ASSERT_UCS_OK(ucp_mem_unmap(receiver().ucph(), imp_memh));
 }
 
-void test_ucp_mmap::test_rereg(unsigned map_flags,
-                               uint64_t memh_pack_flags,
-                               bool import_mem)
+void test_ucp_mmap::test_rereg(unsigned map_flags, bool import_mem)
 {
     ucs_status_t status;
 
@@ -695,7 +735,7 @@ void test_ucp_mmap::test_rereg(unsigned map_flags,
 
         if (import_mem) {
             try {
-                test_rereg_imported_mem(memh, memh_pack_flags, size);
+                test_rereg_imported_mem(memh, size);
             } catch (ucs::test_skip_exception &e) {
                 status = ucp_mem_unmap(sender().ucph(), memh);
                 ASSERT_UCS_OK(status);
@@ -1000,65 +1040,8 @@ public:
     }
 
 protected:
-    struct mem_chunk {
-        ucp_context_h           context;
-        ucp_mem_h               memh;
-        std::vector<ucp_rkey_h> rkeys;
-
-        mem_chunk(ucp_context_h);
-        ~mem_chunk();
-        ucp_rkey_h              unpack(ucp_ep_h, ucp_md_map_t md_map = 0);
-    };
-
     std::vector<std::unique_ptr<mem_chunk>> m_chunks;
 };
-
-test_ucp_rkey_compare::mem_chunk::mem_chunk(ucp_context_h ctx) : context(ctx)
-{
-    size_t size                 = 4096;
-    ucp_mem_map_params_t params = {
-        .field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                      UCP_MEM_MAP_PARAM_FIELD_LENGTH  |
-                      UCP_MEM_MAP_PARAM_FIELD_FLAGS,
-        .address    = NULL,
-        .length     = size,
-        .flags      = UCP_MEM_MAP_ALLOCATE,
-    };
-    ucs_status_t status;
-
-    status  = ucp_mem_map(context, &params, &memh);
-    ASSERT_UCS_OK(status);
-}
-
-test_ucp_rkey_compare::mem_chunk::~mem_chunk()
-{
-    for (auto &rkey : rkeys) {
-        ucp_rkey_destroy(rkey);
-    }
-
-    EXPECT_UCS_OK(ucp_mem_unmap(context, memh));
-}
-
-ucp_rkey_h
-test_ucp_rkey_compare::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
-{
-    ucp_rkey_h rkey;
-    void *rkey_buffer;
-    size_t rkey_size;
-
-    ASSERT_UCS_OK(ucp_rkey_pack(context, memh, &rkey_buffer, &rkey_size));
-    if (md_map == 0) {
-        ASSERT_UCS_OK(ucp_ep_rkey_unpack(ep, rkey_buffer, &rkey));
-    } else {
-        // Different MD map means different config index on proto v2
-        ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
-                                                  md_map, 0, &rkey));
-    }
-
-    ucp_rkey_buffer_release(rkey_buffer);
-    rkeys.push_back(rkey);
-    return rkey;
-}
 
 UCS_TEST_P(test_ucp_rkey_compare, rkey_compare_errors)
 {
@@ -1153,12 +1136,22 @@ public:
 
 UCS_TEST_P(test_ucp_mmap_export, reg_export_and_reimport)
 {
-    test_rereg(0, UCP_MEMH_PACK_FLAG_EXPORT, true);
+    test_rereg(0, true);
 }
 
 UCS_TEST_P(test_ucp_mmap_export, alloc_reg_export_and_reimport)
 {
-    test_rereg(UCP_MEM_MAP_ALLOCATE, UCP_MEMH_PACK_FLAG_EXPORT, true);
+    test_rereg(UCP_MEM_MAP_ALLOCATE, true);
+}
+
+UCS_TEST_P(test_ucp_mmap_export, export_import) {
+    mem_chunk mem(sender().ucph());
+    EXPECT_FALSE(mem.memh->flags & UCP_MEMH_FLAG_IMPORTED);
+
+    ucp_mem_h imported_memh = import_memh(mem.memh);
+    EXPECT_TRUE(imported_memh->flags & UCP_MEMH_FLAG_IMPORTED);
+
+    ASSERT_UCS_OK(ucp_mem_unmap(receiver().ucph(), imported_memh));
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_export)

@@ -713,6 +713,7 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
 
     memh->reg_id  = memh->parent->reg_id;
     memh->md_map |= parent_md_map;
+    memh->flags   = memh->parent->flags;
 
     ucs_for_each_bit(md_index, parent_md_map) {
         ucs_assert(memh->uct[md_index] == NULL);
@@ -1740,7 +1741,6 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
             goto err_rcache_destroy;
         }
 
-        memh->flags       |= UCP_MEMH_FLAG_IMPORTED;
         user_memh->parent  = memh;
     } else {
         memh         = user_memh;
@@ -1748,6 +1748,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
         rcache       = NULL;
     }
 
+    memh->flags      |= UCP_MEMH_FLAG_IMPORTED;
     memh->reg_id      = unpacked->reg_id;
     memh->remote_uuid = unpacked->remote_uuid;
     status            = ucp_memh_import_attach(context, memh,
