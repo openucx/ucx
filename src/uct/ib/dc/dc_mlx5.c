@@ -770,8 +770,6 @@ uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
 
 static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface)
 {
-    // uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-    //                                       uct_ib_mlx5_md_t);
     uint8_t num_dcis     = ucs_array_capacity(&iface->tx.dcis);
     uct_dc_dci_t *dci;
     uint8_t pool_index, dci_index;
@@ -822,6 +820,7 @@ uct_dc_mlx5_iface_create_dci_pool(uct_dc_mlx5_iface_t *iface,
     dci_pool->config            = *config;
     ucs_arbiter_init(&dci_pool->arbiter);
     ucs_array_init_dynamic(&dci_pool->stack);
+    ucs_array_reserve(&dci_pool->stack, iface->tx.ndci);
 
     iface->tx.num_dci_pools++;
     *pool_index_p = pool_index;
@@ -869,11 +868,16 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
     dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
     dci.pool_index        = UCT_DC_MLX5_IFACE_INVALID_POOL_INDEX;
     ucs_array_init_dynamic(&iface->tx.dcis);
+    ucs_array_resize(&iface->tx.dcis,
+                     UCT_DC_MLX5_IFACE_MAX_DCI_POOLS * iface->tx.ndci, dci,
+                     return UCS_ERR_NO_MEMORY);
+    ucs_array_set_length(&iface->tx.dcis, 0);
 
     status = uct_dc_mlx5_iface_create_dci(iface, 0, &dci);
     if (status != UCS_OK) {
         return status;
     }
+    dci.ep = NULL;
 
     iface->tx.bb_max = dci.txwq.bb_max;
 
@@ -1672,7 +1676,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
 
     /* Create fake endpoint which will be used for sending FC grants */
-    uct_dc_mlx5_iface_init_fc_ep(self);
+    status = uct_dc_mlx5_iface_init_fc_ep(self);
+    if (status != UCS_OK) {
+        goto err_destroy_fc_ep_and_dcis;
+    }
 
     uct_dc_mlx5_iface_set_quota(self, config);
 

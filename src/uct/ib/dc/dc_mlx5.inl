@@ -43,7 +43,9 @@ uct_dc_mlx5_get_arbiter_params(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_ep_schedule(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI &&
+        (uct_dc_mlx5_ep_pool_index(ep) !=
+         UCT_DC_MLX5_IFACE_INVALID_POOL_INDEX)) {
         /* no dci:
          * Do not grab dci here. Instead put the group on dci allocation
          * arbiter. This way we can assure fairness between all eps waiting for

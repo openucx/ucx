@@ -326,14 +326,14 @@ uct_dc_mlx5_dci_pool_add_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
     ucs_assertv(ucs_array_length(&pool->stack) <= iface->tx.ndci,
                 "stack length exceeded ndci");
 
-    dci->path_index = pool->config.path_index;
-    dci->pool_index = pool_index;
-    status          = uct_dc_mlx5_iface_create_dci(iface, dci_index, dci);
+    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, dci);
     if (status != UCS_OK) {
         ucs_error("iface %p: failed to create dci %u at pool %u", iface,
                   dci_index, pool_index);
         return status;
     }
+    dci->path_index = pool->config.path_index;
+    dci->pool_index = pool_index;
 
     *ucs_array_append(&pool->stack, return UCS_ERR_NO_MEMORY) = dci_index;
 
@@ -393,11 +393,14 @@ uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
     ucs_status_t status;
 
+    if ((ucs_array_length(&pool->stack) == iface->tx.ndci) ||
+        (pool->release_stack_top == pool->stack_top)) {
+        return 0;
+    }
+
     if (ucs_likely(pool->stack_top < ucs_array_length(&pool->stack))) {
         return 1;
     }
-
-    // ucs_array_append(&pool->stack, return 0);
 
     status = uct_dc_mlx5_dci_pool_append_dci(iface, pool_index);
 
@@ -466,9 +469,13 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface,
 {
     ucs_arbiter_t *waitq;
 
+    // if (uct_dc_mlx5_ep_pool_index(ep) == 16) {
+    //     return;
+    // }
     /* If FC window is empty the group will be scheduled when grant is received */
     if (uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
-        waitq = uct_dc_mlx5_iface_dci_waitq(iface, uct_dc_mlx5_ep_pool_index(ep));
+        waitq = uct_dc_mlx5_iface_dci_waitq(iface,
+                                            uct_dc_mlx5_ep_pool_index(ep));
         ucs_arbiter_group_schedule(waitq, &ep->arb_group);
     }
 }

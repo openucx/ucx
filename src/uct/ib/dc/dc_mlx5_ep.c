@@ -1284,14 +1284,15 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
 
-    if (!uct_dc_mlx5_is_dci_valid(dci)) {
-        return;
-    }
+    // if (!uct_dc_mlx5_is_dci_valid(dci)) {
+    //     return;
+    // }
 
     /* TODO should be removed by flush */
     uct_rc_txqp_purge_outstanding(&iface->super.super, &dci->txqp,
                                   UCS_ERR_CANCELED, dci->txwq.sw_pi, 1);
     ucs_assert(ucs_queue_is_empty(&dci->txqp.outstanding));
+    ucs_array_elem(&iface->tx.dcis, self->dci).ep = NULL;
 }
 
 UCS_CLASS_DEFINE(uct_dc_mlx5_ep_t, uct_base_ep_t);
