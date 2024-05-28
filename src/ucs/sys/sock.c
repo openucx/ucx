@@ -32,6 +32,7 @@
 /* The port space of IPv6 is shared with IPv4 */
 #define UCX_PROCESS_IP_PORT_RANGE        "/proc/sys/net/ipv4/ip_local_port_range"
 
+#define UCS_SOCKET_BYTE_TO_BITS 8
 
 typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
                                         size_t size, int flags);
@@ -887,19 +888,28 @@ ucs_status_t ucs_sock_port_from_string(const char *port_str, uint16_t *port)
     return UCS_OK;
 }
 
-int ucs_sockaddr_cmp(const struct sockaddr *sa1,
-                     const struct sockaddr *sa2,
-                     ucs_status_t *status_p)
+static int ucs_sockaddr_are_both_known_af(const struct sockaddr *sa1,
+                                          const struct sockaddr *sa2)
 {
-    int result          = 1;
-    uint16_t port1      = 0, port2 = 0;
-    ucs_status_t status = UCS_OK;
-
     if (!ucs_sockaddr_is_known_af(sa1) ||
         !ucs_sockaddr_is_known_af(sa2)) {
         ucs_error("unknown address family: %d",
                   !ucs_sockaddr_is_known_af(sa1) ?
                   sa1->sa_family : sa2->sa_family);
+        return 0;
+    }
+
+    return 1;
+}
+
+int ucs_sockaddr_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2,
+                     ucs_status_t *status_p)
+{
+    int result     = 1;
+    uint16_t port1 = 0, port2 = 0;
+    ucs_status_t status = UCS_OK;
+
+    if (!ucs_sockaddr_are_both_known_af(sa1, sa2)) {
         status = UCS_ERR_INVALID_PARAM;
         goto out;
     }
@@ -939,9 +949,7 @@ out:
 
 int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
 {
-    if (!ucs_sockaddr_is_known_af(sa1) || !ucs_sockaddr_is_known_af(sa2)) {
-        ucs_error("unknown address family: %d",
-                  !ucs_sockaddr_is_known_af(sa1) ? sa1->sa_family : sa2->sa_family);
+    if (!ucs_sockaddr_are_both_known_af(sa1, sa2)) {
         return -1;
     }
 
@@ -949,6 +957,67 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
                   ucs_sockaddr_get_inet_addr(sa2),
                   (sa1->sa_family == AF_INET) ?
                   UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN);
+}
+
+ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
+                                       const struct sockaddr *sa2,
+                                       unsigned prefix_len, int *is_match_p)
+{
+    int matched = 0;
+    char ip1_str[UCS_SOCKADDR_STRING_LEN];
+    char ip2_str[UCS_SOCKADDR_STRING_LEN];
+    const void *ipaddr1, *ipaddr2;
+    size_t addr_size, addr_size_bits;
+    ucs_status_t status;
+
+    if (!ucs_sockaddr_are_both_known_af(sa1, sa2)) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (sa1->sa_family != sa2->sa_family) {
+        ucs_debug("different addr_family: s1 %s s2 %s",
+                  ucs_sockaddr_address_family_str(sa1->sa_family),
+                  ucs_sockaddr_address_family_str(sa2->sa_family));
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    status = ucs_sockaddr_inet_addr_sizeof(sa1, &addr_size);
+    ucs_assert(status == UCS_OK);
+
+    addr_size_bits = addr_size * UCS_SOCKET_BYTE_TO_BITS;
+
+    /* Sanity check on the subnet mask size (bits belonging to the prefix) */
+    if (prefix_len > addr_size_bits) {
+        ucs_error("prefix is bigger than address size (in bits): prefix=%u"
+                  " size=%lu",
+                  prefix_len, addr_size_bits);
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto out;
+    }
+
+    ipaddr1 = ucs_sockaddr_get_inet_addr(sa1);
+    ipaddr2 = ucs_sockaddr_get_inet_addr(sa2);
+    ucs_assert((ipaddr1 != NULL) && (ipaddr2 != NULL));
+
+    /* Check if the addresses have matching prefixes */
+    matched = ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
+
+    if ((ucs_sockaddr_get_ipstr(sa1, ip1_str, UCS_SOCKADDR_STRING_LEN) ==
+         UCS_OK) &&
+        (ucs_sockaddr_get_ipstr(sa2, ip2_str, UCS_SOCKADDR_STRING_LEN) ==
+         UCS_OK)) {
+        ucs_debug(matched ? "IP addresses match with a %u-bit prefix: local"
+                            " IP is %s, remote IP is %s" :
+                            "IP addresses do not match with a %u-bit prefix:"
+                            " local IP is %s, remote IP is %s",
+                  prefix_len, ip1_str, ip2_str);
+    }
+
+out:
+    *is_match_p = matched;
+    return status;
 }
 
 ucs_status_t ucs_sockaddr_set_inaddr_any(struct sockaddr *saddr, sa_family_t af)

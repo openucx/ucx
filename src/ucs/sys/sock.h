@@ -540,6 +540,26 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2);
 
 
 /**
+ * Checks if two IP addresses are in the same subnet
+ *
+ * @param [in]  sa1         Pointer to sockaddr structure #1.
+ * @param [in]  sa2         Pointer to sockaddr structure #2.
+ * @param [in]  prefix_len  Subnet prefix length in bits.
+ * @param [out] is_match_p  Pointer to a boolean value indicating if both
+ *                          addresses are in the same subnet.
+ *
+ * @return UCS_OK on success or one of the following errors:
+ *         UCS_ERR_INVALID_PARAM - in case of wrong or mismatched address
+ *                                 families.
+ *         UCS_ERR_EXCEEDS_LIMIT - prefix_len is too big (exceeds size of
+ *                                 address).
+ */
+ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
+                                       const struct sockaddr *sa2,
+                                       unsigned prefix_len, int *is_match_p);
+
+
+/**
  * Indicate if given IP address is INADDR_ANY (IPV4) or in6addr_any (IPV6)
  *
  * @param [in]   addr       Pointer to sockaddr structure.
