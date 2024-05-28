@@ -38,11 +38,6 @@ typedef struct {
 } UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_gga_mlx5_dma_opaque_buf_t;
 
 typedef struct {
-    uct_rc_mlx5_iface_common_qp_cleanup_ctx_t super;
-    uct_gga_mlx5_dma_opaque_buf_t             dma_opaque;
-} uct_gga_mlx5_iface_qp_cleanup_ctx_t;
-
-typedef struct {
     uct_rc_mlx5_base_ep_t         super;
     uct_gga_mlx5_dma_opaque_buf_t dma_opaque;
 } uct_gga_mlx5_ep_t;
@@ -332,13 +327,24 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_ep_t)
 {
-    uct_gga_mlx5_iface_qp_cleanup_ctx_t cleanup_ctx = {
-        .super.qp   = self->super.tx.wq.super,
-        .super.reg  = self->super.tx.wq.reg,
-        .dma_opaque = self->dma_opaque
-    };
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
+            self->super.super.super.super.iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_md_t *ib_md                = uct_ib_iface_md(&iface->super.super);
+    uct_ib_mlx5_md_t *md              = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
+    uint16_t outstanding              = self->super.tx.wq.bb_max -
+                                        self->super.super.txqp.available;
+    uint16_t wqe_count                =
+            uct_ib_mlx5_txwq_num_posted_wqes(&self->super.tx.wq, outstanding);
 
-    uct_rc_mlx5_base_ep_cleanup(&self->super, &cleanup_ctx.super, 0);
+    ucs_assert(outstanding >= wqe_count);
+
+    ibv_dereg_mr(self->dma_opaque.mr);
+    uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
+                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+    uct_rc_iface_remove_qp(&iface->super, self->super.tx.wq.super.qp_num);
+    uct_ib_mlx5_destroy_qp(md, &self->super.tx.wq.super);
+    ucs_list_del(&self->super.super.list);
+    uct_rc_iface_add_cq_credits(&iface->super, outstanding - wqe_count);
 }
 
 UCS_CLASS_DEFINE(uct_gga_mlx5_ep_t, uct_rc_mlx5_base_ep_t);
@@ -462,23 +468,14 @@ uct_gga_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_ib_device_t *device = uct_ib_iface_device(iface);
     const uct_gga_mlx5_iface_addr_t *iface_addr =
-            (const uct_gga_mlx5_iface_addr_t*)params->iface_addr;
+            (const uct_gga_mlx5_iface_addr_t*)
+            UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr,
+                            IFACE_ADDR, NULL);
 
-    if (!uct_ib_iface_is_reachable_v2(tl_iface, params)) {
-        return 0;
-    }
-
-    return iface_addr->be_sys_image_guid ==
-           device->dev_attr.orig_attr.sys_image_guid;
-}
-
-static void uct_gga_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *ctx)
-{
-    uct_gga_mlx5_iface_qp_cleanup_ctx_t *gga_ctx =
-            ucs_derived_of(ctx, uct_gga_mlx5_iface_qp_cleanup_ctx_t);
-
-    ibv_dereg_mr(gga_ctx->dma_opaque.mr);
-    uct_rc_mlx5_iface_common_qp_cleanup(&gga_ctx->super);
+    return (iface_addr != NULL) &&
+           (iface_addr->be_sys_image_guid ==
+            device->dev_attr.orig_attr.sys_image_guid) &&
+           uct_ib_iface_is_reachable_v2(tl_iface, params);
 }
 
 static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
@@ -501,7 +498,7 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
     .cleanup_rx      = ucs_empty_function,
     .fc_ctrl         = ucs_empty_function_return_unsupported,
     .fc_handler      = (uct_rc_iface_fc_handler_func_t)ucs_empty_function_do_assert,
-    .cleanup_qp      = uct_gga_mlx5_iface_qp_cleanup,
+    .cleanup_qp      = ucs_empty_function_do_assert_void,
     .ep_post_check   = uct_rc_mlx5_base_ep_post_check,
     .ep_vfs_populate = uct_rc_mlx5_base_ep_vfs_populate
 };

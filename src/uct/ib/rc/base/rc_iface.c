@@ -754,30 +754,24 @@ err:
     return status;
 }
 
-void uct_rc_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx)
-{
-    uct_rc_iface_t *iface   = cleanup_ctx->iface;
-    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops,
-                                             uct_rc_iface_ops_t);
-
-    ops->cleanup_qp(cleanup_ctx);
-    if (cleanup_ctx->cq_credits == 0) {
-        return;
-    }
-
-    uct_rc_iface_add_cq_credits(iface, cleanup_ctx->cq_credits);
-    uct_rc_iface_arbiter_dispatch(iface);
-}
-
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
 {
     uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx = arg;
-    uct_ib_iface_t *iface = ucs_derived_of(cleanup_ctx->iface, uct_ib_iface_t);
+    uct_rc_iface_t *iface                      = cleanup_ctx->iface;
+    uct_rc_iface_ops_t *ops;
 
-    uct_ib_device_async_event_unregister(uct_ib_iface_device(iface),
+    uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
                                          IBV_EVENT_QP_LAST_WQE_REACHED,
                                          cleanup_ctx->qp_num);
-    uct_rc_iface_qp_cleanup(cleanup_ctx);
+
+    ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
+    ops->cleanup_qp(cleanup_ctx);
+
+    if (cleanup_ctx->cq_credits > 0) {
+        uct_rc_iface_add_cq_credits(iface, cleanup_ctx->cq_credits);
+        uct_rc_iface_arbiter_dispatch(iface);
+    }
+
     ucs_list_del(&cleanup_ctx->list);
     ucs_free(cleanup_ctx);
     return 1;

@@ -28,12 +28,18 @@ protected:
     }
 
     int check_is_reachable(const uct_iface_h tl_iface,
-                           const uct_device_addr_t *dev_addr)
+                           const uct_device_addr_t *dev_addr,
+                           const std::vector<uint8_t> &iface_addr)
     {
         uct_iface_is_reachable_params_t params = {
             .field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR,
             .device_addr = dev_addr
         };
+
+        if (iface_addr.size() != 0) {
+            params.field_mask |= UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR;
+            params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
+        }
 
         return uct_iface_is_reachable_v2(tl_iface, &params);
     }
@@ -176,6 +182,10 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
     ib_pkey_pairs_t pairs = supported_pkey_pairs(false);
 
     for (size_t i = 0; i < pairs.first.size(); i++) {
+        uct_iface_attr_t iface_attr;
+        std::vector<uint8_t> iface_addr1, iface_addr2;
+        ucs_status_t status;
+
         m_pkey[0]       = pairs.first[i][0];
         m_pkey[1]       = pairs.first[i][1];
         m_pkey_index[0] = pairs.second[i][0];
@@ -201,7 +211,13 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         /* pack-unpack the first IB iface address */
         uct_ib_iface_t *iface1      = ucs_derived_of(m_e1->iface(),
                                                      uct_ib_iface_t);
-         uct_ib_address_t *ib_addr1 =
+        status = uct_iface_query(m_e1->iface(), &iface_attr);
+        ASSERT_UCS_OK(status);
+        iface_addr1.resize(iface_attr.iface_addr_len);
+        status = uct_iface_get_address(m_e1->iface(),
+                                       (uct_iface_addr_t*)iface_addr1.data());
+        ASSERT_UCS_OK(status);
+        uct_ib_address_t *ib_addr1 =
              (uct_ib_address_t*)ucs_alloca(uct_ib_iface_address_size(iface1));
         uint16_t pkey1              = test_pack_unpack_ib_address(iface1,
                                                                   ib_addr1);
@@ -209,6 +225,12 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
         /* pack-unpack the second IB iface address */
         uct_ib_iface_t *iface2     = ucs_derived_of(m_e2->iface(),
                                                     uct_ib_iface_t);
+        status = uct_iface_query(m_e2->iface(), &iface_attr);
+        ASSERT_UCS_OK(status);
+        iface_addr2.resize(iface_attr.iface_addr_len);
+        status = uct_iface_get_address(m_e2->iface(),
+                                       (uct_iface_addr_t*)iface_addr2.data());
+        ASSERT_UCS_OK(status);
         uct_ib_address_t *ib_addr2 =
             (uct_ib_address_t*)ucs_alloca(uct_ib_iface_address_size(iface2));
         uint16_t pkey2             = test_pack_unpack_ib_address(iface2,
@@ -220,9 +242,11 @@ UCS_TEST_P(test_uct_ib_pkey, test_pkey_pairs) {
                     ((pkey1 ^ pkey2) & UCT_IB_PKEY_PARTITION_MASK));
 
         EXPECT_EQ(res, check_is_reachable(m_e1->iface(),
-                                          (uct_device_addr_t*)ib_addr2));
+                                          (uct_device_addr_t*)ib_addr2,
+                                          iface_addr2));
         EXPECT_EQ(res, check_is_reachable(m_e2->iface(),
-                                          (uct_device_addr_t*)ib_addr1));
+                                          (uct_device_addr_t*)ib_addr1,
+                                          iface_addr1));
 
         if (res) {
             test_uct_ib::send_recv_short();

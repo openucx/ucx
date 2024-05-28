@@ -56,8 +56,10 @@ typedef struct uct_rc_mlx5_ep {
  * RC MLX5 EP cleanup context
  */
 typedef struct {
-    uct_rc_mlx5_iface_common_qp_cleanup_ctx_t super; /* Base class */
-    uct_ib_mlx5_qp_t                          tm_qp; /* TM Rendezvous QP */
+    uct_rc_iface_qp_cleanup_ctx_t super; /* Base class */
+    uct_ib_mlx5_qp_t              qp; /* Main QP */
+    uct_ib_mlx5_qp_t              tm_qp; /* TM Rendezvous QP */
+    uct_ib_mlx5_mmio_reg_t        *reg; /* Doorbell register */
 } uct_rc_mlx5_iface_qp_cleanup_ctx_t;
 
 
@@ -232,9 +234,5 @@ unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 ucs_status_t uct_rc_mlx5_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p);
 
 ucs_status_t uct_rc_mlx5_iface_arm(uct_iface_h tl_iface, unsigned events);
-
-void uct_rc_mlx5_base_ep_cleanup(uct_rc_mlx5_base_ep_t *ep,
-                                 uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *ctx,
-                                 int async);
 
 #endif

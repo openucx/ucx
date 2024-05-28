@@ -1099,33 +1099,9 @@ err_destroy_txwq_qp:
     return status;
 }
 
-void uct_rc_mlx5_base_ep_cleanup(uct_rc_mlx5_base_ep_t *ep,
-                                 uct_rc_mlx5_iface_common_qp_cleanup_ctx_t *ctx,
-                                 int async)
+static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
-            ep->super.super.super.iface, uct_rc_mlx5_iface_common_t);
-    uint16_t outstanding, wqe_count;
-
-    uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp,
-                                  UCS_ERR_CANCELED, ep->tx.wq.sw_pi, 1);
-
-    (void)uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
-                                      IBV_QPS_ERR);
-
-    /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
-     * overflow. These CQ credits will be released by error CQE handler. */
-    outstanding = ep->tx.wq.bb_max - ep->super.txqp.available;
-    wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&ep->tx.wq, outstanding);
-    ucs_assert(outstanding >= wqe_count);
-    uct_rc_ep_cleanup_qp(&ep->super, &ctx->super, ep->tx.wq.super.qp_num,
-                         outstanding - wqe_count, async);
-}
-
-UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
-{
-    /* No op, cleanup context is implemented in derived class,
-     * call @ref uct_rc_mlx5_base_ep_cleanup from there */
+    /* No op, cleanup context is implemented in derived class */
 }
 
 
@@ -1170,25 +1146,38 @@ err:
 
 UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
-    uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
-#if IBV_HW_TM
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
             self->super.super.super.super.iface, uct_rc_mlx5_iface_common_t);
+    uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
+    uint16_t outstanding, wqe_count;
 
+    cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "mlx5_qp_cleanup_ctx");
+    ucs_assert_always(cleanup_ctx != NULL);
+    cleanup_ctx->qp    = self->super.tx.wq.super;
+    cleanup_ctx->tm_qp = self->tm_qp;
+    cleanup_ctx->reg   = self->super.tx.wq.reg;
+
+    uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
+                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+#if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
     }
 #endif
 
     ucs_assert(self->mp.free == 1);
+    (void)uct_ib_mlx5_modify_qp_state(&iface->super.super,
+                                      &self->super.tx.wq.super, IBV_QPS_ERR);
 
-    cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "mlx5_qp_cleanup_ctx");
-    ucs_assert_always(cleanup_ctx != NULL);
-    cleanup_ctx->super.qp  = self->super.tx.wq.super;
-    cleanup_ctx->super.reg = self->super.tx.wq.reg;
-    cleanup_ctx->tm_qp     = self->tm_qp;
-
-    uct_rc_mlx5_base_ep_cleanup(&self->super, &cleanup_ctx->super, 1);
+    /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
+       overflow. These CQ credits will be released by error CQE handler. */
+    outstanding = self->super.tx.wq.bb_max - self->super.super.txqp.available;
+    wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&self->super.tx.wq,
+                                                   outstanding);
+    ucs_assert(outstanding >= wqe_count);
+    uct_rc_ep_cleanup_qp(&self->super.super, &cleanup_ctx->super,
+                         self->super.tx.wq.super.qp_num,
+                         outstanding - wqe_count);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_mlx5_base_ep_t);

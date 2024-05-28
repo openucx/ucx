@@ -288,7 +288,7 @@ int uct_rc_ep_is_connected(struct ibv_ah_attr *ah_attr,
 
 void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
                           uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx,
-                          uint32_t qp_num, uint16_t cq_credits, int async);
+                          uint32_t qp_num, uint16_t cq_credits);
 
 void uct_rc_ep_pending_purge_warn_cb(uct_pending_req_t *self, void *arg);
 
