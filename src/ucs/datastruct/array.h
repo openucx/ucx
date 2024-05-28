@@ -326,7 +326,7 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  * fixed-size or not, the maximum capacity range is reduced by 1 bit.
  */
 #define ucs_array_max_capacity(_array) \
-    UCS_MASK_SAFE((CHAR_BIT * sizeof((_array)->length)) - 1)
+    UCS_MASK((CHAR_BIT * sizeof((_array)->length)) - 1)
 
 
 /**

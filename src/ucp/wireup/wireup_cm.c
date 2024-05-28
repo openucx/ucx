@@ -417,7 +417,7 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
         ucp_ep_set_lane(ep, lane_idx, uct_ep);
 
         UCS_STATIC_BITMAP_SET(tl_bitmap, rsc_idx);
-        if (ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane_idx)) {
+        if (ucp_ep_is_lane_p2p(ep, lane_idx)) {
             path_index = ucp_ep_get_path_index(ep, lane_idx);
             status     = ucp_wireup_ep_connect(ucp_ep_get_lane(ep, lane_idx), 0,
                                                rsc_idx, path_index, 0, NULL);
