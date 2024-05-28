@@ -130,13 +130,18 @@ bool ucp_test::is_self() const {
     return "self" == GetParam().transports.front();
 }
 
-ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {
-    return create_entity(add_in_front, GetParam());
+ucp_test_base::entity *
+ucp_test::create_entity(bool add_in_front, const ucp_tl_bitmap_t *tl_bitmap)
+{
+    return create_entity(add_in_front, GetParam(), tl_bitmap);
 }
 
-ucp_test_base::entity*
-ucp_test::create_entity(bool add_in_front, const ucp_test_param &test_param) {
-    entity *e = new entity(test_param, m_ucp_config, get_worker_params(), this);
+ucp_test_base::entity *ucp_test::create_entity(bool add_in_front,
+                                               const ucp_test_param &test_param,
+                                               const ucp_tl_bitmap_t *tl_bitmap)
+{
+    entity *e = new entity(test_param, m_ucp_config, get_worker_params(), this,
+                           tl_bitmap);
     if (add_in_front) {
         m_entities.push_front(e);
     } else {
@@ -625,12 +630,12 @@ unsigned ucp_test::mt_num_threads()
 #endif
 }
 
-ucp_test_base::entity::entity(const ucp_test_param& test_param,
-                              ucp_config_t* ucp_config,
-                              const ucp_worker_params_t& worker_params,
-                              const ucp_test_base *test_owner) :
-        m_err_cntr(0), m_rejected_cntr(0), m_accept_err_cntr(0),
-        m_test(test_owner)
+ucp_test_base::entity::entity(const ucp_test_param &test_param,
+                              ucp_config_t *ucp_config,
+                              const ucp_worker_params_t &worker_params,
+                              const ucp_test_base *test_owner,
+                              const ucp_tl_bitmap_t *tl_bitmap) :
+    m_err_cntr(0), m_rejected_cntr(0), m_accept_err_cntr(0), m_test(test_owner)
 {
     const int thread_type                   = test_param.variant.thread_type;
     ucp_params_t local_ctx_params           = test_param.variant.ctx_params;
@@ -673,6 +678,11 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
         /* We could have "invalid configuration" errors only when used
            ucp_config_modify(), in which case we wanted to ignore them. */
         scoped_log_handler slh(hide_config_warns_logger);
+
+        if (tl_bitmap != NULL) {
+            m_ucph.get()->tl_bitmap = *tl_bitmap;
+        }
+
         UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_workers[i].first,
                                ucp_worker_destroy, ucp_worker_create, m_ucph,
                                &local_worker_params);

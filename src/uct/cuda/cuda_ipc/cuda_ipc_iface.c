@@ -480,7 +480,7 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_invalidate         = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_connect_to_ep_v2   = ucs_empty_function_return_unsupported,
     .iface_is_reachable_v2 = uct_cuda_ipc_iface_is_reachable_v2,
-    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int
+    .ep_is_connected       = uct_cuda_ipc_ep_is_connected
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
