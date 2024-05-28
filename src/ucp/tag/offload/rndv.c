@@ -188,13 +188,14 @@ ucp_tag_rndv_offload_sw_proto_probe(const ucp_proto_init_params_t *init_params)
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTS_NAME,
         .md_map              = 0
     };
+    ucp_proto_rndv_ctrl_priv_t rpriv;
 
     if (!ucp_tag_rndv_check_op_id(init_params) ||
         !ucp_ep_config_key_has_tag_lane(init_params->ep_config_key)) {
         return;
     }
 
-    ucp_proto_rndv_ctrl_probe(&params);
+    ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_offload_sw_proto_progress, (self),

@@ -3137,7 +3137,6 @@ protected:
         send_buf.pattern_fill(1, size);
         for (size_t sender_idx = 0; sender_idx < num_senders; ++sender_idx) {
             ucp_send_nbx_callback_t send_cb;
-
             if (sender_idx > 0) {
                 send_cb = scomplete_always_ok_cbx;
                 client_ep_connect(sender_idx);
