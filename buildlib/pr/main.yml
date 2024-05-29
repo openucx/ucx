@@ -456,6 +456,12 @@ stages:
         proto_enable: no
         container: ubuntu2204_ib
         asan_check: yes
+    - template: tests.yml
+      parameters:
+        name: BlueField
+        demands: ucx_bf -equals yes
+        test_perf: 0
+        asan_check: yes
 
 
 #  - stage: Cuda_compatible
