@@ -24,7 +24,7 @@ jobs:
       - bash: |
           source ./buildlib/tools/multi_rail.sh
           build_ucx_in_docker
-          docker_run_srv
+          docker_run_srv negative
         env:
           UCX_TCP_EP_BIND_SRC_ADDR: n
         displayName: Setup Server
@@ -61,8 +61,7 @@ jobs:
       - checkout: none
       - bash: |
           source ./buildlib/tools/multi_rail.sh
-          run_client $(SRV_IP)
-          assert negative
+          run_client negative $(SRV_IP)
         env:
           UCX_TCP_EP_BIND_SRC_ADDR: n
         displayName: Test Negative
@@ -77,7 +76,7 @@ jobs:
       - checkout: none
       - bash: |
           source ./buildlib/tools/multi_rail.sh
-          docker_run_srv
+          docker_run_srv positive
         env:
           UCX_TCP_EP_BIND_SRC_ADDR: y
         displayName: Server Start
@@ -97,8 +96,23 @@ jobs:
       - checkout: none
       - bash: |
           source ./buildlib/tools/multi_rail.sh
-          run_client $(SRV_IP)
-          assert positive
+          run_client positive $(SRV_IP)
         env:
           UCX_TCP_EP_BIND_SRC_ADDR: y
         displayName: Test Positive
+
+  - job: PrintServerLogs
+    dependsOn: TestPositive
+    displayName: Print Server Logs
+    pool:
+      name: MLNX
+      demands: ucx_multi_rail_srv
+    steps:
+      - checkout: none
+      - bash: |
+          source ./buildlib/tools/multi_rail.sh
+          print_srv_log negative
+          print_srv_log positive
+        env:
+          UCX_TCP_EP_BIND_SRC_ADDR: y
+        displayName: Print Server Logs
