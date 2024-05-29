@@ -758,7 +758,8 @@ UCS_TEST_F(test_socket, subnet_match_failure) {
 
     /* Prefix out of range */
     socket_err_exp_str = "prefix is bigger than address size";
-    verify_subnet_error(AF_INET, AF_INET, 45, UCS_ERR_EXCEEDS_LIMIT);
+    verify_subnet_error(AF_INET, AF_INET, 33, UCS_ERR_EXCEEDS_LIMIT);
+    verify_subnet_error(AF_INET6, AF_INET6, 129, UCS_ERR_EXCEEDS_LIMIT);
 }
 
 static void sockaddr_get_ipstr_check(const struct sockaddr *sockaddr,

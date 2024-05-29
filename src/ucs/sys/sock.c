@@ -1003,7 +1003,8 @@ ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
     /* Check if the addresses have matching prefixes */
     matched = ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
 
-    if ((ucs_sockaddr_get_ipstr(sa1, ip1_str, UCS_SOCKADDR_STRING_LEN) ==
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG) &&
+        (ucs_sockaddr_get_ipstr(sa1, ip1_str, UCS_SOCKADDR_STRING_LEN) ==
          UCS_OK) &&
         (ucs_sockaddr_get_ipstr(sa2, ip2_str, UCS_SOCKADDR_STRING_LEN) ==
          UCS_OK)) {
