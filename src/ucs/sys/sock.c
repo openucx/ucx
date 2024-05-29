@@ -963,12 +963,12 @@ ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
                                        const struct sockaddr *sa2,
                                        unsigned prefix_len, int *is_match_p)
 {
-    int matched = 0;
+    int matched         = 0;
+    ucs_status_t status = UCS_OK;
     char ip1_str[UCS_SOCKADDR_STRING_LEN];
     char ip2_str[UCS_SOCKADDR_STRING_LEN];
     const void *ipaddr1, *ipaddr2;
     size_t addr_size, addr_size_bits;
-    ucs_status_t status;
 
     if (!ucs_sockaddr_are_both_known_af(sa1, sa2)) {
         status = UCS_ERR_INVALID_PARAM;
@@ -983,12 +983,11 @@ ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
         goto out;
     }
 
-    status = ucs_sockaddr_inet_addr_sizeof(sa1, &addr_size);
-    ucs_assert(status == UCS_OK);
-
+    /* Get address size */
+    ucs_assert_always(ucs_sockaddr_inet_addr_sizeof(sa1, &addr_size) == UCS_OK);
     addr_size_bits = addr_size * UCS_SOCKET_BYTE_TO_BITS;
 
-    /* Sanity check on the subnet mask size (bits belonging to the prefix) */
+    /* Check subnet mask size (bits belonging to the prefix) */
     if (prefix_len > addr_size_bits) {
         ucs_error("prefix is bigger than address size (in bits): prefix=%u"
                   " size=%lu",
