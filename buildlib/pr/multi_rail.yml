@@ -104,6 +104,7 @@ jobs:
   - job: PrintServerLogs
     dependsOn: TestPositive
     displayName: Print Server Logs
+    condition: always()
     pool:
       name: MLNX
       demands: ucx_multi_rail_srv
@@ -113,6 +114,4 @@ jobs:
           source ./buildlib/tools/multi_rail.sh
           print_srv_log negative
           print_srv_log positive
-        env:
-          UCX_TCP_EP_BIND_SRC_ADDR: y
         displayName: Print Server Logs

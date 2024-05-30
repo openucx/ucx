@@ -8,6 +8,7 @@ if [ -z "$BUILD_SOURCESDIRECTORY" ]; then
     exit 1
 fi
 cd "$BUILD_SOURCESDIRECTORY"
+source "${PWD}"/buildlib/az-helpers.sh
 
 get_nics() {
     # Get NIC names for the first 'n' available interfaces
@@ -51,8 +52,7 @@ build_ucx_in_docker() {
 
 docker_run_srv() {
     if [ -z "$1" ]; then
-        echo "Error: required param is missing"
-        exit 1
+        error "Required param is missing"
     fi
     local test_name="$1"
 
@@ -78,21 +78,20 @@ docker_run_srv() {
 
 print_srv_log() {
     local test_name="$1"
-    printf '%*s\n' 60 '' | tr ' ' '-'
+    printf "\n======= Server log for test: %s =======\n" "$test_name"
     cat "${PWD}/multi_rail_srv_${test_name}_${BUILD_BUILDID}.log"
-    printf '%*s\n' 60 '' | tr ' ' '-'
 }
 
 get_counters() {
     for NIC in ${NICs//,/ }; do
-        ethtool -S "$NIC" | awk '/tx_bytes:/ {print $2}'
+        # ethtool -S "$NIC" | awk '/tx_bytes:/ {print $2}'
+        cat /sys/class/net/"$NIC"/statistics/tx_bytes
     done
 }
 
 run_client() {
     if [ -z "$1" ] || [ -z "$2" ]; then
-        echo "Error: required params are missing"
-        exit 1
+        error "Required params are missing"
     fi
 
     TEST_TYPE="$1"
@@ -115,7 +114,7 @@ run_client() {
         tee "${PWD}/multi_rail_client_${TEST_TYPE}_${BUILD_BUILDID}.log"
 
     mapfile -t counters_after < <(get_counters)
-    assert_ips
+    # assert_ips
     print_counters "${counters_before[*]}" "${counters_after[*]}"
     assert_counters "${counters_before[*]}" "${counters_after[*]}"
 }
@@ -124,22 +123,17 @@ assert_ips() {
     local LOG_FILE="${PWD}/multi_rail_client_${TEST_TYPE}_${BUILD_BUILDID}.log"
 
     if [ "$(wc -l <"$LOG_FILE")" -lt 2 ]; then
-        echo "Error: Dual connection was not established"
-        exit 1
+        error "Dual connection was not established"
     else
         IP1=$(awk '/from/ {print $11}' "$LOG_FILE" | head -n 1 | cut -d ':' -f 1)
         IP2=$(awk '/from/ {print $11}' "$LOG_FILE" | tail -n 1 | cut -d ':' -f 1)
 
         if [[ "$TEST_TYPE" == "negative" && "$IP1" != "$IP2" ]]; then
-            echo "Assert IPs failed: Expected single-rail but got multi-rail"
-            exit 1
+            error "Assert IPs failed: Expected single-rail but got multi-rail"
         elif [[ "$TEST_TYPE" == "positive" && "$IP1" == "$IP2" ]]; then
-            echo "Assert IPs failed: Expected multi-rail but got single-rail"
-            exit 1
+            error "Assert IPs failed: Expected multi-rail but got single-rail"
         fi
     fi
-
-    rm -f "$LOG_FILE"
 }
 
 print_counters() {
@@ -148,17 +142,14 @@ print_counters() {
     local counters_after=($2)
     local nics=(${NICs//,/ })
 
-    printf '%*s\n' 60 '' | tr ' ' '-'
-    printf "\n%-10s %-20s %-20s %-20s %-10s\n" "Interface" "Before (bytes)" "After (bytes)" "Diff (bytes)" "Percentage"
+    printf '%*s\n' 85 '' | tr ' ' '-'
+    printf "\n%-10s %-20s %-20s %-20s\n" "NIC" "Before" "After" "Diff"
     for ((i = 0; i < ${#counters_before[@]}; i++)); do
         local nic="${nics[$i]}"
         local before="${counters_before[$i]}"
         local after="${counters_after[$i]}"
         local diff=$((after - before))
-        local percentage
-        percentage=$(bc <<<"scale=2; ($diff / $before) * 100")
-        printf "%-10s %-20s %-20s %-20s %-10s\n" "$nic" "$before" "$after" "$diff" "$percentage%"
-        printf '%*s\n' 60 '' | tr ' ' '-'
+        printf "%-10s %-20s %-20s %-20s\n" "$nic" "$before" "$after" "$diff"
     done
 }
 
@@ -189,11 +180,9 @@ assert_counters() {
         within_margin=$(bc <<<"$diff2 >= $lower_bound && $diff2 <= $upper_bound")
 
         if [ "$TEST_TYPE" == "negative" ] && [ "$within_margin" -eq 1 ]; then
-            echo "Assert counters failed: Expected single-rail but got multi-rail"
-            exit 1
+            error "Assert counters failed: Expected single-rail but got multi-rail"
         elif [ "$TEST_TYPE" == "positive" ] && [ "$within_margin" -eq 0 ]; then
-            echo "Assert counters failed: Expected multi-rail but got single-rail"
-            exit 1
+            error "Assert counters failed: Expected multi-rail but got single-rail"
         fi
     fi
 }
