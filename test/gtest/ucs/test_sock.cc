@@ -71,23 +71,22 @@ protected:
     }
 
     void verify_subnet_match(sa_family_t af, const char *ip_addr1,
-                             const char *ip_addr2, unsigned max_common_prefix)
+                             const char *ip_addr2,
+                             unsigned max_common_prefix) const
     {
-        struct sockaddr_storage storage1 = {0};
-        struct sockaddr_storage storage2 = {0};
-        struct sockaddr *saddr1          = (struct sockaddr*)&storage1;
-        struct sockaddr *saddr2          = (struct sockaddr*)&storage2;
+        struct sockaddr_storage storage1, storage2;
+        struct sockaddr *saddr1 = (struct sockaddr*)&storage1;
+        struct sockaddr *saddr2 = (struct sockaddr*)&storage2;
         int matched;
 
         fill_sockaddr(af, ip_addr1, 1234, saddr1);
         fill_sockaddr(af, ip_addr2, 1234, saddr2);
 
-        static const size_t byte_to_bits = 8;
-        size_t addr_size_bits = get_addr_size(saddr1) * byte_to_bits;
+        size_t addr_size_bits = get_addr_size(saddr1) * CHAR_BIT;
 
-        for (size_t prefix = 0; prefix < addr_size_bits; ++prefix) {
-            ASSERT_UCS_OK(ucs_sockaddr_subnet_match(saddr1, saddr2, prefix,
-                                                    &matched));
+        for (size_t prefix = 0; prefix <= addr_size_bits; ++prefix) {
+            ASSERT_UCS_OK(ucs_sockaddr_is_subnet_equal(saddr1, saddr2, prefix,
+                                                       &matched));
             EXPECT_EQ(prefix <= max_common_prefix, matched)
                     << "failed to match subnet: ip1=" << ip_addr1
                     << " ip2=" << ip_addr2 << " prefix=" << prefix
@@ -97,7 +96,7 @@ protected:
     }
 
     void verify_subnet_error(sa_family_t af1, sa_family_t af2, unsigned prefix,
-                             ucs_status_t expected_status)
+                             ucs_status_t expected_status) const
     {
         struct sockaddr_storage storage1, storage2;
         struct sockaddr *sa1 = (struct sockaddr*)&storage1;
@@ -107,7 +106,7 @@ protected:
 
         sa1->sa_family = af1;
         sa2->sa_family = af2;
-        status         = ucs_sockaddr_subnet_match(sa1, sa2, prefix, &matched);
+        status         = ucs_sockaddr_is_subnet_equal(sa1, sa2, prefix, &matched);
         EXPECT_EQ(expected_status, status);
         EXPECT_FALSE(matched);
     }
@@ -757,7 +756,7 @@ UCS_TEST_F(test_socket, subnet_match_failure) {
     verify_subnet_error(AF_INET, AF_INET6, 10, UCS_ERR_INVALID_PARAM);
 
     /* Prefix out of range */
-    socket_err_exp_str = "prefix is bigger than address size";
+    socket_err_exp_str = "prefix is longer than address size";
     verify_subnet_error(AF_INET, AF_INET, 33, UCS_ERR_EXCEEDS_LIMIT);
     verify_subnet_error(AF_INET6, AF_INET6, 129, UCS_ERR_EXCEEDS_LIMIT);
 }

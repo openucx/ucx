@@ -32,7 +32,6 @@
 /* The port space of IPv6 is shared with IPv4 */
 #define UCX_PROCESS_IP_PORT_RANGE        "/proc/sys/net/ipv4/ip_local_port_range"
 
-#define UCS_SOCKET_BYTE_TO_BITS 8
 
 typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
                                         size_t size, int flags);
@@ -905,8 +904,8 @@ static int ucs_sockaddr_are_both_known_af(const struct sockaddr *sa1,
 int ucs_sockaddr_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2,
                      ucs_status_t *status_p)
 {
-    int result     = 1;
-    uint16_t port1 = 0, port2 = 0;
+    int result          = 1;
+    uint16_t port1      = 0, port2 = 0;
     ucs_status_t status = UCS_OK;
 
     if (!ucs_sockaddr_are_both_known_af(sa1, sa2)) {
@@ -991,11 +990,11 @@ static void ucs_sockaddr_print_subnet_info(const struct sockaddr *sa1,
     ucs_debug("%s", ucs_string_buffer_cstr(&info));
 }
 
-ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
-                                       const struct sockaddr *sa2,
-                                       unsigned prefix_len, int *is_match_p)
+ucs_status_t ucs_sockaddr_is_subnet_equal(const struct sockaddr *sa1,
+                                          const struct sockaddr *sa2,
+                                          unsigned prefix_len, int *is_equal_p)
 {
-    int matched         = 0;
+    int is_equal        = 0;
     ucs_status_t status = UCS_OK;
     const void *ipaddr1, *ipaddr2;
     size_t addr_size, addr_size_bits;
@@ -1015,11 +1014,11 @@ ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
 
     /* Get address size */
     ucs_assert_always(ucs_sockaddr_inet_addr_sizeof(sa1, &addr_size) == UCS_OK);
-    addr_size_bits = addr_size * UCS_SOCKET_BYTE_TO_BITS;
+    addr_size_bits = addr_size * CHAR_BIT;
 
     /* Check subnet mask size (bits belonging to the prefix) */
     if (prefix_len > addr_size_bits) {
-        ucs_error("prefix is bigger than address size (in bits): prefix=%u"
+        ucs_error("prefix is longer than address size (in bits): prefix=%u"
                   " size=%lu",
                   prefix_len, addr_size_bits);
         status = UCS_ERR_EXCEEDS_LIMIT;
@@ -1032,11 +1031,11 @@ ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
                 ipaddr1, ipaddr2);
 
     /* Check if the addresses have matching prefixes */
-    matched = ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
-    ucs_sockaddr_print_subnet_info(sa1, sa2, prefix_len, matched);
+    is_equal = ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
+    ucs_sockaddr_print_subnet_info(sa1, sa2, prefix_len, is_equal);
 
 out:
-    *is_match_p = matched;
+    *is_equal_p = is_equal;
     return status;
 }
 
