@@ -393,13 +393,14 @@ uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
     ucs_status_t status;
 
-    if ((ucs_array_length(&pool->stack) == iface->tx.ndci) ||
-        (pool->release_stack_top == pool->stack_top)) {
-        return 0;
-    }
-
     if (ucs_likely(pool->stack_top < ucs_array_length(&pool->stack))) {
         return 1;
+    }
+
+    if ((ucs_array_length(&pool->stack) == iface->tx.ndci) 
+    // || (pool->release_stack_top == pool->stack_top)
+        ) {
+        return 0;
     }
 
     status = uct_dc_mlx5_dci_pool_append_dci(iface, pool_index);
@@ -469,9 +470,6 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface,
 {
     ucs_arbiter_t *waitq;
 
-    // if (uct_dc_mlx5_ep_pool_index(ep) == 16) {
-    //     return;
-    // }
     /* If FC window is empty the group will be scheduled when grant is received */
     if (uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
         waitq = uct_dc_mlx5_iface_dci_waitq(iface,

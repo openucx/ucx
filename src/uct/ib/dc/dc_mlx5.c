@@ -863,7 +863,7 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
                               const uct_dc_mlx5_iface_config_t *config)
 {
     uct_dc_dci_t dci = {0};
-    ucs_status_t status;
+    // ucs_status_t status;
 
     dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
     dci.pool_index        = UCT_DC_MLX5_IFACE_INVALID_POOL_INDEX;
@@ -873,15 +873,16 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
                      return UCS_ERR_NO_MEMORY);
     ucs_array_set_length(&iface->tx.dcis, 0);
 
-    status = uct_dc_mlx5_iface_create_dci(iface, 0, &dci);
-    if (status != UCS_OK) {
-        return status;
-    }
-    dci.ep = NULL;
+    // status = uct_dc_mlx5_iface_create_dci(iface, 0, &dci);
+    // if (status != UCS_OK) {
+    //     return status;
+    // }
+    // dci.ep = NULL;
 
-    iface->tx.bb_max = dci.txwq.bb_max;
-
-    uct_dc_mlx5_destroy_dci(iface, &dci);
+    iface->tx.bb_max = 504; //dci.txwq.bb_max;
+    // uct_rc_txqp_purge_outstanding(&iface->super.super, &dci.txqp,
+    //                               UCS_ERR_CANCELED, dci.txwq.sw_pi, 0);
+    // uct_dc_mlx5_destroy_dci(iface, &dci);
 
     return UCS_OK;
 }
@@ -1071,10 +1072,10 @@ ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_c
 
 ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface)
 {
+    uint8_t pool_index = 0;
     uct_dc_mlx5_dci_config_t dci_config;
     ucs_status_t status;
     uct_dc_mlx5_ep_t *ep;
-    uint8_t pool_index;
 
     ep = ucs_malloc(sizeof(uct_dc_mlx5_ep_t), "fc_ep");
     if (ep == NULL) {
@@ -1099,8 +1100,8 @@ ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface)
     if (status != UCS_OK) {
         goto err_cleanup;
     }
-    ep->flags &= ~UCS_MASK(4);
-    ep->flags |= pool_index & UCS_MASK(4);
+    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
+    ep->flags |= pool_index & UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
 
     status    = uct_dc_mlx5_ep_basic_init(iface, ep);
     if (status != UCS_OK) {
