@@ -6,11 +6,12 @@
 #
 
 examplesdir = $(pkgdatadir)/examples
-dist_examples_DATA =   \
+dist_examples_DATA = \
 	hello_world_util.h \
 	ucp_hello_world.c  \
 	uct_hello_world.c  \
 	ucp_client_server.c \
+	ucs_ann_search.c \
 	ucp_util.h
 
 if HAVE_CUDA
@@ -42,6 +43,13 @@ noinst_PROGRAMS = \
 	ucp_hello_world \
 	uct_hello_world \
 	ucp_client_server
+
+lib_LTLIBRARIES = libucs_ann_search.la
+
+libucs_ann_search_la_SOURCES  = ucs_ann_search.c
+libucs_ann_search_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la
+libucs_ann_search_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
+libucs_ann_search_la_CPPFLAGS = $(BASE_CPPFLAGS)
 
 ucp_hello_world_SOURCES  = ucp_hello_world.c
 ucp_hello_world_CFLAGS   = $(BASE_CFLAGS) $(EXAMPLE_CUDA_CFLAGS)

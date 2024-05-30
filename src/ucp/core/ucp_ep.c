@@ -39,9 +39,8 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
-__KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t,
-             ucp_ep_peer_mem_data_t, 1,
-             kh_int64_hash_func, kh_int64_hash_equal);
+__KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t, ucp_ep_peer_mem_data_t,
+             1, 0, kh_int64_hash_func, kh_int64_hash_equal);
 
 typedef struct {
     double reg_growth;
