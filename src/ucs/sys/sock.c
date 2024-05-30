@@ -988,7 +988,7 @@ static void ucs_sockaddr_print_subnet_info(const struct sockaddr *sa1,
                                   (status == UCS_OK) ? ip_str : "<null>");
     }
 
-    ucs_debug(ucs_string_buffer_cstr(&info));
+    ucs_debug("%s", ucs_string_buffer_cstr(&info));
 }
 
 ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
