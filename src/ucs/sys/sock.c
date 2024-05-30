@@ -959,14 +959,44 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
                   UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN);
 }
 
+static void ucs_sockaddr_print_subnet_info(const struct sockaddr *sa1,
+                                           const struct sockaddr *sa2,
+                                           unsigned prefix_len, int matched)
+{
+    UCS_STRING_BUFFER_ONSTACK(info, UCS_SOCKADDR_STRING_LEN * 2 + 60);
+    const struct sockaddr *saddrs[] = {sa1, sa2};
+    unsigned sa_index               = 0;
+    char ip_str[UCS_SOCKADDR_STRING_LEN];
+    const struct sockaddr **sa;
+    ucs_status_t status;
+
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        return;
+    }
+
+    ucs_string_buffer_appendf(&info, "IP addresses");
+    if (!matched) {
+        ucs_string_buffer_appendf(&info, " do not");
+    }
+
+    ucs_string_buffer_appendf(&info, " match with a %u-bit prefix,",
+                              prefix_len);
+
+    ucs_carray_for_each(sa, saddrs, ucs_static_array_size(saddrs)) {
+        status = ucs_sockaddr_get_ipstr(*sa, ip_str, UCS_SOCKADDR_STRING_LEN);
+        ucs_string_buffer_appendf(&info, " sa%u: %s", ++sa_index,
+                                  (status == UCS_OK) ? ip_str : "<null>");
+    }
+
+    ucs_debug(ucs_string_buffer_cstr(&info));
+}
+
 ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
                                        const struct sockaddr *sa2,
                                        unsigned prefix_len, int *is_match_p)
 {
     int matched         = 0;
     ucs_status_t status = UCS_OK;
-    char ip1_str[UCS_SOCKADDR_STRING_LEN];
-    char ip2_str[UCS_SOCKADDR_STRING_LEN];
     const void *ipaddr1, *ipaddr2;
     size_t addr_size, addr_size_bits;
 
@@ -998,22 +1028,12 @@ ucs_status_t ucs_sockaddr_subnet_match(const struct sockaddr *sa1,
 
     ipaddr1 = ucs_sockaddr_get_inet_addr(sa1);
     ipaddr2 = ucs_sockaddr_get_inet_addr(sa2);
-    ucs_assert((ipaddr1 != NULL) && (ipaddr2 != NULL));
+    ucs_assertv((ipaddr1 != NULL) && (ipaddr2 != NULL), "ipaddr1=%p ipaddr2=%p",
+                ipaddr1, ipaddr2);
 
     /* Check if the addresses have matching prefixes */
     matched = ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
-
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG) &&
-        (ucs_sockaddr_get_ipstr(sa1, ip1_str, UCS_SOCKADDR_STRING_LEN) ==
-         UCS_OK) &&
-        (ucs_sockaddr_get_ipstr(sa2, ip2_str, UCS_SOCKADDR_STRING_LEN) ==
-         UCS_OK)) {
-        ucs_debug(matched ? "IP addresses match with a %u-bit prefix: local"
-                            " IP is %s, remote IP is %s" :
-                            "IP addresses do not match with a %u-bit prefix:"
-                            " local IP is %s, remote IP is %s",
-                  prefix_len, ip1_str, ip2_str);
-    }
+    ucs_sockaddr_print_subnet_info(sa1, sa2, prefix_len, matched);
 
 out:
     *is_match_p = matched;
