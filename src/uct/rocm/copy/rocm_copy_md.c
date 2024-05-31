@@ -433,7 +433,7 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_rocm_copy_rcache_ops;
-        rcache_params.flags              = 0;
+        rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
 
         status = ucs_rcache_create(&rcache_params, "rocm_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
