@@ -3,7 +3,7 @@ variables:
   DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/ --net=host
   DOCKER_OPT_GPU: --gpus all $(DOCKER_OPT_IB)
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
- 
+
 resources:
   containers:
     - container: centos7
@@ -326,6 +326,7 @@ stages:
       parameters:
         name: BlueField
         demands: ucx_bf -equals yes
+        run_tests: yes
         test_perf: 0
 
   - stage: Namespace_Tests
