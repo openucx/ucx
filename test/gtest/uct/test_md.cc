@@ -1067,7 +1067,11 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
         memset(buf, 42, REG_SIZE);
         /* child touch the page */
         EXPECT_EQ(0, memcmp(page, buf, REG_SIZE));
+#if HAVE_ROCM
+        _exit(0);
+#else
         exit(0);
+#endif
     }
 
     EXPECT_NE(-1, pid);
