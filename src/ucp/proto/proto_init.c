@@ -728,8 +728,11 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     }
 
     ucs_assertv_always(range_end >= caps->min_length,
-                       "range_end=%zu caps->min_length=%zu",
-                       range_end, caps->min_length);
+                       "range_end=%zu caps->min_length=%zu proto=%s "
+                       "params->max_length=%zu max_frag=%zu hdr_size=%zu",
+                       range_end, caps->min_length,
+                       ucp_proto_id_field(params->super.proto_id, name),
+                       params->max_length, tl_perf->max_frag, params->hdr_size);
 
     /* Add ranges representing sending single fragment */
     status = ucp_proto_init_single_frag_ranges(params, tl_perf, tl_perf_node,
