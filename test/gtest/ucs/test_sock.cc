@@ -17,8 +17,8 @@ static std::string socket_err_exp_str;
 
 class test_socket : public ucs::test {
 public:
-    static void fill_sockaddr(sa_family_t af, const char *ip_addr,
-                              unsigned port, struct sockaddr *sa)
+    static void fill_sockaddr(struct sockaddr *sa, sa_family_t af,
+                              const char *ip_addr, unsigned port)
     {
         sa->sa_family = af;
         inet_pton(af, ip_addr,
@@ -79,8 +79,8 @@ protected:
         struct sockaddr *saddr2 = (struct sockaddr*)&storage2;
         int matched;
 
-        fill_sockaddr(af, ip_addr1, 1234, saddr1);
-        fill_sockaddr(af, ip_addr2, 1234, saddr2);
+        fill_sockaddr(saddr1, af, ip_addr1, 1234);
+        fill_sockaddr(saddr2, af, ip_addr2, 1234);
 
         size_t addr_size_bits = get_addr_size(saddr1) * CHAR_BIT;
 
@@ -596,8 +596,8 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
     int cmp_res1, cmp_res2;
     ucs_status_t status;
 
-    test_socket::fill_sockaddr(sa_family, ip_addr1, port1, sa1);
-    test_socket::fill_sockaddr(sa_family, ip_addr2, port2, sa2);
+    test_socket::fill_sockaddr(sa1, sa_family, ip_addr1, port1);
+    test_socket::fill_sockaddr(sa2, sa_family, ip_addr2, port2);
     const void *addr1 = ucs_sockaddr_get_inet_addr(sa1);
     const void *addr2 = ucs_sockaddr_get_inet_addr(sa2);
 
