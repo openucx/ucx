@@ -67,26 +67,52 @@ ucs_status_t ucp_proto_perf_from_caps(const char *name,
 
 
 /**
- * Add the linear function @a func to the performance of @a factor_id at the
- * range [ @a start, @a end ].
+ * Add linear functions to several performance factors at the range
+ * [ @a start, @a end ]. The performance functions to add are provided in the
+ * array @a funcs, each entry corresponding to a factor id defined in
+ * @ref ucp_proto_perf_factor_id_t. The bitmap @a factors_bitmap specifies the
+ * valid elements in that array; any elements not specified in the bitmap are
+ * ignored.
+ *
  * Initially, all ranges are uninitialized; repeated calls to this function
  * should be used to populate the @a perf data structure.
  *
- * @param [in] perf          Performance data structure to update.
- * @param [in] start         Add the performance function to this range start (inclusive).
- * @param [in] end           Add the performance function to this range end (inclusive).
- * @param [in] factor_id     Performance factor id.
- * @param [in] func          Performance function to add.
- * @param [in] perf_node     Performance node that represents the added function.
- *                           Can be NULL.
+ * @param [in] perf            Performance data structure to update.
+ * @param [in] start           Add the performance function to this range start (inclusive).
+ * @param [in] end             Add the performance function to this range end (inclusive).
+ * @param [in] funcs           Array of performance functions to add.
+ * @param [in] factors_bitmap  Bitmap of performance factors to add, using bit
+ *                             indexes defined in @ref ucp_proto_perf_factor_id_t.
+ * @param [in] perf_node       Performance node that represents the added function.
+ *                             Can be NULL.
  *
  * @note This function may adjust the reference count of @a perf_node as needed.
  */
-ucs_status_t ucp_proto_perf_add_func(ucp_proto_perf_t *perf, size_t start,
-                                     size_t end,
-                                     ucp_proto_perf_factor_id_t factor_id,
-                                     ucs_linear_func_t func,
-                                     ucp_proto_perf_node_t *perf_node);
+ucs_status_t ucp_proto_perf_add_funcs(
+        ucp_proto_perf_t *perf, size_t start, size_t end,
+        const ucs_linear_func_t funcs[UCP_PROTO_PERF_FACTOR_LAST],
+        uint64_t factors_bitmap, ucp_proto_perf_node_t *perf_node);
+
+
+/**
+ * Create a proto perf structure that is the aggregation of multiple other perf
+ * structures: In the ranges where ALL given perf structures are defined, the
+ * result is the factor-wise sum of the performance values. The performance node
+ * of the resulting range will be the parent of the respective ranges in the
+ * provided perf structures.
+ * Other ranges, where at least one of the given perf structures is not defined,
+ * will also not be defined in the result.
+ *
+ * @param [in]  name        Name of the performance data structure.
+ * @param [in]  perf_elems  Array of pointers to the performance structures
+ *                          that should be aggregated.
+ * @param [in]  num_elems   Number of elements in @a perf_elems array.
+ * @param [out] perf_p      Filled with the new performance data structure.
+*/
+ucs_status_t ucp_proto_perf_aggregate(const char *name,
+                                      const ucp_proto_perf_t *const *perf_elems,
+                                      unsigned num_elems,
+                                      ucp_proto_perf_t **perf_p);
 
 
 /**
