@@ -49,6 +49,12 @@ UCS_TEST_F(test_datatype, list_basic) {
     ucs_list_insert_after(&head, &elem0.list);
     ucs_list_insert_before(&head, &elem1.list);
 
+    EXPECT_TRUE(ucs_list_is_first(&head, &elem0.list));
+    EXPECT_FALSE(ucs_list_is_last(&head, &elem0.list));
+
+    EXPECT_FALSE(ucs_list_is_first(&head, &elem1.list));
+    EXPECT_TRUE(ucs_list_is_last(&head, &elem1.list));
+
     std::vector<elem_t*> vec;
     ucs_list_for_each(iter, &head, list) {
         vec.push_back(iter);
@@ -278,7 +284,10 @@ UCS_TEST_F(test_datatype, hlist_foreach_safe) {
         /* Initialize list elements with random numbers */
         std::vector<elem_t> v_elems;
         for (int i = 0; i < length; ++i) {
-            v_elems.push_back({.i = ucs::rand()});
+            elem_t e = {
+                .i = ucs::rand()
+            };
+            v_elems.push_back(e);
         }
 
         /* Add elements to the list */

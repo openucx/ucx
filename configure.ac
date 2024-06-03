@@ -371,7 +371,6 @@ AC_CONFIG_FILES([
                  src/tools/profile/Makefile
                  test/apps/Makefile
                  test/apps/iodemo/Makefile
-                 test/apps/sockaddr/Makefile
                  test/apps/profiling/Makefile
                  test/mpi/Makefile
                  bindings/go/Makefile

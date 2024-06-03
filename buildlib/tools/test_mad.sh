@@ -23,32 +23,37 @@ build_ucx() {
 
 build_ucx_in_docker() {
     docker run --rm \
+        --user "$(id -u)":"$(id -g)" \
         --name ucx_build_"$BUILD_BUILDID" \
         -e BUILD_SOURCESDIRECTORY="$BUILD_SOURCESDIRECTORY" \
         -v "$PWD":"$PWD" -w "$PWD" \
         -v /hpc/local:/hpc/local \
         $IMAGE \
         bash -c "source ./buildlib/tools/test_mad.sh && build_ucx"
-
-    sudo chown -R swx-azure-svc:ecryptfs "$PWD"
 }
 
 docker_run_srv() {
+    local test_name="$1"
     HCA=$(detect_hca)
-    docker_stop_srv
-    docker run --rm \
+    sudo chmod 777 /dev/infiniband/umad*
+    docker run \
+        --rm \
         --detach \
         --net=host \
+        --user "$(id -u)":"$(id -g)" \
         --name ucx_perftest_"$BUILD_BUILDID" \
         -e BUILD_SOURCESDIRECTORY="$BUILD_SOURCESDIRECTORY" \
         -v "$PWD":"$PWD" -w "$PWD" \
         -v /hpc/local:/hpc/local \
         --ulimit memlock=-1:-1 --device=/dev/infiniband/ \
         $IMAGE \
-        bash -c "${PWD}/install/bin/ucx_perftest -K ${HCA}"
+        bash -c "${PWD}/install/bin/ucx_perftest -K ${HCA} > \
+            ${PWD}/ucx_perf_srv_${test_name}_${BUILD_BUILDID}.log 2>&1"
 }
 
 docker_stop_srv() {
+    local test_name="$1"
+    cat "${PWD}/ucx_perf_srv_${test_name}_${BUILD_BUILDID}.log"
     docker stop ucx_perftest_"$BUILD_BUILDID" || true
 }
 

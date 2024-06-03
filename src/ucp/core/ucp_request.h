@@ -172,7 +172,7 @@ struct ucp_request {
                      * Used by rndv/ppln to track completed fragments
                      * Used by rkey_ptr to track copied data size
                      */
-                    size_t           completed_size;
+                    ssize_t          completed_size;
                 };
             } state;
 
@@ -260,9 +260,6 @@ struct ucp_request {
                                 struct {
                                     /* Actual lanes map */
                                     ucp_lane_map_t lanes_map_all;
-
-                                    /* Actual lanes count */
-                                    uint8_t        lanes_count;
                                 } zcopy;
 
                                 struct {
@@ -283,17 +280,19 @@ struct ucp_request {
                             union {
                                 /* Used by rndv/put and rndv/put/frag */
                                 struct {
-                                    /* Which lanes need to flush (0 in fence mode) */
-                                    ucp_lane_map_t flush_map;
+                                    /* Next lane to flush is the first set bit
+                                       in rpriv->flush_map that's >= flush_lane */
+                                    ucp_lane_index_t flush_lane;
 
-                                    /* Which lanes need to send atp */
-                                    ucp_lane_map_t atp_map;
+                                    /* Next lane to send ATP is the first set bit
+                                       in rpriv->atp_map that's >= atp_lane */
+                                    ucp_lane_index_t atp_lane;
                                 } put;
 
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
                                 struct {
                                     /* Size to send in ack message */
-                                    size_t ack_data_size;
+                                    ssize_t ack_data_size;
                                 } ppln;
 
                                 /* Used by rndv/rkey_ptr */
@@ -375,7 +374,6 @@ struct ucp_request {
             union {
                 ucp_lane_index_t  am_bw_index;     /* AM BW lane index */
                 ucp_lane_index_t  multi_lane_idx;  /* Index of the lane with multi-send */
-                ucp_lane_map_t    lanes_map_avail; /* Used lanes map */
             };
             uint8_t               mem_type;        /* Memory type, values are
                                                     * ucs_memory_type_t */

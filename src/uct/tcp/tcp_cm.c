@@ -532,6 +532,8 @@ static unsigned uct_tcp_cm_handle_simult_conn(uct_tcp_iface_t *iface,
         if (connect_ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED) {
             uct_tcp_ep_mod_events(accept_ep, 0, UCS_EVENT_SET_EVREAD);
             ucs_assert(connect_ep->stale_fd == -1);
+            ucs_debug("tcp_ep %p: move accept_ep %p fd=%d to stale",
+                      connect_ep, accept_ep, accept_ep->fd);
             connect_ep->stale_fd = accept_ep->fd;
             accept_ep->fd        = -1;
         }

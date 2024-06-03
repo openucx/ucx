@@ -531,11 +531,11 @@ static void ucs_pgtable_search_recurs(const ucs_pgtable_t *pgtable,
         *last_p = region;
 
         /* Assert that the region actually overlaps the address */
-        ucs_assertv(ucs_max(region->start,   address) <=
-                    ucs_min(region->end - 1, address + UCS_MASK_SAFE(order)),
+        ucs_assertv(ucs_max(region->start, address) <=
+                            ucs_min(region->end - 1, address + UCS_MASK(order)),
                     UCS_PGT_REGION_FMT " address=0x%lx order=%d mask 0x%lx",
                     UCS_PGT_REGION_ARG(region), address, order,
-                    (ucs_pgt_addr_t)UCS_MASK_SAFE(order));
+                    (ucs_pgt_addr_t)UCS_MASK(order));
 
         /* Call the callback */
         cb(pgtable, region, arg);

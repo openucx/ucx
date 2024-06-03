@@ -1,9 +1,11 @@
 parameters:
+  arch:
   name: java test
   demands: []
 
 jobs:
-  - job: ${{ parameters.name }}
+  - job: jucx_test_${{ parameters.arch }}
+    displayName: JUCX Test ${{ parameters.arch }}
     workspace:
       clean: outputs
 
@@ -38,6 +40,21 @@ jobs:
           make -j`nproc`
           make install
         displayName: Build UCX
+
+      - bash: |
+          set -exE
+          source buildlib/az-helpers.sh
+          az_init_modules
+          az_module_load dev/mvn
+          az_module_load dev/jdk-1.8
+          git fetch --unshallow
+          TAG=`git describe --tags`
+          MAVEN_VERSION=${TAG:1}
+          make -C bindings/java/src/main/native/ publish-local \
+              JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
+        displayName: Publish-Local
+        condition: eq(variables['Build.Reason'], 'PullRequest')
+
 
       - bash: |
           set -xeE

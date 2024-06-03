@@ -66,6 +66,9 @@ void* test_md::alloc_thread(void *arg)
 ucs_status_t test_md::reg_mem(unsigned flags, void *address, size_t length,
                               uct_mem_h *memh_p)
 {
+    /* Register memory respecting MD reg_alignment */
+    ucs_align_ptr_range(&address, &length, md_attr().reg_alignment);
+
     uct_md_mem_reg_params_t reg_params;
 
     reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
@@ -273,12 +276,6 @@ void test_md::dereg_cb(uct_completion_t *comp)
     md_comp->self->m_comp_count++;
 }
 
-bool test_md::is_gpu_ipc() const
-{
-    return (GetParam().md_name == "cuda_ipc") ||
-	   (GetParam().md_name == "rocm_ipc");
-}
-
 UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
                      !check_caps(UCT_MD_FLAG_ALLOC |
                                  UCT_MD_FLAG_RKEY_PTR)) {
@@ -387,6 +384,10 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     uct_md_h md_ref               = md();
     uct_alloc_method_t method     = UCT_ALLOC_METHOD_MD;
     unsigned num_alloc_failures   = 0;
+    const auto max_alloc          = md_attr().max_alloc;
+    auto max_size                 = ucs_max(max_alloc / 8,
+                                            ucs_min(max_alloc, 1024));
+
     std::vector<char> key(md_attr().rkey_packed_size);
     size_t size, orig_size;
     ucs_status_t status;
@@ -411,12 +412,13 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
                              UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO;
 
+    max_size               = ucs_min(max_size, 63356);
+    max_size               = ucs_align_down_pow2(max_size, sizeof(size_t));
+
     ucs_for_each_bit(mem_type, md_attr().alloc_mem_types) {
         for (unsigned i = 0; i < iterations; ++i) {
-            size = orig_size = ucs::rand() %
-                               ucs_min(65536, md_attr().max_alloc);
-            if ((size == 0) || (ucs_align_up_pow2(size, sizeof(size_t)) >
-                                md_attr().max_alloc)) {
+            size = orig_size = ucs::rand() % max_size;
+            if (size == 0) {
                 continue;
             }
 
@@ -455,7 +457,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             uct_mem_free(&mem);
         }
 
-        EXPECT_LT((double)num_alloc_failures / iterations, 0.7)
+        EXPECT_LT((double)num_alloc_failures / iterations, 0.3)
                 << "Too many OUT_OF_RESOURCE failures";
     }
 }
@@ -531,6 +533,8 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
 }
 
 UCS_TEST_P(test_md, mem_query) {
+    ASSERT_GT(md_attr().reg_alignment, 0);
+
     for (auto mem_type : mem_buffer::supported_mem_types()) {
         if (!(md_attr().detect_mem_types & UCS_BIT(mem_type))) {
             continue;
@@ -611,7 +615,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
 
             alloc_memory(&address, size, &fill_buffer[0], mem_type);
 
-            status = uct_md_mem_reg(md(), address, size, UCT_MD_MEM_ACCESS_ALL, &memh);
+            status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh);
 
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
@@ -649,8 +653,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
             unsigned n = 0;
             while (n < count) {
                 uct_mem_h memh;
-                status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
-                        &memh);
+                status = reg_mem(UCT_MD_MEM_ACCESS_ALL, ptr, size, &memh);
                 ASSERT_UCS_OK(status);
                 ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
@@ -838,8 +841,9 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
 /* This test registers region N times and later deregs it N/2 times and
  * invalidates N/2 times - mix multiple dereg and invalidate calls.
  * Guarantee that all packed keys are unique. */
-UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE) ||
-		                                                    is_gpu_ipc())
+UCS_TEST_SKIP_COND_P(test_md, invalidate,
+                     !check_caps(UCT_MD_FLAG_INVALIDATE) ||
+                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST))
 {
     static const size_t size       = 1 * UCS_MBYTE;
     const int limit                = 64;
@@ -991,8 +995,8 @@ UCS_TEST_P(test_md, rkey_compare_params_check)
 }
 
 // SM case is covered by XPMEM which has registration capability
-UCS_TEST_SKIP_COND_P(test_md, rkey_compare, !check_caps(UCT_MD_FLAG_REG) ||
-		                                               is_gpu_ipc())
+UCS_TEST_SKIP_COND_P(test_md, rkey_compare,
+                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST))
 {
     size_t size                      = 4096;
     void *address                    = NULL;

@@ -607,6 +607,11 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV | uct_flags);
 }
 
+int ucp_worker_iface_is_activated(const ucp_worker_iface_t *wiface)
+{
+    return wiface->activate_count > 0;
+}
+
 /*
  * If active messages were received by am proxy handler, activate the interface.
  * Otherwise, arm the interface event and make sure that when an active message
@@ -1403,7 +1408,10 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     uct_config_release(iface_config);
 
     if (status != UCS_OK) {
-       goto err_free_iface;
+        ucs_error("uct_iface_open(" UCT_TL_RESOURCE_DESC_FMT ") failed: %s",
+                  UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
+                  ucs_status_string(status));
+        goto err_free_iface;
     }
 
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
@@ -2035,33 +2043,6 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
-static void
-ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
-                                ucp_worker_cfg_index_t ep_cfg_index,
-                                unsigned feature_flag, ucp_operation_id_t op_id,
-                                unsigned proto_flags, ucp_lane_index_t exp_lane,
-                                ucp_memtype_thresh_t *max_eager_short)
-{
-    ucp_proto_select_short_t proto_short;
-
-    if (worker->context->config.features & feature_flag) {
-        ucp_proto_select_short_init(worker, &ep_config->proto_select,
-                                    ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
-                                    op_id, proto_flags, &proto_short);
-
-        /* Short protocol should be either disabled, or use expected lane */
-        ucs_assertv((proto_short.max_length_host_mem < 0) ||
-                            (proto_short.lane == exp_lane),
-                    "max_length_host_mem %ld, lane %d",
-                    proto_short.max_length_host_mem, proto_short.lane);
-    } else {
-        ucp_proto_select_short_disable(&proto_short);
-    }
-
-    max_eager_short->memtype_off = proto_short.max_length_unknown_mem;
-    max_eager_short->memtype_on  = proto_short.max_length_host_mem;
-}
-
 static unsigned ucp_worker_ep_config_free_cb(void *arg)
 {
     ucs_free(arg);
@@ -2090,12 +2071,8 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                       unsigned ep_init_flags,
                                       ucp_worker_cfg_index_t *cfg_index_p)
 {
-    ucp_context_h context = worker->context;
     ucp_worker_cfg_index_t ep_cfg_index;
     ucp_ep_config_t *ep_config;
-    ucp_memtype_thresh_t *tag_max_short;
-    ucp_lane_index_t tag_exp_lane;
-    unsigned tag_proto_flags;
     void *old_ep_cfg_buf;
     ucs_status_t status;
 
@@ -2143,33 +2120,6 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
          * and do not print their configuration
          */
         goto out;
-    }
-
-    if (context->config.ext.proto_enable) {
-        if (ucp_ep_config_key_has_tag_lane(key)) {
-            tag_proto_flags = UCP_PROTO_FLAG_TAG_SHORT;
-            tag_max_short   = &ep_config->tag.offload.max_eager_short;
-            tag_exp_lane    = key->tag_lane;
-        } else {
-            tag_proto_flags = UCP_PROTO_FLAG_AM_SHORT;
-            tag_max_short   = &ep_config->tag.max_eager_short;
-            tag_exp_lane    = key->am_lane;
-        }
-
-        ucp_worker_ep_config_short_init(worker, ep_config, ep_cfg_index,
-                                        UCP_FEATURE_TAG, UCP_OP_ID_TAG_SEND,
-                                        tag_proto_flags, tag_exp_lane,
-                                        tag_max_short);
-
-        ucp_worker_ep_config_short_init(worker, ep_config, ep_cfg_index,
-                                        UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
-                                        UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
-                                        &ep_config->am_u.max_eager_short);
-
-        ucp_worker_ep_config_short_init(worker, ep_config, ep_cfg_index,
-                                        UCP_FEATURE_AM, UCP_OP_ID_AM_SEND_REPLY,
-                                        UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
-                                        &ep_config->am_u.max_reply_eager_short);
     }
 
     ucp_worker_print_used_tls(worker, ep_cfg_index);
@@ -3470,8 +3420,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     ucs_trace("ep %p: do keepalive on lane[%d]=%p ep->flags=0x%x", ep, lane,
               uct_ep, ep->flags);
 
-    if (ucp_ep_is_am_keepalive(ep, rsc_index,
-                               ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane))) {
+    if (ucp_ep_is_am_keepalive(ep, rsc_index, ucp_ep_is_lane_p2p(ep, lane))) {
         status = ucp_ep_do_uct_ep_am_keepalive(ep, uct_ep, rsc_index);
     } else {
         status = uct_ep_check(uct_ep, 0, NULL);
@@ -3773,7 +3722,7 @@ ucp_wiface_process_for_each_lane(ucp_worker_h worker,
 
     ucs_for_each_bit(lane, lane_map) {
         ucs_assertv(lane < UCP_MAX_LANES,
-                    "lane=%" PRIu8 ", lane_map=0x%" PRIx16, lane, lane_map);
+                    "lane=%" PRIu8 ", lane_map=0x%" PRIx64, lane, lane_map);
         rsc_index = ep_config->key.lanes[lane].rsc_index;
         wiface    = ucp_worker_iface(worker, rsc_index);
         wiface_process(wiface);

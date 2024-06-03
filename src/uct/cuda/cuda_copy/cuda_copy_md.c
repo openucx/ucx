@@ -100,25 +100,21 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
-    md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
-    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->reg_nonblock_mem_types = 0;
-    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->alloc_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->detect_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->dmabuf_mem_types       = md->config.dmabuf_supported ?
-                                      UCS_BIT(UCS_MEMORY_TYPE_CUDA) : 0;
+    uct_md_base_md_query(md_attr);
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->dmabuf_mem_types = md->config.dmabuf_supported ?
+                                UCS_BIT(UCS_MEMORY_TYPE_CUDA) : 0;
     md_attr->max_alloc        = SIZE_MAX;
-    md_attr->max_reg          = ULONG_MAX;
-    md_attr->rkey_packed_size = 0;
-    md_attr->reg_cost         = UCS_LINEAR_FUNC_ZERO;
-    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
 

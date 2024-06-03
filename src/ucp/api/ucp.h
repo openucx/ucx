@@ -567,7 +567,13 @@ enum {
      * received from different peers are compared equal, they can be used
      * interchangeably, avoiding the need to keep all of them in memory.
      */
-    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3)
+    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3),
+
+    /**
+     * Enforce pinning of the memory pages in the mapping and populate them up-front.
+     * This flag is mutually exclusive with UCP_MEM_MAP_NONBLOCK.
+     */
+    UCP_MEM_MAP_LOCK           = UCS_BIT(4)
 };
 
 

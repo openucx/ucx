@@ -100,6 +100,7 @@ gtest_SOURCES = \
 	ucm/malloc_hook.cc \
 	\
 	uct/test_amo.cc \
+	uct/test_atomic_key_reg_rdma_mem_type.cc \
 	uct/test_amo_add_xor.cc \
 	uct/test_amo_and_or.cc \
 	uct/test_amo_cswap.cc \

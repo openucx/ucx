@@ -31,23 +31,16 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
 static ucs_status_t
 uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
-    md_attr->flags                  = UCT_MD_FLAG_REG |
-                                      UCT_MD_FLAG_NEED_RKEY |
-                                      UCT_MD_FLAG_INVALIDATE |
-                                      UCT_MD_FLAG_INVALIDATE_RMA |
-                                      UCT_MD_FLAG_INVALIDATE_AMO;
-    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->reg_nonblock_mem_types = 0;
-    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->alloc_mem_types        = 0;
-    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->detect_mem_types       = 0;
-    md_attr->dmabuf_mem_types       = 0;
-    md_attr->max_alloc              = 0;
-    md_attr->max_reg                = ULONG_MAX;
-    md_attr->rkey_packed_size       = sizeof(uct_cuda_ipc_rkey_t);
-    md_attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
-    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+    uct_md_base_md_query(md_attr);
+    md_attr->flags            = UCT_MD_FLAG_REG |
+                                UCT_MD_FLAG_NEED_RKEY |
+                                UCT_MD_FLAG_INVALIDATE |
+                                UCT_MD_FLAG_INVALIDATE_RMA |
+                                UCT_MD_FLAG_INVALIDATE_AMO;
+    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->rkey_packed_size = sizeof(uct_cuda_ipc_rkey_t);
     return UCS_OK;
 }
 

@@ -29,21 +29,14 @@ static ucs_config_field_t uct_tcp_md_config_table[] = {
 
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
+    uct_md_base_md_query(attr);
     /* Dummy memory registration provided. No real memory handling exists */
     attr->flags                  = UCT_MD_FLAG_REG |
                                    UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->max_alloc              = 0;
     attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->alloc_mem_types        = 0;
     attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->detect_mem_types       = 0;
-    attr->dmabuf_mem_types       = 0;
-    attr->max_reg                = ULONG_MAX;
-    attr->rkey_packed_size       = 0;
-    attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
-    memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
 

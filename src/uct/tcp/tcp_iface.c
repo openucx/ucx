@@ -111,6 +111,12 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
                 UCS_CONFIG_TYPE_TIME_UNITS},
 #endif /* UCT_TCP_EP_KEEPALIVE */
 
+  {"EP_BIND_SRC_ADDR", "try",
+   "Bind client socket to the local network interface before connecting to the "
+   "remote peer",
+   ucs_offsetof(uct_tcp_iface_config_t, ep_bind_src_addr),
+                UCS_CONFIG_TYPE_TERNARY},
+
   {NULL}
 };
 
@@ -690,6 +696,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
+    self->config.ep_bind_src_addr  = config->ep_bind_src_addr;
     self->port_range.first         = config->port_range.first;
     self->port_range.last          = config->port_range.last;
 

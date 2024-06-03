@@ -185,17 +185,102 @@ err_out:
     return status;
 }
 
+static UCS_CLASS_DECLARE_DELETE_FUNC(uct_gga_mlx5_iface_t, uct_iface_t);
+
+static uct_iface_ops_t uct_gga_mlx5_iface_tl_ops = {
+    .ep_put_short             = ucs_empty_function_return_unsupported,
+    .ep_put_bcopy             = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_unsupported,
+    .ep_put_zcopy             = ucs_empty_function_return_unsupported,
+    .ep_get_bcopy             = ucs_empty_function_return_unsupported,
+    .ep_get_zcopy             = ucs_empty_function_return_unsupported,
+    .ep_am_short              = (uct_ep_am_short_func_t)ucs_empty_function_return_unsupported,
+    .ep_am_short_iov          = (uct_ep_am_short_iov_func_t)ucs_empty_function_return_unsupported,
+    .ep_am_bcopy              = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_unsupported,
+    .ep_am_zcopy              = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_unsupported,
+    .ep_atomic_cswap64        = ucs_empty_function_return_unsupported,
+    .ep_atomic_cswap32        = ucs_empty_function_return_unsupported,
+    .ep_atomic64_post         = ucs_empty_function_return_unsupported,
+    .ep_atomic32_post         = ucs_empty_function_return_unsupported,
+    .ep_atomic64_fetch        = ucs_empty_function_return_unsupported,
+    .ep_atomic32_fetch        = ucs_empty_function_return_unsupported,
+    .ep_pending_add           = ucs_empty_function_return_unsupported,
+    .ep_pending_purge         = ucs_empty_function_do_assert_void,
+    .ep_flush                 = ucs_empty_function_return_unsupported,
+    .ep_fence                 = ucs_empty_function_return_unsupported,
+    .ep_check                 = ucs_empty_function_return_unsupported,
+    .ep_create                = ucs_empty_function_return_unsupported,
+    .ep_destroy               = ucs_empty_function_do_assert_void,
+    .ep_get_address           = ucs_empty_function_return_unsupported,
+    .ep_connect_to_ep         = ucs_empty_function_return_unsupported,
+    .iface_flush              = ucs_empty_function_return_unsupported,
+    .iface_fence              = (uct_iface_fence_func_t)ucs_empty_function_do_assert,
+    .iface_progress_enable    = ucs_empty_function_do_assert_void,
+    .iface_progress_disable   = ucs_empty_function_do_assert_void,
+    .iface_progress           = (uct_iface_progress_func_t)ucs_empty_function_do_assert,
+    .iface_event_fd_get       = ucs_empty_function_return_unsupported,
+    .iface_event_arm          = ucs_empty_function_return_unsupported,
+    .iface_close              = uct_gga_mlx5_iface_t_delete,
+    .iface_query              = (uct_iface_query_func_t)ucs_empty_function_do_assert,
+    .iface_get_address        = ucs_empty_function_return_success,
+    .iface_get_device_address = ucs_empty_function_return_unsupported,
+    .iface_is_reachable       = uct_base_iface_is_reachable
+};
+
+static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
+    .super = {
+        .super = {
+            .iface_estimate_perf   = uct_base_iface_estimate_perf,
+            .iface_vfs_refresh     = uct_rc_iface_vfs_refresh,
+            .ep_query              = (uct_ep_query_func_t)ucs_empty_function,
+            .ep_invalidate         = uct_rc_mlx5_base_ep_invalidate,
+            .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_do_assert,
+            .iface_is_reachable_v2 = ucs_empty_function_do_assert,
+            .ep_is_connected       = ucs_empty_function_do_assert
+        },
+        .create_cq      = uct_rc_mlx5_iface_common_create_cq,
+        .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
+        .event_cq       = uct_rc_mlx5_iface_common_event_cq,
+        .handle_failure = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert_void,
+    },
+    .init_rx         = (uct_rc_iface_init_rx_func_t)ucs_empty_function_do_assert,
+    .cleanup_rx      = ucs_empty_function_do_assert_void,
+    .fc_ctrl         = uct_rc_mlx5_base_ep_fc_ctrl,
+    .fc_handler      = uct_rc_iface_fc_handler,
+    .cleanup_qp      = ucs_empty_function_do_assert_void,
+    .ep_post_check   = uct_rc_mlx5_base_ep_post_check,
+    .ep_vfs_populate = uct_rc_mlx5_base_ep_vfs_populate
+};
+
 static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
                            uct_md_h tl_md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    uct_gga_mlx5_iface_config_t *config =
+            ucs_derived_of(tl_config, uct_gga_mlx5_iface_config_t);
+    uct_ib_mlx5_md_t *md                = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    uct_ib_iface_init_attr_t init_attr  = {};
+
+    init_attr.qp_type               = IBV_QPT_RC;
+    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
+    init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
+                                                   max_qp_rd_atom);
+    init_attr.tx_moderation         = config->super.tx_cq_moderation;
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_gga_mlx5_iface_tl_ops,
+                              &uct_gga_mlx5_iface_ops, tl_md, worker, params,
+                              &config->super.super, &config->rc_mlx5_common,
+                              &init_attr);
+
+    config->super.super.fc.enable = 0; /* FC requires AM capability */
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_iface_t)
 {
-    ucs_fatal("Unreachable code");
+    uct_base_iface_progress_disable(&self->super.super.super.super.super,
+                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 }
 
 UCS_CLASS_DEFINE(uct_gga_mlx5_iface_t, uct_rc_mlx5_iface_common_t);
@@ -203,6 +288,8 @@ UCS_CLASS_DEFINE(uct_gga_mlx5_iface_t, uct_rc_mlx5_iface_common_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_gga_mlx5_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
+
+static UCS_CLASS_DEFINE_DELETE_FUNC(uct_gga_mlx5_iface_t, uct_iface_t);
 
 static ucs_status_t
 uct_gga_mlx5_query_tl_devices(uct_md_h md,

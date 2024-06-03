@@ -976,19 +976,16 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     const uct_dc_mlx5_iface_addr_t *addr;
-    int same_tm, same_version, same_max_rd_atomic;
+    int same_tm, same_version;
 
     addr = (const uct_dc_mlx5_iface_addr_t*)UCS_PARAM_VALUE(
             UCT_IFACE_IS_REACHABLE_FIELD, params, iface_addr, IFACE_ADDR, NULL);
     if (addr != NULL) {
-        same_tm            = (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ==
-                              UCT_RC_MLX5_TM_ENABLED(&iface->super));
-        same_version       = ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
-                             iface->version_flag);
-        same_max_rd_atomic = (iface->super.super.config.max_rd_atomic == 16) ==
-                              !!(addr->flags &
-                                       UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16);
-        if (!same_version || !same_tm || !same_max_rd_atomic) {
+        same_tm      = (UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ==
+                        UCT_RC_MLX5_TM_ENABLED(&iface->super));
+        same_version = ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
+                        iface->version_flag);
+        if (!same_version || !same_tm) {
             return 0;
         }
     }
@@ -1552,10 +1549,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.ndci   = uct_dc_mlx5_iface_is_hw_dcs(self) ? 1 : config->ndci;
 
     init_attr.qp_type       = UCT_IB_QPT_DCI;
-    init_attr.flags         = UCT_IB_CQ_IGNORE_OVERRUN |
-                              UCT_IB_TX_OPS_PER_PATH;
+    init_attr.flags         = UCT_IB_TX_OPS_PER_PATH;
     init_attr.fc_req_size   = sizeof(uct_dc_fc_request_t);
     init_attr.max_rd_atomic = md->max_rd_atomic_dc;
+    init_attr.tx_moderation = 0; /* disable tx moderation for dcs */
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
@@ -1567,8 +1564,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
 
     init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * self->tx.ndci;
-    uct_ib_mlx5_parse_cqe_zipping(md, &config->rc_mlx5_common.super,
-                                  &init_attr);
 
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
@@ -1594,14 +1589,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     uct_dc_mlx5_iface_init_version(self, tl_md);
 
-    self->tx.fc_seq                        = 0;
-    self->tx.fc_hard_req_timeout           = config->fc_hard_req_timeout;
-    self->tx.fc_hard_req_resend_time       = ucs_get_time();
-    self->tx.fc_hard_req_progress_cb_id    = UCS_CALLBACKQ_ID_NULL;
-    self->tx.num_dci_pools                 = 0;
-    self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
-    self->flags                            = 0;
-    self->tx.av_fl_mlid                    = self->super.super.super.path_bits[0] & 0x7f;
+    self->tx.fc_seq                     = 0;
+    self->tx.fc_hard_req_timeout        = config->fc_hard_req_timeout;
+    self->tx.fc_hard_req_resend_time    = ucs_get_time();
+    self->tx.fc_hard_req_progress_cb_id = UCS_CALLBACKQ_ID_NULL;
+    self->tx.num_dci_pools              = 0;
+    self->flags                         = 0;
+    self->tx.av_fl_mlid = self->super.super.super.path_bits[0] & 0x7f;
 
     kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
     kh_init_inplace(uct_dc_mlx5_config_hash, &self->dc_config_hash);

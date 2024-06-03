@@ -197,16 +197,6 @@ static void ucp_proto_request_set_proto(ucp_request_t *req,
     ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_select_proto(ucp_request_t *req,
-                               const ucp_proto_select_elem_t *select_elem,
-                               size_t msg_length)
-{
-    const ucp_proto_threshold_elem_t *thresh_elem =
-            ucp_proto_select_thresholds_search(select_elem, msg_length);
-    ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
-}
-
 /* Select protocol for the request and initialize protocol-related fields */
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
         ucp_worker_h worker, ucp_ep_h ep, ucp_request_t *req,

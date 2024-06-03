@@ -141,6 +141,8 @@ public:
 
         const size_t &get_err_num() const;
 
+        void reset_err_num();
+
         const size_t &get_accept_err_num() const;
 
         void warn_existing_eps() const;

@@ -304,6 +304,8 @@ ucp_mem_map_params2uct_flags(const ucp_context_h context,
     if (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) {
         if (params->flags & UCP_MEM_MAP_NONBLOCK) {
             flags |= UCT_MD_MEM_FLAG_NONBLOCK;
+        } else if (params->flags & UCP_MEM_MAP_LOCK) {
+            flags |= UCT_MD_MEM_FLAG_LOCK;
         }
 
         if (params->flags & UCP_MEM_MAP_FIXED) {
@@ -470,7 +472,8 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         return UCS_OK;
     }
 
-    if (context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) {
+    if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+        !(uct_flags & UCT_MD_MEM_FLAG_LOCK)) {
         uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
     }
 
@@ -522,7 +525,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
         reg_length  = length;
 
         if (context->rcache == NULL) {
-            reg_align = ucs_max(context->tl_mds[md_index].attr.reg_alignment, 1);
+            reg_align = context->tl_mds[md_index].attr.reg_alignment;
             ucs_align_ptr_range(&reg_address, &reg_length, reg_align);
         }
 
@@ -713,6 +716,7 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
 
     memh->reg_id  = memh->parent->reg_id;
     memh->md_map |= parent_md_map;
+    memh->flags   = memh->parent->flags;
 
     ucs_for_each_bit(md_index, parent_md_map) {
         ucs_assert(memh->uct[md_index] == NULL);
@@ -821,6 +825,10 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
             *memh_p = memh;
             return UCS_OK;
         }
+
+        ucs_trace("memh %p uct_flags mismatch, expected 0x%x got 0x%x", memh,
+                  uct_flags & UCP_MM_UCT_ACCESS_MASK,
+                  memh->uct_flags & UCP_MM_UCT_ACCESS_MASK);
 
         /* Invalidate the mismatching region and get a new one */
         ucs_rcache_region_invalidate(context->rcache, &memh->super,
@@ -1017,6 +1025,13 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     } else if ((!(flags & UCP_MEM_MAP_ALLOCATE) &&
                 (flags & UCP_MEM_MAP_FIXED))) {
         ucs_error("wrong combination of flags when address is defined");
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (ucs_test_all_flags(flags, UCP_MEM_MAP_NONBLOCK | UCP_MEM_MAP_LOCK)) {
+        ucs_error("wrong combination of flags "
+                  "UCP_MEM_MAP_NONBLOCK and UCP_MEM_MAP_LOCK");
         status = UCS_ERR_INVALID_PARAM;
         goto out;
     }
@@ -1495,13 +1510,25 @@ static void ucp_mem_rcache_mem_dereg_cb(void *ctx, ucs_rcache_t *rcache,
     ucp_memh_dereg(context, memh, memh->md_map);
 }
 
-static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
-                                         ucs_rcache_region_t *rregion, char *buf,
-                                         size_t max)
+static void ucp_mem_rcache_merge_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
+                                    ucs_rcache_region_t *rregion)
+{
+    ucp_mem_rcache_reg_ctx_t *reg_ctx = arg;
+    ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
+
+    ucs_log_indent(+1);
+    ucs_trace("merge with memh %p uct_flags 0x%x", memh, memh->uct_flags);
+    reg_ctx->uct_flags |= memh->uct_flags;
+    ucs_log_indent(-1);
+}
+
+static void ucp_mem_rcache_dump_region_cb(void *ctx, ucs_rcache_t *rcache,
+                                          ucs_rcache_region_t *rregion,
+                                          char *buf, size_t max)
 {
     UCS_STRING_BUFFER_FIXED(strb, buf, max);
     ucp_mem_h memh        = ucs_derived_of(rregion, ucp_mem_t);
-    ucp_context_h context = rcontext;
+    ucp_context_h context = ctx;
     unsigned md_index;
 
     if (memh->md_map == 0) {
@@ -1524,6 +1551,7 @@ static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
 static ucs_rcache_ops_t ucp_mem_rcache_ops = {
     .mem_reg     = ucp_mem_rcache_mem_reg_cb,
     .mem_dereg   = ucp_mem_rcache_mem_dereg_cb,
+    .merge       = ucp_mem_rcache_merge_cb,
     .dump_region = ucp_mem_rcache_dump_region_cb
 };
 
@@ -1723,7 +1751,6 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
             goto err_rcache_destroy;
         }
 
-        memh->flags       |= UCP_MEMH_FLAG_IMPORTED;
         user_memh->parent  = memh;
     } else {
         memh         = user_memh;
@@ -1731,6 +1758,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
         rcache       = NULL;
     }
 
+    memh->flags      |= UCP_MEMH_FLAG_IMPORTED;
     memh->reg_id      = unpacked->reg_id;
     memh->remote_uuid = unpacked->remote_uuid;
     status            = ucp_memh_import_attach(context, memh,
@@ -1822,7 +1850,10 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
                  * given address, but an imported memory handle hasn't been
                  * removed from the RCACHE yet. So, it had refcount == 1 and
                  * now it should be 2. */
-                ucs_assertv(rregion->refcount == 2, "%u", rregion->refcount);
+                ucs_assertv(rregion->refcount == 2, "Unexpected refcount: %u. "
+                            "This may indicate that exported memory handle was "
+                            "destroyed, but imported memory handle was not",
+                            rregion->refcount);
                 ucs_rcache_region_invalidate(rcache, rregion,
                                              ucs_empty_function, NULL);
                 ucs_rcache_region_put_unsafe(rcache, rregion);

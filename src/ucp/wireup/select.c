@@ -362,11 +362,20 @@ ucp_wireup_init_select_info(double score, unsigned addr_index,
     select_info->priority   = priority;
 }
 
-static size_t ucp_wireup_max_lanes(ucp_lane_type_t lane_type)
+static size_t
+ucp_wireup_bw_max_lanes(const ucp_wireup_select_params_t *select_params)
+{
+    return (select_params->address->dst_version < 18) ? UCP_MAX_LANES_LEGACY :
+                                                        UCP_MAX_LANES;
+}
+
+static size_t
+ucp_wireup_max_lanes(const ucp_wireup_select_params_t *select_params,
+                     ucp_lane_type_t lane_type)
 {
     return ucp_wireup_lane_type_is_fast_path(lane_type) ?
                    UCP_MAX_FAST_PATH_LANES :
-                   UCP_MAX_LANES;
+                   ucp_wireup_bw_max_lanes(select_params);
 }
 
 /**
@@ -563,7 +572,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             continue;
         }
 
-        if (select_ctx->num_lanes < ucp_wireup_max_lanes(criteria->lane_type)) {
+        if (select_ctx->num_lanes <
+            ucp_wireup_max_lanes(select_params, criteria->lane_type)) {
             /* If we have not reached the lanes limit, we can select any
                combination of rsc_index/addr_index */
             rsc_addr_index_map = addr_index_map;
@@ -639,13 +649,13 @@ out:
     }
 
     ucs_trace("ep %p: selected for %s: " UCT_TL_RESOURCE_DESC_FMT " md[%d]"
-              " -> '%s' address[%d],md[%d],rsc[%u] score %.2f",
+              " -> '%s' address[%d],md[%d] score %.2f",
               ep, criteria->title,
-              UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sinfo.rsc_index].tl_rsc),
+              UCT_TL_RESOURCE_DESC_ARG(
+                      &context->tl_rscs[sinfo.rsc_index].tl_rsc),
               context->tl_rscs[sinfo.rsc_index].md_index, ucp_ep_peer_name(ep),
-              sinfo.addr_index, address->address_list[sinfo.addr_index].md_index,
-              address->address_list[sinfo.addr_index].iface_attr.dst_rsc_index,
-              sinfo.score);
+              sinfo.addr_index,
+              address->address_list[sinfo.addr_index].md_index, sinfo.score);
 
     *select_info = sinfo;
     return UCS_OK;
@@ -697,6 +707,7 @@ ucp_wireup_path_index_is_equal(unsigned path_index1, unsigned path_index2)
 }
 
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
+        const ucp_wireup_select_params_t *select_params,
         const ucp_wireup_select_info_t *select_info,
         ucp_md_index_t dst_md_index, ucs_sys_device_t dst_sys_dev,
         ucp_lane_type_t lane_type, unsigned seg_size,
@@ -749,7 +760,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         ucs_assert_always(!ucp_wireup_has_slow_lanes(select_ctx));
     }
 
-    if (select_ctx->num_lanes >= ucp_wireup_max_lanes(lane_type)) {
+    if (select_ctx->num_lanes >=
+        ucp_wireup_max_lanes(select_params, lane_type)) {
         log_level = show_error ? UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DEBUG;
         ucs_log(log_level, "cannot add %s lane - reached limit (%d)",
                 ucp_lane_type_info[lane_type].short_name,
@@ -797,7 +809,8 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
     ucp_address_entry_t *addr_list = select_params->address->address_list;
     unsigned addr_index            = select_info->addr_index;
 
-    return ucp_wireup_add_lane_desc(select_info, addr_list[addr_index].md_index,
+    return ucp_wireup_add_lane_desc(select_params, select_info,
+                                    addr_list[addr_index].md_index,
                                     addr_list[addr_index].sys_dev, lane_type,
                                     addr_list[addr_index].iface_attr.seg_size,
                                     select_ctx,
@@ -1095,7 +1108,8 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
                                 &select_info);
 
     /* server is not a proxy because it can create all lanes connected */
-    return ucp_wireup_add_lane_desc(&select_info, UCP_NULL_RESOURCE,
+    return ucp_wireup_add_lane_desc(select_params, &select_info,
+                                    UCP_NULL_RESOURCE,
                                     UCS_SYS_DEVICE_ID_UNKNOWN, UCP_LANE_TYPE_CM,
                                     UINT_MAX, select_ctx, 1);
 }
@@ -1541,9 +1555,10 @@ ucp_wireup_add_fast_lanes(ucp_worker_h worker,
     return num_lanes;
 }
 
-static unsigned
-ucp_wireup_get_current_num_lanes(ucp_ep_h ep, ucp_lane_type_t type)
+static unsigned ucp_wireup_get_current_num_lanes(
+        const ucp_wireup_select_params_t *select_params, ucp_lane_type_t type)
 {
+    ucp_ep_h ep                = select_params->ep;
     unsigned current_num_lanes = 0;
     ucp_lane_index_t lane;
 
@@ -1552,7 +1567,7 @@ ucp_wireup_get_current_num_lanes(ucp_ep_h ep, ucp_lane_type_t type)
      */
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
         ucp_ep_has_cm_lane(ep)) {
-        return UCP_PROTO_MAX_LANES;
+        return ucp_wireup_bw_max_lanes(select_params);
     }
 
     for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
@@ -1570,12 +1585,11 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_wireup_select_context_t *select_ctx,
                         unsigned allow_extra_path)
 {
-    ucp_rsc_index_t skip_dev_index       = UCP_NULL_RESOURCE;
-    ucp_ep_h ep                          = select_params->ep;
-    ucp_context_h context                = ep->worker->context;
-    ucp_wireup_dev_usage_count dev_count = {};
-    UCS_ARRAY_DEFINE_ONSTACK(ucp_proto_select_info_array_t, sinfo_array,
-                             UCP_MAX_LANES);
+    ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_rsc_index_t skip_dev_index            = UCP_NULL_RESOURCE;
+    ucp_ep_h ep                               = select_params->ep;
+    ucp_context_h context                     = ep->worker->context;
+    ucp_wireup_dev_usage_count dev_count      = {};
     const uct_iface_attr_t *iface_attr;
     const ucp_address_entry_t *ae;
     ucs_status_t status;
@@ -1585,7 +1599,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
     ucp_wireup_select_info_t *sinfo;
-    unsigned max_lanes;
+    unsigned max_lanes, num_lanes;
     unsigned local_num_paths, remote_num_paths;
 
     local_dev_bitmap      = bw_info->local_dev_bitmap;
@@ -1596,7 +1610,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * to prevent EP reconfiguration in case of dropping lanes due to low BW.
      * TODO: Remove when endpoint reconfiguration is supported.
      */
-    max_lanes = ucp_wireup_get_current_num_lanes(select_params->ep,
+    max_lanes = ucp_wireup_get_current_num_lanes(select_params,
                                                  bw_info->criteria.lane_type);
     max_lanes = ucs_min(max_lanes, bw_info->max_lanes);
 
@@ -1605,7 +1619,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * memory registration) */
     while (ucs_array_length(&sinfo_array) < max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
-            sinfo  = ucs_array_append_fixed(&sinfo_array);
+            sinfo  = ucs_array_append(&sinfo_array, break);
             status = ucp_wireup_select_transport(select_ctx, select_params,
                                                  &bw_info->criteria, tl_bitmap,
                                                  UINT64_MAX, local_dev_bitmap,
@@ -1665,9 +1679,13 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     bw_info->criteria.arg = NULL; /* To suppress compiler warning */
+    num_lanes = ucp_wireup_add_fast_lanes(ep->worker, select_params,
+                                          &sinfo_array,
+                                          bw_info->criteria.lane_type,
+                                          select_ctx);
 
-    return ucp_wireup_add_fast_lanes(ep->worker, select_params, &sinfo_array,
-                                     bw_info->criteria.lane_type, select_ctx);
+    ucs_array_cleanup_dynamic(&sinfo_array);
+    return num_lanes;
 }
 
 static ucs_status_t
@@ -1687,6 +1705,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
           (UCP_FEATURE_TAG | UCP_FEATURE_AM)) ||
         (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
                           UCP_EP_INIT_CREATE_AM_LANE_ONLY)) ||
+        /* TODO: Check MAX_RNDV_LANES here for rndv/am case */
         (context->config.ext.max_eager_lanes < 2)) {
         return UCS_OK;
     }
@@ -1882,7 +1901,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (context->config.ext.proto_enable &&
         (select_params->address->dst_version > UCP_RELEASE_LEGACY)) {
-        bw_info.max_lanes = UCP_PROTO_MAX_LANES;
+        bw_info.max_lanes = ucp_wireup_max_lanes(select_params,
+                                                 bw_info.criteria.lane_type);
     } else {
         bw_info.max_lanes = context->config.ext.max_rndv_lanes;
     }

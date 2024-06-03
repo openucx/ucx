@@ -1761,6 +1761,35 @@ public:
         double max_error = original / pow(2, _UCS_FP8_MANTISSA_BITS);
         EXPECT_NEAR(original, unpacked, max_error);
     }
+
+    const uct_iface_attr_t *get_iface_attr(const ucp_address_entry_t *ae)
+    {
+        ucp_worker_h worker   = sender().worker();
+        ucp_context_h context = worker->context;
+        ucp_rsc_index_t rsc_index;
+        uct_iface_is_reachable_params_t params;
+
+        params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                             UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                             UCT_IFACE_IS_REACHABLE_FIELD_SCOPE;
+        params.device_addr = ae->dev_addr;
+        params.iface_addr  = ae->iface_addr;
+        params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
+
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+            auto wiface = ucp_worker_iface(worker, rsc_index);
+
+            /* Compare resources by device and transport */
+            if ((context->tl_rscs[rsc_index].tl_name_csum ==
+                 ae->tl_name_csum) &&
+                uct_iface_is_reachable_v2(wiface->iface, &params)) {
+                EXPECT_EQ(ae->md_index, context->tl_rscs[rsc_index].md_index);
+                return &wiface->attr;
+            }
+        }
+
+        return nullptr;
+    }
 };
 
 // On some systems TCP has very low BW and high latency, which would be
@@ -1791,8 +1820,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
 
     const ucp_address_entry_t *ae;
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
-        ucp_rsc_index_t rsc_idx = ae->iface_attr.dst_rsc_index;
-        uct_iface_attr_t *attr  = &ucp_worker_iface(worker, rsc_idx)->attr;
+        auto attr = get_iface_attr(ae);
+        ASSERT_NE(nullptr, attr);
 
         // Segment size is packed as a multiplicator of
         // UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR, thus the unpacked value may be

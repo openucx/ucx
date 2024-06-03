@@ -84,6 +84,7 @@ int main(int argc, char **argv) {
         modify_config_for_valgrind("IB_TX_BUFS_GROW", "64");
         modify_config_for_valgrind("UD_RX_QUEUE_LEN", "256");
         modify_config_for_valgrind("UD_RX_QUEUE_LEN_INIT", "32");
+        modify_config_for_valgrind("UD_TIMEOUT", "300s");
         modify_config_for_valgrind("RC_TX_CQ_LEN", "128");
         modify_config_for_valgrind("RC_RX_QUEUE_LEN", "128");
         modify_config_for_valgrind("DC_TX_QUEUE_LEN", "16");
@@ -100,6 +101,7 @@ int main(int argc, char **argv) {
 
     /* set gpu context for tests that need it */
     mem_buffer::set_device_context();
+    mem_buffer::get_bar1_free_size_nvml();
 
     int ret;
     ret = ucs::watchdog_start();

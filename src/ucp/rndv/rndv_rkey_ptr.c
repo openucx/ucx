@@ -40,7 +40,7 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
-        .super.cfg_priority  = 0,
+        .super.cfg_priority  = 80,
         .super.overhead      = context->config.ext.proto_overhead_rkey_ptr,
         .super.latency       = 0,
         .super.min_length    = 0,
@@ -93,8 +93,12 @@ ucp_rndv_rkey_ptr_query_common(const ucp_proto_query_params_t *params,
     const ucp_proto_rndv_rkey_ptr_priv_t *rpriv = params->priv;
 
     ucp_proto_default_query(params, attr);
-    attr->lane_map = UCS_BIT(rpriv->spriv.super.lane) |
-                     UCS_BIT(rpriv->ack.lane);
+
+    ucs_assert(rpriv->spriv.super.lane != UCP_NULL_LANE);
+    attr->lane_map = UCS_BIT(rpriv->spriv.super.lane);
+    if (rpriv->ack.lane != UCP_NULL_LANE) {
+        attr->lane_map |= UCS_BIT(rpriv->ack.lane);
+    }
 }
 
 static void
@@ -207,7 +211,7 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.overhead      = 0,
         .super.latency       = 0,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
-        .super.cfg_priority  = 0,
+        .super.cfg_priority  = 80,
         .super.min_length    = 0,
         .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,

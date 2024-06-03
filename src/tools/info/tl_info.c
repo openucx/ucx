@@ -472,7 +472,7 @@ static void print_md_info(uct_component_h component,
             printf("#           memory invalidation is supported\n");
         }
 
-        if (md_attr.reg_alignment != 0) {
+        if (md_attr.reg_alignment != 1) {
             printf("#            alignment: %zx\n", md_attr.reg_alignment);
         }
 

@@ -4,6 +4,7 @@
 */
 #include <ucm/api/ucm.h>
 #include <ucs/debug/assert.h>
+#include <ucs/sys/ptr_arith.h>
 #include <common/test.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -88,6 +89,11 @@ protected:
         check_event_present(m_free_events, "free", ptr, size);
     }
 
+    CUdevice device() const
+    {
+        return m_device;
+    }
+
 private:
     struct mem_event {
         void              *address;
@@ -115,7 +121,7 @@ private:
             }
         }
 
-        FAIL() << "Could not file memory " << name << " event for " << ptr
+        FAIL() << "Could not find memory " << name << " event for " << ptr
                << ".." << UCS_PTR_BYTE_OFFSET(ptr, size) << " type "
                << ucs_memory_type_names[mem_type];
     }
@@ -255,6 +261,43 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
     check_mem_free_events((void*)dptr, width * height);
+}
+
+UCS_TEST_F(cuda_hooks, test_cuMemMapUnmap) {
+    CUmemAllocationProp prop = {};
+    CUmemGenericAllocationHandle handle;
+    size_t size, granularity;
+    CUdeviceptr ptr;
+    CUresult ret;
+
+    ret = cuMemGetAllocationGranularity(&granularity, &prop,
+                                        CU_MEM_ALLOC_GRANULARITY_MINIMUM);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+    size = ucs_align_up(256 * UCS_KBYTE, granularity);
+
+    prop.type          = CU_MEM_ALLOCATION_TYPE_PINNED;
+    prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    prop.location.id   = device();
+    ret                = cuMemCreate(&handle, size, &prop, 0);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+
+    ret = cuMemAddressReserve(&ptr, size, 0, 0, 0);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+
+    ret = cuMemMap(ptr, size, 0, handle, 0);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+    check_mem_alloc_events((void*)ptr, size, UCS_MEMORY_TYPE_CUDA);
+
+    ret = cuMemUnmap(ptr, size);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+    check_mem_free_events((void*)ptr, size);
+
+    ret = cuMemAddressFree(ptr, size);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
+
+    // Free the memory resources
+    ret = cuMemRelease(handle);
+    ASSERT_EQ(ret, CUDA_SUCCESS);
 }
 
 #if CUDA_VERSION >= 11020

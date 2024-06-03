@@ -22,7 +22,7 @@ jobs:
       - bash: |
           source ./buildlib/tools/test_mad.sh
           build_ucx_in_docker
-          docker_run_srv
+          docker_run_srv LID
         displayName: Setup Server
 
   - job: SetupClient
@@ -63,9 +63,9 @@ jobs:
           HCA: $(HCA)
         displayName: Test LID
 
-  - job: ServerRestart
+  - job: ServerRestartAndPrintLogs
     dependsOn: TestLid
-    displayName: Server Restart
+    displayName: Server Restart And Print Logs
     pool:
       name: MLNX
       demands: mad_server
@@ -73,13 +73,14 @@ jobs:
       - checkout: none
       - bash: |
           source ./buildlib/tools/test_mad.sh
-          docker_run_srv
+          docker_stop_srv LID
+          docker_run_srv GUID
         displayName: Server Restart
 
   - job: TestGuid
     dependsOn:
       - SetupServer
-      - ServerRestart
+      - ServerRestartAndPrintLogs
     displayName: Test Guid
     timeoutInMinutes: 10
     pool:
@@ -97,9 +98,9 @@ jobs:
           HCA: $(HCA)
         displayName: Test GUID
 
-  - job: ServerStop
+  - job: ServerStopAndPrintLogs
     dependsOn: TestGuid
-    displayName: Server Stop
+    displayName: Server Stop And Print Logs
     condition: always()
     pool:
       name: MLNX
@@ -108,5 +109,5 @@ jobs:
       - checkout: none
       - bash: |
           source ./buildlib/tools/test_mad.sh
-          docker_stop_srv
+          docker_stop_srv GUID
         displayName: Server Stop

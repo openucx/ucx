@@ -571,7 +571,8 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     unsigned cq_size = ucs_roundup_pow2(uct_ib_cq_size(iface, init_attr, dir));
     int log_cq_size  = ucs_ilog2(cq_size);
     int cqe_size     = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
-    size_t umem_len  = cqe_size * cq_size;
+    int num_comp_vectors = dev->ibv_context->num_comp_vectors;
+    size_t umem_len      = cqe_size * cq_size;
     ucs_status_t status;
     uint32_t eqn;
 
@@ -587,7 +588,8 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     UCT_IB_MLX5DV_SET64(cqc, cqctx, dbr_addr, cq->devx.dbrec->offset);
 
     /* Set EQN related bits */
-    if (mlx5dv_devx_query_eqn(dev->ibv_context, preferred_cpu, &eqn) != 0) {
+    if (mlx5dv_devx_query_eqn(dev->ibv_context,
+                              preferred_cpu % num_comp_vectors, &eqn) != 0) {
         status = UCS_ERR_IO_ERROR;
         goto err_free_db;
     }

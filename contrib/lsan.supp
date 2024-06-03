@@ -1,1 +1,3 @@
 leak:libcuda
+leak:dlsym
+leak:nvmlInitWithFlags

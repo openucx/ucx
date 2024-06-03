@@ -12,6 +12,7 @@
 
 #include <uct/api/uct.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
+#include <uct/ib/mlx5/ib_mlx5.inl>
 #include <ucs/arch/bitops.h>
 
 
@@ -46,7 +47,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, cs_res,
                       uct_ib_mlx5_qpc_cs_res(
                               ib_iface->config.max_inl_cqe[UCT_IB_DIR_RX], 1));
-    UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
+    UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode,
+                      uct_ib_mlx5_get_atomic_mode(ib_iface));
     if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
     }
@@ -131,7 +133,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, mtu, rc_iface->super.config.path_mtu);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
-    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
+    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode,
+                      uct_ib_mlx5_get_atomic_mode(&rc_iface->super));
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
     if (uct_ib_iface_is_roce(&rc_iface->super)) {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,

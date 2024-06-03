@@ -952,7 +952,6 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         iface_attr->bandwidth     =
                 ucp_tl_iface_bandwidth(worker->context,
                                        &wiface->attr.bandwidth);
-        iface_attr->dst_rsc_index = rsc_idx;
         iface_attr->seg_size      = wiface->attr.cap.am.max_bcopy;
 
         if (signbit(unified->lat_ovh)) {
@@ -996,11 +995,9 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     *size_p = iface_attr_len;
 
     if (unpack_flags & UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX) {
-        ptr                       = UCS_PTR_BYTE_OFFSET(ptr, iface_attr_len);
-        iface_attr->dst_rsc_index = *(uint8_t*)ptr;
-        *size_p                  += sizeof(uint8_t);
-    } else {
-        iface_attr->dst_rsc_index = UCP_NULL_RESOURCE;
+        /* dst_rsc_index was removed from unpacked address, but still exists
+         * in packed address (for wire compatibility), so we need to skip it */
+        *size_p += sizeof(uint8_t);
     }
 
     return UCS_OK;

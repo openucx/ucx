@@ -228,9 +228,10 @@ static unsigned sock_rte_group_index(void *rte_group)
 static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
                              void *arg)
 {
-#pragma omp barrier
-
-#pragma omp master
+#if _OPENMP
+#  pragma omp barrier
+#  pragma omp master
+#endif
   {
     sock_rte_group_t *group = rte_group;
 
@@ -251,7 +252,10 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
         }
     }
   }
-#pragma omp barrier
+
+#if _OPENMP
+#  pragma omp barrier
+#endif
 }
 
 static void sock_rte_post_vec(void *rte_group, const struct iovec *iovec,

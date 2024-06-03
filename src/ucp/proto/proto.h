@@ -22,10 +22,6 @@
 #define UCP_PROTO_MAX_PERF_RANGES 24
 
 
-/* Maximal size of protocol private data */
-#define UCP_PROTO_PRIV_MAX          1024
-
-
 /* Maximal number of protocols in total */
 #define UCP_PROTO_MAX_COUNT         64
 

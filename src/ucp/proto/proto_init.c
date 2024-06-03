@@ -55,10 +55,16 @@ void ucp_proto_common_add_ppln_range(ucp_proto_caps_t *caps,
     frag_overhead =
             ucs_linear_func_apply(ppln_perf[UCP_PROTO_PERF_TYPE_SINGLE], frag_size) -
             ucs_linear_func_apply(ppln_perf[UCP_PROTO_PERF_TYPE_MULTI], frag_size);
-    ucs_assert(frag_overhead >= 0);
 
     ucs_trace("frag-size: %zd" UCP_PROTO_TIME_FMT(frag_overhead), frag_size,
               UCP_PROTO_TIME_ARG(frag_overhead));
+
+    /* In certain cases multi perf can be bigger than single (e.g. FAST_CMPL
+     * with huge send_post_overhead) so the fragment overhead can be negative
+     * according to the logic above. The simplest estimation is to ignore
+     * fragment overhead in that particular case.
+     */
+    frag_overhead = ucs_max(frag_overhead, 0);
 
     /* Apply the pipelining effect when sending multiple fragments */
     ppln_perf[UCP_PROTO_PERF_TYPE_SINGLE] =
