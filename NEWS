@@ -93,6 +93,7 @@
 * Fixed Active Message hanging issue in ucp_client_server
 * Fixed potential crash due to redundant munmap call in ucp mmap tests
 * Fixed a crash when running CUDA gtest under valgrind
+* Fixed UD endpoint timeout issue under Valgrind
 #### Java
 * Fixed failures in Java tests by waiting for send requests completion
 * Fixed JVM segfault in Java tests when gdrcopy driver is not loaded
