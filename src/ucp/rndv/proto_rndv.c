@@ -321,8 +321,7 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
         ucp_proto_caps_t *proto_caps, ucp_proto_id_t proto_id, double bias,
         ucp_proto_caps_t *output_caps, size_t min_length, size_t max_length)
 {
-    const char *proto_name         = ucp_proto_id_field(proto_id, name);
-    ucp_proto_perf_range_t *range  = proto_caps->ranges;
+    const char *proto_name = ucp_proto_id_field(proto_id, name);
     const ucp_proto_perf_range_t *parallel_stages[3];
     size_t range_max_length;
     ucs_status_t status;
@@ -337,7 +336,7 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
     }
 
     ucs_carray_for_each(range, proto_caps->ranges, proto_caps->num_ranges) {
-        range_max_length               = ucs_min(range->max_length, max_length);
+        range_max_length = ucs_min(range->max_length, max_length);
         if (range_max_length < min_length) {
             continue;
         }
