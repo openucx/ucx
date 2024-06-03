@@ -323,6 +323,7 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
 {
     const char *proto_name = ucp_proto_id_field(proto_id, name);
     const ucp_proto_perf_range_t *parallel_stages[3];
+    ucp_proto_perf_range_t *range;
     size_t range_max_length;
     ucs_status_t status;
     size_t i;
