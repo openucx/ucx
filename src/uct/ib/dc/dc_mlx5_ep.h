@@ -492,6 +492,7 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     ucs_trace_data("iface %p: release dci %d from ep %p", iface, dci_index,
                    uct_dc_mlx5_ep_from_dci(iface, dci_index));
 
+    uct_dc_mlx5_iface_dci(iface, dci_index)->ep = NULL;
     pool->stack_top--;
     ucs_assertv(pool->stack_top >= 0, "dci pool underflow, stack_top=%d",
                 (int)pool->stack_top);

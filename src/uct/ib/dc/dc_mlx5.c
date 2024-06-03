@@ -879,8 +879,6 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
     dci.ep = NULL;
 
     iface->tx.bb_max = dci.txwq.bb_max;
-    uct_rc_txqp_purge_outstanding(&iface->super.super, &dci.txqp,
-                                  UCS_ERR_CANCELED, dci.txwq.sw_pi, 0);
     uct_dc_mlx5_destroy_dci(iface, &dci);
 
     return UCS_OK;
