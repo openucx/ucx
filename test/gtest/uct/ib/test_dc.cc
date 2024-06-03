@@ -449,9 +449,8 @@ UCS_TEST_P(test_dc, pool_indices)
     /* Set num paths to max */
     modify_config("IB_NUM_PATHS", std::to_string(max_dci_pools).c_str());
 
-    entity *rand_e        = create_rand_entity();
-
-    bool used_last_pool   = false;
+    entity *rand_e      = create_rand_entity();
+    bool used_last_pool = false;
 
     /* Create an ep for each pool */
     for (int i = 0; i < max_dci_pools; i++) {
