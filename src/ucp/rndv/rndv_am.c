@@ -22,6 +22,9 @@ ucp_rndv_am_cfg_thresh(ucp_context_t *context, size_t am_thresh)
 static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
 {
     ucp_context_h context = params->super.super.worker->context;
+    ucp_proto_multi_priv_t mpriv;
+    ucp_proto_caps_t caps;
+    ucs_status_t status;
 
     if (!ucp_proto_rndv_op_check(&params->super.super, UCP_OP_ID_RNDV_SEND,
                                  0)) {
@@ -38,7 +41,21 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
     params->max_lanes        = context->config.ext.max_rndv_lanes;
     params->opt_align_offs   = UCP_PROTO_COMMON_OFFSET_INVALID;
 
-    ucp_proto_multi_probe(params);
+    status = ucp_proto_multi_init(params, &caps, &mpriv);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    if (ucp_proto_rndv_init_params_incl_prev_stages(&params->super.super)) {
+        status = ucp_proto_rndv_predict_prev_stages(&params->super.super,
+                                                    &caps);
+        if (status != UCS_OK) {
+            return;
+        }
+    }
+
+    ucp_proto_common_add_proto(&params->super, &caps, &mpriv,
+                               ucp_proto_multi_priv_size(&mpriv));
 }
 
 static UCS_F_ALWAYS_INLINE void
