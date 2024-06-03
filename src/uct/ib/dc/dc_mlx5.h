@@ -509,7 +509,6 @@ uct_dc_mlx5_iface_tx_waitq(uct_dc_mlx5_iface_t *iface)
 static UCS_F_ALWAYS_INLINE ucs_arbiter_t *
 uct_dc_mlx5_iface_dci_waitq(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 {
-    ucs_assert_always(pool_index < UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
     return &iface->tx.dci_pool[pool_index].arbiter;
 }
 

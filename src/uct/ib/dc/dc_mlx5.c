@@ -146,6 +146,12 @@ ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
     {NULL}
 };
 
+static uint8_t
+uct_dc_mlx5_max_rd_atomic(const uct_dc_mlx5_iface_addr_t *if_addr)
+{
+    return (if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16) ? 16 : 64;
+}
+
 static ucs_status_t
 uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 {
@@ -168,12 +174,9 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     if_addr    = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
     path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
 
-    if_addr_max_rd_atomic = (if_addr->flags &
-                             UCT_DC_MLX5_IFACE_ADDR_MAX_RD_ATOMIC_16) ?
-                                    16 :
-                                    64;
-    max_rd_atomic = ucs_min(iface->super.super.config.max_rd_atomic,
-                            if_addr_max_rd_atomic);
+    if_addr_max_rd_atomic = uct_dc_mlx5_max_rd_atomic(if_addr);
+    max_rd_atomic         = ucs_min(iface->super.super.config.max_rd_atomic,
+                                    if_addr_max_rd_atomic);
 
     uct_dc_mlx5_init_dci_config(&dci_config, path_index, max_rd_atomic);
 
@@ -770,7 +773,7 @@ uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
 
 static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface)
 {
-    uint8_t num_dcis     = ucs_array_capacity(&iface->tx.dcis);
+    uint8_t num_dcis = ucs_array_capacity(&iface->tx.dcis);
     uct_dc_dci_t *dci;
     uint8_t pool_index, dci_index;
 
@@ -1097,10 +1100,11 @@ ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface)
     if (status != UCS_OK) {
         goto err_cleanup;
     }
+
     ep->flags &= ~UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
     ep->flags |= pool_index & UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
 
-    status    = uct_dc_mlx5_ep_basic_init(iface, ep);
+    status = uct_dc_mlx5_ep_basic_init(iface, ep);
     if (status != UCS_OK) {
         ucs_error("FC ep init failed %s", ucs_status_string(status));
         goto err_cleanup;
