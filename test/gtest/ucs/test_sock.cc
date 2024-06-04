@@ -72,7 +72,7 @@ protected:
 
     void verify_subnet_match(sa_family_t af, const char *ip_addr1,
                              const char *ip_addr2,
-                             unsigned max_common_prefix) const
+                             unsigned longest_common_prefix) const
     {
         struct sockaddr_storage storage1, storage2;
         struct sockaddr *saddr1 = (struct sockaddr*)&storage1;
@@ -85,12 +85,12 @@ protected:
         size_t addr_size_bits = get_addr_size(saddr1) * CHAR_BIT;
 
         for (size_t prefix = 0; prefix <= addr_size_bits; ++prefix) {
-            ASSERT_UCS_OK(ucs_sockaddr_is_subnet_equal(saddr1, saddr2, prefix,
-                                                       &matched));
-            EXPECT_EQ(prefix <= max_common_prefix, matched)
+            ASSERT_UCS_OK(ucs_sockaddr_is_same_subnet(saddr1, saddr2, prefix,
+                                                      &matched));
+            EXPECT_EQ(prefix <= longest_common_prefix, matched)
                     << "failed to match subnet: ip1=" << ip_addr1
                     << " ip2=" << ip_addr2 << " prefix=" << prefix
-                    << " max_common=" << max_common_prefix
+                    << " max_common=" << longest_common_prefix
                     << " (matched=" << matched << ")";
         }
     }
@@ -106,7 +106,8 @@ protected:
 
         sa1->sa_family = af1;
         sa2->sa_family = af2;
-        status         = ucs_sockaddr_is_subnet_equal(sa1, sa2, prefix, &matched);
+        status         = ucs_sockaddr_is_same_subnet(sa1, sa2, prefix,
+                                                     &matched);
         EXPECT_EQ(expected_status, status);
         EXPECT_FALSE(matched);
     }

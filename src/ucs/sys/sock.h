@@ -545,7 +545,7 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2);
  * @param [in]  sa1         Pointer to sockaddr structure #1.
  * @param [in]  sa2         Pointer to sockaddr structure #2.
  * @param [in]  prefix_len  Subnet prefix length in bits.
- * @param [out] is_equal_p  Pointer to a boolean value indicating if both
+ * @param [out] is_same_p   Pointer to a boolean value indicating if both
  *                          addresses are in the same subnet.
  *
  * @return UCS_OK on success or one of the following errors:
@@ -553,9 +553,9 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2);
  *         UCS_ERR_EXCEEDS_LIMIT - prefix_len is too big (exceeds size of
  *                                 address).
  */
-ucs_status_t ucs_sockaddr_is_subnet_equal(const struct sockaddr *sa1,
-                                          const struct sockaddr *sa2,
-                                          unsigned prefix_len, int *is_equal_p);
+ucs_status_t ucs_sockaddr_is_same_subnet(const struct sockaddr *sa1,
+                                         const struct sockaddr *sa2,
+                                         unsigned prefix_len, int *is_same_p);
 
 
 /**

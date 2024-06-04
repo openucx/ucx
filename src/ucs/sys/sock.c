@@ -984,11 +984,11 @@ static void ucs_sockaddr_log_subnet_info(const struct sockaddr *sa1,
     ucs_debug("%s", ucs_string_buffer_cstr(&info));
 }
 
-ucs_status_t ucs_sockaddr_is_subnet_equal(const struct sockaddr *sa1,
-                                          const struct sockaddr *sa2,
-                                          unsigned prefix_len, int *is_equal_p)
+ucs_status_t ucs_sockaddr_is_same_subnet(const struct sockaddr *sa1,
+                                         const struct sockaddr *sa2,
+                                         unsigned prefix_len, int *is_same_p)
 {
-    int is_equal        = 0;
+    int is_same         = 0;
     ucs_status_t status = UCS_OK;
     const void *ipaddr1, *ipaddr2;
     size_t addr_size, addr_size_bits;
@@ -1026,14 +1026,14 @@ ucs_status_t ucs_sockaddr_is_subnet_equal(const struct sockaddr *sa1,
                 ipaddr1, ipaddr2);
 
     /* Check if the addresses have matching prefixes */
-    is_equal = ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
+    is_same = ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
-        ucs_sockaddr_log_subnet_info(sa1, sa2, prefix_len, is_equal);
+        ucs_sockaddr_log_subnet_info(sa1, sa2, prefix_len, is_same);
     }
 
 out:
-    *is_equal_p = is_equal;
+    *is_same_p = is_same;
     return status;
 }
 
