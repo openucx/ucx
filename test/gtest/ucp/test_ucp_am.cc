@@ -17,6 +17,7 @@
 #include "ucp_test.h"
 
 extern "C" {
+#include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/mpool.inl>
@@ -1848,7 +1849,14 @@ private:
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    test_am_send_recv_memtype(64 * UCS_KBYTE);
+    const auto *cfg                 = &sender().worker()->context->config.ext;
+    const size_t rndv_frag_size     = cfg->rndv_frag_size[UCS_MEMORY_TYPE_HOST];
+    const std::vector<size_t> sizes = {64 * UCS_KBYTE, rndv_frag_size - 1,
+                                       rndv_frag_size  + 1};
+
+    for (size_t size : sizes) {
+        test_am_send_recv_memtype(size);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);

@@ -197,32 +197,6 @@ void ucp_proto_rndv_ppln_send_frag_complete(ucp_request_t *freq, int send_ack)
                                       "ppln_send");
 }
 
-static ucs_status_t ucp_proto_rndv_recv_ppln_reset(ucp_request_t *req)
-{
-    ucs_assertv(req->send.rndv.ppln.ack_data_size <= 0,
-                "req->send.rndv.ppln.ack_data_size=%zd",
-                req->send.rndv.ppln.ack_data_size);
-
-    if (!ucp_proto_common_multi_frag_is_completed(req)) {
-        return UCS_OK;
-    }
-
-    req->status                    = UCS_OK;
-    req->send.state.dt_iter.offset = 0;
-    ucp_proto_request_restart(req);
-    return UCS_OK;
-}
-
-void ucp_proto_rndv_ppln_recv_frag_clean(ucp_request_t *freq)
-{
-    ucp_send_request_id_release(freq);
-
-    /* abort freq since super request may change protocol */
-    ucp_proto_rndv_ppln_frag_complete(freq, 0, 1,
-                                      ucp_proto_rndv_recv_ppln_reset,
-                                      "ppln_recv_clean");
-}
-
 void ucp_proto_rndv_ppln_recv_frag_complete(ucp_request_t *freq, int send_ack,
                                             int abort)
 {

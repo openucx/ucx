@@ -610,14 +610,11 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
 {
-    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        return UCS_OK;
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucs_assert(req->send.state.completed_size == 0);
     }
 
-    ucs_assert(req->send.state.completed_size == 0);
-    ucp_send_request_id_release(req);
-    ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
-    return UCS_OK;
+    return ucp_proto_request_zcopy_id_reset(req);
 }
 
 static ucs_status_t
