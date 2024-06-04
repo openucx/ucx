@@ -181,6 +181,8 @@ typedef struct ucp_context_config {
     double                                 proto_overhead_rndv_rtr;
     double                                 proto_overhead_sw;
     double                                 proto_overhead_rkey_ptr;
+    /** Registration cache lookup overhead estimation */
+    double                                 rcache_overhead;
 } ucp_context_config_t;
 
 

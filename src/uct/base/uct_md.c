@@ -637,16 +637,3 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
 
     return UCS_OK;
 }
-
-double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config)
-{
-    if (rcache_config->overhead == UCS_TIME_AUTO) {
-        if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {
-            return 360e-9;
-        } else {
-            return 180e-9;
-        }
-    } else {
-        return ucs_time_to_sec(rcache_config->overhead);
-    }
-}
