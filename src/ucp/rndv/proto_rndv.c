@@ -351,13 +351,11 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
         status                         = ucp_proto_init_parallel_stages(
                 proto_name, min_length, range_max_length, bias, parallel_stages, 
                 num_ctrl_msgs + 1, output_caps);
-        if (status != UCS_OK) {
+        if ((status != UCS_OK) || (range_max_length == max_length)) {
+            ucp_proto_select_caps_cleanup(output_caps);
             return status;
         }
 
-        if (range_max_length == max_length) {
-            break;
-        }
         min_length = range_max_length + 1;
     };
 
@@ -1218,7 +1216,7 @@ ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *init_params,
     ucp_proto_rndv_ctrl_init_params_t rts_params, rtr_params;
     ucp_md_map_t remote_md_map, local_md_map;
     ucp_proto_rndv_ctrl_priv_t rpriv;
-    ucp_proto_caps_t tmp_caps;
+    ucp_proto_caps_t result_caps;
     ucs_status_t status;
 
     ucp_proto_rndv_rts_params_init(init_params, &rts_params);
@@ -1255,13 +1253,27 @@ ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *init_params,
         status       = ucp_proto_rndv_ctrl_range_init(
                 &rtr_params, &rpriv, &ctrl_stages[num_stages++]);
         if (status != UCS_OK) {
-            return status;
+            num_stages--;
+            goto out;
         }
     }
 
-    tmp_caps         = *caps;
-    caps->num_ranges = 0;
-    return ucp_proto_rndv_ctrl_init_parallel_stages(
-            ctrl_stages, num_stages, &tmp_caps, init_params->proto_id, 0,
-            caps, 0, SIZE_MAX);
+    result_caps            = *caps;
+    result_caps.num_ranges = 0;
+    status                 = ucp_proto_rndv_ctrl_init_parallel_stages(
+            ctrl_stages, num_stages, caps, init_params->proto_id, 0,
+            &result_caps, 0, SIZE_MAX);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ucp_proto_select_caps_cleanup(caps);
+    *caps = result_caps;
+
+out:
+    do {
+        ucp_proto_perf_node_deref(&ctrl_stages[--num_stages].node);
+    } while (num_stages > 0);
+
+    return status;
 }
