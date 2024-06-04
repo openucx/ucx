@@ -343,8 +343,8 @@ uct_dc_mlx5_dci_pool_add_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
 ucs_status_t static UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_dci_pool_append_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 {
+    uct_dc_dci_t dci  = {{{0}}};
     uint8_t dci_index = ucs_array_length(&iface->tx.dcis);
-    uct_dc_dci_t dci  = {0};
 
     dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
     *ucs_array_append(&iface->tx.dcis, return UCS_ERR_NO_MEMORY) = dci;
@@ -355,7 +355,7 @@ uct_dc_mlx5_dci_pool_append_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    uct_dc_dci_t empty_dci = {0};
+    uct_dc_dci_t empty_dci = {{{0}}};
     uct_dc_dci_t *dci;
 
     ucs_arbiter_group_init(&ep->arb_group);

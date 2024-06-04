@@ -864,7 +864,7 @@ static ucs_status_t
 uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
                               const uct_dc_mlx5_iface_config_t *config)
 {
-    uct_dc_dci_t dci = {0};
+    uct_dc_dci_t dci = {{{0}}};
     ucs_status_t status;
 
     dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
