@@ -180,7 +180,9 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  * @param _min_capacity  Minimal capacity to reserve.
  * @param _old_buffer_p  If the array was reallocated, and this parameter is
  *                       non-NULL, the previous buffer will not be released, and
- *                       instread it will be returned in *_old_buffer_p.
+ *                       instead it will be returned in *_old_buffer_p,
+ *                       NOTICE: It is assumed that when not-NULL, copying _old_buffer to
+ *                       the new array will be caller's responsibility.
  *
  * @return UCS_OK if successful, UCS_ERR_NO_MEMORY if cannot allocate the array.
  */
