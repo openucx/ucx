@@ -1133,6 +1133,18 @@ static ucs_status_t ucp_perf_test_create_self_rkey(ucx_perf_context_t *perf,
     return status;
 }
 
+static void ucp_perf_test_init_endpoints(ucx_perf_context_t *perf)
+{
+    /* Initialize all endpoints and rkeys to NULL to handle error flow */
+    for (unsigned i = 0; i < perf->params.thread_count; ++i) {
+        perf->ucp.tctx[i].perf.ucp.ep             = NULL;
+        perf->ucp.tctx[i].perf.ucp.rkey           = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_ep        = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_send_rkey = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_recv_rkey = NULL;
+    }
+}
+
 static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
                                                       unsigned peer_index)
 {
@@ -1156,14 +1168,7 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
         goto err;
     }
 
-    /* Initialize all endpoints and rkeys to NULL to handle error flow */
-    for (i = 0; i < thread_count; i++) {
-        perf->ucp.tctx[i].perf.ucp.ep             = NULL;
-        perf->ucp.tctx[i].perf.ucp.rkey           = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_ep        = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_send_rkey = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_recv_rkey = NULL;
-    }
+    ucp_perf_test_init_endpoints(perf);
 
     /* Receive the data from the remote peer, extract the address from it
      * (along with additional wireup info) and create an endpoint to the peer */
@@ -1428,6 +1433,7 @@ static ucs_status_t ucp_perf_setup_daemon_endpoints(ucx_perf_context_t *perf)
 
     ucs_assert_always(is_local_sender != is_remote_sender);
     ucs_assert_always(perf->params.thread_count == 1);
+    ucp_perf_test_init_endpoints(perf);
 
     if (is_local_sender) {
         local_dmn_addr  = &perf->params.ucp.dmn_local_addr;

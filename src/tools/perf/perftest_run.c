@@ -210,26 +210,6 @@ static void print_test_name(struct perftest_context *ctx)
     }
 }
 
-static int read_batch_args(char *buf, char **argv, size_t argv_size)
-{
-    static const char delim[] = " \t\n\r";
-    int argc                  = 0;
-    char *p                   = strtok(buf, delim);
-
-    /* Ignore comment line (where first non-delimiter char is #) */
-    if ((NULL != p) && (*p == '#')) {
-        return 0;
-    }
-
-    while ((NULL != p) && (argc < (argv_size - 1))) {
-        argv[argc++] = p;
-        p            = strtok(NULL, delim);
-    }
-
-    argv[argc] = NULL;
-    return argc;
-}
-
 static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
                                     int *line_num, perftest_params_t *params,
                                     char** test_name_p)
@@ -240,15 +220,24 @@ static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
     char buf[MAX_ARG_SIZE];
     char error_prefix[MAX_ARG_SIZE];
     int argc;
-    char *argv[MAX_SIZE];
+    char *argv[MAX_SIZE + 1];
     int c;
+    char *p;
 
     do {
         if (fgets(buf, sizeof(buf) - 1, batch_file) == NULL) {
             return UCS_ERR_NO_ELEM;
         }
         ++(*line_num);
-    } while ((argc = read_batch_args(buf, argv, MAX_SIZE)) == 0);
+
+        argc = 0;
+        p = strtok(buf, " \t\n\r");
+        while (p && (argc < MAX_SIZE)) {
+            argv[argc++] = p;
+            p = strtok(NULL, " \t\n\r");
+        }
+        argv[argc] = NULL;
+    } while ((argc == 0) || (argv[0][0] == '#'));
 
     ucs_snprintf_safe(error_prefix, sizeof(error_prefix),
                       "in batch file '%s' line %d: ", file_name, *line_num);
@@ -273,30 +262,10 @@ static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
     return UCS_OK;
 }
 
-static size_t get_test_count(FILE *batch_file)
-{
-    size_t test_count = 0;
-
-#define MAX_SIZE 256
-#define MAX_ARG_SIZE 2048
-    char buf[MAX_ARG_SIZE];
-    char *argv[MAX_SIZE];
-
-    while (fgets(buf, sizeof(buf) - 1, batch_file) != NULL) {
-        if (read_batch_args(buf, argv, MAX_SIZE) > 0) {
-            ++test_count;
-        }
-    };
-
-    fseek(batch_file, 0, SEEK_SET);
-    return test_count;
-}
-
 static ucs_status_t run_test_recurs(struct perftest_context *ctx,
                                     const perftest_params_t *parent_params,
                                     unsigned depth)
 {
-    size_t test_count = 0;
     perftest_params_t params;
     ucx_perf_result_t result;
     ucs_status_t status;
@@ -321,10 +290,6 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (parent_params->super.ucp.is_daemon_mode) {
-        test_count = get_test_count(batch_file);
-    }
-
     line_num = 0;
     do {
         status = clone_params(&params, parent_params);
@@ -336,15 +301,6 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
                                  &line_num, &params,
                                  &ctx->test_names[depth]);
         if (status == UCS_OK) {
-            if (parent_params->super.ucp.is_daemon_mode) {
-                /* Keep daemon running until the last test execution begins.
-                 * For the very last run take the is_keep_running value from the
-                 * parent config */
-                params.super.ucp.is_keep_running =
-                    (--test_count == 0) ?
-                        parent_params->super.ucp.is_keep_running : 1;
-            }
-
             run_test_recurs(ctx, &params, depth + 1);
             free(ctx->test_names[depth]);
             ctx->test_names[depth] = NULL;
@@ -361,6 +317,19 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
 out:
     fclose(batch_file);
     return status;
+}
+
+static void terminate_daemon(struct perftest_context *ctx)
+{
+    ucx_perf_context_t perf = {0};
+
+    perf.params                     = ctx->params.super;
+    perf.params.ucp.is_keep_running = 0;
+    perf.params.command             = UCX_PERF_CMD_AM;
+    perf.params.max_outstanding     = 1;
+
+    ucx_perf_funcs[UCX_PERF_API_UCP].setup(&perf);
+    ucx_perf_funcs[UCX_PERF_API_UCP].cleanup(&perf);
 }
 
 ucs_status_t run_test(struct perftest_context *ctx)
@@ -390,6 +359,11 @@ ucs_status_t run_test(struct perftest_context *ctx)
     status = run_test_recurs(ctx, &ctx->params, 0);
     if (status != UCS_OK) {
         ucs_error("Failed to run test: %s", ucs_status_string(status));
+    }
+
+    /* Terminate daemon if running */
+    if (ctx->params.super.ucp.is_daemon_mode) {
+        terminate_daemon(ctx);
     }
 
     return status;

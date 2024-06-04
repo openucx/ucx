@@ -321,7 +321,8 @@ static ucs_status_t init_daemon_params(ucx_perf_params_t *params)
         memcpy(remote_addr, local_addr, sizeof(*remote_addr));
     }
 
-    params->ucp.is_daemon_mode = 1;
+    params->ucp.is_daemon_mode  = 1;
+    params->ucp.is_keep_running = 1;
     return UCS_OK;
 }
 
