@@ -87,8 +87,11 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -o             do not progress the responder in one-sided tests\n");
     printf("     -B             register memory with NONBLOCK flag\n");
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
-    printf("                    file is a test to run, first word is test name, the rest of\n");
-    printf("                    the line is command-line arguments for the test.\n");
+    printf("                    file is a test to run. The first word is a user-defined\n");
+    printf("                    test name, followed by command-line arguments, for example:\n");
+    printf("\n");
+    printf("                        test_tag_bandwidth_64k -t tag_bw -s 65536 -n 10000\n");
+    printf("\n");
     printf("     -R <rank>      percentile rank of the percentile data in latency tests (%.1f)\n",
                                 ctx->params.super.percentile_rank);
     printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
