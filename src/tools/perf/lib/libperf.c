@@ -1135,8 +1135,10 @@ static ucs_status_t ucp_perf_test_create_self_rkey(ucx_perf_context_t *perf,
 
 static void ucp_perf_test_init_endpoints(ucx_perf_context_t *perf)
 {
+    unsigned i;
+
     /* Initialize all endpoints and rkeys to NULL to handle error flow */
-    for (unsigned i = 0; i < perf->params.thread_count; ++i) {
+    for (i = 0; i < perf->params.thread_count; ++i) {
         perf->ucp.tctx[i].perf.ucp.ep             = NULL;
         perf->ucp.tctx[i].perf.ucp.rkey           = NULL;
         perf->ucp.tctx[i].perf.ucp.self_ep        = NULL;
