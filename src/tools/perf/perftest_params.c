@@ -637,7 +637,8 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     ctx->mad_port        = NULL;
 
     optind = 1;
-    while ((c = getopt_long(argc, argv, "p:b:6NfvIc:P:hK:g:G:k" TEST_PARAMS_ARGS,
+    while ((c = getopt_long(argc, argv,
+                            "p:b:6NfvIc:P:hK:g:G:k" TEST_PARAMS_ARGS,
                             TEST_PARAMS_ARGS_LONG, NULL)) != -1) {
         switch (c) {
         case 'p':

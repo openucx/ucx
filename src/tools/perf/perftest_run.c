@@ -321,7 +321,7 @@ out:
 
 static void terminate_daemon(struct perftest_context *ctx)
 {
-    ucx_perf_context_t perf = {0};
+    ucx_perf_context_t perf = {{0}};
 
     perf.params                     = ctx->params.super;
     perf.params.ucp.is_keep_running = 0;

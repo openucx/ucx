@@ -67,8 +67,8 @@ static void ucp_perf_daemon_ep_close(ucp_ep_h ep)
 
 static void ucp_perf_daemon_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
-    ucs_error("ep %p: error handler called with status %s",
-              ep, ucs_status_string(status));
+    ucs_error("ep %p: error handler called with status %s", ep,
+              ucs_status_string(status));
 
     terminated = 1;
 }
