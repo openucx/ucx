@@ -873,7 +873,7 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
     ucs_array_resize(&iface->tx.dcis,
                      UCT_DC_MLX5_IFACE_MAX_DCI_POOLS * iface->tx.ndci, dci,
                      return UCS_ERR_NO_MEMORY);
-    ucs_array_set_length(&iface->tx.dcis, 0);
+    ucs_array_length(&iface->tx.dcis) = 0;
 
     status = uct_dc_mlx5_iface_create_dci(iface, 0, &dci);
     if (status != UCS_OK) {
@@ -1674,6 +1674,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     /* Create fake endpoint which will be used for sending FC grants */
     status = uct_dc_mlx5_iface_init_fc_ep(self);
     if (status != UCS_OK) {
+        ucs_error("failed to init fc_ep");
         goto err_destroy_fc_ep_and_dcis;
     }
 
