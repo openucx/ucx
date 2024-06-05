@@ -321,15 +321,20 @@ out:
 
 static void terminate_daemon(struct perftest_context *ctx)
 {
-    ucx_perf_context_t perf = {{0}};
+    ucx_perf_context_t *perf = calloc(1, sizeof(*perf));
+    if (NULL == perf) {
+        ucs_error("Failed to allocate memory for daemon termination");
+        return;
+    }
 
-    perf.params                     = ctx->params.super;
-    perf.params.ucp.is_keep_running = 0;
-    perf.params.command             = UCX_PERF_CMD_AM;
-    perf.params.max_outstanding     = 1;
+    perf->params                     = ctx->params.super;
+    perf->params.ucp.is_keep_running = 0;
+    perf->params.command             = UCX_PERF_CMD_AM;
+    perf->params.max_outstanding     = 1;
 
-    ucx_perf_funcs[UCX_PERF_API_UCP].setup(&perf);
-    ucx_perf_funcs[UCX_PERF_API_UCP].cleanup(&perf);
+    ucx_perf_funcs[UCX_PERF_API_UCP].setup(perf);
+    ucx_perf_funcs[UCX_PERF_API_UCP].cleanup(perf);
+    free(perf);
 }
 
 ucs_status_t run_test(struct perftest_context *ctx)
