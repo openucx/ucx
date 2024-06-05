@@ -70,12 +70,11 @@ protected:
 class base_event : public base_async {
 public:
     base_event(ucs_async_mode_t mode) : base_async(mode) {
-        ucs_status_t status = ucs_async_pipe_create(&m_event_pipe);
-        ASSERT_UCS_OK(status);
+        create_event();
     }
 
     virtual ~base_event() {
-        ucs_async_pipe_destroy(&m_event_pipe);
+        destory_event();
     }
 
     void set_handler(ucs_async_context_t *async) {
@@ -99,6 +98,14 @@ public:
         ucs_async_pipe_drain(&m_event_pipe);
     }
 
+    void create_event() {
+        ucs_status_t status = ucs_async_pipe_create(&m_event_pipe);
+        ASSERT_UCS_OK(status);
+    }
+
+    void destory_event() {
+        ucs_async_pipe_destroy(&m_event_pipe);
+    }
 protected:
     virtual void ack_event() {
         reset();
@@ -222,11 +229,19 @@ class local_event : public local,
 {
 public:
     local_event(ucs_async_mode_t mode) : local(mode), base_event(mode) {
+        set_event();
+    }
+
+    void set_event() {
         set_handler(&m_async);
     }
 
-    ~local_event() {
+    void unset_event() {
         unset_handler();
+    }
+
+    ~local_event() {
+        unset_event();
     }
 };
 
@@ -308,6 +323,7 @@ protected:
 template<typename LOCAL>
 class test_async_mt : public test_async {
 protected:
+    using FuncVp = void* (*)(void*);
     static const unsigned NUM_THREADS = 32;
 
     test_async_mt() {
@@ -349,10 +365,48 @@ protected:
         return result;
     }
 
-    void spawn() {
+    int crash_run(unsigned index) {
+        static_assert(std::is_base_of<local_event, LOCAL>::value, "");
+        LOCAL* le;
+        m_ev[index] = le = new LOCAL(GetParam());
+
+        check_is_blocked(le, false);
+
+        barrier();
+
+        int round = 0;
+        while (!m_stop[index]) {
+            le->block();
+            check_is_blocked(le, true);
+            unsigned before = le->count();
+            suspend_and_poll(le, 10);
+            unsigned after  = le->count();
+            le->unblock();
+            EXPECT_EQ(before, after); /* Should not handle while blocked */
+
+            auto wait = rand() % 40;
+            le->unset_event();
+            le->destory_event();
+            suspend(wait);
+            le->create_event();
+            le->set_event();
+            suspend(40 - wait);
+            le->check_miss();
+            ++round;
+        }
+
+        check_is_blocked(le, false);
+
+        int result = le->count();
+        delete le;
+        m_ev[index] = NULL;
+        return result;
+    }
+
+    void spawn(FuncVp f = thread_func) {
         for (unsigned i = 0; i < NUM_THREADS; ++i) {
             m_stop[i] = false;
-            pthread_create(&m_threads[i], NULL, thread_func, (void*)this);
+            pthread_create(&m_threads[i], NULL, f, (void*)this);
         }
         barrier();
     }
@@ -399,6 +453,7 @@ private:
         pthread_barrier_wait(&m_barrier);
     }
 
+public:
     static void *thread_func(void *arg)
     {
         test_async_mt *self = reinterpret_cast<test_async_mt*>(arg);
@@ -413,6 +468,21 @@ private:
         return (void*)-1;
     }
 
+    static void *crash_func(void *arg)
+    {
+        test_async_mt *self = reinterpret_cast<test_async_mt*>(arg);
+
+        for (unsigned index = 0; index < NUM_THREADS; ++index) {
+            if (self->m_threads[index] == pthread_self()) {
+                return (void*)(uintptr_t)self->crash_run(index);
+            }
+        }
+
+        /* Not found */
+        return (void*)-1;
+    }
+
+private:
     pthread_t                      m_threads[NUM_THREADS];
     pthread_barrier_t              m_barrier;
     int                            m_thread_counts[NUM_THREADS];
@@ -809,6 +879,19 @@ UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread,
         UCS_TEST_MESSAGE << "retry " << (retry + 1);
     }
     EXPECT_GE(min_count, exp_min_count);
+}
+
+UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread_create_destory,
+                     !(HAVE_DECL_F_SETOWN_EX)) {
+    spawn(crash_func);
+    for (int j = 0; j < 4; ++j) {
+        for (unsigned i = 0; i < NUM_THREADS; ++i) {
+            event(i)->push_event();
+        }
+        suspend(50);
+    }
+    suspend();
+    stop();
 }
 
 UCS_TEST_SKIP_COND_P(test_async_event_mt, check_blocks_multithread,
