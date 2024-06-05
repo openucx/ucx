@@ -20,7 +20,7 @@
 #include <inttypes.h>
 
 
-#define UCP_RCACHE_LOOKUP_FUNC ucs_linear_func_make(50.0e-9, 0)
+#define UCP_RCACHE_OVERHEAD_DEFAULT 50.0e-9
 
 
 /* Mask of UCT memory flags that need make sure are present when reusing an

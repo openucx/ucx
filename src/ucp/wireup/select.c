@@ -1309,7 +1309,7 @@ ucp_wireup_mem_reg_cost(ucp_context_t *context,
     }
 
     if (remote_addr->dst_version > UCP_RELEASE_LEGACY) {
-        return UCP_RCACHE_LOOKUP_FUNC;
+        return ucs_linear_func_make(UCP_RCACHE_OVERHEAD_DEFAULT, 0);
     }
 
     /* This is needed to preserve wire-compatibility support with

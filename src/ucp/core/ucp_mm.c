@@ -1596,6 +1596,9 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context,
         }
     }
 
+    context->config.ext.rcache_overhead = ucs_time_units_to_sec(
+            rcache_config->overhead, UCP_RCACHE_OVERHEAD_DEFAULT);
+
     return UCS_OK;
 
 err_rcache_destroy:
