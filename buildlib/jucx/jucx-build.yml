@@ -22,7 +22,7 @@ jobs:
     steps:
       - checkout: self
         clean: true
-        fetchDepth: 100
+        fetchDepth: 200
         retryCountOnTaskFailure: 5
         path: "we/need/to/go/deeper"
         # ^workaround agent issue with container in root path
@@ -42,7 +42,6 @@ jobs:
           az_module_load dev/mvn
           # use the lowest supported Java version for compatibility:
           az_module_load dev/jdk-1.8
-          git fetch --unshallow
           TAG=`git describe --tags`
           # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
           # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
