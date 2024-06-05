@@ -17,6 +17,14 @@
 #include <ucs/debug/memtrack_int.h>
 
 
+void ucs_mpmc_queue_block(ucs_mpmc_queue_t *mpmc) {
+    ucs_spin_lock(&mpmc->lock);
+}
+
+void ucs_mpmc_queue_unblock(ucs_mpmc_queue_t *mpmc) {
+    ucs_spin_unlock(&mpmc->lock);
+}
+
 ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc)
 {
     ucs_queue_head_init(&mpmc->queue);

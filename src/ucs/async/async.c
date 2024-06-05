@@ -104,11 +104,19 @@ static inline uint64_t ucs_async_missed_event_pack(int id,
     return ((uint64_t)id << UCS_ASYNC_MISSED_QUEUE_SHIFT) | (uint32_t)events;
 }
 
+static inline int ucs_async_missed_event_unpack_id(uint64_t value) {
+    return value >> UCS_ASYNC_MISSED_QUEUE_SHIFT;
+}
+
+static inline int ucs_async_missed_event_unpack_event(uint64_t value) {
+    return value & UCS_ASYNC_MISSED_QUEUE_MASK;
+}
+
 static inline void ucs_async_missed_event_unpack(uint64_t value, int *id_p,
                                                  int *events_p)
 {
-    *id_p     = value >> UCS_ASYNC_MISSED_QUEUE_SHIFT;
-    *events_p = value & UCS_ASYNC_MISSED_QUEUE_MASK;
+    *id_p     = ucs_async_missed_event_unpack_id(value);
+    *events_p = ucs_async_missed_event_unpack_event(value);
 }
 
 static void ucs_async_handler_hold(ucs_async_handler_t *handler)
@@ -530,6 +538,8 @@ err:
 ucs_status_t ucs_async_remove_handler(int id, int is_sync)
 {
     ucs_async_handler_t *handler;
+    ucs_async_context_t *async;
+    ucs_mpmc_elem_t *elem;
     ucs_status_t status;
 
     /* We can't find the async handle mode without taking a read lock, which in
@@ -566,6 +576,17 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
              * for the async handler to complete */
             sched_yield();
         }
+    }
+
+    async = handler->async;
+    if (async != NULL) {
+        ucs_mpmc_queue_block(&async->missed);
+        ucs_mpmc_queue_for_each(elem, &async->missed) {
+            if (ucs_async_missed_event_unpack_id(elem->value) == handler->id) {
+                elem->value = -1;
+            }
+        }
+        ucs_mpmc_queue_unblock(&async->missed);
     }
 
     ucs_async_handler_put(handler);
@@ -613,6 +634,10 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
             /* TODO we should retry here if the code is change to check miss
              * only during ASYNC_UNBLOCK */
             break;
+        }
+
+        if (value == -1) {
+            continue;
         }
 
         ucs_async_method_call_all(block);

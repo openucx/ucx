@@ -32,6 +32,29 @@ typedef struct ucs_mpmc_elem {
 
 
 /**
+ * Iterate over MPMC queue elements. The queue must not be modified during the
+ * iteration.
+ *
+ * @param elem Variable which will hold point to the MPMC queue element.
+ * @param mpmc_queue MPMC Queue to iterate on.
+ */
+#define ucs_mpmc_queue_for_each(elem, mpmc_queue) \
+    ucs_queue_for_each(elem, &(mpmc_queue)->queue, super)
+
+
+/**
+ * Lock MPMC queue.
+ */
+void ucs_mpmc_queue_block(ucs_mpmc_queue_t *mpmc);
+
+
+/**
+ * Unlock MPMC queue.
+ */
+void ucs_mpmc_queue_unblock(ucs_mpmc_queue_t *mpmc);
+
+
+/**
  * Initialize MPMC queue.
  *
  * @param length   Queue length.
