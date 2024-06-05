@@ -350,6 +350,9 @@ ucs_status_t ucs_async_context_init(ucs_async_context_t *async, ucs_async_mode_t
         goto err_free_miss_fds;
     }
 
+#if UCS_ENABLE_ASSERT
+    async->owner       = UCS_ASYNC_PTHREAD_ID_NULL;
+#endif
     async->mode        = mode;
     async->last_wakeup = ucs_get_time();
     return UCS_OK;
