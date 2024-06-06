@@ -397,7 +397,8 @@ uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
         return 1;
     }
 
-    if (ucs_array_length(&pool->stack) == iface->tx.ndci) {
+    if ((ucs_array_length(&pool->stack) == iface->tx.ndci) ||
+        (pool->stack_top == iface->tx.ndci)) {
         return 0;
     }
 
