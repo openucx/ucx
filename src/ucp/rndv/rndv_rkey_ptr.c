@@ -83,12 +83,9 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-
-    if (ucp_proto_rndv_init_params_incl_prev_stages(init_params)) {
-        status = ucp_proto_rndv_predict_prev_stages(init_params, &caps);
-        if (status != UCS_OK) {
-            return;
-        }
+    status = ucp_proto_rndv_predict_prev_stages(init_params, &caps);
+    if (status != UCS_OK) {
+        return;
     }
 
     ucp_proto_common_add_proto(&params.super, &caps, &rpriv, sizeof(rpriv));
@@ -276,11 +273,9 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    if (ucp_proto_rndv_init_params_incl_prev_stages(init_params)) {
-        status = ucp_proto_rndv_predict_prev_stages(init_params, &caps);
-        if (status != UCS_OK) {
-            return;
-        }
+    status = ucp_proto_rndv_predict_prev_stages(init_params, &caps);
+    if (status != UCS_OK) {
+        return;
     }
 
     ucp_proto_common_add_proto(&params.super, &caps, &rpriv, sizeof(rpriv));

@@ -129,11 +129,9 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
             continue;
         }
 
-        if (ucp_proto_rndv_init_params_incl_prev_stages(init_params)) {
-            status = ucp_proto_rndv_predict_prev_stages(init_params, &caps);
-            if (status != UCS_OK) {
-                continue;
-            }
+        status = ucp_proto_rndv_predict_prev_stages(init_params, &caps);
+        if (status != UCS_OK) {
+            continue;
         }
 
         ucp_proto_select_add_proto(init_params, proto->cfg_thresh,

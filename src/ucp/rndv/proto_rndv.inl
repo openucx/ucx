@@ -345,18 +345,6 @@ ucp_proto_rndv_init_params_is_ppln_frag(const ucp_proto_init_params_t *params)
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_proto_rndv_init_params_incl_prev_stages(
-        const ucp_proto_init_params_t *params)
-{
-    if (!ucp_proto_init_check_op(params, UCP_PROTO_RNDV_OP_ID_MASK)) {
-        return 0;
-    }
-
-    return ucp_proto_select_op_flags(params->select_param) &
-            UCP_PROTO_SELECT_OP_FLAG_PREV_STAGES;
-}
-
-static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_op_check(const ucp_proto_init_params_t *params,
                         ucp_operation_id_t op_id, int support_ppln)
 {

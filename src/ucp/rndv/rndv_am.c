@@ -46,12 +46,9 @@ static void ucp_rndv_am_probe_common(ucp_proto_multi_init_params_t *params)
         return;
     }
 
-    if (ucp_proto_rndv_init_params_incl_prev_stages(&params->super.super)) {
-        status = ucp_proto_rndv_predict_prev_stages(&params->super.super,
-                                                    &caps);
-        if (status != UCS_OK) {
-            return;
-        }
+    status = ucp_proto_rndv_predict_prev_stages(&params->super.super, &caps);
+    if (status != UCS_OK) {
+        return;
     }
 
     ucp_proto_common_add_proto(&params->super, &caps, &mpriv,

@@ -351,11 +351,14 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
         status                         = ucp_proto_init_parallel_stages(
                 proto_name, min_length, range_max_length, bias, parallel_stages, 
                 num_ctrl_msgs + 1, output_caps);
-        if ((status != UCS_OK) || (range_max_length == max_length)) {
+        if (status != UCS_OK) {
             ucp_proto_select_caps_cleanup(output_caps);
             return status;
         }
 
+        if (range_max_length == max_length) {
+            break;
+        }
         min_length = range_max_length + 1;
     };
 
@@ -485,14 +488,9 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
                     "remote_proto->cfg_priority=%u", proto_name,
                     params->super.cfg_priority, remote_proto->cfg_priority);
 
-
-
-        if (ucp_proto_rndv_init_params_incl_prev_stages(init_params)) {
-            status = ucp_proto_rndv_predict_prev_stages(init_params,
-                                                        &result_caps);
-            if (status != UCS_OK) {
-                continue;
-            }
+        status = ucp_proto_rndv_predict_prev_stages(init_params, &result_caps);
+        if (status != UCS_OK) {
+            continue;
         }
 
         ucp_proto_select_add_proto(init_params, cfg_thresh, cfg_priority,
@@ -572,6 +570,7 @@ ucp_proto_rndv_rtr_common_params_init(
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
+        .md_map              = 0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME
     };
 
@@ -594,9 +593,7 @@ ucp_proto_rndv_rtr_params_init(const ucp_proto_init_params_t *init_params,
     params->unpack_perf_node = NULL;
     params->mem_info.type    = init_params->select_param->mem_type;
     params->mem_info.sys_dev = init_params->select_param->sys_dev;
-    params->md_map           = 0;
 }
-
 
 ucs_status_t
 ucp_proto_rndv_rtr_mtype_params_init(const ucp_proto_init_params_t *init_params,
@@ -622,9 +619,7 @@ ucp_proto_rndv_rtr_mtype_params_init(const ucp_proto_init_params_t *init_params,
 
     status = ucp_mm_get_alloc_md_index(context, &md_index,
                                        params->mem_info.type);
-    if ((status != UCS_OK) || (md_index == UCP_NULL_RESOURCE)) {
-        params->md_map = 0;
-    } else {
+    if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
         params->md_map = UCS_BIT(md_index);
     }
 
@@ -633,7 +628,6 @@ ucp_proto_rndv_rtr_mtype_params_init(const ucp_proto_init_params_t *init_params,
             init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
             &params->unpack_time, &params->unpack_perf_node);
 }
-
 
 static void
 ucp_proto_rndv_rts_params_init(const ucp_proto_init_params_t *init_params,
@@ -840,11 +834,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *params,
         return status;
     }
 
-    if (ucp_proto_rndv_init_params_incl_prev_stages(init_params)) {
-        status = ucp_proto_rndv_predict_prev_stages(init_params, caps);
-    }
-
-    return status;
+    return ucp_proto_rndv_predict_prev_stages(init_params, caps);
 }
 
 size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg)
@@ -1194,23 +1184,43 @@ void ucp_proto_rndv_bulk_request_init_lane_idx(
 }
 
 static int
+ucp_proto_rndv_init_params_incl_prev_stages(
+        const ucp_proto_init_params_t *params)
+{
+    if (!ucp_proto_init_check_op(params, UCP_PROTO_RNDV_OP_ID_MASK)) {
+        return 0;
+    }
+
+    return ucp_proto_select_op_flags(params->select_param) &
+            UCP_PROTO_SELECT_OP_FLAG_PREV_STAGES;
+}
+
+static int
 ucp_proto_rndv_predict_rtr_mtype(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context          = init_params->worker->context;
     ucs_memory_type_t frag_mem_type = context->config.ext.rndv_frag_mem_type;
+    ucs_memory_type_t rkey_mem_type;
 
     if (init_params->rkey_config_key == NULL) {
         return 0;
     }
+    rkey_mem_type = init_params->rkey_config_key->mem_type;
 
-    return (init_params->rkey_config_key->mem_type == frag_mem_type) ? 1 : 0;
+    if ((rkey_mem_type == init_params->select_param->mem_type) ||
+        (rkey_mem_type != frag_mem_type)) {
+        return 0;
+    }
+
+    /* Report `true` only if `rkey_mem_type` equal to `frag_mem_type` and
+     * different from `select_params->mem_type` */
+    return 1;
 }
 
 ucs_status_t
 ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *init_params,
                                    ucp_proto_caps_t *caps)
 {
-    int is_rtr_mtype  = ucp_proto_rndv_predict_rtr_mtype(init_params);
     size_t num_stages = 0;
     ucp_proto_perf_range_t ctrl_stages[2];
     ucp_proto_rndv_ctrl_init_params_t rts_params, rtr_params;
@@ -1218,6 +1228,11 @@ ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *init_params,
     ucp_proto_rndv_ctrl_priv_t rpriv;
     ucp_proto_caps_t result_caps;
     ucs_status_t status;
+
+    if (!ucp_proto_rndv_init_params_incl_prev_stages(init_params)) {
+        /* Do not include previous stages */
+        return UCS_OK;
+    }
 
     ucp_proto_rndv_rts_params_init(init_params, &rts_params);
     if (rts_params.lane == UCP_NULL_LANE) {
@@ -1230,7 +1245,7 @@ ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *init_params,
     remote_md_map = ucp_proto_rndv_md_map_to_remote(&rts_params, rpriv.md_map);
 
     /* Turn RTS md_map to remote in case if RTS was sent by peer */
-    if (ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
+    if (ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_RECV))) {
         rpriv.md_map = remote_md_map;
     }
     status = ucp_proto_rndv_ctrl_range_init(&rts_params, &rpriv,
@@ -1241,11 +1256,12 @@ ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *init_params,
 
     /* Predict RTR */
     if (ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_RNDV_SEND))) {
-        if (is_rtr_mtype) {
+        status     = UCS_ERR_UNSUPPORTED;
+        if (ucp_proto_rndv_predict_rtr_mtype(init_params)) {
             status = ucp_proto_rndv_rtr_mtype_params_init(init_params,
                                                           &rtr_params);
-        } 
-        if ((!is_rtr_mtype) || (status != UCS_OK)) {
+        }
+        if (status != UCS_OK) {
             ucp_proto_rndv_rtr_params_init(init_params, &rtr_params);
         }
 
