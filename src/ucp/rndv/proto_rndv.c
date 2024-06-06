@@ -1256,6 +1256,7 @@ ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *init_params,
             num_stages--;
             goto out;
         }
+        ucp_proto_perf_node_deref(&rtr_params.unpack_perf_node);
     }
 
     result_caps            = *caps;
