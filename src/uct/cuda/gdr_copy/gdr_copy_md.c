@@ -12,6 +12,7 @@
 #include <string.h>
 #include <limits.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/debug/memtrack_int.h>
@@ -21,9 +22,28 @@
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_md.h>
 
+typedef struct {
+    pthread_mutex_t   lock;
+    unsigned          refcount;
+    uct_gdr_copy_md_t *md;
+} uct_gdr_copy_global_context_t;
+
+static uct_gdr_copy_global_context_t uct_gdr_copy_context = {
+    .lock     = PTHREAD_MUTEX_INITIALIZER,
+    .refcount = 0,
+    .md       = NULL,
+};
+
 static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_gdr_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+
+    {"SHARED_MD", "y", "Use a single memory domain instance that will be "
+     "shared across all contexts",
+     ucs_offsetof(uct_gdr_copy_md_config_t, shared), UCS_CONFIG_TYPE_BOOL},
+
+    {"RCACHE", "try", "Enable using memory registration cache",
+     ucs_offsetof(uct_gdr_copy_md_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
 
     {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
      ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.m), UCS_CONFIG_TYPE_TIME},
@@ -35,15 +55,22 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
 };
 
 static ucs_status_t
-uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
+uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
+    uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
+
     uct_md_base_md_query(md_attr);
     md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->rkey_packed_size = sizeof(uct_gdr_copy_key_t);
-    md_attr->reg_alignment    = GPU_PAGE_SIZE;
+
+    /* In absence of own cache require proper alignment from the global cache */
+    if (md->rcache == NULL) {
+        md_attr->reg_alignment = GPU_PAGE_SIZE;
+    }
+
     return UCS_OK;
 }
 
@@ -180,10 +207,12 @@ uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uct_gdr_copy_mem_t *mem_hndl = NULL;
     ucs_status_t status;
 
+    pthread_mutex_lock(&uct_gdr_copy_context.lock);
     mem_hndl = ucs_malloc(sizeof(uct_gdr_copy_mem_t), "gdr_copy handle");
     if (NULL == mem_hndl) {
         ucs_error("failed to allocate memory for gdr_copy_mem_t");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     ucs_ptr_check_align(address, length, GPU_PAGE_SIZE);
@@ -191,11 +220,15 @@ uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                            mem_hndl);
     if (status != UCS_OK) {
         ucs_free(mem_hndl);
-        return status;
+        goto out;
     }
 
     *memh_p = mem_hndl;
-    return UCS_OK;
+    status  = UCS_OK;
+
+out:
+    pthread_mutex_unlock(&uct_gdr_copy_context.lock);
+    return status;
 }
 
 static ucs_status_t
@@ -206,6 +239,7 @@ uct_gdr_copy_mem_dereg(uct_md_h uct_md,
     ucs_status_t status;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+    pthread_mutex_lock(&uct_gdr_copy_context.lock);
 
     mem_hndl = params->memh;
     status   = uct_gdr_copy_mem_dereg_internal(uct_md, mem_hndl);
@@ -214,6 +248,7 @@ uct_gdr_copy_mem_dereg(uct_md_h uct_md,
     }
 
     ucs_free(mem_hndl);
+    pthread_mutex_unlock(&uct_gdr_copy_context.lock);
     return status;
 }
 
@@ -240,15 +275,28 @@ static void uct_gdr_copy_md_close(uct_md_h uct_md)
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     int ret;
 
+    pthread_mutex_lock(&uct_gdr_copy_context.lock);
+    if ((md == uct_gdr_copy_context.md) &&
+        (--uct_gdr_copy_context.refcount > 0)) {
+        goto out;
+    }
+
+    if (md->rcache != NULL) {
+        ucs_rcache_destroy(md->rcache);
+    }
+
     ret = gdr_close(md->gdrcpy_ctx);
     if (ret) {
         ucs_warn("failed to close gdrcopy. ret:%d", ret);
     }
 
     ucs_free(md);
+
+out:
+    pthread_mutex_unlock(&uct_gdr_copy_context.lock);
 }
 
-static uct_md_ops_t md_ops = {
+static uct_md_ops_t uct_gdr_copy_md_ops = {
     .close              = uct_gdr_copy_md_close,
     .query              = uct_gdr_copy_md_query,
     .mkey_pack          = uct_gdr_copy_mkey_pack,
@@ -258,37 +306,211 @@ static uct_md_ops_t md_ops = {
     .detect_memory_type = ucs_empty_function_return_unsupported
 };
 
-static ucs_status_t
-uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
-                     const uct_md_config_t *config, uct_md_h *md_p)
-{
-    const uct_gdr_copy_md_config_t *md_config =
-                    ucs_derived_of(config, uct_gdr_copy_md_config_t);
-    ucs_status_t status;
-    uct_gdr_copy_md_t *md;
+/**
+ * cuda memory region in the registration cache.
+ */
+typedef struct uct_gdr_copy_rcache_region {
+    ucs_rcache_region_t super;
+    uct_gdr_copy_mem_t  memh; /**< mr exposed to the user as the memh */
+} uct_gdr_copy_rcache_region_t;
 
-    md = ucs_malloc(sizeof(uct_gdr_copy_md_t), "uct_gdr_copy_md_t");
-    if (NULL == md) {
+static ucs_status_t
+uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
+                            const uct_md_mem_reg_params_t *params,
+                            uct_mem_h *memh_p)
+{
+    uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
+    ucs_rcache_region_t *rregion;
+    ucs_status_t status;
+    uct_gdr_copy_mem_t *memh;
+
+    status = ucs_rcache_get(md->rcache, address, length, GPU_PAGE_SIZE,
+                            PROT_READ | PROT_WRITE, &flags, &rregion);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_assert(rregion->refcount > 0);
+    memh    = &ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t)->memh;
+    *memh_p = memh;
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md,
+                              const uct_md_mem_dereg_params_t *params)
+
+{
+    uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
+    uct_gdr_copy_rcache_region_t *region;
+
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    region = ucs_container_of(params->memh, uct_gdr_copy_rcache_region_t, memh);
+    ucs_rcache_region_put(md->rcache, &region->super);
+    return UCS_OK;
+}
+
+static uct_md_ops_t uct_gdr_copy_md_rcache_ops = {
+    .close              = uct_gdr_copy_md_close,
+    .query              = uct_gdr_copy_md_query,
+    .mkey_pack          = uct_gdr_copy_mkey_pack,
+    .mem_reg            = uct_gdr_copy_mem_rcache_reg,
+    .mem_dereg          = uct_gdr_copy_mem_rcache_dereg,
+    .detect_memory_type = ucs_empty_function_return_unsupported,
+};
+
+static ucs_status_t
+uct_gdr_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache, void *arg,
+                               ucs_rcache_region_t *rregion,
+                               uint16_t rcache_mem_reg_flags)
+{
+    uct_gdr_copy_md_t *md = context;
+    int *flags            = arg;
+    uct_gdr_copy_rcache_region_t *region;
+
+    if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {
+        *flags |= UCT_MD_MEM_FLAG_HIDE_ERRORS;
+    }
+
+    region = ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t);
+    return uct_gdr_copy_mem_reg_internal(&md->super,
+                                         (void*)region->super.super.start,
+                                         region->super.super.end -
+                                         region->super.super.start,
+                                         *flags, &region->memh);
+}
+
+static void uct_gdr_copy_rcache_mem_dereg_cb(void *context,
+                                             ucs_rcache_t *rcache,
+                                             ucs_rcache_region_t *rregion)
+{
+    uct_gdr_copy_md_t *md = context;
+    uct_gdr_copy_rcache_region_t *region;
+
+    region = ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t);
+    (void)uct_gdr_copy_mem_dereg_internal(&md->super, &region->memh);
+}
+
+static void uct_gdr_copy_rcache_dump_region_cb(void *context,
+                                               ucs_rcache_t *rcache,
+                                               ucs_rcache_region_t *rregion,
+                                               char *buf, size_t max)
+{
+    uct_gdr_copy_rcache_region_t *region =
+            ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t);
+    uct_gdr_copy_mem_t *memh = &region->memh;
+
+    ucs_snprintf_safe(buf, max, "bar ptr:%p", memh->bar_ptr);
+}
+
+static ucs_rcache_ops_t uct_gdr_copy_rcache_ops = {
+    .mem_reg     = uct_gdr_copy_rcache_mem_reg_cb,
+    .mem_dereg   = uct_gdr_copy_rcache_mem_dereg_cb,
+    .merge       = (void*)ucs_empty_function,
+    .dump_region = uct_gdr_copy_rcache_dump_region_cb
+};
+
+static ucs_status_t
+uct_gdr_copy_md_create(uct_component_t *component,
+                       const uct_gdr_copy_md_config_t *md_config,
+                       uct_gdr_copy_md_t **md_p)
+{
+    ucs_rcache_params_t rcache_params;
+    uct_gdr_copy_md_t *md;
+    ucs_status_t status;
+
+    md = ucs_malloc(sizeof(*md), "uct_gdr_copy_md_t");
+    if (md == NULL) {
         ucs_error("failed to allocate memory for uct_gdr_copy_md_t");
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops       = &md_ops;
     md->super.component = &uct_gdr_copy_component;
     md->reg_cost        = md_config->uc_reg_cost;
+    md->super.ops       = &uct_gdr_copy_md_ops;
 
     md->gdrcpy_ctx = gdr_open();
     if (md->gdrcpy_ctx == NULL) {
         ucs_error("failed to open gdr copy");
         status = UCS_ERR_IO_ERROR;
-        goto err_free_md;
+        goto err_free;
     }
 
-    *md_p = (uct_md_h) md;
+    if (md_config->enable_rcache == UCS_NO) {
+        goto out;
+    }
+
+    ucs_rcache_set_default_params(&rcache_params);
+    rcache_params.region_struct_size = sizeof(uct_gdr_copy_rcache_region_t);
+    rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
+    rcache_params.context            = md;
+    rcache_params.ops                = &uct_gdr_copy_rcache_ops;
+    rcache_params.flags              = 0;
+
+    status = ucs_rcache_create(&rcache_params, "gdr_copy", NULL, &md->rcache);
+    if (status == UCS_OK) {
+        md->super.ops = &uct_gdr_copy_md_rcache_ops;
+        md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
+    } else if (md_config->enable_rcache == UCS_YES) {
+        status = UCS_ERR_IO_ERROR;
+        goto err_close_gdr;
+    } else {
+        ucs_debug("ucs_rcache_create() failed with: %s",
+                  ucs_status_string(status));
+    }
+
+out:
+    *md_p = md;
     return UCS_OK;
 
-err_free_md:
+err_close_gdr:
+    gdr_close(md->gdrcpy_ctx);
+err_free:
     ucs_free(md);
+    return status;
+}
+
+static ucs_status_t
+uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
+                     const uct_md_config_t *config, uct_md_h *md_p)
+{
+    const uct_gdr_copy_md_config_t *md_config =
+            ucs_derived_of(config, uct_gdr_copy_md_config_t);
+    uct_gdr_copy_md_t *md;
+    ucs_status_t status;
+
+    if (!md_config->shared) {
+        status = uct_gdr_copy_md_create(component, md_config, &md);
+        if (status == UCS_OK) {
+            *md_p = &md->super;
+        }
+
+        return status;
+    }
+
+    pthread_mutex_lock(&uct_gdr_copy_context.lock);
+    if (uct_gdr_copy_context.refcount > 0) {
+        if ((md_config->enable_rcache != UCS_TRY) &&
+            ((uct_gdr_copy_context.md->rcache == NULL) !=
+             (md_config->enable_rcache == UCS_NO))) {
+            ucs_error("inconsistent gdr_copy rcache enable param");
+            status = UCS_ERR_INVALID_PARAM;
+        } else {
+            status = UCS_OK;
+        }
+    } else {
+        status = uct_gdr_copy_md_create(component, md_config,
+                                        &uct_gdr_copy_context.md);
+    }
+
+    if (status == UCS_OK) {
+        uct_gdr_copy_context.refcount++;
+        *md_p = &uct_gdr_copy_context.md->super;
+    }
+
+    pthread_mutex_unlock(&uct_gdr_copy_context.lock);
     return status;
 }
 
