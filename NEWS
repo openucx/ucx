@@ -11,6 +11,13 @@
 ### Features:
 ### Bugfixes:
 
+## 1.17.0-rc3 (June 6, 2024)
+### Bugfixes:
+#### UCP
+* Fixed wire compatibility issue due to mismatched lane selection
+#### UCS
+* Fixed uninitialized variable access in rcache
+
 ## 1.17.0-rc2 (May 29, 2024)
 ### Features:
 #### UCP
