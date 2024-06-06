@@ -75,10 +75,12 @@ protected:
                              unsigned longest_common_prefix) const
     {
         struct sockaddr_storage storage1, storage2;
-        struct sockaddr *saddr1 = (struct sockaddr*)&storage1;
-        struct sockaddr *saddr2 = (struct sockaddr*)&storage2;
+        struct sockaddr *saddr1;
+        struct sockaddr *saddr2;
         int matched;
 
+        saddr1 = (struct sockaddr*)&storage1;
+        saddr2 = (struct sockaddr*)&storage2;
         fill_sockaddr(saddr1, af, ip_addr1, 1234);
         fill_sockaddr(saddr2, af, ip_addr2, 1234);
 
