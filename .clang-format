@@ -128,7 +128,6 @@ FixNamespaceComments: true
 NamespaceIndentation: None
 UseTab: Never
 ReflowComments: false
-SortIncludes: false
 IncludeCategories:
  - Regex: '^"'
    Priority: 1
