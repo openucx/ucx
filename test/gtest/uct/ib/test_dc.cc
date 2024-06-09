@@ -500,7 +500,7 @@ public:
         uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->iface(),
                                                     uct_dc_mlx5_iface_t);
 
-        for (int i = 0; i < ucs_array_length(&iface->tx.dcis); ++i) {
+        for (int i = 0; i < iface->tx.ndci; ++i) {
             uct_rc_txqp_available_set(&ucs_array_elem(&iface->tx.dcis, i).txqp,
                                       0);
         }
