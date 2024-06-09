@@ -239,8 +239,9 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     ucp_lane_index_t lane_idx, lane;
     ucp_proto_rndv_put_priv_t rpriv;
     int send_atp, use_fence;
-    ucp_proto_caps_t caps;
+    ucp_proto_perf_t *perf;
     ucs_status_t status;
+    size_t frag_size;
     unsigned atp_map;
     size_t priv_size;
 
@@ -252,8 +253,8 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     }
 
     status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_PUT_DESC,
-                                      UCP_PROTO_RNDV_ATP_NAME, &rpriv.bulk,
-                                      &caps);
+                                      UCP_PROTO_RNDV_ATP_NAME, &perf,
+                                      &frag_size, &rpriv.bulk);
     if (status != UCS_OK) {
         return;
     }
@@ -322,7 +323,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     rpriv.atp_num_lanes = ucs_popcount(rpriv.atp_map);
 
     priv_size = UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, bulk.mpriv);
-    ucp_proto_common_add_proto(&params.super, &caps, &rpriv, priv_size);
+    ucp_proto_common_add_proto(&params.super, perf, frag_size, &rpriv, priv_size);
 }
 
 static const char *

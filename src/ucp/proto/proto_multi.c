@@ -21,7 +21,8 @@
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
-                                  ucp_proto_caps_t *caps,
+                                  ucp_proto_perf_t **perf_p,
+                                  size_t *frag_size_p,
                                   ucp_proto_multi_priv_t *mpriv)
 {
     ucp_context_h context         = params->super.super.worker->context;
@@ -240,8 +241,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         }
     }
 
-    status = ucp_proto_common_init_caps(&params->super, &perf, perf_node,
-                                        reg_md_map, caps);
+    status = ucp_proto_common_init_perf(&params->super, &perf,
+                                        perf_node, reg_md_map, perf_p);
+    if (status == UCS_OK) {
+        *frag_size_p = perf.max_frag;
+    }
+
     /* Deref unused nodes */
     for (i = 0; i < num_lanes; ++i) {
         ucp_proto_perf_node_deref(&lanes_perf_nodes[lanes[i]]);
@@ -261,15 +266,16 @@ size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv)
 void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
 {
     ucp_proto_multi_priv_t mpriv;
-    ucp_proto_caps_t caps;
+    ucp_proto_perf_t *perf;
     ucs_status_t status;
+    size_t frag_size;
 
-    status = ucp_proto_multi_init(params, &caps, &mpriv);
+    status = ucp_proto_multi_init(params, &perf, &frag_size, &mpriv);
     if (status != UCS_OK) {
         return;
     }
 
-    ucp_proto_common_add_proto(&params->super, &caps, &mpriv,
+    ucp_proto_common_add_proto(&params->super, perf, frag_size, &mpriv,
                                ucp_proto_multi_priv_size(&mpriv));
 }
 

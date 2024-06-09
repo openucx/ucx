@@ -267,7 +267,7 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
 
 
 void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
-                                const ucp_proto_caps_t *proto_caps,
+                                ucp_proto_perf_t *perf, size_t frag_size,
                                 const void *priv, size_t priv_size);
 
 

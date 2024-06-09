@@ -350,7 +350,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_perf_node, all, "all")
 static std::ostream &operator<<(std::ostream &os, const ucp_proto_perf_t *perf)
 {
     ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-    ucp_proto_perf_dump(perf, &strb);
+    ucp_proto_perf_str(perf, &strb);
     auto &ret = os << ucs_string_buffer_cstr(&strb);
     ucs_string_buffer_cleanup(&strb);
     return ret;
@@ -358,7 +358,11 @@ static std::ostream &operator<<(std::ostream &os, const ucp_proto_perf_t *perf)
 
 static std::ostream &operator<<(std::ostream &os, const ucs_linear_func_t &func)
 {
-    return os << func.c << "+" << func.m << "x";
+    char buffer[128];
+
+    ucs_snprintf_safe(buffer, sizeof(buffer), UCP_PROTO_PERF_FUNC_FMT,
+                      UCP_PROTO_PERF_FUNC_ARG(&func));
+    return os << buffer;
 }
 
 class test_proto_perf : public ucs::test {
@@ -379,13 +383,6 @@ protected:
         return make_perf_shared_ptr(perf);
     }
 
-    static perf_ptr_t from_caps(const ucp_proto_caps_t &caps)
-    {
-        ucp_proto_perf_t *perf;
-        ASSERT_UCS_OK(ucp_proto_perf_from_caps("test", &caps, &perf));
-        return make_perf_shared_ptr(perf);
-    }
-
     perf_ptr_t aggregate(const std::vector<perf_ptr_t> &perfs)
     {
         std::vector<ucp_proto_perf_t*> perfs_ptr_vec;
@@ -403,14 +400,15 @@ protected:
     static void add_funcs(perf_ptr_t perf, size_t start, size_t end,
                           const perf_factors_map_t &factors)
     {
-        ucs_linear_func_t funcs[UCP_PROTO_PERF_FACTOR_LAST];
-        uint64_t factors_map = 0;
+        ucp_proto_perf_factors_t perf_factors =
+                UCP_PROTO_PERF_FACTORS_INITIALIZER;
+
+        // ucp_proto_perf_factors_reset(perf_factors);
         for (auto &f : factors) {
-            funcs[f.first] = f.second;
-            factors_map   |= UCS_BIT(f.first);
+            perf_factors[f.first] = f.second;
         }
-        ASSERT_UCS_OK(ucp_proto_perf_add_funcs(perf.get(), start, end, funcs,
-                                               factors_map, NULL));
+        ASSERT_UCS_OK(ucp_proto_perf_add_funcs(perf.get(), start, end,
+                                               perf_factors, NULL, "test", ""));
     }
 
     static void add_func(perf_ptr_t perf, size_t start, size_t end,
@@ -462,7 +460,8 @@ protected:
                     seg, (ucp_proto_perf_factor_id_t)factor_id);
             EXPECT_TRUE(
                     ucs_linear_func_is_equal(expected_func, segment_func, 1e-9))
-                    << "factor_id=" << factor_id << " expected_func"
+                    << "start=" << start << " end=" << end
+                    << " factor_id=" << factor_id << " expected_func="
                     << expected_func << " segment_func=" << segment_func;
         }
     }
@@ -473,6 +472,11 @@ private:
         return {perf, ucp_proto_perf_destroy};
     }
 
+    static ucs_linear_func_t perf_func(double overhead_nsec, double bw_mbs)
+    {
+        return {overhead_nsec * 1e-9, 1.0 / (bw_mbs * UCS_MBYTE)};
+    }
+
 protected:
     static const ucs_linear_func_t local_tl_func;
     static const ucs_linear_func_t remote_tl_func;
@@ -480,43 +484,13 @@ protected:
     perf_ptr_t m_perf;
 };
 
-const ucs_linear_func_t test_proto_perf::local_tl_func  = {10, 1};
-const ucs_linear_func_t test_proto_perf::remote_tl_func = {20, 2};
-const ucs_linear_func_t test_proto_perf::local_cpu_func = {30, 3};
+const ucs_linear_func_t test_proto_perf::local_tl_func  = perf_func(10, 1000);
+const ucs_linear_func_t test_proto_perf::remote_tl_func = perf_func(20, 2000);
+const ucs_linear_func_t test_proto_perf::local_cpu_func = perf_func(30, 3000);
 
-UCS_TEST_F(test_proto_perf, empty)
-{
+UCS_TEST_F(test_proto_perf, empty) {
     m_perf = create();
     expect_empty_range(0, SIZE_MAX);
-}
-
-UCS_TEST_F(test_proto_perf, from_caps)
-{
-    ucp_proto_caps_t caps;
-
-    caps.min_length = 1000;
-    caps.num_ranges = 2;
-
-    caps.ranges[0].max_length                       = 1999;
-    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_SINGLE] = local_tl_func;
-    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_MULTI]  = UCS_LINEAR_FUNC_ZERO;
-    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_CPU]    = UCS_LINEAR_FUNC_ZERO;
-    caps.ranges[0].node                             = NULL;
-
-    caps.ranges[1].max_length                       = 2999;
-    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_SINGLE] = UCS_LINEAR_FUNC_ZERO;
-    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_MULTI]  = UCS_LINEAR_FUNC_ZERO;
-    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_CPU]    = local_cpu_func;
-    caps.ranges[1].node                             = NULL;
-
-    m_perf = from_caps(caps);
-    UCS_TEST_MESSAGE << m_perf.get();
-
-    expect_empty_range(0, 999);
-    expect_perf(1000, 1999, {{UCP_PROTO_PERF_FACTOR_SINGLE, local_tl_func}});
-    expect_perf(2000, 2999,
-                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
-    expect_empty_range(3000, SIZE_MAX);
 }
 
 UCS_TEST_F(test_proto_perf, single_func)
@@ -528,6 +502,29 @@ UCS_TEST_F(test_proto_perf, single_func)
     expect_empty_range(0, 999);
     expect_perf(1000, 1999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
     expect_empty_range(2000, SIZE_MAX);
+}
+
+UCS_TEST_F(test_proto_perf, to_inf)
+{
+    /*
+     *  0    172                   SIZE_MAX
+     *  |     |                       |
+     *  |     +------ local_tl -------+
+     *  |                             |
+     *  |                             |
+     *  +----------- local_cpu -------+
+     */
+    m_perf = create();
+    add_func(172, SIZE_MAX, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    add_func(0, SIZE_MAX, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    expect_perf(0, 171, {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_perf(172, SIZE_MAX,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
 }
 
 UCS_TEST_F(test_proto_perf, intersect_first)

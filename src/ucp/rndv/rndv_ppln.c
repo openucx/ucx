@@ -36,102 +36,103 @@ typedef struct {
 static void
 ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
 {
-    static const double frag_overhead            = 30e-9;
-    ucp_worker_h worker                          = init_params->worker;
-    const ucp_proto_select_param_t *select_param = init_params->select_param;
-    ucp_proto_common_init_params_t err_params    = {
-        .super = *init_params,
-        .flags = 0
-    };
-    const ucp_proto_select_elem_t *select_elem;
-    const ucp_proto_perf_range_t *frag_range;
-    ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_select_param_t sel_param;
-    ucp_proto_rndv_ppln_priv_t rpriv;
-    ucp_proto_select_t *proto_select;
-    ucp_proto_caps_t caps, ppln_caps;
-    ucs_linear_func_t ppln_overhead;
-    ucp_proto_init_elem_t *proto;
-    char frag_size_str[32];
-    void *frag_proto_priv;
-    ucs_status_t status;
+    // TODO
+    // static const double frag_overhead            = 30e-9;
+    // ucp_worker_h worker                          = init_params->worker;
+    // const ucp_proto_select_param_t *select_param = init_params->select_param;
+    // ucp_proto_common_init_params_t err_params    = {
+    //     .super = *init_params,
+    //     .flags = 0
+    // };
+    // const ucp_proto_select_elem_t *select_elem;
+    // const ucp_proto_perf_range_t *frag_range;
+    // ucp_worker_cfg_index_t rkey_cfg_index;
+    // ucp_proto_select_param_t sel_param;
+    // ucp_proto_rndv_ppln_priv_t rpriv;
+    // ucp_proto_select_t *proto_select;
+    // ucp_proto_caps_t caps, ppln_caps;
+    // ucs_linear_func_t ppln_overhead;
+    // ucp_proto_init_elem_t *proto;
+    // char frag_size_str[32];
+    // void *frag_proto_priv;
+    // ucs_status_t status;
 
-    if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
-        !ucp_proto_common_init_check_err_handling(&err_params) ||
-        ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
-        return;
-    }
+    // if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
+    //     !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
+    //     !ucp_proto_common_init_check_err_handling(&err_params) ||
+    //     ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
+    //     return;
+    // }
 
-    /* Select a protocol for rndv recv */
-    sel_param             = *select_param;
-    sel_param.op_id_flags = ucp_proto_select_op_id(select_param) |
-                            UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
-    sel_param.op_attr     = ucp_proto_select_op_attr_pack(
-            UCP_OP_ATTR_FLAG_MULTI_SEND);
+    // /* Select a protocol for rndv recv */
+    // sel_param             = *select_param;
+    // sel_param.op_id_flags = ucp_proto_select_op_id(select_param) |
+    //                         UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+    // sel_param.op_attr     = ucp_proto_select_op_attr_pack(
+    //         UCP_OP_ATTR_FLAG_MULTI_SEND);
 
-    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
-                                        init_params->rkey_cfg_index,
-                                        &rkey_cfg_index);
-    if (proto_select == NULL) {
-        return;
-    }
+    // proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
+    //                                     init_params->rkey_cfg_index,
+    //                                     &rkey_cfg_index);
+    // if (proto_select == NULL) {
+    //     return;
+    // }
 
-    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
-                                               init_params->ep_cfg_index,
-                                               init_params->rkey_cfg_index,
-                                               &sel_param);
-    if (select_elem == NULL) {
-        return;
-    }
+    // select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
+    //                                            init_params->ep_cfg_index,
+    //                                            init_params->rkey_cfg_index,
+    //                                            &sel_param);
+    // if (select_elem == NULL) {
+    //     return;
+    // }
 
-    /* Add each proto as a separate variant */
-    ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
-        if (ucp_proto_id_field(proto->proto_id, flags) &
-            UCP_PROTO_FLAG_INVALID) {
-            continue;
-        }
+    // /* Add each proto as a separate variant */
+    // ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
+    //     if (ucp_proto_id_field(proto->proto_id, flags) &
+    //         UCP_PROTO_FLAG_INVALID) {
+    //         continue;
+    //     }
 
-        ucs_assert(proto->caps.num_ranges > 0);
+    //     ucs_assert(proto->caps.num_ranges > 0);
 
-        frag_range = proto->caps.ranges + (proto->caps.num_ranges - 1);
-        if (frag_range->max_length == 0) {
-            continue;
-        }
+    //     frag_range = proto->caps.ranges + (proto->caps.num_ranges - 1);
+    //     if (frag_range->max_length == 0) {
+    //         continue;
+    //     }
 
-        /* Initialize private data */
-        rpriv.frag_size             = frag_range->max_length;
-        rpriv.frag_proto_min_length = proto->caps.min_length;
+    //     /* Initialize private data */
+    //     rpriv.frag_size             = frag_range->max_length;
+    //     rpriv.frag_proto_min_length = proto->caps.min_length;
 
-        frag_proto_priv = &ucs_array_elem(&select_elem->proto_init.priv_buf,
-                                          proto->priv_offset);
-        ucp_proto_rndv_set_variant_config(init_params, proto,
-                                          &sel_param, frag_proto_priv,
-                                          &rpriv.frag_proto_cfg);
+    //     frag_proto_priv = &ucs_array_elem(&select_elem->proto_init.priv_buf,
+    //                                       proto->priv_offset);
+    //     ucp_proto_rndv_set_variant_config(init_params, proto,
+    //                                       &sel_param, frag_proto_priv,
+    //                                       &rpriv.frag_proto_cfg);
 
-        ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
-                  ucs_memunits_to_str(rpriv.frag_size, frag_size_str,
-                                      sizeof(frag_size_str)),
-                  UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
+    //     ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+    //               ucs_memunits_to_str(rpriv.frag_size, frag_size_str,
+    //                                   sizeof(frag_size_str)),
+    //               UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
 
-        /* Add the single range of the pipeline protocol to ppln_caps */
-        ppln_caps.min_length = frag_range->max_length + 1;
-        ppln_caps.num_ranges = 0;
-        ucp_proto_common_add_ppln_range(&ppln_caps, frag_range, SIZE_MAX);
+    //     /* Add the single range of the pipeline protocol to ppln_caps */
+    //     ppln_caps.min_length = frag_range->max_length + 1;
+    //     ppln_caps.num_ranges = 0;
+    //     ucp_proto_common_add_ppln_range(&ppln_caps, frag_range, SIZE_MAX);
 
-        /* Add ATS overhead */
-        ppln_overhead = ucs_linear_func_make(
-                frag_overhead, frag_overhead / frag_range->max_length);
-        status        = ucp_proto_rndv_ack_init(
-                init_params, UCP_PROTO_RNDV_ATS_NAME, &ppln_caps,
-                ppln_overhead, &rpriv.ack, &caps);
-        if (status == UCS_OK) {
-            ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
-                                       proto->cfg_priority,
-                                       &caps, &rpriv, sizeof(rpriv));
-        }
-        ucp_proto_select_caps_cleanup(&ppln_caps);
-    }
+    //     /* Add ATS overhead */
+    //     ppln_overhead = ucs_linear_func_make(
+    //             frag_overhead, frag_overhead / frag_range->max_length);
+    //     status        = ucp_proto_rndv_ack_init(
+    //             init_params, UCP_PROTO_RNDV_ATS_NAME, &ppln_caps,
+    //             ppln_overhead, &rpriv.ack, &caps);
+    //     if (status == UCS_OK) {
+    //         ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+    //                                    proto->cfg_priority,
+    //                                    &caps, &rpriv, sizeof(rpriv));
+    //     }
+    //     ucp_proto_select_caps_cleanup(&ppln_caps);
+    // }
 }
 
 static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
