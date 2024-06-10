@@ -12,6 +12,7 @@
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/arch/global_opts.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -147,6 +148,14 @@ typedef struct {
        values. */
     size_t                     rcache_stat_min;
     size_t                     rcache_stat_max;
+
+    /* Estimated latency and bandwidth between devices according to distance
+       within the sysfs device tree */
+    double                     pci_root_lat;
+    double                     pci_root_bw_base;
+    double                     pci_root_bw_max;
+    ucs_sys_dev_distance_t     common_numa;
+    ucs_sys_dev_distance_t     sys_root;
 } ucs_global_opts_t;
 
 

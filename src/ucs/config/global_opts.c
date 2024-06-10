@@ -191,6 +191,39 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "The list order decides the priority of the providers.",
   ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"PCI_ROOT_LAT", "300ns",
+   "Estimated latency between devices with the same PCI domain and bus number",
+   ucs_offsetof(ucs_global_opts_t, pci_root_lat), UCS_CONFIG_TYPE_TIME},
+
+  {"PCI_ROOT_BW_BASE", "19200MBs",
+   "Divisible part of the estimated bandwidth between devices with the same\n"
+   "PCI domain and bus number. The path between devices is the divisor of the\n"
+   "estimation.",
+   ucs_offsetof(ucs_global_opts_t, pci_root_bw_base), UCS_CONFIG_TYPE_BW},
+
+  {"PCI_ROOT_BW_MAX", "3500MBs",
+   "Maximum estimated bandwidth between devices with the same PCI domain and\n"
+   "bus number",
+   ucs_offsetof(ucs_global_opts_t, pci_root_bw_max), UCS_CONFIG_TYPE_BW},
+
+  {"COMMON_NUMA_LAT", "300ns",
+   "Estimated latency between devices with different PCI domains and/or bus\n"
+   "numbers residing on the same NUMA node.",
+   ucs_offsetof(ucs_global_opts_t, common_numa.latency), UCS_CONFIG_TYPE_TIME},
+
+  {"COMMON_NUMA_BW", "17000MBs",
+   "Estimated bandwidth between devices with different PCI domains and/or bus\n"
+   "numbers residing on the same NUMA node.",
+   ucs_offsetof(ucs_global_opts_t, common_numa.bandwidth), UCS_CONFIG_TYPE_BW},
+
+  {"SYS_ROOT_LAT", "500ns",
+   "Estimated latency between devices residing on different NUMA nodes",
+   ucs_offsetof(ucs_global_opts_t, sys_root.latency), UCS_CONFIG_TYPE_TIME},
+
+  {"SYS_ROOT_BW", "220MBs",
+   "Estimated bandwidth between devices residing on different NUMA nodes",
+   ucs_offsetof(ucs_global_opts_t, sys_root.bandwidth), UCS_CONFIG_TYPE_BW},
+
  {NULL}
 };
 

@@ -334,17 +334,7 @@ static int ucs_topo_is_pci_root(const char *path)
 
 static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
 {
-    distance->latency = 500e-9;
-    switch (ucs_arch_get_cpu_model()) {
-    case UCS_CPU_MODEL_AMD_ROME:
-    case UCS_CPU_MODEL_AMD_MILAN:
-    case UCS_CPU_MODEL_AMD_GENOA:
-        distance->bandwidth = 5100 * UCS_MBYTE;
-        break;
-    default:
-        distance->bandwidth = 220 * UCS_MBYTE;
-        break;
-    }
+    *distance = ucs_global_opts.sys_root;
 }
 
 static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
@@ -357,15 +347,15 @@ static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
     ucs_assertv(path_distance > 0, "path1=%s path2=%s", path1, path2);
 
     /* TODO set latency/bandwidth by CPU model */
-    distance->latency   = 300e-9;
-    distance->bandwidth = ucs_min(3500.0 * UCS_MBYTE,
-                                  (19200.0 * UCS_MBYTE) / path_distance);
+    distance->latency   = ucs_global_opts.pci_root_lat;
+    distance->bandwidth = ucs_min(
+            ucs_global_opts.pci_root_bw_max,
+            ucs_global_opts.pci_root_bw_base / path_distance);
 }
 
 static void ucs_topo_common_numa_node_distance(ucs_sys_dev_distance_t *distance)
 {
-    distance->latency   = 300e-9;
-    distance->bandwidth = 17000 * UCS_MBYTE;
+    *distance = ucs_global_opts.common_numa;
 }
 
 static int
