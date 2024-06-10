@@ -317,7 +317,7 @@ ucp_proto_rndv_ctrl_range_init(const ucp_proto_rndv_ctrl_init_params_t *params,
 /* Copy performance ranges from the remote protocol add CTRL overheads */
 static ucs_status_t
 ucp_proto_rndv_ctrl_init_parallel_stages(
-        ucp_proto_perf_range_t *ctrl_ranges, size_t num_ctrl_msgs,
+        ucp_proto_perf_range_t *ctrl_ranges, unsigned num_ctrl_msgs,
         ucp_proto_caps_t *proto_caps, ucp_proto_id_t proto_id, double bias,
         ucp_proto_caps_t *output_caps, size_t min_length, size_t max_length)
 {
@@ -328,7 +328,7 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
     ucs_status_t status;
     size_t i;
 
-    ucs_assertv(num_ctrl_msgs <= 2, "num_ctrl_msgs=%zu", num_ctrl_msgs);
+    ucs_assertv(num_ctrl_msgs <= 2, "num_ctrl_msgs=%u", num_ctrl_msgs);
     for (i = 0; i < num_ctrl_msgs; ++i) {
         ucs_trace("%s: aggregate with %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
                   proto_name, ucp_proto_perf_node_name(ctrl_ranges[i].node),
@@ -620,7 +620,7 @@ ucp_proto_rndv_rtr_mtype_params_init(const ucp_proto_init_params_t *init_params,
     status = ucp_mm_get_alloc_md_index(context, &md_index,
                                        params->mem_info.type);
     if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
-        params->md_map = UCS_BIT(md_index);
+        params->md_map |= UCS_BIT(md_index);
     }
 
     return ucp_proto_init_buffer_copy_time(
