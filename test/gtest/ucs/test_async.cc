@@ -365,7 +365,7 @@ protected:
         return result;
     }
 
-    int crash_run(unsigned index) {
+    int repeat_create_destroy_run(unsigned index) {
         static_assert(std::is_base_of<local_event, LOCAL>::value, "");
         LOCAL* le;
         m_ev[index] = le = new LOCAL(GetParam());
@@ -388,7 +388,7 @@ protected:
             le->unset_event();
             le->destory_event();
             suspend(wait);
-            le->create_event();
+            le->create_event(); /* same memory could be used by other thread */
             le->set_event();
             suspend(40 - wait);
             le->check_miss();
@@ -468,13 +468,13 @@ public:
         return (void*)-1;
     }
 
-    static void *crash_func(void *arg)
+    static void *repeat_create_destroy_func(void *arg)
     {
         test_async_mt *self = reinterpret_cast<test_async_mt*>(arg);
 
         for (unsigned index = 0; index < NUM_THREADS; ++index) {
             if (self->m_threads[index] == pthread_self()) {
-                return (void*)(uintptr_t)self->crash_run(index);
+                return (void*)(uintptr_t)self->repeat_create_destroy_run(index);
             }
         }
 
@@ -883,7 +883,7 @@ UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread,
 
 UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread_create_destory,
                      !(HAVE_DECL_F_SETOWN_EX)) {
-    spawn(crash_func);
+    spawn(repeat_create_destroy_func);
     for (int j = 0; j < 4; ++j) {
         for (unsigned i = 0; i < NUM_THREADS; ++i) {
             event(i)->push_event();
