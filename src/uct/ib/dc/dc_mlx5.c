@@ -773,7 +773,7 @@ uct_dc_mlx5_destroy_dci(uct_dc_mlx5_iface_t *iface, uct_dc_dci_t *dci)
 
 static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface)
 {
-    uint8_t num_dcis = ucs_array_capacity(&iface->tx.dcis);
+    uint8_t num_dcis = ucs_array_length(&iface->tx.dcis);
     uct_dc_dci_t *dci;
     uint8_t pool_index, dci_index;
 
@@ -1080,6 +1080,7 @@ ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface)
         status =  UCS_ERR_NO_MEMORY;
         goto err;
     }
+
     /* We do not have any peer address at this point, so init basic subclasses
      * only (for statistics, iface, etc) */
     status = UCS_CLASS_INIT(uct_base_ep_t, (void*)(&ep->super),
@@ -1098,7 +1099,7 @@ ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface)
         goto err_cleanup;
     }
 
-    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
+    ep->flags = 0;
     ep->flags |= pool_index & UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
 
     status = uct_dc_mlx5_ep_basic_init(iface, ep);

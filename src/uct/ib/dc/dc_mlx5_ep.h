@@ -622,7 +622,7 @@ uct_dc_mlx5_iface_dci_detach(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 
     ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
     ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
-    uct_dc_mlx5_iface_dci(iface, ep->dci)->ep = NULL;
+    // uct_dc_mlx5_iface_dci(iface, ep->dci)->ep = NULL;
 
     uct_dc_mlx5_iface_dci_schedule_release(iface, dci_index);
 
