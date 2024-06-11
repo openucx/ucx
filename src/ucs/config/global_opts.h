@@ -152,7 +152,7 @@ typedef struct {
     /* Estimated latency and bandwidth between devices according to distance
        within the sysfs device tree */
     double                     pci_root_lat;
-    double                     pci_root_bw_base;
+    double                     pci_root_bw_k;
     double                     pci_root_bw_max;
     ucs_sys_dev_distance_t     common_numa;
     ucs_sys_dev_distance_t     sys_root;

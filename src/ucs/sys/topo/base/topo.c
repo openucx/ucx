@@ -345,7 +345,7 @@ static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
     distance->latency   = ucs_global_opts.pci_root_lat;
     distance->bandwidth = ucs_min(
             ucs_global_opts.pci_root_bw_max,
-            ucs_global_opts.pci_root_bw_base / path_distance);
+            ucs_global_opts.pci_root_bw_k / path_distance);
 }
 
 static int
