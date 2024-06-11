@@ -125,7 +125,7 @@ private:
         return ucs_async_pipe_rfd(&m_event_pipe);
     }
 
-    ucs_async_pipe_t  m_event_pipe;
+    ucs_async_pipe_t m_event_pipe;
     volatile uint32_t m_event_valid = 0;
 };
 
@@ -333,7 +333,7 @@ protected:
 template<typename LOCAL>
 class test_async_mt : public test_async {
 protected:
-    using FuncVp                      = void* (*)(void*);
+    using ThreadFunc                  = void *(*)(void*);
     static const unsigned NUM_THREADS = 32;
 
     test_async_mt() {
@@ -377,7 +377,7 @@ protected:
 
     int repeat_create_destroy_run(unsigned index) {
         static_assert(std::is_base_of<local_event, LOCAL>::value, "");
-        LOCAL* le;
+        LOCAL *le;
         m_ev[index] = le = new LOCAL(GetParam());
 
         check_is_blocked(le, false);
@@ -413,7 +413,7 @@ protected:
         return result;
     }
 
-    void spawn(FuncVp f = thread_func) {
+    void spawn(ThreadFunc f = thread_func) {
         for (unsigned i = 0; i < NUM_THREADS; ++i) {
             m_stop[i] = false;
             pthread_create(&m_threads[i], NULL, f, (void*)this);
