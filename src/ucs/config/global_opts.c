@@ -191,38 +191,38 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "The list order decides the priority of the providers.",
   ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
- {"DISTANCE_LAT", "pci:300ns,numa:300ns,sys:500ns",
+ {"DISTANCE_LAT", "pxb:300ns,phb:300ns,sys:500ns",
   "Estimated latency between system devices", 0,
   UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
-      {"pci", "latency between devices with the same PCI domain and bus number",
-       ucs_offsetof(ucs_global_opts_t, pci_root_lat)},
-      {"numa",
+      {"pxb", "latency between devices with the same PCI domain and bus number",
+       ucs_offsetof(ucs_global_opts_t, dist_pxb_lat)},
+      {"phb",
        "latency between devices with different PCI domains and/or bus numbers "
        "residing on the same NUMA node",
-       ucs_offsetof(ucs_global_opts_t, common_numa.latency)},
+       ucs_offsetof(ucs_global_opts_t, dist_phb.latency)},
       {"sys", "latency between devices residing on different NUMA nodes",
-       ucs_offsetof(ucs_global_opts_t, sys_root.latency)},
+       ucs_offsetof(ucs_global_opts_t, dist_sys.latency)},
       {NULL}
  )},
 
- {"DISTANCE_BW", "pci_k:19200MBs,pci_max:3500MBs,numa:17000MBs,sys:220MBs",
+ {"DISTANCE_BW", "pxb_k:19200MBs,pxb_max:3500MBs,phb:17000MBs,sys:220MBs",
   "Estimated bandwidth between system devices", 0,
   UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
-      {"pci_k",
+      {"pxb_k",
        "coefficient of proportionality between the estimated bandwidth and the "
        "distance between devices with the same PCI domain and bus number. The "
        "bandwidth is inversely proportional to the distance.",
-       ucs_offsetof(ucs_global_opts_t, pci_root_bw_k)},
-      {"pci_max",
+       ucs_offsetof(ucs_global_opts_t, dist_pxb_bw_k)},
+      {"pxb_max",
        "maximum estimated bandwidth between devices with the same PCI domain "
        "and bus number",
-       ucs_offsetof(ucs_global_opts_t, pci_root_bw_max)},
-      {"numa",
+       ucs_offsetof(ucs_global_opts_t, dist_pxb_bw_max)},
+      {"phb",
        "bandwidth between devices with different PCI domains and/or bus "
        "numbers residing on the same NUMA node",
-       ucs_offsetof(ucs_global_opts_t, common_numa.bandwidth)},
+       ucs_offsetof(ucs_global_opts_t, dist_phb.bandwidth)},
       {"sys", "bandwidth between devices residing on different NUMA nodes",
-       ucs_offsetof(ucs_global_opts_t, sys_root.bandwidth)},
+       ucs_offsetof(ucs_global_opts_t, dist_sys.bandwidth)},
       {NULL}
  )},
 

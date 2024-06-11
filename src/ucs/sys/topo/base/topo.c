@@ -342,10 +342,10 @@ static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
     ucs_assertv(path_distance > 0, "path1=%s path2=%s", path1, path2);
 
     /* TODO set latency/bandwidth by CPU model */
-    distance->latency   = ucs_global_opts.pci_root_lat;
+    distance->latency   = ucs_global_opts.dist_pxb_lat;
     distance->bandwidth = ucs_min(
-            ucs_global_opts.pci_root_bw_max,
-            ucs_global_opts.pci_root_bw_k / path_distance);
+            ucs_global_opts.dist_pxb_bw_max,
+            ucs_global_opts.dist_pxb_bw_k / path_distance);
 }
 
 static int
@@ -392,11 +392,11 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
         return UCS_OK;
     } else if (ucs_topo_is_sys_root(common_path)) {
         if (ucs_topo_is_same_numa_node(device1, device2)) {
-            *distance = ucs_global_opts.common_numa;
+            *distance = ucs_global_opts.dist_phb;
             return UCS_OK;
         }
 
-        *distance = ucs_global_opts.sys_root;
+        *distance = ucs_global_opts.dist_sys;
         return UCS_OK;
     }
 
