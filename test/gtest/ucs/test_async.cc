@@ -94,6 +94,12 @@ public:
         ucs_async_pipe_push(&m_event_pipe);
     }
 
+    void push_event_if_valid() {
+        if (m_event_valid == 1) {
+            push_event();
+        }
+    }
+
     void reset() {
         ucs_async_pipe_drain(&m_event_pipe);
     }
@@ -101,11 +107,14 @@ public:
     void create_event() {
         ucs_status_t status = ucs_async_pipe_create(&m_event_pipe);
         ASSERT_UCS_OK(status);
+        EXPECT_EQ(ucs_atomic_cswap32(&m_event_valid, 0, 1), 0);
     }
 
     void destory_event() {
+        EXPECT_EQ(ucs_atomic_cswap32(&m_event_valid, 1, 0), 1);
         ucs_async_pipe_destroy(&m_event_pipe);
     }
+
 protected:
     virtual void ack_event() {
         reset();
@@ -116,7 +125,8 @@ private:
         return ucs_async_pipe_rfd(&m_event_pipe);
     }
 
-    ucs_async_pipe_t m_event_pipe;
+    ucs_async_pipe_t  m_event_pipe;
+    volatile uint32_t m_event_valid = 0;
 };
 
 class base_timer : public base_async {
@@ -323,7 +333,7 @@ protected:
 template<typename LOCAL>
 class test_async_mt : public test_async {
 protected:
-    using FuncVp = void* (*)(void*);
+    using FuncVp                      = void* (*)(void*);
     static const unsigned NUM_THREADS = 32;
 
     test_async_mt() {
@@ -380,17 +390,17 @@ protected:
             check_is_blocked(le, true);
             unsigned before = le->count();
             suspend_and_poll(le, 10);
-            unsigned after  = le->count();
+            unsigned after = le->count();
             le->unblock();
             EXPECT_EQ(before, after); /* Should not handle while blocked */
 
-            auto wait = ucs::rand() % 40;
+            auto wait = ucs::rand() % 20;
             le->unset_event();
             le->destory_event();
             suspend(wait);
             le->create_event(); /* same memory could be used by other thread */
             le->set_event();
-            suspend(40 - wait);
+            suspend(20 - wait);
             le->check_miss();
             ++round;
         }
@@ -886,9 +896,9 @@ UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread_create_destory,
     spawn(repeat_create_destroy_func);
     for (int j = 0; j < 4; ++j) {
         for (unsigned i = 0; i < NUM_THREADS; ++i) {
-            event(i)->push_event();
+            event(i)->push_event_if_valid();
         }
-        suspend(50);
+        suspend(30);
     }
     suspend();
     stop();
