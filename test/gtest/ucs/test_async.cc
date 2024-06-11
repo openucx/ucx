@@ -384,7 +384,7 @@ protected:
             le->unblock();
             EXPECT_EQ(before, after); /* Should not handle while blocked */
 
-            auto wait = rand() % 40;
+            auto wait = ucs::rand() % 40;
             le->unset_event();
             le->destory_event();
             suspend(wait);
