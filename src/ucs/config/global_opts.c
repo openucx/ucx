@@ -197,8 +197,8 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 
   {"PCI_ROOT_BW_BASE", "19200MBs",
    "Divisible part of the estimated bandwidth between devices with the same\n"
-   "PCI domain and bus number. The length of the path between devices is the divisor of the\n"
-   "estimation.",
+   "PCI domain and bus number. The length of the path between devices is the\n"
+   "divisor of the estimation.",
    ucs_offsetof(ucs_global_opts_t, pci_root_bw_base), UCS_CONFIG_TYPE_BW},
 
   {"PCI_ROOT_BW_MAX", "3500MBs",

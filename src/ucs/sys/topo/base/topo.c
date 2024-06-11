@@ -332,11 +332,6 @@ static int ucs_topo_is_pci_root(const char *path)
     return count == strlen(path);
 }
 
-static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
-{
-    *distance = ucs_global_opts.sys_root;
-}
-
 static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
                                        ucs_sys_dev_distance_t *distance)
 {
@@ -351,11 +346,6 @@ static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
     distance->bandwidth = ucs_min(
             ucs_global_opts.pci_root_bw_max,
             ucs_global_opts.pci_root_bw_base / path_distance);
-}
-
-static void ucs_topo_common_numa_node_distance(ucs_sys_dev_distance_t *distance)
-{
-    *distance = ucs_global_opts.common_numa;
 }
 
 static int
@@ -402,11 +392,11 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
         return UCS_OK;
     } else if (ucs_topo_is_sys_root(common_path)) {
         if (ucs_topo_is_same_numa_node(device1, device2)) {
-            ucs_topo_common_numa_node_distance(distance);
+            *distance = ucs_global_opts.common_numa;
             return UCS_OK;
         }
 
-        ucs_topo_sys_root_distance(distance);
+        *distance = ucs_global_opts.sys_root;
         return UCS_OK;
     }
 
