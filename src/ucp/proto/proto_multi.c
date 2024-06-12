@@ -275,7 +275,7 @@ void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
         return;
     }
 
-    ucp_proto_common_add_proto(&params->super, perf, frag_size, &mpriv,
+    ucp_proto_common_add_proto(&params->super, perf, &mpriv,
                                ucp_proto_multi_priv_size(&mpriv));
 }
 

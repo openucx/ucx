@@ -424,11 +424,12 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
     return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
 }
 
-ucs_status_t ucp_proto_perf_ppln(const ucp_proto_perf_t *perf, size_t frag_size,
-                                 ucp_proto_flat_perf_t *flat_perf)
+ucs_status_t
+ucp_proto_perf_max_envelope(const ucp_proto_perf_t *perf,
+                            ucp_proto_flat_perf_t *flat_perf)
 {
-    // TODO sum till frag size, max-envelope after frag size
-    return ucp_proto_perf_sum(perf, flat_perf);
+    // TODO implement (check proto_init.c ppln_perf)
+    return UCS_OK;
 }
 
 ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
@@ -501,6 +502,16 @@ ucp_proto_perf_segment_next(const ucp_proto_perf_t *perf,
     }
 
     return ucs_list_next(&seg->list, ucp_proto_perf_segment_t, list);
+}
+
+const ucp_proto_perf_segment_t *
+ucp_proto_perf_segment_last(const ucp_proto_perf_t *perf)
+{
+    if (ucs_list_is_empty(&perf->segments)) {
+        return NULL;
+    }
+
+    return ucs_list_tail(&perf->segments, ucp_proto_perf_segment_t, list);
 }
 
 void ucp_proto_perf_segment_str(const ucp_proto_perf_segment_t *seg,

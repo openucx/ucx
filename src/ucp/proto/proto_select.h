@@ -48,7 +48,6 @@ typedef struct {
     size_t                priv_offset;
     size_t                cfg_thresh; /* Configured protocol threshold */
     unsigned              cfg_priority; /* Priority of configuration */
-    size_t                frag_size; /* Fragment size for MULTI pipelining */
     ucp_proto_perf_t      *perf;
     ucp_proto_flat_perf_t flat_perf; /* Flat performance considering all parts */
 } ucp_proto_init_elem_t;
@@ -183,7 +182,7 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
 // frag_size is SIZE_MAX if no pipelining (single frag proto)
 void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
                                 size_t cfg_thresh, unsigned cfg_priority,
-                                ucp_proto_perf_t *perf, size_t frag_size,
+                                ucp_proto_perf_t *perf,
                                 const void *priv, size_t priv_size);
 
 

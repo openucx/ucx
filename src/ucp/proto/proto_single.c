@@ -78,10 +78,7 @@ void ucp_proto_single_probe(const ucp_proto_single_init_params_t *params)
         return;
     }
 
-    ucp_proto_common_add_proto(
-            &params->super, perf,
-            SIZE_MAX, // TODO this should mean there is no multi-frag support
-            &spriv, sizeof(spriv));
+    ucp_proto_common_add_proto(&params->super, perf, &spriv, sizeof(spriv));
 }
 
 void ucp_proto_single_query(const ucp_proto_query_params_t *params,

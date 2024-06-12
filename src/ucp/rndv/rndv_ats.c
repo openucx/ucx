@@ -13,27 +13,13 @@
 
 static void ucp_proto_rndv_ats_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_common_init_params_t params = {
-        .super         = *init_params,
-        .cfg_thresh    = UCS_MEMUNITS_AUTO,
-        .cfg_priority  = 80,
-        .overhead      = 0,
-        .latency       = 0,
-        .min_length    = 0,
-        .max_length    = SIZE_MAX,
-        .min_iov       = 0,
-        .min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .hdr_size      = 0,
-        .send_op       = UCT_EP_OP_LAST,
-        .memtype_op    = UCT_EP_OP_LAST,
-        .flags         = 0,
-        .exclude_map   = 0
-    };
+    ucp_proto_common_init_params_t params;
     ucp_proto_rndv_ack_priv_t priv;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
+
+    params              = ucp_proto_common_params_init(init_params);
+    params.cfg_priority = 80;
 
     /* This protocols supports either a regular rendezvous receive but without
      * data, or a rendezvous receive which should ignore the data.
@@ -58,7 +44,7 @@ static void ucp_proto_rndv_ats_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    ucp_proto_common_add_proto(&params, perf, SIZE_MAX, &priv, sizeof(priv));
+    ucp_proto_common_add_proto(&params, perf, &priv, sizeof(priv));
 }
 
 static void

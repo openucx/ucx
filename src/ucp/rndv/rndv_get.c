@@ -79,7 +79,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
     }
 
     priv_size = UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, mpriv);
-    ucp_proto_common_add_proto(&params.super, perf, frag_size, &rpriv, priv_size);
+    ucp_proto_common_add_proto(&params.super, perf, &rpriv, priv_size);
 }
 
 static UCS_F_ALWAYS_INLINE void

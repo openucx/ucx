@@ -108,6 +108,74 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
     return UCS_OK;
 }
 
+ucp_proto_common_init_params_t
+ucp_proto_common_params_init(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_common_init_params_t params = {
+        .super         = *init_params,
+        .cfg_thresh    = UCS_MEMUNITS_AUTO,
+        .min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .send_op       = UCT_EP_OP_LAST,
+        .memtype_op    = UCT_EP_OP_LAST
+    };
+    return params;
+}
+
+ucs_status_t
+ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf, size_t max_length)
+{
+    ucp_proto_perf_factors_t factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    double max_value                 = -DBL_MAX;
+    ucp_proto_perf_factor_id_t factor_id, max_factor_id;
+    const ucp_proto_perf_segment_t *frag_seg;
+    ucs_linear_func_t factor_func;
+    size_t frag_size;
+    char frag_str[64];
+
+    frag_seg  = ucp_proto_perf_segment_last(perf);
+    ucs_assert(frag_seg != NULL);
+    frag_size = ucp_proto_perf_segment_end(frag_seg);
+    ucs_assertv(frag_size < max_length, "frag_size=%zu max_length=%zu",
+                frag_size, max_length);
+
+    /*
+     * 3-factor 3-msg pipeline:
+     * 1 msg: [=1=] [======2======] [=3=]
+     * 2 msg:       [=1=]           [======2======] [=3=]
+     * 3 msg:             [=1=]                     [======2======] [=3=]
+     * Approximation:
+     *        [=1=] [======================2======================] [=3=]
+     * 
+     * All the factors except longest one turn into constant fragment overhead
+     * due to overlapping (1 and 3 from example).
+     */
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; factor_id++) {
+        factor_func          = ucp_proto_perf_segment_func(frag_seg, factor_id);
+        factors[factor_id].c = ucs_linear_func_apply(factor_func, frag_size);
+        if (factors[factor_id].c > max_value) {
+            max_factor_id = factor_id;
+            max_value     = factors[factor_id].c;
+        }
+    }
+
+    /* Longest factor still saves the slope but it's constant part turns
+     * to dynamic since it start to depend on number of sent fragments
+     * (2 from example).
+     */
+    factors[max_factor_id]    = ucp_proto_perf_segment_func(frag_seg,
+                                                            max_factor_id);
+    factors[max_factor_id].m += factors[max_factor_id].c / frag_size;
+    factors[max_factor_id].c  = 0;
+
+
+    ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
+    return ucp_proto_perf_add_funcs(perf, frag_size + 1, max_length, factors,
+                                    ucp_proto_perf_segment_node(frag_seg),
+                                    "pipeline", "frag size: %s", frag_str);
+}
+
 static ucs_status_t
 ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
@@ -331,7 +399,7 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
     ucs_status_t status;
 
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        // TODO pass favtor id and node name
+        // TODO pass factor id and node name
         ucp_proto_init_add_memreg_time(params, reg_md_map, range_start,
                                        range_end, perf);
     } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) {
@@ -349,6 +417,7 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
         /* Remote access implies zero copy on receiver */
         ucs_assert(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY);
     } else {
+        // Q: Should we add overheads to REMOTE factors in that case?
         if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
             /* Receiver has to register its buffer */
             // TODO pass favtor id and node name
@@ -428,23 +497,36 @@ ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
         return status;
     }
 
-    /* Add buffer copy/register cost when the size is not empty */
+    /* Add buffer copy/register cost for non-empty messages */
     if (range_end > 0) {
         status = ucp_proto_init_add_buffer_perf(params, ucs_max(1, range_start),
                                                 range_end, reg_md_map, perf);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
     }
 
     status = ucp_proto_init_add_tl_perf(params, tl_perf, tl_perf_node,
                                         range_start, range_end, perf);
     if (status != UCS_OK) {
-        return status;
+            goto out;
     }
 
-    *perf_p = perf;
-    return UCS_OK;
+    /* Append range representing sending rest of the fragments, if range_end is
+       not the max length and the protocol supports fragmentation */
+    if ((range_end < params->max_length) &&
+        !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
+        status = ucp_proto_common_add_ppln_perf(perf, params->max_length);
+    }
+
+out:
+    if (status != UCS_OK) {
+        ucp_proto_perf_destroy(perf);
+    } else {
+        *perf_p = perf;
+    }
+
+    return status;
 }
 
 int ucp_proto_init_check_op(const ucp_proto_init_params_t *init_params,

@@ -86,7 +86,7 @@ static void ucp_proto_reconfig_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_perf_add_funcs(perf, 0, SIZE_MAX, perf_factors, NULL, "dummy",
                              "");
 
-    ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_INF, 0, perf, SIZE_MAX,
+    ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_INF, 0, perf,
                                NULL, 0);
 }
 

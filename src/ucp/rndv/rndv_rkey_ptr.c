@@ -55,8 +55,7 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
         return; // TODO cleanup
     }
 
-    ucp_proto_common_add_proto(init_params, perf, SIZE_MAX, &rpriv,
-                               sizeof(rpriv));
+    ucp_proto_common_add_proto(init_params, perf, &rpriv, sizeof(rpriv));
 }
 
 static void

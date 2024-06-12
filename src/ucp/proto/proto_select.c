@@ -577,24 +577,21 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select)
 
 void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
                                 size_t cfg_thresh, unsigned cfg_priority,
-                                ucp_proto_perf_t *perf, size_t frag_size,
+                                ucp_proto_perf_t *perf,
                                 const void *priv, size_t priv_size)
 {
     ucp_proto_select_init_protocols_t *proto_init = init_params->ctx;
     ucp_proto_id_t proto_id                       = init_params->proto_id;
-    char frag_size_str[64], cfg_thresh_str[64];
+    char cfg_thresh_str[64];
     ucp_proto_init_elem_t *init_elem;
     const char *proto_name;
     ucs_status_t status;
     size_t priv_offset;
 
-    ucs_assert(!ucp_proto_perf_is_empty(perf));
-
     proto_name = ucp_proto_id_field(proto_id, name);
 
     /* A successful protocol initialization must return non-empty range */
-    ucs_assert(frag_size > 0);
-    // TODO ucs_assert(!ucp_proto_perf_is_empty(perf));
+    ucs_assert(!ucp_proto_perf_is_empty(perf));
 
     if (init_params->ep_config_key->err_mode != UCP_ERR_HANDLING_MODE_NONE) {
         ucs_assertv(ucp_protocols[proto_id]->abort !=
@@ -603,11 +600,8 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
                     proto_name);
     }
 
-    ucs_trace("added protocol %s frag_size %s cfg_thresh %s cfg_priority %d "
-              "priv_size %zu",
+    ucs_trace("added protocol %s cfg_thresh %s cfg_priority %d priv_size %zu",
               proto_name,
-              ucs_memunits_to_str(frag_size, frag_size_str,
-                                  sizeof(frag_size_str)),
               ucs_memunits_to_str(cfg_thresh, cfg_thresh_str,
                                   sizeof(cfg_thresh_str)),
               cfg_priority, priv_size);
@@ -637,13 +631,12 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
     init_elem->priv_offset  = priv_offset;
     init_elem->cfg_thresh   = cfg_thresh;
     init_elem->cfg_priority = cfg_priority;
-    init_elem->frag_size    = frag_size;
     init_elem->perf         = perf;
 
     if (ucp_proto_select_op_attr_unpack(init_params->select_param->op_attr) &
         UCP_OP_ATTR_FLAG_MULTI_SEND) {
-        status = ucp_proto_perf_ppln(init_elem->perf, frag_size,
-                                     &init_elem->flat_perf);
+        status = ucp_proto_perf_max_envelope(init_elem->perf,
+                                             &init_elem->flat_perf);
     } else {
         status = ucp_proto_perf_sum(init_elem->perf, &init_elem->flat_perf);
     }

@@ -641,12 +641,11 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
 }
 
 void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
-                                ucp_proto_perf_t *perf, size_t frag_size,
-                                const void *priv, size_t priv_size)
+                                ucp_proto_perf_t *perf, const void *priv,
+                                size_t priv_size)
 {
     ucp_proto_select_add_proto(&params->super, params->cfg_thresh,
-                               params->cfg_priority, perf, frag_size, priv,
-                               priv_size);
+                               params->cfg_priority, perf, priv, priv_size);
 }
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self)

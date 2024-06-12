@@ -141,10 +141,10 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
                                        const ucp_proto_perf_t *perf2,
                                        ucp_proto_perf_t **perf_p);
 
-
-/* Pipeline by frag_size */
-ucs_status_t ucp_proto_perf_ppln(const ucp_proto_perf_t *perf, size_t frag_size,
-                                 ucp_proto_flat_perf_t *flat_perf);
+/* Envelope */
+ucs_status_t
+ucp_proto_perf_max_envelope(const ucp_proto_perf_t *perf,
+                            ucp_proto_flat_perf_t *flat_perf);
 
 
 /* Sum of all parts */
@@ -216,6 +216,13 @@ ucp_proto_perf_segment_node(const ucp_proto_perf_segment_t *seg);
 const ucp_proto_perf_segment_t *
 ucp_proto_perf_segment_next(const ucp_proto_perf_t *perf,
                             const ucp_proto_perf_segment_t *seg);
+
+
+/**
+ * Get last segment, or NULL if none.
+ */
+const ucp_proto_perf_segment_t *
+ucp_proto_perf_segment_last(const ucp_proto_perf_t *perf);
 
 
 void ucp_proto_perf_segment_str(const ucp_proto_perf_segment_t *seg,

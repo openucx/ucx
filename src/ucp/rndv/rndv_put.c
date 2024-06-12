@@ -323,7 +323,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     rpriv.atp_num_lanes = ucs_popcount(rpriv.atp_map);
 
     priv_size = UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, bulk.mpriv);
-    ucp_proto_common_add_proto(&params.super, perf, frag_size, &rpriv, priv_size);
+    ucp_proto_common_add_proto(&params.super, perf, &rpriv, priv_size);
 }
 
 static const char *

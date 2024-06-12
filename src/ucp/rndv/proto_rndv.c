@@ -378,7 +378,7 @@ static void ucp_proto_rndv_ctrl_variant_probe(
                 params->super.cfg_priority, remote_proto->cfg_priority);
 
     ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
-                               perf, remote_proto->frag_size, rpriv, priv_size);
+                               perf, rpriv, priv_size);
 }
 
 void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,

@@ -45,6 +45,14 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
                              ucp_proto_perf_envelope_t *envelope_list);
 
 
+ucp_proto_common_init_params_t
+ucp_proto_common_params_init(const ucp_proto_init_params_t *init_params);
+
+
+ucs_status_t
+ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf, size_t max_length);
+
+
 void ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
                                     ucp_md_map_t reg_md_map, size_t range_start,
                                     size_t range_end, ucp_proto_perf_t *perf);
