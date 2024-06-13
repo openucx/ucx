@@ -285,11 +285,12 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
                                     ucs_memory_type_t remote_mem_type,
                                     uct_ep_operation_t memtype_op,
                                     size_t range_start, size_t range_end,
+                                    ucp_proto_perf_factor_id_t cpu_factor_id,
                                     ucp_proto_perf_t *perf)
 {
-    ucp_context_h context = worker->context;
+    ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    ucp_context_h context                 = worker->context;
     ucs_memory_type_t src_mem_type, dst_mem_type;
-    ucp_proto_perf_factors_t perf_factors;
     ucp_proto_perf_node_t *tl_perf_node;
     const ucp_ep_config_t *ep_config;
     ucp_worker_iface_t *wiface;
@@ -298,11 +299,9 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     ucp_lane_index_t lane;
     ucs_status_t status;
 
-    ucp_proto_perf_factors_reset(perf_factors);
-
     if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
         // TODO "memcpy" perf node with "bandwidth" data
-        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
+        perf_factors[cpu_factor_id] =
                 ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
         ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
                                 NULL, title, "memcpy");
@@ -360,11 +359,12 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     /* all allowed copy operations are one-sided */
     ucs_assert(perf_attr.recv_overhead < UCP_PROTO_PERF_EPSILON);
 
+    // Q: Should this latency overhead be applied only for local or remote CPU???
     perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c =
             ucp_tl_iface_latency(context, &perf_attr.latency);
-    perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU].c =
+    perf_factors[cpu_factor_id].c =
             perf_attr.send_pre_overhead + perf_attr.send_post_overhead;
-    perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU].m =
+    perf_factors[cpu_factor_id].m =
             1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
 
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
@@ -396,6 +396,7 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
 {
     const ucp_proto_select_param_t *select_param = params->super.select_param;
     ucs_memory_type_t recv_mem_type;
+    uint32_t op_attr_mask;
     ucs_status_t status;
 
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
@@ -407,39 +408,39 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
         status = ucp_proto_init_add_buffer_copy_time(
                 params->super.worker, "send copy", UCS_MEMORY_TYPE_HOST,
                 select_param->mem_type, params->memtype_op, range_start,
-                range_end, perf);
+                range_end, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, perf);
         if (status != UCS_OK) {
             return status;
         }
     }
 
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
-        /* Remote access implies zero copy on receiver */
-        ucs_assert(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY);
-    } else {
-        // Q: Should we add overheads to REMOTE factors in that case?
-        if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
-            /* Receiver has to register its buffer */
-            // TODO pass favtor id and node name
-            ucp_proto_init_add_memreg_time(params, reg_md_map, range_start,
-                                           range_end, perf);
-        } else {
-            if (params->super.rkey_config_key == NULL) {
-                /* Assume same memory type as sender */
-                recv_mem_type = select_param->mem_type;
-            } else {
-                recv_mem_type = params->super.rkey_config_key->mem_type;
-            }
+    op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
+    if (/* Remote access implies zero copy on receiver */
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) ||
+        /* Count only send completion time without waiting for a response */
+        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE))) {
+        return UCS_OK;
+    }
 
-            /* Receiver has to copy data */
-            status = ucp_proto_init_add_buffer_copy_time(
-                    params->super.worker, "recv copy", UCS_MEMORY_TYPE_HOST,
-                    recv_mem_type, UCT_EP_OP_PUT_SHORT, range_start, range_end,
-                    perf);
-            if (status != UCS_OK) {
-                return status;
-            }
-        }
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
+        /* Receiver has to register its buffer */
+        // TODO pass favtor id and node name
+        ucp_proto_init_add_memreg_time(params, reg_md_map, range_start,
+                                       range_end, perf);
+        return UCS_OK;
+    }
+
+    /* Receiver has to copy data.
+     * Assume same memory type as sender if no rkey */
+    recv_mem_type = (params->super.rkey_config_key == NULL) ? 
+            select_param->mem_type : params->super.rkey_config_key->mem_type;
+    status        = ucp_proto_init_add_buffer_copy_time(
+            params->super.worker, "recv copy", UCS_MEMORY_TYPE_HOST,
+            recv_mem_type, UCT_EP_OP_PUT_SHORT, range_start, range_end,
+            UCP_PROTO_PERF_FACTOR_REMOTE_CPU, perf);
+    if (status != UCS_OK) {
+        return status;
     }
 
     return UCS_OK;
