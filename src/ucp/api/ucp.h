@@ -1881,6 +1881,7 @@ typedef struct ucp_am_handler_param {
 
     /**
      * Active Message id.
+     * @warning Value must be between 0 and UINT16_MAX.
      */
     unsigned                 id;
 

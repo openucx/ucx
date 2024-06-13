@@ -418,9 +418,9 @@ protected:
         }
     }
 
-    void set_am_data_handler(entity &e, uint16_t am_id,
-                             ucp_am_recv_callback_t cb, void *arg,
-                             unsigned flags = 0)
+    ucs_status_t set_am_data_handler_internal(entity &e, unsigned am_id,
+                                              ucp_am_recv_callback_t cb, void *arg,
+                                              unsigned flags = 0)
     {
         ucp_am_handler_param_t param;
 
@@ -437,7 +437,14 @@ protected:
             param.flags       = flags;
         }
 
-        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
+        return ucp_worker_set_am_recv_handler(e.worker(), &param);
+    }
+
+    void set_am_data_handler(entity &e, uint16_t am_id,
+                             ucp_am_recv_callback_t cb, void *arg,
+                             unsigned flags = 0)
+    {
+        ASSERT_UCS_OK(set_am_data_handler_internal(e, am_id, cb, arg, flags));
     }
 
     void check_header(const void *header, size_t header_length)
@@ -448,11 +455,11 @@ protected:
 
     ucs_status_ptr_t
     update_counter_and_send_am(const void *header, size_t header_length,
-                               const void *buffer, size_t count,
+                               const void *buffer, size_t count, unsigned am_id,
                                const ucp_request_param_t *param)
     {
         m_send_counter++;
-        return ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, header,
+        return ucp_am_send_nbx(sender().ep(), am_id, header,
                                header_length, buffer, count, param);
     }
 
@@ -478,6 +485,7 @@ protected:
         ucs_status_ptr_t sptr = update_counter_and_send_am(hdr, hdr_length,
                                                            dt_desc.buf(),
                                                            dt_desc.count(),
+                                                           TEST_AM_NBX_ID,
                                                            &param);
         return sptr;
     }
@@ -692,6 +700,46 @@ protected:
     ucp_mem_h                       m_rx_memh;
 };
 
+class test_ucp_am_id : public test_ucp_am_nbx {
+protected:
+    void reset_counters()
+    {
+        test_ucp_am_nbx::reset_counters();
+        m_recv_counter_cb = 0;
+    }
+
+    void test_am_id_handler()
+    {
+        reset_counters();
+
+        ucs_status_t status = set_am_data_handler_internal(
+                                            receiver(), 0xffff0001,
+                                            am_id_overflow_data_cb, this);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+        ucp_request_param_t param;
+        param.op_attr_mask = 0;
+
+        ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul, NULL, 0,
+                                                           0xffff0001, &param);
+        EXPECT_EQ(UCS_PTR_STATUS(sptr), UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(0, m_recv_counter_cb);
+    }
+
+    static ucs_status_t am_id_overflow_data_cb(void *arg, const void *header,
+                                               size_t header_length,
+                                               void *data, size_t length,
+                                               const ucp_am_recv_param_t *param)
+    {
+        test_ucp_am_id *self = reinterpret_cast<test_ucp_am_id*>(arg);
+        self->m_recv_counter_cb++;
+        return self->am_data_handler(header, header_length,
+                                     data, length, param);
+    }
+
+    volatile size_t m_recv_counter_cb;
+};
+
 void test_ucp_am_nbx::test_datatypes(std::function<void()> test_f,
                                      const std::vector<ucp_dt_type> &datatypes)
 {
@@ -796,6 +844,14 @@ UCS_TEST_P(test_ucp_am_nbx, am_header_error)
     EXPECT_EQ(UCS_PTR_STATUS(sptr), UCS_ERR_INVALID_PARAM);
 }
 #endif
+
+UCS_TEST_P(test_ucp_am_id, am_id_overflow)
+{
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    test_am_id_handler();
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_id)
 
 UCS_TEST_P(test_ucp_am_nbx, zero_send)
 {
@@ -1732,7 +1788,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_rndv, invalid_recv_desc,
 
     param.op_attr_mask = 0ul;
     ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul, &data,
-                                                       sizeof(data), &param);
+                                                       sizeof(data),
+                                                       TEST_AM_NBX_ID, &param);
 
     wait_receives();
 
@@ -1769,7 +1826,9 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)
 
         ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul,
                                                            sbuf.data(),
-                                                           sbuf.size(), &param);
+                                                           sbuf.size(),
+                                                           TEST_AM_NBX_ID,
+                                                           &param);
 
         EXPECT_EQ(m_status, request_wait(sptr));
         EXPECT_EQ(m_recv_counter, m_send_counter);
