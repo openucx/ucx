@@ -424,6 +424,38 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
     return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
 }
 
+ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
+                                        ucp_proto_perf_t **perf_p)
+{
+    ucp_proto_perf_segment_t *seg;
+    ucp_proto_perf_t *perf;
+    ucs_status_t status;
+
+    ucp_proto_perf_check(remote_perf);
+
+    status = ucp_proto_perf_create(remote_perf->name, &perf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *perf = *remote_perf;
+
+    /* Turn local factors to remote and vice versa */
+    ucp_proto_perf_segment_foreach(seg, perf) {
+        ucs_swap(&seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU],
+                 &seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU]);
+        ucs_swap(&seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL],
+                 &seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL]);
+
+        /* Create turned perf node */
+        seg->node = ucp_proto_perf_node_new_data(
+                "turned", ucp_proto_perf_node_name(seg->node));
+        ucp_proto_perf_node_update_factors(seg->node, seg->perf_factors);
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t
 ucp_proto_perf_max_envelope(const ucp_proto_perf_t *perf,
                             ucp_proto_flat_perf_t *flat_perf)

@@ -321,9 +321,9 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         ucp_proto_init_elem_t *remote_proto, const void *remote_priv)
 {
     const char *proto_name = ucp_proto_id_field(remote_proto->proto_id, name);
+    ucp_proto_perf_t *ctrl_perf, *turned_perf;
     size_t cfg_thresh, cfg_priority;
     ucs_linear_func_t overhead;
-    ucp_proto_perf_t *ctrl_perf;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
@@ -343,10 +343,15 @@ static void ucp_proto_rndv_ctrl_variant_probe(
                                    params->super.min_length,
                                    params->super.max_length, ctrl_perf);
 
-    status = ucp_proto_perf_aggregate2(proto_name, remote_proto->perf,
-                                       ctrl_perf, &perf);
+    status = ucp_proto_perf_turn_remote(remote_proto->perf, &turned_perf);
     if (status != UCS_OK) {
-        return;
+        goto out_destroy_ctrl_perf;
+    }
+
+    status = ucp_proto_perf_aggregate2(proto_name, turned_perf, ctrl_perf,
+                                       &perf);
+    if (status != UCS_OK) {
+        goto out_destroy_turned_perf;
     }
 
     // TODO add unpack perf
@@ -379,6 +384,11 @@ static void ucp_proto_rndv_ctrl_variant_probe(
 
     ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
                                perf, rpriv, priv_size);
+
+out_destroy_turned_perf:
+    ucp_proto_perf_destroy(turned_perf);
+out_destroy_ctrl_perf:
+    ucp_proto_perf_destroy(ctrl_perf);
 }
 
 void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,

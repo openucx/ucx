@@ -141,6 +141,18 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
                                        const ucp_proto_perf_t *perf2,
                                        ucp_proto_perf_t **perf_p);
 
+
+/**
+ * Create a proto perf structure that is equal to @a remote_perf but all
+ * local factors' values are turned to remote ones and vice versa.
+ *
+ * @param [in]  remote_perf Performance data structure to turn.
+ * @param [out] perf_p      Filled with the new performance data structure.
+*/
+ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
+                                        ucp_proto_perf_t **perf_p);
+
+
 /* Envelope */
 ucs_status_t
 ucp_proto_perf_max_envelope(const ucp_proto_perf_t *perf,
