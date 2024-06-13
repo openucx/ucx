@@ -311,6 +311,7 @@ void ucp_proto_rndv_set_variant_config(
     proto_config->ep_cfg_index   = init_params->ep_cfg_index;
     proto_config->rkey_cfg_index = init_params->rkey_cfg_index;
     proto_config->select_param   = *select_param;
+    proto_config->init_elem      = proto;
 }
 
 /* Probe a rndv_ctrl variant with a given remote protocol */

@@ -305,6 +305,7 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
             proto_config->rkey_cfg_index = rkey_cfg_index;
             proto_config->proto_idx      = proto_idx;
             proto_config->select_param   = *select_param;
+            proto_config->init_elem      = proto;
             *last_proto_idx              = proto_idx;
         }
 

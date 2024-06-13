@@ -427,12 +427,9 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
                                const ucp_proto_config_t *proto_config,
                                size_t msg_length, ucs_string_buffer_t *strb)
 {
-    const ucp_proto_select_elem_t *select_elem;
-    ucp_worker_cfg_index_t new_key_cfg_index;
-    // const ucp_proto_perf_range_t *range;
+    const ucp_proto_flat_perf_range_t *range;
     ucp_proto_query_attr_t proto_attr;
-    ucp_proto_select_t *proto_select;
-    // double bandwidth;
+    double bandwidth;
 
     ucs_assert(worker->context->config.ext.proto_enable);
 
@@ -446,31 +443,17 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
                               proto_attr.desc, proto_attr.config);
     ucs_string_buffer_rtrim(strb, NULL);
 
-    /* Find protocol selection root */
-    proto_select = ucp_proto_select_get(worker, proto_config->ep_cfg_index,
-                                        proto_config->rkey_cfg_index,
-                                        &new_key_cfg_index);
-    if (proto_select == NULL) {
-        return;
-    }
-
-    /* Emulate protocol selection process */
-    ucs_assert(new_key_cfg_index == proto_config->rkey_cfg_index);
-    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
-                                               proto_config->ep_cfg_index,
-                                               proto_config->rkey_cfg_index,
-                                               &proto_config->select_param);
-    if (select_elem == NULL) {
-        return;
-    }
-
     /* Find the relevant performance range */
-    // TODO use proto_init
-    // range     = ucp_proto_perf_range_search(select_elem, msg_length);
-    // bandwidth = ucp_proto_select_calc_bandwidth(&proto_config->select_param,
-    //                                             range, msg_length);
-    // ucs_string_buffer_appendf(strb, " %.1f MB/s %.2f us", bandwidth / UCS_MBYTE,
-    //                           msg_length / bandwidth * UCS_USEC_PER_SEC);
+    range = ucp_proto_flat_perf_find_lb(&proto_config->init_elem->flat_perf,
+                                        msg_length);
+    if (range == NULL || range->start > msg_length) {
+        ucs_string_buffer_appendf(strb, " - not available");
+        return;
+    }
+
+    bandwidth = msg_length / ucs_linear_func_apply(range->value, msg_length);
+    ucs_string_buffer_appendf(strb, " %.1f MB/s %.2f us", bandwidth / UCS_MBYTE,
+                              msg_length / bandwidth * UCS_USEC_PER_SEC);
 }
 
 void ucp_proto_select_info_str(ucp_worker_h worker,

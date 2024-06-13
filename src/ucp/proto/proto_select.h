@@ -116,6 +116,9 @@ typedef struct {
      * existing in-progress request
      */
     ucp_proto_select_param_t select_param;
+
+    /* Pointer to the corresponding initialization data */
+    const ucp_proto_init_elem_t *init_elem;
 } ucp_proto_config_t;
 
 
