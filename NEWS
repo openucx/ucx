@@ -11,14 +11,7 @@
 ### Features:
 ### Bugfixes:
 
-## 1.17.0-rc3 (June 6, 2024)
-### Bugfixes:
-#### UCP
-* Fixed wire compatibility issue due to mismatched lane selection
-#### UCS
-* Fixed uninitialized variable access in rcache
-
-## 1.17.0-rc2 (May 29, 2024)
+## 1.17.0 (June 13, 2024)
 ### Features:
 #### UCP
 * Improved the accuracy of rendezvous protocol performance estimation
@@ -77,6 +70,7 @@
 * Fixed assertion failure when rcache fails during memh allocation
 * Fixed atomic device selection issue
 * Fixed worker interface deactivation while still in use by endpoints
+* Fixed wire compatibility issue due to mismatched lane selection
 #### RDMA CORE (IB, ROCE, etc.)
 * Disabled device memory if atomics are not available
 * Fixed indirect keys creation for MT registered memory
@@ -95,6 +89,7 @@
 * Fixed system device distance calculation for devices on different PCIe root
 * Fixed support for large size arrays in ucs_array
 * Fixed synchronization issue in rcache
+* Fixed uninitialized variable access in rcache
 #### Tests
 * Fixed test failures when GPU is present but disabled
 * Fixed Active Message hanging issue in ucp_client_server
