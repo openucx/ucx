@@ -26,13 +26,13 @@
 #define UCP_PROTO_MSGLEN_EPSILON   0.5
 
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
-                             size_t range_start, size_t range_end, int convex,
+ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
+                             unsigned num_funcs, size_t range_start,
+                             size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list)
 {
-    const ucs_linear_func_t *perf_list_ptr = ucs_array_begin(perf_list);
-    const unsigned perf_list_length        = ucs_array_length(perf_list);
-    size_t start                           = range_start;
+    uint64_t mask = UCS_MASK(num_funcs);
+    size_t start  = range_start;
     char num_str[64];
     struct {
         unsigned index;
@@ -42,11 +42,8 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
     ucs_status_t status;
     size_t midpoint;
     double x_sample, x_intersect;
-    uint64_t mask;
 
-    ucs_assert_always(perf_list_length < 64);
-    mask = UCS_MASK(perf_list_length);
-
+    ucs_assert_always(num_funcs < 64);
     do {
         ucs_assert(mask != 0);
 
@@ -55,7 +52,7 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
         best.result = DBL_MAX;
         ucs_for_each_bit(curr.index, mask) {
             x_sample    = start + UCP_PROTO_MSGLEN_EPSILON;
-            curr.result = ucs_linear_func_apply(perf_list_ptr[curr.index],
+            curr.result = ucs_linear_func_apply(funcs[curr.index],
                                                 x_sample);
             ucs_assert(curr.result != DBL_MAX);
             if ((best.index == UINT_MAX) ||
@@ -78,8 +75,8 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
         midpoint = range_end;
         mask    &= ~UCS_BIT(best.index);
         ucs_for_each_bit(curr.index, mask) {
-            status = ucs_linear_func_intersect(perf_list_ptr[curr.index],
-                                               perf_list_ptr[best.index],
+            status = ucs_linear_func_intersect(funcs[curr.index],
+                                               funcs[best.index],
                                                &x_intersect);
             if ((status == UCS_OK) && (x_intersect > start)) {
                 /* We care only if the intersection is after 'start', since

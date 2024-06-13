@@ -23,14 +23,14 @@ typedef struct {
 
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_envelope_t, unsigned,
                        ucp_proto_perf_envelope_elem_t);
-UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_list_t, unsigned, ucs_linear_func_t);
 
 
 /*
- * Accepts a list of performance functions for a given range and appends the
+ * Accepts an array of performance functions for a given range and appends the
  * convex or concave envelope of these functions to an output list.
  *
- * @param [in] perf_list       List of performance functions.
+ * @param [in] funcs           Array of performance functions.
+ * @param [in] num_funcs       Number of elements in @a funcs argument.
  * @param [in] range_start     Range interval start.
  * @param [in] range_end       Range interval end.
  * @param [in] convex          Whether to select convex (maximal) or concave
@@ -40,8 +40,9 @@ UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_list_t, unsigned, ucs_linear_func_t);
  *                             which it corresponds.
  */
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
-                             size_t range_start, size_t range_end, int convex,
+ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
+                             unsigned num_funcs, size_t range_start,
+                             size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list);
 
 

@@ -155,8 +155,8 @@ ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
 
 /* Envelope */
 ucs_status_t
-ucp_proto_perf_max_envelope(const ucp_proto_perf_t *perf,
-                            ucp_proto_flat_perf_t *flat_perf);
+ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
+                        ucp_proto_flat_perf_t *flat_perf);
 
 
 /* Sum of all parts */

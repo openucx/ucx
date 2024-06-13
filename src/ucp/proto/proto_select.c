@@ -20,6 +20,7 @@
 #include <ucp/core/ucp_worker.inl>
 
 
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_list_t, unsigned, ucs_linear_func_t);
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_thresh_t, unsigned,
                        ucp_proto_threshold_elem_t);
 
@@ -352,8 +353,10 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
 
         ucs_assert_always(!ucs_array_is_empty(&perf_list));
 
-        status = ucp_proto_perf_envelope_make(&perf_list, msg_length,
-                                              max_length, 1, &envelope);
+        status = ucp_proto_perf_envelope_make(ucs_array_begin(&perf_list),
+                                              ucs_array_length(&perf_list),
+                                              msg_length, max_length, 1,
+                                              &envelope);
         if (status != UCS_OK) {
             goto err_cleanup_perf_list;
         }
@@ -635,8 +638,8 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
 
     if (ucp_proto_select_op_attr_unpack(init_params->select_param->op_attr) &
         UCP_OP_ATTR_FLAG_MULTI_SEND) {
-        status = ucp_proto_perf_max_envelope(init_elem->perf,
-                                             &init_elem->flat_perf);
+        status = ucp_proto_perf_envelope(init_elem->perf, 0,
+                                         &init_elem->flat_perf);
     } else {
         status = ucp_proto_perf_sum(init_elem->perf, &init_elem->flat_perf);
     }

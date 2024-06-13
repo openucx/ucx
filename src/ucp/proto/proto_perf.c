@@ -10,6 +10,7 @@
 
 #include "proto_perf.h"
 #include "proto_debug.h"
+#include "proto_init.h"
 
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/log.h>
@@ -457,10 +458,50 @@ ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
 }
 
 ucs_status_t
-ucp_proto_perf_max_envelope(const ucp_proto_perf_t *perf,
-                            ucp_proto_flat_perf_t *flat_perf)
+ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
+                        ucp_proto_flat_perf_t *flat_perf)
 {
-    // TODO implement (check proto_init.c ppln_perf)
+    ucp_proto_perf_envelope_elem_t *envelope_elem;
+    const ucp_proto_perf_segment_t *seg;
+    ucp_proto_flat_perf_range_t *range;
+    ucp_proto_perf_envelope_t envelope;
+    ucs_status_t status;
+    size_t range_start;
+
+    ucp_proto_perf_check(perf);
+
+    ucs_array_init_dynamic(&envelope);
+    ucp_proto_perf_segment_foreach(seg, perf) {
+        status = ucp_proto_perf_envelope_make(seg->perf_factors,
+                                              UCP_PROTO_PERF_FACTOR_LAST,
+                                              seg->start, seg->end, convex,
+                                              &envelope);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    /* Find range start */
+    seg = ucp_proto_perf_find_segment_lb(perf, 0);
+    if (seg == NULL) {
+        /* Empty perf */
+        return UCS_OK;
+    }
+    range_start = seg->start;
+
+    ucs_array_for_each(envelope_elem, &envelope) {
+        while (envelope_elem->max_length > seg->end) {
+            /* Find segment for current envelope*/
+            seg = ucs_list_next(&seg->list, ucp_proto_perf_segment_t, list);
+        }
+
+        range        = ucs_array_append(flat_perf, return UCS_ERR_NO_MEMORY);
+        range->start = range_start;
+        range->end   = envelope_elem->max_length;
+        range->value = seg->perf_factors[envelope_elem->index];
+        range_start  = envelope_elem->max_length + 1;
+    }
+
     return UCS_OK;
 }
 
