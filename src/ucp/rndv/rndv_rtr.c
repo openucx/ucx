@@ -172,8 +172,6 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
-        .unpack_time         = UCS_LINEAR_FUNC_ZERO,
-        .unpack_perf_node    = NULL,
         .perf_bias           = 0.0,
         .mem_info.type       = init_params->select_param->mem_type,
         .mem_info.sys_dev    = init_params->select_param->sys_dev,
@@ -398,15 +396,19 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    status = ucp_proto_perf_create("rtr/mtype unpack", &params.unpack_perf);
+    if (status != UCS_OK) {
+        return;
+    }
 
-    // TODO create unpack perf
-    // status = ucp_proto_init_buffer_copy_time(
-    //         init_params->worker, "rtr/mtype unpack", params.mem_info.type,
-    //         init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
-    //         &params.unpack_time, &params.unpack_perf_node);
-    // if (status != UCS_OK) {
-    //     return;
-    // }
+    status = ucp_proto_init_add_buffer_copy_time(
+            init_params->worker, "unpack copy", params.mem_info.type,
+            init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
+            params.super.min_length, params.super.max_length,
+            UCP_PROTO_PERF_FACTOR_LOCAL_CPU, params.unpack_perf);
+    if (status != UCS_OK) {
+        goto out_unpack_perf_destroy;
+    }
 
     status = ucp_mm_get_alloc_md_index(context, &md_index,
                                        params.mem_info.type);
@@ -420,7 +422,8 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
     rpriv.data_received = ucp_proto_rndv_rtr_mtype_data_received;
 
     ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
-    ucp_proto_perf_node_deref(&params.unpack_perf_node);
+out_unpack_perf_destroy:
+    ucp_proto_perf_destroy(params.unpack_perf);
 }
 
 static void

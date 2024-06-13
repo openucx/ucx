@@ -321,6 +321,8 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         ucp_proto_init_elem_t *remote_proto, const void *remote_priv)
 {
     const char *proto_name = ucp_proto_id_field(remote_proto->proto_id, name);
+    size_t num_elems  = 0;
+    const ucp_proto_perf_t *perf_elems[3];
     ucp_proto_perf_t *ctrl_perf, *turned_perf;
     size_t cfg_thresh, cfg_priority;
     ucs_linear_func_t overhead;
@@ -348,13 +350,16 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         goto out_destroy_ctrl_perf;
     }
 
-    status = ucp_proto_perf_aggregate2(proto_name, turned_perf, ctrl_perf,
-                                       &perf);
+    perf_elems[num_elems++]     = ctrl_perf;
+    perf_elems[num_elems++]     = turned_perf;
+    if (params->unpack_perf != NULL) {
+        perf_elems[num_elems++] = params->unpack_perf;
+    }
+
+    status = ucp_proto_perf_aggregate(proto_name, perf_elems, num_elems, &perf);
     if (status != UCS_OK) {
         goto out_destroy_turned_perf;
     }
-
-    // TODO add unpack perf
 
     ucp_proto_rndv_set_variant_config(&params->super.super, remote_proto,
                                       remote_select_param, remote_priv,
@@ -513,7 +518,6 @@ void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
-        .unpack_time         = UCS_LINEAR_FUNC_ZERO,
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .mem_info.type       = init_params->select_param->mem_type,
         .mem_info.sys_dev    = init_params->select_param->sys_dev,

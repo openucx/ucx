@@ -87,11 +87,8 @@ typedef struct {
     /* Lane to send control message */
     ucp_lane_index_t               lane;
 
-    /* Time to unpack the received data */
-    ucs_linear_func_t              unpack_time;
-
-    /* Performance node to represent unpacking time; ignored if NULL */
-    ucp_proto_perf_node_t          *unpack_perf_node;
+    /* Performance data to unpack the received data */
+    ucp_proto_perf_t              *unpack_perf;
 
     /* Reduce estimated time by this value (for example, 0.03 means to report
        a 3% better time) */
