@@ -33,8 +33,8 @@ export ASAN_OPTIONS=protect_shadow_gap=0
 
 # LD_PRELOAD puts ASAN first in initial library list which is required for
 # correct ASAN work.
-ASAN_LD_PRELOAD=$(shell ldconfig -p | grep libasan.so | tr ' ' '\n' | grep / | head -1)
-TEST_ENV=LD_PRELOAD=$(ASAN_LD_PRELOAD):$(LD_PRELOAD)
+ASAN_LIB=$(shell ldd $(abs_builddir)/gtest | grep libasan.so | cut -d' ' -f3)
+TEST_ENV=LD_PRELOAD=$(ASAN_LIB):$(LD_PRELOAD)
 endif
 
 GTEST_ARGS = \
