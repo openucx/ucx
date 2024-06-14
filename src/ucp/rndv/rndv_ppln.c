@@ -142,11 +142,17 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
                 ucp_proto_id_field(init_params->proto_id, name),
                 ppln_perf, ack_perf, &result_perf);
         if (status == UCS_OK) {
-            ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
-                                       proto->cfg_priority,
-                                       result_perf, &rpriv, sizeof(rpriv));
+            goto destroy_ack_perf;
         }
 
+        status = ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+                                            proto->cfg_priority,
+                                            result_perf, &rpriv, sizeof(rpriv));
+        if (status != UCS_OK) {
+            ucp_proto_perf_destroy(result_perf);
+        }
+
+destroy_ack_perf:
         ucp_proto_perf_destroy(ack_perf);
 destroy_ppln_perf:
         ucp_proto_perf_destroy(ppln_perf);

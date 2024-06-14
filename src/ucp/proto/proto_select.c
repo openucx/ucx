@@ -579,10 +579,11 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select)
     kh_destroy(ucp_proto_select_hash, proto_select->hash);
 }
 
-void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
-                                size_t cfg_thresh, unsigned cfg_priority,
-                                ucp_proto_perf_t *perf,
-                                const void *priv, size_t priv_size)
+ucs_status_t
+ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
+                           size_t cfg_thresh, unsigned cfg_priority,
+                           ucp_proto_perf_t *perf, const void *priv,
+                           size_t priv_size)
 {
     ucp_proto_select_init_protocols_t *proto_init = init_params->ctx;
     ucp_proto_id_t proto_id                       = init_params->proto_id;
@@ -619,7 +620,7 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
     ucs_array_resize(&proto_init->priv_buf, priv_offset + priv_size, 0,
                      ucs_error("failed to allocate proto priv of size %zu",
                                priv_size);
-                     return);
+                     return UCS_ERR_NO_MEMORY);
     memcpy(&ucs_array_elem(&proto_init->priv_buf, priv_offset), priv,
            priv_size);
 
@@ -648,15 +649,14 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
         goto err_revert_proto;
     }
 
-    return;
+    return UCS_OK;
 
 err_revert_proto:
     ucs_array_set_length(&proto_init->protocols,
                          ucs_array_length(&proto_init->protocols) - 1);
 err_revert_priv:
     ucs_array_set_length(&proto_init->priv_buf, priv_offset);
-    // TODO ?? return err code?
-    ucp_proto_perf_destroy(perf); // don't leak
+    return status;
 }
 
 void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short)

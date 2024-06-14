@@ -392,8 +392,11 @@ static void ucp_proto_rndv_ctrl_variant_probe(
                 "remote_proto->cfg_priority=%u", proto_name,
                 params->super.cfg_priority, remote_proto->cfg_priority);
 
-    ucp_proto_select_add_proto(&params->super.super, cfg_thresh, cfg_priority,
-                               perf, rpriv, priv_size);
+    status = ucp_proto_select_add_proto(&params->super.super, cfg_thresh,
+                                        cfg_priority, perf, rpriv, priv_size);
+    if (status != UCS_OK) {
+        ucp_proto_perf_destroy(perf);
+    }
 
 out_destroy_turned_perf:
     ucp_proto_perf_destroy(turned_perf);
