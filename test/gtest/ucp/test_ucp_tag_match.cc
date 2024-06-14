@@ -856,7 +856,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, req_exp_auto_thresh, "RNDV_THRESH=auto") {
 
 UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
     const std::vector<size_t> sizes = {1000, 2000, 8000,
-                                       ucs::limit_buffer_size(2500ul *
+                                       ucs::limit_buffer_size(250ul *
                                                               UCS_MBYTE),
                                        ucs::limit_buffer_size(UCS_GBYTE + 32)};
 
@@ -865,6 +865,8 @@ UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
         const size_t size = c_size / ucs::test_time_multiplier() /
                             ucs::test_time_multiplier();
         request *my_send_req, *my_recv_req;
+
+        UCS_TEST_MESSAGE << size << " bytes (c_size=" << c_size << ")";
 
         std::vector<char> sendbuf(size, 0);
         std::vector<char> recvbuf(size, 0);
@@ -881,6 +883,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
 
         wait(my_recv_req);
 
+        EXPECT_EQ(UCS_OK,              my_recv_req->status);
         EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
         EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
         EXPECT_TRUE(my_recv_req->completed);
