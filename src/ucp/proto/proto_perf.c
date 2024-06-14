@@ -422,33 +422,47 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
 ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
                                         ucp_proto_perf_t **perf_p)
 {
-    ucp_proto_perf_segment_t *seg;
+    ucp_proto_perf_segment_t *remote_seg, *seg;
+    ucp_proto_perf_factors_t turned_factors;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
     ucp_proto_perf_check(remote_perf);
 
-    status = ucp_proto_perf_create(remote_perf->name, &perf);
+    status = ucp_proto_perf_create("turned", &perf);
     if (status != UCS_OK) {
         return status;
     }
 
-    *perf = *remote_perf;
-
     /* Turn local factors to remote and vice versa */
-    ucp_proto_perf_segment_foreach(seg, perf) {
-        ucs_swap(&seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU],
-                 &seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU]);
-        ucs_swap(&seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL],
-                 &seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL]);
+    ucp_proto_perf_segment_foreach(remote_seg, remote_perf) {
+        turned_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU];
+        turned_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL];
+        turned_factors[UCP_PROTO_PERF_FACTOR_LATENCY] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY];
+        turned_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL];
+        turned_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU];
 
-        /* Create turned perf node */
-        seg->node = ucp_proto_perf_node_new_data(
-                "turned", ucp_proto_perf_node_name(seg->node));
-        ucp_proto_perf_node_update_factors(seg->node, seg->perf_factors);
+        status = ucp_proto_perf_segment_new(perf, remote_seg->start,
+                                            remote_seg->end, &seg);
+        if (status != UCS_OK) {
+            goto err_destroy_perf;
+        }
+
+        ucp_proto_perf_segment_add_funcs(perf, seg, turned_factors,
+                                         remote_seg->node);
     }
 
+    *perf_p = perf;
     return UCS_OK;
+
+err_destroy_perf:
+    ucp_proto_perf_destroy(perf);
+    return status;
 }
 
 ucs_status_t
