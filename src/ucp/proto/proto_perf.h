@@ -99,15 +99,15 @@ int ucp_proto_perf_is_empty(const ucp_proto_perf_t *perf);
  * @param [in] perf_node       Performance node that represents the added function.
  *                             Can be NULL.
  *
- *  TODO add option to create custom perf node (a child of the range) when adding
+ *  TODO add option to create custom perf node (a child of the range) when adding ???
  *
  * @note This function may adjust the reference count of @a perf_node as needed.
  */
 ucs_status_t
 ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
                          const ucp_proto_perf_factors_t perf_factors,
-                         ucp_proto_perf_node_t *perf_node, const char *title,
-                         const char *desc_fmt, ...);
+                         ucp_proto_perf_node_t *child_perf_node,
+                         const char *title, const char *desc_fmt, ...);
 
 
 /**
@@ -124,7 +124,7 @@ ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
  *                          that should be aggregated.
  * @param [in]  num_elems   Number of elements in @a perf_elems array.
  * @param [out] perf_p      Filled with the new performance data structure.
-*/
+ */
 ucs_status_t ucp_proto_perf_aggregate(const char *name,
                                       const ucp_proto_perf_t *const *perf_elems,
                                       unsigned num_elems,
@@ -143,18 +143,33 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
  *
  * @param [in]  remote_perf Performance data structure to turn.
  * @param [out] perf_p      Filled with the new performance data structure.
-*/
+ */
 ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
                                         ucp_proto_perf_t **perf_p);
 
 
-/* Envelope */
+/**
+ * Convert given @a perf to @a flat_perf structure that contains convex or
+ * concave envelope across all factors for each segment. Used for async scheme
+ * performance estimations.
+ *
+ * @param [in]  perf        Performance data structure to convert.
+ * @param [in]  convex      If 1 calculate convex, if 0 concave.
+ * @param [out] flat_perf   Filled with convex or concave envelope.
+ */
 ucs_status_t
 ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
                         ucp_proto_flat_perf_t *flat_perf);
 
 
-/* Sum of all parts */
+/**
+ * Convert given @a perf to @a flat_perf structure that contains sum of all
+ * factors for each segment. Used for blocking scheme performance estimations.
+ *
+ * @param [in]  perf        Performance data structure to convert.
+ * @param [in]  convex      If 1 calculate convex, if 0 concave.
+ * @param [out] flat_perf   Filled with convex or concave envelope.
+ */
 ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
                                  ucp_proto_flat_perf_t *flat_perf);
 
