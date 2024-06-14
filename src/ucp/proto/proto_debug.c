@@ -141,20 +141,6 @@ ucp_proto_select_param_dump(ucp_worker_h worker,
                               operation_names, select_param_strb);
 }
 
-// static double
-// ucp_proto_select_calc_bandwidth(const ucp_proto_select_param_t *select_param,
-//                                 const ucp_proto_perf_range_t *range,
-//                                 size_t msg_length)
-// {
-//     const ucs_linear_func_t *perf_func;
-//     ucp_proto_perf_type_t perf_type;
-
-//     perf_type = ucp_proto_select_param_perf_type(select_param);
-//     perf_func = &range->perf[perf_type];
-
-//     return msg_length / ucs_linear_func_apply(*perf_func, msg_length);
-// }
-
 static void ucp_proto_table_row_separator(ucs_string_buffer_t *strb,
                                           const int *column_width,
                                           unsigned num_columns)
@@ -505,7 +491,7 @@ ucp_proto_perf_node_t *ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
     if (type == UCP_PROTO_PERF_NODE_TYPE_DATA) {
         ucs_array_init_dynamic(&perf_node->data);
     } else if (type == UCP_PROTO_PERF_NODE_TYPE_SELECT) {
-        perf_node->selected_child = 0;
+        perf_node->selected_child = selected_child;
     }
     return perf_node;
 }
@@ -813,8 +799,7 @@ static inline khint32_t kh_ptr_hash_func(void *ptr)
 KHASH_INIT(ucp_proto_graph_node, ucp_proto_perf_node_t*, int, 1,
            kh_ptr_hash_func, kh_int64_hash_equal);
 
-  // TODO static
-void
+static void
 ucp_proto_perf_graph_dump_recurs(ucp_proto_perf_node_t *perf_node,
                                  int parent_id,
                                  khash_t(ucp_proto_graph_node) *nodes_hash,
@@ -1011,7 +996,7 @@ ucp_proto_select_write_info(ucp_worker_h worker,
             continue;
         }
 
-        // TODO create performance nodes for candidates
+        // TODO create performance nodes for candidates ???
         proto = ucp_proto_select_elem_get_proto(select_elem, range_start);
         ucp_proto_perf_segment_foreach_range(seg, seg_start, seg_end,
                                              proto->perf, range_start,

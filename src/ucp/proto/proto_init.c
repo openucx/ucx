@@ -182,6 +182,7 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
 {
     ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     const double latency       = tl_perf->latency + tl_perf->sys_latency;
+    // Q: Should post overhead be exlcluded in case of MULTI???
     const double send_overhead = tl_perf->send_pre_overhead +
                                  tl_perf->send_post_overhead;
     uint32_t op_attr_mask;
@@ -200,8 +201,8 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
     perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU].c += send_overhead;
     perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c   += latency;
 
-    // TODO consider FAST_CMPL
-    if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS)) {
+    if (!(op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS)) {
         perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU].c +=
                 tl_perf->recv_overhead;
     }
@@ -229,51 +230,55 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
                                     tl_perf_node, "transport", "");
 }
 
-void ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
-                                    ucp_md_map_t reg_md_map, size_t range_start,
-                                    size_t range_end, ucp_proto_perf_t *perf)
+ucs_status_t
+ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
+                               ucp_md_map_t reg_md_map,
+                               ucp_proto_perf_factor_id_t cpu_factor_id,
+                               const char *perf_node_name,
+                               size_t range_start, size_t range_end,
+                               ucp_proto_perf_t *perf)
 {
     ucp_context_h context                 = params->super.worker->context;
     ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    ucp_proto_perf_node_t *reg_perf_node;
     const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
     const char *md_name;
 
     if (reg_md_map == 0) {
-        return;
+        return UCS_OK;
     }
 
     if (context->rcache != NULL) {
-        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
+        perf_factors[cpu_factor_id] =
                 ucs_linear_func_make(context->config.ext.rcache_overhead, 0);
         ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
                                  NULL, "rcache lookup", "");
-        return;
+        return UCS_OK;
     }
 
-    // perf_node = ucp_proto_perf_node_new_data("mem reg", "");
+    reg_perf_node = ucp_proto_perf_node_new_data("mem reg", "");
 
     /* Go over all memory domains */
     ucs_for_each_bit(md_index, reg_md_map) {
         md_attr = &context->tl_mds[md_index].attr;
         md_name = context->tl_mds[md_index].rsc.md_name;
-        ucs_linear_func_add_inplace(
-                &perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU],
-                md_attr->reg_cost);
+        ucs_linear_func_add_inplace(&perf_factors[cpu_factor_id],
+                                    md_attr->reg_cost);
         ucs_trace("md %s reg: " UCP_PROTO_PERF_FUNC_FMT, md_name,
                   UCP_PROTO_PERF_FUNC_ARG(&md_attr->reg_cost));
-        // TODO
-        //ucp_proto_perf_node_add_data(perf_node, md_name, md_attr->reg_cost);
+        ucp_proto_perf_node_add_data(reg_perf_node, md_name, md_attr->reg_cost);
     }
 
-    // if (!ucs_is_pow2(reg_md_map)) {
-    //     /* Multiple memory domains */
-    //     ucp_proto_perf_node_add_data(perf_node, "total", *memreg_time);
-    // }
-    // TODO add perf node with entry for each MD
-    ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
-                             NULL, "memory registration", "%u mds",
-                             ucs_popcount(reg_md_map));
+    if (!ucs_is_pow2(reg_md_map)) {
+        /* Multiple memory domains */
+        ucp_proto_perf_node_add_data(reg_perf_node, "total",
+                                     perf_factors[cpu_factor_id]);
+    }
+
+    return ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
+                                    reg_perf_node, perf_node_name, "%u mds",
+                                    ucs_popcount(reg_md_map));
 }
 
 ucs_status_t
@@ -297,7 +302,7 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     ucs_status_t status;
 
     if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
-        // TODO "memcpy" perf node with "bandwidth" data
+        // TODO "memcpy" perf node with "bandwidth" data ???
         perf_factors[cpu_factor_id] =
                 ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
         ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
@@ -397,9 +402,12 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
     ucs_status_t status;
 
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        // TODO pass factor id and node name
-        ucp_proto_init_add_memreg_time(params, reg_md_map, range_start,
-                                       range_end, perf);
+        status = ucp_proto_init_add_memreg_time(
+                params, reg_md_map, UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
+                "send memory registration", range_start, range_end, perf);
+        if (status != UCS_OK) {
+            return status;
+        }
     } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) {
         ucs_assert(reg_md_map == 0);
         status = ucp_proto_init_add_buffer_copy_time(
@@ -422,10 +430,12 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
 
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
         /* Receiver has to register its buffer */
-        // TODO pass favtor id and node name
-        ucp_proto_init_add_memreg_time(params, reg_md_map, range_start,
-                                       range_end, perf);
-        return UCS_OK;
+        status = ucp_proto_init_add_memreg_time(
+                params, reg_md_map, UCP_PROTO_PERF_FACTOR_REMOTE_CPU,
+                "send memory registration", range_start, range_end, perf);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     /* Receiver has to copy data.

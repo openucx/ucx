@@ -342,9 +342,13 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         return;
     }
 
-    ucp_proto_init_add_memreg_time(&params->super, rpriv->md_map,
-                                   params->super.min_length,
-                                   params->super.max_length, ctrl_perf);
+    status = ucp_proto_init_add_memreg_time(
+            &params->super, rpriv->md_map, UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
+            "memory registration", params->super.min_length,
+            params->super.max_length, ctrl_perf);
+    if (status != UCS_OK) {
+        goto out_destroy_ctrl_perf;
+    }
 
     status = ucp_proto_perf_turn_remote(remote_proto->perf, &turned_perf);
     if (status != UCS_OK) {

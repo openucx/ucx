@@ -54,9 +54,13 @@ ucs_status_t
 ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf, size_t max_length);
 
 
-void ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
-                                    ucp_md_map_t reg_md_map, size_t range_start,
-                                    size_t range_end, ucp_proto_perf_t *perf);
+ucs_status_t
+ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
+                               ucp_md_map_t reg_md_map,
+                               ucp_proto_perf_factor_id_t cpu_factor_id,
+                               const char *perf_node_name,
+                               size_t range_start, size_t range_end,
+                               ucp_proto_perf_t *perf);
 
 
 ucs_status_t
