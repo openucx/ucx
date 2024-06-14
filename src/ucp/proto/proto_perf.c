@@ -82,13 +82,14 @@ static void ucp_proto_perf_check(const ucp_proto_perf_t *perf)
     min_start = 0;
     ucp_proto_perf_segment_foreach(seg, perf) {
         ucs_assertv((seg->start >= min_start) && (seg->start <= seg->end),
-                    "perf=%p seg->start=%zu seg->end=%zu min_start=%zu %s", perf,
-                    seg->start, seg->end, min_start,
-                 ucp_proto_perf_log(perf, UCS_LOG_LEVEL_ERROR));
+                    "perf=%p seg->start=%zu seg->end=%zu min_start=%zu %s",
+                    perf, seg->start, seg->end, min_start,
+                    ucp_proto_perf_log(perf, UCS_LOG_LEVEL_ERROR));
         if (seg->end == SIZE_MAX) {
             ucs_assertv(ucs_list_is_last(&perf->segments, &seg->list),
-                        "perf=%p seg->start=%zu seg->end=%zu %s", perf, seg->start,
-                        seg->end, ucp_proto_perf_log(perf, UCS_LOG_LEVEL_ERROR));
+                        "perf=%p seg->start=%zu seg->end=%zu %s",
+                        perf, seg->start, seg->end,
+                        ucp_proto_perf_log(perf, UCS_LOG_LEVEL_ERROR));
         } else {
             min_start = seg->end + 1;
         }
@@ -100,6 +101,7 @@ static ucs_status_t ucp_proto_perf_segment_new(const ucp_proto_perf_t *perf,
                                                size_t start, size_t end,
                                                ucp_proto_perf_segment_t **seg_p)
 {
+    ucp_proto_perf_factor_id_t factor_id;
     ucp_proto_perf_segment_t *seg;
 
     ucs_assertv(start <= end, "perf=%p start=%zu end=%zu", perf, start, end);
@@ -109,10 +111,13 @@ static ucs_status_t ucp_proto_perf_segment_new(const ucp_proto_perf_t *perf,
         return UCS_ERR_NO_MEMORY;
     }
 
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; factor_id++) {
+        seg->perf_factors[factor_id] = UCS_LINEAR_FUNC_ZERO;
+    }
+
     seg->start = start;
     seg->end   = end;
     seg->node  = NULL;
-    ucp_proto_perf_factors_reset(seg->perf_factors);
 
     *seg_p = seg;
     return UCS_OK;
@@ -185,15 +190,6 @@ ucp_proto_perf_segment_add_funcs(ucp_proto_perf_t *perf,
 
     ucp_proto_perf_node_update_factors(seg->node, seg->perf_factors);
     ucp_proto_perf_node_add_child(seg->node, perf_node);
-}
-
-void ucp_proto_perf_factors_reset(ucp_proto_perf_factors_t perf_factors)
-{
-    ucp_proto_perf_factor_id_t factor_id;
-
-    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; factor_id++) {
-        perf_factors[factor_id] = UCS_LINEAR_FUNC_ZERO;
-    }
 }
 
 ucs_status_t ucp_proto_perf_create(const char *name, ucp_proto_perf_t **perf_p)

@@ -403,7 +403,6 @@ protected:
         ucp_proto_perf_factors_t perf_factors =
                 UCP_PROTO_PERF_FACTORS_INITIALIZER;
 
-        // ucp_proto_perf_factors_reset(perf_factors);
         for (auto &f : factors) {
             perf_factors[f.first] = f.second;
         }

@@ -61,11 +61,6 @@ typedef ucs_linear_func_t ucp_proto_perf_factors_t[UCP_PROTO_PERF_FACTOR_LAST];
          _seg = ucp_proto_perf_segment_next(_perf, _seg))
 
 
-// TODO
-// TODO add empty initializer for the factors array??
-void ucp_proto_perf_factors_reset(ucp_proto_perf_factors_t perf_factors);
-
-
 /**
  * Initialize a new performance data structure.
  *
