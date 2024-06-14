@@ -124,10 +124,10 @@ ucs_status_t
 ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf, size_t max_length)
 {
     ucp_proto_perf_factors_t factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
-    double max_value                 = -DBL_MAX;
     ucp_proto_perf_factor_id_t factor_id, max_factor_id;
     const ucp_proto_perf_segment_t *frag_seg;
     ucs_linear_func_t factor_func;
+    double max_value;
     size_t frag_size;
     char frag_str[64];
 
@@ -148,6 +148,8 @@ ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf, size_t max_length)
      * All the factors except longest one turn into constant fragment overhead
      * due to overlapping (1 and 3 from example).
      */
+    max_factor_id = 0;
+    max_value     = -DBL_MAX;
     for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; factor_id++) {
         factor_func          = ucp_proto_perf_segment_func(frag_seg, factor_id);
         factors[factor_id].c = ucs_linear_func_apply(factor_func, frag_size);
