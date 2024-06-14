@@ -128,7 +128,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
 
         status = ucp_proto_common_add_ppln_perf(ppln_perf, SIZE_MAX);
         if (status != UCS_OK) {
-            goto destroy_ppln_perf;
+            goto out_destroy_ppln_perf;
         }
 
         /* Add ATS overhead */
@@ -136,14 +136,14 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
                 &ack_params, ucp_proto_rndv_find_ctrl_lane(init_params),
                 UCP_PROTO_RNDV_ATS_NAME, ppln_overhead, &ack_perf);
         if (status != UCS_OK) {
-            goto destroy_ppln_perf;
+            goto out_destroy_ppln_perf;
         }
 
         status = ucp_proto_perf_aggregate2(
                 ucp_proto_id_field(init_params->proto_id, name),
                 ppln_perf, ack_perf, &result_perf);
         if (status == UCS_OK) {
-            goto destroy_ack_perf;
+            goto out_destroy_ack_perf;
         }
 
         status = ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
@@ -153,9 +153,9 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
             ucp_proto_perf_destroy(result_perf);
         }
 
-destroy_ack_perf:
+out_destroy_ack_perf:
         ucp_proto_perf_destroy(ack_perf);
-destroy_ppln_perf:
+out_destroy_ppln_perf:
         ucp_proto_perf_destroy(ppln_perf);
     }
 }
