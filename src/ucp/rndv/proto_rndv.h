@@ -159,11 +159,10 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
 
 
-ucs_status_t
-ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
-                        const char *name, ucs_linear_func_t overhead,
-                        ucp_proto_perf_t **perf_p,
-                        ucp_proto_rndv_ack_priv_t *apriv);
+ucs_status_t ucp_proto_rndv_ctrl_perf(
+        const ucp_proto_common_init_params_t *init_params,
+        ucp_lane_index_t lane, const char *name, ucs_linear_func_t overhead,
+        ucp_proto_perf_t **perf_p);
 
 
 ucs_status_t

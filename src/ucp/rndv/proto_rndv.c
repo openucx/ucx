@@ -185,8 +185,8 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     return UCS_OK;
 }
 
-static ucs_status_t ucp_proto_rndv_ctrl_perf(
-        const const ucp_proto_common_init_params_t *init_params,
+ucs_status_t ucp_proto_rndv_ctrl_perf(
+        const ucp_proto_common_init_params_t *init_params,
         ucp_lane_index_t lane, const char *name, ucs_linear_func_t overhead,
         ucp_proto_perf_t **perf_p)
 {
@@ -577,27 +577,6 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     return ucp_proto_request_zcopy_id_reset(req);
 }
 
-// TODO remove this wrapper?
-ucs_status_t
-ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
-                        const char *name, ucs_linear_func_t overhead,
-                        ucp_proto_perf_t **perf_p,
-                        ucp_proto_rndv_ack_priv_t *apriv)
-{
-    if (ucp_proto_rndv_init_params_is_ppln_frag(&init_params->super)) {
-        /* Not sending ACK */
-        apriv->lane = UCP_NULL_LANE;
-    } else {
-        apriv->lane = ucp_proto_rndv_find_ctrl_lane(&init_params->super);
-        if (apriv->lane == UCP_NULL_LANE) {
-            return UCS_ERR_NO_ELEM;
-        }
-    }
-
-    return ucp_proto_rndv_ctrl_perf(init_params, apriv->lane, name, overhead,
-                                    perf_p);
-}
-
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          const char *name, const char *ack_name,
@@ -619,19 +598,25 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     mpriv->align_thresh = ucs_max(rndv_align_thresh,
                                   mpriv->align_thresh + mpriv->min_frag);
 
-    status = ucp_proto_rndv_ack_init(&init_params->super, ack_name,
-                                     ucs_linear_func_make(150e-9, 0),
-                                     &ack_perf, &rpriv->super);
+    if (ucp_proto_rndv_init_params_is_ppln_frag(&init_params->super.super)) {
+        /* Report perf without ACK in case of pipeline */
+        *perf_p = bulk_perf;
+    }
+
+    status = ucp_proto_rndv_ctrl_perf(
+            &init_params->super,
+            ucp_proto_rndv_find_ctrl_lane(&init_params->super.super),
+            ack_name, ucs_linear_func_make(150e-9, 0), &ack_perf);
     if (status != UCS_OK) {
-        return status; // TODO cleanup
+        goto out_destroy_bulk_perf;
     }
 
     status = ucp_proto_perf_aggregate2(name, bulk_perf, ack_perf, perf_p);
-    if (status != UCS_OK) {
-        return status; // TODO cleanup
-    }
 
-    return UCS_OK;
+    ucp_proto_perf_destroy(ack_perf);
+out_destroy_bulk_perf:
+    ucp_proto_perf_destroy(bulk_perf);
+    return status;
 }
 
 size_t ucp_proto_rndv_common_pack_ack(void *dest, void *arg)
