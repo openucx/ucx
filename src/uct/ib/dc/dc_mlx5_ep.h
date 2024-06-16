@@ -323,7 +323,8 @@ uct_dc_mlx5_dci_pool_add_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
     uct_dc_dci_t *dci            = uct_dc_mlx5_iface_dci(iface, dci_index);
     ucs_status_t status;
 
-    ucs_assertv(ucs_array_length(&pool->stack) <= iface->tx.ndci,
+    ucs_assertv(ucs_array_length(&pool->stack) < iface->tx.ndci ||
+                        uct_dc_mlx5_iface_is_dci_rand(iface),
                 "stack length exceeded ndci");
 
     status = uct_dc_mlx5_iface_create_dci(iface, dci_index, dci);
@@ -335,7 +336,9 @@ uct_dc_mlx5_dci_pool_add_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
     dci->path_index = pool->config.path_index;
     dci->pool_index = pool_index;
 
-    *ucs_array_append(&pool->stack, return UCS_ERR_NO_MEMORY) = dci_index;
+    if(!uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        *ucs_array_append(&pool->stack, return UCS_ERR_NO_MEMORY) = dci_index;
+    }
 
     return UCS_OK;
 }
@@ -357,15 +360,21 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_dci_t empty_dci = {{{0}}};
     uct_dc_dci_t *dci;
+    size_t dcis_array_size;
 
     ucs_arbiter_group_init(&ep->arb_group);
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         /* coverity[dont_call] */
-        ep->dci               = rand_r(&iface->tx.rand_seed) % iface->tx.ndci;
+        ep->dci                     = rand_r(&iface->tx.rand_seed) %
+                                      (UCT_DC_MLX5_IFACE_MAX_DCI_POOLS * iface->tx.ndci);
+        //iface->tx.ndci;
         ep->dci_channel_index = 0;
         empty_dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
-        ucs_array_resize(&iface->tx.dcis, ep->dci + 1, empty_dci,
+        dcis_array_size             = ucs_max(ep->dci + 1,
+                                              ucs_array_length(&iface->tx.dcis));
+        ucs_info("random - dcis array_size: %zu", dcis_array_size);
+        ucs_array_resize(&iface->tx.dcis, dcis_array_size, empty_dci,
                          ucs_error("%p: failed to create ep %p - could not "
                                    "resize dcis array to %u",
                                    iface, ep, ep->dci);
