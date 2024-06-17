@@ -17,7 +17,7 @@ func TestUcpWorkerEfd(t *testing.T) {
 	ucpContext, _ := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
 	defer ucpContext.Close()
 	ucpWorkerParams := &UcpWorkerParams{}
-	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_SINGLE)
+	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
 	ucpWorkerParams.WakeupEdge()
 
 	ucpWorker, err := ucpContext.NewWorker(ucpWorkerParams)
