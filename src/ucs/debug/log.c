@@ -145,9 +145,16 @@ static void ucs_log_get_file_name(char *log_file_name, size_t max, int idx)
 
 static void ucs_log_file_rotate()
 {
-    char old_log_file_name[PATH_MAX];
-    char new_log_file_name[PATH_MAX];
+    char *old_log_file_name = ucs_malloc(PATH_MAX, "old_log_file_name");
+    char *new_log_file_name = ucs_malloc(PATH_MAX, "new_log_file_name");
     int idx, ret;
+
+    if ((old_log_file_name == NULL) || (new_log_file_name == NULL)) {
+        ucs_free(old_log_file_name);
+        ucs_free(new_log_file_name);
+        ucs_error("Failed to allocate memory for log file names");
+        return;
+    }
 
     if (ucs_log_file_last_idx == ucs_global_opts.log_file_rotate) {
         /* remove the last file and log rotation from the
@@ -188,6 +195,9 @@ static void ucs_log_file_rotate()
             ucs_fatal("unable to write to %s", new_log_file_name);
         }
     }
+
+    ucs_free(old_log_file_name);
+    ucs_free(new_log_file_name);
 }
 
 static void ucs_log_handle_file_max_size(int log_entry_len)
