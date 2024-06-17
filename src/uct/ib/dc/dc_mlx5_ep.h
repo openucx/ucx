@@ -365,9 +365,7 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         /* coverity[dont_call] */
-        ep->dci                     = rand_r(&iface->tx.rand_seed) %
-                                    //   (UCT_DC_MLX5_IFACE_MAX_DCI_POOLS * iface->tx.ndci);
-        iface->tx.ndci;
+        ep->dci               = rand_r(&iface->tx.rand_seed) % iface->tx.ndci;
         ep->dci_channel_index = 0;
         empty_dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
         dcis_array_size             = ucs_max(ep->dci + 1,
@@ -397,24 +395,47 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
                           UCS_STATS_ARG(ep->super.stats));
 }
 
-static UCS_F_ALWAYS_INLINE int
+typedef enum {
+    UCT_DC_MLX5_CAN_NOT_ALLOC, /* can't use existing or create new dcis */
+    UCT_DC_MLX5_CAN_ALLOC, /* can use existing dcis for allocation */
+    UCT_DC_MLX5_SHOULD_ALLOC /* can allocate another dci by creating another dci */
+} uct_dc_mlx5_can_alloc_res_t;
+
+static UCS_F_ALWAYS_INLINE uct_dc_mlx5_can_alloc_res_t
 uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 {
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
-    ucs_status_t status;
 
     if (ucs_likely(pool->stack_top < ucs_array_length(&pool->stack))) {
-        return 1;
+        return UCT_DC_MLX5_CAN_ALLOC;
     }
 
     if ((ucs_array_length(&pool->stack) == iface->tx.ndci) ||
         (pool->stack_top == iface->tx.ndci)) {
-        return 0;
+        return UCT_DC_MLX5_CAN_NOT_ALLOC;
+    }
+
+    return UCT_DC_MLX5_SHOULD_ALLOC;
+}
+
+static UCS_F_ALWAYS_INLINE uct_dc_mlx5_can_alloc_res_t
+uct_dc_mlx5_iface_dci_can_alloc_or_create(uct_dc_mlx5_iface_t *iface,
+                                          uint8_t pool_index)
+{
+    uct_dc_mlx5_can_alloc_res_t can_alloc =
+            uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index);
+    ucs_status_t status;
+
+    if (can_alloc != UCT_DC_MLX5_SHOULD_ALLOC) {
+        return can_alloc;
     }
 
     status = uct_dc_mlx5_dci_pool_append_dci(iface, pool_index);
+    if (status != UCS_OK) {
+        return UCT_DC_MLX5_CAN_NOT_ALLOC;
+    }
 
-    return status == UCS_OK;
+    return UCT_DC_MLX5_CAN_ALLOC;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -453,8 +474,8 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
          * NOTE: in case of rand dci allocation policy, dci_waitq is always
          * empty.
          */
-        if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index) &&
-            !uct_dc_mlx5_iface_is_dci_shared(iface)) {
+        if (!uct_dc_mlx5_iface_is_dci_shared(iface) &&
+            uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
             ucs_arbiter_dispatch(dci_waitq, 1,
                                  uct_dc_mlx5_iface_dci_do_pending_wait, NULL);
         }
@@ -559,8 +580,8 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     uct_dc_mlx5_iface_dci_release(iface, dci_index);
 
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-    ep->dci                      = UCT_DC_MLX5_EP_NO_DCI;
-    ep->flags                   &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
+    ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
+    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
 
     uct_dc_mlx5_iface_dci(iface, dci_index)->ep = NULL;
 
@@ -695,7 +716,7 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         return UCS_OK;
     }
 
-    if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+    if (uct_dc_mlx5_iface_dci_can_alloc_or_create(iface, pool_index)) {
         waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
         ucs_assert(ucs_arbiter_is_empty(waitq));
 

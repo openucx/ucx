@@ -1392,7 +1392,7 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
                 ep, iface, ep->dci,
                 uct_dc_mlx5_iface_dci(iface, ep->dci)->pool_index);
 
-    if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+    if (!uct_dc_mlx5_iface_dci_can_alloc_or_create(iface, pool_index)) {
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
