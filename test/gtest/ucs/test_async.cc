@@ -107,11 +107,11 @@ public:
     void create_event() {
         ucs_status_t status = ucs_async_pipe_create(&m_event_pipe);
         ASSERT_UCS_OK(status);
-        EXPECT_EQ(ucs_atomic_cswap32(&m_event_valid, 0, 1), 0);
+        EXPECT_EQ(0, ucs_atomic_cswap32(&m_event_valid, 0, 1));
     }
 
     void destory_event() {
-        EXPECT_EQ(ucs_atomic_cswap32(&m_event_valid, 1, 0), 1);
+        EXPECT_EQ(1, ucs_atomic_cswap32(&m_event_valid, 1, 0));
         ucs_async_pipe_destroy(&m_event_pipe);
     }
 
@@ -384,7 +384,6 @@ protected:
 
         barrier();
 
-        int round = 0;
         while (!m_stop[index]) {
             le->block();
             check_is_blocked(le, true);
@@ -402,7 +401,6 @@ protected:
             le->set_event();
             suspend(20 - wait);
             le->check_miss();
-            ++round;
         }
 
         check_is_blocked(le, false);

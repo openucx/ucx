@@ -20,6 +20,8 @@
 #define UCS_ASYNC_TIMER_ID_MIN          1000000u
 #define UCS_ASYNC_TIMER_ID_MAX          2000000u
 
+#define UCS_ASYNC_INVALID_EVENT         -1
+
 #define UCS_ASYNC_HANDLER_FMT           "%p [id=%d ref %d] %s()"
 #define UCS_ASYNC_HANDLER_ARG(_h)       (_h), (_h)->id, (_h)->refcount, \
                                         ucs_debug_get_symbol_name((_h)->cb)
@@ -583,10 +585,9 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
     async = handler->async;
     if (async != NULL) {
         ucs_mpmc_queue_block(&async->missed);
-        ucs_mpmc_queue_for_each(elem, &async->missed)
-        {
+        ucs_mpmc_queue_for_each(elem, &async->missed) {
             if (ucs_async_missed_event_unpack_id(elem->value) == handler->id) {
-                elem->value = -1;
+                elem->value = UCS_ASYNC_INVALID_EVENT;
             }
         }
         ucs_mpmc_queue_unblock(&async->missed);
@@ -639,7 +640,7 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
             break;
         }
 
-        if (value == -1) {
+        if (value == UCS_ASYNC_INVALID_EVENT) {
             continue;
         }
 
