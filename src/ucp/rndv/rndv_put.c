@@ -38,12 +38,19 @@ typedef struct {
 
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_put_common_complete(ucp_request_t *req)
+ucp_proto_rndv_put_common_complete(ucp_request_t *req, uint64_t put_cntr)
 {
     ucp_trace_req(req, "rndv_put_common_complete");
-    UCP_WORKER_STAT_RNDV(req->send.ep->worker, PUT_ZCOPY, +1);
+    UCS_STATS_UPDATE_COUNTER(req->send.ep->worker->stats, put_cntr, +1);
     ucp_proto_rndv_rkey_destroy(req);
     ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+}
+
+static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
+{
+    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
+                                          send.state.uct_comp);
+    ucp_proto_rndv_put_common_complete(req, UCP_WORKER_STAT_RNDV_PUT_ZCOPY);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -66,12 +73,18 @@ ucp_proto_rndv_put_common_flush_completion_send_atp(uct_completion_t *uct_comp)
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
+    uint64_t put_cntr;
 
     ucp_trace_req(req, "rndv_put_common_completion_send_atp status %s",
                   ucs_status_string(uct_comp->status));
 
     if (ucs_unlikely(uct_comp->status != UCS_OK)) {
-        ucp_proto_rndv_put_common_complete(req);
+        if (rpriv->atp_comp_cb == ucp_proto_rndv_put_zcopy_completion) {
+            put_cntr = UCP_WORKER_STAT_RNDV_PUT_ZCOPY;
+        } else {
+            put_cntr = UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY;
+        }
+        ucp_proto_rndv_put_common_complete(req, put_cntr);
         return;
     }
 
@@ -381,13 +394,6 @@ ucp_proto_rndv_put_zcopy_send_progress(uct_pending_req_t *uct_req)
             ucp_proto_rndv_put_common_data_sent, rpriv->put_comp_cb);
 }
 
-static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
-{
-    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
-                                          send.state.uct_comp);
-    ucp_proto_rndv_put_common_complete(req);
-}
-
 static void
 ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
@@ -518,7 +524,8 @@ static void ucp_proto_rndv_put_mtype_completion(uct_completion_t *uct_comp)
 
     ucp_trace_req(req, "rndv_put_mtype_completion");
     ucs_mpool_put(req->send.rndv.mdesc);
-    ucp_proto_rndv_put_common_complete(req);
+    ucp_proto_rndv_put_common_complete(req,
+                                       UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY);
 }
 
 static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)

@@ -20,6 +20,7 @@ extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_resource.h>
 #include <ucs/datastruct/mpool.inl>
 }
 
@@ -1668,6 +1669,13 @@ public:
         }
     }
 
+    size_t get_rndv_frag_size(ucs_memory_type_t mem_type)
+    {
+        const auto *cfg = &sender().worker()->context->config.ext;
+
+        return cfg->rndv_frag_size[mem_type];
+    }
+
 protected:
     static constexpr unsigned RNDV_THRESH = 128;
     ucs_status_t m_status;
@@ -1849,8 +1857,7 @@ private:
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    const auto *cfg                 = &sender().worker()->context->config.ext;
-    const size_t rndv_frag_size     = cfg->rndv_frag_size[UCS_MEMORY_TYPE_HOST];
+    const size_t rndv_frag_size     = get_rndv_frag_size(UCS_MEMORY_TYPE_HOST);
     const std::vector<size_t> sizes = {64 * UCS_KBYTE, rndv_frag_size - 1,
                                        rndv_frag_size  + 1};
 
@@ -1906,3 +1913,88 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_memtype_disable_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
+
+
+#ifdef ENABLE_STATS
+class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
+public:
+    void init() override
+    {
+        stats_activate();
+        modify_config("RNDV_THRESH", "128");
+        test_ucp_am_nbx::init();
+    }
+
+    void cleanup() override
+    {
+        test_ucp_am_nbx::cleanup();
+        stats_restore();
+    }
+
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
+    }
+
+protected:
+    void test_ppl_send(ucs_memory_type_t mem_type, size_t num_frags,
+                       uint64_t sender_cntr, uint64_t sender_cntr_value,
+                       uint64_t receiver_cntr, uint64_t receiver_cntr_value)
+    {
+        if (!has_rma_zcopy()) {
+            UCS_TEST_SKIP_R("No RMA support");
+        }
+
+        const size_t rndv_frag_size = get_rndv_frag_size(mem_type);
+        test_am_send_recv(rndv_frag_size * num_frags);
+
+        check_stats(sender(), sender_cntr, sender_cntr_value);
+        check_stats(receiver(), receiver_cntr, receiver_cntr_value);
+    }
+
+private:
+    void check_stats(entity &e, uint64_t cntr, uint64_t exp_value)
+    {
+        auto stats_node = e.worker()->stats;
+        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
+
+        EXPECT_EQ(exp_value, value) << "counter is "
+                                    << stats_node->cls->counter_names[cntr];
+    }
+
+    bool has_rma_zcopy() {
+        return has_transport("rc_v") || has_transport("rc_x") ||
+               has_transport("dc_x") ||
+               (ucp_context_find_tl_md(receiver().ucph(), "cma")  != nullptr) ||
+               (ucp_context_find_tl_md(receiver().ucph(), "knem") != nullptr);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_rndv_ppln, host_buff_cuda_frag,
+                     !(is_proto_enabled()),
+                     "RNDV_SCHEME=put_ppln", "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    test_ppl_send(UCS_MEMORY_TYPE_CUDA, num_frags,
+                  UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, num_frags,
+                  UCP_WORKER_STAT_RNDV_RTR_MTYPE, num_frags);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_rndv_ppln, host_buff_host_frag,
+                     !(is_proto_enabled()),
+                     "RNDV_SCHEME=put_ppln", "RNDV_FRAG_MEM_TYPE=host")
+{
+    // Host memory should not be pipelined thru host staging buffers
+    test_ppl_send(UCS_MEMORY_TYPE_CUDA, 2,
+                  UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 0,
+                  UCP_WORKER_STAT_RNDV_RTR_MTYPE, 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
+
+#endif
