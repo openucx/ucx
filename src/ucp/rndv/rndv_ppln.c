@@ -132,10 +132,9 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         }
 
         /* Add ATS overhead */
-        status = ucp_proto_rndv_ctrl_perf(
-                &ack_params, ucp_proto_rndv_find_ctrl_lane(init_params),
-                UCP_PROTO_RNDV_ATS_NAME, ppln_overhead, &ack_perf);
-        if (status != UCS_OK) {
+        status = ucp_proto_rndv_ack_init(&ack_params, UCP_PROTO_RNDV_ATS_NAME,
+                                         ppln_overhead, &ack_perf, &rpriv.ack);
+        if ((status != UCS_OK) || (rpriv.ack.lane == UCP_NULL_LANE)) {
             goto out_destroy_ppln_perf;
         }
 

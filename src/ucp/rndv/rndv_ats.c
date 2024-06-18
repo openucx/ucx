@@ -34,14 +34,9 @@ static void ucp_proto_rndv_ats_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    if (ucp_proto_rndv_init_params_is_ppln_frag(&params.super)) {
-        return;
-    }
-
-    status = ucp_proto_rndv_ctrl_perf(
-            &params, ucp_proto_rndv_find_ctrl_lane(init_params),
-            UCP_PROTO_RNDV_ATS_NAME, UCS_LINEAR_FUNC_ZERO, &perf);
-    if (status != UCS_OK) {
+    status = ucp_proto_rndv_ack_init(&params, UCP_PROTO_RNDV_ATS_NAME,
+                                     UCS_LINEAR_FUNC_ZERO, &perf, &priv);
+    if ((status != UCS_OK) || (priv.lane == UCP_NULL_LANE)) {
         return;
     }
 
