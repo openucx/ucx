@@ -258,18 +258,28 @@ static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
                                      void *obj, const char *rel_path,
                                      va_list ap, ucs_vfs_node_t **new_node)
 {
+    char *rel_path_buf, *abs_path_buf, *token, *next_token;
     ucs_vfs_node_t *current_node;
-    char rel_path_buf[PATH_MAX];
-    char abs_path_buf[PATH_MAX];
-    char *token, *next_token;
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&rel_path_buf, "rel_path_buf");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucs_string_alloc_path_buffer(&abs_path_buf, "abs_path_buf");
+    if (status != UCS_OK) {
+        goto out_free_rel_path_buf;
+    }
 
     current_node = ucs_vfs_node_get_by_obj(parent_obj);
     if (current_node == NULL) {
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_free_abs_path_buf;
     }
 
     /* generate the relative path */
-    ucs_vsnprintf_safe(rel_path_buf, sizeof(rel_path_buf), rel_path, ap);
+    ucs_vsnprintf_safe(rel_path_buf, PATH_MAX, rel_path, ap);
 
     /* Build parent nodes along the rel_path, without associated object */
     next_token = rel_path_buf;
@@ -277,31 +287,39 @@ static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
     while (next_token != NULL) {
         current_node = ucs_vfs_node_add_subdir(current_node, token);
         if (current_node == NULL) {
-            return UCS_ERR_NO_MEMORY;
+            status = UCS_ERR_NO_MEMORY;
+            goto out_free_abs_path_buf;
         }
 
         token = strsep(&next_token, "/");
     }
 
     ucs_vfs_node_build_path(current_node, token, abs_path_buf,
-                            sizeof(abs_path_buf));
+                            PATH_MAX);
 
     if (ucs_vfs_node_need_update_path(type, abs_path_buf, obj)) {
-        ucs_vfs_node_update_path(obj, abs_path_buf, sizeof(abs_path_buf));
+        ucs_vfs_node_update_path(obj, abs_path_buf, PATH_MAX);
     }
 
     if (ucs_vfs_node_find_by_path(abs_path_buf) != NULL) {
-        return UCS_ERR_ALREADY_EXISTS;
+        status = UCS_ERR_ALREADY_EXISTS;
+        goto out_free_abs_path_buf;
     }
 
     current_node = ucs_vfs_node_create(current_node, abs_path_buf, type, obj);
     if (current_node == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_abs_path_buf;
     }
 
     *new_node = current_node;
 
-    return UCS_OK;
+out_free_abs_path_buf:
+    ucs_free(abs_path_buf);
+out_free_rel_path_buf:
+    ucs_free(rel_path_buf);
+out:
+    return status;
 }
 
 /* must be called with lock held */
