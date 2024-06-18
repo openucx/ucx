@@ -1112,7 +1112,7 @@ protected:
     void test_fixed(test_1int_t *array, size_t capacity);
     void generate_linked_list(int size, simple_elem_t *head);
     void copy_array_of_linked_lists(int size, simple_elem_t *dst,
-                                    simple_elem_t *src);
+                                    const simple_elem_t *src);
 
     void cleanup_array_of_linked_lists(test_list_links_array_t *test_array);
 };
@@ -1120,23 +1120,20 @@ protected:
 /* generate a list of numbers in a certain size */
 void test_array::generate_linked_list(int size, simple_elem_t *head)
 {
-    simple_elem_t *iter, *tmp;
+    simple_elem_t *iter;
 
     ucs_list_head_init(&head->list);
 
-    tmp = head;
-
     for (int i = 0; i < size; i++) {
-        iter   = (simple_elem_t*)ucs_calloc(1, sizeof(simple_elem_t),
-                                            "list element");
+        iter    = (simple_elem_t*)ucs_calloc(1, sizeof(simple_elem_t),
+                                             "list element");
         iter->i = i;
-        ucs_list_insert_after(&tmp->list, &iter->list);
-        tmp = iter;
+        ucs_list_add_tail(&head->list, &iter->list);
     }
 }
 
 void test_array::copy_array_of_linked_lists(int size, simple_elem_t *dst,
-                                            simple_elem_t *src)
+                                            const simple_elem_t *src)
 {
     for(int i = 0; i < size; ++i) { //TODO: should be foreach
         ucs_list_head_init(&dst[i].list);
@@ -1158,15 +1155,14 @@ void test_array::cleanup_array_of_linked_lists(test_list_links_array_t *test_arr
     }
 
     ucs_array_cleanup_dynamic(test_array);
-
 }
 
 UCS_TEST_F(test_array, dynamic_array_grow_of_list_link_elements) {
     constexpr size_t NUM_ELEMENTS = 100;
-    constexpr size_t LIST_SIZE = 200;
+    constexpr size_t LIST_SIZE    = 200;
     test_list_links_array_t test_array;
-    ucs_array_init_dynamic(&test_array);
 
+    ucs_array_init_dynamic(&test_array);
 
     /* create and fill array of linked lists */
     for (size_t i = 0; i < NUM_ELEMENTS; ++i) {
