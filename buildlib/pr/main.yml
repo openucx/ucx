@@ -290,10 +290,11 @@ stages:
       parameters:
         name: new
         demands: ucx_new -equals yes
-    - template: wire_compat.yml
-      parameters:
-        name: bond
-        demands: ucx_iodemo -equals yes
+    # Temporaly disable wire-compat tests on rain machines
+    #- template: wire_compat.yml
+    #  parameters:
+    #    name: bond
+    #    demands: ucx_iodemo -equals yes
 
   - stage: Coverity
     dependsOn: [Static_check]
