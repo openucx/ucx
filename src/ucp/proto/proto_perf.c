@@ -62,6 +62,7 @@ static const char *ucp_proto_perf_factor_names[] = {
     [UCP_PROTO_PERF_FACTOR_LAST]       = NULL
 };
 
+#if ENABLE_ASSERT
 static const char*
 ucp_proto_perf_log(const ucp_proto_perf_t *perf, ucs_log_level_t log_level)
 {
@@ -72,6 +73,7 @@ ucp_proto_perf_log(const ucp_proto_perf_t *perf, ucs_log_level_t log_level)
     ucs_string_buffer_cleanup(&strb);
     return "";
 }
+#endif
 
 static void ucp_proto_perf_check(const ucp_proto_perf_t *perf)
 {
@@ -250,7 +252,7 @@ ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
      *                __________________
      * range to add: |__________________|
      *                __________________    _________________
-     * perf after:   |__|__________|____|  |_____|__________|
+     * perf after:   |__|__________|____|  |_________________|
      */
     seg = ucs_list_head(&perf->segments, ucp_proto_perf_segment_t, list);
     while ((&seg->list != &perf->segments) && (start <= end)) {

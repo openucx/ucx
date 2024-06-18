@@ -629,6 +629,7 @@ ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
             &proto_init->protocols,
             ucs_error("failed to allocate protocol %s init element",
                       proto_name);
+            status = UCS_ERR_NO_MEMORY;
             goto err_revert_priv);
 
     memset(init_elem, 0, sizeof(*init_elem));

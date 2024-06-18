@@ -407,8 +407,7 @@ out_destroy_ctrl_perf:
 void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
                                void *priv, size_t priv_size)
 {
-    const ucp_proto_init_params_t *init_params = &params->super.super;
-    ucp_proto_rndv_ctrl_priv_t *rpriv          = priv;
+    ucp_proto_rndv_ctrl_priv_t *rpriv = priv;
     const ucp_proto_select_init_protocols_t *remote_proto_init;
     ucp_proto_select_param_t remote_select_param;
     ucp_proto_select_elem_t *remote_proto_select;
@@ -437,7 +436,7 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
 
     /* Add variants for each remote proto */
     ucs_trace("add variants for %s: min_length=%zu max_length=%zu",
-              ucp_proto_id_field(init_params->proto_id, name),
+              ucp_proto_id_field(params->super.super.proto_id, name),
               params->super.min_length, params->super.max_length);
     ucs_log_indent(+1);
     ucs_array_for_each(remote_proto, &remote_proto_init->protocols) {

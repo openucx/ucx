@@ -83,9 +83,6 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     }
 
     ack_params.max_length = SIZE_MAX;
-    ppln_overhead         = ucs_linear_func_make(
-            frag_overhead, frag_overhead / rpriv.frag_size);
-
     /* Add each proto as a separate variant */
     ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
         if (ucp_proto_id_field(proto->proto_id, flags) &
@@ -132,8 +129,12 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         }
 
         /* Add ATS overhead */
-        status = ucp_proto_rndv_ack_init(&ack_params, UCP_PROTO_RNDV_ATS_NAME,
-                                         ppln_overhead, &ack_perf, &rpriv.ack);
+        ppln_overhead = ucs_linear_func_make(frag_overhead,
+                                             frag_overhead / rpriv.frag_size);
+        status        = ucp_proto_rndv_ack_init(&ack_params,
+                                                UCP_PROTO_RNDV_ATS_NAME,
+                                                ppln_overhead, &ack_perf,
+                                                &rpriv.ack);
         if ((status != UCS_OK) || (rpriv.ack.lane == UCP_NULL_LANE)) {
             goto out_destroy_ppln_perf;
         }
