@@ -258,14 +258,22 @@ static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
                                      void *obj, const char *rel_path,
                                      va_list ap, ucs_vfs_node_t **new_node)
 {
+    char *rel_path_buf = ucs_malloc(PATH_MAX, "rel_path_buf");
+    char *abs_path_buf = ucs_malloc(PATH_MAX, "abs_path_buf");
     ucs_vfs_node_t *current_node;
-    char rel_path_buf[PATH_MAX];
-    char abs_path_buf[PATH_MAX];
     char *token, *next_token;
+    ucs_status_t status = UCS_OK;
+
+    if ((rel_path_buf == NULL) || (abs_path_buf == NULL)) {
+        ucs_error("Failed to allocate memory for path buffers");
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
 
     current_node = ucs_vfs_node_get_by_obj(parent_obj);
     if (current_node == NULL) {
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
     }
 
     /* generate the relative path */
@@ -277,7 +285,8 @@ static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
     while (next_token != NULL) {
         current_node = ucs_vfs_node_add_subdir(current_node, token);
         if (current_node == NULL) {
-            return UCS_ERR_NO_MEMORY;
+            status = UCS_ERR_NO_MEMORY;
+            goto out;
         }
 
         token = strsep(&next_token, "/");
@@ -291,17 +300,22 @@ static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
     }
 
     if (ucs_vfs_node_find_by_path(abs_path_buf) != NULL) {
-        return UCS_ERR_ALREADY_EXISTS;
+        status = UCS_ERR_ALREADY_EXISTS;
+        goto out;
     }
 
     current_node = ucs_vfs_node_create(current_node, abs_path_buf, type, obj);
     if (current_node == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     *new_node = current_node;
 
-    return UCS_OK;
+out:
+    ucs_free(rel_path_buf);
+    ucs_free(abs_path_buf);
+    return status;
 }
 
 /* must be called with lock held */
