@@ -257,6 +257,11 @@ stages:
               BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
               long_test: $(long_test)
               test_static: $(test_static)
+          
+          - bash: |
+              python compile_time_stack_usage_check.py
+            displayName: "Check Stack Usage"
+            condition: always()
 
   - stage: ucx_perftest_mad_rte
     dependsOn: [Static_check]

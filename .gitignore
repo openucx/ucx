@@ -37,6 +37,7 @@ depcomp
 .dirstamp
 *.lo
 *.o
+*.su
 contrib/rpmdef.sh
 contrib/ucx
 bindings/java/pom.xml
