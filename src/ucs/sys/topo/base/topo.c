@@ -383,8 +383,16 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
                             ucs_sys_device_t device2,
                             ucs_sys_dev_distance_t *distance)
 {
-    char path1[PATH_MAX], path2[PATH_MAX], common_path[PATH_MAX];
-    ucs_status_t status;
+    char *path1 = ucs_malloc(PATH_MAX, "path1");
+    char *path2 = ucs_malloc(PATH_MAX, "path2");
+    char *common_path = ucs_malloc(PATH_MAX, "common_path");
+    ucs_status_t status = UCS_OK;
+
+    if ((path1 == NULL) || (path2 == NULL) || (common_path == NULL)) {
+        ucs_error("Failed to allocate memory for path buffers");
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free_buffers;
+    }
 
     /* If one of the devices is unknown, we assume near topology */
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
@@ -409,20 +417,25 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
     ucs_path_get_common_parent(path1, path2, common_path);
     if (ucs_topo_is_pci_root(common_path)) {
         ucs_topo_pci_root_distance(path1, path2, distance);
-        return UCS_OK;
+        goto out_free_buffers;
     } else if (ucs_topo_is_sys_root(common_path)) {
         if (ucs_topo_is_same_numa_node(device1, device2)) {
             ucs_topo_common_numa_node_distance(distance);
-            return UCS_OK;
+            goto out_free_buffers;
         }
 
         ucs_topo_sys_root_distance(distance);
-        return UCS_OK;
+        goto out_free_buffers;
     }
 
     /* Report best perf for common PCI bridge or sysfs parsing error */
 default_distance:
-    return ucs_topo_get_distance_default(device1, device2, distance);
+    status = ucs_topo_get_distance_default(device1, device2, distance);
+out_free_buffers:
+    ucs_free(path1);
+    ucs_free(path2);
+    ucs_free(common_path);
+    return status;
 }
 
 static void ucs_topo_get_memory_distance_sysfs(ucs_sys_device_t device,
