@@ -362,7 +362,7 @@ static void ucp_proto_rndv_ctrl_variant_probe(
     }
 
     status = ucp_proto_perf_aggregate(proto_name, perf_elems, num_elems, &perf);
-    if (status != UCS_OK) {
+    if ((status != UCS_OK) || ucp_proto_perf_is_empty(perf)) {
         goto out_destroy_turned_perf;
     }
 

@@ -126,7 +126,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
             continue;
         }
 
-        status = ucp_proto_common_add_ppln_perf(ppln_perf, SIZE_MAX);
+        status = ucp_proto_common_add_ppln_perf(ppln_perf, frag_seg, SIZE_MAX);
         if (status != UCS_OK) {
             goto out_destroy_ppln_perf;
         }

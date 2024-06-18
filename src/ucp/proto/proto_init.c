@@ -121,21 +121,23 @@ ucp_proto_common_params_init(const ucp_proto_init_params_t *init_params)
 }
 
 ucs_status_t
-ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf, size_t max_length)
+ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf,
+                               const ucp_proto_perf_segment_t *frag_seg,
+                               size_t max_length)
 {
     ucp_proto_perf_factors_t factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     ucp_proto_perf_factor_id_t factor_id, max_factor_id;
-    const ucp_proto_perf_segment_t *frag_seg;
     ucs_linear_func_t factor_func;
     double max_value;
     size_t frag_size;
     char frag_str[64];
 
-    frag_seg  = ucp_proto_perf_segment_last(perf);
-    ucs_assert(frag_seg != NULL);
     frag_size = ucp_proto_perf_segment_end(frag_seg);
     ucs_assertv(frag_size < max_length, "frag_size=%zu max_length=%zu",
                 frag_size, max_length);
+    ucs_assertv(ucp_proto_perf_find_segment_lb(perf, frag_size + 1) == NULL,
+                "ppln range already contains perf data frag_size=%zu",
+                frag_size);
 
     /*
      * 3-factor 3-msg pipeline:
@@ -479,6 +481,7 @@ ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
                            ucp_md_map_t reg_md_map, ucp_proto_perf_t **perf_p)
 {
     const char *proto_name = ucp_proto_id_field(params->super.proto_id, name);
+    const ucp_proto_perf_segment_t *frag_seg;
     size_t range_start, range_end;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
@@ -526,7 +529,10 @@ ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
        not the max length and the protocol supports fragmentation */
     if ((range_end < params->max_length) &&
         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
-        status = ucp_proto_common_add_ppln_perf(perf, params->max_length);
+        frag_seg = ucp_proto_perf_segment_last(perf);
+        ucs_assert(frag_seg != NULL);
+        status   = ucp_proto_common_add_ppln_perf(perf, frag_seg,
+                                                  params->max_length);
     }
 
 out:

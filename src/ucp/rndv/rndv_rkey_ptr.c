@@ -42,6 +42,8 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
     ucp_proto_perf_t *perf, *ack_perf;
     ucs_status_t status;
 
+    ucs_assert(!ucp_proto_perf_is_empty(rkey_ptr_perf));
+
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
                                      UCS_LINEAR_FUNC_ZERO, &ack_perf,
                                      &rpriv->ack);
@@ -51,20 +53,22 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
 
     if (rpriv->ack.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */
-        ucp_proto_common_add_proto(init_params, perf, rpriv, sizeof(rpriv));
+        ucp_proto_common_add_proto(init_params, rkey_ptr_perf, rpriv,
+                                   sizeof(rpriv));
         return;
     }
 
     status = ucp_proto_perf_aggregate2(proto_name, rkey_ptr_perf, ack_perf,
                                        &perf);
     if (status != UCS_OK) {
-        goto out_destroy_ack_perf;
+        goto out_destroy_perf;
     }
 
     ucp_proto_common_add_proto(init_params, perf, rpriv, sizeof(rpriv));
 
-out_destroy_ack_perf:
+out_destroy_perf:
     ucp_proto_perf_destroy(ack_perf);
+    ucp_proto_perf_destroy(rkey_ptr_perf);
 }
 
 static void
@@ -111,8 +115,6 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
 
     ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv,
                                          sizeof(rpriv));
-
-    ucp_proto_perf_destroy(perf);
 }
 
 static void
@@ -290,8 +292,6 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
 
     ucp_proto_rndv_rkey_ptr_probe_common(&params.super, perf, &rpriv.super,
                                          sizeof(rpriv));
-
-    ucp_proto_perf_destroy(perf);
 }
 
 static ucs_status_t ucp_proto_rndv_rkey_ptr_mtype_completion(ucp_request_t *req)

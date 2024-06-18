@@ -51,7 +51,9 @@ ucp_proto_common_params_init(const ucp_proto_init_params_t *init_params);
 
 
 ucs_status_t
-ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf, size_t max_length);
+ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf,
+                               const ucp_proto_perf_segment_t *frag_seg,
+                               size_t max_length);
 
 
 ucs_status_t
