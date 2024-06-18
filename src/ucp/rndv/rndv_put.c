@@ -26,6 +26,7 @@ typedef struct ucp_proto_rndv_put_priv {
     ucp_lane_map_t             flush_map;
     ucp_lane_map_t             atp_map;
     ucp_lane_index_t           atp_num_lanes;
+    uint8_t                    stat_counter;
     ucp_proto_rndv_bulk_priv_t bulk;
 } ucp_proto_rndv_put_priv_t;
 
@@ -40,10 +41,20 @@ typedef struct {
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_put_common_complete(ucp_request_t *req)
 {
+    const ucp_proto_rndv_put_priv_t UCS_V_UNUSED *rpriv =
+                                                   req->send.proto_config->priv;
     ucp_trace_req(req, "rndv_put_common_complete");
-    UCP_WORKER_STAT_RNDV(req->send.ep->worker, PUT_ZCOPY, +1);
+    UCS_STATS_UPDATE_COUNTER(req->send.ep->worker->stats, rpriv->stat_counter,
+                             +1);
     ucp_proto_rndv_rkey_destroy(req);
     ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+}
+
+static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
+{
+    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
+                                          send.state.uct_comp);
+    ucp_proto_rndv_put_common_complete(req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -201,7 +212,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
                                 uct_ep_operation_t memtype_op, unsigned flags,
                                 ucp_md_map_t initial_reg_md_map,
                                 uct_completion_callback_t comp_cb,
-                                int support_ppln)
+                                int support_ppln, uint8_t stat_counter)
 {
     const size_t atp_size                = sizeof(ucp_rndv_ack_hdr_t);
     ucp_context_t *context               = init_params->worker->context;
@@ -320,6 +331,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
         ucs_assert(rpriv.atp_map != 0);
     }
     rpriv.atp_num_lanes = ucs_popcount(rpriv.atp_map);
+    rpriv.stat_counter  = stat_counter;
 
     priv_size = UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, bulk.mpriv);
     ucp_proto_common_add_proto(&params.super, &caps, &rpriv, priv_size);
@@ -381,13 +393,6 @@ ucp_proto_rndv_put_zcopy_send_progress(uct_pending_req_t *uct_req)
             ucp_proto_rndv_put_common_data_sent, rpriv->put_comp_cb);
 }
 
-static void ucp_proto_rndv_put_zcopy_completion(uct_completion_t *uct_comp)
-{
-    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
-                                          send.state.uct_comp);
-    ucp_proto_rndv_put_common_complete(req);
-}
-
 static void
 ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
@@ -396,7 +401,8 @@ ucp_proto_rndv_put_zcopy_probe(const ucp_proto_init_params_t *init_params)
             UCT_EP_OP_LAST,
             UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
             UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-            0, ucp_proto_rndv_put_zcopy_completion, 0);
+            0, ucp_proto_rndv_put_zcopy_completion, 0,
+            UCP_WORKER_STAT_RNDV_PUT_ZCOPY);
 }
 
 static void
@@ -553,7 +559,8 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_put_common_probe(init_params,
                                     UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
                                     frag_size, UCT_EP_OP_GET_ZCOPY, 0,
-                                    mdesc_md_map, comp_cb, 1);
+                                    mdesc_md_map, comp_cb, 1,
+                                    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY);
 }
 
 static void

@@ -20,6 +20,7 @@ extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_resource.h>
 #include <ucs/datastruct/mpool.inl>
 }
 
@@ -1668,6 +1669,13 @@ public:
         }
     }
 
+    size_t get_rndv_frag_size(ucs_memory_type_t mem_type)
+    {
+        const auto *cfg = &sender().worker()->context->config.ext;
+
+        return cfg->rndv_frag_size[mem_type];
+    }
+
 protected:
     static constexpr unsigned RNDV_THRESH = 128;
     ucs_status_t m_status;
@@ -1849,8 +1857,7 @@ private:
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    const auto *cfg                 = &sender().worker()->context->config.ext;
-    const size_t rndv_frag_size     = cfg->rndv_frag_size[UCS_MEMORY_TYPE_HOST];
+    const size_t rndv_frag_size     = get_rndv_frag_size(UCS_MEMORY_TYPE_HOST);
     const std::vector<size_t> sizes = {64 * UCS_KBYTE, rndv_frag_size - 1,
                                        rndv_frag_size  + 1};
 
@@ -1906,3 +1913,107 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_memtype_disable_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
+
+
+#ifdef ENABLE_STATS
+class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
+public:
+    void init() override
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+        stats_activate();
+        modify_config("RNDV_THRESH", "128");
+        modify_config("RNDV_SCHEME", "put_ppln");
+        modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
+        test_ucp_am_nbx::init();
+    }
+
+    void cleanup() override
+    {
+        test_ucp_am_nbx::cleanup();
+        stats_restore();
+    }
+
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
+    }
+
+protected:
+    void test_ppln_send(ucs_memory_type_t mem_type, size_t num_frags,
+                        uint64_t sender_cntr, uint64_t sender_cntr_value,
+                        uint64_t receiver_cntr, uint64_t receiver_cntr_value)
+    {
+        if (!is_ppln_supported(mem_type)) {
+            UCS_TEST_SKIP_R("No RMA support");
+        }
+
+        const size_t rndv_frag_size = get_rndv_frag_size(mem_type);
+        test_am_send_recv(rndv_frag_size * num_frags);
+
+        check_stats(sender(), sender_cntr, sender_cntr_value);
+        check_stats(receiver(), receiver_cntr, receiver_cntr_value);
+    }
+
+private:
+    void check_stats(entity &e, uint64_t cntr, uint64_t exp_value)
+    {
+        auto stats_node = e.worker()->stats;
+        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
+
+        EXPECT_EQ(exp_value, value) << "counter is "
+                                    << stats_node->cls->counter_names[cntr];
+    }
+
+    bool is_ppln_supported(ucs_memory_type_t mem_type)
+    {
+        const auto ep     = sender().ep();
+        const auto config = ucp_ep_config(ep);
+
+        for (auto i = 0; i < config->key.num_lanes; ++i) {
+            const auto lane = config->key.rma_bw_lanes[i];
+            if (lane == UCP_NULL_LANE) {
+                break;
+            }
+            if (ucp_ep_md_attr(ep, lane)->reg_mem_types & UCS_BIT(mem_type)) {
+                const auto iface_attr =
+                    ucp_worker_iface_get_attr(sender().worker(),
+                                              ucp_ep_get_rsc_index(ep, lane));
+                if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_cuda_frag,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags,
+                   UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, num_frags,
+                   UCP_WORKER_STAT_RNDV_RTR_MTYPE, num_frags);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_host_frag,
+           "RNDV_FRAG_MEM_TYPE=host")
+{
+    // Host memory should not be pipelined thru host staging buffers
+    test_ppln_send(UCS_MEMORY_TYPE_HOST, 2,
+                   UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 0,
+                   UCP_WORKER_STAT_RNDV_RTR_MTYPE, 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
+
+#endif
