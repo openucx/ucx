@@ -2035,9 +2035,9 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                       const uct_ib_md_config_t *md_config,
                                       uct_ib_md_t **p_md)
 {
-    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
-    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
-    char cap_2_out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
+    char *out = ucs_malloc(UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out), "out");
+    char *in = ucs_malloc(UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in), "in");
+    char *cap_2_out = ucs_malloc(UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out), "cap_2_out");
     ucs_status_t status                                    = UCS_OK;
     uint8_t lag_state                                      = 0;
     void *cap_2;
@@ -2053,20 +2053,26 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     ucs_mpool_params_t mp_params;
     int ksm_atomic;
 
+    if ((out == NULL) || (in == NULL) || (cap_2_out == NULL)) {
+        ucs_error("Failed to allocate memory for HCA capability buffers");
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
     if (!mlx5dv_is_supported(ibv_device)) {
         status = UCS_ERR_UNSUPPORTED;
-        goto err;
+        goto err_free_buffers;
     }
 
     if (md_config->devx == UCS_NO) {
         status = UCS_ERR_UNSUPPORTED;
-        goto err;
+        goto err_free_buffers;
     }
 
     ctx = uct_ib_mlx5_devx_open_device(ibv_device);
     if (ctx == NULL) {
         status = UCS_ERR_UNSUPPORTED;
-        goto err;
+        goto err_free_buffers;
     }
 
     md = ucs_derived_of(uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx),
@@ -2347,6 +2353,10 @@ err_free_md:
     uct_ib_md_free(&md->super);
 err_free_context:
     uct_ib_md_device_context_close(ctx);
+err_free_buffers:
+    ucs_free(out);
+    ucs_free(in);
+    ucs_free(cap_2_out);
 err:
     if ((status == UCS_ERR_UNSUPPORTED) && (md_config->devx == UCS_YES)) {
         ucs_error("DEVX requested but not supported by %s",
