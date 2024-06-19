@@ -8,6 +8,8 @@
 
 #include <uct/uct_test.h>
 
+#include <vector>
+
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
@@ -757,15 +759,13 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
  * - flush() will also progress pending CREQs
  */
 UCS_TEST_P(test_ud, connect_iface_2k) {
-
     unsigned i;
-    unsigned cids[2000];
     unsigned count = 2000 / ucs::test_time_multiplier();
+    std::vector<unsigned> cids(count, UCT_UD_EP_NULL_ID);
 
     /* create 2k connections */
     for (i = 0; i < count; i++) {
         m_e1->connect_to_iface(i, *m_e2);
-        cids[i] = UCT_UD_EP_NULL_ID;
     }
 
     flush();
