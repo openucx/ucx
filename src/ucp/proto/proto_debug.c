@@ -33,7 +33,7 @@ struct ucp_proto_perf_node {
     ucp_proto_perf_node_type_t                    type;
 
     /* Name of the range */
-    const char                                    *name;
+    char                                          name[UCP_PROTO_DESC_STR_MAX];
 
     /* Description of the range */
     char                                          desc[UCP_PROTO_DESC_STR_MAX];
@@ -484,9 +484,10 @@ ucp_proto_perf_node_t *ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
     }
 
     perf_node->type     = type;
-    perf_node->name     = name;
     perf_node->refcount = 1;
     ucs_array_init_dynamic(&perf_node->children);
+    ucs_assert(name != NULL);
+    ucs_strncpy_safe(perf_node->name, name, sizeof(perf_node->name));
     ucs_vsnprintf_safe(perf_node->desc, sizeof(perf_node->desc), desc_fmt, ap);
     if (type == UCP_PROTO_PERF_NODE_TYPE_DATA) {
         ucs_array_init_dynamic(&perf_node->data);

@@ -424,8 +424,8 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
 ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
                                         ucp_proto_perf_t **perf_p)
 {
+    ucp_proto_perf_segment_t *remote_seg, *new_seg;
     ucp_proto_perf_factors_t turned_factors;
-    ucp_proto_perf_segment_t *remote_seg;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
@@ -449,13 +449,16 @@ ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
         turned_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU];
 
-        status = ucp_proto_perf_add_funcs(perf, remote_seg->start,
-                                          remote_seg->end, turned_factors,
-                                          remote_seg->node, perf->name, "");
+        status = ucp_proto_perf_segment_new(perf, remote_seg->start,
+                                            remote_seg->end, &new_seg);
         if (status != UCS_OK) {
             ucp_proto_perf_destroy(perf);
             return status;
         }
+
+        ucs_list_add_tail(&perf->segments, &new_seg->list);
+        ucp_proto_perf_segment_add_funcs(perf, new_seg, turned_factors,
+                                         remote_seg->node);
     }
 
     *perf_p = perf;
