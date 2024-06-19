@@ -248,7 +248,7 @@ ucp_proto_select_cleanup_protocols(ucp_proto_select_init_protocols_t *proto_init
     ucp_proto_init_elem_t *init_elem;
 
     ucs_array_for_each(init_elem, &proto_init->protocols) {
-        ucs_array_cleanup_dynamic(&init_elem->flat_perf);
+        ucp_proto_flat_perf_destroy(&init_elem->flat_perf);
         ucp_proto_perf_destroy(init_elem->perf);
     }
     ucs_array_cleanup_dynamic(&proto_init->priv_buf);

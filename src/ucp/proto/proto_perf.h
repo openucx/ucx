@@ -34,9 +34,10 @@ typedef enum {
 
 
 typedef struct {
-    size_t            start;
-    size_t            end;
-    ucs_linear_func_t value;
+    size_t                 start;
+    size_t                 end;
+    ucs_linear_func_t      value;
+    ucp_proto_perf_node_t *node;
 } ucp_proto_flat_perf_range_t;
 
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_flat_perf_t, unsigned,
@@ -263,6 +264,16 @@ void ucp_proto_perf_str(const ucp_proto_perf_t *perf,
 
 const ucp_proto_flat_perf_range_t *
 ucp_proto_flat_perf_find_lb(const ucp_proto_flat_perf_t *flat_perf, size_t lb);
+
+
+/**
+ * Destroy a flat performance data structure and free associated memory.
+ * The reference counts of any perf_node objects passed to
+ * @ref ucp_proto_perf_add_func() will be adjusted accordingly.
+ *
+ * @param [in]  flat_perf   Performance data structure to destroy.
+*/
+void ucp_proto_flat_perf_destroy(ucp_proto_flat_perf_t *flat_perf);
 
 
 #endif

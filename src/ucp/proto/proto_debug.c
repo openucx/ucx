@@ -960,10 +960,9 @@ void ucp_proto_select_write_info(
     const ucp_proto_init_elem_t *selected_proto, *proto;
     char dir_path[PATH_MAX], file_name[NAME_MAX];
     char range_start_str[64], range_end_str[64];
-    const ucp_proto_perf_segment_t *seg;
+    const ucp_proto_flat_perf_range_t *range;
     ucp_proto_perf_node_t *select_node;
     ucp_proto_query_attr_t proto_attr;
-    size_t UCS_V_UNUSED seg_start, seg_end;
     size_t selected_child;
     unsigned proto_idx;
     unsigned selected_flags;
@@ -1012,16 +1011,14 @@ void ucp_proto_select_write_info(
 
     UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
         proto     = &ucs_array_elem(&proto_init->protocols, proto_idx);
-        seg       = ucp_proto_perf_find_segment_lb(proto->perf, range_start);
-        seg_start = ucp_proto_perf_segment_start(seg);
-        seg_end   = ucp_proto_perf_segment_end(seg);
-        ucs_assertv(seg_start <= range_start, "seg_start=%zu range_start=%zu",
-                    seg_start, range_start);
-        ucs_assertv(seg_end >= range_end, "seg_end=%zu range_end=%zu",
-                    seg_end, range_end);
+        range     = ucp_proto_flat_perf_find_lb(&proto->flat_perf, range_start);
+        ucs_assertv(range->start <= range_start, 
+                    "range->start=%zu range_start=%zu",
+                    range->start, range_start);
+        ucs_assertv(range->end >= range_end, "range->end=%zu range_end=%zu",
+                    range->end, range_end);
 
-        ucp_proto_perf_node_add_child(select_node,
-                                      ucp_proto_perf_segment_node(seg));
+        ucp_proto_perf_node_add_child(select_node, range->node);
     }
 
     ucp_proto_config_query(worker, selected_config, range_start, &proto_attr);

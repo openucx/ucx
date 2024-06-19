@@ -469,6 +469,8 @@ ucs_status_t
 ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
                         ucp_proto_flat_perf_t *flat_perf)
 {
+    static const char *convex_names[] = { "concave envelope",
+                                          "convex envelope"};
     ucp_proto_perf_envelope_elem_t *envelope_elem;
     const ucp_proto_perf_segment_t *seg;
     ucp_proto_flat_perf_range_t *range;
@@ -478,6 +480,7 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
 
     ucp_proto_perf_check(perf);
 
+    ucs_array_init_dynamic(flat_perf);
     ucs_array_init_dynamic(&envelope);
     ucp_proto_perf_segment_foreach(seg, perf) {
         status = ucp_proto_perf_envelope_make(seg->perf_factors,
@@ -507,6 +510,11 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
         range->start = range_start;
         range->end   = envelope_elem->max_length;
         range->value = seg->perf_factors[envelope_elem->index];
+        range->node  = ucp_proto_perf_node_new_data(perf->name, "flat perf");
+        ucp_proto_perf_node_add_child(range->node, seg->node);
+        ucp_proto_perf_node_add_data(range->node, convex_names[convex],
+                                     range->value);
+
         range_start  = envelope_elem->max_length + 1;
     }
 
@@ -520,17 +528,22 @@ ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
     ucp_proto_flat_perf_range_t *range;
     ucp_proto_perf_factor_id_t factor_id;
 
+    ucs_array_init_dynamic(flat_perf);
     ucp_proto_perf_segment_foreach(seg, perf) {
         range        = ucs_array_append(flat_perf, return UCS_ERR_NO_MEMORY);
         range->start = seg->start;
         range->end   = seg->end;
         range->value = UCS_LINEAR_FUNC_ZERO;
+        range->node  = ucp_proto_perf_node_new_data(perf->name, "flat perf");
 
         for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
              factor_id++) {
             ucs_linear_func_add_inplace(&range->value,
                                         seg->perf_factors[factor_id]);
         }
+
+        ucp_proto_perf_node_add_child(range->node, seg->node);
+        ucp_proto_perf_node_add_data(range->node, "sum", range->value);
     }
 
     return UCS_OK;
@@ -640,4 +653,14 @@ ucp_proto_flat_perf_find_lb(const ucp_proto_flat_perf_t *flat_perf, size_t lb)
         }
     }
     return NULL;
+}
+
+void ucp_proto_flat_perf_destroy(ucp_proto_flat_perf_t *flat_perf) {
+    ucp_proto_flat_perf_range_t *range;
+
+    ucs_array_for_each(range, flat_perf) {
+        ucp_proto_perf_node_deref(&range->node);
+    }
+
+    ucs_array_cleanup_dynamic(flat_perf);
 }
