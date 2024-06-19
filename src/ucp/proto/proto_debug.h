@@ -6,6 +6,8 @@
 #ifndef UCP_PROTO_DEBUG_H_
 #define UCP_PROTO_DEBUG_H_
 
+#include <ucs/datastruct/dynamic_bitmap.h>
+
 #include "proto_common.h"
 #include "proto_select.h"
 
@@ -157,6 +159,14 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
                                  ucp_worker_cfg_index_t rkey_cfg_index,
                                  const ucp_proto_select_param_t *select_param,
                                  ucp_proto_select_elem_t *select_elem);
+
+
+void ucp_proto_select_write_info(
+        ucp_worker_h worker,
+        const ucp_proto_select_init_protocols_t *proto_init,
+        const ucs_dynamic_bitmap_t *proto_mask, unsigned selected_idx,
+        ucp_proto_config_t *selected_config, size_t range_start,
+        size_t range_end);
 
 
 #endif

@@ -908,9 +908,10 @@ ucp_proto_perf_graph_dump_recurs(ucp_proto_perf_node_t *perf_node,
     }
 }
 
-static void ucp_proto_perf_graph_dump(const ucp_proto_query_attr_t *proto_attr,
-                                      const ucp_proto_perf_segment_t *seg,
-                                      size_t range_end, const char *file_name)
+static void
+ucp_proto_perf_node_graph_dump(const ucp_proto_query_attr_t *proto_attr,
+                               const char *file_name,
+                               ucp_proto_perf_node_t *node)
 {
     khash_t(ucp_proto_graph_node) nodes_hash = KHASH_STATIC_INITIALIZER;
     ucs_string_buffer_t dot_strb             = UCS_STRING_BUFFER_INITIALIZER;
@@ -925,8 +926,7 @@ static void ucp_proto_perf_graph_dump(const ucp_proto_query_attr_t *proto_attr,
     ucs_string_buffer_appendf(
             &dot_strb, "\tnode0 [label=\"%s\\n%s\" shape=box style=rounded]\n",
             proto_attr->desc, proto_attr->config);
-    ucp_proto_perf_graph_dump_recurs(ucp_proto_perf_segment_node(seg), 0,
-                                     &nodes_hash, 1, &dot_strb);
+    ucp_proto_perf_graph_dump_recurs(node, 0, &nodes_hash, 1, &dot_strb);
     ucs_string_buffer_appendf(&dot_strb, "}\n");
 
     ucs_string_buffer_dump(&dot_strb, "", fp);
@@ -947,27 +947,31 @@ static char ucp_proto_debug_fix_filename(char ch)
     }
 }
 
-static void
-ucp_proto_select_write_info(ucp_worker_h worker,
-                            ucp_worker_cfg_index_t ep_cfg_index,
-                            ucp_worker_cfg_index_t rkey_cfg_index,
-                            const ucp_proto_select_param_t *select_param,
-                            const ucp_proto_select_elem_t *select_elem)
+void ucp_proto_select_write_info(
+        ucp_worker_h worker,
+        const ucp_proto_select_init_protocols_t *proto_init,
+        const ucs_dynamic_bitmap_t *proto_mask, unsigned selected_idx,
+        ucp_proto_config_t *selected_config, size_t range_start,
+        size_t range_end)
 {
     UCS_STRING_BUFFER_ONSTACK(ep_cfg_strb, UCP_PROTO_CONFIG_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_CONFIG_STR_MAX);
+    const ucp_proto_init_elem_t *selected_proto, *proto;
     char dir_path[PATH_MAX], file_name[NAME_MAX];
-    char seg_start_str[64], seg_end_str[64];
+    char range_start_str[64], range_end_str[64];
     const ucp_proto_perf_segment_t *seg;
-    const ucp_proto_init_elem_t *proto;
+    ucp_proto_perf_node_t *select_node;
     ucp_proto_query_attr_t proto_attr;
-    size_t range_start, range_end;
-    size_t seg_start, seg_end;
-    int proto_valid;
+    size_t UCS_V_UNUSED seg_start, seg_end;
+    size_t selected_child;
+    unsigned proto_idx;
+    unsigned selected_flags;
     int ret;
 
-    ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
-                                select_param, ucp_operation_names, &ep_cfg_strb,
+    ucp_proto_select_param_dump(worker, selected_config->ep_cfg_index,
+                                selected_config->rkey_cfg_index,
+                                &selected_config->select_param,
+                                ucp_operation_names, &ep_cfg_strb,
                                 &sel_param_strb);
     if (!ucp_proto_debug_is_info_enabled(
                 worker->context, ucs_string_buffer_cstr(&sel_param_strb))) {
@@ -985,33 +989,44 @@ ucp_proto_select_write_info(ucp_worker_h worker,
     ucs_string_buffer_translate(&ep_cfg_strb, ucp_proto_debug_fix_filename);
     ucs_string_buffer_translate(&sel_param_strb, ucp_proto_debug_fix_filename);
 
-    range_end = -1;
-    do {
-        range_start = range_end + 1;
-        proto_valid = ucp_proto_select_elem_query(worker, select_elem,
-                                                  range_start, &proto_attr);
-        range_end   = proto_attr.max_msg_length;
+    selected_proto = &ucs_array_elem(&proto_init->protocols, selected_idx);
+    selected_flags = ucp_proto_id_field(selected_proto->proto_id, flags);
+    if (selected_flags & UCP_PROTO_FLAG_INVALID) {
+        return;
+    }
 
-        if (!proto_valid) {
-            continue;
-        }
+    ucs_memunits_to_str(range_start, range_start_str, sizeof(range_start_str));
+    ucs_memunits_to_str(range_end, range_end_str, sizeof(range_end_str));
+    selected_child  = ucs_dynamic_bitmap_popcount_upto_index(proto_mask,
+                                                             selected_idx);
+    select_node = ucp_proto_perf_node_new_select(
+            "selected", selected_child, "%s %s..%s",
+            ucp_proto_id_field(selected_proto->proto_id, name),
+            range_start_str, range_end_str);
 
-        // TODO create performance nodes for candidates ???
-        proto = ucp_proto_select_elem_get_proto(select_elem, range_start);
-        ucp_proto_perf_segment_foreach_range(seg, seg_start, seg_end,
-                                             proto->perf, range_start,
-                                             range_end) {
-            ucs_memunits_to_str(seg_start, seg_start_str,
-                                sizeof(seg_start_str));
-            ucs_memunits_to_str(seg_end, seg_end_str, sizeof(seg_end_str));
-            ucs_snprintf_safe(file_name, sizeof(file_name),
-                              "%s/%s_%s_%s_%s.dot", dir_path,
-                              ucs_string_buffer_cstr(&ep_cfg_strb),
-                              ucs_string_buffer_cstr(&sel_param_strb),
-                              seg_start_str, seg_end_str);
-            ucp_proto_perf_graph_dump(&proto_attr, seg, range_end, file_name);
-        }
-    } while (range_end != SIZE_MAX);
+    ucs_snprintf_safe(file_name, sizeof(file_name), "%s/%s_%s_%s_%s.dot",
+                      dir_path, ucs_string_buffer_cstr(&ep_cfg_strb),
+                      ucs_string_buffer_cstr(&sel_param_strb), range_start_str,
+                      range_end_str);
+
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        proto     = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        seg       = ucp_proto_perf_find_segment_lb(proto->perf, range_start);
+        seg_start = ucp_proto_perf_segment_start(seg);
+        seg_end   = ucp_proto_perf_segment_end(seg);
+        ucs_assertv(seg_start <= range_start, "seg_start=%zu range_start=%zu",
+                    seg_start, range_start);
+        ucs_assertv(seg_end >= range_end, "seg_end=%zu range_end=%zu",
+                    seg_end, range_end);
+
+        ucp_proto_perf_node_add_child(select_node,
+                                      ucp_proto_perf_segment_node(seg));
+    }
+
+    ucp_proto_config_query(worker, selected_config, range_start, &proto_attr);
+    ucp_proto_perf_node_graph_dump(&proto_attr, file_name, select_node);
+
+    ucp_proto_perf_node_deref(&select_node);
 }
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,
@@ -1028,12 +1043,6 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
                                select_param, select_elem, 0, &strb);
     ucs_string_buffer_for_each_token(line, &strb, "\n") {
         ucs_log_print_compact(line);
-    }
-
-    /* Print detailed protocol selection data to a user-configured path */
-    if (!ucs_string_is_empty(worker->context->config.ext.proto_info_dir)) {
-        ucp_proto_select_write_info(worker, ep_cfg_index, rkey_cfg_index,
-                                    select_param, select_elem);
     }
 
     ucs_string_buffer_cleanup(&strb);

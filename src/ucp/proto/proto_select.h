@@ -109,9 +109,6 @@ typedef struct {
      */
     ucp_worker_cfg_index_t   rkey_cfg_index;
 
-    /* Index of the selected protocol, in proto_init array */
-    uint16_t                 proto_idx;
-
     /* Copy of protocol selection parameters, used to re-select protocol for
      * existing in-progress request
      */

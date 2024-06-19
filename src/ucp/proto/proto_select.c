@@ -257,13 +257,14 @@ ucp_proto_select_cleanup_protocols(ucp_proto_select_init_protocols_t *proto_init
 
 static ucs_status_t ucp_proto_select_elem_add_envelope(
         const ucp_proto_select_init_protocols_t *proto_init,
-        ucp_worker_cfg_index_t ep_cfg_index,
+        ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
         ucp_worker_cfg_index_t rkey_cfg_index,
         const ucp_proto_select_param_t *select_param, size_t msg_length,
         const ucp_proto_perf_envelope_t *envelope,
         const ucs_dynamic_bitmap_t *proto_mask, ucp_proto_thresh_t *thresholds,
-        unsigned *last_proto_idx)
+        unsigned *last_proto_idx, int internal)
 {
+    const char *proto_info_dir = worker->context->config.ext.proto_info_dir;
     ucp_proto_perf_envelope_elem_t *envelope_elem;
     ucp_proto_threshold_elem_t *thresh_elem;
     const ucp_proto_init_elem_t *proto;
@@ -309,6 +310,13 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
             *last_proto_idx              = proto_idx;
         }
 
+        /* Print detailed protocol selection data to a user-configured path */
+        if (!internal && !ucs_string_is_empty(proto_info_dir)) {
+            ucp_proto_select_write_info(worker, proto_init, proto_mask,
+                                        proto_idx, &thresh_elem->proto_config,
+                                        range_start, envelope_elem->max_length);
+        }
+
         range_start = envelope_elem->max_length + 1;
     }
 
@@ -321,7 +329,8 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
                                   ucp_proto_select_init_protocols_t *proto_init,
                                   ucp_worker_cfg_index_t ep_cfg_index,
                                   ucp_worker_cfg_index_t rkey_cfg_index,
-                                  const ucp_proto_select_param_t *select_param)
+                                  const ucp_proto_select_param_t *select_param,
+                                  int internal)
 {
     ucp_proto_thresh_t thresholds  = UCS_ARRAY_DYNAMIC_INITIALIZER;
     unsigned last_proto_idx        = UINT_MAX;
@@ -364,12 +373,10 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
 
         ucs_assert_always(ucs_array_last(&envelope)->max_length == max_length);
 
-        status = ucp_proto_select_elem_add_envelope(proto_init, ep_cfg_index,
-                                                    rkey_cfg_index,
-                                                    select_param, msg_length,
-                                                    &envelope, &proto_mask,
-                                                    &thresholds,
-                                                    &last_proto_idx);
+        status = ucp_proto_select_elem_add_envelope(
+                proto_init, worker, ep_cfg_index, rkey_cfg_index, select_param,
+                msg_length, &envelope, &proto_mask, &thresholds,
+                &last_proto_idx, internal);
         if (status != UCS_OK) {
             goto err_cleanup_envelope;
         }
@@ -478,7 +485,7 @@ ucp_proto_select_elem_init(ucp_worker_h worker, int internal,
 
     status = ucp_proto_select_elem_init_thresh(worker, select_elem, &proto_init,
                                                ep_cfg_index, rkey_cfg_index,
-                                               select_param);
+                                               select_param, internal);
     if (status != UCS_OK) {
         goto out_cleanup_proto_init;
     }
@@ -866,6 +873,5 @@ ucp_proto_select_elem_get_proto(const ucp_proto_select_elem_t *select_elem,
     const ucp_proto_threshold_elem_t *thresh_elem;
 
     thresh_elem = ucp_proto_select_thresholds_search(select_elem, msg_length);
-    return &ucs_array_elem(&select_elem->proto_init.protocols,
-                           thresh_elem->proto_config.proto_idx);
+    return thresh_elem->proto_config.init_elem;
 }
