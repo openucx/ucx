@@ -693,8 +693,9 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
     ssize_t max_short_signed;
     const uint32_t *op_attribute;
 
+    /* Initialize to disabled state to make coverity happy */
+    ucp_proto_select_short_disable(proto_short);
     if (worker->context->config.progress_wrapper_enabled) {
-        ucp_proto_select_short_disable(proto_short);
         return;
     }
 

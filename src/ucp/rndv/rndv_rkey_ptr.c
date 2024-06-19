@@ -34,7 +34,7 @@ typedef struct {
 
 static void ucp_proto_rndv_rkey_ptr_probe_common(
         const ucp_proto_common_init_params_t *init_params,
-        ucp_proto_perf_t *rkey_ptr_perf, ucp_proto_rndv_rkey_ptr_priv_t *rpriv,
+        ucp_proto_perf_t *rndv_op_perf, ucp_proto_rndv_rkey_ptr_priv_t *rpriv,
         size_t priv_size)
 {
     const char *proto_name = ucp_proto_id_field(init_params->super.proto_id,
@@ -42,7 +42,7 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
     ucp_proto_perf_t *perf, *ack_perf;
     ucs_status_t status;
 
-    ucs_assert(!ucp_proto_perf_is_empty(rkey_ptr_perf));
+    ucs_assert(!ucp_proto_perf_is_empty(rndv_op_perf));
 
     status = ucp_proto_rndv_ack_init(init_params, UCP_PROTO_RNDV_ATS_NAME,
                                      UCS_LINEAR_FUNC_ZERO, &ack_perf,
@@ -53,22 +53,21 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
 
     if (rpriv->ack.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */
-        ucp_proto_common_add_proto(init_params, rkey_ptr_perf, rpriv,
-                                   sizeof(rpriv));
+        ucp_proto_common_add_proto(init_params, rndv_op_perf, rpriv, priv_size);
         return;
     }
 
-    status = ucp_proto_perf_aggregate2(proto_name, rkey_ptr_perf, ack_perf,
+    status = ucp_proto_perf_aggregate2(proto_name, rndv_op_perf, ack_perf,
                                        &perf);
     if (status != UCS_OK) {
         goto out_destroy_perf;
     }
 
-    ucp_proto_common_add_proto(init_params, perf, rpriv, sizeof(rpriv));
+    ucp_proto_common_add_proto(init_params, perf, rpriv, priv_size);
 
 out_destroy_perf:
     ucp_proto_perf_destroy(ack_perf);
-    ucp_proto_perf_destroy(rkey_ptr_perf);
+    ucp_proto_perf_destroy(rndv_op_perf);
 }
 
 static void
