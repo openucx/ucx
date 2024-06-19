@@ -169,7 +169,7 @@ ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          const char *name, const char *ack_name,
-                         ucp_proto_perf_t **perf_p, size_t *frag_size_p,
+                         ucp_proto_perf_t **perf_p,
                          ucp_proto_rndv_bulk_priv_t *rpriv);
 
 

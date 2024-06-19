@@ -510,29 +510,28 @@ ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
         return status;
     }
 
-    /* Add buffer copy/register cost for non-empty messages */
-    if (range_end > 0) {
-        status = ucp_proto_init_add_buffer_perf(params, ucs_max(1, range_start),
-                                                range_end, reg_md_map, perf);
-        if (status != UCS_OK) {
-            goto out;
-        }
-    }
-
     status = ucp_proto_init_add_tl_perf(params, tl_perf, tl_perf_node,
                                         range_start, range_end, perf);
     if (status != UCS_OK) {
             goto out;
     }
 
-    /* Append range representing sending rest of the fragments, if range_end is
-       not the max length and the protocol supports fragmentation */
-    if ((range_end < params->max_length) &&
-        !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
-        frag_seg = ucp_proto_perf_segment_last(perf);
-        ucs_assert(frag_seg != NULL);
-        status   = ucp_proto_common_add_ppln_perf(perf, frag_seg,
-                                                  params->max_length);
+    if (range_end > 0) {
+        /* Add buffer copy/register cost for non-empty messages */
+        status = ucp_proto_init_add_buffer_perf(params, ucs_max(1, range_start),
+                                                range_end, reg_md_map, perf);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        /* Add range that represent sending many fragments */
+        if ((range_end < params->max_length) &&
+            !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
+            frag_seg = ucp_proto_perf_segment_last(perf);
+            ucs_assert(frag_seg != NULL);
+            status   = ucp_proto_common_add_ppln_perf(perf, frag_seg,
+                                                      params->max_length);
+        }
     }
 
 out:

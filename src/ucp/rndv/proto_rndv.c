@@ -602,7 +602,7 @@ ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          const char *name, const char *ack_name,
-                         ucp_proto_perf_t **perf_p, size_t *frag_size_p,
+                         ucp_proto_perf_t **perf_p,
                          ucp_proto_rndv_bulk_priv_t *rpriv)
 {
     ucp_context_t *context        = init_params->super.super.worker->context;
@@ -611,7 +611,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     ucp_proto_perf_t *bulk_perf, *ack_perf;
     ucs_status_t status;
 
-    status = ucp_proto_multi_init(init_params, &bulk_perf, frag_size_p, mpriv);
+    status = ucp_proto_multi_init(init_params, &bulk_perf, mpriv);
     if (status != UCS_OK) {
         return status;
     }

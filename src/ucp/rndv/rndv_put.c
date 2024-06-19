@@ -241,7 +241,6 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     int send_atp, use_fence;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
-    size_t frag_size;
     unsigned atp_map;
     size_t priv_size;
 
@@ -254,7 +253,7 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
 
     status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_PUT_DESC,
                                       UCP_PROTO_RNDV_ATP_NAME, &perf,
-                                      &frag_size, &rpriv.bulk);
+                                      &rpriv.bulk);
     if (status != UCS_OK) {
         return;
     }
