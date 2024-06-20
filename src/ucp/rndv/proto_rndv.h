@@ -87,11 +87,8 @@ typedef struct {
     /* Lane to send control message */
     ucp_lane_index_t               lane;
 
-    /* Time to unpack the received data */
-    ucs_linear_func_t              unpack_time;
-
-    /* Performance node to represent unpacking time; ignored if NULL */
-    ucp_proto_perf_node_t          *unpack_perf_node;
+    /* Performance data to unpack the received data */
+    ucp_proto_perf_t              *unpack_perf;
 
     /* Reduce estimated time by this value (for example, 0.03 means to report
        a 3% better time) */
@@ -135,12 +132,6 @@ enum {
 
 /* Initializes protocol which sends rendezvous control message using AM lane
  * (e.g. RTS and ATS). */
-ucs_status_t
-ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params,
-                         ucp_proto_caps_t *proto_caps,
-                         ucp_proto_rndv_ctrl_priv_t *priv);
-
-
 void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
                                void *priv, size_t priv_size);
 
@@ -152,11 +143,11 @@ ucp_proto_rndv_find_ctrl_lane(const ucp_proto_init_params_t *params);
 void ucp_proto_rndv_rts_probe(const ucp_proto_init_params_t *init_params);
 
 
-void
-ucp_proto_rndv_set_variant_config(const ucp_proto_init_params_t *init_params,
-                                  const ucp_proto_init_elem_t *proto,
-                                  const ucp_proto_select_param_t *select_param,
-                                  void *priv, ucp_proto_config_t *cfg);
+void ucp_proto_rndv_set_variant_config(
+        const ucp_proto_init_params_t *init_params,
+        const ucp_proto_init_elem_t *proto,
+        const ucp_proto_select_param_t *select_param, const void *priv,
+        ucp_proto_config_t *cfg);
 
 
 void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
@@ -168,19 +159,18 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
 
 
-ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
-                                     const char *name,
-                                     const ucp_proto_caps_t *input_caps,
-                                     ucs_linear_func_t overhead,
-                                     ucp_proto_rndv_ack_priv_t *apriv,
-                                     ucp_proto_caps_t *caps);
+ucs_status_t
+ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
+                        const char *name, ucs_linear_func_t overhead,
+                        ucp_proto_perf_t **perf_p,
+                        ucp_proto_rndv_ack_priv_t *apriv);
 
 
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          const char *name, const char *ack_name,
-                         ucp_proto_rndv_bulk_priv_t *rpriv,
-                         ucp_proto_caps_t *caps);
+                         ucp_proto_perf_t **perf_p,
+                         ucp_proto_rndv_bulk_priv_t *rpriv);
 
 
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);

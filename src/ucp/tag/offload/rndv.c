@@ -181,7 +181,6 @@ ucp_tag_rndv_offload_sw_proto_probe(const ucp_proto_init_params_t *init_params)
         .super.exclude_map   = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .lane                = init_params->ep_config_key->tag_lane,
-        .unpack_time         = UCS_LINEAR_FUNC_ZERO,
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .mem_info.type       = init_params->select_param->mem_type,
         .mem_info.sys_dev    = init_params->select_param->sys_dev,
