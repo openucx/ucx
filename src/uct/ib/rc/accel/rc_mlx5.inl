@@ -1401,12 +1401,11 @@ uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
 #endif /* IBV_HW_TM */
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
-                                 int poll_flags)
+uct_rc_mlx5_iface_common_poll_rx_one(uct_rc_mlx5_iface_common_t *iface,
+                                     int poll_flags)
 {
     struct mlx5_cqe64 *cqe;
     unsigned byte_len;
-    uint16_t max_batch;
     unsigned count;
     void *rc_hdr;
     unsigned flags;
@@ -1535,7 +1534,22 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 out_update_db:
     uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_RX]);
 out:
-    max_batch = iface->super.super.config.rx_max_batch;
+    return count;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
+                                 int poll_flags)
+{
+    unsigned count       = 0;
+    unsigned rx_max_poll = iface->super.super.config.rx_max_poll;
+    uint16_t max_batch   = iface->super.super.config.rx_max_batch;
+
+    while (rx_max_poll-- &&
+           uct_rc_mlx5_iface_common_poll_rx_one(iface, poll_flags)) {
+        count++;
+    }
+
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
         if (poll_flags & UCT_IB_MLX5_POLL_FLAG_LINKED_LIST) {
             uct_rc_mlx5_iface_srq_post_recv_ll(iface);
@@ -1543,6 +1557,7 @@ out:
             uct_rc_mlx5_iface_srq_post_recv(iface);
         }
     }
+
     return count;
 }
 

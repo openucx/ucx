@@ -248,7 +248,7 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
+uct_dc_mlx5_poll_tx_one(uct_dc_mlx5_iface_t *iface, int poll_flags)
 {
     uint8_t dci_index;
     struct mlx5_cqe64 *cqe;
@@ -288,6 +288,19 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
     uct_ib_mlx5_update_db_cq_ci(&iface->super.cq[UCT_IB_DIR_TX]);
 
     return 1;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
+{
+    unsigned count       = 0;
+    unsigned tx_max_poll = iface->super.super.super.config.tx_max_poll;
+
+    while (tx_max_poll-- && uct_dc_mlx5_poll_tx_one(iface, poll_flags)) {
+        count++;
+    }
+
+    return count;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
