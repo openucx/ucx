@@ -323,11 +323,16 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
         ucp_proto_perf_range_t *remote_range,
         ucp_proto_caps_t *proto_caps, size_t min_length, size_t max_length)
 {
-    const char *rndv_op_name = ucp_operation_names[params->remote_op_id];
+    const char *variant_name = ucp_proto_perf_node_name(remote_range->node);
+    const char *proto_name   = ucp_proto_id_field(params->super.super.proto_id,
+                                                  name);
     const ucp_proto_perf_range_t *parallel_stages[2];
-    ucp_proto_perf_range_t remote_perf;
+    UCS_STRING_BUFFER_ONSTACK(agg_buf, 256);
     size_t range_max_length;
     ucs_status_t status;
+
+    ucs_string_buffer_appendf(&agg_buf, "%s"UCP_PROTO_PERF_NODE_NEW_LINE"%s",
+                              proto_name, variant_name);
 
     do {
         range_max_length = ucs_min(remote_range->max_length, max_length);
@@ -335,30 +340,18 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
             continue;
         }
 
-        ucs_trace("%s: max %zu remote-op %s %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
-                  ucp_proto_id_field(params->super.super.proto_id, name),
-                  remote_range->max_length, rndv_op_name,
-                  ucp_proto_perf_node_name(remote_range->node),
+        ucs_trace("%s: max %zu remote-op %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+                  proto_name, remote_range->max_length, variant_name,
                   UCP_PROTO_PERF_FUNC_TYPES_ARG(remote_range->perf));
 
-        /* remote_perf->node ---> remote_range->node */
-        remote_perf.node       = ucp_proto_perf_node_new_data(rndv_op_name, "");
-        remote_perf.max_length = remote_range->max_length;
-        ucp_proto_perf_copy(remote_perf.perf, remote_range->perf);
-        ucp_proto_perf_range_add_data(&remote_perf);
-        ucp_proto_perf_node_add_child(remote_perf.node, remote_range->node);
-
         parallel_stages[0] = ctrl_range;
-        parallel_stages[1] = &remote_perf;
-        status = ucp_proto_init_parallel_stages(params->ctrl_msg_name,
-                                                min_length, range_max_length,
-                                                params->perf_bias,
-                                                parallel_stages, 2, proto_caps);
+        parallel_stages[1] = remote_range;
+        status             = ucp_proto_init_parallel_stages(
+                ucs_string_buffer_cstr(&agg_buf), min_length, range_max_length,
+                params->perf_bias, parallel_stages, 2, proto_caps);
         if (status != UCS_OK) {
             return status;
         }
-
-        ucp_proto_perf_node_deref(&remote_perf.node);
 
         min_length = range_max_length + 1;
     } while ((remote_range++)->max_length < max_length);

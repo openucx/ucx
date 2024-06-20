@@ -10,6 +10,9 @@
 #include "proto_select.h"
 
 
+/* String to place new line inside performance graph */
+#define UCP_PROTO_PERF_NODE_NEW_LINE "<br/>"
+
 /* Format string to display a protocol time */
 #define UCP_PROTO_TIME_FMT(_time_var) " " #_time_var ": %.2f ns"
 #define UCP_PROTO_TIME_ARG(_time_val) ((_time_val) * 1e9)
