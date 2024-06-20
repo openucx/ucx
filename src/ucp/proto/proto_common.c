@@ -250,9 +250,9 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
             UCT_TL_RESOURCE_DESC_FMT, UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        ucp_proto_perf_node_add_bandwidth(perf_node, "bw/proc",
+        ucp_proto_perf_node_add_bandwidth(perf_node, "bw/dedicated",
                                           perf_attr->bandwidth.dedicated);
-        ucp_proto_perf_node_add_bandwidth(perf_node, "bw/node",
+        ucp_proto_perf_node_add_bandwidth(perf_node, "bw/shared",
                                           perf_attr->bandwidth.shared);
     }
 
@@ -641,11 +641,11 @@ ucp_lane_index_t ucp_proto_common_find_lanes_with_min_frag(
 }
 
 void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
-                                const ucp_proto_caps_t *proto_caps,
+                                ucp_proto_perf_t *perf, size_t frag_size,
                                 const void *priv, size_t priv_size)
 {
     ucp_proto_select_add_proto(&params->super, params->cfg_thresh,
-                               params->cfg_priority, proto_caps, priv,
+                               params->cfg_priority, perf, frag_size, priv,
                                priv_size);
 }
 

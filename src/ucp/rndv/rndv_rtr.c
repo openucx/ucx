@@ -398,13 +398,15 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    status = ucp_proto_init_buffer_copy_time(
-            init_params->worker, "rtr/mtype unpack", params.mem_info.type,
-            init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
-            &params.unpack_time, &params.unpack_perf_node);
-    if (status != UCS_OK) {
-        return;
-    }
+
+    // TODO create unpack perf
+    // status = ucp_proto_init_buffer_copy_time(
+    //         init_params->worker, "rtr/mtype unpack", params.mem_info.type,
+    //         init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
+    //         &params.unpack_time, &params.unpack_perf_node);
+    // if (status != UCS_OK) {
+    //     return;
+    // }
 
     status = ucp_mm_get_alloc_md_index(context, &md_index,
                                        params.mem_info.type);

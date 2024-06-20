@@ -29,10 +29,41 @@ typedef enum {
     UCP_PROTO_PERF_FACTOR_LOCAL_TL,
     UCP_PROTO_PERF_FACTOR_REMOTE_TL,
     UCP_PROTO_PERF_FACTOR_LATENCY,
-    UCP_PROTO_PERF_FACTOR_SINGLE, /* For compatibility; to remove */
-    UCP_PROTO_PERF_FACTOR_MULTI,  /* For compatibility; to remove */
     UCP_PROTO_PERF_FACTOR_LAST
 } ucp_proto_perf_factor_id_t;
+
+
+typedef struct {
+    size_t            start;
+    size_t            end;
+    ucs_linear_func_t value;
+} ucp_proto_flat_perf_range_t;
+
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_flat_perf_t, unsigned,
+                       ucp_proto_flat_perf_range_t);
+
+
+/* Array of all performance factors */
+typedef ucs_linear_func_t ucp_proto_perf_factors_t[UCP_PROTO_PERF_FACTOR_LAST];
+
+#define UCP_PROTO_PERF_FACTORS_INITIALIZER  {}
+
+
+/* Iterate on all segments within a given range */
+#define ucp_proto_perf_segment_foreach_range(_seg, _seg_start, _seg_end, \
+                                              _perf, _range_start, _range_end) \
+    for (_seg = ucp_proto_perf_find_segment_lb(_perf, _range_start); \
+         (_seg != NULL) && \
+         (_seg_start = \
+                  ucs_max(_range_start, ucp_proto_perf_segment_start(seg)), \
+         _seg_end = ucs_min(_range_end, ucp_proto_perf_segment_end(seg)), \
+         _seg_start <= seg_end); \
+         _seg = ucp_proto_perf_segment_next(_perf, _seg))
+
+
+// TODO
+// TODO add empty initializer for the factors array??
+void ucp_proto_perf_factors_reset(ucp_proto_perf_factors_t perf_factors);
 
 
 /**
@@ -54,25 +85,14 @@ ucs_status_t ucp_proto_perf_create(const char *name, ucp_proto_perf_t **perf_p);
 void ucp_proto_perf_destroy(ucp_proto_perf_t *perf);
 
 
-/**
- * Create proto perf structure from proto caps.
- *
- * @param [in]  name        Name of the performance data structure.
- * @param [in]  proto_caps  Proto caps to create perf from.
- * @param [out] perf_p      Filled with the new performance data structure.
-*/
-ucs_status_t ucp_proto_perf_from_caps(const char *name,
-                                      const ucp_proto_caps_t *proto_caps,
-                                      ucp_proto_perf_t **perf_p);
+int ucp_proto_perf_is_empty(const ucp_proto_perf_t *perf);
 
 
 /**
  * Add linear functions to several performance factors at the range
  * [ @a start, @a end ]. The performance functions to add are provided in the
  * array @a funcs, each entry corresponding to a factor id defined in
- * @ref ucp_proto_perf_factor_id_t. The bitmap @a factors_bitmap specifies the
- * valid elements in that array; any elements not specified in the bitmap are
- * ignored.
+ * @ref ucp_proto_perf_factor_id_t.
  *
  * Initially, all ranges are uninitialized; repeated calls to this function
  * should be used to populate the @a perf data structure.
@@ -80,18 +100,19 @@ ucs_status_t ucp_proto_perf_from_caps(const char *name,
  * @param [in] perf            Performance data structure to update.
  * @param [in] start           Add the performance function to this range start (inclusive).
  * @param [in] end             Add the performance function to this range end (inclusive).
- * @param [in] funcs           Array of performance functions to add.
- * @param [in] factors_bitmap  Bitmap of performance factors to add, using bit
- *                             indexes defined in @ref ucp_proto_perf_factor_id_t.
+ * @param [in] perf_factors    Array of performance functions to add.
  * @param [in] perf_node       Performance node that represents the added function.
  *                             Can be NULL.
  *
+ *  TODO add option to create custom perf node (a child of the range) when adding
+ *
  * @note This function may adjust the reference count of @a perf_node as needed.
  */
-ucs_status_t ucp_proto_perf_add_funcs(
-        ucp_proto_perf_t *perf, size_t start, size_t end,
-        const ucs_linear_func_t funcs[UCP_PROTO_PERF_FACTOR_LAST],
-        uint64_t factors_bitmap, ucp_proto_perf_node_t *perf_node);
+ucs_status_t
+ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
+                         const ucp_proto_perf_factors_t perf_factors,
+                         ucp_proto_perf_node_t *perf_node, const char *title,
+                         const char *desc_fmt, ...);
 
 
 /**
@@ -113,6 +134,22 @@ ucs_status_t ucp_proto_perf_aggregate(const char *name,
                                       const ucp_proto_perf_t *const *perf_elems,
                                       unsigned num_elems,
                                       ucp_proto_perf_t **perf_p);
+
+
+ucs_status_t ucp_proto_perf_aggregate2(const char *name,
+                                       const ucp_proto_perf_t *perf1,
+                                       const ucp_proto_perf_t *perf2,
+                                       ucp_proto_perf_t **perf_p);
+
+
+/* Pipeline by frag_size */
+ucs_status_t ucp_proto_perf_ppln(const ucp_proto_perf_t *perf, size_t frag_size,
+                                 ucp_proto_flat_perf_t *flat_perf);
+
+
+/* Sum of all parts */
+ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
+                                 ucp_proto_flat_perf_t *flat_perf);
 
 
 /**
@@ -174,12 +211,29 @@ ucp_proto_perf_segment_node(const ucp_proto_perf_segment_t *seg);
 
 
 /**
+ * Get next segment, or NULL if none.
+ */
+const ucp_proto_perf_segment_t *
+ucp_proto_perf_segment_next(const ucp_proto_perf_t *perf,
+                            const ucp_proto_perf_segment_t *seg);
+
+
+void ucp_proto_perf_segment_str(const ucp_proto_perf_segment_t *seg,
+                                ucs_string_buffer_t *strb);
+
+
+/**
  * Dump the performance data structure to a string buffer.
  *
  * @param [in]  perf        Performance data structure to dump.
  * @param [out] strb        String buffer to dump the performance data to.
  */
-void ucp_proto_perf_dump(const ucp_proto_perf_t *perf,
-                         ucs_string_buffer_t *strb);
+void ucp_proto_perf_str(const ucp_proto_perf_t *perf,
+                        ucs_string_buffer_t *strb);
+
+
+const ucp_proto_flat_perf_range_t *
+ucp_proto_flat_perf_find_lb(const ucp_proto_flat_perf_t *flat_perf, size_t lb);
+
 
 #endif
