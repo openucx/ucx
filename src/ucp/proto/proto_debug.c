@@ -33,7 +33,7 @@ struct ucp_proto_perf_node {
     ucp_proto_perf_node_type_t                    type;
 
     /* Name of the range */
-    const char                                    *name;
+    char                                          name[UCP_PROTO_DESC_STR_MAX];
 
     /* Description of the range */
     char                                          desc[UCP_PROTO_DESC_STR_MAX];
@@ -512,9 +512,11 @@ ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type, const char *name,
     }
 
     perf_node->type     = type;
-    perf_node->name     = name;
     perf_node->refcount = 1;
     ucs_array_init_dynamic(&perf_node->children);
+
+    ucs_assert(name != NULL);
+    ucs_strncpy_safe(perf_node->name, name, sizeof(perf_node->name));
     ucs_vsnprintf_safe(perf_node->desc, sizeof(perf_node->desc), desc_fmt, ap);
 
     return perf_node;
@@ -899,7 +901,8 @@ ucp_proto_perf_graph_dump_recurs(ucp_proto_perf_node_t *perf_node,
     /* Description */
     if (!ucs_string_is_empty(perf_node->desc)) {
         ucs_string_buffer_appendf(
-                strb, "<font face=\"calibri\" point-size=\"11\">%s<br/></font>",
+                strb, "<font face=\"calibri\" point-size=\"11\">%s"
+                UCP_PROTO_PERF_NODE_NEW_LINE"</font>",
                 perf_node->desc);
     }
 
