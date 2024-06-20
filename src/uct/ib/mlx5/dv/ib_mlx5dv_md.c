@@ -8,6 +8,8 @@
 #  include "config.h"
 #endif
 
+#include "umr.h"
+
 #include <uct/ib/mlx5/ib_mlx5.h>
 
 #include <ucs/arch/bitops.h>
@@ -2294,6 +2296,12 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_dbrec_mpool_cleanup;
     }
 
+    status = uct_ib_umr_init(&md->super.super, &md->umr);
+    if (status != UCS_OK) {
+        goto err_zero_cleanup;
+    }
+
+    ucs_debug("%s: opened DEVX md", ibv_get_device_name(ibv_device));
     ucs_debug("%s: opened DEVX md log_max_qp=%d",
               uct_ib_device_name(dev), log_max_qp);
 
@@ -2336,6 +2344,8 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     *p_md = &md->super;
     return UCS_OK;
 
+err_zero_cleanup:
+    uct_ib_mlx5_md_buf_free(md, md->zero_buf, &md->zero_mem);
 err_dbrec_mpool_cleanup:
     ucs_mpool_cleanup(&md->dbrec_pool, 0);
 err_lock_destroy:
@@ -2386,6 +2396,7 @@ void uct_ib_mlx5_devx_md_close(uct_md_h tl_md)
     struct ibv_context *ctx = md->super.dev.ibv_context;
 
     uct_ib_mlx5_devx_cleanup_flush_mr(md);
+    uct_ib_umr_cleanup(md->umr);
     uct_ib_mlx5_md_buf_free(md, md->zero_buf, &md->zero_mem);
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
     ucs_recursive_spinlock_destroy(&md->dbrec_lock);

@@ -351,6 +351,9 @@ KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
 #endif
 
 
+typedef struct uct_ib_mlx5_umr uct_ib_mlx5_umr_t;
+
+
 /**
  * MLX5 IB memory domain.
  */
@@ -363,6 +366,8 @@ typedef struct uct_ib_mlx5_md {
 #if HAVE_DEVX
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;
+
+    uct_ib_mlx5_umr_t        *umr;
 
     struct {
         ucs_list_link_t      list;

@@ -36,7 +36,8 @@ noinst_HEADERS += \
 	mlx5/ib_mlx5.h \
 	mlx5/ib_mlx5.inl \
 	mlx5/dv/ib_mlx5_dv.h \
-	mlx5/dv/ib_mlx5_ifc.h
+	mlx5/dv/ib_mlx5_ifc.h \
+	mlx5/dv/umr.h
 
 libuct_ib_la_SOURCES += \
 	mlx5/ib_mlx5_log.c \
@@ -45,7 +46,8 @@ libuct_ib_la_SOURCES += \
 libuct_ib_la_LDFLAGS +=  $(LIB_MLX5)
 libuct_ib_la_SOURCES += \
 	mlx5/dv/ib_mlx5_dv.c \
-	mlx5/dv/ib_mlx5dv_md.c
+	mlx5/dv/ib_mlx5dv_md.c \
+	mlx5/dv/umr.c
 endif # HAVE_MLX5_DV
 
 

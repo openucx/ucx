@@ -303,6 +303,14 @@ uct_ib_mlx5_txwq_wrap_data(uct_ib_mlx5_txwq_t *txwq, void *data)
 }
 
 
+static UCS_F_ALWAYS_INLINE size_t
+uct_ib_mlx5_txwq_diff(uct_ib_mlx5_txwq_t *txwq, void *start, void *end)
+{
+    return UCS_PTR_BYTE_DIFF(start, end) +
+          (UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend) * (start > end));
+}
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_raddr,
                             uct_rkey_t rdma_rkey)
