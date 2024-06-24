@@ -3,7 +3,7 @@
 # See file LICENSE for terms.
 #
 
-if HAVE_MLX5
+if HAVE_MLX5_DV
 
 module_LTLIBRARIES      = libuct_ib_mlx5.la
 libuct_ib_mlx5_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
@@ -16,7 +16,6 @@ libuct_ib_mlx5_la_SOURCES =
 
 noinst_HEADERS =
 
-if HAVE_MLX5_DV
 libmlx5_ver             = $(shell (rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h) | grep -v 'not owned' | head -1)
 
 libuct_ib_mlx5_la_CPPFLAGS += -DUCT_IB_LIBMLX5_VER=\"$(libmlx5_ver)\"
@@ -35,10 +34,8 @@ libuct_ib_mlx5_la_SOURCES += \
 libuct_ib_mlx5_la_SOURCES += \
 	dv/ib_mlx5_dv.c \
 	dv/ib_mlx5dv_md.c
-endif # HAVE_MLX5_DV
 
 if HAVE_TL_RC
-if HAVE_MLX5_DV
 noinst_HEADERS += \
 	accel/rc_mlx5.h \
 	accel/rc_mlx5.inl \
@@ -48,7 +45,6 @@ libuct_ib_mlx5_la_SOURCES += \
 	accel/rc_mlx5_ep.c \
 	accel/rc_mlx5_iface.c \
 	accel/rc_mlx5_common.c
-endif # HAVE_MLX5_DV
 
 if HAVE_DEVX
 libuct_ib_mlx5_la_SOURCES += \
@@ -94,4 +90,4 @@ PKG_CONFIG_NAME=ib-mlx5
 include $(top_srcdir)/config/module.am
 include $(top_srcdir)/config/module-pkg-config.am
 
-endif # HAVE_MLX5
+endif # HAVE_MLX5_DV
