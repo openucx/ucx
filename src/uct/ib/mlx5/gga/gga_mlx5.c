@@ -10,7 +10,7 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/ib/base/ib_md.h>
-#include <uct/ib/mlx5/accel/rc_mlx5.h>
+#include <uct/ib/mlx5/rc/rc_mlx5.h>
 
 
 typedef struct {

@@ -45,7 +45,7 @@
 #  include <uct/ib/rc/base/rc_ep.h>
 #  include <uct/ib/rc/verbs/rc_verbs.h>
 #  ifdef HAVE_MLX5_DV
-#    include <uct/ib/mlx5/accel/rc_mlx5.h>
+#    include <uct/ib/mlx5/rc/rc_mlx5.h>
 #  endif
 #endif
 
@@ -58,7 +58,7 @@
 #  include <uct/ib/ud/base/ud_def.h>
 #  include <uct/ib/ud/verbs/ud_verbs.h>
 #  ifdef HAVE_MLX5_HW_UD
-#    include <uct/ib/mlx5/accel/ud_mlx5.h>
+#    include <uct/ib/mlx5/ud/ud_mlx5.h>
 #  endif
 #endif
 

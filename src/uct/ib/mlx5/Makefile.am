@@ -37,19 +37,19 @@ libuct_ib_mlx5_la_SOURCES += \
 
 if HAVE_TL_RC
 noinst_HEADERS += \
-	accel/rc_mlx5.h \
-	accel/rc_mlx5.inl \
-	accel/rc_mlx5_common.h
+	rc/rc_mlx5.h \
+	rc/rc_mlx5.inl \
+	rc/rc_mlx5_common.h
 
 libuct_ib_mlx5_la_SOURCES += \
-	accel/rc_mlx5_ep.c \
-	accel/rc_mlx5_iface.c \
-	accel/rc_mlx5_common.c
+	rc/rc_mlx5_ep.c \
+	rc/rc_mlx5_iface.c \
+	rc/rc_mlx5_common.c
 
 if HAVE_DEVX
 libuct_ib_mlx5_la_SOURCES += \
-	accel/rc_mlx5_devx.c \
-	accel/gga_mlx5.c
+	rc/rc_mlx5_devx.c \
+	gga/gga_mlx5.c
 
 endif # HAVE_DEVX
 
@@ -75,12 +75,12 @@ endif # HAVE_TL_DC
 if HAVE_TL_UD
 if HAVE_MLX5_HW_UD
 noinst_HEADERS += \
-	accel/ud_mlx5_common.h \
-	accel/ud_mlx5.h
+	ud/ud_mlx5_common.h \
+	ud/ud_mlx5.h
 
 libuct_ib_mlx5_la_SOURCES += \
-	accel/ud_mlx5_common.c \
-	accel/ud_mlx5.c
+	ud/ud_mlx5_common.c \
+	ud/ud_mlx5.c
 endif # HAVE_MLX5_HW_UD
 
 endif # HAVE_TL_UD
