@@ -207,20 +207,29 @@ ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id, char *path,
                               size_t max)
 {
     const size_t prefix_length = strlen(UCS_TOPO_SYSFS_PCI_PREFIX);
-    char link_path[PATH_MAX];
+    char *link_path = ucs_malloc(PATH_MAX, "link_path");
+    ucs_status_t status = UCS_OK;
+
+    if (link_path == NULL) {
+        ucs_error("Failed to allocate memory for link path");
+        return UCS_ERR_NO_MEMORY;
+    }
 
     if (max < PATH_MAX) {
-        return UCS_ERR_BUFFER_TOO_SMALL;
+        status = UCS_ERR_BUFFER_TOO_SMALL;
+        goto out_free_buffer;
     }
 
     ucs_strncpy_safe(link_path, UCS_TOPO_SYSFS_PCI_PREFIX, sizeof(link_path));
     ucs_topo_bus_id_str(bus_id, 0, link_path + prefix_length,
                         PATH_MAX - prefix_length);
     if (realpath(link_path, path) == NULL) {
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
     }
 
-    return UCS_OK;
+out_free_buffer:
+    ucs_free(link_path);
+    return status;
 }
 
 static int
