@@ -69,12 +69,12 @@ protected:
 
 class base_event : public base_async {
 public:
-    base_event(ucs_async_mode_t mode) : base_async(mode) {
+    base_event(ucs_async_mode_t mode) : base_async(mode), m_event_valid(0) {
         create_event();
     }
 
     virtual ~base_event() {
-        destory_event();
+        destroy_event();
     }
 
     void set_handler(ucs_async_context_t *async) {
@@ -110,7 +110,7 @@ public:
         EXPECT_EQ(0, ucs_atomic_cswap32(&m_event_valid, 0, 1));
     }
 
-    void destory_event() {
+    void destroy_event() {
         EXPECT_EQ(1, ucs_atomic_cswap32(&m_event_valid, 1, 0));
         ucs_async_pipe_destroy(&m_event_pipe);
     }
@@ -126,7 +126,7 @@ private:
     }
 
     ucs_async_pipe_t m_event_pipe;
-    volatile uint32_t m_event_valid = 0;
+    volatile uint32_t m_event_valid;
 };
 
 class base_timer : public base_async {
@@ -377,25 +377,25 @@ protected:
 
     int repeat_create_destroy_run(unsigned index) {
         static_assert(std::is_base_of<local_event, LOCAL>::value, "");
-        LOCAL *le;
-        m_ev[index] = le = new LOCAL(GetParam());
+        auto le = std::unique_ptr<LOCAL>(new LOCAL(GetParam()));
+        m_ev[index] = le.get();
 
-        check_is_blocked(le, false);
+        check_is_blocked(le.get(), false);
 
         barrier();
 
         while (!m_stop[index]) {
             le->block();
-            check_is_blocked(le, true);
+            check_is_blocked(le.get(), true);
             unsigned before = le->count();
-            suspend_and_poll(le, 10);
+            suspend_and_poll(le.get(), 10);
             unsigned after = le->count();
             le->unblock();
             EXPECT_EQ(before, after); /* Should not handle while blocked */
 
             auto wait = ucs::rand() % 20;
             le->unset_event();
-            le->destory_event();
+            le->destroy_event();
             suspend(wait);
             le->create_event(); /* same memory could be used by other thread */
             le->set_event();
@@ -403,12 +403,10 @@ protected:
             le->check_miss();
         }
 
-        check_is_blocked(le, false);
+        check_is_blocked(le.get(), false);
 
-        int result = le->count();
-        delete le;
         m_ev[index] = NULL;
-        return result;
+        return le->count();
     }
 
     void spawn(ThreadFunc f = thread_func) {
@@ -889,7 +887,7 @@ UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread,
     EXPECT_GE(min_count, exp_min_count);
 }
 
-UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread_create_destory,
+UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread_create_destroy,
                      !(HAVE_DECL_F_SETOWN_EX)) {
     spawn(repeat_create_destroy_func);
     for (int j = 0; j < 4; ++j) {
