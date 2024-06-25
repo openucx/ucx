@@ -27,7 +27,6 @@ libuct_ib_la_SOURCES = \
 	base/ib_log.c \
 	base/ib_md.c
 
-
 if HAVE_TL_RC
 noinst_HEADERS += \
 	rc/base/rc_def.h \
