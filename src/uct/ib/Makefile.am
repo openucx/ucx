@@ -44,7 +44,6 @@ libuct_ib_la_SOURCES += \
 
 endif # HAVE_TL_RC
 
-
 if HAVE_TL_UD
 noinst_HEADERS += \
 	ud/base/ud_iface_common.h \
