@@ -21,7 +21,7 @@ AC_MSG_NOTICE([Compiling $str])
 
 
 #
-# MLX5 DV Support, Provides RC/UD accelerated, DC and DV transports
+# MLX5 DV support, provides accelerated RC/UD/DC transports
 #
 AC_ARG_WITH([mlx5-dv],
             [AS_HELP_STRING([--with-mlx5-dv], [Compile with mlx5 Direct Verbs

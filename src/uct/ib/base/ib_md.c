@@ -37,6 +37,8 @@ static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                sizeof(ucs_config_bw_spec_t),
                                UCS_CONFIG_TYPE_BW_SPEC);
 
+int uct_ib_mlx5_loaded = 0; /* Populated by IB MLX5 submodule */
+
 static const char *uct_ib_devx_objs[] = {
     [UCT_IB_DEVX_OBJ_RCQP]  = "rcqp",
     [UCT_IB_DEVX_OBJ_RCSRQ] = "rcsrq",
@@ -1497,8 +1499,6 @@ uct_component_t uct_ib_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-
-int uct_ib_mlx5_loaded = 0; /* Populated by IB MLX5 submodule */
 
 void UCS_F_CTOR uct_ib_init()
 {

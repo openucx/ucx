@@ -5,35 +5,29 @@
 
 if HAVE_MLX5_DV
 
-module_LTLIBRARIES      = libuct_ib_mlx5.la
-libuct_ib_mlx5_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
+module_LTLIBRARIES         = libuct_ib_mlx5.la
+libuct_ib_mlx5_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) \
+	-DUCT_IB_LIBMLX5_VER=\"$(libmlx5_ver)\"
+
 libuct_ib_mlx5_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_ib_mlx5_la_LDFLAGS  = $(LIB_MLX5) $(IBVERBS_LDFLAGS) -version-info $(SOVERSION)
 libuct_ib_mlx5_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                              $(top_builddir)/src/uct/libuct.la \
                              $(top_builddir)/src/uct/ib/libuct_ib.la
-libuct_ib_mlx5_la_SOURCES =
+libmlx5_ver                = $(shell (rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h) | grep -v 'not owned' | head -1)
 
-noinst_HEADERS =
+libuct_ib_mlx5_la_SOURCES = \
+	ib_mlx5_log.c \
+	ib_mlx5.c \
+	dv/ib_mlx5_dv.c \
+	dv/ib_mlx5dv_md.c
 
-libmlx5_ver             = $(shell (rpm -qf $(IBVERBS_DIR)/include/infiniband/mlx5_hw.h &>/dev/null && rpm -qf /usr/include/infiniband/mlx5_hw.h) | grep -v 'not owned' | head -1)
-
-libuct_ib_mlx5_la_CPPFLAGS += -DUCT_IB_LIBMLX5_VER=\"$(libmlx5_ver)\"
-
-noinst_HEADERS += \
+noinst_HEADERS = \
 	ib_mlx5_log.h \
 	ib_mlx5.h \
 	ib_mlx5.inl \
 	dv/ib_mlx5_dv.h \
 	dv/ib_mlx5_ifc.h
-
-libuct_ib_mlx5_la_SOURCES += \
-	ib_mlx5_log.c \
-	ib_mlx5.c
-
-libuct_ib_mlx5_la_SOURCES += \
-	dv/ib_mlx5_dv.c \
-	dv/ib_mlx5dv_md.c
 
 if HAVE_TL_RC
 noinst_HEADERS += \
