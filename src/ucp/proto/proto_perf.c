@@ -485,43 +485,34 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
     /* Factors envelope doesn't include latency since it is calculated for async
      * performance which overlaps it */
     factor_mask = UCS_MASK(UCP_PROTO_PERF_FACTOR_LAST) &
-                   ~UCP_PROTO_PERF_FACTOR_LATENCY;
+                   ~UCS_BIT(UCP_PROTO_PERF_FACTOR_LATENCY);
 
     ucs_array_init_dynamic(flat_perf);
     ucs_array_init_dynamic(&envelope);
     ucp_proto_perf_segment_foreach(seg, perf) {
+        ucs_array_set_length(&envelope, 0);
         status = ucp_proto_perf_envelope_make(seg->perf_factors, factor_mask,
                                               seg->start, seg->end, convex,
                                               &envelope);
         if (status != UCS_OK) {
             return status;
         }
-    }
 
-    /* Find range start */
-    seg = ucp_proto_perf_find_segment_lb(perf, 0);
-    if (seg == NULL) {
-        /* Empty perf */
-        return UCS_OK;
-    }
-    range_start = seg->start;
+        range_start = seg->start;
+        ucs_array_for_each(envelope_elem, &envelope) {
+            range        = ucs_array_append(flat_perf,
+                                            return UCS_ERR_NO_MEMORY);
+            range->start = range_start;
+            range->end   = envelope_elem->max_length;
+            range->value = seg->perf_factors[envelope_elem->index];
+            range->node  = ucp_proto_perf_node_new_data(perf->name,
+                                                        "flat perf");
+            ucp_proto_perf_node_add_child(range->node, seg->node);
+            ucp_proto_perf_node_add_data(range->node, convex_names[convex],
+                                         range->value);
 
-    ucs_array_for_each(envelope_elem, &envelope) {
-        while (envelope_elem->max_length > seg->end) {
-            /* Find segment for current envelope*/
-            seg = ucs_list_next(&seg->list, ucp_proto_perf_segment_t, list);
+            range_start  = envelope_elem->max_length + 1;
         }
-
-        range        = ucs_array_append(flat_perf, return UCS_ERR_NO_MEMORY);
-        range->start = range_start;
-        range->end   = envelope_elem->max_length;
-        range->value = seg->perf_factors[envelope_elem->index];
-        range->node  = ucp_proto_perf_node_new_data(perf->name, "flat perf");
-        ucp_proto_perf_node_add_child(range->node, seg->node);
-        ucp_proto_perf_node_add_data(range->node, convex_names[convex],
-                                     range->value);
-
-        range_start  = envelope_elem->max_length + 1;
     }
 
     return UCS_OK;
@@ -643,6 +634,23 @@ void ucp_proto_perf_str(const ucp_proto_perf_t *perf, ucs_string_buffer_t *strb)
                                sizeof(range_str));
         ucs_string_buffer_appendf(strb, "%s {", range_str);
         ucp_proto_perf_segment_str(seg, strb);
+        ucs_string_buffer_appendf(strb, "} ");
+    }
+    ucs_string_buffer_rtrim(strb, NULL);
+}
+
+void ucp_proto_flat_perf_str(const ucp_proto_flat_perf_t *flat_perf,
+                             ucs_string_buffer_t *strb)
+{
+    ucp_proto_flat_perf_range_t *range;
+    char range_str[64];
+
+    ucs_array_for_each(range, flat_perf) {
+        ucs_memunits_range_str(range->start, range->end, range_str,
+                               sizeof(range_str));
+        ucs_string_buffer_appendf(strb, "%s {", range_str);
+        ucs_string_buffer_appendf(strb, UCP_PROTO_PERF_FUNC_FMT,
+                                  UCP_PROTO_PERF_FUNC_ARG(&range->value));
         ucs_string_buffer_appendf(strb, "} ");
     }
     ucs_string_buffer_rtrim(strb, NULL);

@@ -49,6 +49,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_proto_flat_perf_t, unsigned,
 /* Array of all performance factors */
 typedef ucs_linear_func_t ucp_proto_perf_factors_t[UCP_PROTO_PERF_FACTOR_LAST];
 
+
 #define UCP_PROTO_PERF_FACTORS_INITIALIZER  {}
 
 
@@ -168,8 +169,7 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
  * factors for each segment. Used for blocking scheme performance estimations.
  *
  * @param [in]  perf        Performance data structure to convert.
- * @param [in]  convex      If 1 calculate convex, if 0 concave.
- * @param [out] flat_perf   Filled with convex or concave envelope.
+ * @param [out] flat_perf   Filled with sum of all factors.
  */
 ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
                                  ucp_proto_flat_perf_t *flat_perf);
@@ -252,6 +252,10 @@ void ucp_proto_perf_segment_str(const ucp_proto_perf_segment_t *seg,
                                 ucs_string_buffer_t *strb);
 
 
+void ucp_proto_flat_perf_str(const ucp_proto_flat_perf_t *flat_perf,
+                             ucs_string_buffer_t *strb);
+
+
 /**
  * Dump the performance data structure to a string buffer.
  *
@@ -262,6 +266,16 @@ void ucp_proto_perf_str(const ucp_proto_perf_t *perf,
                         ucs_string_buffer_t *strb);
 
 
+/**
+ * Find the first range that contains a point greater than or equal to a given
+ * lower bound value.
+ *
+ * @param [in] flat_perf     Flat performance data structure.
+ * @param [in] lb            Lower bound of the segment to find.
+ *
+ * @return Pointer to the first range that contains a point greater than or
+ *         equal to @a lb, or NULL if all ranges end before @a lb.
+ */
 const ucp_proto_flat_perf_range_t *
 ucp_proto_flat_perf_find_lb(const ucp_proto_flat_perf_t *flat_perf, size_t lb);
 

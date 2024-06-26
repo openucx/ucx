@@ -149,9 +149,8 @@ ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
          * trend and any other trend. This would be the point where that
          * other trend becomes the best one.
          */
-        midpoint    = range_end;
-        funcs_mask &= ~UCS_BIT(best.index);
-        ucs_for_each_bit(curr.index, funcs_mask) {
+        midpoint = range_end;
+        ucs_for_each_bit(curr.index, funcs_mask & ~UCS_BIT(best.index)) {
             status = ucs_linear_func_intersect(funcs[curr.index],
                                                funcs[best.index],
                                                &x_intersect);

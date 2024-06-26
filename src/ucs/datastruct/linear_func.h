@@ -207,8 +207,18 @@ static inline int
 ucs_linear_func_is_equal(ucs_linear_func_t func1, ucs_linear_func_t func2,
                          double epsilon)
 {
-    return (fabs(func1.m - func2.m) <= epsilon) &&
-           (fabs(func1.c - func2.c) <= epsilon);
+    /* Equality comparison is required since fabs() from substration of two
+       zeroes can return 1 on some platforms */
+    if ((func1.m != func2.m) && (fabs(func1.m - func2.m) > epsilon)) {
+        return 0;
+    }
+    if ((func1.c != func2.c) && (fabs(func1.c - func2.c) > epsilon)) {
+        return 0;
+    }
+    return 1;
+
+    // return (fabs(func1.m - func2.m) <= epsilon) &&
+    //        (fabs(func1.c - func2.c) <= epsilon);
 }
 
 
