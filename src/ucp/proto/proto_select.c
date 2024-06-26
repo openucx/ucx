@@ -113,13 +113,6 @@ static ucs_status_t ucp_proto_thresholds_next_range(
     }
     ucs_assert(msg_length <= max_length);
 
-    /*
-     * TODO
-     * disabled ==> prio -1
-     * auto     ==> prio 0
-     * config   ==> prio cfg_priority
-     */
-
     if (ucs_dynamic_bitmap_is_zero(proto_mask)) {
         status = UCS_ERR_UNSUPPORTED;
         goto out;
@@ -362,11 +355,12 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
         }
 
         ucs_assert_always(!ucs_array_is_empty(&perf_list));
+        ucs_assert_always(ucs_array_length(&perf_list) < 64);
 
-        status = ucp_proto_perf_envelope_make(ucs_array_begin(&perf_list),
-                                              ucs_array_length(&perf_list),
-                                              msg_length, max_length, 1,
-                                              &envelope);
+        status = ucp_proto_perf_envelope_make(
+                ucs_array_begin(&perf_list),
+                UCS_MASK(ucs_array_length(&perf_list)),
+                msg_length, max_length, 1, &envelope);
         if (status != UCS_OK) {
             goto err_cleanup_perf_list;
         }

@@ -28,6 +28,8 @@ typedef enum {
     UCP_PROTO_PERF_FACTOR_REMOTE_CPU,
     UCP_PROTO_PERF_FACTOR_LOCAL_TL,
     UCP_PROTO_PERF_FACTOR_REMOTE_TL,
+    UCP_PROTO_PERF_FACTOR_LOCAL_MEMTYPE_COPY,
+    UCP_PROTO_PERF_FACTOR_REMOTE_MEMTYPE_COPY,
     UCP_PROTO_PERF_FACTOR_LATENCY,
     UCP_PROTO_PERF_FACTOR_LAST
 } ucp_proto_perf_factor_id_t;
@@ -99,8 +101,6 @@ int ucp_proto_perf_is_empty(const ucp_proto_perf_t *perf);
  * @param [in] perf_factors    Array of performance functions to add.
  * @param [in] perf_node       Performance node that represents the added function.
  *                             Can be NULL.
- *
- *  TODO add option to create custom perf node (a child of the range) when adding ???
  *
  * @note This function may adjust the reference count of @a perf_node as needed.
  */

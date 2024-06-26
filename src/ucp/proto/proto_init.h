@@ -41,7 +41,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_envelope_t, unsigned,
  */
 ucs_status_t
 ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
-                             unsigned num_funcs, size_t range_start,
+                             uint64_t funcs_mask, size_t range_start,
                              size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list);
 

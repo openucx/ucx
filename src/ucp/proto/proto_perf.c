@@ -54,12 +54,14 @@ struct ucp_proto_perf {
     ucs_list_for_each((_seg), &(_perf)->segments, list)
 
 static const char *ucp_proto_perf_factor_names[] = {
-    [UCP_PROTO_PERF_FACTOR_LOCAL_CPU]  = "cpu",
-    [UCP_PROTO_PERF_FACTOR_REMOTE_CPU] = "cpu-remote",
-    [UCP_PROTO_PERF_FACTOR_LOCAL_TL]   = "tl",
-    [UCP_PROTO_PERF_FACTOR_REMOTE_TL]  = "tl-remote",
-    [UCP_PROTO_PERF_FACTOR_LATENCY]    = "lat",
-    [UCP_PROTO_PERF_FACTOR_LAST]       = NULL
+    [UCP_PROTO_PERF_FACTOR_LOCAL_CPU]            = "cpu",
+    [UCP_PROTO_PERF_FACTOR_REMOTE_CPU]           = "cpu-remote",
+    [UCP_PROTO_PERF_FACTOR_LOCAL_TL]             = "tl",
+    [UCP_PROTO_PERF_FACTOR_REMOTE_TL]            = "tl-remote",
+    [UCP_PROTO_PERF_FACTOR_LOCAL_MEMTYPE_COPY]   = "memtype-copy",
+    [UCP_PROTO_PERF_FACTOR_REMOTE_MEMTYPE_COPY]  = "memtype-copy-remote",
+    [UCP_PROTO_PERF_FACTOR_LATENCY]              = "lat",
+    [UCP_PROTO_PERF_FACTOR_LAST]                 = NULL
 };
 
 #if ENABLE_ASSERT
@@ -477,14 +479,19 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
     ucp_proto_perf_envelope_t envelope;
     ucs_status_t status;
     size_t range_start;
+    uint64_t factor_mask;
 
     ucp_proto_perf_check(perf);
+
+    /* Factors envelope doesn't include latency since it is calculated for async
+     * performance which overlaps it */
+    factor_mask = UCS_MASK(UCP_PROTO_PERF_FACTOR_LAST) &
+                   ~UCP_PROTO_PERF_FACTOR_LATENCY;
 
     ucs_array_init_dynamic(flat_perf);
     ucs_array_init_dynamic(&envelope);
     ucp_proto_perf_segment_foreach(seg, perf) {
-        status = ucp_proto_perf_envelope_make(seg->perf_factors,
-                                              UCP_PROTO_PERF_FACTOR_LAST,
+        status = ucp_proto_perf_envelope_make(seg->perf_factors, factor_mask,
                                               seg->start, seg->end, convex,
                                               &envelope);
         if (status != UCS_OK) {

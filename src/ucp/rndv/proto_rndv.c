@@ -221,7 +221,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_perf(
         return status;
     }
 
-    // TODO consider control message size
+    /* TODO: consider control message size */
     perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] = ucs_linear_func_add(
             ucs_linear_func_make(perf_attr.send_pre_overhead +
                                          perf_attr.send_post_overhead,
@@ -334,7 +334,7 @@ static void ucp_proto_rndv_ctrl_variant_probe(
               remote_proto->cfg_thresh, remote_proto->cfg_priority);
 
     /* Set send_overheads to the time to send and receive RTS message */
-    overhead = ucs_linear_func_make(params->super.overhead, 0.0);
+    overhead = ucs_linear_func_make(params->super.overhead * 2, 0.0);
     status   = ucp_proto_rndv_ctrl_perf(&params->super, rpriv->lane,
                                         params->ctrl_msg_name, overhead,
                                         &ctrl_perf);
@@ -576,7 +576,6 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     return ucp_proto_request_zcopy_id_reset(req);
 }
 
-// TODO remove this wrapper? (no: more code duplication due to lane assignment + ctrl_perf creation)
 ucs_status_t
 ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
                         const char *name, ucs_linear_func_t overhead,

@@ -27,12 +27,11 @@
 
 ucs_status_t
 ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
-                             unsigned num_funcs, size_t range_start,
+                             uint64_t funcs_mask, size_t range_start,
                              size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list)
 {
-    uint64_t mask = UCS_MASK(num_funcs);
-    size_t start  = range_start;
+    size_t start = range_start;
     char num_str[64];
     struct {
         unsigned index;
@@ -43,14 +42,13 @@ ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
     size_t midpoint;
     double x_sample, x_intersect;
 
-    ucs_assert_always(num_funcs < 64);
     do {
         ucs_assert(mask != 0);
 
         /* Find best trend at the 'start' point */
         best.index  = UINT_MAX;
         best.result = DBL_MAX;
-        ucs_for_each_bit(curr.index, mask) {
+        ucs_for_each_bit(curr.index, funcs_mask) {
             x_sample    = start + UCP_PROTO_MSGLEN_EPSILON;
             curr.result = ucs_linear_func_apply(funcs[curr.index],
                                                 x_sample);
@@ -72,9 +70,9 @@ ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
          * trend and any other trend. This would be the point where that
          * other trend becomes the best one.
          */
-        midpoint = range_end;
-        mask    &= ~UCS_BIT(best.index);
-        ucs_for_each_bit(curr.index, mask) {
+        midpoint    = range_end;
+        funcs_mask &= ~UCS_BIT(best.index);
+        ucs_for_each_bit(curr.index, funcs_mask) {
             status = ucs_linear_func_intersect(funcs[curr.index],
                                                funcs[best.index],
                                                &x_intersect);
@@ -186,7 +184,6 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
 {
     ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     const double latency       = tl_perf->latency + tl_perf->sys_latency;
-    // Q: Should post overhead be exlcluded in case of MULTI???
     const double send_overhead = tl_perf->send_pre_overhead +
                                  tl_perf->send_post_overhead;
     uint32_t op_attr_mask;
@@ -306,7 +303,6 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     ucs_status_t status;
 
     if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
-        // TODO "memcpy" perf node with "bandwidth" data ???
         perf_factors[cpu_factor_id] =
                 ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
         ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
@@ -365,7 +361,6 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     /* all allowed copy operations are one-sided */
     ucs_assert(perf_attr.recv_overhead < UCP_PROTO_PERF_EPSILON);
 
-    // Q: Should this latency overhead be applied only for local or remote CPU???
     perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c =
             ucp_tl_iface_latency(context, &perf_attr.latency);
     perf_factors[cpu_factor_id].c =
