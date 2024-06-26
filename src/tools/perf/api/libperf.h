@@ -236,6 +236,17 @@ typedef struct ucx_perf_rte {
 } ucx_perf_rte_t;
 
 
+typedef struct {
+    uint64_t addr;
+    uint64_t length;
+} ucp_perf_daemon_req_t;
+
+
+typedef struct {
+    uint8_t keep_running;
+} ucp_perf_daemon_fin_req_t;
+
+
 /**
  * Common report function
  */
@@ -299,6 +310,8 @@ typedef struct ucx_perf_params {
                                                 (not included in message size) */
         int                     is_daemon_mode;  /* Whether DPU offloading daemon
                                                     is configured */
+        int                     is_keep_running; /* Whether to keep daemon running
+                                                    at the end of the test run */
         struct sockaddr_storage dmn_local_addr;  /* IP and port of local daemon,
                                                     used to offload communication */
         struct sockaddr_storage dmn_remote_addr; /* IP and port of remote daemon,
@@ -306,12 +319,6 @@ typedef struct ucx_perf_params {
     } ucp;
 
 } ucx_perf_params_t;
-
-
-typedef struct {
-    uint64_t addr;
-    uint64_t length;
-} ucp_perf_daemon_req_t;
 
 
 /* Allocators for each memory type */

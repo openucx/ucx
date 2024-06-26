@@ -927,20 +927,25 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
 }
 
 static ucs_status_ptr_t
-ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index, int daemon_mode)
+ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index,
+                         const ucx_perf_params_t *params)
 {
     ucp_request_param_t ep_close_params = {0};
     ucp_request_param_t dmn_fin_param   = {0};
     ucs_status_ptr_t req;
+    ucp_perf_daemon_fin_req_t dmn_fin_req;
 
     if (NULL == ep) {
         return NULL;
     }
 
-    if (daemon_mode) {
+    if (params->ucp.is_daemon_mode) {
         dmn_fin_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
         dmn_fin_param.flags        = UCP_AM_SEND_FLAG_EAGER;
-        req = ucp_am_send_nbx(ep, UCP_PERF_DAEMON_AM_ID_FIN, NULL, 0, NULL, 0,
+        dmn_fin_req.keep_running   = !!params->ucp.is_keep_running;
+
+        req = ucp_am_send_nbx(ep, UCP_PERF_DAEMON_AM_ID_FIN, NULL, 0,
+                              &dmn_fin_req, sizeof(dmn_fin_req),
                               &dmn_fin_param);
         if (UCS_PTR_IS_PTR(req)) {
             ucp_request_free(req);
@@ -1001,7 +1006,7 @@ static void ucp_perf_test_destroy_self_eps(ucx_perf_context_t *perf)
         ucp_perf_test_rkey_destroy(perf->ucp.tctx[i].perf.ucp.self_recv_rkey);
 
         req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.self_ep, i,
-                                       perf->params.ucp.is_daemon_mode);
+                                       &perf->params);
         if (req != NULL) {
             reqs[num_in_prog++] = req;
         }
@@ -1022,7 +1027,7 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t *perf)
         ucp_perf_test_rkey_destroy(perf->ucp.tctx[i].perf.ucp.rkey);
 
         req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.ep, i,
-                                       perf->params.ucp.is_daemon_mode);
+                                       &perf->params);
         if (req != NULL) {
             reqs[num_in_prog++] = req;
         }
@@ -1128,6 +1133,20 @@ static ucs_status_t ucp_perf_test_create_self_rkey(ucx_perf_context_t *perf,
     return status;
 }
 
+static void ucp_perf_test_init_endpoints(ucx_perf_context_t *perf)
+{
+    unsigned i;
+
+    /* Initialize all endpoints and rkeys to NULL to handle error flow */
+    for (i = 0; i < perf->params.thread_count; ++i) {
+        perf->ucp.tctx[i].perf.ucp.ep             = NULL;
+        perf->ucp.tctx[i].perf.ucp.rkey           = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_ep        = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_send_rkey = NULL;
+        perf->ucp.tctx[i].perf.ucp.self_recv_rkey = NULL;
+    }
+}
+
 static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
                                                       unsigned peer_index)
 {
@@ -1151,14 +1170,7 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
         goto err;
     }
 
-    /* Initialize all endpoints and rkeys to NULL to handle error flow */
-    for (i = 0; i < thread_count; i++) {
-        perf->ucp.tctx[i].perf.ucp.ep             = NULL;
-        perf->ucp.tctx[i].perf.ucp.rkey           = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_ep        = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_send_rkey = NULL;
-        perf->ucp.tctx[i].perf.ucp.self_recv_rkey = NULL;
-    }
+    ucp_perf_test_init_endpoints(perf);
 
     /* Receive the data from the remote peer, extract the address from it
      * (along with additional wireup info) and create an endpoint to the peer */
@@ -1423,6 +1435,7 @@ static ucs_status_t ucp_perf_setup_daemon_endpoints(ucx_perf_context_t *perf)
 
     ucs_assert_always(is_local_sender != is_remote_sender);
     ucs_assert_always(perf->params.thread_count == 1);
+    ucp_perf_test_init_endpoints(perf);
 
     if (is_local_sender) {
         local_dmn_addr  = &perf->params.ucp.dmn_local_addr;
