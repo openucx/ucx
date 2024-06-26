@@ -28,7 +28,7 @@
     ((_perf_func)->m != 0.0) ? (1.0 / ((_perf_func)->m * UCS_MBYTE)) : INFINITY
 
 /* Format string to display a protocol performance function */
-#define UCP_PROTO_PERF_FUNC_FMT(_perf_var) " " #_perf_var ": " \
+#define UCP_PROTO_PERF_FUNC_FMT \
     UCP_PROTO_PERF_FUNC_TIME_FMT " ns/KB, " \
     UCP_PROTO_PERF_FUNC_BW_FMT " MB/s"
 #define UCP_PROTO_PERF_FUNC_ARG(_perf_func) \
@@ -38,9 +38,9 @@
 /* Format string to display a protocol performance estimations
  * of different types. See ucp_proto_perf_type_t */
 #define UCP_PROTO_PERF_FUNC_TYPES_FMT \
-    UCP_PROTO_PERF_FUNC_FMT(single) \
-    UCP_PROTO_PERF_FUNC_FMT(multi) \
-    UCP_PROTO_PERF_FUNC_FMT(cpu)
+    "single: " UCP_PROTO_PERF_FUNC_FMT \
+    "multi: " UCP_PROTO_PERF_FUNC_FMT \
+    "cpu: " UCP_PROTO_PERF_FUNC_FMT
 #define UCP_PROTO_PERF_FUNC_TYPES_ARG(_perf_func) \
     UCP_PROTO_PERF_FUNC_ARG((&(_perf_func)[UCP_PROTO_PERF_TYPE_SINGLE])), \
     UCP_PROTO_PERF_FUNC_ARG((&(_perf_func)[UCP_PROTO_PERF_TYPE_MULTI])), \
@@ -95,6 +95,10 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
                                const ucp_proto_config_t *proto_config,
                                size_t msg_length, ucs_string_buffer_t *strb);
 
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
+                        unsigned selected_child, const char *name,
+                        const char *desc_fmt, va_list ap);
 
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new_data(const char *name, const char *desc_fmt, ...);
