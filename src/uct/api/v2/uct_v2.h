@@ -805,7 +805,10 @@ typedef enum uct_md_attr_field {
     UCT_MD_ATTR_FIELD_GLOBAL_ID                 = UCS_BIT(15),
 
     /** Indicate registration alignment. */
-    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16)
+    UCT_MD_ATTR_FIELD_REG_ALIGNMENT             = UCS_BIT(16),
+
+    /** Indicate memory types that the MD can register using global VA MR. */
+    UCT_MD_ATTR_FIELD_GVA_MEM_TYPES             = UCS_BIT(17)
 } uct_md_attr_field_t;
 
 
@@ -856,6 +859,11 @@ typedef struct {
      * Bitmap of memory types that can be cached for this memory domain.
      */
     uint64_t          cache_mem_types;
+
+    /**
+     * Bitmap of memory types that can create global memory handle.
+     */
+    uint64_t          gva_mem_types;
 
     /**
      * Bitmap of memory types that Memory Domain can detect if address belongs

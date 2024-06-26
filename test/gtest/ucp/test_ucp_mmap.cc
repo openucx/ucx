@@ -18,6 +18,7 @@ extern "C" {
 }
 
 #include <cmath>
+#include <list>
 
 class test_ucp_mmap : public ucp_test {
 public:
@@ -942,6 +943,52 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         ASSERT_UCS_OK(status);
     }
 }
+
+UCS_TEST_P(test_ucp_mmap, gva, "GVA_ENABLE=y", "IB_MLX5_DEVX_OBJECTS?=")
+{
+    std::list<void*> bufs;
+    ucp_mem_h first     = NULL;
+    ucp_md_map_t md_map = 0;
+
+    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+        size_t size  = (i + 1) * ((i % 2) ? 1000 : 1);
+        void *buffer = ucs_malloc(size, "gva");
+        bufs.push_back(buffer);
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = buffer;
+        params.length     = size;
+
+        ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &params, &memh));
+
+        if (i == 0) {
+            first  = memh;
+            md_map = memh->md_map & sender().ucph()->gva_md_map[memh->mem_type];
+            if (md_map == 0) {
+                UCS_TEST_MESSAGE << "no GVA";
+                break;
+            }
+        } else {
+            ucp_md_index_t md_index;
+
+            ucs_for_each_bit(md_index, md_map) {
+                EXPECT_EQ(memh->uct[md_index], first->uct[md_index]);
+            }
+
+            ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), memh));
+        }
+    }
+
+    ASSERT_UCS_OK(ucp_mem_unmap(sender().ucph(), first));
+    for (auto *buffer : bufs) {
+        ucs_free(buffer);
+    }
+}
+
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap)
 

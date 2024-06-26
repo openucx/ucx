@@ -35,7 +35,8 @@ enum {
     /*
      * Memory handle was imported and points to some peer's memory buffer.
      */
-    UCP_MEMH_FLAG_IMPORTED  = UCS_BIT(0)
+    UCP_MEMH_FLAG_IMPORTED = UCS_BIT(0),
+    UCP_MEMH_FLAG_MLOCKED  = UCS_BIT(1),
 };
 
 

@@ -252,6 +252,7 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->flags                     = md->cap_flags;
     md_attr->access_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->reg_mem_types             = md->reg_mem_types;
+    md_attr->gva_mem_types             = md->gva_mem_types;
     md_attr->reg_nonblock_mem_types    = md->reg_nonblock_mem_types;
     md_attr->cache_mem_types           = UCS_MASK(UCS_MEMORY_TYPE_LAST);
     md_attr->rkey_packed_size          = UCT_IB_MD_PACKED_RKEY_SIZE;
@@ -540,6 +541,7 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
                                  void *addr, size_t length)
 {
 #if HAVE_DECL_IBV_ADVISE_MR
+    unsigned retry = 0;
     struct ibv_sge sg_list;
     int ret;
 
@@ -553,12 +555,15 @@ ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh,
     sg_list.addr   = (uintptr_t)addr;
     sg_list.length = length;
 
-    ret = UCS_PROFILE_CALL(ibv_advise_mr, md->pd,
-                           IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
-                           IBV_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
+    do {
+        ret = UCS_PROFILE_CALL(ibv_advise_mr, md->pd,
+                               IBV_ADVISE_MR_ADVICE_PREFETCH_WRITE,
+                               IBV_ADVISE_MR_FLAG_FLUSH, &sg_list, 1);
+    } while ((ret == EAGAIN) && (retry++ < md->config.reg_retry_cnt));
+
     if (ret) {
-        ucs_error("ibv_advise_mr(addr=%p length=%zu) returned %d: %m", addr,
-                  length, ret);
+        ucs_diag("ibv_advise_mr(addr=%p length=%zu key=%x) returned %d: %m",
+                 addr, length, ib_memh->lkey, ret);
         return UCS_ERR_IO_ERROR;
     }
 #endif

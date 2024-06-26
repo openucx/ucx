@@ -763,6 +763,51 @@ uct_ib_mlx5_devx_memh_alloc(uct_ib_mlx5_md_t *md, size_t length,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ib_mlx5_devx_mem_reg_gva(uct_md_h uct_md, uct_mem_h *memh_p)
+{
+    uct_ib_mlx5_md_t *md           = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+    uct_md_mem_reg_params_t params = {};
+    uct_ib_mlx5_devx_mem_t *memh;
+    uint64_t access_flags;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_memh_alloc(md, SIZE_MAX, UCT_MD_MEM_FLAG_NONBLOCK,
+                                         sizeof(memh->mrs[0]), &memh);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    access_flags = uct_ib_memh_access_flags(&md->super, &memh->super);
+    status = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params, access_flags,
+                           NULL, &memh->mrs[UCT_IB_MR_DEFAULT].super.ib);
+    if (status != UCS_OK) {
+        goto err_reg;
+    }
+
+    if (md->super.relaxed_order) {
+        status = uct_ib_reg_mr(&md->super, NULL, SIZE_MAX, &params,
+                               access_flags & ~IBV_ACCESS_RELAXED_ORDERING,
+                               NULL,
+                               &memh->mrs[UCT_IB_MR_STRICT_ORDER].super.ib);
+        if (status != UCS_OK) {
+            goto err_dereg_default;
+        }
+    }
+
+    memh->super.lkey = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->lkey;
+    memh->super.rkey = memh->mrs[UCT_IB_MR_DEFAULT].super.ib->rkey;
+    *memh_p          = memh;
+    return UCS_OK;
+
+err_dereg_default:
+    uct_ib_dereg_mr(memh->mrs[UCT_IB_MR_DEFAULT].super.ib);
+err_reg:
+    ucs_free(memh);
+err:
+    return status;
+}
+
 ucs_status_t
 uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
                          const uct_md_mem_reg_params_t *params,
@@ -773,6 +818,10 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uct_ib_mlx5_devx_mem_t *memh;
     ucs_status_t status;
     uint32_t dummy_mkey;
+
+    if (flags & UCT_MD_MEM_GVA) {
+        return uct_ib_mlx5_devx_mem_reg_gva(uct_md, memh_p);
+    }
 
     status = uct_ib_mlx5_devx_memh_alloc(md, length, flags,
                                          sizeof(memh->mrs[0]), &memh);
@@ -1605,6 +1654,8 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     ucs_debug("%s: ODP is supported, version %d",
               uct_ib_device_name(&md->super.dev), version);
     md->super.reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md->super.gva_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+
     return;
 
 no_odp:

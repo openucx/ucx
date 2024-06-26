@@ -1170,6 +1170,8 @@ static void ucp_ep_params_check_err_handling(ucp_ep_h ep,
         return;
     }
 
+    ucs_assert(!ep->worker->context->config.ext.gva_enable);
+
     if (ucp_worker_keepalive_is_enabled(ep->worker) &&
         ucp_ep_use_indirect_id(ep)) {
         return;
@@ -1185,6 +1187,14 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     ucp_ep_h ep    = NULL;
     unsigned flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     ucs_status_t status;
+
+    if ((UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
+                         UCP_ERR_HANDLING_MODE_NONE) !=
+         UCP_ERR_HANDLING_MODE_NONE) &&
+        worker->context->config.ext.gva_enable) {
+        ucs_error("GVA and error handling not supported");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     UCS_ASYNC_BLOCK(&worker->async);
 

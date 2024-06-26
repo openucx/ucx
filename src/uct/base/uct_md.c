@@ -418,6 +418,8 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, access_mem_types,
                               UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, gva_mem_types,
+                              UCT_MD_ATTR_FIELD_GVA_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, dmabuf_mem_types,
                               UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_cost, UCT_MD_ATTR_FIELD_REG_COST);
@@ -495,6 +497,7 @@ void uct_md_base_md_query(uct_md_attr_v2_t *md_attr)
     md_attr->alloc_mem_types           = 0;
     md_attr->access_mem_types          = 0;
     md_attr->dmabuf_mem_types          = 0;
+    md_attr->gva_mem_types             = 0;
     md_attr->max_alloc                 = 0;
     md_attr->max_reg                   = ULONG_MAX;
     md_attr->reg_cost                  = UCS_LINEAR_FUNC_ZERO;
@@ -575,7 +578,7 @@ ucs_status_t uct_md_mem_reg_v2(uct_md_h md, void *address, size_t length,
 {
     uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
 
-    if ((length == 0) || (address == NULL)) {
+    if (length == 0) {
         uct_md_log_mem_reg_error(flags,
                                  "uct_md_mem_reg(address=%p length=%zu): "
                                  "invalid parameters", address, length);
