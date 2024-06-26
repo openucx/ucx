@@ -477,7 +477,7 @@ protected:
                            ucs_linear_func_t exp_func)
     {
         auto *range     = find_lb(flat_perf, start);
-        // size_t midpoint = start + (end - start) / 2;
+        size_t midpoint = start + (end - start) / 2;
 
         std::stringstream info;
         info << "expected=[" << start << ", " << end << ", " << exp_func
@@ -487,27 +487,15 @@ protected:
         EXPECT_NE(range, nullptr) << info.str();
         EXPECT_GE(start, range->start) << info.str();
         EXPECT_LE(end, range->end) << info.str();
-        EXPECT_TRUE(ucs_linear_func_is_equal(exp_func, range->value, 1e-9))
-                << info.str();
 
-        if (!ucs_linear_func_is_equal(exp_func, range->value, 1e-9)) {
-            printf("ISSUE\n");
+        // Cannot compare functions directly since on big sizes (e.g. SIZE_MAX)
+        // small latency difference can be overhelmed by floating point math
+        // innacurracy after addition with huge BW*SIZE_MAX.
+        for (size_t point: {start, midpoint, end}) {
+            double expected_result = ucs_linear_func_apply(exp_func, point);
+            double range_result    = ucs_linear_func_apply(range->value, point);
+            EXPECT_NEAR(expected_result, range_result, 10e-9) << info.str();
         }
-
-    //     /* Cannot compare functions directly since on big sizes (e.g. SIZE_MAX)
-    //      * small latency difference can be overhelmed by floating point math
-    //      * innacurracy after addition with huge BW*SIZE_MAX.
-    //      */
-    //     for (size_t point: {start, midpoint, end}) {
-    //         double expected_result = ucs_linear_func_apply(exp_func, point);
-    //         double range_result    = ucs_linear_func_apply(range->value, point);
-    //         EXPECT_NEAR(expected_result, range_result, 1e-9) << err_str.str();
-    //     }
-    //     if (!((range != nullptr) && (start >= range->start) &&
-    //                 (end <= range->end) &&
-    //                 ucs_linear_func_is_equal(exp_func, range->value, 1e-9))) {
-    //         printf("error\n");
-    //     } 
     }
 
     void expect_envelope_flat_perf(size_t start, size_t end,
@@ -516,11 +504,6 @@ protected:
         ucp_proto_perf_envelope_elem_t *envelope_elem;
         std::vector<ucs_linear_func_t> factors_vec;
         ucp_proto_perf_envelope_t envelope;
-
-        if (start > max_envelope_check_size) {
-            return;
-        }
-        end = std::min(end, max_envelope_check_size);
 
         for (const auto& factor: factors) {
             if (factor.first == UCP_PROTO_PERF_FACTOR_LATENCY) {
@@ -556,6 +539,20 @@ protected:
         expect_flat_range(m_sum_flat_perf, start, end, expected_func);
     }
 
+    void expect_flat_perf(size_t start, size_t end,
+                          const perf_factors_map_t &factors)
+    {
+        // Reduce testing range to `max_envelope_check_size` since precise
+        // testing of big sizes is inpossible due to floating point loss
+        if (start > max_envelope_check_size) {
+            return;
+        }
+        end = std::min(end, max_envelope_check_size);
+
+        expect_envelope_flat_perf(start, end, factors);
+        expect_sum_flat_perf(start, end, factors);
+    }
+
     void
     expect_perf(size_t start, size_t end, const perf_factors_map_t &factors)
     {
@@ -582,11 +579,10 @@ protected:
                     << expected_func << " segment_func=" << segment_func;
         }
 
-        expect_envelope_flat_perf(start, end, factors);
-        expect_sum_flat_perf(start, end, factors);
+        expect_flat_perf(start, end, factors);
     }
 
-    void get_flat()
+    void init_flat()
     {
         m_envelope_flat_perf = create_flat_perf_ptr();
         m_sum_flat_perf      = create_flat_perf_ptr();
@@ -600,6 +596,12 @@ protected:
     static ucs_linear_func_t perf_func(double overhead_nsec, double bw_mbs)
     {
         return {overhead_nsec * 1e-9, 1.0 / (bw_mbs * UCS_MBYTE)};
+    }
+
+    void print_perf() {
+        UCS_TEST_MESSAGE << "perf:     " << m_perf.get();
+        UCS_TEST_MESSAGE << "envelope: " << m_envelope_flat_perf.get();
+        UCS_TEST_MESSAGE << "sum:      " << m_sum_flat_perf.get();
     }
 private:
     static perf_ptr_t make_perf_ptr(ucp_proto_perf_t *perf)
@@ -623,12 +625,13 @@ protected:
 const ucs_linear_func_t test_proto_perf::local_tl_func  = perf_func(10, 1000);
 const ucs_linear_func_t test_proto_perf::remote_tl_func = perf_func(20, 2000);
 const ucs_linear_func_t test_proto_perf::local_cpu_func = perf_func(30, 3000);
-const size_t test_proto_perf::max_envelope_check_size   = 50 * UCS_GBYTE;
+const size_t test_proto_perf::max_envelope_check_size   = UCS_GBYTE;
 
 UCS_TEST_F(test_proto_perf, empty) {
     m_perf = create();
 
-    get_flat();
+    init_flat();
+    print_perf();
 
     expect_empty_range(0, SIZE_MAX);
 }
@@ -637,9 +640,9 @@ UCS_TEST_F(test_proto_perf, single_func)
 {
     m_perf = create();
     add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
-    UCS_TEST_MESSAGE << m_perf.get();
 
-    get_flat();
+    init_flat();
+    print_perf();
 
     expect_empty_range(0, 999);
     expect_perf(1000, 1999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
@@ -658,12 +661,10 @@ UCS_TEST_F(test_proto_perf, to_inf)
      */
     m_perf = create();
     add_func(172, SIZE_MAX, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
-    UCS_TEST_MESSAGE << m_perf.get();
-
     add_func(0, SIZE_MAX, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
-    UCS_TEST_MESSAGE << m_perf.get();
 
-    get_flat();
+    init_flat();
+    print_perf();
 
     expect_perf(0, 171, {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
     expect_perf(172, SIZE_MAX,
@@ -685,9 +686,9 @@ UCS_TEST_F(test_proto_perf, intersect_first)
     add_func(500, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
     add_func(3000, 3999, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func);
     add_func(1000, 4999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
-    UCS_TEST_MESSAGE << m_perf.get();
 
-    get_flat();
+    init_flat();
+    print_perf();
 
     expect_empty_range(0, 499);
     expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
@@ -718,9 +719,10 @@ UCS_TEST_F(test_proto_perf, intersect_last)
     add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
     add_func(3000, 3999, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func);
     add_func(500, 3499, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
-    UCS_TEST_MESSAGE << m_perf.get();
 
-    get_flat();
+    init_flat();
+    print_perf();
+
 
     expect_empty_range(0, 499);
     expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
@@ -750,9 +752,9 @@ UCS_TEST_F(test_proto_perf, intersect_middle)
     m_perf = create();
     add_func(500, 2999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
     add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
-    UCS_TEST_MESSAGE << m_perf.get();
 
-    get_flat();
+    init_flat();
+    print_perf();
 
     expect_empty_range(0, 499);
     expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
@@ -783,9 +785,10 @@ UCS_TEST_F(test_proto_perf, agg2)
     UCS_TEST_MESSAGE << perf2.get();
 
     m_perf = aggregate({perf1, perf2});
-    UCS_TEST_MESSAGE << m_perf.get();
 
-    get_flat();
+    init_flat();
+
+    print_perf();
 
     expect_empty_range(0, 999);
     expect_perf(1000, 1999,
@@ -823,9 +826,10 @@ UCS_TEST_F(test_proto_perf, agg3)
     UCS_TEST_MESSAGE << perf3.get();
 
     m_perf = aggregate({perf1, perf2, perf3});
-    UCS_TEST_MESSAGE << m_perf.get();
 
-    get_flat();
+    init_flat();
+
+    print_perf();
 
     expect_empty_range(0, 1199);
     expect_perf(1200, 1999,
@@ -835,13 +839,15 @@ UCS_TEST_F(test_proto_perf, agg3)
     expect_empty_range(2000, SIZE_MAX);
 }
 
-
 UCS_TEST_F(test_proto_perf, envelope_intersect)
 {
-    auto local_tl_factor  = perf_func(0, 1000);
-    auto remote_tl_factor = perf_func(1000, 0);
+    size_t overhead_per_byte = 10;
+    size_t fixed_overhead    = 1000;
+    auto local_tl_factor     = ucs_linear_func_make(0, overhead_per_byte);
+    auto remote_tl_factor    = ucs_linear_func_make(fixed_overhead, 0);
+
     /*
-     * Intersection of two factors:
+     * Case for testing intersection of two factors:
      *           //
      * envelope //
      *         //
@@ -854,13 +860,30 @@ UCS_TEST_F(test_proto_perf, envelope_intersect)
     m_perf = create();
     add_func(0, SIZE_MAX, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_factor);
     add_func(0, SIZE_MAX, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_factor);
-    UCS_TEST_MESSAGE << m_perf.get();
 
-    get_flat();
+    init_flat();
+
+    print_perf();
 
     expect_perf(0, SIZE_MAX,
                 {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_factor},
                  {UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_factor}});
+
+    // `fixed_overhead` should be divisible by `overhead_per_byte` to have
+    // accurate intersection point
+    ASSERT_GE(fixed_overhead, overhead_per_byte);
+    ASSERT_EQ(fixed_overhead % overhead_per_byte, 0);
+    auto intersection     = fixed_overhead / overhead_per_byte;
+    auto *remote_tl_range = find_lb(m_envelope_flat_perf, intersection);
+    auto *local_tl_range  = find_lb(m_envelope_flat_perf, intersection + 1);
+
+    ASSERT_NE(remote_tl_range, nullptr);
+    ASSERT_NE(local_tl_range, nullptr);
+
+    ASSERT_TRUE(ucs_linear_func_is_equal(remote_tl_factor,
+                                         remote_tl_range->value, 1e-9));
+    ASSERT_TRUE(ucs_linear_func_is_equal(local_tl_factor,
+                                         local_tl_range->value, 1e-9));
 }
 
 class test_proto_perf_aggregate : public test_proto_perf {
@@ -997,7 +1020,7 @@ void test_proto_perf_aggregate::test_random_funcs(unsigned num_perfs,
 
     m_perf = aggregate(perfs);
 
-    get_flat();
+    init_flat();
 
     for (auto point : sample_points) {
         auto expected_result = expected_aggregate_result(perfs, point);
@@ -1012,11 +1035,8 @@ void test_proto_perf_aggregate::test_random_funcs(unsigned num_perfs,
         for (size_t i = 0; i < perfs.size(); ++i) {
             UCS_TEST_MESSAGE << "perf " << i << ": " << perfs[i].get();
         }
-        UCS_TEST_MESSAGE << "result:   " << m_perf.get();
-        UCS_TEST_MESSAGE << "envelope: " << m_envelope_flat_perf.get();
-        UCS_TEST_MESSAGE << "sum:      " << m_sum_flat_perf.get();
-
-        get_flat();
+        UCS_TEST_MESSAGE << "result:";
+        print_perf();
     }
 
     m_perf.reset();

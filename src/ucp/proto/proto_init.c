@@ -127,8 +127,11 @@ ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
         /* Find best trend at the 'start' point */
         best.index  = UINT_MAX;
         best.result = DBL_MAX;
+        x_sample    = start;
+        if (x_sample < range_end) {
+            x_sample += UCP_PROTO_MSGLEN_EPSILON;
+        }
         ucs_for_each_bit(curr.index, funcs_mask) {
-            x_sample    = start + UCP_PROTO_MSGLEN_EPSILON;
             curr.result = ucs_linear_func_apply(funcs[curr.index],
                                                 x_sample);
             ucs_assert(curr.result != DBL_MAX);
