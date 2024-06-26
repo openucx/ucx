@@ -371,7 +371,8 @@ protected:
     }
 
     bool host_only() {
-        return get_variant_value() & NON_BLOCK;
+        // RMA does not support non-host memory with proto v1
+        return (get_variant_value() & NON_BLOCK) || !is_proto_enabled();
     }
 
 private:

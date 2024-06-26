@@ -316,24 +316,31 @@ ucp_proto_rndv_ctrl_range_init(const ucp_proto_rndv_ctrl_init_params_t *params,
 
 /* Copy performance ranges from the remote protocol add CTRL overheads */
 static ucs_status_t
-ucp_proto_rndv_ctrl_init_parallel_stages(
-        ucp_proto_perf_range_t *ctrl_ranges, unsigned num_ctrl_msgs,
-        ucp_proto_caps_t *proto_caps, ucp_proto_id_t proto_id, double bias,
-        ucp_proto_caps_t *output_caps, size_t min_length, size_t max_length)
+ucp_proto_rndv_ctrl_init_parallel_stages(ucp_proto_perf_range_t *ctrl_ranges,
+                                         unsigned num_ctrl_msgs,
+                                         ucp_proto_caps_t *proto_caps,
+                                         double bias,
+                                         ucp_proto_caps_t *output_caps,
+                                         size_t min_length, size_t max_length)
 {
-    const char *proto_name = ucp_proto_id_field(proto_id, name);
     const ucp_proto_perf_range_t *parallel_stages[3];
+    UCS_STRING_BUFFER_ONSTACK(ctrl_msgs_buf, 256);
+    UCS_STRING_BUFFER_ONSTACK(agg_buf, 256);
     ucp_proto_perf_range_t *range;
+    const char *ctrl_name;
     size_t range_max_length;
     ucs_status_t status;
     size_t i;
 
     ucs_assertv(num_ctrl_msgs <= 2, "num_ctrl_msgs=%u", num_ctrl_msgs);
     for (i = 0; i < num_ctrl_msgs; ++i) {
-        ucs_trace("%s: aggregate with %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
-                  proto_name, ucp_proto_perf_node_name(ctrl_ranges[i].node),
-                  UCP_PROTO_PERF_FUNC_TYPES_ARG(ctrl_ranges[i].perf));
+        ctrl_name          = ucp_proto_perf_node_name(ctrl_ranges[i].node);
         parallel_stages[i] = &ctrl_ranges[i];
+        ucs_string_buffer_appendf(
+                &ctrl_msgs_buf, "%s"UCP_PROTO_PERF_NODE_NEW_LINE, ctrl_name);
+
+        ucs_trace("aggregate proto caps with %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+                  ctrl_name, UCP_PROTO_PERF_FUNC_TYPES_ARG(ctrl_ranges[i].perf));
     }
 
     ucs_carray_for_each(range, proto_caps->ranges, proto_caps->num_ranges) {
@@ -342,17 +349,20 @@ ucp_proto_rndv_ctrl_init_parallel_stages(
             continue;
         }
 
-        ucs_trace("%s: max %zu %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
-                  proto_name, range->max_length,
-                  ucp_proto_perf_node_name(range->node),
+        ucs_trace("%s range max %zu" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+                  ucp_proto_perf_node_name(range->node), range->max_length,
                   UCP_PROTO_PERF_FUNC_TYPES_ARG(range->perf));
+
+        ucs_string_buffer_reset(&agg_buf);
+        ucs_string_buffer_appendf(&agg_buf, "%s%s",
+                                  ucs_string_buffer_cstr(&ctrl_msgs_buf),
+                                  ucp_proto_perf_node_name(range->node));
 
         parallel_stages[num_ctrl_msgs] = range;
         status                         = ucp_proto_init_parallel_stages(
-                proto_name, min_length, range_max_length, bias, parallel_stages, 
-                num_ctrl_msgs + 1, output_caps);
+                ucs_string_buffer_cstr(&agg_buf), min_length, range_max_length,
+                bias, parallel_stages, num_ctrl_msgs + 1, output_caps);
         if (status != UCS_OK) {
-            ucp_proto_select_caps_cleanup(output_caps);
             return status;
         }
 
@@ -458,9 +468,11 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
         ucp_proto_common_init_base_caps(&params->super, &result_caps,
                                         min_length);
 
-        status = ucp_proto_rndv_ctrl_init_parallel_stages(
-                &ctrl_perf, 1, caps, remote_proto->proto_id, params->perf_bias,
-                &result_caps, min_length, max_length);
+        status = ucp_proto_rndv_ctrl_init_parallel_stages(&ctrl_perf, 1, caps,
+                                                          params->perf_bias,
+                                                          &result_caps,
+                                                          min_length,
+                                                          max_length);
         ucp_proto_perf_node_deref(&ctrl_perf.node);
         if (status != UCS_OK) {
             ucs_trace("failed to calculate parallel stages for %s", proto_name);
@@ -708,14 +720,11 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
 {
-    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        return UCS_OK;
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucs_assert(req->send.state.completed_size == 0);
     }
 
-    ucs_assert(req->send.state.completed_size == 0);
-    ucp_send_request_id_release(req);
-    ucp_proto_request_zcopy_clean(req, UCP_DT_MASK_ALL);
-    return UCS_OK;
+    return ucp_proto_request_zcopy_id_reset(req);
 }
 
 static ucs_status_t
@@ -786,8 +795,8 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
     for (i = 0; i < input_caps->num_ranges; ++i) {
         ack_range.max_length = input_caps->ranges[i].max_length;
 
-        parallel_stages[0] = &ack_range;
-        parallel_stages[1] = &input_caps->ranges[i];
+        parallel_stages[0] = &input_caps->ranges[i];
+        parallel_stages[1] = &ack_range;
 
         status = ucp_proto_init_parallel_stages(
                 ucp_proto_id_field(init_params->proto_id, name), min_length,
@@ -1278,8 +1287,7 @@ ucp_proto_rndv_predict_prev_stages(const ucp_proto_init_params_t *init_params,
     result_caps            = *caps;
     result_caps.num_ranges = 0;
     status                 = ucp_proto_rndv_ctrl_init_parallel_stages(
-            ctrl_stages, num_stages, caps, init_params->proto_id, 0,
-            &result_caps, 0, SIZE_MAX);
+            ctrl_stages, num_stages, caps, 0, &result_caps, 0, SIZE_MAX);
     if (status != UCS_OK) {
         goto out;
     }

@@ -50,7 +50,8 @@ void test_uct_perf::test_execute(unsigned flags = 0,
         }
     }
 
-    if (has_transport("tcp") || has_transport("cuda_copy")) {
+    if (has_transport("tcp") || has_transport("cuda_copy") ||
+        has_transport("gdr_copy")) {
         check_perf = false; /* TODO calibrate expected performance based on transport */
         max_iter   = 1000lu;
     }

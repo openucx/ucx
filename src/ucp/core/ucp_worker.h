@@ -47,6 +47,8 @@
     do { \
         if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
             UCS_ASYNC_BLOCK(&(_worker)->async); \
+        } else if (!((_worker)->flags & UCP_WORKER_FLAG_THREAD_SERIALIZED)) { \
+            ucs_assert(ucs_async_check_owner_thread(&(_worker)->async)); \
         } \
     } while (0)
 

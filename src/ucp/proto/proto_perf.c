@@ -12,7 +12,9 @@
 #include "proto_debug.h"
 
 #include <ucs/datastruct/list.h>
+#include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 
 
@@ -61,10 +63,10 @@ static const char *ucp_proto_perf_factor_names[] = {
     [UCP_PROTO_PERF_FACTOR_LAST]       = NULL
 };
 
-static void ucp_proto_perf_check(ucp_proto_perf_t *perf)
+static void ucp_proto_perf_check(const ucp_proto_perf_t *perf)
 {
 #if ENABLE_ASSERT
-    ucp_proto_perf_segment_t *seg;
+    const ucp_proto_perf_segment_t *seg;
     size_t min_start;
 
     min_start = 0;
@@ -135,41 +137,28 @@ static ucs_status_t ucp_proto_perf_segment_split(const ucp_proto_perf_t *perf,
     return UCS_OK;
 }
 
-static void ucp_proto_perf_segment_create_node(ucp_proto_perf_t *perf,
-                                               ucp_proto_perf_segment_t *seg)
+static void ucp_proto_perf_segment_add_funcs(
+        ucp_proto_perf_t *perf, ucp_proto_perf_segment_t *seg,
+        const ucs_linear_func_t funcs[UCP_PROTO_PERF_FACTOR_LAST],
+        uint64_t factors_bitmap, ucp_proto_perf_node_t *perf_node)
 {
-    ucp_proto_perf_factor_id_t factor_id;
+    unsigned factor_id;
 
-    ucs_assert(seg->node == NULL);
-
-    seg->node = ucp_proto_perf_node_new_data(perf->name, "");
+    /* Create a performance node for this segment if it does not exist yet */
     if (seg->node == NULL) {
-        return;
+        seg->node = ucp_proto_perf_node_new_data(perf->name, "");
     }
 
-    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; factor_id++) {
-        ucp_proto_perf_node_add_data(seg->node,
-                                     ucp_proto_perf_factor_names[factor_id],
-                                     seg->factors[factor_id]);
-    }
-}
-
-static void
-ucp_proto_perf_segment_add_func(ucp_proto_perf_t *perf,
-                                ucp_proto_perf_segment_t *seg,
-                                ucp_proto_perf_factor_id_t factor_id,
-                                ucs_linear_func_t func,
-                                ucp_proto_perf_node_t *perf_node)
-{
-    ucs_linear_func_add_inplace(&seg->factors[factor_id], func);
-
-    if (seg->node == NULL) {
-        ucp_proto_perf_segment_create_node(perf, seg);
-    } else {
+    /* Add the functions to the segment and the performance node */
+    ucs_for_each_bit(factor_id, factors_bitmap) {
+        ucs_assert(factor_id < UCP_PROTO_PERF_FACTOR_LAST); /* For Coverity */
+        ucs_linear_func_add_inplace(&seg->factors[factor_id], funcs[factor_id]);
         ucp_proto_perf_node_update_data(seg->node,
                                         ucp_proto_perf_factor_names[factor_id],
                                         seg->factors[factor_id]);
     }
+
+    /* Add the child performance node to the segment performance node */
     ucp_proto_perf_node_add_child(seg->node, perf_node);
 }
 
@@ -203,6 +192,7 @@ ucs_status_t ucp_proto_perf_from_caps(const char *name,
                                       const ucp_proto_caps_t *proto_caps,
                                       ucp_proto_perf_t **perf_p)
 {
+    ucs_linear_func_t funcs[UCP_PROTO_PERF_FACTOR_LAST];
     const ucp_proto_perf_range_t *range;
     ucp_proto_perf_segment_t *seg;
     ucp_proto_perf_t *perf;
@@ -231,16 +221,18 @@ ucs_status_t ucp_proto_perf_from_caps(const char *name,
         ucp_proto_perf_node_ref(seg->node);
         ucs_list_add_tail(&perf->segments, &seg->list);
 
-        ucp_proto_perf_segment_add_func(perf, seg, UCP_PROTO_PERF_FACTOR_SINGLE,
-                                        range->perf[UCP_PROTO_PERF_TYPE_SINGLE],
-                                        NULL);
-        ucp_proto_perf_segment_add_func(perf, seg, UCP_PROTO_PERF_FACTOR_MULTI,
-                                        range->perf[UCP_PROTO_PERF_TYPE_MULTI],
-                                        NULL);
-        ucp_proto_perf_segment_add_func(perf, seg,
-                                        UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
-                                        range->perf[UCP_PROTO_PERF_TYPE_CPU],
-                                        NULL);
+        funcs[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
+                range->perf[UCP_PROTO_PERF_TYPE_CPU];
+        funcs[UCP_PROTO_PERF_FACTOR_SINGLE] =
+                range->perf[UCP_PROTO_PERF_TYPE_SINGLE];
+        funcs[UCP_PROTO_PERF_FACTOR_MULTI] =
+                range->perf[UCP_PROTO_PERF_TYPE_MULTI];
+        ucp_proto_perf_segment_add_funcs(
+                perf, seg, funcs,
+                UCS_BIT(UCP_PROTO_PERF_FACTOR_LOCAL_CPU) |
+                UCS_BIT(UCP_PROTO_PERF_FACTOR_SINGLE) |
+                UCS_BIT(UCP_PROTO_PERF_FACTOR_MULTI),
+                NULL);
 
         range_start = range->max_length + 1;
     }
@@ -255,11 +247,10 @@ err:
     return status;
 }
 
-ucs_status_t ucp_proto_perf_add_func(ucp_proto_perf_t *perf, size_t start,
-                                     size_t end,
-                                     ucp_proto_perf_factor_id_t factor_id,
-                                     ucs_linear_func_t func,
-                                     ucp_proto_perf_node_t *perf_node)
+ucs_status_t ucp_proto_perf_add_funcs(
+        ucp_proto_perf_t *perf, size_t start, size_t end,
+        const ucs_linear_func_t funcs[UCP_PROTO_PERF_FACTOR_LAST],
+        uint64_t factors_bitmap, ucp_proto_perf_node_t *perf_node)
 {
     ucp_proto_perf_segment_t *seg, *new_seg;
     ucs_status_t status;
@@ -317,7 +308,8 @@ ucs_status_t ucp_proto_perf_add_func(ucp_proto_perf_t *perf, size_t start,
                     seg->start);
         ucs_assertv(end >= seg->end, "end=%zu seg->end=%zu", end, seg->end);
 
-        ucp_proto_perf_segment_add_func(perf, seg, factor_id, func, perf_node);
+        ucp_proto_perf_segment_add_funcs(perf, seg, funcs, factors_bitmap,
+                                         perf_node);
         start = seg->end + 1;
         seg   = ucs_list_next(&seg->list, ucp_proto_perf_segment_t, list);
     }
@@ -330,13 +322,101 @@ ucs_status_t ucp_proto_perf_add_func(ucp_proto_perf_t *perf, size_t start,
         }
 
         ucs_list_add_tail(&perf->segments, &seg->list);
-        ucp_proto_perf_segment_add_func(perf, seg, factor_id, func, perf_node);
+        ucp_proto_perf_segment_add_funcs(perf, seg, funcs, factors_bitmap,
+                                         perf_node);
     }
 
     status = UCS_OK;
 
 out:
     ucp_proto_perf_check(perf);
+    return status;
+}
+
+ucs_status_t ucp_proto_perf_aggregate(const char *name,
+                                      const ucp_proto_perf_t *const *perf_elems,
+                                      unsigned num_elems,
+                                      ucp_proto_perf_t **perf_p)
+{
+    const ucp_proto_perf_segment_t *seg;
+    ucp_proto_perf_segment_t *new_seg;
+    ucp_proto_perf_t *perf;
+    ucs_list_link_t **pos;
+    unsigned i, curr_elem;
+    ucs_status_t status;
+    size_t start, end;
+
+    status = ucp_proto_perf_create(name, &perf);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    if (num_elems == 0) {
+        goto out;
+    }
+
+    pos = ucs_alloca(sizeof(*pos) * num_elems);
+    for (i = 0; i < num_elems; ++i) {
+        ucp_proto_perf_check(perf_elems[i]);
+        pos[i] = perf_elems[i]->segments.next;
+    }
+
+    curr_elem = 0;
+    start     = 0;
+    end       = SIZE_MAX;
+    while (pos[curr_elem] != &perf_elems[curr_elem]->segments) {
+        seg = ucs_container_of(pos[curr_elem], ucp_proto_perf_segment_t, list);
+        if (seg->end < start) {
+            /* Find the next segment that may contain the start point */
+            pos[curr_elem] = pos[curr_elem]->next;
+            continue;
+        }
+
+        if (start < seg->start) {
+            /* Segment does not contain start point, start over from the
+               beginning of the segment */
+            start = seg->start;
+        } else {
+            end = ucs_min(seg->end, end);
+            ++curr_elem;
+            if (curr_elem < num_elems) {
+                /* Have more elements to intersect with */
+                continue;
+            }
+
+            /* Finished intersecting all perf elements - create a new segment */
+            status = ucp_proto_perf_segment_new(perf, start, end, &new_seg);
+            if (status != UCS_OK) {
+                goto err_destroy;
+            }
+
+            ucs_list_add_tail(&perf->segments, &new_seg->list);
+            for (i = 0; i < num_elems; ++i) {
+                seg = ucs_container_of(pos[i], ucp_proto_perf_segment_t, list);
+                ucp_proto_perf_segment_add_funcs(
+                        perf, new_seg, seg->factors,
+                        UCS_MASK(UCP_PROTO_PERF_FACTOR_LAST), seg->node);
+            }
+
+            if (end == SIZE_MAX) {
+                goto out;
+            }
+
+            start = end + 1;
+        }
+
+        end       = SIZE_MAX;
+        curr_elem = 0;
+    }
+
+out:
+    ucp_proto_perf_check(perf);
+    *perf_p = perf;
+    return UCS_OK;
+
+err_destroy:
+    ucp_proto_perf_destroy(perf);
+err:
     return status;
 }
 

@@ -1309,7 +1309,7 @@ ucp_wireup_mem_reg_cost(ucp_context_t *context,
     }
 
     if (remote_addr->dst_version > UCP_RELEASE_LEGACY) {
-        return UCP_RCACHE_LOOKUP_FUNC;
+        return ucs_linear_func_make(UCP_RCACHE_OVERHEAD_DEFAULT, 0);
     }
 
     /* This is needed to preserve wire-compatibility support with
@@ -1918,7 +1918,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * use of fence operations usually don't request the TAG feature, hence the
      * check.
      */
-    if (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
+    if ((select_params->address->dst_version >= 17) &&
+        (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM))) {
         ucs_carray_for_each(lane_desc, select_ctx->lane_descs,
                             select_ctx->num_lanes) {
             if (!(lane_desc->lane_types & UCS_BIT(UCP_LANE_TYPE_AM))) {

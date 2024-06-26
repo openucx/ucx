@@ -745,7 +745,7 @@ test_init_mt() {
 
 test_memtrack() {
 	echo "==== Running memtrack test ===="
-	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
+	UCX_MEMTRACK_DEST=stdout GTEST_FILTER=test_memtrack.sanity make -C ./test/gtest test
 
 	echo "==== Running memtrack limit test ===="
 	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
@@ -828,7 +828,7 @@ run_gtest_watchdog_test() {
 	env WATCHDOG_GTEST_TIMEOUT_=$watchdog_timeout \
 		WATCHDOG_GTEST_SLEEP_TIME_=$sleep_time \
 		GTEST_FILTER=test_watchdog.watchdog_timeout \
-		./test/gtest/gtest 2>&1 | tee watchdog_timeout_test &
+		make -C ./test/gtest test 2>&1 | tee watchdog_timeout_test &
 	pid=$!
 	wait $pid
 

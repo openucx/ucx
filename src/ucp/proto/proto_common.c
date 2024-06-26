@@ -245,6 +245,11 @@ void ucp_proto_common_lane_perf_node(ucp_context_h context,
     const uct_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index].tl_rsc;
     ucp_proto_perf_node_t *perf_node;
 
+    if (perf_attr->operation == UCT_EP_OP_LAST) {
+        *perf_node_p = NULL;
+        return;
+    }
+
     perf_node = ucp_proto_perf_node_new_data(
             uct_ep_operation_names[perf_attr->operation],
             UCT_TL_RESOURCE_DESC_FMT, UCT_TL_RESOURCE_DESC_ARG(tl_rsc));

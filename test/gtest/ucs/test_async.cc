@@ -16,6 +16,7 @@ extern "C" {
 
 #include <sys/poll.h>
 
+#include <thread>
 
 class base_async {
 public:
@@ -419,6 +420,38 @@ private:
     bool                           m_stop[NUM_THREADS];
     LOCAL*                         m_ev[NUM_THREADS];
 };
+
+UCS_TEST_SKIP_COND_P(test_async, check_owner_thread,
+                     !UCS_ENABLE_ASSERT ||
+                             (GetParam() != UCS_ASYNC_MODE_THREAD_MUTEX))
+{
+    struct async_context {
+        ucs_async_context_t context;
+        int                 result;
+    } async[2] = {};
+
+    ASSERT_UCS_OK(ucs_async_context_init(&async[0].context, GetParam()));
+    ASSERT_UCS_OK(ucs_async_context_init(&async[1].context, GetParam()));
+
+    EXPECT_TRUE(ucs_async_check_owner_thread(&async[0].context));
+
+    std::thread t([&async]() {
+        async[0].result = ucs_async_check_owner_thread(&async[0].context);
+        async[1].result = ucs_async_check_owner_thread(&async[1].context);
+    });
+
+    t.join();
+
+    // Main thread: only owns first context
+    EXPECT_TRUE(ucs_async_check_owner_thread(&async[0].context));
+    EXPECT_FALSE(ucs_async_check_owner_thread(&async[1].context));
+    // Secondary thread: only owns second context
+    EXPECT_FALSE(async[0].result);
+    EXPECT_TRUE(async[1].result);
+
+    ucs_async_context_cleanup(&async[0].context);
+    ucs_async_context_cleanup(&async[1].context);
+}
 
 UCS_TEST_P(test_async, global_event) {
     global_event ge(GetParam());
