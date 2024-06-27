@@ -490,7 +490,7 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
     ucs_array_init_dynamic(flat_perf);
     ucs_array_init_dynamic(&envelope);
     ucp_proto_perf_segment_foreach(seg, perf) {
-        ucs_array_set_length(&envelope, 0);
+        ucs_array_clean(&envelope);
         status = ucp_proto_perf_envelope_make(seg->perf_factors, factor_mask,
                                               seg->start, seg->end, convex,
                                               &envelope);
