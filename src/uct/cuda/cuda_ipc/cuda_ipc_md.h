@@ -13,6 +13,14 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/config/types.h>
 
+/**
+ * @brief cuda ipc MD descriptor
+ */
+typedef struct uct_cuda_ipc_md {
+    uct_md_t                 super;   /**< Domain info */
+    ucs_ternary_auto_value_t enable_mnnvl;
+} uct_cuda_ipc_md_t;
+
 typedef struct {
     /* GPU Device number */
     int     dev_num;
@@ -51,7 +59,8 @@ extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
  * @brief cuda ipc domain configuration.
  */
 typedef struct uct_cuda_ipc_md_config {
-    uct_md_config_t super;
+    uct_md_config_t          super;
+    ucs_ternary_auto_value_t enable_mnnvl;
 } uct_cuda_ipc_md_config_t;
 
 
@@ -65,14 +74,37 @@ typedef struct {
 } uct_cuda_ipc_memh_t;
 
 
+#if HAVE_CUDA_FABRIC
+typedef enum uct_cuda_ipc_key_handle {
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_ERROR = 0,
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
+} uct_cuda_ipc_key_handle_t;
+
+
+typedef struct uct_cuda_ipc_md_handle {
+    uct_cuda_ipc_key_handle_t handle_type;
+    union {
+        CUipcMemHandle        legacy;        /* Legacy IPC handle */
+        CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
+    } handle;
+    CUmemPoolPtrExportData    ptr;
+    CUmemoryPool              pool;
+} uct_cuda_ipc_md_handle_t;
+#else
+typedef CUipcMemHandle uct_cuda_ipc_md_handle_t;
+#endif
+
+
 /**
  * @brief cudar ipc region registered for exposure
  */
 typedef struct {
-    CUipcMemHandle  ph;      /* Memory handle of GPU memory */
-    CUdeviceptr     d_bptr;  /* Allocation base address */
-    size_t          b_len;   /* Allocation size */
-    ucs_list_link_t link;
+    uct_cuda_ipc_md_handle_t  ph;     /* Memory handle of GPU memory */
+    CUdeviceptr               d_bptr; /* Allocation base address */
+    size_t                    b_len;  /* Allocation size */
+    ucs_list_link_t           link;
 } uct_cuda_ipc_lkey_t;
 
 
@@ -80,12 +112,12 @@ typedef struct {
  * @brief cuda ipc remote key for put/get
  */
 typedef struct {
-    CUipcMemHandle  ph;      /* Memory handle of GPU memory */
-    pid_t           pid;     /* PID as key to resolve peer_map hash */
-    CUdeviceptr     d_bptr;  /* Allocation base address */
-    size_t          b_len;   /* Allocation size */
-    int             dev_num; /* GPU Device number */
-    CUuuid          uuid;    /* GPU Device UUID */
+    uct_cuda_ipc_md_handle_t  ph;      /* Memory handle of GPU memory */
+    pid_t                     pid;     /* PID as key to resolve peer_map hash */
+    CUdeviceptr               d_bptr;  /* Allocation base address */
+    size_t                    b_len;   /* Allocation size */
+    int                       dev_num; /* GPU Device number */
+    CUuuid                    uuid;    /* GPU Device UUID */
 } uct_cuda_ipc_rkey_t;
 
 
