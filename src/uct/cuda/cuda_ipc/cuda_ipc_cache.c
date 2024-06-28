@@ -48,6 +48,76 @@ typedef struct uct_cuda_ipc_remote_cache {
 
 uct_cuda_ipc_remote_cache_t uct_cuda_ipc_remote_cache;
 
+#if HAVE_CUDA_FABRIC
+static UCS_F_ALWAYS_INLINE int
+uct_cuda_ipc_rem_mpool_cache_hash_equal(CUmemFabricHandle *key1,
+                                        CUmemFabricHandle *key2)
+{
+    return !memcmp(key1, key2, sizeof(*key1));
+}
+
+static UCS_F_ALWAYS_INLINE khint64_t
+uct_cuda_ipc_rem_mpool_cache_hash_func(CUmemFabricHandle *key)
+{
+    return kh_int64_hash_func((khint64_t)key->data);
+}
+
+KHASH_INIT(cuda_ipc_rem_mpool_cache, CUmemFabricHandle*,
+           CUmemoryPool*, 1, uct_cuda_ipc_rem_mpool_cache_hash_func,
+           uct_cuda_ipc_rem_mpool_cache_hash_equal);
+
+typedef struct uct_cuda_ipc_rem_mpool_cache {
+    khash_t(cuda_ipc_rem_mpool_cache) hash;
+    ucs_recursive_spinlock_t          lock;
+} uct_cuda_ipc_rem_mpool_cache_t;
+
+uct_cuda_ipc_rem_mpool_cache_t uct_cuda_ipc_rem_mpool_cache;
+
+static ucs_status_t
+uct_cuda_ipc_get_rem_mpool_cache(CUmemFabricHandle *fabric_handle,
+                                 CUmemoryPool **imported_mpool, int *key_present)
+{
+    ucs_status_t status = UCS_OK;
+    CUmemoryPool *mpool;
+    khiter_t khiter;
+    int khret;
+
+    ucs_recursive_spin_lock(&uct_cuda_ipc_rem_mpool_cache.lock);
+
+    khiter = kh_put(cuda_ipc_rem_mpool_cache,
+                    &uct_cuda_ipc_rem_mpool_cache.hash, fabric_handle, &khret);
+    if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
+        (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
+        mpool = ucs_malloc(sizeof(*mpool), "cuda_ipc_mempool");
+        if (mpool == NULL) {
+            ucs_error("failed to allocate memory for locally mapped mempool");
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportFromShareableHandle(
+               mpool, (void *)fabric_handle, CU_MEM_HANDLE_TYPE_FABRIC, 0));
+        if (status != UCS_OK) {
+            ucs_free(mpool);
+            goto err;
+        }
+        kh_val(&uct_cuda_ipc_rem_mpool_cache.hash, khiter) = mpool;
+        *imported_mpool = mpool;
+        *key_present    = 0;
+    } else if (khret == UCS_KH_PUT_KEY_PRESENT) {
+        *imported_mpool = kh_val(&uct_cuda_ipc_rem_mpool_cache.hash, khiter);
+        *key_present    = 1;
+    } else {
+        ucs_error("unable to use cuda_ipc remote_cache hash");
+        status = UCS_ERR_NO_RESOURCE;
+    }
+
+err:
+    ucs_recursive_spin_unlock(&uct_cuda_ipc_rem_mpool_cache.lock);
+    return status;
+}
+#endif
+
 static ucs_pgt_dir_t *uct_cuda_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
     void *ptr;
@@ -96,24 +166,135 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_trace("%s: cuda ipc cache purged", cache->name);
 }
 
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_legacy(CUipcMemHandle memh,
+                                   CUdeviceptr *mapped_addr)
+{
+    CUresult cuerr;
+
+    cuerr = cuIpcOpenMemHandle(mapped_addr, memh,
+                               CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
+    if (cuerr != CUDA_SUCCESS) {
+        ucs_debug("cuIpcOpenMemHandle() failed: %s",
+                  uct_cuda_base_cu_get_error_string(cuerr));
+        return (cuerr == CUDA_ERROR_ALREADY_MAPPED) ?
+            UCS_ERR_ALREADY_EXISTS : UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+#if HAVE_CUDA_FABRIC
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_vmm(const uct_cuda_ipc_rkey_t *key,
+                                CUdeviceptr *mapped_addr)
+{
+    CUmemAccessDesc access_desc = {};
+    ucs_status_t status;
+    CUdeviceptr dptr;
+    CUmemGenericAllocationHandle handle;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemImportFromShareableHandle(&handle,
+                (void*)&key->ph.handle.vmm, CU_MEM_HANDLE_TYPE_FABRIC));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status =
+        UCT_CUDADRV_FUNC_LOG_ERR(cuMemAddressReserve(&dptr, key->b_len, 0, 0, 0));
+    if (status != UCS_OK) {
+        goto release_handle;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemMap(dptr, key->b_len, 0, handle, 0));
+    if (status != UCS_OK) {
+        goto release_va_range;
+    }
+
+    cuCtxGetDevice(&access_desc.location.id);
+
+    access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemSetAccess(dptr, key->b_len, &access_desc, 1));
+    if (status != UCS_OK) {
+        cuMemUnmap(dptr, key->b_len);
+        goto release_va_range;
+    }
+
+    *mapped_addr = dptr;
+
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuMemRelease(handle));
+
+release_va_range:
+    cuMemAddressFree(dptr, key->b_len);
+release_handle:
+    cuMemRelease(handle);
+
+    return status;
+}
+
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_mempool(const uct_cuda_ipc_rkey_t *key,
+                                    CUdeviceptr *mapped_addr)
+{
+    CUmemoryPool *imported_mpool = NULL;
+    int key_present              = 0;
+    CUmemAccessDesc access_desc  = {};
+    CUdeviceptr dptr;
+    ucs_status_t status;
+
+    status =
+        uct_cuda_ipc_get_rem_mpool_cache((CUmemFabricHandle*)&key->ph.handle.mempool,
+                &imported_mpool, &key_present);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_assert(imported_mpool != NULL);
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportPointer(&dptr,
+                *imported_mpool, (CUmemPoolPtrExportData*)&key->ph.ptr));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (!key_present) {
+        cuCtxGetDevice(&access_desc.location.id);
+        access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolSetAccess(*imported_mpool,
+                    &access_desc, 1));
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    *mapped_addr = dptr;
+
+    return UCS_OK;
+}
+#endif
+
 static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_rkey_t *key,
                                                 CUdeviceptr *mapped_addr)
 {
-    CUresult cuerr;
-    ucs_status_t status;
+#if HAVE_CUDA_FABRIC
+    ucs_trace("key handle type %u", key->ph.handle_type);
 
-    cuerr = cuIpcOpenMemHandle(mapped_addr, key->ph,
-                               CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
-    if (cuerr == CUDA_SUCCESS) {
-        status = UCS_OK;
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        return uct_cuda_ipc_open_memhandle_legacy(key->ph.handle.legacy, mapped_addr);
+    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+        return uct_cuda_ipc_open_memhandle_vmm(key, mapped_addr);
+    } else if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
+        return uct_cuda_ipc_open_memhandle_mempool(key, mapped_addr);
     } else {
-        ucs_debug("cuIpcOpenMemHandle() failed: %s",
-                  uct_cuda_base_cu_get_error_string(cuerr));
-        status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_ERR_ALREADY_EXISTS :
-                                                        UCS_ERR_INVALID_PARAM;
+        return UCS_ERR_NO_RESOURCE;
     }
-
-    return status;
+#else
+    return uct_cuda_ipc_open_memhandle_legacy(key->ph, mapped_addr);
+#endif
 }
 
 static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
@@ -183,6 +364,32 @@ err_unlock:
     return status;
 }
 
+ucs_status_t uct_cuda_ipc_close_memhandle(uct_cuda_ipc_cache_region_t *region)
+{
+    ucs_status_t status;
+#if HAVE_CUDA_FABRIC
+    if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemUnmap(
+                    (CUdeviceptr)region->mapped_addr, region->key.b_len));
+        if (status == UCS_OK) {
+            status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAddressFree(
+                        (CUdeviceptr)region->mapped_addr, region->key.b_len));
+        }
+    } else if (region->key.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL) {
+        /* Ideally we call cuMemFreeAsync on imported pointer region here but
+         * handles can be closed after device context has been destroyed which
+         * would cause cuMemFreeAsync to fail for a given stream */
+        status = UCS_OK;
+    } else
+#endif
+    {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuIpcCloseMemHandle(
+                    (CUdeviceptr)region->mapped_addr));
+    }
+
+    return status;
+}
+
 ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
                                           void *mapped_addr, int cache_enabled)
 {
@@ -215,8 +422,7 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
         ucs_assert(region->mapped_addr == mapped_addr);
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+        status = uct_cuda_ipc_close_memhandle(region);
         ucs_free(region);
     }
 
@@ -232,6 +438,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
     int ret;
+    size_t cmp_size;
+
+#if HAVE_CUDA_FABRIC
+    cmp_size = sizeof(key->ph.handle);
+#else
+    cmp_size = sizeof(key->ph);
+#endif
 
     status = uct_cuda_ipc_get_remote_cache(key->pid, &cache);
     if (status != UCS_OK) {
@@ -244,7 +457,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
         if (memcmp((const void *)&key->ph, (const void *)&region->key.ph,
-                   sizeof(key->ph)) == 0) {
+                   cmp_size) == 0) {
             /*cache hit */
             ucs_trace("%s: cuda_ipc cache hit addr:%p size:%lu region:"
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->d_bptr,
@@ -269,8 +482,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
             }
 
             /* close memhandle */
-            UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+            uct_cuda_ipc_close_memhandle(region);
             ucs_free(region);
         }
     }
@@ -412,10 +624,25 @@ void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache)
 UCS_STATIC_INIT {
     ucs_recursive_spinlock_init(&uct_cuda_ipc_remote_cache.lock, 0);
     kh_init_inplace(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash);
+
+#if HAVE_CUDA_FABRIC
+    ucs_recursive_spinlock_init(&uct_cuda_ipc_rem_mpool_cache.lock, 0);
+    kh_init_inplace(cuda_ipc_rem_mpool_cache, &uct_cuda_ipc_rem_mpool_cache.hash);
+#endif
 }
 
 UCS_STATIC_CLEANUP {
     uct_cuda_ipc_cache_t *rem_cache;
+
+#if HAVE_CUDA_FABRIC
+    CUmemoryPool *mpool;
+    kh_foreach_value(&uct_cuda_ipc_rem_mpool_cache.hash, mpool, {
+        cuMemPoolDestroy(*mpool);
+        ucs_free(mpool);
+    })
+    kh_destroy_inplace(cuda_ipc_rem_mpool_cache, &uct_cuda_ipc_rem_mpool_cache.hash);
+    ucs_recursive_spinlock_destroy(&uct_cuda_ipc_rem_mpool_cache.lock);
+#endif
 
     kh_foreach_value(&uct_cuda_ipc_remote_cache.hash, rem_cache, {
         uct_cuda_ipc_destroy_cache(rem_cache);
