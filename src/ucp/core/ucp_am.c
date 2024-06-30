@@ -316,6 +316,17 @@ ucp_am_zcopy_pack_user_header(ucp_request_t *req)
     return UCS_OK;
 }
 
+static ucs_status_t ucp_am_check_id(unsigned am_id)
+{
+    if (ENABLE_PARAMS_CHECK && ucs_unlikely(am_id > UINT16_MAX)) {
+        ucs_error("invalid AM id %u, must be in range [0, %u]",
+                  am_id, UINT16_MAX);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
                                             const ucp_am_handler_param_t *param)
 {
@@ -326,6 +337,11 @@ ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
     if (!ucs_test_all_flags(param->field_mask, UCP_AM_HANDLER_PARAM_FIELD_ID |
                                                UCP_AM_HANDLER_PARAM_FIELD_CB)) {
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucp_am_check_id(param->id);
+    if (status != UCS_OK) {
+        return status;
     }
 
     id    = param->id;
@@ -948,6 +964,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_REQUEST_CHECK_PARAM(param);
+
+    status = ucp_am_check_id(id);
+    if (status != UCS_OK) {
+        return UCS_STATUS_PTR(status);
+    }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
