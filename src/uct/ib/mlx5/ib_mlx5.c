@@ -554,7 +554,9 @@ uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, unsigned flags, int log_level,
     uar = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, flags);
     if (uar == NULL) {
         sprintf(buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x(%s)) "
-                "failed: %m", uct_ib_device_name(&md->super.dev), flags, title);
+                "failed: %m. This may be due to insufficient UAR space. "
+                "Consider increasing PF_LOG_BAR_SIZE from the default value of 5, using mlxconfig tool",
+                uct_ib_device_name(&md->super.dev), flags, title);
         if (fallback == NULL) {
             ucs_log(log_level, "%s", buf);
         } else {
