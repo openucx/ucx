@@ -1112,7 +1112,7 @@ protected:
     void test_fixed(test_1int_t *array, size_t capacity);
     void generate_linked_list(int size, simple_elem_t *head);
     void copy_array_of_linked_lists(int size, simple_elem_t *dst,
-                                    const simple_elem_t *src);
+                                    simple_elem_t *src);
 
     void cleanup_array_of_linked_lists(test_list_links_array_t *test_array);
 };
@@ -1133,9 +1133,9 @@ void test_array::generate_linked_list(int size, simple_elem_t *head)
 }
 
 void test_array::copy_array_of_linked_lists(int size, simple_elem_t *dst,
-                                            const simple_elem_t *src)
+                                            simple_elem_t *src)
 {
-    for(int i = 0; i < size; ++i) { //TODO: should be foreach
+    for(int i = 0; i < size; ++i) {
         ucs_list_head_init(&dst[i].list);
         ucs_list_splice_tail(&dst[i].list, &src[i].list);
     }
