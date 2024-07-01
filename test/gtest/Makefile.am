@@ -82,6 +82,11 @@ gtest_CPPFLAGS = \
 	$(OPENMP_CFLAGS)
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install $(LDFLAGS_DYNAMIC_LIST_DATA)
+
+# disable-new-dtags to force using RPATH instead of RUNPATH to avoid loading of
+# wrong shared libraries accessible by LD_LIBRARY_PATH
+gtest_LDFLAGS += -Wl,--disable-new-dtags
+
 gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = \
 	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11 \
