@@ -87,6 +87,8 @@ static void print_size(const char *name, size_t size)
     print_size(UCS_PP_QUOTE(_type) "." UCS_PP_QUOTE(_field), \
                ucs_field_sizeof(_type, _field))
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 void print_type_info(const char * tl_name)
 {
     if (tl_name == NULL) {
@@ -292,3 +294,4 @@ void print_type_info(const char * tl_name)
     PRINT_SIZE(ucp_wireup_msg_t);
 
 }
+#pragma GCC diagnostic pop
