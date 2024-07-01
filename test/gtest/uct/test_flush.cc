@@ -149,7 +149,10 @@ public:
 
     void check_skip_test_flush_remote() {
         if ((GetParam()->tl_name != "dc_mlx5") &&
+#if HAVE_MLX5_DV
+            // MD must be created with MLX5 provider to support remote flush
             (GetParam()->tl_name != "rc_verbs") &&
+#endif
             (GetParam()->tl_name != "rc_mlx5")) {
             UCS_TEST_SKIP_R("not supported");
         }
