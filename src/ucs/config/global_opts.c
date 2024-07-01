@@ -53,6 +53,7 @@ ucs_global_opts_t ucs_global_opts = {
     .vfs_thread_affinity   = 0,
     .rcache_check_pfn      = 0,
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
+    .module_ext            = UCX_MODULE_EXT, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
     .modules               = { {NULL, 0}, UCS_CONFIG_ALLOW_LIST_ALLOW_ALL },
     .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER,
@@ -174,6 +175,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
  {"MODULE_DIR", UCX_MODULE_DIR,
   "Directory to search for loadable modules",
   ucs_offsetof(ucs_global_opts_t, module_dir), UCS_CONFIG_TYPE_STRING},
+
+ {"MODULE_EXT", UCX_MODULE_EXT,
+  "File extension to be applied for searching loadable modules.",
+  ucs_offsetof(ucs_global_opts_t, module_ext), UCS_CONFIG_TYPE_STRING},
 
  {"MODULE_LOG_LEVEL", "trace",
   "Logging level for module loader",
