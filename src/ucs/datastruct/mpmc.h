@@ -32,26 +32,14 @@ typedef struct ucs_mpmc_elem {
 
 
 /**
- * Iterate over MPMC queue elements. The queue must not be modified during the
- * iteration.
+ * MPMC queue element value predicate.
  *
- * @param [inout] _elem Pointer variable to the current MPMC queue element.
- * @param [in]    _mpmc_queue MPMC Queue to iterate on.
+ * @param [in] value MPMC queue element value to check.
+ * @param [in] arg   User-defined argument.
+ *
+ * @return Predicate result value - nonzero means "true", zero means "false".
  */
-#define ucs_mpmc_queue_for_each(_elem, _mpmc_queue) \
-    ucs_queue_for_each(_elem, &(_mpmc_queue)->queue, super)
-
-
-/**
- * Lock MPMC queue.
- */
-void ucs_mpmc_queue_lock(ucs_mpmc_queue_t *mpmc);
-
-
-/**
- * Unlock MPMC queue.
- */
-void ucs_mpmc_queue_unlock(ucs_mpmc_queue_t *mpmc);
+typedef int (*ucs_mpmc_queue_predicate_t)(uint64_t value, void* arg);
 
 
 /**
@@ -85,6 +73,19 @@ ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint64_t value);
  *                            or another thread removed the current item.
  */
 ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p);
+
+
+/**
+ * Remove all elements from the MPMC queue with the given value for which the
+ * given predicate returns "true" (nonzero) value.
+ * This can be used from any context and any thread.
+ *
+ * @param  [in] mpmc      MPMC queue.
+ * @param  [in] pred      Predicate to check candidates for removal.
+ * @param  [in] arg       User-defined argument for the predicate.
+ */
+void ucs_mpmc_queue_remove_if(ucs_mpmc_queue_t *mpmc,
+                              ucs_mpmc_queue_predicate_t pred, void *arg);
 
 
 /**

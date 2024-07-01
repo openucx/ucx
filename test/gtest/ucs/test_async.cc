@@ -95,7 +95,7 @@ public:
     }
 
     void push_event_if_valid() {
-        if (m_event_valid == 1) {
+        if (m_event_valid) {
             push_event();
         }
     }
@@ -333,7 +333,6 @@ protected:
 template<typename LOCAL>
 class test_async_mt : public test_async {
 protected:
-    using ThreadFunc                  = void *(*)(void*);
     static const unsigned NUM_THREADS = 32;
 
     test_async_mt() {
@@ -409,7 +408,7 @@ protected:
         return le->count();
     }
 
-    void spawn(ThreadFunc f = thread_func) {
+    void spawn(void *(*f)(void*) = thread_func) {
         for (unsigned i = 0; i < NUM_THREADS; ++i) {
             m_stop[i] = false;
             pthread_create(&m_threads[i], NULL, f, (void*)this);

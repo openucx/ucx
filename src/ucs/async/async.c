@@ -20,8 +20,6 @@
 #define UCS_ASYNC_TIMER_ID_MIN          1000000u
 #define UCS_ASYNC_TIMER_ID_MAX          2000000u
 
-#define UCS_ASYNC_INVALID_EVENT         -1
-
 #define UCS_ASYNC_HANDLER_FMT           "%p [id=%d ref %d] %s()"
 #define UCS_ASYNC_HANDLER_ARG(_h)       (_h), (_h)->id, (_h)->refcount, \
                                         ucs_debug_get_symbol_name((_h)->cb)
@@ -121,6 +119,11 @@ static inline void ucs_async_missed_event_unpack(uint64_t value, int *id_p,
 {
     *id_p     = ucs_async_missed_event_unpack_id(value);
     *events_p = ucs_async_missed_event_unpack_events(value);
+}
+
+static inline int ucs_async_missed_event_is_same(uint64_t value, void *arg)
+{
+    return ucs_async_missed_event_unpack_id(value) == (int)(uintptr_t)arg;
 }
 
 static void ucs_async_handler_hold(ucs_async_handler_t *handler)
@@ -543,7 +546,6 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
 {
     ucs_async_handler_t *handler;
     ucs_async_context_t *async;
-    ucs_mpmc_elem_t *elem;
     ucs_status_t status;
 
     /* We can't find the async handle mode without taking a read lock, which in
@@ -584,13 +586,8 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
 
     async = handler->async;
     if (async != NULL) {
-        ucs_mpmc_queue_lock(&async->missed);
-        ucs_mpmc_queue_for_each(elem, &async->missed) {
-            if (ucs_async_missed_event_unpack_id(elem->value) == handler->id) {
-                elem->value = UCS_ASYNC_INVALID_EVENT;
-            }
-        }
-        ucs_mpmc_queue_unlock(&async->missed);
+        ucs_mpmc_queue_remove_if(&async->missed, ucs_async_missed_event_is_same,
+                                 (void *)(uintptr_t)handler->id);
     }
 
     ucs_async_handler_put(handler);
@@ -638,10 +635,6 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
             /* TODO we should retry here if the code is change to check miss
              * only during ASYNC_UNBLOCK */
             break;
-        }
-
-        if (value == UCS_ASYNC_INVALID_EVENT) {
-            continue;
         }
 
         ucs_async_method_call_all(block);
