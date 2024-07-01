@@ -393,6 +393,8 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface);
 
+void uct_rc_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx);
+
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
 
 /**
