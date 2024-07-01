@@ -12,6 +12,13 @@ jobs:
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
+    variables:
+      ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:
+        POSTFIX: ${{ replace(variables['Build.SourceBranch'], 'refs/heads/', '') }}
+      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+        POSTFIX: ${{ replace(variables['Build.SourceBranch'], 'refs/tags/v', '') }}
+      ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+        POSTFIX: pr$(System.PullRequest.PullRequestNumber)
 
     steps:
     - checkout: self
@@ -28,6 +35,15 @@ jobs:
         # gcc --version
         ./contrib/configure-release --with-java=no
         ./contrib/buildrpm.sh -s -t -b
+
+        # Append POSTFIX value to the source tarball filename
+        find . -name "ucx-*.tar.gz" -exec sh -c '
+          old_fname="$1"
+          new_fname="${1%.tar.gz}-'"$POSTFIX"'.tar.gz"
+          mv "$old_fname" "$new_fname"
+          echo "Old filename: $old_fname"   # e.g.: ucx-1.17.0.tar.gz
+          echo "New filename: $new_fname"   # e.g.: ucx-1.17.0-rc2.tar.gz
+        ' _ {} \;
       displayName: Build tarball
 
     - task: GithubRelease@0
