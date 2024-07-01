@@ -134,9 +134,12 @@ ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
         ucs_for_each_bit(curr.index, funcs_mask) {
             curr.result = ucs_linear_func_apply(funcs[curr.index],
                                                 x_sample);
-            ucs_assert(curr.result != DBL_MAX);
-            if (!isnan(curr.result) && ((best.index == UINT_MAX) ||
-                ((curr.result < best.result) == convex))) {
+            ucs_assertv((curr.result != DBL_MAX) && !isnan(curr.result),
+                        UCP_PROTO_PERF_FUNC_FMT " curr.index=%u x_sample=%f",
+                        UCP_PROTO_PERF_FUNC_ARG(&funcs[curr.index]), curr.index,
+                        x_sample);
+            if ((best.index == UINT_MAX) ||
+                ((curr.result < best.result) == convex)) {
                 best = curr;
             }
         }
