@@ -48,7 +48,7 @@ void ucp_proto_perf_range_add_data(const ucp_proto_perf_range_t *range);
  * Accepts a list of performance functions for a given range and appends the
  * convex or concave envelope of these functions to an output list.
  *
- * @param [in] perf_list       List of performance functions.
+ * @param [in] funcs           List of performance functions.
  * @param [in] funcs_mask      Mask that defines which @ perf_list elements
  *                             should be considered during envelope calculation.
  * @param [in] range_end       Range interval end.
