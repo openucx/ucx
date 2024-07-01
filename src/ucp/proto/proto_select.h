@@ -31,6 +31,9 @@
  * Relevant for UCP_OP_ID_RNDV_SEND and UCP_OP_ID_RNDV_RECV. */
 #define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
 
+/* Predict previous stages performance and include it to proto caps.
+ * Relevant for UCP_OP_ID_RNDV_SEND and UCP_OP_ID_RNDV_RECV. */
+#define UCP_PROTO_SELECT_OP_FLAG_PREV_STAGES (UCP_PROTO_SELECT_OP_FLAGS_BASE << 2)
 
 /* Select eager/rendezvous protocol for Active Message sends.
  * Relevant for UCP_OP_ID_AM_SEND and UCP_OP_ID_AM_SEND_REPLY. */
