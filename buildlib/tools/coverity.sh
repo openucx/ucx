@@ -4,7 +4,7 @@ realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 
-COV_MODULE="tools/cov-2019.12"
+COV_MODULE="tools/cov-2023.12"
 
 #
 # Run Coverity and report errors
@@ -54,15 +54,19 @@ run_coverity() {
 	xpmem_root=$(module show $XPMEM_MODULE 2>&1 | awk '/CPATH/ {print $3}' | sed -e 's,/include,,')
 	with_xpmem="--with-xpmem=$xpmem_root"
 
-	${WORKSPACE}/contrib/configure-$ucx_build_type --prefix=$ucx_inst --with-cuda --with-gdrcopy --with-java $with_xpmem
+	${WORKSPACE}/contrib/configure-$ucx_build_type \
+		--prefix=$ucx_inst \
+		--disable-gtest \
+		--with-cuda \
+		--with-gdrcopy \
+		--with-java \
+		$with_xpmem
 	cov_build_id="cov_build_${ucx_build_type}"
 	cov_build="$ucx_build_dir/$cov_build_id"
 	rm -rf $cov_build
 	mkdir -p $cov_build
 	cov-build --dir $cov_build $MAKEP all
-	if [ "${ucx_build_type}" == "devel" ]; then
-		cov-manage-emit --dir $cov_build --tu-pattern "file('.*/test/gtest/common/googletest/*')" delete
-	fi
+	cov-manage-emit --dir $cov_build --tu-pattern "file('.*/src/ucm/ptmalloc*/*')" delete
 	cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
 	nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 	rc=$(($rc+$nerrors))
