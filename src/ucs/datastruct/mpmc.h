@@ -81,11 +81,11 @@ ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p);
  * This can be used from any context and any thread.
  *
  * @param  [in] mpmc      MPMC queue.
- * @param  [in] pred      Predicate to check candidates for removal.
+ * @param  [in] predicate Predicate to check candidates for removal.
  * @param  [in] arg       User-defined argument for the predicate.
  */
 void ucs_mpmc_queue_remove_if(ucs_mpmc_queue_t *mpmc,
-                              ucs_mpmc_queue_predicate_t pred, void *arg);
+                              ucs_mpmc_queue_predicate_t predicate, void *arg);
 
 
 /**

@@ -78,14 +78,14 @@ ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p)
 }
 
 void ucs_mpmc_queue_remove_if(ucs_mpmc_queue_t *mpmc,
-                              ucs_mpmc_queue_predicate_t pred, void *arg)
+                              ucs_mpmc_queue_predicate_t predicate, void *arg)
 {
     ucs_mpmc_elem_t *elem;
     ucs_queue_iter_t iter;
 
     ucs_spin_lock(&mpmc->lock);
     ucs_queue_for_each_safe(elem, iter, &mpmc->queue, super) {
-        if (pred(elem->value, arg)) {
+        if (predicate(elem->value, arg)) {
             ucs_queue_del_iter(&mpmc->queue, iter);
         }
     }

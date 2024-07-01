@@ -121,9 +121,10 @@ static inline void ucs_async_missed_event_unpack(uint64_t value, int *id_p,
     *events_p = ucs_async_missed_event_unpack_events(value);
 }
 
-static inline int ucs_async_missed_event_is_same(uint64_t value, void *arg)
+static int ucs_async_missed_event_is_same(uint64_t value, void *arg)
 {
-    return ucs_async_missed_event_unpack_id(value) == (int)(uintptr_t)arg;
+    return ucs_async_missed_event_unpack_id(value) ==
+            ((ucs_async_handler_t *)arg)->id;
 }
 
 static void ucs_async_handler_hold(ucs_async_handler_t *handler)
@@ -587,7 +588,7 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
     async = handler->async;
     if (async != NULL) {
         ucs_mpmc_queue_remove_if(&async->missed, ucs_async_missed_event_is_same,
-                                 (void *)(uintptr_t)handler->id);
+                                 handler);
     }
 
     ucs_async_handler_put(handler);
