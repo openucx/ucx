@@ -213,6 +213,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_dc_mlx5_ep_t);
         PRINT_SIZE(uct_dc_mlx5_iface_t);
         PRINT_SIZE(uct_dc_mlx5_iface_config_t);
+        PRINT_SIZE(uct_dc_mlx5_dci_pool_t);
         printf("\n");
     }
 #endif
