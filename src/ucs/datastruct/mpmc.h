@@ -12,8 +12,6 @@
 #include <ucs/type/status.h>
 #include <ucs/type/spinlock.h>
 
-#define UCS_MPMC_INVALID_VALUE -1
-
 /**
  * A Multi-producer-multi-consumer thread-safe queue.
  * Every push/pull is a single atomic operation in "good" scenario.
