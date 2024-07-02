@@ -103,6 +103,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 
 UCS_STATIC_INIT
 {
+    /* coverity[check_return] */
     cuInit(0);
 }
 
