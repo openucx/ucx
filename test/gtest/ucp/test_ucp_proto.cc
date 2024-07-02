@@ -584,12 +584,14 @@ protected:
 
     void init_flat()
     {
-        m_envelope_flat_perf = create_flat_perf_ptr();
-        m_sum_flat_perf      = create_flat_perf_ptr();
+        ucp_proto_flat_perf_t *envelope_perf, *sum_perf;
 
-        ASSERT_UCS_OK(ucp_proto_perf_envelope(m_perf.get(), 0,
-                                              m_envelope_flat_perf.get()));
-        ASSERT_UCS_OK(ucp_proto_perf_sum(m_perf.get(), m_sum_flat_perf.get()));
+        ASSERT_NE(m_perf.get(), nullptr) << "Perf should be initialized";
+        ASSERT_UCS_OK(ucp_proto_perf_envelope(m_perf.get(), 0, &envelope_perf));
+        ASSERT_UCS_OK(ucp_proto_perf_sum(m_perf.get(), &sum_perf));
+
+        m_envelope_flat_perf = make_flat_perf_ptr(envelope_perf);
+        m_sum_flat_perf      = make_flat_perf_ptr(sum_perf);
     }
 
 
@@ -609,8 +611,9 @@ private:
         return {perf, ucp_proto_perf_destroy};
     }
 
-    static flat_perf_ptr_t create_flat_perf_ptr() {
-        return {new ucp_proto_flat_perf_t, ucp_proto_flat_perf_destroy};
+    static flat_perf_ptr_t make_flat_perf_ptr(ucp_proto_flat_perf_t *flat_perf)
+    {
+        return {flat_perf, ucp_proto_flat_perf_destroy};
     }
 protected:
     static const size_t max_envelope_check_size;
@@ -627,7 +630,8 @@ const ucs_linear_func_t test_proto_perf::remote_tl_func = perf_func(20, 2000);
 const ucs_linear_func_t test_proto_perf::local_cpu_func = perf_func(30, 3000);
 const size_t test_proto_perf::max_envelope_check_size   = UCS_GBYTE;
 
-UCS_TEST_F(test_proto_perf, empty) {
+UCS_TEST_F(test_proto_perf, empty)
+{
     m_perf = create();
 
     init_flat();
@@ -722,7 +726,6 @@ UCS_TEST_F(test_proto_perf, intersect_last)
 
     init_flat();
     print_perf();
-
 
     expect_empty_range(0, 499);
     expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
@@ -828,7 +831,6 @@ UCS_TEST_F(test_proto_perf, agg3)
     m_perf = aggregate({perf1, perf2, perf3});
 
     init_flat();
-
     print_perf();
 
     expect_empty_range(0, 1199);

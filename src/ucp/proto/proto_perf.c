@@ -469,8 +469,10 @@ ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
 
 ucs_status_t
 ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
-                        ucp_proto_flat_perf_t *flat_perf)
+                        ucp_proto_flat_perf_t **flat_perf_ptr)
 {
+    ucp_proto_flat_perf_t *flat_perf  = ucs_malloc(
+            sizeof(ucp_proto_flat_perf_t), "sum flat perf");
     static const char *convex_names[] = {"concave envelope", "convex envelope"};
     ucp_proto_perf_envelope_elem_t *envelope_elem;
     const ucp_proto_perf_segment_t *seg;
@@ -479,6 +481,10 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
     ucs_status_t status;
     size_t range_start;
     uint64_t factor_mask;
+
+    if (flat_perf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
     ucp_proto_perf_check(perf);
 
@@ -495,13 +501,15 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
                                               seg->start, seg->end, convex,
                                               &envelope);
         if (status != UCS_OK) {
-            return status;
+            goto out_cleanup_envelope;
         }
 
         range_start = seg->start;
         ucs_array_for_each(envelope_elem, &envelope) {
-            range        = ucs_array_append(flat_perf,
-                                            return UCS_ERR_NO_MEMORY);
+            range        = ucs_array_append(
+                    flat_perf, ucs_array_cleanup_dynamic(flat_perf);
+                               status = UCS_ERR_NO_MEMORY;
+                               goto out_cleanup_envelope);
             range->start = range_start;
             range->end   = envelope_elem->max_length;
             range->value = seg->perf_factors[envelope_elem->index];
@@ -515,19 +523,32 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
         }
     }
 
-    return UCS_OK;
+    status         = UCS_OK;
+    *flat_perf_ptr = flat_perf;
+
+out_cleanup_envelope:
+    ucs_array_cleanup_dynamic(&envelope);
+    return status;
 }
 
 ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
-                                ucp_proto_flat_perf_t *flat_perf)
+                                ucp_proto_flat_perf_t **flat_perf_ptr)
 {
+    ucp_proto_flat_perf_t *flat_perf = ucs_malloc(sizeof(ucp_proto_flat_perf_t),
+                                                  "envelope flat perf");
     const ucp_proto_perf_segment_t *seg;
     ucp_proto_flat_perf_range_t *range;
     ucp_proto_perf_factor_id_t factor_id;
 
+    if (flat_perf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
     ucs_array_init_dynamic(flat_perf);
     ucp_proto_perf_segment_foreach(seg, perf) {
-        range        = ucs_array_append(flat_perf, return UCS_ERR_NO_MEMORY);
+        range        = ucs_array_append(flat_perf,
+                                        ucs_array_cleanup_dynamic(flat_perf);
+                                        return UCS_ERR_NO_MEMORY);
         range->start = seg->start;
         range->end   = seg->end;
         range->value = UCS_LINEAR_FUNC_ZERO;
@@ -543,6 +564,7 @@ ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
         ucp_proto_perf_node_add_data(range->node, "sum", range->value);
     }
 
+    *flat_perf_ptr = flat_perf;
     return UCS_OK;
 }
 
@@ -677,4 +699,5 @@ void ucp_proto_flat_perf_destroy(ucp_proto_flat_perf_t *flat_perf) {
     }
 
     ucs_array_cleanup_dynamic(flat_perf);
+    ucs_free(flat_perf);
 }
