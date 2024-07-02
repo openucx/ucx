@@ -90,6 +90,8 @@ UCS_TEST_F(test_bitops, ptr_ctz) {
     ASSERT_EQ(88, ucs_count_ptr_trailing_zero_bits(buffer, 160));
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 UCS_TEST_F(test_bitops, is_equal) {
     uint8_t buffer1[20] = {0};
     uint8_t buffer2[20] = {0};
@@ -197,6 +199,7 @@ UCS_TEST_F(test_bitops, is_equal) {
     ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 8));
     ASSERT_FALSE(ucs_bitwise_is_equal(buffer1, buffer2, 64));
 }
+#pragma GCC diagnostic pop
 
 template<typename Type> void test_mask()
 {

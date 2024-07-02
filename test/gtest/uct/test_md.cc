@@ -462,6 +462,8 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     }
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 UCS_TEST_P(test_md, mem_type_detect_mds) {
     const size_t buffer_size = 1024;
     size_t slice_offset;
@@ -531,6 +533,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
         free_memory(address, static_cast<ucs_memory_type_t>(alloc_mem_type));
     }
 }
+#pragma GCC diagnostic pop
 
 UCS_TEST_P(test_md, mem_query) {
     ASSERT_GT(md_attr().reg_alignment, 0);

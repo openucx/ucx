@@ -10,7 +10,16 @@
 #
 # Initialize CFLAGS
 #
-BASE_CFLAGS="-g -Wall -Werror"
+# -Wframe-larger-than=8192: Warn if stack frame size exceeds 8192 bytes (8 KB)
+BASE_CFLAGS="-g -Wall -Werror -Wframe-larger-than=8192"
+
+# To suppress -Wframe-larger-than=8192 for specific functions, use:
+# #pragma GCC diagnostic push
+# #pragma GCC diagnostic ignored "-Wframe-larger-than="
+# void specific_function() {
+#     /* Function code */
+# }
+# #pragma GCC diagnostic pop
 
 
 #

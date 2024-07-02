@@ -773,6 +773,8 @@ private:
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_BCOPY) \
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_ZCOPY)
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 ucs_status_t uct_perf_test_dispatch(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_DATA, perf,
@@ -791,3 +793,4 @@ ucs_status_t uct_perf_test_dispatch(ucx_perf_context_t *perf)
     ucs_error("Invalid test case");
     return UCS_ERR_INVALID_PARAM;
 }
+#pragma GCC diagnostic pop
