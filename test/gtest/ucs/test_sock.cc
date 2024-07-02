@@ -17,6 +17,22 @@ static std::string socket_err_exp_str;
 
 class test_socket : public ucs::test {
 public:
+    static void fill_sockaddr(struct sockaddr *sa, sa_family_t af,
+                              const char *ip_addr, unsigned port)
+    {
+        sa->sa_family = af;
+        inet_pton(af, ip_addr,
+                  const_cast<void*>(ucs_sockaddr_get_inet_addr(sa)));
+        ASSERT_UCS_OK(ucs_sockaddr_set_port(sa, port));
+        ASSERT_TRUE(ucs_sockaddr_get_inet_addr(sa) != NULL);
+    }
+
+    static size_t get_addr_size(const struct sockaddr *sa)
+    {
+        return (sa->sa_family == AF_INET) ? sizeof(UCS_SOCKET_INET_ADDR(sa)) :
+                                            sizeof(UCS_SOCKET_INET6_ADDR(sa));
+    }
+
 protected:
 
     static ucs_log_func_rc_t
@@ -52,6 +68,50 @@ protected:
             ucs_sockaddr_str(saddr, test_str, sizeof(test_str));
             EXPECT_EQ(exp_str, test_str);
         }
+    }
+
+    void verify_subnet_match(sa_family_t af, const char *ip_addr1,
+                             const char *ip_addr2,
+                             unsigned longest_common_prefix) const
+    {
+        struct sockaddr_storage storage1, storage2;
+        struct sockaddr *saddr1;
+        struct sockaddr *saddr2;
+        int matched;
+
+        saddr1 = (struct sockaddr*)&storage1;
+        saddr2 = (struct sockaddr*)&storage2;
+        fill_sockaddr(saddr1, af, ip_addr1, 1234);
+        fill_sockaddr(saddr2, af, ip_addr2, 1234);
+
+        size_t addr_size_bits = get_addr_size(saddr1) * CHAR_BIT;
+
+        for (size_t prefix = 0; prefix <= addr_size_bits; ++prefix) {
+            ASSERT_UCS_OK(ucs_sockaddr_is_same_subnet(saddr1, saddr2, prefix,
+                                                      &matched));
+            EXPECT_EQ(prefix <= longest_common_prefix, matched)
+                    << "failed to match subnet: ip1=" << ip_addr1
+                    << " ip2=" << ip_addr2 << " prefix=" << prefix
+                    << " max_common=" << longest_common_prefix
+                    << " (matched=" << matched << ")";
+        }
+    }
+
+    void verify_subnet_error(sa_family_t af1, sa_family_t af2, unsigned prefix,
+                             ucs_status_t expected_status) const
+    {
+        struct sockaddr_storage storage1, storage2;
+        struct sockaddr *sa1 = (struct sockaddr*)&storage1;
+        struct sockaddr *sa2 = (struct sockaddr*)&storage2;
+        int matched;
+        ucs_status_t status;
+
+        sa1->sa_family = af1;
+        sa2->sa_family = af2;
+        status         = ucs_sockaddr_is_same_subnet(sa1, sa2, prefix,
+                                                     &matched);
+        EXPECT_EQ(expected_status, status);
+        EXPECT_FALSE(matched);
     }
 };
 
@@ -539,28 +599,15 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
     int cmp_res1, cmp_res2;
     ucs_status_t status;
 
-    sa1->sa_family = sa_family;
-    sa2->sa_family = sa_family;
-
-    inet_pton(sa_family, ip_addr1,
-              const_cast<void*>(ucs_sockaddr_get_inet_addr(sa1)));
-    inet_pton(sa_family, ip_addr2,
-              const_cast<void*>(ucs_sockaddr_get_inet_addr(sa2)));
-
-    status = ucs_sockaddr_set_port(sa1, port1);
-    ASSERT_UCS_OK(status);
-    status = ucs_sockaddr_set_port(sa2, port2);
-    ASSERT_UCS_OK(status);
-
+    test_socket::fill_sockaddr(sa1, sa_family, ip_addr1, port1);
+    test_socket::fill_sockaddr(sa2, sa_family, ip_addr2, port2);
     const void *addr1 = ucs_sockaddr_get_inet_addr(sa1);
     const void *addr2 = ucs_sockaddr_get_inet_addr(sa2);
 
     ASSERT_TRUE(addr1 != NULL);
     ASSERT_TRUE(addr2 != NULL);
 
-    size_t addr_size = ((sa_family == AF_INET) ?
-                        sizeof(UCS_SOCKET_INET_ADDR(sa1)) :
-                        sizeof(UCS_SOCKET_INET6_ADDR(sa1)));
+    size_t addr_size = test_socket::get_addr_size(sa1);
 
     // `sa1` vs `sa2`
     {
@@ -672,6 +719,49 @@ UCS_TEST_F(test_socket, sockaddr_cmp_err) {
 
     sockaddr_cmp_err_test((const struct sockaddr*)&sa_un,
                           (const struct sockaddr*)&sa_in);
+}
+
+UCS_TEST_F(test_socket, subnet_match) {
+    /* IPv4 non byte-aligned */
+    verify_subnet_match(AF_INET, "192.168.122.28", "192.168.122.13", 27);
+    verify_subnet_match(AF_INET, "192.168.3.28", "192.168.7.13", 21);
+    verify_subnet_match(AF_INET, "192.45.3.28", "192.14.7.13", 10);
+
+    /* IPv4 byte-aligned */
+    verify_subnet_match(AF_INET, "192.168.173.157", "10.33.44.100", 0);
+    verify_subnet_match(AF_INET, "192.168.173.157", "192.33.44.100", 8);
+    verify_subnet_match(AF_INET, "192.168.173.157", "192.168.44.100", 16);
+    verify_subnet_match(AF_INET, "192.168.173.157", "192.168.173.100", 24);
+    verify_subnet_match(AF_INET, "192.168.173.157", "192.168.173.157", 32);
+
+    /* IPv6 non byte-aligned */
+    verify_subnet_match(AF_INET6, "fe80::218:e7ff:fe16:fb97",
+                        "fe80::219:e7ff:fe16:fb97", 79);
+    verify_subnet_match(AF_INET6, "fe80::218:e7ff:fef8:fb97",
+                        "fe80::218:e7ff:feff:fb97", 109);
+
+    /* IPv6 byte-aligned */
+    verify_subnet_match(AF_INET6, "fe80::218:e7ff:fe16:fb97",
+                        "fe80::218:e77f:fe16:fb97", 88);
+    verify_subnet_match(AF_INET6, "fe80::218:e7ff:fe16:fb97",
+                        "fe80::218:e7ff:fe16:fb97", 128);
+}
+
+UCS_TEST_F(test_socket, subnet_match_failure) {
+    scoped_log_handler log_handler(socket_error_handler);
+
+    /* Unknown address family */
+    socket_err_exp_str = "unknown address family: ";
+    verify_subnet_error(AF_UNIX, AF_INET, 10, UCS_ERR_INVALID_PARAM);
+    verify_subnet_error(AF_INET, AF_UNIX, 10, UCS_ERR_INVALID_PARAM);
+
+    /* Different address families */
+    verify_subnet_error(AF_INET, AF_INET6, 10, UCS_ERR_INVALID_PARAM);
+
+    /* Prefix out of range */
+    socket_err_exp_str = "prefix is longer than address size";
+    verify_subnet_error(AF_INET, AF_INET, 33, UCS_ERR_EXCEEDS_LIMIT);
+    verify_subnet_error(AF_INET6, AF_INET6, 129, UCS_ERR_EXCEEDS_LIMIT);
 }
 
 static void sockaddr_get_ipstr_check(const struct sockaddr *sockaddr,

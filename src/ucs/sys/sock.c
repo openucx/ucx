@@ -887,19 +887,25 @@ ucs_status_t ucs_sock_port_from_string(const char *port_str, uint16_t *port)
     return UCS_OK;
 }
 
-int ucs_sockaddr_cmp(const struct sockaddr *sa1,
-                     const struct sockaddr *sa2,
+static int ucs_sockaddr_check_known_af(const struct sockaddr *sa)
+{
+    if (!ucs_sockaddr_is_known_af(sa)) {
+        ucs_error("unknown address family: %d", sa->sa_family);
+        return 0;
+    }
+
+    return 1;
+}
+
+int ucs_sockaddr_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2,
                      ucs_status_t *status_p)
 {
     int result          = 1;
     uint16_t port1      = 0, port2 = 0;
     ucs_status_t status = UCS_OK;
 
-    if (!ucs_sockaddr_is_known_af(sa1) ||
-        !ucs_sockaddr_is_known_af(sa2)) {
-        ucs_error("unknown address family: %d",
-                  !ucs_sockaddr_is_known_af(sa1) ?
-                  sa1->sa_family : sa2->sa_family);
+    if (!ucs_sockaddr_check_known_af(sa1) ||
+        !ucs_sockaddr_check_known_af(sa2)) {
         status = UCS_ERR_INVALID_PARAM;
         goto out;
     }
@@ -939,9 +945,8 @@ out:
 
 int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
 {
-    if (!ucs_sockaddr_is_known_af(sa1) || !ucs_sockaddr_is_known_af(sa2)) {
-        ucs_error("unknown address family: %d",
-                  !ucs_sockaddr_is_known_af(sa1) ? sa1->sa_family : sa2->sa_family);
+    if (!ucs_sockaddr_check_known_af(sa1) ||
+        !ucs_sockaddr_check_known_af(sa2)) {
         return -1;
     }
 
@@ -949,6 +954,87 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
                   ucs_sockaddr_get_inet_addr(sa2),
                   (sa1->sa_family == AF_INET) ?
                   UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN);
+}
+
+static void ucs_sockaddr_log_subnet_info(const struct sockaddr *sa1,
+                                         const struct sockaddr *sa2,
+                                         unsigned prefix_len, int matched)
+{
+    UCS_STRING_BUFFER_ONSTACK(info, UCS_SOCKADDR_STRING_LEN * 2 + 60);
+    const struct sockaddr *saddrs[] = {sa1, sa2};
+    unsigned sa_index               = 0;
+    char ip_str[UCS_SOCKADDR_STRING_LEN];
+    const struct sockaddr **sa;
+    ucs_status_t status;
+
+    ucs_string_buffer_appendf(&info, "IP addresses");
+    if (!matched) {
+        ucs_string_buffer_appendf(&info, " do not");
+    }
+
+    ucs_string_buffer_appendf(&info, " match with a %u-bit prefix,",
+                              prefix_len);
+
+    ucs_carray_for_each(sa, saddrs, ucs_static_array_size(saddrs)) {
+        status = ucs_sockaddr_get_ipstr(*sa, ip_str, UCS_SOCKADDR_STRING_LEN);
+        ucs_string_buffer_appendf(&info, " sa%u: %s", ++sa_index,
+                                  (status == UCS_OK) ? ip_str : "<null>");
+    }
+
+    ucs_debug("%s", ucs_string_buffer_cstr(&info));
+}
+
+ucs_status_t ucs_sockaddr_is_same_subnet(const struct sockaddr *sa1,
+                                         const struct sockaddr *sa2,
+                                         unsigned prefix_len, int *is_same_p)
+{
+    int is_same         = 0;
+    ucs_status_t status = UCS_OK;
+    const void *ipaddr1, *ipaddr2;
+    size_t addr_size, addr_size_bits;
+
+    if (!ucs_sockaddr_check_known_af(sa1) ||
+        !ucs_sockaddr_check_known_af(sa2)) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (sa1->sa_family != sa2->sa_family) {
+        ucs_debug("different addr_family: s1 %s s2 %s",
+                  ucs_sockaddr_address_family_str(sa1->sa_family),
+                  ucs_sockaddr_address_family_str(sa2->sa_family));
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    /* Get address size */
+    ucs_assert_always(ucs_sockaddr_inet_addr_sizeof(sa1, &addr_size) == UCS_OK);
+    addr_size_bits = addr_size * CHAR_BIT;
+
+    /* Check subnet mask size (bits belonging to the prefix) */
+    if (prefix_len > addr_size_bits) {
+        ucs_error("prefix is longer than address size (in bits): prefix=%u"
+                  " size=%lu",
+                  prefix_len, addr_size_bits);
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto out;
+    }
+
+    ipaddr1 = ucs_sockaddr_get_inet_addr(sa1);
+    ipaddr2 = ucs_sockaddr_get_inet_addr(sa2);
+    ucs_assertv((ipaddr1 != NULL) && (ipaddr2 != NULL), "ipaddr1=%p ipaddr2=%p",
+                ipaddr1, ipaddr2);
+
+    /* Check if the addresses have matching prefixes */
+    is_same = ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
+
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        ucs_sockaddr_log_subnet_info(sa1, sa2, prefix_len, is_same);
+    }
+
+out:
+    *is_same_p = is_same;
+    return status;
 }
 
 ucs_status_t ucs_sockaddr_set_inaddr_any(struct sockaddr *saddr, sa_family_t af)
