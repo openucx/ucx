@@ -52,11 +52,30 @@ static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
+static int ucp_wireup_ep_is_next_ep_active(const ucp_wireup_ep_t *wireup_ep)
+{
+    return (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) ||
+           (wireup_ep->aux_ep == NULL);
+}
+
+uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    uct_ep_h msg_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
+
+    if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
+        ucp_proxy_ep_set_uct_ep(&wireup_ep->super, NULL, 0, UCP_NULL_RESOURCE);
+    } else {
+        wireup_ep->aux_ep = NULL;
+    }
+
+    return msg_ep;
+}
+
 uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
 {
     uct_ep_h wireup_msg_ep;
 
-    if ((wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) || (wireup_ep->aux_ep == NULL)) {
+    if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
         wireup_msg_ep = wireup_ep->super.uct_ep;
     } else {
         wireup_msg_ep = wireup_ep->aux_ep;
@@ -456,7 +475,7 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
 
 ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
                                    ucp_rsc_index_t rsc_index,
-                                   unsigned path_index, int connect_aux,
+                                   unsigned path_index, int aux_needed,
                                    const ucp_unpacked_address_t *remote_address)
 {
     ucp_wireup_ep_t *wireup_ep     = ucp_wireup_ep(uct_ep);
@@ -488,8 +507,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
               UCT_TL_RESOURCE_DESC_ARG(
                       &worker->context->tl_rscs[rsc_index].tl_rsc));
 
-    /* we need to create an auxiliary transport only for active messages */
-    if (connect_aux) {
+    /* We need to create an auxiliary transport only for active messages.
+       Skip this step if auxiliary already exists. */
+    if (aux_needed && (wireup_ep->aux_ep == NULL)) {
         status = ucp_wireup_ep_connect_aux(wireup_ep, ep_init_flags,
                                            remote_address);
         if (status != UCS_OK) {
