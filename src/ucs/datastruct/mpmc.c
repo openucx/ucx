@@ -67,7 +67,6 @@ ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p)
     while (!ucs_queue_is_empty(&mpmc->queue)) {
         elem = ucs_queue_pull_elem_non_empty(&mpmc->queue, ucs_mpmc_elem_t,
                                              super);
-
         if (elem->value != UCS_MPMC_INVALID_VALUE) {
             *value_p = elem->value;
             status   = UCS_OK;
