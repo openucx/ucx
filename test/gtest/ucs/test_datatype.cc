@@ -1143,16 +1143,19 @@ void test_array::copy_array_of_linked_lists(int size, simple_elem_t *dst,
 
 void test_array::cleanup_array_of_linked_lists(test_list_links_array_t *test_array)
 {
+    simple_elem_t *prev = NULL;
     simple_elem_t *head;
     simple_elem_t *elem;
     simple_elem_t *list_elem;
     ucs_array_for_each(head, test_array) {
         ucs_list_for_each(list_elem, &head->list, list) {
+            ucs_free(prev);
             elem = (simple_elem_t*)list_elem;
             ucs_list_del(&elem->list);
-            ucs_free(elem);
+            prev = elem;
         }
     }
+    ucs_free(prev);
 
     ucs_array_cleanup_dynamic(test_array);
 }
