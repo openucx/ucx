@@ -1090,7 +1090,9 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    ucs_assert(ep->dci < ucs_array_length(&iface->tx.dcis));
+    ucs_assertv(ep->dci < ucs_array_length(&iface->tx.dcis),
+                "ep->dci: %u dcis length: %u", ep->dci,
+                ucs_array_length(&iface->tx.dcis));
 
     /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
     if (fc_req->sender.payload.is_global) {

@@ -490,22 +490,23 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                           uct_ib_mlx5_md_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
-    uct_dc_mlx5_dci_config_t config;
+    uct_dc_mlx5_dci_config_t *config, temp_config;
     struct ibv_qp_attr attr;
     long attr_mask;
     ucs_status_t status;
 
     /* in case dci is not attached to a dci pool*/
     if (dci->pool_index != UCT_DC_MLX5_IFACE_INVALID_POOL_INDEX) {
-        config = iface->tx.dci_pool[dci->pool_index].config;
+        config = &iface->tx.dci_pool[dci->pool_index].config;
     } else {
-        uct_dc_mlx5_init_dci_config(&config, 0,
+        uct_dc_mlx5_init_dci_config(&temp_config, 0,
                                     iface->super.super.config.max_rd_atomic);
+        config = &temp_config;
     }
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_dc_mlx5_iface_devx_dci_connect(iface, &dci->txwq.super,
-                                                  &config);
+                                                  config);
     }
 
     ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
@@ -551,7 +552,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     attr.timeout        = iface->super.super.config.timeout;
     attr.rnr_retry      = iface->super.super.config.rnr_retry;
     attr.retry_cnt      = iface->super.super.config.retry_cnt;
-    attr.max_rd_atomic  = config.max_rd_atomic;
+    attr.max_rd_atomic  = config->max_rd_atomic;
     attr_mask           = IBV_QP_STATE      |
                           IBV_QP_SQ_PSN     |
                           IBV_QP_TIMEOUT    |
@@ -864,25 +865,23 @@ static ucs_status_t
 uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
                               const uct_dc_mlx5_iface_config_t *config)
 {
-    uct_dc_dci_t dci = {{{0}}};
     ucs_status_t status;
 
-    dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
-    dci.pool_index        = UCT_DC_MLX5_IFACE_INVALID_POOL_INDEX;
+    UCT_DC_MLX5_DECL_EMPTY_DCI(empty_dci);
+
     ucs_array_init_dynamic(&iface->tx.dcis);
     ucs_array_resize(&iface->tx.dcis,
-                     UCT_DC_MLX5_IFACE_MAX_DCI_POOLS * iface->tx.ndci, dci,
-                     return UCS_ERR_NO_MEMORY);
+                     UCT_DC_MLX5_IFACE_MAX_DCI_POOLS * iface->tx.ndci,
+                     empty_dci, return UCS_ERR_NO_MEMORY);
     ucs_array_length(&iface->tx.dcis) = 0;
 
-    status = uct_dc_mlx5_iface_create_dci(iface, 0, &dci);
+    status = uct_dc_mlx5_iface_create_dci(iface, 0, &empty_dci);
     if (status != UCS_OK) {
         return status;
     }
-    dci.ep = NULL;
 
-    iface->tx.bb_max = dci.txwq.bb_max;
-    uct_dc_mlx5_destroy_dci(iface, &dci);
+    iface->tx.bb_max = empty_dci.txwq.bb_max;
+    uct_dc_mlx5_destroy_dci(iface, &empty_dci);
 
     return UCS_OK;
 }
@@ -1099,8 +1098,7 @@ ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface)
         goto err_cleanup;
     }
 
-    ep->flags = 0;
-    ep->flags |= pool_index & UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
+    ep->flags = pool_index & UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
 
     status = uct_dc_mlx5_ep_basic_init(iface, ep);
     if (status != UCS_OK) {

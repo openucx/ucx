@@ -62,6 +62,11 @@ struct ibv_ravh {
         (_self)->flags |= UCT_DC_MLX5_IFACE_FLAG_##_flag_name##_FULL_HANDSHAKE; \
     }
 
+#define UCT_DC_MLX5_DECL_EMPTY_DCI(_empty_dci) \
+    uct_dc_dci_t _empty_dci      = {{{0}}}; \
+    _empty_dci.pool_index        = UCT_DC_MLX5_IFACE_INVALID_POOL_INDEX; \
+    _empty_dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
+
 
 typedef struct uct_dc_mlx5_ep     uct_dc_mlx5_ep_t;
 typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
@@ -279,7 +284,7 @@ typedef struct {
 UCS_ARRAY_DECLARE_TYPE(uct_dc_dci_array_t, uint16_t, uct_dc_dci_t);
 
 struct uct_dc_mlx5_iface {
-    uct_rc_mlx5_iface_common_t super;
+    uct_rc_mlx5_iface_common_t       super;
     struct {
         /* Array of dcis */
         uct_dc_dci_array_t           dcis;
@@ -334,9 +339,9 @@ struct uct_dc_mlx5_iface {
     } tx;
 
     struct {
-        uct_ib_mlx5_qp_t dct;
+        uct_ib_mlx5_qp_t             dct;
 
-        uint8_t          port_affinity;
+        uint8_t                      port_affinity;
     } rx;
 
     khash_t(uct_dc_mlx5_config_hash) dc_config_hash;
@@ -473,7 +478,7 @@ uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
     }
 
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ndci   = ucs_array_capacity(&iface->tx.dcis);
+    ndci   = ucs_array_length(&iface->tx.dcis);
     for (i = 0; i < ndci; i++) {
         if (uct_dc_mlx5_iface_dci(iface, i)->txwq.super.qp_num == qp_num) {
             return i;
@@ -517,9 +522,9 @@ uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
     uct_dc_dci_t *dci = uct_dc_mlx5_iface_dci(iface, dci_index);
 
-    if (!uct_dc_mlx5_is_dci_valid(dci)) {
-        return 0;
-    }
+    // if (!uct_dc_mlx5_is_dci_valid(dci)) {
+    //     return 0;
+    // }
 
     return uct_rc_txqp_available(&dci->txqp) < (int16_t)iface->tx.bb_max;
 }

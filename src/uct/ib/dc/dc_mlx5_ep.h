@@ -311,7 +311,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_init_dci_config(uct_dc_mlx5_dci_config_t *dci_config,
                             uint8_t path_index, uint8_t max_rd_atomic)
 {
-    dci_config->path_index    = path_index;
+    dci_config->path_index    = path_index % UCT_DC_MLX5_IFACE_MAX_DCI_POOLS;
     dci_config->max_rd_atomic = max_rd_atomic;
 }
 
@@ -332,10 +332,11 @@ uct_dc_mlx5_dci_pool_add_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
                   dci_index, pool_index);
         return status;
     }
+
     dci->path_index = pool->config.path_index;
     dci->pool_index = pool_index;
 
-    if(!uct_dc_mlx5_iface_is_dci_rand(iface)) {
+    if (!uct_dc_mlx5_iface_is_dci_rand(iface)) {
         *ucs_array_append(&pool->stack, return UCS_ERR_NO_MEMORY) = dci_index;
     }
 
@@ -345,10 +346,10 @@ uct_dc_mlx5_dci_pool_add_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
 ucs_status_t static UCS_F_ALWAYS_INLINE
 uct_dc_mlx5_dci_pool_append_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 {
-    uct_dc_dci_t dci  = {{{0}}};
     uint8_t dci_index = ucs_array_length(&iface->tx.dcis);
 
-    dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
+    UCT_DC_MLX5_DECL_EMPTY_DCI(dci);
+
     *ucs_array_append(&iface->tx.dcis, return UCS_ERR_NO_MEMORY) = dci;
 
     return uct_dc_mlx5_dci_pool_add_dci(iface, pool_index, dci_index);
@@ -357,9 +358,10 @@ uct_dc_mlx5_dci_pool_append_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    uct_dc_dci_t empty_dci = {{{0}}};
     uct_dc_dci_t *dci;
     size_t dcis_array_size;
+
+    UCT_DC_MLX5_DECL_EMPTY_DCI(empty_dci);
 
     ucs_arbiter_group_init(&ep->arb_group);
 
@@ -367,16 +369,14 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         /* coverity[dont_call] */
         ep->dci               = rand_r(&iface->tx.rand_seed) % iface->tx.ndci;
         ep->dci_channel_index = 0;
-        empty_dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
-        dcis_array_size             = ucs_max(ep->dci + 1,
-                                              ucs_array_length(&iface->tx.dcis));
+        dcis_array_size       = ucs_max(ep->dci + 1,
+                                        ucs_array_length(&iface->tx.dcis));
         ucs_array_resize(&iface->tx.dcis, dcis_array_size, empty_dci,
                          ucs_error("%p: failed to create ep %p - could not "
                                    "resize dcis array to %u",
                                    iface, ep, ep->dci);
                          return UCS_ERR_NO_MEMORY);
-        if (!uct_dc_mlx5_is_dci_valid(
-                    &ucs_array_elem(&iface->tx.dcis, ep->dci))) {
+        if (!uct_dc_mlx5_is_dci_valid(uct_dc_mlx5_iface_dci(iface, ep->dci))) {
             uct_dc_mlx5_dci_pool_add_dci(iface, uct_dc_mlx5_ep_pool_index(ep),
                                          ep->dci);
         }
@@ -653,7 +653,6 @@ uct_dc_mlx5_iface_dci_detach(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 
     ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
     ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
-    // uct_dc_mlx5_iface_dci(iface, ep->dci)->ep = NULL;
 
     uct_dc_mlx5_iface_dci_schedule_release(iface, dci_index);
 
