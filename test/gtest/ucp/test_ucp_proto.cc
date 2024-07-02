@@ -1039,6 +1039,8 @@ void test_proto_perf_aggregate::test_random_funcs(unsigned num_perfs,
         }
         UCS_TEST_MESSAGE << "result:";
         print_perf();
+
+        init_flat();
     }
 
     m_perf.reset();
