@@ -3824,6 +3824,10 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
         }
     }
 
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_USER_DATA) {
+        attr->user_data = ep->ext->user_data;
+    }
+
     return UCS_OK;
 }
 
