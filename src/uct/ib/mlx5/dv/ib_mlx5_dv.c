@@ -418,7 +418,8 @@ uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
     if (obj == NULL) {
         syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
         ucs_log(log_level,
-                "mlx5dv_devx_obj_create(%s) failed on %s, syndrome 0x%x: %m",
+                "mlx5dv_devx_obj_create(%s) failed on %s, syndrome 0x%x: %m. "
+                "Consider increasing PF_LOG_BAR_SIZE from the default value of 5, using mlxconfig tool",
                 msg_arg, ibv_get_device_name(context->device), syndrome);
     }
 
