@@ -638,6 +638,10 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
             break;
         }
 
+        if (value == UCS_MPMC_INVALID_VALUE) {
+            continue;
+        }
+
         ucs_async_method_call_all(block);
         UCS_ASYNC_BLOCK(async);
 

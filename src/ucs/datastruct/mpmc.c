@@ -86,8 +86,7 @@ void ucs_mpmc_queue_remove_if(ucs_mpmc_queue_t *mpmc,
     ucs_spin_lock(&mpmc->lock);
     ucs_queue_for_each_safe(elem, iter, &mpmc->queue, super) {
         if (predicate(elem->value, arg)) {
-            ucs_queue_del_iter(&mpmc->queue, iter);
-            ucs_free(elem);
+            elem->value = UCS_MPMC_INVALID_VALUE;
         }
     }
     ucs_spin_unlock(&mpmc->lock);
