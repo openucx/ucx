@@ -246,7 +246,8 @@ endif # HAVE_IB
 
 if HAVE_CUDA
 gtest_SOURCES += \
-	ucm/cuda_hooks.cc
+	ucm/cuda_hooks.cc \
+	uct/cuda/test_cuda_ipc_md.cc
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
 gtest_LDFLAGS += \
