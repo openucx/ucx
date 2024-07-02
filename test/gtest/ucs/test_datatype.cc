@@ -1165,7 +1165,7 @@ UCS_TEST_F(test_array, dynamic_array_grow_of_list_link_elements) {
     constexpr size_t LIST_SIZE    = 200;
     test_list_links_array_t test_array;
 
-    ucs_array_init_dynamic(&test_array);
+    ucs_array_init_complex(&test_array);
 
     /* create and fill array of linked lists */
     for (size_t i = 0; i < NUM_ELEMENTS; ++i) {
