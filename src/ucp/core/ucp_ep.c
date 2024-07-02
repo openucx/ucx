@@ -618,6 +618,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     if (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) {
         /* user_data overrides err_handler.arg */
         ep->ext->user_data = params->user_data;
+        ep->flags |= UCP_EP_FLAG_USER_DATA_PARAM;
     }
 
     return UCS_OK;
@@ -3822,6 +3823,10 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_USER_DATA) {
+        attr->user_data = ep->flags & UCP_EP_FLAG_USER_DATA_PARAM ? ep->ext->user_data : NULL;
     }
 
     return UCS_OK;
