@@ -17,6 +17,14 @@
 BEGIN_C_DECLS
 
 
+typedef enum {
+    UCS_ARRAY_TYPE_DYNAMIC, /* Array size can be dynamically increased */
+    UCS_ARRAY_TYPE_FIXED,   /* Fixed-size array*/
+    UCS_ARRAY_TYPE_COMPLEX /* Array may contain complex elements such as linked lists or pointers,
+                               appending elements to this kind of array must be done by calling
+                               ucs_array_append_safe() with a non-NULL old_buffer_p */
+} ucs_array_type_t;
+
 /**
  * Define an array structure.
  *
@@ -28,9 +36,8 @@ BEGIN_C_DECLS
         _value_type *buffer; \
         _index_type length; \
         _index_type capacity : ((CHAR_BIT * sizeof(_index_type)) - 1); \
-        uint8_t     is_fixed : 1; \
+        uint8_t     type : 2; \
     }
-
 
 /**
  * Declare an array type.
@@ -50,7 +57,7 @@ BEGIN_C_DECLS
  * calling @ref ucs_array_cleanup_dynamic()
  */
 #define UCS_ARRAY_DYNAMIC_INITIALIZER \
-    { NULL, 0, 0, 0 }
+    { NULL, 0, 0, UCS_ARRAY_TYPE_DYNAMIC }
 
 
 /**
@@ -70,7 +77,7 @@ BEGIN_C_DECLS
  * @endcode
  */
 #define UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
-    { (_buffer), 0, (_capacity), 1 }
+    { (_buffer), 0, (_capacity), UCS_ARRAY_TYPE_FIXED }
 
 
 /**
@@ -123,7 +130,7 @@ BEGIN_C_DECLS
         (_array)->buffer   = NULL; \
         (_array)->length   = 0; \
         (_array)->capacity = 0; \
-        (_array)->is_fixed = 0; \
+        (_array)->type     = UCS_ARRAY_TYPE_DYNAMIC; \
     }
 
 
@@ -143,9 +150,21 @@ BEGIN_C_DECLS
         (_array)->buffer   = (_buffer); \
         (_array)->length   = 0; \
         (_array)->capacity = (_capacity); \
-        (_array)->is_fixed = 1; \
+        (_array)->type     = UCS_ARRAY_TYPE_FIXED; \
     }
 
+/**
+ * Initialize a complex array. a dynamic array which contains complex elements,
+ * required methods for appending to this kind of array is ucs_array_append_safe() 
+ * with a non-NULL old_buff_p parameter
+ * 
+ * @param _array   Pointer to the array to initialize
+ */
+#define ucs_array_init_complex(_array) \
+    { \
+        ucs_array_init_dynamic(_array); \
+        (_array)->type = UCS_ARRAY_TYPE_COMPLEX; \
+    }
 
 /*
  * Cleanup a dynamic array.
@@ -180,7 +199,9 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  * @param _min_capacity  Minimal capacity to reserve.
  * @param _old_buffer_p  If the array was reallocated, and this parameter is
  *                       non-NULL, the previous buffer will not be released, and
- *                       instread it will be returned in *_old_buffer_p.
+ *                       instead it will be returned in *_old_buffer_p,
+ *                       NOTICE: It is assumed that when not-NULL, copying _old_buffer to
+ *                       the new array will be caller's responsibility.
  *
  * @return UCS_OK if successful, UCS_ERR_NO_MEMORY if cannot allocate the array.
  */
@@ -243,7 +264,9 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
     ({ \
         ucs_typeof((_array)->buffer) _append_elem; \
         ucs_status_t _append_status; \
-        \
+         /* Complex array requires old_buffer to be non-NULL */ \
+         /* as the caller is responsible for copying to the new buffer */ \
+        ucs_assert(!ucs_array_is_complex(_array) || ((_old_buffer_p) != NULL)); \
         _append_status = ucs_array_reserve_safe(_array, (_array)->length + 1, \
                                                 _old_buffer_p); \
         if (ucs_likely(_append_status == UCS_OK)) { \
@@ -333,8 +356,13 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
  * @return Whether this is a fixed-length array
  */
 #define ucs_array_is_fixed(_array) \
-    ((_array)->is_fixed)
+    ((_array)->type == UCS_ARRAY_TYPE_FIXED)
 
+/**
+ * @return Wether this is an array with complex elements
+*/
+#define ucs_array_is_complex(_array) \
+    ((_array)->type == UCS_ARRAY_TYPE_COMPLEX)
 
 /**
  * Get array element
