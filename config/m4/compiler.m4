@@ -10,7 +10,7 @@
 #
 # Initialize CFLAGS
 #
-BASE_CFLAGS="-g -Wall -Werror"
+BASE_CFLAGS="-g -O0 -Wall -Werror -fstack-usage"
 
 
 #
