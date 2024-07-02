@@ -39,7 +39,7 @@ typedef struct ucs_mpmc_elem {
  *
  * @return Predicate result value - nonzero means "true", zero means "false".
  */
-typedef int (*ucs_mpmc_queue_predicate_t)(uint64_t value, void* arg);
+typedef int (*ucs_mpmc_queue_predicate_t)(uint64_t value, void *arg);
 
 
 /**

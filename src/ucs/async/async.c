@@ -124,7 +124,7 @@ static inline void ucs_async_missed_event_unpack(uint64_t value, int *id_p,
 static int ucs_async_missed_event_is_same(uint64_t value, void *arg)
 {
     return ucs_async_missed_event_unpack_id(value) ==
-            ((ucs_async_handler_t *)arg)->id;
+           ((ucs_async_handler_t *)arg)->id;
 }
 
 static void ucs_async_handler_hold(ucs_async_handler_t *handler)

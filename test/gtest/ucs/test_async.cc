@@ -376,7 +376,7 @@ protected:
 
     int repeat_create_destroy_run(unsigned index) {
         static_assert(std::is_base_of<local_event, LOCAL>::value, "");
-        auto le = std::unique_ptr<LOCAL>(new LOCAL(GetParam()));
+        auto le     = std::unique_ptr<LOCAL>(new LOCAL(GetParam()));
         m_ev[index] = le.get();
 
         check_is_blocked(le.get(), false);
