@@ -376,36 +376,36 @@ protected:
 
     int repeat_create_destroy_run(unsigned index) {
         static_assert(std::is_base_of<local_event, LOCAL>::value, "");
-        auto le     = std::unique_ptr<LOCAL>(new LOCAL(GetParam()));
-        m_ev[index] = le.get();
+        LOCAL le(GetParam());
+        m_ev[index] = &le;
 
-        check_is_blocked(le.get(), false);
+        check_is_blocked(&le, false);
 
         barrier();
 
         while (!m_stop[index]) {
-            le->block();
-            check_is_blocked(le.get(), true);
-            unsigned before = le->count();
-            suspend_and_poll(le.get(), 10);
-            unsigned after = le->count();
-            le->unblock();
+            le.block();
+            check_is_blocked(&le, true);
+            unsigned before = le.count();
+            suspend_and_poll(&le, 10);
+            unsigned after = le.count();
+            le.unblock();
             EXPECT_EQ(before, after); /* Should not handle while blocked */
 
             auto wait = ucs::rand() % 20;
-            le->unset_event();
-            le->destroy_event();
+            le.unset_event();
+            le.destroy_event();
             suspend(wait);
-            le->create_event(); /* same memory could be used by other thread */
-            le->set_event();
+            le.create_event(); /* same memory could be used by other thread */
+            le.set_event();
             suspend(20 - wait);
-            le->check_miss();
+            le.check_miss();
         }
 
-        check_is_blocked(le.get(), false);
+        check_is_blocked(&le, false);
 
         m_ev[index] = NULL;
-        return le->count();
+        return le.count();
     }
 
     void spawn(void *(*f)(void*) = thread_func) {
