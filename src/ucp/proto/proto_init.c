@@ -107,13 +107,12 @@ void ucp_proto_perf_range_add_data(const ucp_proto_perf_range_t *range)
 }
 
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
-                             size_t range_start, size_t range_end, int convex,
+ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
+                             uint64_t funcs_mask, size_t range_start,
+                             size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list)
 {
-    const ucs_linear_func_t *perf_list_ptr = ucs_array_begin(perf_list);
-    const unsigned perf_list_length        = ucs_array_length(perf_list);
-    size_t start                           = range_start;
+    size_t start = range_start;
     char num_str[64];
     struct {
         unsigned index;
@@ -123,22 +122,22 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
     ucs_status_t status;
     size_t midpoint;
     double x_sample, x_intersect;
-    uint64_t mask;
-
-    ucs_assert_always(perf_list_length < 64);
-    mask = UCS_MASK(perf_list_length);
 
     do {
-        ucs_assert(mask != 0);
-
         /* Find best trend at the 'start' point */
         best.index  = UINT_MAX;
         best.result = DBL_MAX;
-        ucs_for_each_bit(curr.index, mask) {
-            x_sample    = start + UCP_PROTO_MSGLEN_EPSILON;
-            curr.result = ucs_linear_func_apply(perf_list_ptr[curr.index],
+        x_sample    = start;
+        if (x_sample < range_end) {
+            x_sample += UCP_PROTO_MSGLEN_EPSILON;
+        }
+        ucs_for_each_bit(curr.index, funcs_mask) {
+            curr.result = ucs_linear_func_apply(funcs[curr.index],
                                                 x_sample);
-            ucs_assert(curr.result != DBL_MAX);
+            ucs_assertv((curr.result != DBL_MAX) && !isnan(curr.result),
+                        UCP_PROTO_PERF_FUNC_FMT " curr.index=%u x_sample=%f",
+                        UCP_PROTO_PERF_FUNC_ARG(&funcs[curr.index]), curr.index,
+                        x_sample);
             if ((best.index == UINT_MAX) ||
                 ((curr.result < best.result) == convex)) {
                 best = curr;
@@ -157,10 +156,9 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
          * other trend becomes the best one.
          */
         midpoint = range_end;
-        mask    &= ~UCS_BIT(best.index);
-        ucs_for_each_bit(curr.index, mask) {
-            status = ucs_linear_func_intersect(perf_list_ptr[curr.index],
-                                               perf_list_ptr[best.index],
+        ucs_for_each_bit(curr.index, funcs_mask & ~UCS_BIT(best.index)) {
+            status = ucs_linear_func_intersect(funcs[curr.index],
+                                               funcs[best.index],
                                                &x_intersect);
             if ((status == UCS_OK) && (x_intersect > start)) {
                 /* We care only if the intersection is after 'start', since
@@ -227,7 +225,7 @@ ucp_proto_init_parallel_stages(const char *proto_name, size_t range_start,
         *perf_elem = (*stage_elem)->perf[UCP_PROTO_PERF_TYPE_MULTI];
 
         ucs_trace("stage[%zu] %s " UCP_PROTO_PERF_FUNC_TYPES_FMT
-                  UCP_PROTO_PERF_FUNC_FMT(perf_elem),
+                  UCP_PROTO_PERF_FUNC_FMT,
                   stage_elem - stages,
                   ucp_proto_perf_node_name((*stage_elem)->node),
                   UCP_PROTO_PERF_FUNC_TYPES_ARG((*stage_elem)->perf),
@@ -240,8 +238,10 @@ ucp_proto_init_parallel_stages(const char *proto_name, size_t range_start,
     *perf_elem = sum_cpu_perf;
 
     /* Multi-fragment is pipelining overheads and network transfer */
-    status = ucp_proto_perf_envelope_make(&stage_list, range_start, range_end,
-                                          0, &concave);
+    status = ucp_proto_perf_envelope_make(
+            ucs_array_begin(&stage_list),
+            UCS_MASK(ucs_array_length(&stage_list)), range_start, range_end,
+            0, &concave);
     if (status != UCS_OK) {
         goto out;
     }
@@ -336,7 +336,7 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
         md_attr = &context->tl_mds[md_index].attr;
         md_name = context->tl_mds[md_index].rsc.md_name;
         ucs_linear_func_add_inplace(memreg_time, md_attr->reg_cost);
-        ucs_trace("md %s" UCP_PROTO_PERF_FUNC_FMT(reg_cost), md_name,
+        ucs_trace("md %s reg_cost: " UCP_PROTO_PERF_FUNC_FMT, md_name,
                   UCP_PROTO_PERF_FUNC_ARG(&md_attr->reg_cost));
 
         ucp_proto_perf_node_add_data(perf_node, md_name, md_attr->reg_cost);
