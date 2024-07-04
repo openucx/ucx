@@ -9,27 +9,40 @@
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/config/types.h>
 
+typedef struct {
+    /* GPU Device number */
+    int     dev_num;
+    /* Cache of accessible devices (ucs_ternary_auto_value_t) */
+    uint8_t accessible[0];
+} uct_cuda_ipc_dev_cache_t;
 
-/**
- * @brief cuda ipc MD descriptor
- */
-typedef struct uct_cuda_ipc_md {
-    struct uct_md            super;   /**< Domain info */
-    CUuuid*                  uuid_map;
-    ucs_ternary_auto_value_t *peer_accessible_cache;
-    int                      uuid_map_size;
-    int                      uuid_map_capacity;
-} uct_cuda_ipc_md_t;
+static UCS_F_ALWAYS_INLINE int uct_cuda_ipc_uuid_equals(CUuuid a, CUuuid b)
+{
+    int64_t *a64 = (int64_t *)a.bytes;
+    int64_t *b64 = (int64_t *)b.bytes;
+    return (a64[0] == b64[0]) && (a64[1] == b64[1]);
+}
+
+static UCS_F_ALWAYS_INLINE khint32_t uct_cuda_ipc_uuid_hash_func(CUuuid key)
+{
+    int64_t *i64 = (int64_t *)key.bytes;
+    return kh_int64_hash_func(i64[0] ^ i64[1]);
+}
+
+KHASH_INIT(cuda_ipc_uuid_hash, CUuuid, uct_cuda_ipc_dev_cache_t*, 1,
+           uct_cuda_ipc_uuid_hash_func, uct_cuda_ipc_uuid_equals);
 
 /**
  * @brief cuda ipc component extension
  */
-typedef struct uct_cuda_ipc_component {
-    uct_component_t    super;
-    uct_cuda_ipc_md_t* md;
+typedef struct {
+    uct_component_t             super;
+    khash_t(cuda_ipc_uuid_hash) uuid_hash;
+    pthread_mutex_t             lock;
 } uct_cuda_ipc_component_t;
 
 extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
