@@ -478,7 +478,8 @@ protected:
     rc_verbs,           \
     dc_mlx5,            \
     ud_verbs,           \
-    ud_mlx5
+    ud_mlx5,            \
+    gga_mlx5
 
 
 #define UCT_TEST_CMS rdmacm, tcp

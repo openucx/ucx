@@ -1040,7 +1040,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 }
 #endif /* IBV_HW_TM */
 
-static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
+UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(params->iface,
                                                        uct_rc_mlx5_iface_common_t);
@@ -1069,11 +1069,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
         }
     }
 
-    status = uct_ib_device_async_event_register(&md->super.dev,
-                                                IBV_EVENT_QP_LAST_WQE_REACHED,
-                                                self->tx.wq.super.qp_num);
-    if (status != UCS_OK) {
-        goto err_destroy_txwq_qp;
+    if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
+        status = uct_ib_device_async_event_register(
+                &md->super.dev, IBV_EVENT_QP_LAST_WQE_REACHED,
+                self->tx.wq.super.qp_num);
+        if (status != UCS_OK) {
+            goto err_destroy_txwq_qp;
+        }
     }
 
     status = uct_rc_iface_add_qp(&iface->super, &self->super,
@@ -1088,9 +1090,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 err_event_unreg:
-    uct_ib_device_async_event_unregister(&md->super.dev,
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         self->tx.wq.super.qp_num);
+    if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
+        uct_ib_device_async_event_unregister(&md->super.dev,
+                                             IBV_EVENT_QP_LAST_WQE_REACHED,
+                                             self->tx.wq.super.qp_num);
+    }
 err_destroy_txwq_qp:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;

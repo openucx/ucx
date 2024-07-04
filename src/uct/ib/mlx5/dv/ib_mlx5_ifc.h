@@ -72,6 +72,7 @@ enum {
     UCT_IB_MLX5_CMD_OP_2ERR_QP                 = 0x507,
     UCT_IB_MLX5_CMD_OP_2RST_QP                 = 0x50a,
     UCT_IB_MLX5_CMD_OP_QUERY_QP                = 0x50b,
+    UCT_IB_MLX5_CMD_OP_INIT2INIT_QP            = 0x50e,
     UCT_IB_MLX5_CMD_OP_CREATE_RMP              = 0x90c,
     UCT_IB_MLX5_CMD_OP_CREATE_DCT              = 0x710,
     UCT_IB_MLX5_CMD_OP_DRAIN_DCT               = 0x712,
@@ -428,7 +429,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    affiliate_nic_vport_criteria[0x8];
     uint8_t    native_port_num[0x8];
     uint8_t    num_vhca_ports[0x8];
-    uint8_t    reserved_at_618[0x6];
+    uint8_t    flex_parser_id_gtpu_teid[0x4];
+    uint8_t    reserved_at_61c[0x1];
+    uint8_t    trusted_vnic_vhca[0x1];
     uint8_t    sw_owner_id[0x1];
     uint8_t    reserve_not_to_use[0x1];
     uint8_t    reserved_at_620[0x60];
@@ -1296,6 +1299,10 @@ enum {
 };
 
 enum {
+    UCT_IB_MLX5_QPC_OPT_MASK_32_INIT2INIT_MMO = 1 << 3,
+};
+
+enum {
     UCT_IB_MLX5_QPC_END_PADDING_MODE_SCATTER_AS_IS                = 0x0,
     UCT_IB_MLX5_QPC_END_PADDING_MODE_PAD_TO_CACHE_LINE_ALIGNMENT  = 0x1
 };
@@ -1502,6 +1509,20 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         dbr_umem_id[0x20];
 };
 
+struct uct_ib_mlx5_qpc_ext_bits {
+    uint8_t         delay_drop_en[0x1];
+    uint8_t         vl15[0x1];
+    uint8_t         mmo[0x1];
+    uint8_t         reserved_at_3[0xd];
+    uint8_t         dci_stream_channel_id[0x10];
+
+    uint8_t         qos_queue_group_id_requester[0x20];
+
+    uint8_t         qos_queue_group_id_responder[0x20];
+
+    uint8_t         reserved_at_80[0x5a0];
+};
+
 struct uct_ib_mlx5_create_qp_out_bits {
     uint8_t         status[0x8];
     uint8_t         reserved_at_8[0x18];
@@ -1537,6 +1558,42 @@ struct uct_ib_mlx5_create_qp_in_bits {
     uint8_t         reserved_at_861[0x1f];
 
     uint8_t         pas[0][0x40];
+};
+
+struct uct_ib_mlx5_init2init_qp_out_bits {
+    uint8_t         status[0x8];
+    uint8_t         reserved_at_8[0x18];
+
+    uint8_t         syndrome[0x20];
+
+    uint8_t         reserved_at_40[0x20];
+    uint8_t         ece[0x20];
+};
+
+struct uct_ib_mlx5_init2init_qp_in_bits {
+    uint8_t                         opcode[0x10];
+    uint8_t                         uid[0x10];
+
+    uint8_t                         vhca_tunnel_id[0x10];
+    uint8_t                         op_mod[0x10];
+
+    uint8_t                         qpc_ext[0x1];
+    uint8_t                         reserved_at_41[0x7];
+    uint8_t                         qpn[0x18];
+
+    uint8_t                         reserved_at_60[0x20];
+
+    uint8_t                         opt_param_mask[0x20];
+
+    uint8_t                         ece[0x20];
+
+    struct uct_ib_mlx5_qpc_bits     qpc_data;
+
+    uint8_t                         reserved_at_800[0x40];
+
+    uint8_t                         opt_param_mask_95_32[0x40];
+
+    struct uct_ib_mlx5_qpc_ext_bits qpc_data_extension;
 };
 
 struct uct_ib_mlx5_init2rtr_qp_out_bits {

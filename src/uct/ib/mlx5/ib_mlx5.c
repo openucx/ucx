@@ -786,6 +786,8 @@ void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
         uct_ib_mlx5_iface_put_res_domain(qp);
         uct_worker_tl_data_put(reg, uct_ib_mlx5_mmio_cleanup);
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
+        ucs_fatal("qp %p: TYPE_NULL", qp);
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         if (reg != NULL) {
             uct_worker_tl_data_put(reg, uct_ib_mlx5_mmio_cleanup);
@@ -941,6 +943,8 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         uct_ib_mlx5_devx_destroy_qp(md, qp);
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
+        ucs_fatal("md %p: qp %p: TYPE_NULL", md, qp);
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }

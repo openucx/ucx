@@ -440,6 +440,7 @@ typedef struct uct_ib_mlx5_dbrec {
 typedef enum {
     UCT_IB_MLX5_OBJ_TYPE_VERBS,
     UCT_IB_MLX5_OBJ_TYPE_DEVX,
+    UCT_IB_MLX5_OBJ_TYPE_NULL,
     UCT_IB_MLX5_OBJ_TYPE_LAST
 } uct_ib_mlx5_obj_type_t;
 

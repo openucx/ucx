@@ -202,7 +202,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, pd, uct_ib_mlx5_devx_md_get_pdn(md));
     UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, uar->uar->page_id);
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
-    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, !!attr->super.srq_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, attr->super.srq_num ? 1 /* SRQ */ :
+                                                               3 /* no RQ */);
     UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, attr->super.srq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, send_cq->cq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, recv_cq->cq_num);
@@ -319,6 +320,8 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         return uct_ib_mlx5_devx_obj_modify(qp->devx.obj, in, inlen, out, outlen,
                                            opcode_str);
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
+        return UCS_ERR_INVALID_PARAM;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         return UCS_ERR_UNSUPPORTED;
     }
@@ -352,6 +355,8 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
             return UCS_ERR_IO_ERROR;
         }
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
+        return UCS_ERR_INVALID_PARAM;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         return UCS_ERR_UNSUPPORTED;
     }

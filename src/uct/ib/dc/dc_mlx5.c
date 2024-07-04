@@ -646,6 +646,7 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
         uct_ib_mlx5_devx_obj_destroy(iface->rx.dct.devx.obj, "DCT");
 #endif
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
