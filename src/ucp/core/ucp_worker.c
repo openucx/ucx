@@ -94,8 +94,10 @@ static ucs_stats_class_t ucp_worker_stats_class = {
         [UCP_WORKER_STAT_RNDV_RX_EXP]              = "rndv_rx_exp",
         [UCP_WORKER_STAT_RNDV_RX_UNEXP]            = "rndv_rx_unexp",
         [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]           = "rndv_put_zcopy",
+        [UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY]     = "rndv_put_mtype_zcopy",
         [UCP_WORKER_STAT_RNDV_GET_ZCOPY]           = "rndv_get_zcopy",
         [UCP_WORKER_STAT_RNDV_RTR]                 = "rndv_rtr",
+        [UCP_WORKER_STAT_RNDV_RTR_MTYPE]           = "rndv_rtr_mtype",
         [UCP_WORKER_STAT_RNDV_RKEY_PTR]            = "rndv_rkey_ptr"
     }
 };
