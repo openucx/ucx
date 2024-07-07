@@ -207,7 +207,7 @@ run_client_server_app() {
 
 	if [ $kill_server -eq 1 ]
 	then
-		kill -9 ${server_pid}
+		kill -9 ${server_pid} || true # ignore failure
 	fi
 	wait ${server_pid} || true
 }
@@ -356,7 +356,7 @@ run_client_server() {
 		do
 			for msg_size in ${msg_size_list}
 			do
-				echo "==== Running UCP client-server with \"${mem_type}\" memory type using \"{$api}\" API with msg_size={$msg_size} ===="
+				echo "==== Running UCP client-server with \"${mem_type}\" memory type using \"${api}\" API with msg_size={$msg_size} ===="
 				run_client_server_app "./examples/${test_name}" "-m ${mem_type} -c ${api} -s ${msg_size}" "-a ${server_ip}" 1 0
 			done
 		done
