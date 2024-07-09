@@ -1098,14 +1098,102 @@ static std::ostream& operator<<(std::ostream& os, const test_value_type_t &v) {
     return os << "<" << v.num1 << "," << v.num2 << ">";
 }
 
+typedef struct {
+    int             i;
+    ucs_list_link_t list;
+} simple_elem_t;
 
 UCS_ARRAY_DECLARE_TYPE(test_2num_t, unsigned, test_value_type_t);
 UCS_ARRAY_DECLARE_TYPE(test_1int_t, size_t, int);
+UCS_ARRAY_DECLARE_TYPE(test_list_links_array_t, unsigned, simple_elem_t);
 
 class test_array : public test_datatype {
 protected:
     void test_fixed(test_1int_t *array, size_t capacity);
+    void generate_linked_list(int size, simple_elem_t *head);
+    void copy_array_of_linked_lists(void *dst, void *src, int size);
+    void cleanup_array_of_linked_lists(test_list_links_array_t *test_array);
 };
+
+/* generate a list of numbers in a certain size */
+void test_array::generate_linked_list(int size, simple_elem_t *head)
+{
+    ucs_list_head_init(&head->list);
+
+    for (int i = 0; i < size; i++) {
+        simple_elem_t *iter = new simple_elem_t;
+        iter->i             = i;
+        ucs_list_add_tail(&head->list, &iter->list);
+        /* coverity[leaked_storage] */
+    }
+}
+
+void test_array::copy_array_of_linked_lists(void *dst, void *src, int size)
+{
+    simple_elem_t *src_array_of_lists = static_cast<simple_elem_t*>(src);
+    simple_elem_t *dst_array_of_lists = static_cast<simple_elem_t*>(dst);
+
+    for (int i = 0; i < size; ++i) {
+        ucs_list_head_init(&dst_array_of_lists[i].list);
+        ucs_list_splice_tail(&dst_array_of_lists[i].list,
+                             &src_array_of_lists[i].list);
+    }
+}
+
+void test_array::cleanup_array_of_linked_lists(
+        test_list_links_array_t *test_array)
+{
+    simple_elem_t *tmp;
+    simple_elem_t *head;
+    simple_elem_t *elem;
+    simple_elem_t *list_elem;
+    ucs_array_for_each(head, test_array) {
+        ucs_list_for_each_safe(list_elem, tmp, &head->list, list) {
+            elem = (simple_elem_t*)list_elem;
+            ucs_list_del(&elem->list);
+            delete list_elem;
+        }
+    }
+
+    ucs_array_cleanup_dynamic(test_array);
+}
+
+UCS_TEST_F(test_array, dynamic_array_grow_of_list_link_elements) {
+    constexpr size_t NUM_ELEMENTS = 100;
+    constexpr size_t LIST_SIZE    = 200;
+    test_list_links_array_t test_array;
+
+    ucs_array_init_dynamic(&test_array);
+
+    /* create and fill array of linked lists */
+    for (size_t i = 0; i < NUM_ELEMENTS; ++i) {
+        void *old_buffer    = NULL;
+        simple_elem_t *elem = ucs_array_append_safe(&test_array, &old_buffer,
+                                                    FAIL());
+        generate_linked_list(LIST_SIZE, elem);
+
+        if (old_buffer != NULL) {
+            copy_array_of_linked_lists(test_array.buffer, old_buffer, i);
+            ucs_free(old_buffer);
+        }
+        EXPECT_EQ(i + 1, ucs_array_length(&test_array));
+    }
+
+    EXPECT_EQ(NUM_ELEMENTS, ucs_array_length(&test_array));
+
+    /* validate array integrity */
+    simple_elem_t *head, *elem;
+    ucs_array_for_each(head, &test_array) {
+        int expected_value = 0;
+        ucs_list_for_each(elem, &head->list, list) {
+            EXPECT_EQ(expected_value, elem->i);
+            expected_value++;
+        }
+        EXPECT_EQ(LIST_SIZE, expected_value);
+    }
+
+    cleanup_array_of_linked_lists(&test_array);
+}
 
 UCS_TEST_F(test_array, dynamic_array_2int_grow) {
     test_2num_t test_array;
