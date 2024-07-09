@@ -1124,6 +1124,7 @@ void test_array::generate_linked_list(int size, simple_elem_t *head)
         simple_elem_t *iter = new simple_elem_t;
         iter->i             = i;
         ucs_list_add_tail(&head->list, &iter->list);
+        /* coverity[leaked_storage] */
     }
 }
 
