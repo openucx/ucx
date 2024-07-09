@@ -1182,6 +1182,30 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
     return false;
 }
 
+bool ucp_test_base::entity::is_rndv_ppln_supported() const
+{
+    const auto ep              = this->ep();
+    const auto config          = ucp_ep_config(ep);
+    ucs_memory_type_t mem_type = this->ucph()->config.ext.rndv_frag_mem_type;
+
+    for (auto i = 0; i < config->key.num_lanes; ++i) {
+        const auto lane = config->key.rma_bw_lanes[i];
+        if (lane == UCP_NULL_LANE) {
+            break;
+        }
+        if (ucp_ep_md_attr(ep, lane)->reg_mem_types & UCS_BIT(mem_type)) {
+            const auto iface_attr =
+                ucp_worker_iface_get_attr(this->worker(),
+                        ucp_ep_get_rsc_index(ep, lane));
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 bool ucp_test_base::entity::is_conn_reqs_queue_empty() const
 {
     return m_conn_reqs.empty();
