@@ -277,9 +277,12 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     return sizeof(*rtr) + packed_rkey_size;
 }
 
-static void ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
 {
-    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    if (!abort || (req->send.rndv.mdesc != NULL)) {
+        ucs_mpool_put_inline(req->send.rndv.mdesc);
+    }
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 0, abort);
     } else {
