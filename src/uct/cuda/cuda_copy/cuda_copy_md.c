@@ -221,10 +221,11 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
         return status;
     }
 
-    prop.type                 = CU_MEM_ALLOCATION_TYPE_PINNED;
-    prop.requestedHandleTypes = CU_MEM_HANDLE_TYPE_FABRIC;
-    prop.location.type        = CU_MEM_LOCATION_TYPE_DEVICE;
-    prop.location.id          = cu_device;
+    prop.type                            = CU_MEM_ALLOCATION_TYPE_PINNED;
+    prop.requestedHandleTypes            = CU_MEM_HANDLE_TYPE_FABRIC;
+    prop.location.type                   = CU_MEM_LOCATION_TYPE_DEVICE;
+    prop.location.id                     = cu_device;
+    prop.allocFlags.gpuDirectRDMACapable = 1;
 
     if (md->granularity == SIZE_MAX) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAllocationGranularity(
