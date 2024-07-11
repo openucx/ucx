@@ -214,6 +214,7 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
     CUmemAllocationProp prop    = {};
     CUmemAccessDesc access_desc = {};
     ucs_status_t status;
+    int allowed_types;
     CUdevice cu_device;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cu_device));
@@ -266,6 +267,12 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
                                                      alloc_handle->length,
                                                      &access_desc, 1));
     if (status != UCS_OK) {
+        goto err_mem_unmap;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuPointerGetAttribute(&allowed_types,
+                CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES, alloc_handle->ptr));
+    if ((status != UCS_OK) || !(allowed_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
         goto err_mem_unmap;
     }
 
