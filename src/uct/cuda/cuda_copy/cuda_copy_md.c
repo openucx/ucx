@@ -216,7 +216,7 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
     ucs_status_t status;
     CUdevice cu_device;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cu_device));
+    status = UCT_CUDADRV_FUNC_LOG_WARN(cuCtxGetDevice(&cu_device));
     if (status != UCS_OK) {
         return status;
     }
@@ -227,7 +227,7 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
     prop.location.id          = cu_device;
 
     if (md->granularity == SIZE_MAX) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemGetAllocationGranularity(
+        status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemGetAllocationGranularity(
                 &md->granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM));
         if (status != UCS_OK) {
             return status;
@@ -236,21 +236,21 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
 
     alloc_handle->length = ucs_align_up(alloc_handle->length, md->granularity);
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemCreate(&alloc_handle->generic_handle,
+    status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemCreate(&alloc_handle->generic_handle,
                                                   alloc_handle->length, &prop,
                                                   0));
     if (status != UCS_OK) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
+    status = UCT_CUDADRV_FUNC_LOG_WARN(
             cuMemAddressReserve(&alloc_handle->ptr, alloc_handle->length,
                                 md->granularity, 0, 0));
     if (status != UCS_OK) {
         goto err_mem_release;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
+    status = UCT_CUDADRV_FUNC_LOG_WARN(
             cuMemMap(alloc_handle->ptr, alloc_handle->length, 0,
                      alloc_handle->generic_handle, 0));
     if (status != UCS_OK) {
@@ -261,7 +261,7 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
     access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
     access_desc.location.id   = cu_device;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemSetAccess(alloc_handle->ptr,
+    status = UCT_CUDADRV_FUNC_LOG_WARN(cuMemSetAccess(alloc_handle->ptr,
                                                      alloc_handle->length,
                                                      &access_desc, 1));
     if (status != UCS_OK) {
@@ -270,7 +270,7 @@ uct_cuda_copy_mem_alloc_fabric(uct_cuda_copy_md_t *md,
 
     alloc_handle->is_vmm = 1;
 
-    ucs_trace("allocated vmm fabric memory at %p of size %ld\n",
+    ucs_warn("allocated vmm fabric memory at %p of size %ld\n",
               (void*)alloc_handle->ptr, alloc_handle->length);
     return UCS_OK;
 
@@ -318,6 +318,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     if (mem_type == UCS_MEMORY_TYPE_CUDA) {
         if (md->config.enable_fabric != UCS_NO) {
             status = uct_cuda_copy_mem_alloc_fabric(md, alloc_handle);
+            ucs_warn("alloc fabric: %s", ucs_status_string(status));
             if (status == UCS_OK) {
                 goto allocated;
             } else {
@@ -330,6 +331,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
         if (md->config.enable_fabric != UCS_YES) {
             status = UCT_CUDADRV_FUNC_LOG_ERR(
                     cuMemAlloc(&alloc_handle->ptr, alloc_handle->length));
+            ucs_warn("alloc legacy: %s", ucs_status_string(status));
             if (status == UCS_OK) {
                 goto allocated;
             }

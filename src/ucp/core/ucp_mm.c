@@ -1373,6 +1373,8 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     status = ucp_memh_alloc(context, NULL, frag_size * num_elems, mem_type,
                             UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK,
                             ucs_mpool_name(mp), &chunk_hdr->memh);
+    ucs_warn("rndv mpools alloc memt %s status %s, size %zu", ucs_memory_type_names[mem_type],
+             ucs_status_string(status), frag_size * num_elems);
     if (status != UCS_OK) {
         return status;
     }
