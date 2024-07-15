@@ -434,6 +434,11 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                               uct_ib_iface_roce_dscp(&iface->super.super));
         }
 
+        UCT_IB_MLX5DV_SET(qpc, qpc, multi_path,
+                          iface->super.super.config.rcx_multi_path);
+        UCT_IB_MLX5DV_SET(qpc, qpc, multi_path_force,
+                          iface->super.super.config.multi_path_force);
+
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
                                                &opt_param_mask);
     } else {

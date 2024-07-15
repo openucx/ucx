@@ -51,7 +51,13 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
                       uct_ib_mlx5_get_atomic_mode(ib_iface));
     if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
+    } else {
+        UCT_IB_MLX5DV_SET(dctc, dctc, multi_path,
+                          ib_iface->config.dc_multi_path);
+        UCT_IB_MLX5DV_SET(dctc, dctc, multi_path_force,
+                          ib_iface->config.multi_path_force);
     }
+
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->rx.port_affinity);
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak,
                       iface->super.super.config.min_rnr_timer);
@@ -143,6 +149,11 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
             uct_ib_mlx5_devx_set_qpc_port_affinity(md, dci_config->path_index,
                                                    qpc, &opt_param_mask);
         }
+
+        UCT_IB_MLX5DV_SET(qpc, qpc, multi_path,
+                          rc_iface->super.config.dc_multi_path);
+        UCT_IB_MLX5DV_SET(qpc, qpc, multi_path_force,
+                          rc_iface->super.config.multi_path_force);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
                           rc_iface->super.config.sl);

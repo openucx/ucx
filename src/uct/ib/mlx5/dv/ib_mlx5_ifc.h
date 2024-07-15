@@ -917,7 +917,8 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         offload_type[0x4];
     uint8_t         reserved_at_1c[0x4];
 
-    uint8_t         reserved_at_20[0x8];
+    uint8_t         reserved_at_20[0x7];
+    uint8_t         multi_path_force[0x1];
     uint8_t         user_index[0x18];
 
     uint8_t         reserved_at_40[0x8];
