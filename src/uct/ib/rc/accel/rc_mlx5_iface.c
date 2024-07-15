@@ -772,10 +772,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     if (mlx5_config->super.ar_enable != UCS_NO) {
         self->super.super.config.rcx_multi_path = md->super.multi_path.xrc_rdma;
-        self->super.super.config.dc_multi_path = md->super.multi_path.dc_rdma;
+        self->super.super.config.dc_multi_path  = md->super.multi_path.dc_rdma;
         if (mlx5_config->super.ar_enable == UCS_YES) {
             self->super.super.config.multi_path_force =
-                md->super.multi_path.force;
+                    md->super.multi_path.force;
         }
     }
 
