@@ -29,7 +29,7 @@ static std::string wrap_config_dc_str(const std::string &str)
 
 class test_dc : public test_rc {
 public:
-    virtual void init() {
+    virtual void init() override {
         uct_test::init();
 
         m_e1 = uct_test::create_entity(0);
@@ -59,7 +59,7 @@ public:
         return ucs_derived_of(e->ep(idx), uct_dc_mlx5_ep_t);
     }
 
-    virtual void cleanup() {
+    virtual void cleanup() override {
         uct_test::cleanup();
     }
 
@@ -489,7 +489,7 @@ class test_dc_flow_control : public test_rc_flow_control {
 public:
 
     /* virtual */
-    uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
+    uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) override {
         return &ucs_derived_of(e->ep(ep_idx), uct_dc_mlx5_ep_t)->fc;
     }
 
@@ -505,7 +505,7 @@ public:
         ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_RESOURCE));
     }
 
-    virtual void disable_entity(entity *e) {
+    virtual void disable_entity(entity *e) override {
         uct_dc_mlx5_iface_t *iface      = ucs_derived_of(e->iface(),
                                                          uct_dc_mlx5_iface_t);
         uct_dc_mlx5_pool_stack_t *stack = &iface->tx.dci_pool[0].stack;
@@ -521,7 +521,7 @@ public:
         iface->tx.dci_pool[0].stack_top = iface->tx.ndci;
     }
 
-    virtual void enable_entity(entity *e, unsigned cq_num = 128) {
+    virtual void enable_entity(entity *e, unsigned cq_num = 128) override {
         uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->iface(),
                                                     uct_dc_mlx5_iface_t);
 
@@ -540,7 +540,7 @@ public:
         }
     }
 
-    virtual void test_pending_grant(int16_t wnd)
+    virtual void test_pending_grant(int16_t wnd) override
     {
         test_rc_flow_control::test_pending_grant(wnd);
         flush();
