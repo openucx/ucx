@@ -482,6 +482,24 @@ void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
                                    unsigned byte_len, int poll_flags);
 
 
+static UCS_F_ALWAYS_INLINE ucs_ternary_auto_value_t
+uct_rc_mlx5_multi_path_get(uint8_t multi_path,
+                           uint8_t multi_path_force,
+                           uct_rc_mlx5_iface_common_config_t *config)
+{
+    if (!multi_path || (config->super.ar_enable == UCS_NO)) {
+        return UCS_NO;
+    }
+
+    if (multi_path_force &&
+        config->super.ar_enable == UCS_YES) {
+        return UCS_YES;
+    }
+
+    return UCS_TRY;
+}
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_fill_tmh(struct ibv_tmh *tmh, uct_tag_t tag,
                      uint32_t app_ctx, unsigned op)

@@ -342,9 +342,7 @@ struct uct_ib_iface {
         enum ibv_mtu                 path_mtu;
         uint8_t                      counter_set_id;
         uct_ib_iface_send_overhead_t send_overhead;
-        uint8_t                      rcx_multi_path;
-        uint8_t                      dc_multi_path;
-        uint8_t                      multi_path_force;
+        ucs_ternary_auto_value_t     multi_path;
     } config;
 
     uct_ib_iface_ops_t        *ops;
