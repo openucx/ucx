@@ -127,8 +127,6 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg,
     test_get_zcopy();
 }
 
-UCT_INSTANTIATE_IB_AND_GGA_TEST_CASE(uct_p2p_rma_test_alloc_methods)
-
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_multithreaded,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
                                  UCT_IFACE_FLAG_GET_ZCOPY),
@@ -137,6 +135,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_multithreaded,
     test_put_zcopy();
     test_get_zcopy();
 }
+
+UCT_INSTANTIATE_IB_AND_GGA_TEST_CASE(uct_p2p_rma_test_alloc_methods)
 
 class uct_p2p_mix_test_alloc_methods : public uct_p2p_mix_test {};
 
