@@ -202,7 +202,10 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    pps[0x1];
     uint8_t    pps_modify[0x1];
     uint8_t    log_max_msg[0x5];
-    uint8_t    reserved_at_1c8[0x4];
+    uint8_t    multi_path_xrc_rdma[0x1];
+    uint8_t    multi_path_dc_rdma[0x1];
+    uint8_t    multi_path_rc_rdma[0x1];
+    uint8_t    reserved_at_1cb[0x1];
     uint8_t    max_tc[0x4];
     uint8_t    reserved_at_1d0[0x1];
     uint8_t    dcbx[0x1];
@@ -500,7 +503,8 @@ struct uct_ib_mlx5_cmd_hca_cap_2_bits {
 
     uint8_t    reserved_at_80[0x3];
     uint8_t    max_num_prog_sample_field[0x5];
-    uint8_t    reserved_at_88[0x3];
+    uint8_t    multi_path_force[0x1];
+    uint8_t    reserved_at_89[0x2];
     uint8_t    log_max_num_reserved_qpn[0x5];
     uint8_t    atomic_rate_pa[0x1];
     uint8_t    introspection_mkey_access_allowed[0x1];
@@ -1384,7 +1388,8 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         latency_sensitive[0x1];
     uint8_t         reserved_at_24[0x1];
     uint8_t         drain_sigerr[0x1];
-    uint8_t         reserved_at_26[0x2];
+    uint8_t         multi_path[0x1];
+    uint8_t         multi_path_force[0x1];
     uint8_t         pd[0x18];
 
     uint8_t         mtu[0x3];
