@@ -8,7 +8,7 @@
 #include "dc_mlx5_ep.h"
 
 
-#include <uct/ib/rc/accel/rc_mlx5.inl>
+#include <uct/ib/mlx5/rc/rc_mlx5.inl>
 #include "uct/ib/rc/base/rc_iface.h"
 #include "uct/ib/rc/base/rc_ep.h"
 
