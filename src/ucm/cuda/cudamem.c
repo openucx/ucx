@@ -36,7 +36,7 @@
         ret = ucm_orig_##_name(ptr_arg, UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
         if (ret == (_success)) { \
             ptr = _ref ptr_arg; \
-            ucm_trace("%s(" _args_fmt ") allocated %p", __FUNCTION__, \
+            ucm_trace("%s(" _args_fmt ") allocated %p", __func__, \
                       UCM_FUNC_PASS_ARGS(__VA_ARGS__), (void*)ptr); \
             ucm_cuda_dispatch_mem_alloc((CUdeviceptr)ptr, (_size), \
                                         (_mem_type)); \
@@ -53,7 +53,7 @@
         _retval ret; \
         \
         ucm_event_enter(); \
-        ucm_trace("%s(" _args_fmt ")", __FUNCTION__, \
+        ucm_trace("%s(" _args_fmt ")", __func__, \
                   UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
         ucm_cuda_dispatch_mem_free((CUdeviceptr)(_ptr_arg), _size, _mem_type, \
                                    #_name); \
