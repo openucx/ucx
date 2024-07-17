@@ -455,53 +455,51 @@ CHECK_CXX_COMP()
 
 
 #
-# Check for C++11 support
+# Check for C++17 support
 #
-AC_MSG_CHECKING([c++11 support])
+AC_MSG_CHECKING([c++17 support])
 AC_LANG_PUSH([C++])
 SAVE_CXXFLAGS="$CXXFLAGS"
-CXX11FLAGS="-std=c++11"
-CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
+CXX17FLAGS="-std=c++17"
+CXXFLAGS="$CXXFLAGS $CXX17FLAGS"
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
-					#include <string>
+					#include <cstddef>
 					int main(int argc, char** argv) {
-						std::to_string(1);
+						std::byte b{__STRICT_ANSI__};
 						return 0;
 					} ]])],
                   [AC_MSG_RESULT([yes])
-                   AC_SUBST([CXX11FLAGS])
-                   cxx11_happy=yes],
+                   AC_SUBST([CXX17FLAGS])
+                   cxx17_happy=yes],
                   [AC_MSG_RESULT([no])
-                   cxx11_happy=no])
+                   cxx17_happy=no])
 CXXFLAGS="$SAVE_CXXFLAGS"
 AC_LANG_POP
-AM_CONDITIONAL([HAVE_CXX11], [test "x$cxx11_happy" != xno])
+AM_CONDITIONAL([HAVE_CXX17], [test "x$cxx17_happy" != xno])
 
 
 #
-# Check for GNU++11 support
+# Check for GNU++17 support
 #
-AC_MSG_CHECKING([gnu++11 support])
+AC_MSG_CHECKING([gnu++17 support])
 AC_LANG_PUSH([C++])
 
 SAVE_CXXFLAGS="$CXXFLAGS"
-CXX11FLAGS="-std=gnu++11"
-CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
+CXX17FLAGS="-std=gnu++17"
+CXXFLAGS="$CXXFLAGS $CXX17FLAGS"
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
-					#include <string>
+					#include <cstddef>
 					int main(int argc, char** argv) {
-						int a;
-						typeof(a) b = 0;
-						std::to_string(1);
+						std::byte b{1};
 						return 0;
 					} ]])],
                   [AC_MSG_RESULT([yes])
-                   AC_SUBST([CXX11FLAGS])
-                   gnuxx11_happy=yes],
+                   AC_SUBST([CXX17FLAGS])
+                   gnuxx17_happy=yes],
                   [AC_MSG_RESULT([no])
-                   gnuxx11_happy=no])
+                   gnuxx17_happy=no])
 CXXFLAGS="$SAVE_CXXFLAGS"
-AM_CONDITIONAL([HAVE_GNUXX11], [test "x$gnuxx11_happy" != xno])
+AM_CONDITIONAL([HAVE_GNUXX17], [test "x$gnuxx17_happy" != xno])
 
 AC_CHECK_DECL(_GLIBCXX_NOTHROW, have_glibcxx_nothrow=yes,
               have_glibcxx_nothrow=no, [[#include <exception>]])

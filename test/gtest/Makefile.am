@@ -89,7 +89,7 @@ gtest_LDFLAGS += -Wl,--disable-new-dtags
 
 gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = \
-	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11 \
+	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++17 \
 	-DGTEST_UCM_HOOK_LIB_DIR="\"${abs_builddir}/ucm/test_dlopen/.libs\""
 
 gtest_SOURCES = \
@@ -263,7 +263,7 @@ gtest_LDADD += \
 endif
 
 if HAVE_HIP
-if HAVE_GNUXX11
+if HAVE_GNUXX17
 gtest_SOURCES += \
 	ucm/rocm_hooks.cc
 gtest_CPPFLAGS += \
