@@ -8,7 +8,7 @@
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 }
 #endif
 

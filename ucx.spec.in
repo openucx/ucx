@@ -11,6 +11,7 @@
 %bcond_with    vfs
 %bcond_with    mad
 %bcond_with    ze
+%bcond_with    mlx5
 
 Name: ucx
 Version: @VERSION@
@@ -41,6 +42,9 @@ BuildRequires: gdrcopy
 %endif
 %if %{with ib}
 BuildRequires: libibverbs-devel
+%endif
+%if %{with mlx5}
+BuildRequires: rdma-core-devel
 %endif
 %if %{with knem}
 BuildRequires: knem
@@ -114,6 +118,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \
            %_with_arg ib verbs \
+           %_with_arg mlx5 mlx5 \
            %_with_arg knem knem \
            %_with_arg rdmacm rdmacm \
            %_with_arg rocm rocm \
@@ -186,6 +191,9 @@ Provides static libraries required for developing with UCX.
 %if %{with ib}
 %{_libdir}/pkgconfig/ucx-ib.pc
 %endif
+%if %{with mlx5}
+%{_libdir}/pkgconfig/ucx-ib-mlx5.pc
+%endif
 %if %{with rdmacm}
 %{_libdir}/pkgconfig/ucx-rdmacm.pc
 %endif
@@ -253,6 +261,20 @@ hardware-offloaded data transfer.
 
 %files ib
 %{_libdir}/ucx/libuct_ib.so.*
+%endif
+
+%if %{with mlx5}
+%package ib-mlx5
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX IB MLX5 RDMA provider support
+Group: System Environment/Libraries
+
+%description ib-mlx5
+Provides support for DevX, Direct Verbs and DC transports for Infiniband
+devices.
+
+%files ib-mlx5
+%{_libdir}/ucx/libuct_ib_mlx5.so.*
 %endif
 
 %if %{with mad}
