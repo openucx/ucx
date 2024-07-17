@@ -113,6 +113,8 @@ enum {
     UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
                                                         indirect endpoint id instead of pointer,
                                                         can be replaced with looking at local ID */
+    UCP_EP_FLAG_USER_DATA_PARAM        = UCS_BIT(15),/* EP's user_data was passed via
+                                                        @ref ucp_ep_params_t::user_data */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */

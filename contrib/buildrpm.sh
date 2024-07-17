@@ -115,6 +115,7 @@ if [ $opt_binrpm -eq 1 ]; then
 	with_args+=" $(with_arg xpmem)"
 	with_args+=" $(with_arg fuse)"
 	with_args+=" $(with_arg mad)"
+	with_args+=" $(with_arg mlx5)"
 
 	echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec $defines $with_args | bash -eEx
 fi

@@ -12,8 +12,8 @@
 
 extern "C" {
 #include <uct/api/uct.h>
-#include <uct/ib/dc/dc_mlx5.h>
-#include <uct/ib/dc/dc_mlx5_ep.h>
+#include <uct/ib/mlx5/dc/dc_mlx5.h>
+#include <uct/ib/mlx5/dc/dc_mlx5_ep.h>
 }
 
 

@@ -223,6 +223,11 @@ gtest_CPPFLAGS += \
 gtest_LDADD += \
 	$(IBVERBS_LDFLAGS) \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
+if HAVE_MLX5_DV
+gtest_LDADD += \
+	$(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la
+endif
+
 if HAVE_DEVX
 gtest_SOURCES += \
 	uct/ib/test_devx.cc
