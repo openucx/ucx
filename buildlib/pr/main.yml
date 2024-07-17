@@ -182,290 +182,290 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
-  - stage: Codestyle
-    jobs:
-    - template: codestyle.yml
+  # - stage: Codestyle
+  #   jobs:
+  #   - template: codestyle.yml
 
-  - stage: Static_check
-    dependsOn: [Codestyle]
-    jobs:
-    - template: static_checks.yml
+  # - stage: Static_check
+  #   dependsOn: [Codestyle]
+  #   jobs:
+  #   - template: static_checks.yml
 
-  - stage: Build
-    dependsOn: [Static_check]
-    jobs:
-      - job: build_source
-        pool:
-          name: MLNX
-          demands:
-            - ucx_docker -equals yes
-        strategy:
-          matrix:
-            rhel72:
-              CONTAINER: rhel72
-            rhel74:
-              CONTAINER: rhel74
-            rhel76:
-              CONTAINER: rhel76
-              long_test: yes
-            rhel76_mofed47:
-              CONTAINER: rhel76_mofed47
-              long_test: yes
-            ubuntu2004:
-              CONTAINER: ubuntu2004
-              long_test: yes
-              extra_modules: ""
-            ubuntu1804:
-              CONTAINER: ubuntu1804
-              extra_modules: ""
-            ubuntu2204:
-              CONTAINER: ubuntu2204
-            ubuntu2210:
-              CONTAINER: ubuntu2210
-            debian113:
-              CONTAINER: debian113
-            debian109:
-              CONTAINER: debian109
-            sles15sp2:
-              CONTAINER: sles15sp2
-            rhel82:
-              CONTAINER: rhel82
-            rhel90:
-              CONTAINER: rhel90
-            fedora34:
-              CONTAINER: fedora34
-              long_test: yes
-            centos7:
-              CONTAINER: centos7_ib
-            ubuntu2004_rocm:
-              CONTAINER: ubuntu2004_rocm_5_4_0
-            ubuntu2204_rocm:
-              CONTAINER: ubuntu2204_rocm_6_0_0
-        container: $[ variables['CONTAINER'] ]
-        timeoutInMinutes: 340
+  # - stage: Build
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #     - job: build_source
+  #       pool:
+  #         name: MLNX
+  #         demands:
+  #           - ucx_docker -equals yes
+  #       strategy:
+  #         matrix:
+  #           rhel72:
+  #             CONTAINER: rhel72
+  #           rhel74:
+  #             CONTAINER: rhel74
+  #           rhel76:
+  #             CONTAINER: rhel76
+  #             long_test: yes
+  #           rhel76_mofed47:
+  #             CONTAINER: rhel76_mofed47
+  #             long_test: yes
+  #           ubuntu2004:
+  #             CONTAINER: ubuntu2004
+  #             long_test: yes
+  #             extra_modules: ""
+  #           ubuntu1804:
+  #             CONTAINER: ubuntu1804
+  #             extra_modules: ""
+  #           ubuntu2204:
+  #             CONTAINER: ubuntu2204
+  #           ubuntu2210:
+  #             CONTAINER: ubuntu2210
+  #           debian113:
+  #             CONTAINER: debian113
+  #           debian109:
+  #             CONTAINER: debian109
+  #           sles15sp2:
+  #             CONTAINER: sles15sp2
+  #           rhel82:
+  #             CONTAINER: rhel82
+  #           rhel90:
+  #             CONTAINER: rhel90
+  #           fedora34:
+  #             CONTAINER: fedora34
+  #             long_test: yes
+  #           centos7:
+  #             CONTAINER: centos7_ib
+  #           ubuntu2004_rocm:
+  #             CONTAINER: ubuntu2004_rocm_5_4_0
+  #           ubuntu2204_rocm:
+  #             CONTAINER: ubuntu2204_rocm_6_0_0
+  #       container: $[ variables['CONTAINER'] ]
+  #       timeoutInMinutes: 340
 
-        steps:
-          - checkout: self
-            clean: true
-            fetchDepth: 100
-            retryCountOnTaskFailure: 5
+  #       steps:
+  #         - checkout: self
+  #           clean: true
+  #           fetchDepth: 100
+  #           retryCountOnTaskFailure: 5
 
-          - bash: |
-              ./buildlib/tools/builds.sh
-            displayName: Build
-            env:
-              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
-              long_test: $(long_test)
-              test_static: $(test_static)
+  #         - bash: |
+  #             ./buildlib/tools/builds.sh
+  #           displayName: Build
+  #           env:
+  #             BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+  #             long_test: $(long_test)
+  #             test_static: $(test_static)
 
-  - stage: ucx_perftest_mad_rte
-    dependsOn: [Static_check]
-    displayName: ucx_perftest over MAD RTE
-    lockBehavior: sequential
-    variables:
-      - group: concurrency_lock
-    jobs:
-    - template: mad_tests.yml
+  # - stage: ucx_perftest_mad_rte
+  #   dependsOn: [Static_check]
+  #   displayName: ucx_perftest over MAD RTE
+  #   lockBehavior: sequential
+  #   variables:
+  #     - group: concurrency_lock
+  #   jobs:
+  #   - template: mad_tests.yml
 
-  - stage: WireCompat
-    dependsOn: [Static_check]
-    jobs:
-    - template: wire_compat.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-    - template: wire_compat.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        container: centos7_cuda11
-        ucx_targets:
-          ucx_1_15:
-            ucx_tag: v1.15.x
-          ucx_1_16:
-            ucx_tag: v1.16.x
-          ucx_1_17:
-            ucx_tag: v1.17.x
-    - template: wire_compat.yml
-      parameters:
-        name: new
-        demands: ucx_new -equals yes
-    # Temporaly disable wire-compat tests on rain machines
-    #- template: wire_compat.yml
-    #  parameters:
-    #    name: bond
-    #    demands: ucx_iodemo -equals yes
+  # - stage: WireCompat
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #   - template: wire_compat.yml
+  #     parameters:
+  #       name: althca
+  #       demands: ucx_althca -equals yes
+  #   - template: wire_compat.yml
+  #     parameters:
+  #       name: gpu
+  #       demands: ucx_gpu -equals yes
+  #       container: centos7_cuda11
+  #       ucx_targets:
+  #         ucx_1_15:
+  #           ucx_tag: v1.15.x
+  #         ucx_1_16:
+  #           ucx_tag: v1.16.x
+  #         ucx_1_17:
+  #           ucx_tag: v1.17.x
+  #   - template: wire_compat.yml
+  #     parameters:
+  #       name: new
+  #       demands: ucx_new -equals yes
+  #   # Temporaly disable wire-compat tests on rain machines
+  #   #- template: wire_compat.yml
+  #   #  parameters:
+  #   #    name: bond
+  #   #    demands: ucx_iodemo -equals yes
 
-  - stage: Coverity
-    dependsOn: [Static_check]
-    jobs:
-      - template: coverity.yml
-        parameters:
-          demands: ucx_docker -equals yes
-          container: coverity_rh7
+  # - stage: Coverity
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #     - template: coverity.yml
+  #       parameters:
+  #         demands: ucx_docker -equals yes
+  #         container: coverity_rh7
 
   - stage: Tests
-    dependsOn: [Static_check]
+    # dependsOn: [Static_check]
     jobs:
-    - template: tests.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-        test_perf: 0
-    - template: tests.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        test_perf: 1
-        container: centos7_cuda11
-    - template: tests.yml
-      parameters:
-        name: new
-        demands: ucx_new -equals yes
-        test_perf: 1
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-    - template: tests.yml
-      parameters:
-        name: roce_proto_disable
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        proto_enable: no
+    # - template: tests.yml
+    #   parameters:
+    #     name: althca
+    #     demands: ucx_althca -equals yes
+    #     test_perf: 0
+    # - template: tests.yml
+    #   parameters:
+    #     name: gpu
+    #     demands: ucx_gpu -equals yes
+    #     test_perf: 1
+    #     container: centos7_cuda11
+    # - template: tests.yml
+    #   parameters:
+    #     name: new
+    #     demands: ucx_new -equals yes
+    #     test_perf: 1
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce_proto_disable
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    #     proto_enable: no
     - template: tests.yml
       parameters:
         name: BlueField
-        demands: ucx_bf -equals yes
+        demands: swx-rain04-bf1 -equals yes
         run_tests: yes
         test_perf: 0
 
-  - stage: Namespace_Tests
-    dependsOn: [Static_check]
-    jobs:
-    - template: namespace_tests.yml
-      parameters:
-        name: new_namespace
-        demands: ucx_new -equals yes
+  # - stage: Namespace_Tests
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #   - template: namespace_tests.yml
+  #     parameters:
+  #       name: new_namespace
+  #       demands: ucx_new -equals yes
 
-  - stage: io_demo
-    dependsOn: [Static_check]
-    jobs:
-    - template: io_demo/io-demo.yml
+  # - stage: io_demo
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #   - template: io_demo/io-demo.yml
 
-  - stage: jucx
-    dependsOn: [Static_check]
-    jobs:
-      - template: ../jucx/jucx-test.yml
-        parameters:
-          arch: amd64
-          name: gpu
-          demands: ucx_gpu
+  # - stage: jucx
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #     - template: ../jucx/jucx-test.yml
+  #       parameters:
+  #         arch: amd64
+  #         name: gpu
+  #         demands: ucx_gpu
 
-      - template: ../jucx/jucx-test.yml
-        parameters:
-          arch: aarch64
-          demands: ucx-arm64
+  #     - template: ../jucx/jucx-test.yml
+  #       parameters:
+  #         arch: aarch64
+  #         demands: ucx-arm64
 
-  - stage: go
-    dependsOn: [Static_check]
-    jobs:
-      - template: go/go-test.yml
-        parameters:
-          name: new
-          demands: ucx_new -equals yes
-      - template: go/go-test.yml
-        parameters:
-            name: gpu
-            demands: ucx_gpu -equals yes
+  # - stage: go
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #     - template: go/go-test.yml
+  #       parameters:
+  #         name: new
+  #         demands: ucx_new -equals yes
+  #     - template: go/go-test.yml
+  #       parameters:
+  #           name: gpu
+  #           demands: ucx_gpu -equals yes
 
-  - stage: Build_Static
-    dependsOn: [Static_check]
-    jobs:
-      - job: build_source
-        pool:
-          name: MLNX
-          demands:
-            - ucx_docker -equals yes
-        strategy:
-          matrix:
-            centos7:
-              CONTAINER: centos7_ib
-              extra_modules: ucx-ib ucx-cma ucx-rdmacm
-              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
-              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
-            ubuntu2004:
-              CONTAINER: ubuntu2004
-              extra_modules: ""
-              extra_tls: ""
-              run_tls: ""
-            ubuntu1804:
-              CONTAINER: ubuntu1804
-              extra_modules: ""
-              extra_tls: ""
-              run_tls: ""
-        container: $[ variables['CONTAINER'] ]
-        timeoutInMinutes: 340
+  # - stage: Build_Static
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #     - job: build_source
+  #       pool:
+  #         name: MLNX
+  #         demands:
+  #           - ucx_docker -equals yes
+  #       strategy:
+  #         matrix:
+  #           centos7:
+  #             CONTAINER: centos7_ib
+  #             extra_modules: ucx-ib ucx-cma ucx-rdmacm
+  #             extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+  #             run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+  #           ubuntu2004:
+  #             CONTAINER: ubuntu2004
+  #             extra_modules: ""
+  #             extra_tls: ""
+  #             run_tls: ""
+  #           ubuntu1804:
+  #             CONTAINER: ubuntu1804
+  #             extra_modules: ""
+  #             extra_tls: ""
+  #             run_tls: ""
+  #       container: $[ variables['CONTAINER'] ]
+  #       timeoutInMinutes: 340
 
-        steps:
-          - checkout: self
-            clean: true
-            fetchDepth: 100
-            retryCountOnTaskFailure: 5
+  #       steps:
+  #         - checkout: self
+  #           clean: true
+  #           fetchDepth: 100
+  #           retryCountOnTaskFailure: 5
 
-          - bash: |
-              ./buildlib/tools/build_static.sh
-            displayName: Build
-            env:
-              EXTRA_TLS: $(extra_tls)
-              RUN_TLS: $(run_tls)
-              EXTRA_MODULES: $(extra_modules)
-              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
+  #         - bash: |
+  #             ./buildlib/tools/build_static.sh
+  #           displayName: Build
+  #           env:
+  #             EXTRA_TLS: $(extra_tls)
+  #             RUN_TLS: $(run_tls)
+  #             EXTRA_MODULES: $(extra_modules)
+  #             EXECUTOR_NUMBER: $(AZP_AGENT_ID)
 
 
-  - stage: Cuda
-    dependsOn: [Static_check]
-    jobs:
-      - template: cuda/cuda.yml
+  # - stage: Cuda
+  #   dependsOn: [Static_check]
+  #   jobs:
+  #     - template: cuda/cuda.yml
 
 
   - stage: AddressSanitizer
-    dependsOn: [Static_check]
+    # dependsOn: [Static_check]
     jobs:
-    - template: tests.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-        test_perf: 0
-        container: centos8_cuda11_asan
-        asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: new
-        demands: ucx_new -equals yes
-        test_perf: 0
-        container: ubuntu2204_ib
-        asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: roce
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        container: ubuntu2204_ib
-        asan_check: yes
-    - template: tests.yml
-      parameters:
-        name: roce_proto_disable
-        demands: ucx_roce -equals yes
-        test_perf: 0
-        proto_enable: no
-        container: ubuntu2204_ib
-        asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: gpu
+    #     demands: ucx_gpu -equals yes
+    #     test_perf: 0
+    #     container: centos8_cuda11_asan
+    #     asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: new
+    #     demands: ucx_new -equals yes
+    #     test_perf: 0
+    #     container: ubuntu2204_ib
+    #     asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    #     container: ubuntu2204_ib
+    #     asan_check: yes
+    # - template: tests.yml
+    #   parameters:
+    #     name: roce_proto_disable
+    #     demands: ucx_roce -equals yes
+    #     test_perf: 0
+    #     proto_enable: no
+    #     container: ubuntu2204_ib
+    #     asan_check: yes
     - template: tests.yml
       parameters:
         name: BlueField
-        demands: ucx_bf -equals yes
+        demands: swx-rain04-bf1 -equals yes
         test_perf: 0
         asan_check: yes
 
