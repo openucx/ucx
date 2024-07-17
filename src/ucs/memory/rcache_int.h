@@ -18,7 +18,7 @@
 #define ucs_rcache_region_log_lvl(_level, _message, ...) \
     do { \
         if (ucs_log_is_enabled(_level)) { \
-            ucs_rcache_region_log(__FILE__, __LINE__, __FUNCTION__, (_level), \
+            ucs_rcache_region_log(__FILE__, __LINE__, __func__, (_level), \
                                   _message, ## __VA_ARGS__); \
         } \
     } while (0)
