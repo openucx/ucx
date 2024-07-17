@@ -1375,6 +1375,14 @@ ucp_wireup_can_reconfigure(ucp_ep_h ep, const ucp_ep_config_key_t *new_key,
     }
 
     old_key = &ucp_ep_config(ep)->key;
+
+    /* Verify both old/new configurations have only p2p lanes */
+    if (!ucp_wireup_are_all_lanes_p2p(ep, old_key) ||
+           !ucp_wireup_are_all_lanes_p2p(ep, new_key) ||
+           (old_key->num_lanes != new_key->num_lanes)) {
+        return 0;
+    }
+
     ucp_ep_config_lanes_intersect(old_key, new_key, ep, remote_address,
                                   addr_indices, reuse_lane_map);
 
@@ -1385,10 +1393,7 @@ ucp_wireup_can_reconfigure(ucp_ep_h ep, const ucp_ep_config_key_t *new_key,
         }
     }
 
-    /* Verify both old/new configurations have only p2p lanes */
-    return ucp_wireup_are_all_lanes_p2p(ep, old_key) &&
-           ucp_wireup_are_all_lanes_p2p(ep, new_key) &&
-           (old_key->num_lanes == new_key->num_lanes);
+    return 1;
 }
 
 /* Check whether resource restriction is required */
