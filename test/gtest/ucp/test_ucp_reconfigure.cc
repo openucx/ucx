@@ -25,7 +25,8 @@ protected:
                const ucp_worker_params_t &worker_params,
                const ucp_test *test_owner) :
             ucp_test_base::entity(test_params, ucp_config, worker_params,
-                                  test_owner)
+                                  test_owner),
+            m_cfg_index(UCP_WORKER_CFG_INDEX_NULL)
         {
         }
 
