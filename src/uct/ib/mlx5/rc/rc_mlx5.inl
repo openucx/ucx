@@ -889,7 +889,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
     case MLX5_OPCODE_MMO|UCT_RC_MLX5_OPCODE_FLAG_MMO_GET:
         gga_wqe                  = txwq->curr;
 #if ENABLE_DEBUG_DATA
-        gga_wqe->padding         = 0xdeadbeaf;
+        gga_wqe->padding         = 0xdeadbeef;
 #endif
         gga_wqe->be_opaque_lkey  = htobe32(opaque_mr->lkey);
         gga_wqe->be_opaque_vaddr = htobe64((uintptr_t)opaque_mr->addr);

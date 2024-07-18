@@ -438,10 +438,10 @@ uct_gga_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_gga_mlx5_ep_t *gga_ep = ucs_derived_of(ep, uct_gga_mlx5_ep_t);
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
-                                          uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md      = ucs_derived_of(iface->super.super.super.md,
+                                               uct_ib_mlx5_md_t);
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
-    uint8_t fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
+    uint8_t fm_ce_se                        = MLX5_WQE_CTRL_CQ_UPDATE;
     uct_rkey_t rkey_copy;
     ucs_status_t status;
 
@@ -478,11 +478,11 @@ uct_gga_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_gga_mlx5_ep_t *gga_ep = ucs_derived_of(ep, uct_gga_mlx5_ep_t);
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
-                                          uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md      = ucs_derived_of(iface->super.super.super.md,
+                                               uct_ib_mlx5_md_t);
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
-    size_t total_length = uct_iov_total_length(iov, iovcnt);
-    uint8_t fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
+    size_t total_length                     = uct_iov_total_length(iov, iovcnt);
+    uint8_t fm_ce_se                        = MLX5_WQE_CTRL_CQ_UPDATE;
     uct_rkey_t rkey_copy;
     ucs_status_t status;
 

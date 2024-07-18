@@ -16,6 +16,12 @@
 #include <string.h>
 
 
+#define UCT_IB_MLX5_DMA_SEG_FMT           "va 0x%"PRIx64" len %d lkey 0x%x"
+
+#define UCT_IB_MLX5_DMA_SEG_FMT_ARG(_seg) be64toh((_seg)->addr),\
+                                          be32toh((_seg)->byte_count), \
+                                          be32toh((_seg)->lkey)
+
 static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                                  void *qend, int max_sge, int dump_qp,
                                  uct_log_data_dump_func_t packet_dump_cb,
@@ -238,27 +244,17 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
 }
 
 #if HAVE_MLX5_MMO
-static size_t
-uct_ib_mlx5_dump_data_seg(const struct mlx5_wqe_data_seg *seg,
-                          const char *prefix, char *buf, size_t max)
-{
-    snprintf(buf, max, " %s[va 0x%"PRIx64" len %d lkey 0x%x]", prefix,
-             be64toh(seg->addr), be32toh(seg->byte_count), be32toh(seg->lkey));
-    return strlen(buf);
-}
-
 static void uct_ib_mlx5_dump_dma_wqe(const void *wqe, char *buf, size_t max)
 {
     const uct_ib_mlx5_dma_wqe_t *dma_wqe = wqe;
-    const char *ends                     = buf + max;
-    char *s                              = buf;
 
-    snprintf(s, max, " OPQ[lkey 0x%x va 0x%"PRIx64"]",
+    snprintf(buf, max, " OPQ[lkey 0x%x va 0x%"PRIx64"]"
+             "G_SEG[" UCT_IB_MLX5_DMA_SEG_FMT "]"
+             "S_SEG[" UCT_IB_MLX5_DMA_SEG_FMT "]",
              be32toh(dma_wqe->be_opaque_lkey),
-             be64toh(dma_wqe->be_opaque_vaddr));
-    s += strlen(s);
-    s += uct_ib_mlx5_dump_data_seg(&dma_wqe->gather, "G_SEG", s, ends - s);
-    uct_ib_mlx5_dump_data_seg(&dma_wqe->scatter, "S_SEG", s, ends - s);
+             be64toh(dma_wqe->be_opaque_vaddr),
+             UCT_IB_MLX5_DMA_SEG_FMT_ARG(&dma_wqe->gather),
+             UCT_IB_MLX5_DMA_SEG_FMT_ARG(&dma_wqe->scatter));
 }
 #endif
 
