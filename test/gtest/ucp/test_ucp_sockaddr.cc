@@ -3170,6 +3170,9 @@ protected:
             send_recv(sender(), receiver(), send_recv_type(), false, cb_type(),
                       sender_idx);
 
+            /* Test relies on RNDV logic so rma_bw_lanes should exist */
+            ASSERT_TRUE(has_rndv_lanes(sender().ep()));
+
             for (size_t i = 0; i < num_sends; ++i) {
                 void *sreq = send(sender(), send_buf.ptr(), size,
                                   SEND_RECV_TAG, send_cb, NULL, sender_idx);
