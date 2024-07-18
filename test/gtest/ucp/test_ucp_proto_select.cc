@@ -342,17 +342,16 @@ protected:
         size_t range_start;
         do {
             range_start = range_end + 1;
-
             ucp_proto_query_attr_t proto_attr;
-            int valid = ucp_proto_select_elem_query(worker, &select_elem,
-                                                    range_start, &proto_attr);
-            range_end = proto_attr.max_msg_length;
-            if (valid) {
-            char buf[1024];
-                sprintf(buf, "  %zu-%zu desc: %s, config: %s", range_start,
-                range_end, proto_attr.desc, proto_attr.config);
-                UCS_TEST_MESSAGE << buf;
+            if (ucp_proto_select_elem_query(worker, &select_elem,
+                                            range_start, &proto_attr)) {
+                UCS_TEST_MESSAGE << range_start <<  "-"
+                                 << proto_attr.max_msg_length
+                                 << " desc: " << proto_attr.desc << ", config: "
+                                 << proto_attr.config;
             }
+
+            range_end = proto_attr.max_msg_length;
         } while (range_end != SIZE_MAX);
     }
 
@@ -361,7 +360,6 @@ protected:
                             const ucp_proto_select_elem_t &select_elem,
                             const proto_select_data_vec_t &data)
     {
-        dump_select_elem(worker, select_elem);
         for (auto &it : data) {
             size_t start = string_to_memunits(it.range_start);
             EXPECT_TRUE(select_elem_match(worker, select_elem, it, start));
@@ -384,11 +382,19 @@ protected:
 
         kh_foreach(proto_select.hash, select_key.u64, select_elem,
             if (key_match(key, select_key)) {
-                UCS_TEST_MESSAGE << "Key op flags: "
-                                 << (int)select_key.param.op_id_flags
-                                 << ", attr: " << (int)select_key.param.op_attr;
                 check_proto_select_elem(worker, select_elem, data);
             });
+
+        if (testing::Test::HasFailure()) {
+            kh_foreach(proto_select.hash, select_key.u64, select_elem,
+                if (key_match(key, select_key)) {
+                    UCS_TEST_MESSAGE << "Key op flags: "
+                                     << (int)select_key.param.op_id_flags
+                                     << ", attr: "
+                                     << (int)select_key.param.op_attr;
+                    dump_select_elem(worker, select_elem);
+                });
+        }
     }
 
     static bool
