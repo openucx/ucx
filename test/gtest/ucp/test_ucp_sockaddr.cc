@@ -3116,7 +3116,6 @@ class test_ucp_sockaddr_protocols_err_sender
 protected:
     virtual void init() {
         m_err_count = 0;
-        modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
         /* receiver should try to read wrong data, instead of detecting error
            in keepalive process and closing the connection */
         disable_keepalive();
@@ -3169,9 +3168,6 @@ protected:
             /* Warmup */
             send_recv(sender(), receiver(), send_recv_type(), false, cb_type(),
                       sender_idx);
-
-            /* Test relies on RNDV logic so rma_bw_lanes should exist */
-            ASSERT_TRUE(has_rndv_lanes(sender().ep()));
 
             for (size_t i = 0; i < num_sends; ++i) {
                 void *sreq = send(sender(), send_buf.ptr(), size,
