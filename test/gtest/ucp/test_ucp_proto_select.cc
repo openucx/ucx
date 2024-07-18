@@ -5,6 +5,7 @@
  */
 
 #include "ucp_test.h"
+#include <unordered_map>
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
@@ -12,18 +13,12 @@ extern "C" {
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 #include <ucp/proto/proto_select.inl>
-#include <ucs/sys/topo/base/topo.h>
 }
 
 struct mock_t {
 public:
-    typedef void (*func_t)(void);
-    typedef std::map<func_t *, std::unique_ptr<mock_t>> mock_map_t;
-
-    ~mock_t()
-    {
-        *m_orig_ptr = m_orig;
-    }
+    using func_t     = void (*)();
+    using mock_map_t = std::unordered_map<func_t *, std::unique_ptr<mock_t>>;
 
     static void cleanup()
     {
@@ -33,29 +28,27 @@ public:
     template <typename Fn>
     static mock_t *setup(Fn *orig_ptr, Fn mock)
     {
-        func_t *ptr = reinterpret_cast<func_t *>(orig_ptr);
-        auto it = g_mock_map.find(ptr);
+        func_t *ptr    = reinterpret_cast<func_t *>(orig_ptr);
+        func_t mock_fn = reinterpret_cast<func_t>(mock);
+        auto it        = g_mock_map.find(ptr);
         if (it == g_mock_map.end()) {
-            mock_t * new_mock = new mock_t(ptr, reinterpret_cast<func_t>(mock));
+            mock_t * new_mock = new mock_t(ptr, mock_fn);
             g_mock_map[ptr] = std::unique_ptr<mock_t>(new_mock);
             return new_mock;
         }
 
+        it->second->m_mock = mock_fn;
         return it->second.get();
     }
 
     template <typename Fn, typename... Args>
     static ucs_status_t actual_call(Fn *orig_ptr, Args&&... args)
     {
-        mock_t *mock = find(reinterpret_cast<func_t *>(orig_ptr)); 
-        Fn orig_func = mock ? reinterpret_cast<Fn>(mock->m_orig) : *orig_ptr;
+        auto it = g_mock_map.find(reinterpret_cast<func_t *>(orig_ptr));
+        Fn orig_func = (it == g_mock_map.end()) ?
+                            *orig_ptr :
+                            reinterpret_cast<Fn>(it->second->m_orig);
         return orig_func(std::forward<Args>(args)...);
-    }
-
-    static mock_t *find(func_t *orig_ptr)
-    {
-        auto it = g_mock_map.find(orig_ptr);
-        return (it == g_mock_map.end()) ? nullptr : it->second.get();
     }
 
 private:
@@ -64,6 +57,13 @@ private:
     {
         *m_orig_ptr = m_mock;
     }
+
+    ~mock_t()
+    {
+        *m_orig_ptr = m_orig;
+    }
+
+    friend std::unique_ptr<mock_t>::deleter_type;
 
     func_t *m_orig_ptr;
     func_t  m_orig;
@@ -77,13 +77,8 @@ mock_t::mock_map_t mock_t::g_mock_map;
 
 class mock_component {
 public:
-    typedef std::function<void(uct_perf_attr_t &)> perf_attr_func_t;
-    typedef std::function<void(uct_iface_attr &)> iface_attr_func_t;
-
-    ~mock_component()
-    {
-        m_component->flags = m_flags_orig;
-    }
+    using perf_attr_func_t  = std::function<void(uct_perf_attr_t &)>;
+    using iface_attr_func_t = std::function<void(uct_iface_attr &)>;
 
     static mock_component &setup(const std::string &name)
     {
@@ -108,7 +103,7 @@ public:
         mock_t::cleanup();
     }
 
-    uct_component_t * operator->() const
+    uct_component_h operator->() const
     {
         return m_component;
     }
@@ -124,20 +119,6 @@ public:
         m_iface_attrs_funcs[iface_name] = cb;
     }
 
-    static void set_mock_memory_distance(const ucs_sys_dev_distance_t &distance)
-    {
-        g_memory_distance = distance;
-
-        ucs_sys_topo_provider_t *provider;
-        ucs_list_for_each(provider, &ucs_sys_topo_providers_list, list) {
-            mock_t::setup(&provider->ops.get_memory_distance,
-                (ucs_topo_get_memory_distance_func_t)(
-                [](ucs_sys_device_t device, ucs_sys_dev_distance_t *distance) {
-                    *distance = g_memory_distance;
-                }));
-        }
-    }
-
 private:
     mock_component(uct_component_h component) :
         m_component(component),
@@ -147,6 +128,11 @@ private:
         ucs_list_for_each(tl, &component->tl_list, list) {
             mock_t::setup(&tl->iface_open, iface_open_mock);
         }
+    }
+
+    ~mock_component()
+    {
+        m_component->flags = m_flags_orig;
     }
 
     static uct_component_h find_uct_component(const std::string &name)
@@ -188,16 +174,17 @@ private:
         uct_tl_t *tl         = self->find_tl(params);
         ucs_status_t status  = mock_t::actual_call(&tl->iface_open, md, worker,
                                                    params, config, iface_p);
-        if (status == UCS_OK) {
-            uct_base_iface_t *base = ucs_derived_of(*iface_p, uct_base_iface_t);
-            self->m_iface_names[base] = std::string(params->mode.device.tl_name)
-                                        + "/" + params->mode.device.dev_name;
-
-            mock_t::setup(&base->internal_ops->iface_estimate_perf,
-                          iface_estimate_perf_mock);
-            mock_t::setup(&(*iface_p)->ops.iface_query, iface_query_mock);
+        if (status != UCS_OK) {
+            return status;
         }
 
+        uct_base_iface_t *base    = ucs_derived_of(*iface_p, uct_base_iface_t);
+        self->m_iface_names[base] = std::string(params->mode.device.tl_name) +
+                                    "/" + params->mode.device.dev_name;
+
+        mock_t::setup(&base->internal_ops->iface_estimate_perf,
+                      iface_estimate_perf_mock);
+        mock_t::setup(&(*iface_p)->ops.iface_query, iface_query_mock);
         return status;
     }
 
@@ -208,12 +195,14 @@ private:
         ucs_status_t status    =
             mock_t::actual_call(&base->internal_ops->iface_estimate_perf, iface,
                                 perf_attr);
-        if (status == UCS_OK) {
-            mock_component *self = find(base->md->component);
-            auto it = self->m_perf_attrs_funcs.find(self->m_iface_names[base]);
-            if (it != self->m_perf_attrs_funcs.end()) {
-                (it->second)(*perf_attr);
-            }
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        mock_component *self = find(base->md->component);
+        auto it = self->m_perf_attrs_funcs.find(self->m_iface_names[base]);
+        if (it != self->m_perf_attrs_funcs.end()) {
+            (it->second)(*perf_attr);
         }
 
         return status;
@@ -224,32 +213,34 @@ private:
     {
         ucs_status_t status =
             mock_t::actual_call(&iface->ops.iface_query, iface, iface_attr);
-        if (status == UCS_OK) {
-            uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
-            mock_component *self   = find(base->md->component);
-            auto it = self->m_iface_attrs_funcs.find(self->m_iface_names[base]);
-            if (it != self->m_iface_attrs_funcs.end()) {
-                (it->second)(*iface_attr);
-            }
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        uct_base_iface_t *base = ucs_derived_of(iface, uct_base_iface_t);
+        mock_component *self   = find(base->md->component);
+        auto it = self->m_iface_attrs_funcs.find(self->m_iface_names[base]);
+        if (it != self->m_iface_attrs_funcs.end()) {
+            (it->second)(*iface_attr);
         }
 
         return status;
     }
 
+    friend std::unique_ptr<mock_component>::deleter_type;
+
     uct_component_h                           m_component;
     uint64_t                                  m_flags_orig;
-    std::map<uct_base_iface_t *, std::string> m_iface_names;
-    std::map<std::string, iface_attr_func_t>  m_iface_attrs_funcs;
-    std::map<std::string, perf_attr_func_t>   m_perf_attrs_funcs;
+    std::unordered_map<uct_base_iface_t *, std::string> m_iface_names;
+    std::unordered_map<std::string, iface_attr_func_t>  m_iface_attrs_funcs;
+    std::unordered_map<std::string, perf_attr_func_t>   m_perf_attrs_funcs;
 
-    typedef std::map<uct_component_h,
-                     std::unique_ptr<mock_component>> component_map_t;
-    static component_map_t        g_component_map;
-    static ucs_sys_dev_distance_t g_memory_distance;
+    using component_map_t = std::unordered_map<uct_component_h,
+                                               std::unique_ptr<mock_component>>;
+    static component_map_t g_component_map;
 };
 
 mock_component::component_map_t mock_component::g_component_map;
-ucs_sys_dev_distance_t mock_component::g_memory_distance;
 
 
 struct proto_select_data {
@@ -259,7 +250,7 @@ struct proto_select_data {
     std::string config;
 };
 
-typedef std::vector<proto_select_data> proto_select_data_vec_t;
+using proto_select_data_vec_t = std::vector<proto_select_data>;
 
 class test_ucp_proto_select : public ucp_test {
 public:
@@ -272,6 +263,7 @@ public:
     {
         modify_config("PROTO_ENABLE", "y");
         modify_config("MAX_RNDV_LANES", "1");
+        modify_config("TOPO_PRIO", "default");
     }
 
     virtual void cleanup() override
@@ -392,7 +384,7 @@ protected:
 
         kh_foreach(proto_select.hash, select_key.u64, select_elem,
             if (key_match(key, select_key)) {
-                UCS_TEST_MESSAGE << "Key op: "
+                UCS_TEST_MESSAGE << "Key op flags: "
                                  << (int)select_key.param.op_id_flags
                                  << ", attr: " << (int)select_key.param.op_attr;
                 check_proto_select_elem(worker, select_elem, data);
@@ -418,7 +410,6 @@ protected:
 
 UCS_TEST_P(test_ucp_proto_select, mock_perf_attr, "NET_DEVICES=mlx5_0:1")
 {
-    mock_component::set_mock_memory_distance({0, DBL_MAX});
     mock_component::setup("ib").set_mock_iface_attr("rc_mlx5/mlx5_0:1",
         [](uct_iface_attr_t &iface_attr) {
             iface_attr.dev_num_paths    = 1;
