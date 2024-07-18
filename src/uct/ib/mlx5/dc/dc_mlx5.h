@@ -12,9 +12,9 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/rc/verbs/rc_verbs.h>
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/ud/base/ud_iface_common.h>
-#include <uct/ib/ud/accel/ud_mlx5_common.h>
+#include <uct/ib/mlx5/ud/ud_mlx5_common.h>
 
 
 /*

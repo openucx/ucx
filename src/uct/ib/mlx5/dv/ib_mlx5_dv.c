@@ -430,41 +430,6 @@ uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
     return obj;
 }
 
-ucs_status_t
-uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg)
-{
-    int ret;
-
-    ret = mlx5dv_devx_obj_destroy(obj);
-    if (ret != 0) {
-        ucs_warn("mlx5dv_devx_obj_destroy(%s) failed: %m", msg_arg);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
-}
-
-ucs_status_t uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
-                                          const void *in, size_t inlen,
-                                          void *out, size_t outlen,
-                                          char *msg_arg, int silent)
-{
-    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
-    int ret;
-    unsigned syndrome;
-
-    ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
-    if (ret != 0) {
-        syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
-        ucs_log(level,
-                "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
-                msg_arg, ibv_get_device_name(context->device), syndrome);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
-}
-
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p)
