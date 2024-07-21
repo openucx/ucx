@@ -351,6 +351,9 @@ struct uct_dc_mlx5_iface {
 
 extern ucs_config_field_t uct_dc_mlx5_iface_config_table[];
 
+extern const char *uct_dc_tx_policy_names[];
+
+
 ucs_status_t
 uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
                              const uct_dc_mlx5_iface_config_t *config);
