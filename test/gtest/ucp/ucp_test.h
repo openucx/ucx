@@ -352,8 +352,9 @@ protected:
         }
     }
 
-    template <typename T>
-    void wait_for_value(volatile T *var, T value, double timeout = 10.0) const
+    template<typename T>
+    void wait_for_value(volatile T *var, T value,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
     {
         ucs_time_t deadline = ucs_get_time() +
                               ucs_time_from_sec(timeout) * ucs::test_time_multiplier();

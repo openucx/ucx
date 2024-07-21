@@ -25,7 +25,6 @@
 
 
 #define DEFAULT_DELAY_MS           1.0
-#define DEFAULT_TIMEOUT_SEC       10.0
 #define DEFAULT_VARIANT              0
 
 #define UCT_TEST_CALL_AND_TRY_AGAIN(_func, _res) \
