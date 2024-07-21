@@ -861,12 +861,19 @@ ucs_status_t uct_dc_mlx5_iface_resize_and_fill_dcis(uct_dc_mlx5_iface_t *iface,
                                                     uint16_t size)
 {
     uct_dc_dci_t empty_dci = {{{0}}};
+    size_t old_length      = ucs_array_length(&iface->tx.dcis);
+    void *old_buffer_p;
 
     empty_dci.txwq.super.qp_num = UCT_IB_INVALID_QPN;
-    ucs_array_resize(&iface->tx.dcis, size, empty_dci,
-                     ucs_error("%p: could not resize dcis array to %u", iface,
-                               size);
-                     return UCS_ERR_NO_MEMORY);
+    ucs_array_resize_safe(&iface->tx.dcis, size, empty_dci,
+                          ucs_error("%p: could not resize dcis array to %u",
+                                    iface, size);
+                          return UCS_ERR_NO_MEMORY, &old_buffer_p);
+    if (old_buffer_p) {
+        uct_dc_mlx5_iface_dcis_array_copy(iface->tx.dcis.buffer, old_buffer_p,
+                                          old_length);
+        ucs_array_buffer_free(old_buffer_p);
+    }
 
     return UCS_OK;
 }
@@ -879,11 +886,7 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
     uct_dc_dci_t *dci;
 
     ucs_array_init_dynamic(&iface->tx.dcis);
-    /* Reserving max size as a temporary solution due to pointer-copy issue in ucs_array
-       TODO: fix when ucs_array_t supports complex types 
-    */
-    status = uct_dc_mlx5_iface_resize_and_fill_dcis(
-            iface, UCT_DC_MLX5_IFACE_MAX_DCI_POOLS * iface->tx.ndci);
+    status = uct_dc_mlx5_iface_resize_and_fill_dcis(iface, 1);
     if (status != UCS_OK) {
         return status;
     }
@@ -899,6 +902,8 @@ uct_dc_mlx5_iface_dcis_create(uct_dc_mlx5_iface_t *iface,
 
     iface->tx.bb_max = dci->txwq.bb_max;
     uct_dc_mlx5_destroy_dci(iface, dci);
+
+    ucs_array_length(&iface->tx.dcis) = 0;
 
     return UCS_OK;
 }

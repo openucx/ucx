@@ -500,10 +500,10 @@ public:
         uct_dc_mlx5_iface_t *iface      = ucs_derived_of(e->iface(),
                                                          uct_dc_mlx5_iface_t);
         uct_dc_mlx5_pool_stack_t *stack = &iface->tx.dci_pool[0].stack;
+        uct_dc_dci_t *dci;
 
-        for (int i = 0; i < iface->tx.ndci; ++i) {
-            uct_rc_txqp_available_set(&ucs_array_elem(&iface->tx.dcis, i).txqp,
-                                      0);
+        ucs_array_for_each(dci, &iface->tx.dcis) {
+            uct_rc_txqp_available_set(&dci->txqp, 0);
         }
 
         for (int i = ucs_array_length(stack); i < iface->tx.ndci; i++) {
@@ -515,9 +515,9 @@ public:
     virtual void enable_entity(entity *e, unsigned cq_num = 128) {
         uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->iface(),
                                                     uct_dc_mlx5_iface_t);
+        uct_dc_dci_t *dci;
 
-        for (int i = 0; i < iface->tx.ndci; ++i) {
-            uct_dc_dci_t *dci = &ucs_array_elem(&iface->tx.dcis, i);
+        ucs_array_for_each(dci, &iface->tx.dcis) {
             uct_rc_txqp_available_set(&dci->txqp, dci->txwq.bb_max);
         }
 
