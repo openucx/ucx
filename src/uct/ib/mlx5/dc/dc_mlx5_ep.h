@@ -382,6 +382,25 @@ uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
     return ucs_likely(pool->stack_top < iface->tx.ndci);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_dc_mlx5_iface_dcis_array_copy(void *dst, void *src, size_t length)
+{
+    uct_dc_dci_t *src_dcis = (uct_dc_dci_t*)src;
+    uct_dc_dci_t *dst_dcis = (uct_dc_dci_t*)dst;
+    size_t i;
+
+    memcpy(dst_dcis, src_dcis, sizeof(uct_dc_dci_t) * length);
+
+    /* txqp is a queue and need to splice tail */
+    for (i = 0; i < length; ++i) {
+        if (uct_dc_mlx5_is_dci_valid(&src_dcis[i])) {
+            ucs_queue_head_init(&dst_dcis[i].txqp.outstanding);
+            ucs_queue_splice(&dst_dcis[i].txqp.outstanding,
+                             &src_dcis[i].txqp.outstanding);
+        }
+    }
+}
+
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_can_alloc_or_create(uct_dc_mlx5_iface_t *iface,
                                           uint8_t pool_index)
