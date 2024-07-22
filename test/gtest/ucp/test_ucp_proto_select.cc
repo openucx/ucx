@@ -27,8 +27,8 @@ public:
 
 private:
     friend class mock_component;
-    using component_map = std::unordered_map<uct_component_h,
-                                             std::unique_ptr<mock_component>>;
+    using component_map =
+        std::unordered_map<uct_component_h, std::unique_ptr<mock_component>>;
 
     static component_map &map()
     {
@@ -59,16 +59,16 @@ private:
 
 class mock_component {
 public:
-    using perf_attr_func_t  = std::function<void(uct_perf_attr_t &)>;
-    using iface_attr_func_t = std::function<void(uct_iface_attr &)>;
+    using perf_attr_func_t  = std::function<void(uct_perf_attr_t&)>;
+    using iface_attr_func_t = std::function<void(uct_iface_attr&)>;
 
     void set_mock_perf_attr(const std::string &iface_name, perf_attr_func_t cb)
     {
         m_perf_attrs_funcs[iface_name] = cb;
     }
 
-    void set_mock_iface_attr(const std::string &iface_name,
-                             iface_attr_func_t cb)
+    void
+    set_mock_iface_attr(const std::string &iface_name, iface_attr_func_t cb)
     {
         m_iface_attrs_funcs[iface_name] = cb;
     }
@@ -85,7 +85,7 @@ private:
         }
     }
 
-    uct_tl_t * find_tl(const uct_iface_params_t *params) const
+    uct_tl_t *find_tl(const uct_iface_params_t *params) const
     {
         uct_tl_t *tl;
         ucs_list_for_each(tl, &m_component->tl_list, list) {
@@ -177,8 +177,7 @@ mock_component &mock_component_test::setup_mock(const std::string &name)
     mock_component *mock_comp = find(component);
     if (nullptr == mock_comp) {
         mock_comp = new mock_component(component, m_mock);
-        map().emplace(component,
-                      std::unique_ptr<mock_component>(mock_comp));
+        map().emplace(component, std::unique_ptr<mock_component>(mock_comp));
     }
 
     return *mock_comp;
@@ -195,7 +194,7 @@ using proto_select_data_vec_t = std::vector<proto_select_data>;
 
 class test_ucp_proto_select : public ucp_test, public mock_component_test {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_AM);
     }
@@ -212,17 +211,16 @@ public:
         ucp_test::cleanup();
     }
 
-    static void
-    check_ep_config(entity &e, const proto_select_data_vec_t &data,
-                    ucp_proto_select_key_t key)
+    static void check_ep_config(entity &e, const proto_select_data_vec_t &data,
+                                ucp_proto_select_key_t key)
     {
         ucp_ep_config_t *config = ucp_worker_ep_config(e.worker(), 0);
         check_proto_select(e.worker(), config->proto_select, data, key);
     }
 
-    static void
-    check_rkey_config(entity &e, const proto_select_data_vec_t &data,
-                      ucp_proto_select_key_t key)
+    static void check_rkey_config(entity &e,
+                                  const proto_select_data_vec_t &data,
+                                  ucp_proto_select_key_t key)
     {
         ucp_rkey_config_t *config = &e.worker()->rkey_config[0];
         check_proto_select(e.worker(), config->proto_select, data, key);
@@ -263,9 +261,8 @@ protected:
                                   size_t range_start)
     {
         ucp_proto_query_attr_t proto_attr;
-        int valid = ucp_proto_select_elem_query(worker, &select_elem,
-                                                range_start, &proto_attr);
-        if (!valid) {
+        if (!ucp_proto_select_elem_query(worker, &select_elem, range_start,
+                                         &proto_attr)) {
             return false;
         }
 
@@ -283,8 +280,8 @@ protected:
         do {
             range_start = range_end + 1;
             ucp_proto_query_attr_t proto_attr;
-            if (ucp_proto_select_elem_query(worker, &select_elem,
-                                            range_start, &proto_attr)) {
+            if (ucp_proto_select_elem_query(worker, &select_elem, range_start,
+                                            &proto_attr)) {
                 UCS_TEST_MESSAGE << range_start <<  "-"
                                  << proto_attr.max_msg_length
                                  << " desc: " << proto_attr.desc << ", config: "
@@ -306,8 +303,8 @@ protected:
             /* As we cannot get range_start directly, we assert that protocol
              * is different at that range */
             if (start > 0) {
-                EXPECT_FALSE(select_elem_match(worker, select_elem, it,
-                             start - 1));
+                EXPECT_FALSE(
+                        select_elem_match(worker, select_elem, it, start - 1));
             }
         }
     }

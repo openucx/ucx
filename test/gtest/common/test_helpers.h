@@ -1046,27 +1046,26 @@ public:
         m_mock_map.clear();
     }
 
-    template <typename Fn>
-    void setup(Fn *orig_ptr, Fn mock)
+    template <typename Fn> void setup(Fn *orig_ptr, Fn mock)
     {
-        func *ptr    = reinterpret_cast<func *>(orig_ptr);
+        func *ptr    = reinterpret_cast<func*>(orig_ptr);
         func mock_fn = reinterpret_cast<func>(mock);
         auto it      = m_mock_map.find(ptr);
         if (it == m_mock_map.end()) {
             mock_func *new_mock = new mock_func(ptr, mock_fn);
             m_mock_map[ptr]     = std::unique_ptr<mock_func>(new_mock);
         } else {
-            it->second->m_mock  = mock_fn;
+            it->second->m_mock = mock_fn;
         }
     }
 
     template <typename Fn, typename... Args>
     ucs_status_t actual_call(Fn *orig_ptr, Args&&... args) const
     {
-        auto it      = m_mock_map.find(reinterpret_cast<func *>(orig_ptr));
+        auto it      = m_mock_map.find(reinterpret_cast<func*>(orig_ptr));
         Fn orig_func = (it == m_mock_map.end()) ?
-                            *orig_ptr :
-                            reinterpret_cast<Fn>(it->second->m_orig);
+                                *orig_ptr :
+                                reinterpret_cast<Fn>(it->second->m_orig);
         return orig_func(std::forward<Args>(args)...);
     }
 
@@ -1084,8 +1083,8 @@ private:
         }
 
         func *m_orig_ptr;
-        func  m_orig;
-        func  m_mock;
+        func m_orig;
+        func m_mock;
     };
 
     std::unordered_map<func *, std::unique_ptr<mock_func>> m_mock_map;
