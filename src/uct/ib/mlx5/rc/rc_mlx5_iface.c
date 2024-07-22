@@ -194,9 +194,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     return UCS_OK;
 }
 
-static void
-uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
-                                 ucs_status_t ep_status)
+void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
+                                      ucs_status_t ep_status)
 {
     struct mlx5_cqe64 *cqe = arg;
     uct_rc_iface_t *iface  = ucs_derived_of(ib_iface, uct_rc_iface_t);

@@ -13,6 +13,13 @@
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif
 
+
+static std::string
+wrap_config_ib_str(const uct_test *self, const std::string& str) {
+    const std::string prefix = self->has_transport("gga_mlx5") ? "GGA_" : "IB_";
+    return prefix + str;
+}
+
 class uct_p2p_rma_test_xfer : public uct_p2p_rma_test {};
 
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_xfer, fence_relaxed_order,
@@ -95,7 +102,8 @@ class uct_p2p_rma_test_alloc_methods : public uct_p2p_rma_test {
 protected:
     void test_put_zcopy() {
         test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
-                        0, sender().iface_attr().cap.put.max_zcopy,
+                        sender().iface_attr().cap.put.min_zcopy,
+                        sender().iface_attr().cap.put.max_zcopy,
                         TEST_UCT_FLAG_SEND_ZCOPY);
     }
 
@@ -104,6 +112,10 @@ protected:
                         sender().iface_attr().cap.get.min_zcopy,
                         sender().iface_attr().cap.get.max_zcopy,
                         TEST_UCT_FLAG_RECV_ZCOPY);
+    }
+
+    virtual std::string wrap_config_str(const std::string& str) const override {
+        return ::wrap_config_ib_str(this, str);
     }
 };
 
@@ -118,15 +130,13 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg,
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_alloc_methods, xfer_reg_multithreaded,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
                                  UCT_IFACE_FLAG_GET_ZCOPY),
-                     "IB_REG_MT_THRESH=1", "IB_REG_MT_CHUNK=1G",
-                     "IB_REG_MT_BIND=y")
+                     "REG_MT_THRESH=1", "REG_MT_CHUNK=1G", "REG_MT_BIND=y")
 {
     test_put_zcopy();
     test_get_zcopy();
 }
 
-UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_alloc_methods)
-
+UCT_INSTANTIATE_IB_AND_GGA_TEST_CASE(uct_p2p_rma_test_alloc_methods)
 
 class uct_p2p_mix_test_alloc_methods : public uct_p2p_mix_test {};
 
@@ -135,7 +145,7 @@ UCS_TEST_P(uct_p2p_mix_test_alloc_methods, mix1000)
     run(1000);
 }
 
-UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_alloc_methods)
+UCT_INSTANTIATE_IB_AND_GGA_TEST_CASE(uct_p2p_mix_test_alloc_methods)
 
 
 class uct_p2p_mix_test_mt : public uct_p2p_mix_test {
@@ -167,8 +177,8 @@ protected:
     virtual void init() override
     {
         push_config();
-        modify_config("IB_REG_MT_THRESH", ucs::to_string(reg_mt_chunk + 1));
-        modify_config("IB_REG_MT_CHUNK", ucs::to_string(reg_mt_chunk));
+        modify_config("REG_MT_THRESH", ucs::to_string(reg_mt_chunk + 1));
+        modify_config("REG_MT_CHUNK", ucs::to_string(reg_mt_chunk));
 
         uct_p2p_mix_test::init();
 
@@ -190,12 +200,16 @@ protected:
         pop_config();
     }
 
+    virtual std::string wrap_config_str(const std::string& str) const override {
+        return ::wrap_config_ib_str(this, str);
+    }
+
     constexpr static size_t reg_mt_chunk = 16 * UCS_KBYTE;
 };
 
 constexpr size_t uct_p2p_mix_test_mt::reg_mt_chunk;
 
-UCS_TEST_P(uct_p2p_mix_test_mt, mix1000_alloc_methods, "IB_REG_MT_BIND=y")
+UCS_TEST_P(uct_p2p_mix_test_mt, mix1000_alloc_methods, "REG_MT_BIND=y")
 {
     run(1000);
 }
@@ -211,7 +225,7 @@ UCS_TEST_P(uct_p2p_mix_test_mt, mix1000_last_byte_offset)
     run(1000, (reg_mt_chunk * 2) - 8, 8);
 }
 
-UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_mt)
+UCT_INSTANTIATE_IB_AND_GGA_TEST_CASE(uct_p2p_mix_test_mt)
 
 
 class uct_p2p_mix_test_indirect_atomic : public uct_p2p_mix_test {};

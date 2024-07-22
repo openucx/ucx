@@ -87,6 +87,8 @@
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
 
+#define UCT_IB_MLX5_OPMOD_MMO_DMA   0x1
+
 #ifdef HAVE_STRUCT_MLX5_WQE_AV_BASE
 
 #  define mlx5_av_base(_av)         (&(_av)->base)
@@ -236,6 +238,16 @@ enum {
 
 
 #if HAVE_DEVX
+typedef struct uct_ib_mlx5_dma_wqe {
+    struct mlx5_wqe_ctrl_seg ctrl;
+    uint32_t                 padding;   /* unused for dma */
+    uint32_t                 be_opaque_lkey;
+    uint64_t                 be_opaque_vaddr;
+    struct mlx5_wqe_data_seg gather;
+    struct mlx5_wqe_data_seg scatter;
+} UCS_S_PACKED UCS_V_ALIGNED(sizeof(void*)) uct_ib_mlx5_dma_wqe_t;
+
+
 typedef struct {
     struct mlx5dv_devx_obj *dvmr;
     int                    mr_num;

@@ -16,6 +16,12 @@
 #include <string.h>
 
 
+#define UCT_IB_MLX5_DMA_SEG_FMT           "va 0x%"PRIx64" len %d lkey 0x%x"
+
+#define UCT_IB_MLX5_DMA_SEG_FMT_ARG(_seg) be64toh((_seg)->addr),\
+                                          be32toh((_seg)->byte_count), \
+                                          be32toh((_seg)->lkey)
+
 static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                                  void *qend, int max_sge, int dump_qp,
                                  uct_log_data_dump_func_t packet_dump_cb,
@@ -237,6 +243,21 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
     return ds;
 }
 
+#if HAVE_MLX5_MMO
+static void uct_ib_mlx5_dump_dma_wqe(const void *wqe, char *buf, size_t max)
+{
+    const uct_ib_mlx5_dma_wqe_t *dma_wqe = wqe;
+
+    snprintf(buf, max, " OPQ[lkey 0x%x va 0x%"PRIx64"]"
+             "G_SEG[" UCT_IB_MLX5_DMA_SEG_FMT "]"
+             "S_SEG[" UCT_IB_MLX5_DMA_SEG_FMT "]",
+             be32toh(dma_wqe->be_opaque_lkey),
+             be64toh(dma_wqe->be_opaque_vaddr),
+             UCT_IB_MLX5_DMA_SEG_FMT_ARG(&dma_wqe->gather),
+             UCT_IB_MLX5_DMA_SEG_FMT_ARG(&dma_wqe->scatter));
+}
+#endif
+
 static uint64_t network_to_host(void *ptr, int size)
 {
     if (size == 4) {
@@ -282,7 +303,10 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                                            UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
         [MLX5_OPCODE_ATOMIC_MASKED_FA] = { "MASKED_FETCH_ADD",
                                            UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
-   };
+#if HAVE_MLX5_MMO
+        [MLX5_OPCODE_MMO]              = { "MMO",        0 }
+#endif
+    };
 
     struct mlx5_wqe_ctrl_seg *ctrl = wqe;
     uint8_t opcode      = ctrl->opmod_idx_opcode >> 24;
@@ -312,6 +336,13 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                            ctrl->fm_ce_se & (1 << 1),
                            s, ends - s);
     s += strlen(s);
+
+#if HAVE_MLX5_MMO
+    if (opcode == MLX5_OPCODE_MMO) {
+        uct_ib_mlx5_dump_dma_wqe(wqe, s, ends - s);
+        return;
+    }
+#endif
 
     /* Additional segments */
     --ds;
@@ -540,4 +571,3 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
                                     packet_dump_cb, buf, sizeof(buf) - 1);
     uct_log_data(file, line, function, buf);
 }
-
