@@ -67,7 +67,7 @@ static void ucp_perf_daemon_ep_close(ucp_ep_h ep)
 
 static void ucp_perf_daemon_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
-    ucs_error("ep %p: error handler called with status %s", ep,
+    ucs_debug("ep %p: error handler called with status %s", ep,
               ucs_status_string(status));
 
     terminated = 1;
@@ -155,9 +155,9 @@ ucp_perf_daemon_send_cb(void *request, ucs_status_t status, void *user_data)
     ucp_perf_daemon_context_t *ctx = user_data;
 
     if (status != UCS_OK) {
-        ucs_error("PEER_TX operation failed: %s", ucs_status_string(status));
+        ucs_error("SEND operation failed: %s", ucs_status_string(status));
     } else {
-        ucs_trace_data("PEER_TX completed");
+        ucs_trace_data("SEND completed");
     }
 
     ucp_perf_daemon_send_am_eager_reply(ctx->host_ep,
