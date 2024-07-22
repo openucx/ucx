@@ -15,6 +15,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sock.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -144,6 +145,15 @@ void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
                                   iov[iov_index].iov_len);
     }
     ucs_string_buffer_rtrim(strb, "|");
+}
+
+void ucs_string_buffer_append_saddr(ucs_string_buffer_t *strb,
+                                    const struct sockaddr *sa)
+{
+    char sockstr[UCS_SOCKADDR_STRING_LEN];
+
+    ucs_sockaddr_str(sa, sockstr, UCS_SOCKADDR_STRING_LEN);
+    ucs_string_buffer_appendf(strb, "%s", sockstr);
 }
 
 static int ucs_string_buffer_match_charset(char ch, const char *charset)

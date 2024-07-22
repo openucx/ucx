@@ -614,6 +614,56 @@ ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+static void uct_ib_iface_log_subnet_info(const struct sockaddr_storage *sa1,
+                                         const struct sockaddr_storage *sa2,
+                                         unsigned prefix_len, int matched)
+{
+    UCS_STRING_BUFFER_ONSTACK(info, UCS_SOCKADDR_STRING_LEN * 2 + 60);
+
+    ucs_string_buffer_appendf(&info, "IP addresses");
+    if (!matched) {
+        ucs_string_buffer_appendf(&info, " do not");
+    }
+
+    ucs_string_buffer_appendf(&info,
+                              " match with a %u-bit prefix, addresses: ",
+                              prefix_len);
+
+    ucs_string_buffer_append_saddr(&info, (struct sockaddr*)sa1);
+    ucs_string_buffer_appendf(&info, " ");
+    ucs_string_buffer_append_saddr(&info, (struct sockaddr*)sa2);
+    ucs_debug("%s", ucs_string_buffer_cstr(&info));
+}
+
+static ucs_status_t
+uct_ib_iface_roce_to_sockaddr(sa_family_t af, const void *gid,
+                              struct sockaddr_storage *sock_storage)
+{
+    struct sockaddr *sa = (struct sockaddr *)sock_storage;
+    const uint8_t *inet_addr;
+    size_t addr_size;
+    ucs_status_t status;
+
+    /* Set address family */
+    sa->sa_family = af;
+
+    /* Set port to 0 as it's not relevant for RoCE */
+    status = ucs_sockaddr_set_port(sa, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Get address size */
+    status = ucs_sockaddr_inet_addr_size(af, &addr_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Set IP address */
+    inet_addr = UCS_PTR_BYTE_OFFSET(gid, sizeof(union ibv_gid) - addr_size);
+    return ucs_sockaddr_set_inet_addr(sa, inet_addr);
+}
+
 static int
 uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                const uct_ib_address_t *remote_ib_addr,
@@ -622,14 +672,11 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     sa_family_t local_ib_addr_af         = local_gid_info->roce_info.addr_family;
     uct_ib_roce_version_t local_roce_ver = local_gid_info->roce_info.ver;
     uint8_t remote_ib_addr_flags         = remote_ib_addr->flags;
+    struct sockaddr_storage sa_local, sa_remote;
     uct_ib_roce_version_t remote_roce_ver;
     sa_family_t remote_ib_addr_af;
     char local_str[128], remote_str[128];
-    uint8_t *local_addr, *remote_addr;
-    ucs_status_t status;
-    size_t addr_offset;
-    size_t addr_size;
-    int ret;
+    int matched;
 
     /* check for wildcards in the RoCE version (RDMACM or non-RoCE cases) */
     if ((uct_ib_address_flags_get_roce_version(remote_ib_addr_flags)) ==
@@ -640,17 +687,6 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     /* check for zero-sized netmask */
     if (prefix_bits == 0) {
         return 1;
-    }
-
-    /* check the address family */
-    remote_ib_addr_af = uct_ib_address_flags_get_roce_af(remote_ib_addr_flags);
-
-    if (local_ib_addr_af != remote_ib_addr_af) {
-        ucs_assert(local_ib_addr_af != 0);
-        ucs_debug("different addr_family detected. local %s remote %s",
-                  ucs_sockaddr_address_family_str(local_ib_addr_af),
-                  ucs_sockaddr_address_family_str(remote_ib_addr_af));
-        return 0;
     }
 
     /* check the RoCE version */
@@ -674,31 +710,23 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
         return 1; /* We assume it is, but actually there's no good test */
     }
 
-    status = ucs_sockaddr_inet_addr_size(local_ib_addr_af, &addr_size);
-    if (status != UCS_OK) {
-        ucs_error("failed to detect RoCE address size");
+    remote_ib_addr_af = uct_ib_address_flags_get_roce_af(remote_ib_addr_flags);
+    if ((uct_ib_iface_roce_to_sockaddr(local_ib_addr_af, &local_gid_info->gid,
+                                          &sa_local) != UCS_OK) ||
+        (uct_ib_iface_roce_to_sockaddr(remote_ib_addr_af, remote_ib_addr + 1,
+                                          &sa_remote) != UCS_OK)) {
         return 0;
     }
 
-    addr_offset = sizeof(union ibv_gid) - addr_size;
-    local_addr  = UCS_PTR_BYTE_OFFSET(&local_gid_info->gid, addr_offset);
-    remote_addr = UCS_PTR_BYTE_OFFSET(&remote_ib_addr->flags + 1, addr_offset);
+    matched = ucs_sockaddr_is_same_subnet((struct sockaddr*)&sa_local,
+                                          (struct sockaddr*)&sa_remote,
+                                          prefix_bits);
 
-    /* sanity check on the subnet mask size (bits belonging to the prefix) */
-    ucs_assert((prefix_bits / 8) <= addr_size);
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        uct_ib_iface_log_subnet_info(&sa_local, &sa_remote, prefix_bits, matched);
+    }
 
-    /* check if the addresses have matching prefixes */
-    ret = ucs_bitwise_is_equal(local_addr, remote_addr, prefix_bits);
-
-    ucs_debug(ret ? "IP addresses match with a %u-bit prefix: local IP is %s,"
-                    " remote IP is %s" :
-                    "IP addresses do not match with a %u-bit prefix. local IP"
-                    " is %s, remote IP is %s",
-              prefix_bits,
-              inet_ntop(local_ib_addr_af, local_addr, local_str, 128),
-              inet_ntop(remote_ib_addr_af, remote_addr, remote_str, 128));
-
-    return ret;
+    return matched;
 }
 
 int uct_ib_iface_is_same_device(const uct_ib_address_t *ib_addr, uint16_t dlid,
