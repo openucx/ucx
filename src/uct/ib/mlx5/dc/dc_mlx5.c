@@ -28,12 +28,12 @@
 #define UCT_DC_MLX5_MAX_TX_CQ_LEN (16 * UCS_MBYTE)
 
 
-static const char *uct_dc_tx_policy_names[] = {
-    [UCT_DC_TX_POLICY_DCS]           = "dcs",
-    [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
-    [UCT_DC_TX_POLICY_RAND]          = "rand",
-    [UCT_DC_TX_POLICY_HW_DCS]        = "hw_dcs",
-    [UCT_DC_TX_POLICY_LAST]          = NULL
+const char *uct_dc_tx_policy_names[] = {
+    [UCT_DC_TX_POLICY_DCS]       = "dcs",
+    [UCT_DC_TX_POLICY_DCS_QUOTA] = "dcs_quota",
+    [UCT_DC_TX_POLICY_RAND]      = "rand",
+    [UCT_DC_TX_POLICY_HW_DCS]    = "hw_dcs",
+    [UCT_DC_TX_POLICY_LAST]      = NULL
 };
 
 static const char *uct_dct_affinity_policy_names[] = {

@@ -477,7 +477,53 @@ UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
 
 
 class test_dc_flow_control : public test_rc_flow_control {
+protected:
+    virtual void init()
+    {
+        modify_config("DC_MLX5_TX_POLICY", get_tx_policy_name());
+        test_rc_flow_control::init();
+    }
+
 public:
+    static std::vector<const struct resource*>
+    enum_resources(const std::string &tl_name)
+    {
+        static std::vector<struct resource> all_resources;
+        auto resources = uct_test::enum_resources(tl_name);
+
+        if (resources.empty()) {
+            return resources;
+        }
+
+        ucs_assert(tl_name == "dc_mlx5");
+
+        if (all_resources.empty()) {
+            std::vector<uct_dc_tx_policy_t> policies =
+                    {UCT_DC_TX_POLICY_DCS_QUOTA, UCT_DC_TX_POLICY_RAND,
+                     UCT_DC_TX_POLICY_HW_DCS};
+            for (auto policy : policies) {
+                for (const auto &elem : resources) {
+                    struct resource rsc = *elem;
+                    rsc.variant         = policy;
+                    rsc.variant_name    = uct_dc_tx_policy_names[policy];
+                    all_resources.push_back(rsc);
+                }
+            }
+        }
+
+        return filter_resources(all_resources,
+                                resource::is_equal_component_name, "");
+    }
+
+    int get_tx_policy() const
+    {
+        return GetParam()->variant;
+    }
+
+    std::string get_tx_policy_name() const
+    {
+        return GetParam()->variant_name;
+    }
 
     /* virtual */
     uct_rc_fc_t* get_fc_ptr(entity *e, int ep_idx = 0) {
@@ -614,8 +660,14 @@ UCS_TEST_P(test_dc_flow_control, soft_request)
  * 2) No crash when grant for destroyed ep arrives */
 UCS_TEST_P(test_dc_flow_control, flush_destroy)
 {
-    int wnd = 5;
+    int wnd                    = 5;
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(m_e1->iface(),
+                                                uct_dc_mlx5_iface_t);
     ucs_status_t status;
+
+    if (uct_dc_mlx5_iface_is_dci_shared(iface)) {
+        UCS_TEST_SKIP_R("shared dcis are not supported - no pending wait");
+    }
 
     disable_entity(m_e2);
 
