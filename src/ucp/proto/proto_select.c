@@ -78,7 +78,7 @@ static ucs_status_t ucp_proto_thresholds_next_range(
         proto_name = ucp_proto_id_field(proto->proto_id, name);
         ucs_assert_always(proto_name != NULL);
 
-        range = ucp_proto_flat_perf_find_lb(&proto->flat_perf, msg_length);
+        range = ucp_proto_flat_perf_find_lb(proto->flat_perf, msg_length);
         if (range == NULL) {
             ucs_trace("skipping proto %s for msg_length %zu", proto_name,
                       msg_length);
@@ -159,7 +159,7 @@ static ucs_status_t ucp_proto_thresholds_next_range(
     /* Add data to perf_list */
     UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
         proto = &ucs_array_elem(&proto_init->protocols, proto_idx);
-        range = ucp_proto_flat_perf_find_lb(&proto->flat_perf, msg_length);
+        range = ucp_proto_flat_perf_find_lb(proto->flat_perf, msg_length);
 
         *ucs_array_append(perf_list, status = UCS_ERR_NO_MEMORY;
                           goto out_unindent) = range->value;
@@ -241,7 +241,7 @@ ucp_proto_select_cleanup_protocols(ucp_proto_select_init_protocols_t *proto_init
     ucp_proto_init_elem_t *init_elem;
 
     ucs_array_for_each(init_elem, &proto_init->protocols) {
-        ucp_proto_flat_perf_destroy(&init_elem->flat_perf);
+        ucp_proto_flat_perf_destroy(init_elem->flat_perf);
         ucp_proto_perf_destroy(init_elem->perf);
     }
     ucs_array_cleanup_dynamic(&proto_init->priv_buf);
@@ -357,10 +357,10 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
         ucs_assert_always(!ucs_array_is_empty(&perf_list));
         ucs_assert_always(ucs_array_length(&perf_list) < 64);
 
-        status = ucp_proto_perf_envelope_make(
-                ucs_array_begin(&perf_list),
-                UCS_MASK(ucs_array_length(&perf_list)),
-                msg_length, max_length, 1, &envelope);
+        status = ucp_proto_perf_envelope_make(ucs_array_begin(&perf_list),
+                                              ucs_array_length(&perf_list),
+                                              msg_length, max_length, 1,
+                                              &envelope);
         if (status != UCS_OK) {
             goto err_cleanup_perf_list;
         }

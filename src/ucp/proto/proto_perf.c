@@ -54,50 +54,52 @@ struct ucp_proto_perf {
     ucs_list_for_each((_seg), &(_perf)->segments, list)
 
 static const char *ucp_proto_perf_factor_names[] = {
-    [UCP_PROTO_PERF_FACTOR_LOCAL_CPU]            = "cpu",
-    [UCP_PROTO_PERF_FACTOR_REMOTE_CPU]           = "cpu-remote",
-    [UCP_PROTO_PERF_FACTOR_LOCAL_TL]             = "tl",
-    [UCP_PROTO_PERF_FACTOR_REMOTE_TL]            = "tl-remote",
-    [UCP_PROTO_PERF_FACTOR_LOCAL_MEMTYPE_COPY]   = "memtype-copy",
-    [UCP_PROTO_PERF_FACTOR_REMOTE_MEMTYPE_COPY]  = "memtype-copy-remote",
-    [UCP_PROTO_PERF_FACTOR_LATENCY]              = "lat",
-    [UCP_PROTO_PERF_FACTOR_LAST]                 = NULL
+    [UCP_PROTO_PERF_FACTOR_LOCAL_CPU]     = "cpu",
+    [UCP_PROTO_PERF_FACTOR_REMOTE_CPU]    = "cpu-remote",
+    [UCP_PROTO_PERF_FACTOR_LOCAL_TL]      = "tl",
+    [UCP_PROTO_PERF_FACTOR_REMOTE_TL]     = "tl-remote",
+    [UCP_PROTO_PERF_FACTOR_LOCAL_MTCOPY]  = "mtcopy",
+    [UCP_PROTO_PERF_FACTOR_REMOTE_MTCOPY] = "mtcopy-remote",
+    [UCP_PROTO_PERF_FACTOR_LATENCY]       = "lat",
+    [UCP_PROTO_PERF_FACTOR_LAST]          = NULL
 };
-
-#if ENABLE_ASSERT
-static const char*
-ucp_proto_perf_log(const ucp_proto_perf_t *perf, ucs_log_level_t log_level)
-{
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-
-    ucp_proto_perf_str(perf, &strb);
-    ucs_log(log_level, "%s %s", perf->name, ucs_string_buffer_cstr(&strb));
-    ucs_string_buffer_cleanup(&strb);
-    return "";
-}
-#endif
 
 static void ucp_proto_perf_check(const ucp_proto_perf_t *perf)
 {
 #if ENABLE_ASSERT
+    ucs_string_buffer_t funcb = UCS_STRING_BUFFER_INITIALIZER;
+    const char *reason        = NULL;
     const ucp_proto_perf_segment_t *seg;
     size_t min_start;
 
     min_start = 0;
     ucp_proto_perf_segment_foreach(seg, perf) {
-        ucs_assertv((seg->start >= min_start) && (seg->start <= seg->end),
-                    "perf=%p seg->start=%zu seg->end=%zu min_start=%zu %s",
-                    perf, seg->start, seg->end, min_start,
-                    ucp_proto_perf_log(perf, UCS_LOG_LEVEL_ERROR));
-        if (seg->end == SIZE_MAX) {
-            ucs_assertv(ucs_list_is_last(&perf->segments, &seg->list),
-                        "perf=%p seg->start=%zu seg->end=%zu %s",
-                        perf, seg->start, seg->end,
-                        ucp_proto_perf_log(perf, UCS_LOG_LEVEL_ERROR));
-        } else {
+        if (seg->start < min_start) {
+            reason = "seg->start < min_start";
+            break;
+        }
+        if (seg->start > seg->end) {
+            reason = "seg->start > seg->end";
+            break;
+        }
+        if (seg->end < SIZE_MAX) {
             min_start = seg->end + 1;
+        } else {
+            if (!ucs_list_is_last(&perf->segments, &seg->list)) {
+                reason = "!ucs_list_is_last(&perf->segments, &seg->list)";
+                break;
+            }
         }
     }
+
+    if (reason != NULL) {
+        ucp_proto_perf_str(perf, &funcb);
+        ucs_error("%s %s", perf->name, ucs_string_buffer_cstr(&funcb));
+        ucs_fatal("%s perf=%p seg->start=%zu seg->end=%zu min_start=%zu",
+                  reason, perf, seg->start, seg->end, min_start);
+    }
+
+    ucs_string_buffer_cleanup(&funcb);
 #endif
 }
 
@@ -242,8 +244,8 @@ ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
     ucp_proto_perf_check(perf);
 
     va_start(ap, desc_fmt);
-    perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_DATA,
-                                        0, title, desc_fmt, ap);
+    perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_DATA, 0, title,
+                                        desc_fmt, ap);
     va_end(ap);
 
     ucp_proto_perf_node_update_factors(perf_node, perf_factors);
@@ -301,7 +303,7 @@ ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
 
         ucp_proto_perf_segment_add_funcs(perf, seg, perf_factors, perf_node);
         if (seg->end == SIZE_MAX) {
-            goto out_ok; /*Avoid wraparound */
+            goto out_ok; /* Avoid wraparound */
         }
 
         start = seg->end + 1;
@@ -423,53 +425,55 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
     return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
 }
 
-ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
-                                        ucp_proto_perf_t **perf_p)
+ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
+                                   ucp_proto_perf_t **perf_p)
 {
     ucp_proto_perf_segment_t *remote_seg, *new_seg;
-    ucp_proto_perf_factors_t turned_factors;
+    ucp_proto_perf_factors_t perf_factors;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
     ucp_proto_perf_check(remote_perf);
 
-    status = ucp_proto_perf_create("turned", &perf);
+    status = ucp_proto_perf_create("remote", &perf);
     if (status != UCS_OK) {
         return status;
     }
 
     /* Turn local factors to remote and vice versa */
     ucp_proto_perf_segment_foreach(remote_seg, remote_perf) {
-        turned_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
+        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU];
-        turned_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
+        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL];
-        turned_factors[UCP_PROTO_PERF_FACTOR_LATENCY] =
+        perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY];
-        turned_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL] =
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL];
-        turned_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU] =
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU];
 
         status = ucp_proto_perf_segment_new(perf, remote_seg->start,
                                             remote_seg->end, &new_seg);
         if (status != UCS_OK) {
-            ucp_proto_perf_destroy(perf);
-            return status;
+            goto err_cleanup_perf;
         }
 
         ucs_list_add_tail(&perf->segments, &new_seg->list);
-        ucp_proto_perf_segment_add_funcs(perf, new_seg, turned_factors,
+        ucp_proto_perf_segment_add_funcs(perf, new_seg, perf_factors,
                                          remote_seg->node);
     }
 
     *perf_p = perf;
     return UCS_OK;
+
+err_cleanup_perf:
+    ucp_proto_perf_destroy(perf);
+    return status;
 }
 
-ucs_status_t
-ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
-                        ucp_proto_flat_perf_t *flat_perf)
+ucs_status_t ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
+                                     ucp_proto_flat_perf_t **flat_perf_ptr)
 {
     static const char *convex_names[] = { "concave envelope",
                                           "convex envelope"};
@@ -477,67 +481,77 @@ ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
     const ucp_proto_perf_segment_t *seg;
     ucp_proto_flat_perf_range_t *range;
     ucp_proto_perf_envelope_t envelope;
+    ucp_proto_flat_perf_t *flat_perf;
     ucs_status_t status;
     size_t range_start;
-    uint64_t factor_mask;
+
+    flat_perf = ucs_malloc(sizeof(ucp_proto_flat_perf_t), "envelope flat perf");
+    if (flat_perf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
     ucp_proto_perf_check(perf);
-
-    /* Factors envelope doesn't include latency since it is calculated for async
-     * performance which overlaps it */
-    factor_mask = UCS_MASK(UCP_PROTO_PERF_FACTOR_LAST) &
-                   ~UCP_PROTO_PERF_FACTOR_LATENCY;
 
     ucs_array_init_dynamic(flat_perf);
     ucs_array_init_dynamic(&envelope);
     ucp_proto_perf_segment_foreach(seg, perf) {
-        status = ucp_proto_perf_envelope_make(seg->perf_factors, factor_mask,
-                                              seg->start, seg->end, convex,
-                                              &envelope);
+        ucs_array_length(&envelope) = 0;
+        status = ucp_proto_perf_envelope_make(
+                seg->perf_factors, UCP_PROTO_PERF_FACTOR_LAST_WO_LATENCY,
+                seg->start, seg->end, convex, &envelope);
         if (status != UCS_OK) {
-            return status;
+            goto err_cleanup;
         }
-    }
 
-    /* Find range start */
-    seg = ucp_proto_perf_find_segment_lb(perf, 0);
-    if (seg == NULL) {
-        /* Empty perf */
-        return UCS_OK;
-    }
+    range_start = seg->start;
     range_start = seg->start;
 
-    ucs_array_for_each(envelope_elem, &envelope) {
-        while (envelope_elem->max_length > seg->end) {
-            /* Find segment for current envelope*/
-            seg = ucs_list_next(&seg->list, ucp_proto_perf_segment_t, list);
+        range_start = seg->start;
+
+        ucs_array_for_each(envelope_elem, &envelope) {
+            range        = ucs_array_append(flat_perf,
+                                            status = UCS_ERR_NO_MEMORY;
+                                            goto err_cleanup);
+            range->start = range_start;
+            range->end   = envelope_elem->max_length;
+            range->value = seg->perf_factors[envelope_elem->index];
+            range->node  = ucp_proto_perf_node_new_data(
+                    perf->name, convex_names[convex]);
+            ucp_proto_perf_node_add_child(range->node, seg->node);
+            ucp_proto_perf_node_add_data(range->node, "total", range->value);
+
+            range_start = envelope_elem->max_length + 1;
         }
-
-        range        = ucs_array_append(flat_perf, return UCS_ERR_NO_MEMORY);
-        range->start = range_start;
-        range->end   = envelope_elem->max_length;
-        range->value = seg->perf_factors[envelope_elem->index];
-        range->node  = ucp_proto_perf_node_new_data(perf->name, "flat perf");
-        ucp_proto_perf_node_add_child(range->node, seg->node);
-        ucp_proto_perf_node_add_data(range->node, convex_names[convex],
-                                     range->value);
-
-        range_start  = envelope_elem->max_length + 1;
     }
 
+    *flat_perf_ptr = flat_perf;
+    ucs_array_cleanup_dynamic(&envelope);
     return UCS_OK;
+
+err_cleanup:
+    ucp_proto_flat_perf_destroy(flat_perf);
+    ucs_array_cleanup_dynamic(&envelope);
+    return status;
 }
 
 ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
-                                ucp_proto_flat_perf_t *flat_perf)
+                                ucp_proto_flat_perf_t **flat_perf_ptr)
 {
     const ucp_proto_perf_segment_t *seg;
     ucp_proto_flat_perf_range_t *range;
     ucp_proto_perf_factor_id_t factor_id;
+    ucp_proto_flat_perf_t *flat_perf;
+    ucs_status_t status;
+
+    flat_perf = ucs_malloc(sizeof(ucp_proto_flat_perf_t), "sum flat perf");
+    if (flat_perf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
     ucs_array_init_dynamic(flat_perf);
     ucp_proto_perf_segment_foreach(seg, perf) {
-        range        = ucs_array_append(flat_perf, return UCS_ERR_NO_MEMORY);
+        range        = ucs_array_append(flat_perf, status = UCS_ERR_NO_MEMORY;
+                                        goto err_cleanup);
         range->start = seg->start;
         range->end   = seg->end;
         range->value = UCS_LINEAR_FUNC_ZERO;
@@ -553,7 +567,12 @@ ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
         ucp_proto_perf_node_add_data(range->node, "sum", range->value);
     }
 
+    *flat_perf_ptr = flat_perf;
     return UCS_OK;
+
+err_cleanup:
+    ucp_proto_flat_perf_destroy(flat_perf);
+    return status;
 }
 
 ucp_proto_perf_segment_t *
@@ -649,6 +668,23 @@ void ucp_proto_perf_str(const ucp_proto_perf_t *perf, ucs_string_buffer_t *strb)
     ucs_string_buffer_rtrim(strb, NULL);
 }
 
+void ucp_proto_flat_perf_str(const ucp_proto_flat_perf_t *flat_perf,
+                             ucs_string_buffer_t *strb)
+{
+    ucp_proto_flat_perf_range_t *range;
+    char range_str[64];
+
+    ucs_array_for_each(range, flat_perf) {
+        ucs_memunits_range_str(range->start, range->end, range_str,
+                               sizeof(range_str));
+        ucs_string_buffer_appendf(strb, "%s {", range_str);
+        ucs_string_buffer_appendf(strb, UCP_PROTO_PERF_FUNC_FMT,
+                                  UCP_PROTO_PERF_FUNC_ARG(&range->value));
+        ucs_string_buffer_appendf(strb, "} ");
+    }
+    ucs_string_buffer_rtrim(strb, NULL);
+}
+
 const ucp_proto_flat_perf_range_t *
 ucp_proto_flat_perf_find_lb(const ucp_proto_flat_perf_t *flat_perf, size_t lb)
 {
@@ -662,7 +698,8 @@ ucp_proto_flat_perf_find_lb(const ucp_proto_flat_perf_t *flat_perf, size_t lb)
     return NULL;
 }
 
-void ucp_proto_flat_perf_destroy(ucp_proto_flat_perf_t *flat_perf) {
+void ucp_proto_flat_perf_destroy(ucp_proto_flat_perf_t *flat_perf)
+{
     ucp_proto_flat_perf_range_t *range;
 
     ucs_array_for_each(range, flat_perf) {
@@ -670,4 +707,5 @@ void ucp_proto_flat_perf_destroy(ucp_proto_flat_perf_t *flat_perf) {
     }
 
     ucs_array_cleanup_dynamic(flat_perf);
+    ucs_free(flat_perf);
 }

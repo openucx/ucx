@@ -49,7 +49,7 @@ typedef struct {
     size_t                cfg_thresh; /* Configured protocol threshold */
     unsigned              cfg_priority; /* Priority of configuration */
     ucp_proto_perf_t      *perf;
-    ucp_proto_flat_perf_t flat_perf; /* Flat performance considering all parts */
+    ucp_proto_flat_perf_t *flat_perf; /* Flat performance considering all parts */
 } ucp_proto_init_elem_t;
 
 

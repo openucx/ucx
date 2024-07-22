@@ -82,7 +82,7 @@ static void ucp_proto_reconfig_probe(const ucp_proto_init_params_t *init_params)
     }
 
     perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
-            ucs_linear_func_make(INFINITY, INFINITY);
+            ucs_linear_func_make(INFINITY, 0);
     ucp_proto_perf_add_funcs(perf, 0, SIZE_MAX, perf_factors, NULL, "dummy",
                              "");
 

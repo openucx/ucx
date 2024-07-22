@@ -28,9 +28,10 @@ typedef enum {
     UCP_PROTO_PERF_FACTOR_REMOTE_CPU,
     UCP_PROTO_PERF_FACTOR_LOCAL_TL,
     UCP_PROTO_PERF_FACTOR_REMOTE_TL,
-    UCP_PROTO_PERF_FACTOR_LOCAL_MEMTYPE_COPY,
-    UCP_PROTO_PERF_FACTOR_REMOTE_MEMTYPE_COPY,
-    UCP_PROTO_PERF_FACTOR_LATENCY,
+    UCP_PROTO_PERF_FACTOR_LOCAL_MTCOPY,
+    UCP_PROTO_PERF_FACTOR_REMOTE_MTCOPY,
+    UCP_PROTO_PERF_FACTOR_LAST_WO_LATENCY,
+    UCP_PROTO_PERF_FACTOR_LATENCY = UCP_PROTO_PERF_FACTOR_LAST_WO_LATENCY,
     UCP_PROTO_PERF_FACTOR_LAST
 } ucp_proto_perf_factor_id_t;
 
@@ -145,8 +146,8 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
  * @param [in]  remote_perf Performance data structure to turn.
  * @param [out] perf_p      Filled with the new performance data structure.
  */
-ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
-                                        ucp_proto_perf_t **perf_p);
+ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
+                                   ucp_proto_perf_t **perf_p);
 
 
 /**
@@ -154,25 +155,23 @@ ucs_status_t ucp_proto_perf_turn_remote(const ucp_proto_perf_t *remote_perf,
  * concave envelope across all factors for each segment. Used for async scheme
  * performance estimations.
  *
- * @param [in]  perf        Performance data structure to convert.
- * @param [in]  convex      If 1 calculate convex, if 0 concave.
- * @param [out] flat_perf   Filled with convex or concave envelope.
+ * @param [in]  perf          Performance data structure to convert.
+ * @param [in]  convex        If 1 calculate convex, if 0 concave.
+ * @param [out] flat_perf_ptr Filled with convex or concave envelope.
  */
-ucs_status_t
-ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
-                        ucp_proto_flat_perf_t *flat_perf);
+ucs_status_t ucp_proto_perf_envelope(const ucp_proto_perf_t *perf, int convex,
+                                     ucp_proto_flat_perf_t **flat_perf_ptr);
 
 
 /**
  * Convert given @a perf to @a flat_perf structure that contains sum of all
  * factors for each segment. Used for blocking scheme performance estimations.
  *
- * @param [in]  perf        Performance data structure to convert.
- * @param [in]  convex      If 1 calculate convex, if 0 concave.
- * @param [out] flat_perf   Filled with convex or concave envelope.
+ * @param [in]  perf          Performance data structure to convert.
+ * @param [out] flat_perf_ptr Filled with sum of all factors.
  */
 ucs_status_t ucp_proto_perf_sum(const ucp_proto_perf_t *perf,
-                                 ucp_proto_flat_perf_t *flat_perf);
+                                ucp_proto_flat_perf_t **flat_perf);
 
 
 /**

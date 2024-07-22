@@ -26,9 +26,8 @@
 #define UCP_PROTO_MSGLEN_EPSILON   0.5
 
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
-                             uint64_t funcs_mask, size_t range_start,
-                             size_t range_end, int convex,
+ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs, uint64_t funcs_num,
+                             size_t range_start, size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list)
 {
     size_t start = range_start;
@@ -41,18 +40,25 @@ ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
     ucs_status_t status;
     size_t midpoint;
     double x_sample, x_intersect;
+    uint64_t mask;
+
+    ucs_assert_always(funcs_num < 64);
+    mask = UCS_MASK(funcs_num);
 
     do {
-        ucs_assert(mask != 0);
-
         /* Find best trend at the 'start' point */
         best.index  = UINT_MAX;
         best.result = DBL_MAX;
-        ucs_for_each_bit(curr.index, funcs_mask) {
-            x_sample    = start + UCP_PROTO_MSGLEN_EPSILON;
-            curr.result = ucs_linear_func_apply(funcs[curr.index],
-                                                x_sample);
-            ucs_assert(curr.result != DBL_MAX);
+        x_sample    = start;
+        if (x_sample < range_end) {
+            x_sample += UCP_PROTO_MSGLEN_EPSILON;
+        }
+        ucs_for_each_bit(curr.index, mask) {
+            curr.result = ucs_linear_func_apply(funcs[curr.index], x_sample);
+            ucs_assertv((curr.result != DBL_MAX) && !isnan(curr.result),
+                        UCP_PROTO_PERF_FUNC_FMT " curr.index=%u x_sample=%f",
+                        UCP_PROTO_PERF_FUNC_ARG(&funcs[curr.index]), curr.index,
+                        x_sample);
             if ((best.index == UINT_MAX) ||
                 ((curr.result < best.result) == convex)) {
                 best = curr;
@@ -70,16 +76,17 @@ ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
          * trend and any other trend. This would be the point where that
          * other trend becomes the best one.
          */
-        midpoint    = range_end;
-        funcs_mask &= ~UCS_BIT(best.index);
-        ucs_for_each_bit(curr.index, funcs_mask) {
+        midpoint = range_end;
+        mask    &= ~UCS_BIT(best.index);
+        ucs_for_each_bit(curr.index, mask) {
             status = ucs_linear_func_intersect(funcs[curr.index],
-                                               funcs[best.index],
-                                               &x_intersect);
-            if ((status == UCS_OK) && (x_intersect > start)) {
-                /* We care only if the intersection is after 'start', since
-                 * otherwise 'best' is better than 'curr' at
-                 * 'end' as well as at 'start'.
+                                               funcs[best.index], &x_intersect);
+            if ((status == UCS_OK) && (x_intersect > x_sample)) {
+                /* We care only if the intersection is after 'x_sample', since
+                 * otherwise 'best' is better than 'curr' at 'end' as well as
+                 * at 'x_sample'. Since 'x_sample' differs from start only
+                 * for 0.5 we make an estimation and set it as 'best' for
+                 * 'start' as well.
                  */
                 midpoint = ucs_min(ucs_double_to_sizet(x_intersect, SIZE_MAX),
                                    midpoint);

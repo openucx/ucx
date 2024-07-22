@@ -430,7 +430,7 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
     ucs_string_buffer_rtrim(strb, NULL);
 
     /* Find the relevant performance range */
-    range = ucp_proto_flat_perf_find_lb(&proto_config->init_elem->flat_perf,
+    range = ucp_proto_flat_perf_find_lb(proto_config->init_elem->flat_perf,
                                         msg_length);
     if (range == NULL || range->start > msg_length) {
         ucs_string_buffer_appendf(strb, " - not available");
@@ -1011,7 +1011,7 @@ void ucp_proto_select_write_info(
 
     UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
         proto     = &ucs_array_elem(&proto_init->protocols, proto_idx);
-        range     = ucp_proto_flat_perf_find_lb(&proto->flat_perf, range_start);
+        range     = ucp_proto_flat_perf_find_lb(proto->flat_perf, range_start);
         ucs_assert_always(range != NULL);
         ucs_assertv(range->start <= range_start, 
                     "range->start=%zu range_start=%zu",

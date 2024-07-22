@@ -30,7 +30,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_envelope_t, unsigned,
  * convex or concave envelope of these functions to an output list.
  *
  * @param [in] funcs           Array of performance functions.
- * @param [in] num_funcs       Number of elements in @a funcs argument.
+ * @param [in] funcs_num       Number of functions in list.
  * @param [in] range_start     Range interval start.
  * @param [in] range_end       Range interval end.
  * @param [in] convex          Whether to select convex (maximal) or concave
@@ -40,9 +40,8 @@ UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_envelope_t, unsigned,
  *                             which it corresponds.
  */
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs,
-                             uint64_t funcs_mask, size_t range_start,
-                             size_t range_end, int convex,
+ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs, uint64_t funcs_num,
+                             size_t range_start, size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list);
 
 
