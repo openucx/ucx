@@ -203,6 +203,9 @@ public:
     {
         modify_config("PROTO_ENABLE", "y");
         modify_config("MAX_RNDV_LANES", "1");
+
+        /* Reset topo provider to force reload from config */
+        ucs_sys_topo_provider = NULL;
         modify_config("TOPO_PRIO", "default");
     }
 
