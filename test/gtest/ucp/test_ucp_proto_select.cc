@@ -212,6 +212,8 @@ public:
     virtual void cleanup() override
     {
         ucp_test::cleanup();
+        /* Reset topo provider to not affect subsequent tests */
+        ucs_sys_topo_provider = NULL;
     }
 
     static void check_ep_config(entity &e, const proto_select_data_vec_t &data,
