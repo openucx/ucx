@@ -1,0 +1,16 @@
+#
+# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+libdir = @libdir@/ucx
+
+Name: @PACKAGE@-mlx5
+Description: Unified Communication X Library IB MLX5 module
+Version: @VERSION@
+Libs:
+Libs.private: -L${libdir} -luct_ib_mlx5 -Wl,--undefined=uct_mlx5_init @IBVERBS_LDFLAGS@
+Requires.private: libmlx5 libibverbs

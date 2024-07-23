@@ -8,12 +8,15 @@
 
 #include <common/test.h>
 #include <common/mem_buffer.h>
+#include <unordered_map>
+#include <memory>
 
 extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_perf.h>
 #include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
@@ -343,3 +346,499 @@ UCS_TEST_P(test_perf_node, replace_null)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_perf_node, all, "all")
+
+static std::ostream &operator<<(std::ostream &os, const ucp_proto_perf_t *perf)
+{
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    ucp_proto_perf_dump(perf, &strb);
+    auto &ret = os << ucs_string_buffer_cstr(&strb);
+    ucs_string_buffer_cleanup(&strb);
+    return ret;
+}
+
+static std::ostream &operator<<(std::ostream &os, const ucs_linear_func_t &func)
+{
+    return os << func.c << "+" << func.m << "x";
+}
+
+class test_proto_perf : public ucs::test {
+public:
+    using perf_ptr_t         = std::shared_ptr<ucp_proto_perf_t>;
+    using perf_factors_map_t = std::unordered_map<int, ucs_linear_func_t>;
+
+protected:
+    virtual void cleanup() override
+    {
+        m_perf.reset();
+    }
+
+    static perf_ptr_t create()
+    {
+        ucp_proto_perf_t *perf;
+        ASSERT_UCS_OK(ucp_proto_perf_create("test", &perf));
+        return make_perf_shared_ptr(perf);
+    }
+
+    static perf_ptr_t from_caps(const ucp_proto_caps_t &caps)
+    {
+        ucp_proto_perf_t *perf;
+        ASSERT_UCS_OK(ucp_proto_perf_from_caps("test", &caps, &perf));
+        return make_perf_shared_ptr(perf);
+    }
+
+    perf_ptr_t aggregate(const std::vector<perf_ptr_t> &perfs)
+    {
+        std::vector<ucp_proto_perf_t*> perfs_ptr_vec;
+        std::transform(perfs.begin(), perfs.end(),
+                       std::back_inserter(perfs_ptr_vec),
+                       [](const perf_ptr_t &p) { return p.get(); });
+
+        ucp_proto_perf_t *perf;
+        ASSERT_UCS_OK(ucp_proto_perf_aggregate("aggregate",
+                                               perfs_ptr_vec.data(),
+                                               perfs_ptr_vec.size(), &perf));
+        return make_perf_shared_ptr(perf);
+    }
+
+    static void add_funcs(perf_ptr_t perf, size_t start, size_t end,
+                          const perf_factors_map_t &factors)
+    {
+        ucs_linear_func_t funcs[UCP_PROTO_PERF_FACTOR_LAST];
+        uint64_t factors_map = 0;
+        for (auto &f : factors) {
+            funcs[f.first] = f.second;
+            factors_map   |= UCS_BIT(f.first);
+        }
+        ASSERT_UCS_OK(ucp_proto_perf_add_funcs(perf.get(), start, end, funcs,
+                                               factors_map, NULL));
+    }
+
+    static void add_func(perf_ptr_t perf, size_t start, size_t end,
+                         ucp_proto_perf_factor_id_t factor_id,
+                         ucs_linear_func_t func)
+    {
+        add_funcs(perf, start, end, {{factor_id, func}});
+    }
+
+    void add_func(size_t start, size_t end,
+                  ucp_proto_perf_factor_id_t factor_id, ucs_linear_func_t func)
+    {
+        add_func(m_perf, start, end, factor_id, func);
+    }
+
+    static ucp_proto_perf_segment_t *find_lb(perf_ptr_t perf, size_t start)
+    {
+        return ucp_proto_perf_find_segment_lb(perf.get(), start);
+    }
+
+    void expect_empty_range(size_t start, size_t end)
+    {
+        ucp_proto_perf_segment_t *seg = find_lb(m_perf, start);
+
+        EXPECT_TRUE((seg == nullptr) ||
+                    (end < ucp_proto_perf_segment_start(seg)))
+                << "perf=" << m_perf.get() << " start=" << start
+                << " end=" << end;
+    }
+
+    void
+    expect_perf(size_t start, size_t end, const perf_factors_map_t &factors)
+    {
+        const ucp_proto_perf_segment_t *seg = find_lb(m_perf, start);
+        ASSERT_NE(nullptr, seg) << "start=" << start;
+
+        EXPECT_GE(start, ucp_proto_perf_segment_start(seg));
+        EXPECT_LE(end, ucp_proto_perf_segment_end(seg));
+
+        int factor_id = UCP_PROTO_PERF_FACTOR_LOCAL_CPU;
+        for (; factor_id < UCP_PROTO_PERF_FACTOR_LAST; ++factor_id) {
+            ucs_linear_func_t expected_func = UCS_LINEAR_FUNC_ZERO;
+            auto entry                      = factors.find(factor_id);
+            if (entry != std::end(factors)) {
+                expected_func = entry->second;
+            }
+
+            auto segment_func = ucp_proto_perf_segment_func(
+                    seg, (ucp_proto_perf_factor_id_t)factor_id);
+            EXPECT_TRUE(
+                    ucs_linear_func_is_equal(expected_func, segment_func, 1e-9))
+                    << "factor_id=" << factor_id << " expected_func"
+                    << expected_func << " segment_func=" << segment_func;
+        }
+    }
+
+private:
+    static perf_ptr_t make_perf_shared_ptr(ucp_proto_perf_t *perf)
+    {
+        return {perf, ucp_proto_perf_destroy};
+    }
+
+protected:
+    static const ucs_linear_func_t local_tl_func;
+    static const ucs_linear_func_t remote_tl_func;
+    static const ucs_linear_func_t local_cpu_func;
+    perf_ptr_t m_perf;
+};
+
+const ucs_linear_func_t test_proto_perf::local_tl_func  = {10, 1};
+const ucs_linear_func_t test_proto_perf::remote_tl_func = {20, 2};
+const ucs_linear_func_t test_proto_perf::local_cpu_func = {30, 3};
+
+UCS_TEST_F(test_proto_perf, empty)
+{
+    m_perf = create();
+    expect_empty_range(0, SIZE_MAX);
+}
+
+UCS_TEST_F(test_proto_perf, from_caps)
+{
+    ucp_proto_caps_t caps;
+
+    caps.min_length = 1000;
+    caps.num_ranges = 2;
+
+    caps.ranges[0].max_length                       = 1999;
+    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_SINGLE] = local_tl_func;
+    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_MULTI]  = UCS_LINEAR_FUNC_ZERO;
+    caps.ranges[0].perf[UCP_PROTO_PERF_TYPE_CPU]    = UCS_LINEAR_FUNC_ZERO;
+    caps.ranges[0].node                             = NULL;
+
+    caps.ranges[1].max_length                       = 2999;
+    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_SINGLE] = UCS_LINEAR_FUNC_ZERO;
+    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_MULTI]  = UCS_LINEAR_FUNC_ZERO;
+    caps.ranges[1].perf[UCP_PROTO_PERF_TYPE_CPU]    = local_cpu_func;
+    caps.ranges[1].node                             = NULL;
+
+    m_perf = from_caps(caps);
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    expect_empty_range(0, 999);
+    expect_perf(1000, 1999, {{UCP_PROTO_PERF_FACTOR_SINGLE, local_tl_func}});
+    expect_perf(2000, 2999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_empty_range(3000, SIZE_MAX);
+}
+
+UCS_TEST_F(test_proto_perf, single_func)
+{
+    m_perf = create();
+    add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    expect_empty_range(0, 999);
+    expect_perf(1000, 1999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_empty_range(2000, SIZE_MAX);
+}
+
+UCS_TEST_F(test_proto_perf, intersect_first)
+{
+    /*
+     * 500   1000          1999    3000          3999  4999
+     *  |     |              |      |              |    |
+     *  +-----+-- local_tl --+      +- remote_tl --+    |
+     *        |                                         |
+     *        |                                         |
+     *        +------ local_cpu ------------------------+
+     */
+    m_perf = create();
+    add_func(500, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    add_func(3000, 3999, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func);
+    add_func(1000, 4999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    expect_empty_range(0, 499);
+    expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(1000, 1999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(2000, 2999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_perf(3000, 3999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func}});
+    expect_perf(4000, 4999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_empty_range(5000, SIZE_MAX);
+}
+
+UCS_TEST_F(test_proto_perf, intersect_last)
+{
+    /*
+     * 500   1000         1999    3000  3499    3999
+     *  |     |             |      |      |       |
+     *  |     +- local_tl +-+      +- remote_tl --+
+     *  |                                  |
+     *  |                                  |
+     *  +----- local_cpu ------------------+
+     */
+    m_perf = create();
+    add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    add_func(3000, 3999, UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func);
+    add_func(500, 3499, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    expect_empty_range(0, 499);
+    expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_perf(1000, 1999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(2000, 2999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func}});
+    expect_perf(3000, 3499,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func}});
+    expect_perf(3500, 3999,
+                {{UCP_PROTO_PERF_FACTOR_REMOTE_TL, remote_tl_func}});
+    expect_empty_range(4000, SIZE_MAX);
+}
+
+UCS_TEST_F(test_proto_perf, intersect_middle)
+{
+    /*
+     * 500   1000                  1999   2999
+     *  |     |                      |     |
+     *  +-----+------ local_tl ------+-----+
+     *        |                      |
+     *        |                      |
+     *        +------ local_cpu -----+
+     */
+    m_perf = create();
+    add_func(500, 2999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    add_func(1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func);
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    expect_empty_range(0, 499);
+    expect_perf(500, 999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(1000, 1999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_perf(2000, 2999, {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_empty_range(3000, SIZE_MAX);
+}
+
+UCS_TEST_F(test_proto_perf, agg2)
+{
+    /*
+     * 500   1000                  1999   2999
+     *  |     |                      |     |
+     *  +-----+------ local_tl ------+-----+
+     *        |                      |
+     *        |                      |
+     *        +------ local_cpu -----+
+     */
+    perf_ptr_t perf1 = create();
+    add_func(perf1, 500, 2999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    UCS_TEST_MESSAGE << perf1.get();
+
+    perf_ptr_t perf2 = create();
+    add_func(perf2, 1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
+             local_cpu_func);
+    UCS_TEST_MESSAGE << perf2.get();
+
+    m_perf = aggregate({perf1, perf2});
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    expect_empty_range(0, 999);
+    expect_perf(1000, 1999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU, local_cpu_func},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_empty_range(2000, SIZE_MAX);
+}
+
+UCS_TEST_F(test_proto_perf, agg3)
+{
+    /*
+     * 500   1000  1200              1999       2999
+     *  |     |      |                 |          |
+     *  +-----+------+---1.local_tl ---+----------+
+     *        |      |                 |          |
+     *        |      |                 |          |
+     *        +------+--2.local_cpu1 --+          |
+     *               |                            |
+     *               |                            |
+     *               +--3.local_cpu2 -------------+
+     *
+     */
+    perf_ptr_t perf1 = create();
+    add_func(perf1, 500, 2999, UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func);
+    UCS_TEST_MESSAGE << perf1.get();
+
+    perf_ptr_t perf2 = create();
+    add_func(perf2, 1000, 1999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
+             local_cpu_func);
+    UCS_TEST_MESSAGE << perf2.get();
+
+    perf_ptr_t perf3 = create();
+    add_func(perf3, 1200, 2999, UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
+             local_cpu_func);
+    UCS_TEST_MESSAGE << perf3.get();
+
+    m_perf = aggregate({perf1, perf2, perf3});
+    UCS_TEST_MESSAGE << m_perf.get();
+
+    expect_empty_range(0, 1199);
+    expect_perf(1200, 1999,
+                {{UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
+                  ucs_linear_func_add(local_cpu_func, local_cpu_func)},
+                 {UCP_PROTO_PERF_FACTOR_LOCAL_TL, local_tl_func}});
+    expect_empty_range(2000, SIZE_MAX);
+}
+
+class test_proto_perf_aggregate : public test_proto_perf {
+protected:
+    using perf_vec_t = std::vector<perf_ptr_t>;
+
+    // Test aggregation of random collection of perf structures, by sampling
+    // the result at specific points
+    void test_random_funcs(unsigned num_perfs, unsigned num_segments);
+
+private:
+    // Generate a random ascending sequence of numbers, ending with SIZE_MAX
+    static std::vector<size_t> generate_random_sequence(unsigned length);
+
+    // Generate a random perf structure
+    static perf_ptr_t generate_random_perf(unsigned max_segments);
+
+    // Collect points of sampling based on perf structure segments
+    static std::vector<size_t> get_sample_points(perf_ptr_t perf);
+
+    // Calculate the expected aggregation result at a given point. If the
+    // expected result is undefined, return nullptr.
+    std::unique_ptr<perf_factors_map_t>
+    expected_aggregate_result(const std::vector<perf_ptr_t> &perfs,
+                              size_t point);
+};
+
+std::vector<size_t>
+test_proto_perf_aggregate::generate_random_sequence(unsigned length)
+{
+    std::vector<size_t> sequence;
+    size_t value = 0;
+    std::generate_n(std::back_inserter(sequence), length, [&value]() {
+        value += ucs::rand_range(10000) + 1;
+        return value;
+    });
+    sequence.emplace_back(SIZE_MAX);
+    return sequence;
+}
+
+test_proto_perf::perf_ptr_t
+test_proto_perf_aggregate::generate_random_perf(unsigned max_segments)
+{
+    perf_ptr_t perf = create();
+    size_t start    = 0;
+    auto points     = generate_random_sequence(max_segments);
+    for (auto point : points) {
+        if (ucs::rand_range(4) > 0) {
+            ucs_linear_func_t tl_func  = {1.0 * ucs::rand_range(4),
+                                          1.0 * ucs::rand_range(4)};
+            ucs_linear_func_t cpu_func = {2.0 * ucs::rand_range(4),
+                                          2.0 * ucs::rand_range(4)};
+            add_funcs(perf, start, point,
+                      {{UCP_PROTO_PERF_FACTOR_LOCAL_TL, tl_func},
+                       {UCP_PROTO_PERF_FACTOR_LOCAL_CPU, cpu_func}});
+        }
+        start = point + 1;
+    }
+    return perf;
+}
+
+std::vector<size_t>
+test_proto_perf_aggregate::get_sample_points(perf_ptr_t perf)
+{
+    std::vector<size_t> points;
+
+    auto seg = find_lb(perf, 0);
+    while (seg != NULL) {
+        auto start = ucp_proto_perf_segment_start(seg);
+        auto end   = ucp_proto_perf_segment_end(seg);
+        points.push_back(start);
+        points.push_back(end);
+        points.push_back((start + end) / 2);
+        if (start > 0) {
+            points.push_back(start - 1);
+        }
+        if (end == SIZE_MAX) {
+            break;
+        }
+
+        points.push_back(end + 1);
+        seg = find_lb(perf, end + 1);
+    }
+
+    return points;
+}
+
+std::unique_ptr<test_proto_perf::perf_factors_map_t>
+test_proto_perf_aggregate::expected_aggregate_result(const perf_vec_t &perfs,
+                                                     size_t point)
+{
+    perf_factors_map_t agg;
+    for (auto perf : perfs) {
+        ucp_proto_perf_segment_t *seg = find_lb(perf, point);
+        if ((seg == NULL) || (point < ucp_proto_perf_segment_start(seg))) {
+            return nullptr; // Point not found in one of the perf objects
+        }
+
+        for (int factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST;
+             ++factor_id) {
+            auto func = ucp_proto_perf_segment_func(
+                    seg, (ucp_proto_perf_factor_id_t)factor_id);
+            if (!ucs_linear_func_is_zero(func, UCP_PROTO_PERF_EPSILON)) {
+                if (agg.find(factor_id) == agg.end()) {
+                    agg[factor_id] = func;
+                } else {
+                    ucs_linear_func_add_inplace(&agg[factor_id], func);
+                }
+            }
+        }
+    }
+
+    return std::unique_ptr<perf_factors_map_t>(new perf_factors_map_t(agg));
+}
+
+void test_proto_perf_aggregate::test_random_funcs(unsigned num_perfs,
+                                                  unsigned num_segments)
+{
+    std::vector<perf_ptr_t> perfs;
+    std::generate_n(std::back_inserter(perfs), num_perfs,
+                    [num_segments]() -> perf_ptr_t {
+                        return generate_random_perf(num_segments);
+                    });
+
+    std::set<size_t> sample_points;
+    for (auto perf : perfs) {
+        auto perf_points = get_sample_points(perf);
+        std::copy(perf_points.begin(), perf_points.end(),
+                  std::inserter(sample_points, sample_points.begin()));
+    }
+
+    m_perf = aggregate(perfs);
+
+    for (auto point : sample_points) {
+        auto expected_result = expected_aggregate_result(perfs, point);
+        if (expected_result) {
+            expect_perf(point, point, *expected_result.get());
+        } else {
+            expect_empty_range(point, point);
+        }
+    }
+
+    if (testing::Test::HasFailure()) {
+        for (size_t i = 0; i < perfs.size(); ++i) {
+            UCS_TEST_MESSAGE << "perf " << i << ": " << perfs[i].get();
+        }
+        UCS_TEST_MESSAGE << "result: " << m_perf.get();
+    }
+
+    m_perf.reset();
+}
+
+UCS_TEST_F(test_proto_perf_aggregate, random)
+{
+    for (int iter = 0; (iter < (1000 / ucs::test_time_multiplier())) &&
+                       !::testing::Test::HasFailure();
+         ++iter) {
+        test_random_funcs(10, 10);
+    }
+}

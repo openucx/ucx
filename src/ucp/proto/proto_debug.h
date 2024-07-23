@@ -10,6 +10,9 @@
 #include "proto_select.h"
 
 
+/* String to place new line inside performance graph */
+#define UCP_PROTO_PERF_NODE_NEW_LINE "<br/>"
+
 /* Format string to display a protocol time */
 #define UCP_PROTO_TIME_FMT(_time_var) " " #_time_var ": %.2f ns"
 #define UCP_PROTO_TIME_ARG(_time_val) ((_time_val) * 1e9)
@@ -112,6 +115,10 @@ void ucp_proto_perf_node_ref(ucp_proto_perf_node_t *perf_node);
 void ucp_proto_perf_node_deref(ucp_proto_perf_node_t **perf_node_p);
 
 
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_dup(const ucp_proto_perf_node_t *perf_node);
+
+
 void ucp_proto_perf_node_own_child(ucp_proto_perf_node_t *perf_node,
                                    ucp_proto_perf_node_t **child_perf_node_p);
 
@@ -128,6 +135,11 @@ ucp_proto_perf_node_get_child(ucp_proto_perf_node_t *perf_node, unsigned n);
 void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
                                   const char *name,
                                   const ucs_linear_func_t value);
+
+
+void ucp_proto_perf_node_update_data(ucp_proto_perf_node_t *perf_node,
+                                     const char *name,
+                                     const ucs_linear_func_t value);
 
 
 void ucp_proto_perf_node_add_scalar(ucp_proto_perf_node_t *perf_node,

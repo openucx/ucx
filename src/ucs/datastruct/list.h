@@ -109,18 +109,36 @@ static inline void ucs_list_del(ucs_list_link_t *elem)
 /**
  * @return Whether the list is empty.
  */
-static inline int ucs_list_is_empty(ucs_list_link_t *head)
+static inline int ucs_list_is_empty(const ucs_list_link_t *head)
 {
     return head->next == head;
 }
 
 /**
- * @return Whether the list contains only elem.
+ * @return Whether @a elem is the first element in the list @a head.
  */
-static inline int ucs_list_is_only(ucs_list_link_t *head,
-                                   ucs_list_link_t *elem)
+static inline int
+ucs_list_is_first(const ucs_list_link_t *head, const ucs_list_link_t *elem)
 {
-    return (head->next == elem) && (elem->next == head);
+    return elem->prev == head;
+}
+
+/**
+ * @return Whether @a elem is the last element in the list @a head.
+ */
+static inline int
+ucs_list_is_last(const ucs_list_link_t *head, const ucs_list_link_t *elem)
+{
+    return elem->next == head;
+}
+
+/**
+ * @return Whether the list @a head contains only then element @a elem.
+ */
+static inline int
+ucs_list_is_only(const ucs_list_link_t *head, const ucs_list_link_t *elem)
+{
+    return ucs_list_is_first(head, elem) && ucs_list_is_last(head, elem);
 }
 
 /**

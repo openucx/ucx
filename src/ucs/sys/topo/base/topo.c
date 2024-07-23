@@ -341,6 +341,9 @@ static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
     case UCS_CPU_MODEL_AMD_GENOA:
         distance->bandwidth = 5100 * UCS_MBYTE;
         break;
+    case UCS_CPU_MODEL_NVIDIA_GRACE:
+        distance->bandwidth = 16500 * UCS_MBYTE;
+        break;
     default:
         distance->bandwidth = 220 * UCS_MBYTE;
         break;

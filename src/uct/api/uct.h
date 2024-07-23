@@ -836,6 +836,11 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_SYMMETRIC_RKEY       = UCS_BIT(10),
 
     /**
+     * Register global VA to access all process virtual address space.
+     */
+    UCT_MD_MEM_GVA                  = UCS_BIT(11),
+
+    /**
      * Enable local and remote access for all operations.
      */
     UCT_MD_MEM_ACCESS_ALL           = (UCT_MD_MEM_ACCESS_REMOTE_PUT |

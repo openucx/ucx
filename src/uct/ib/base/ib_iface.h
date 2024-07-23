@@ -724,9 +724,12 @@ uct_ib_fill_cq_attr(struct ibv_cq_init_attr_ex *cq_attr,
                     const uct_ib_iface_init_attr_t *init_attr,
                     uct_ib_iface_t *iface, int preferred_cpu, unsigned cq_size)
 {
+    int num_comp_vectors =
+            uct_ib_iface_device(iface)->ibv_context->num_comp_vectors;
+
     cq_attr->cqe         = cq_size;
     cq_attr->channel     = iface->comp_channel;
-    cq_attr->comp_vector = preferred_cpu;
+    cq_attr->comp_vector = preferred_cpu % num_comp_vectors;
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
     /* Always check CQ overrun if assert mode enabled. */
     /* coverity[dead_error_condition] */

@@ -236,8 +236,7 @@ ucp_datatype_iter_move(ucp_datatype_iter_t *dst_iter,
 
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_slice(const ucp_datatype_iter_t *dt_iter, size_t offset,
-                        size_t length, ucp_datatype_iter_t *sliced_dt_iter,
-                        uint8_t *sg_count)
+                        size_t length, ucp_datatype_iter_t *sliced_dt_iter)
 {
     ucs_assertv(dt_iter->dt_class == UCP_DATATYPE_CONTIG, "dt=%d (%s)",
                 dt_iter->dt_class, ucp_datatype_class_names[dt_iter->dt_class]);
@@ -250,7 +249,6 @@ ucp_datatype_iter_slice(const ucp_datatype_iter_t *dt_iter, size_t offset,
                                                     dt_iter->type.contig.buffer,
                                                     offset);
     sliced_dt_iter->type.contig.memh       = NULL;
-    *sg_count                              = 1;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_datatype_iter_mem_reg_single(
@@ -520,17 +518,26 @@ ucp_datatype_iter_next_ptr(const ucp_datatype_iter_t *dt_iter,
     return ucp_datatype_iter_next(dt_iter, max_length, next_iter);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_datatype_iter_next_slice(const ucp_datatype_iter_t *dt_iter,
-                             size_t max_length,
-                             ucp_datatype_iter_t *sliced_dt_iter,
-                             ucp_datatype_iter_t *next_iter, uint8_t *sg_count)
+static UCS_F_ALWAYS_INLINE size_t
+ucp_datatype_iter_next_slice_overlap(ucp_datatype_iter_t *dt_iter,
+                                     size_t max_length, size_t min_frag,
+                                     ucp_datatype_iter_t *sliced_dt_iter,
+                                     ucp_datatype_iter_t *next_iter)
 {
-    size_t length;
+    size_t  length  = ucp_datatype_iter_next(dt_iter, max_length, next_iter);
+    ssize_t overlap = min_frag - length;
 
-    length = ucp_datatype_iter_next(dt_iter, max_length, next_iter);
-    ucp_datatype_iter_slice(dt_iter, dt_iter->offset, length, sliced_dt_iter,
-                            sg_count);
+    /* Overlap previous fragment to respect min_frag requirement */
+    if (ucs_unlikely(overlap > 0)) {
+        dt_iter->offset -= overlap;
+        length          += overlap;
+    } else {
+        overlap          = 0;
+    }
+
+    ucp_datatype_iter_slice(dt_iter, dt_iter->offset, length, sliced_dt_iter);
+
+    return overlap;
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h

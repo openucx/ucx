@@ -34,22 +34,23 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_base_ep_zcopy_post(
         /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
         /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
         /* TAG  */ uct_tag_t tag, uint32_t app_ctx, uint32_t ib_imm_be,
-        int force_sig, uct_rc_send_handler_t handler, uint16_t op_flags,
+        uint8_t wqe_flags, uct_rc_send_handler_t handler, uint16_t op_flags,
         uct_completion_t *comp)
 {
-    uct_rc_mlx5_iface_common_t *iface  = ucs_derived_of(ep->super.super.super.iface,
-                                                        uct_rc_mlx5_iface_common_t);
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                       uct_rc_mlx5_iface_common_t);
+    uint8_t fm_ce_se                  = (comp == NULL) ? wqe_flags :
+                                        (wqe_flags | MLX5_WQE_CTRL_CQ_UPDATE);
     uint16_t sn;
 
     sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_txqp_dptr_post_iov(iface, IBV_QPT_RC,
-                                   &ep->super.txqp, &ep->tx.wq,
-                                   opcode, iov, iovcnt,
+                                   &ep->super.txqp, &ep->tx.wq, opcode,
+                                   iov, iovcnt,
                                    am_id, am_hdr, am_hdr_len,
                                    rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
-                                   tag, app_ctx, ib_imm_be, 0,
-                                   (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE,
-                                   0,
+                                   tag, app_ctx, ib_imm_be,
+                                   0, fm_ce_se, 0,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp, sn,
@@ -789,11 +790,12 @@ int uct_rc_mlx5_base_ep_is_connected(const uct_ep_h tl_ep,
     }
 
     if (params->field_mask & UCT_EP_IS_CONNECTED_FIELD_EP_ADDR) {
-        rc_addr       = (uct_rc_mlx5_ep_address_t*)params->ep_addr;
-        addr_qp       = uct_ib_unpack_uint24(rc_addr->qp_num);
+        rc_addr = (uct_rc_mlx5_ep_address_t*)params->ep_addr;
+        addr_qp = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
-    return uct_rc_ep_is_connected(&ah_attr, params, qp_num, addr_qp);
+    return uct_rc_ep_is_connected(&ep->super, &ah_attr, params, qp_num,
+                                  addr_qp);
 }
 
 ucs_status_t
@@ -1039,7 +1041,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 }
 #endif /* IBV_HW_TM */
 
-static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
+UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(params->iface,
                                                        uct_rc_mlx5_iface_common_t);
@@ -1068,11 +1070,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
         }
     }
 
-    status = uct_ib_device_async_event_register(&md->super.dev,
-                                                IBV_EVENT_QP_LAST_WQE_REACHED,
-                                                self->tx.wq.super.qp_num);
-    if (status != UCS_OK) {
-        goto err_destroy_txwq_qp;
+    if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
+        status = uct_ib_device_async_event_register(
+                &md->super.dev, IBV_EVENT_QP_LAST_WQE_REACHED,
+                self->tx.wq.super.qp_num);
+        if (status != UCS_OK) {
+            goto err_destroy_txwq_qp;
+        }
     }
 
     status = uct_rc_iface_add_qp(&iface->super, &self->super,
@@ -1087,9 +1091,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 err_event_unreg:
-    uct_ib_device_async_event_unregister(&md->super.dev,
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         self->tx.wq.super.qp_num);
+    if (iface->rx.srq.type != UCT_IB_MLX5_OBJ_TYPE_NULL) {
+        uct_ib_device_async_event_unregister(&md->super.dev,
+                                             IBV_EVENT_QP_LAST_WQE_REACHED,
+                                             self->tx.wq.super.qp_num);
+    }
 err_destroy_txwq_qp:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;

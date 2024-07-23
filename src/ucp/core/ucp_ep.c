@@ -618,6 +618,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     if (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) {
         /* user_data overrides err_handler.arg */
         ep->ext->user_data = params->user_data;
+        ep->flags |= UCP_EP_FLAG_USER_DATA_PARAM;
     }
 
     return UCS_OK;
@@ -804,7 +805,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
 
-    status = ucp_wireup_ep_create(ep, NULL, &uct_ep);
+    status = ucp_wireup_ep_create(ep, &uct_ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -1170,6 +1171,8 @@ static void ucp_ep_params_check_err_handling(ucp_ep_h ep,
         return;
     }
 
+    ucs_assert(!ep->worker->context->config.ext.gva_enable);
+
     if (ucp_worker_keepalive_is_enabled(ep->worker) &&
         ucp_ep_use_indirect_id(ep)) {
         return;
@@ -1185,6 +1188,14 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     ucp_ep_h ep    = NULL;
     unsigned flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     ucs_status_t status;
+
+    if ((UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
+                         UCP_ERR_HANDLING_MODE_NONE) !=
+         UCP_ERR_HANDLING_MODE_NONE) &&
+        worker->context->config.ext.gva_enable) {
+        ucs_error("GVA and error handling not supported");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -1859,17 +1870,13 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
 
 static ucp_lane_index_t
 ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
-                              const ucp_rsc_index_t *dst_rsc_indices1,
                               ucp_lane_index_t lane1,
-                              const ucp_ep_config_key_t *key2,
-                              const ucp_rsc_index_t *dst_rsc_indices2)
+                              const ucp_ep_config_key_t *key2)
 {
     ucp_lane_index_t lane_idx;
 
     for (lane_idx = 0; lane_idx < key2->num_lanes; ++lane_idx) {
-        if (ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane_idx) &&
-            ucp_ep_lane_is_dst_index_match(dst_rsc_indices1[lane1],
-                                           dst_rsc_indices2[lane_idx])) {
+        if (ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane_idx)) {
             return lane_idx;
         }
     }
@@ -1877,21 +1884,64 @@ ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
     return UCP_NULL_LANE;
 }
 
+static ucp_lane_index_t
+ucp_ep_config_find_reusable_lane(const ucp_ep_config_key_t *key1,
+                                 const ucp_ep_config_key_t *key2, ucp_ep_h ep,
+                                 const ucp_unpacked_address_t *remote_address,
+                                 const unsigned *addr_indices,
+                                 ucp_lane_index_t old_lane)
+{
+    ucp_context_h context     = ep->worker->context;
+    ucp_rsc_index_t rsc_index = key1->lanes[old_lane].rsc_index;
+    ucp_lane_index_t new_lane;
+    unsigned addr_index;
+    const ucp_address_entry_t *ae;
+
+    if (old_lane == key1->cm_lane) {
+        return key2->cm_lane;
+    }
+
+    new_lane = ucp_ep_config_find_match_lane(key1, old_lane, key2);
+    if (new_lane == UCP_NULL_LANE) {
+        /* No matching lane was found */
+        return UCP_NULL_LANE;
+    }
+
+    /* Return matching lane in case it is not connected yet */
+    if (!ucp_ep_is_local_connected(ep)) {
+        return new_lane;
+    }
+
+    addr_index = addr_indices[new_lane];
+    ae         = &remote_address->address_list[addr_index];
+
+    /* Verify both lane and address have the same transport */
+    ucs_assertv_always(context->tl_rscs[rsc_index].tl_name_csum ==
+                               ae->tl_name_csum,
+                       "lane=%u address=%u",
+                       context->tl_rscs[rsc_index].tl_name_csum,
+                       ae->tl_name_csum);
+
+    return ucp_wireup_is_lane_connected(ep, old_lane, ae) ? new_lane :
+                                                            UCP_NULL_LANE;
+}
+
 /* Go through the first configuration and check if the lanes selected
  * for this configuration could be used for the second configuration */
 void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_rsc_index_t *dst_rsc_indices1,
                                    const ucp_ep_config_key_t *key2,
-                                   const ucp_rsc_index_t *dst_rsc_indices2,
+                                   const ucp_ep_h ep,
+                                   const ucp_unpacked_address_t *remote_address,
+                                   const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map)
 {
     ucp_lane_index_t lane1_idx;
 
     for (lane1_idx = 0; lane1_idx < key1->num_lanes; ++lane1_idx) {
-        lane_map[lane1_idx] = ucp_ep_config_find_match_lane(key1,
-                                                            dst_rsc_indices1,
-                                                            lane1_idx, key2,
-                                                            dst_rsc_indices2);
+        lane_map[lane1_idx] = ucp_ep_config_find_reusable_lane(key1, key2, ep,
+                                                               remote_address,
+                                                               addr_indices,
+                                                               lane1_idx);
     }
 }
 
@@ -3773,6 +3823,10 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_USER_DATA) {
+        attr->user_data = ep->flags & UCP_EP_FLAG_USER_DATA_PARAM ? ep->ext->user_data : NULL;
     }
 
     return UCS_OK;

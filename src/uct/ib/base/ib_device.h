@@ -24,6 +24,7 @@
 
 
 #define UCT_IB_QPN_ORDER                  24  /* How many bits can be an IB QP number */
+#define UCT_IB_INVALID_QPN                UCS_MASK(UCT_IB_QPN_ORDER)
 #define UCT_IB_UIDX_SHIFT                 8   /* BE uidx shift */
 #define UCT_IB_LRH_LEN                    8   /* IB Local routing header */
 #define UCT_IB_GRH_LEN                    40  /* IB GLobal routing header */

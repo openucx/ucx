@@ -255,9 +255,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
     ucp_lane_index_t lane;
     ucs_status_t status;
 
-    ucs_assertv(remaining_lane_map != 0, "req=%p *lane_p=%d lane_map=0x%x", req,
-                *lane_p, lane_map);
-    lane = ucs_ffs32(remaining_lane_map);
+    ucs_assertv(remaining_lane_map != 0,
+                "req=%p *lane_p=%d lane_map=0x%" PRIx64, req, *lane_p,
+                lane_map);
+    lane = ucs_ffs64(remaining_lane_map);
 
     status = send_func(req, lane);
     if (ucs_likely(status == UCS_OK)) {

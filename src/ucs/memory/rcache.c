@@ -830,12 +830,8 @@ ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
     return UCS_OK;
 }
 
-/* Lock must be held
- * Old ASAN versions reports buffer underflow false-positive during access to
- * `region` through `ucs_list_link_t` entry. Newer ASAN versions don't
- * report this issue (e.g. standard ASAN on Ubuntu 22.04).
- */
-static ucs_status_t UCS_F_NO_SANITIZE_ADDRESS
+/* Lock must be held */
+static ucs_status_t
 ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
                          ucs_pgt_addr_t *end, size_t *alignment, int *prot,
                          int *merged, ucs_rcache_region_t **region_p)
@@ -855,14 +851,16 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
     ucs_list_head_init(&region_list);
     ucs_rcache_find_regions(rcache, *start, *end - 1, &region_list);
 
-    region = ucs_list_next(&region_list, ucs_rcache_region_t, tmp_list);
-    if (ucs_list_is_only(&region_list, &region->tmp_list) &&
-        (*start >= region->super.start) && (*end <= region->super.end) &&
-        ucs_rcache_region_test(region, *prot, *alignment)) {
-        /* Found a region which contains the given address range */
-        ucs_rcache_region_hold(rcache, region);
-        *region_p = region;
-        return UCS_ERR_ALREADY_EXISTS;
+    if (!ucs_list_is_empty(&region_list)) {
+        region = ucs_list_next(&region_list, ucs_rcache_region_t, tmp_list);
+        if (ucs_list_is_only(&region_list, &region->tmp_list) &&
+            (*start >= region->super.start) && (*end <= region->super.end) &&
+            ucs_rcache_region_test(region, *prot, *alignment)) {
+            /* Found a region which contains the given address range */
+            ucs_rcache_region_hold(rcache, region);
+            *region_p = region;
+            return UCS_ERR_ALREADY_EXISTS;
+        }
     }
 
     /* TODO check if any of the regions is locked */

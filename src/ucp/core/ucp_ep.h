@@ -113,6 +113,8 @@ enum {
     UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
                                                         indirect endpoint id instead of pointer,
                                                         can be replaced with looking at local ID */
+    UCP_EP_FLAG_USER_DATA_PARAM        = UCS_BIT(15),/* EP's user_data was passed via
+                                                        @ref ucp_ep_params_t::user_data */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -751,9 +753,10 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      ucp_lane_index_t lane2);
 
 void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
-                                   const ucp_rsc_index_t *dst_rsc_indices1,
                                    const ucp_ep_config_key_t *key2,
-                                   const ucp_rsc_index_t *dst_rsc_indices2,
+                                   const ucp_ep_h ep,
+                                   const ucp_unpacked_address_t *remote_address,
+                                   const unsigned *addr_indices,
                                    ucp_lane_index_t *lane_map);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,

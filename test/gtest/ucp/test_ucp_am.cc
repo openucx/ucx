@@ -17,8 +17,10 @@
 #include "ucp_test.h"
 
 extern "C" {
+#include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_resource.h>
 #include <ucs/datastruct/mpool.inl>
 }
 
@@ -417,9 +419,9 @@ protected:
         }
     }
 
-    void set_am_data_handler(entity &e, uint16_t am_id,
-                             ucp_am_recv_callback_t cb, void *arg,
-                             unsigned flags = 0)
+    ucs_status_t set_am_data_handler_internal(entity &e, unsigned am_id,
+                                              ucp_am_recv_callback_t cb, void *arg,
+                                              unsigned flags = 0)
     {
         ucp_am_handler_param_t param;
 
@@ -436,7 +438,14 @@ protected:
             param.flags       = flags;
         }
 
-        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
+        return ucp_worker_set_am_recv_handler(e.worker(), &param);
+    }
+
+    void set_am_data_handler(entity &e, uint16_t am_id,
+                             ucp_am_recv_callback_t cb, void *arg,
+                             unsigned flags = 0)
+    {
+        ASSERT_UCS_OK(set_am_data_handler_internal(e, am_id, cb, arg, flags));
     }
 
     void check_header(const void *header, size_t header_length)
@@ -447,11 +456,11 @@ protected:
 
     ucs_status_ptr_t
     update_counter_and_send_am(const void *header, size_t header_length,
-                               const void *buffer, size_t count,
+                               const void *buffer, size_t count, unsigned am_id,
                                const ucp_request_param_t *param)
     {
         m_send_counter++;
-        return ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, header,
+        return ucp_am_send_nbx(sender().ep(), am_id, header,
                                header_length, buffer, count, param);
     }
 
@@ -477,6 +486,7 @@ protected:
         ucs_status_ptr_t sptr = update_counter_and_send_am(hdr, hdr_length,
                                                            dt_desc.buf(),
                                                            dt_desc.count(),
+                                                           TEST_AM_NBX_ID,
                                                            &param);
         return sptr;
     }
@@ -691,6 +701,46 @@ protected:
     ucp_mem_h                       m_rx_memh;
 };
 
+class test_ucp_am_id : public test_ucp_am_nbx {
+protected:
+    void reset_counters()
+    {
+        test_ucp_am_nbx::reset_counters();
+        m_recv_counter_cb = 0;
+    }
+
+    void test_am_id_handler()
+    {
+        reset_counters();
+
+        ucs_status_t status = set_am_data_handler_internal(
+                                            receiver(), 0xffff0001,
+                                            am_id_overflow_data_cb, this);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+        ucp_request_param_t param;
+        param.op_attr_mask = 0;
+
+        ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul, NULL, 0,
+                                                           0xffff0001, &param);
+        EXPECT_EQ(UCS_PTR_STATUS(sptr), UCS_ERR_INVALID_PARAM);
+        EXPECT_EQ(0, m_recv_counter_cb);
+    }
+
+    static ucs_status_t am_id_overflow_data_cb(void *arg, const void *header,
+                                               size_t header_length,
+                                               void *data, size_t length,
+                                               const ucp_am_recv_param_t *param)
+    {
+        test_ucp_am_id *self = reinterpret_cast<test_ucp_am_id*>(arg);
+        self->m_recv_counter_cb++;
+        return self->am_data_handler(header, header_length,
+                                     data, length, param);
+    }
+
+    volatile size_t m_recv_counter_cb;
+};
+
 void test_ucp_am_nbx::test_datatypes(std::function<void()> test_f,
                                      const std::vector<ucp_dt_type> &datatypes)
 {
@@ -795,6 +845,14 @@ UCS_TEST_P(test_ucp_am_nbx, am_header_error)
     EXPECT_EQ(UCS_PTR_STATUS(sptr), UCS_ERR_INVALID_PARAM);
 }
 #endif
+
+UCS_TEST_P(test_ucp_am_id, am_id_overflow)
+{
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    test_am_id_handler();
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_id)
 
 UCS_TEST_P(test_ucp_am_nbx, zero_send)
 {
@@ -1667,6 +1725,13 @@ public:
         }
     }
 
+    size_t get_rndv_frag_size(ucs_memory_type_t mem_type)
+    {
+        const auto *cfg = &sender().worker()->context->config.ext;
+
+        return cfg->rndv_frag_size[mem_type];
+    }
+
 protected:
     static constexpr unsigned RNDV_THRESH = 128;
     ucs_status_t m_status;
@@ -1731,7 +1796,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_rndv, invalid_recv_desc,
 
     param.op_attr_mask = 0ul;
     ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul, &data,
-                                                       sizeof(data), &param);
+                                                       sizeof(data),
+                                                       TEST_AM_NBX_ID, &param);
 
     wait_receives();
 
@@ -1768,7 +1834,9 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)
 
         ucs_status_ptr_t sptr = update_counter_and_send_am(NULL, 0ul,
                                                            sbuf.data(),
-                                                           sbuf.size(), &param);
+                                                           sbuf.size(),
+                                                           TEST_AM_NBX_ID,
+                                                           &param);
 
         EXPECT_EQ(m_status, request_wait(sptr));
         EXPECT_EQ(m_recv_counter, m_send_counter);
@@ -1848,7 +1916,13 @@ private:
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    test_am_send_recv_memtype(64 * UCS_KBYTE);
+    const size_t rndv_frag_size     = get_rndv_frag_size(UCS_MEMORY_TYPE_HOST);
+    const std::vector<size_t> sizes = {64 * UCS_KBYTE, rndv_frag_size - 1,
+                                       rndv_frag_size  + 1};
+
+    for (size_t size : sizes) {
+        test_am_send_recv_memtype(size);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);
@@ -1898,3 +1972,107 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_memtype_disable_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
+
+
+#ifdef ENABLE_STATS
+class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
+public:
+    void init() override
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+        stats_activate();
+        modify_config("RNDV_THRESH", "128");
+        modify_config("RNDV_SCHEME", "put_ppln");
+        modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
+        test_ucp_am_nbx::init();
+    }
+
+    void cleanup() override
+    {
+        test_ucp_am_nbx::cleanup();
+        stats_restore();
+    }
+
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
+    }
+
+protected:
+    void test_ppln_send(ucs_memory_type_t mem_type, size_t num_frags,
+                        uint64_t sender_cntr, uint64_t sender_cntr_value,
+                        uint64_t receiver_cntr, uint64_t receiver_cntr_value)
+    {
+        if (!is_ppln_supported(mem_type)) {
+            UCS_TEST_SKIP_R("No RMA support");
+        }
+
+        const size_t rndv_frag_size = get_rndv_frag_size(mem_type);
+        test_am_send_recv(rndv_frag_size * num_frags);
+
+        check_stats(sender(), sender_cntr, sender_cntr_value);
+        check_stats(receiver(), receiver_cntr, receiver_cntr_value);
+    }
+
+private:
+    void check_stats(entity &e, uint64_t cntr, uint64_t exp_value)
+    {
+        auto stats_node = e.worker()->stats;
+        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
+
+        EXPECT_EQ(exp_value, value) << "counter is "
+                                    << stats_node->cls->counter_names[cntr];
+    }
+
+    bool is_ppln_supported(ucs_memory_type_t mem_type)
+    {
+        const auto ep     = sender().ep();
+        const auto config = ucp_ep_config(ep);
+
+        for (auto i = 0; i < config->key.num_lanes; ++i) {
+            const auto lane = config->key.rma_bw_lanes[i];
+            if (lane == UCP_NULL_LANE) {
+                break;
+            }
+            if (ucp_ep_md_attr(ep, lane)->reg_mem_types & UCS_BIT(mem_type)) {
+                const auto iface_attr =
+                    ucp_worker_iface_get_attr(sender().worker(),
+                                              ucp_ep_get_rsc_index(ep, lane));
+                if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_cuda_frag,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags,
+                   UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, num_frags,
+                   UCP_WORKER_STAT_RNDV_RTR_MTYPE, num_frags);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_host_frag,
+           "RNDV_FRAG_MEM_TYPE=host")
+{
+    // Host memory should not be pipelined thru host staging buffers
+    test_ppln_send(UCS_MEMORY_TYPE_HOST, 2,
+                   UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 0,
+                   UCP_WORKER_STAT_RNDV_RTR_MTYPE, 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
+
+#endif

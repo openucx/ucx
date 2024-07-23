@@ -389,12 +389,12 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_TIME       {ucs_config_sscanf_time,      ucs_config_sprintf_time, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     ucs_config_doc_nop, \
-                                    "time value: <number>[s|us|ms|ns]"}
+                                    "time value: <number>[m|s|ms|us|ns]"}
 
 #define UCS_CONFIG_TYPE_TIME_UNITS {ucs_config_sscanf_time_units, ucs_config_sprintf_time_units, \
                                     ucs_config_clone_ulong,       ucs_config_release_nop, \
                                     ucs_config_help_generic,      ucs_config_doc_nop, \
-                                    "time value: <number>[s|us|ms|ns], \"inf\", or \"auto\""}
+                                    "time value: <number>[m|s|ms|us|ns], \"inf\", or \"auto\""}
 
 #define UCS_CONFIG_TYPE_BW         {ucs_config_sscanf_bw,        ucs_config_sprintf_bw, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \

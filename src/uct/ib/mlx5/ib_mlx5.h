@@ -61,7 +61,8 @@
 #define UCT_IB_MLX5_CQ_SET_CI            0
 #define UCT_IB_MLX5_CQ_ARM_DB            1
 #define UCT_IB_MLX5_LOG_MAX_MSG_SIZE     30
-#define UCT_IB_MLX5_ATOMIC_MODE          3
+#define UCT_IB_MLX5_ATOMIC_MODE_COMP     1
+#define UCT_IB_MLX5_ATOMIC_MODE_EXT      3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE   UCS_BIT(29) /* GRH/IP in the CQE */
 #define UCT_IB_MLX5_CQE_FORMAT_MASK      0xc
@@ -194,9 +195,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(14),
     /* Device supports DMA MMO */
     UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(15),
+    /* Device supports XGVMI UMR workflow */
+    UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(16),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 17,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -437,6 +440,7 @@ typedef struct uct_ib_mlx5_dbrec {
 typedef enum {
     UCT_IB_MLX5_OBJ_TYPE_VERBS,
     UCT_IB_MLX5_OBJ_TYPE_DEVX,
+    UCT_IB_MLX5_OBJ_TYPE_NULL,
     UCT_IB_MLX5_OBJ_TYPE_LAST
 } uct_ib_mlx5_obj_type_t;
 
@@ -904,13 +908,42 @@ uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
                             size_t inlen, void *out, size_t outlen,
                             char *msg_arg, ucs_log_level_t log_level);
 
-ucs_status_t
-uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg);
+static inline ucs_status_t
+uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg)
+{
+    int ret;
 
-ucs_status_t uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
-                                          const void *in, size_t inlen,
-                                          void *out, size_t outlen,
-                                          char *msg_arg, int silent);
+    ret = mlx5dv_devx_obj_destroy(obj);
+    if (ret != 0) {
+        ucs_warn("mlx5dv_devx_obj_destroy(%s) failed: %m", msg_arg);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static inline ucs_status_t
+uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
+                             const void *in, size_t inlen,
+                             void *out, size_t outlen,
+                             char *msg_arg, int silent)
+{
+    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    int ret;
+    unsigned syndrome;
+
+    ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
+    if (ret != 0) {
+        syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        ucs_log(level,
+                "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
+                msg_arg, ibv_get_device_name(context->device), syndrome);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
@@ -1091,6 +1124,9 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                       const uct_ib_md_config_t *md_config,
                                       uct_ib_md_t **p_md);
+
+ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
+                                               uct_ib_mlx5_devx_mem_t *memh);
 #endif
 
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);

@@ -384,6 +384,10 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     uct_md_h md_ref               = md();
     uct_alloc_method_t method     = UCT_ALLOC_METHOD_MD;
     unsigned num_alloc_failures   = 0;
+    const auto max_alloc          = md_attr().max_alloc;
+    auto max_size                 = ucs_max(max_alloc / 8,
+                                            ucs_min(max_alloc, 1024));
+
     std::vector<char> key(md_attr().rkey_packed_size);
     size_t size, orig_size;
     ucs_status_t status;
@@ -408,12 +412,13 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA |
                              UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO;
 
+    max_size               = ucs_min(max_size, 63356);
+    max_size               = ucs_align_down_pow2(max_size, sizeof(size_t));
+
     ucs_for_each_bit(mem_type, md_attr().alloc_mem_types) {
         for (unsigned i = 0; i < iterations; ++i) {
-            size = orig_size = ucs::rand() %
-                               ucs_min(65536, md_attr().max_alloc);
-            if ((size == 0) || (ucs_align_up_pow2(size, sizeof(size_t)) >
-                                md_attr().max_alloc)) {
+            size = orig_size = ucs::rand() % max_size;
+            if (size == 0) {
                 continue;
             }
 
@@ -452,7 +457,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             uct_mem_free(&mem);
         }
 
-        EXPECT_LT((double)num_alloc_failures / iterations, 0.7)
+        EXPECT_LT((double)num_alloc_failures / iterations, 0.3)
                 << "Too many OUT_OF_RESOURCE failures";
     }
 }

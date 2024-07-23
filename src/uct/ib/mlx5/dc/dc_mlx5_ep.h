@@ -85,12 +85,14 @@ typedef struct {
 } uct_dc_mlx5_pending_req_priv_t;
 
 
-UCS_CLASS_DECLARE(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *, const uct_dc_mlx5_iface_addr_t *,
-                  uct_ib_mlx5_base_av_t *, uint8_t);
+UCS_CLASS_DECLARE(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t*,
+                  const uct_dc_mlx5_iface_addr_t*, uct_ib_mlx5_base_av_t*,
+                  uint8_t, const uct_dc_mlx5_dci_config_t*);
 
-UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
-                  const uct_dc_mlx5_iface_addr_t *,
-                  uct_ib_mlx5_base_av_t *, uint8_t, struct mlx5_grh_av *);
+UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t*,
+                  const uct_dc_mlx5_iface_addr_t*, uct_ib_mlx5_base_av_t*,
+                  uint8_t, struct mlx5_grh_av*,
+                  const uct_dc_mlx5_dci_config_t*);
 
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_dc_mlx5_ep_t, uct_ep_t);
 
@@ -270,7 +272,7 @@ uct_dc_mlx5_ep_rand_arb_group(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     ucs_assert(uct_dc_mlx5_iface_is_dci_shared(iface) &&
                (ep->dci != UCT_DC_MLX5_EP_NO_DCI));
     /* If DCI random policy is used, DCI is always assigned to EP */
-    return &iface->tx.dcis[ep->dci].arb_group;
+    return &uct_dc_mlx5_iface_dci(iface, ep->dci)->arb_group;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_arbiter_group_t*
@@ -298,26 +300,70 @@ uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     /* Can be used with dcs* policies only, with rand policy every dci may
      * be used by many eps */
     ucs_assert(!uct_dc_mlx5_iface_is_dci_shared(iface));
-    return iface->tx.dcis[dci_index].ep;
+    return uct_dc_mlx5_iface_dci(iface, dci_index)->ep;
 }
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
                                    struct mlx5_cqe64 *cqe,
                                    ucs_status_t status);
 
+static UCS_F_ALWAYS_INLINE void
+uct_dc_mlx5_init_dci_config(uct_dc_mlx5_dci_config_t *dci_config,
+                            uint8_t path_index, uint8_t max_rd_atomic)
+{
+    dci_config->path_index    = path_index % UCT_DC_MLX5_IFACE_MAX_DCI_POOLS;
+    dci_config->max_rd_atomic = max_rd_atomic;
+}
+
+ucs_status_t static UCS_F_ALWAYS_INLINE
+uct_dc_mlx5_dci_pool_init_dci(uct_dc_mlx5_iface_t *iface, uint8_t pool_index,
+                              uint8_t dci_index)
+{
+    uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
+    uct_dc_dci_t *dci            = uct_dc_mlx5_iface_dci(iface, dci_index);
+    ucs_status_t status;
+
+    ucs_assertv(ucs_array_length(&pool->stack) < iface->tx.ndci,
+                "stack length exceeded ndci");
+
+    status = uct_dc_mlx5_iface_create_dci(iface, dci_index, 1);
+    if (status != UCS_OK) {
+        ucs_error("iface %p: failed to create dci %u at pool %u", iface,
+                  dci_index, pool_index);
+        return status;
+    }
+
+    dci->path_index = pool->config.path_index;
+    dci->pool_index = pool_index;
+
+    return UCS_OK;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
+    uct_dc_dci_t *dci;
+    size_t dcis_array_size;
+
     ucs_arbiter_group_init(&ep->arb_group);
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         /* coverity[dont_call] */
         ep->dci               = rand_r(&iface->tx.rand_seed) % iface->tx.ndci;
         ep->dci_channel_index = 0;
+        dcis_array_size       = ucs_max(ep->dci + 1,
+                                        ucs_array_length(&iface->tx.dcis));
+        uct_dc_mlx5_iface_resize_and_fill_dcis(iface, dcis_array_size);
+
+        if (!uct_dc_mlx5_is_dci_valid(uct_dc_mlx5_iface_dci(iface, ep->dci))) {
+            uct_dc_mlx5_dci_pool_init_dci(iface, uct_dc_mlx5_ep_pool_index(ep),
+                                          ep->dci);
+        }
     } else if (uct_dc_mlx5_iface_is_hw_dcs(iface)) {
         ucs_assertv(iface->tx.ndci == 1, "ndci=%u", iface->tx.ndci);
+        dci                   = uct_dc_mlx5_iface_dci(iface, ep->dci);
         ep->dci               = 0;
-        ep->dci_channel_index = iface->tx.dcis[ep->dci].next_channel_index++ %
+        ep->dci_channel_index = dci->next_channel_index++ %
                                 iface->tx.num_dci_channels;
     } else {
         ep->dci               = UCT_DC_MLX5_EP_NO_DCI;
@@ -328,10 +374,46 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
                           UCS_STATS_ARG(ep->super.stats));
 }
 
-static UCS_F_ALWAYS_INLINE int
+static int
 uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 {
-    return iface->tx.dci_pool[pool_index].stack_top < iface->tx.ndci;
+    uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
+
+    return ucs_likely(pool->stack_top < iface->tx.ndci);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_iface_dci_can_alloc_or_create(uct_dc_mlx5_iface_t *iface,
+                                          uint8_t pool_index)
+{
+    uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
+    uint8_t dci_index;
+    ucs_status_t status;
+
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_shared(iface));
+
+    if (ucs_likely(pool->stack_top < ucs_array_length(&pool->stack))) {
+        return 1;
+    }
+
+    dci_index = ucs_array_length(&iface->tx.dcis);
+    if (ucs_array_length(&pool->stack) >= iface->tx.ndci) {
+        return 0;
+    }
+
+    /* Append a new dci */
+    status = uct_dc_mlx5_iface_resize_and_fill_dcis(iface, dci_index + 1);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    status = uct_dc_mlx5_dci_pool_init_dci(iface, pool_index, dci_index);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    *ucs_array_append(&pool->stack, return UCS_ERR_NO_MEMORY) = dci_index;
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -370,8 +452,8 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
          * NOTE: in case of rand dci allocation policy, dci_waitq is always
          * empty.
          */
-        if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index) &&
-            !uct_dc_mlx5_iface_is_dci_shared(iface)) {
+        if (!uct_dc_mlx5_iface_is_dci_shared(iface) &&
+            uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
             ucs_arbiter_dispatch(dci_waitq, 1,
                                  uct_dc_mlx5_iface_dci_do_pending_wait, NULL);
         }
@@ -398,7 +480,8 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface,
 
     /* If FC window is empty the group will be scheduled when grant is received */
     if (uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
-        waitq = uct_dc_mlx5_iface_dci_waitq(iface, uct_dc_mlx5_ep_pool_index(ep));
+        waitq = uct_dc_mlx5_iface_dci_waitq(iface,
+                                            uct_dc_mlx5_ep_pool_index(ep));
         ucs_arbiter_group_schedule(waitq, &ep->arb_group);
     }
 }
@@ -406,11 +489,7 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface,
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_dc_mlx5_iface_dci_pool_index(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 {
-    ucs_assertv(iface->tx.dcis[dci_index].pool_index <
-                        UCT_DC_MLX5_IFACE_MAX_DCI_POOLS,
-                "pool_index=%d dci_index=%d",
-                iface->tx.dcis[dci_index].pool_index, dci_index);
-    return iface->tx.dcis[dci_index].pool_index;
+    return uct_dc_mlx5_iface_dci(iface, dci_index)->pool_index;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -423,11 +502,12 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     ucs_trace_data("iface %p: release dci %d from ep %p", iface, dci_index,
                    uct_dc_mlx5_ep_from_dci(iface, dci_index));
 
+    uct_dc_mlx5_iface_dci(iface, dci_index)->ep = NULL;
     pool->stack_top--;
     ucs_assertv(pool->stack_top >= 0, "dci pool underflow, stack_top=%d",
                 (int)pool->stack_top);
     ucs_assert(pool->release_stack_top < pool->stack_top);
-    pool->stack[pool->stack_top] = dci_index;
+    ucs_array_elem(&pool->stack, pool->stack_top) = dci_index;
 }
 
 /* Release endpoint's DCI below, if the endpoint does not have outstanding
@@ -478,9 +558,10 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     uct_dc_mlx5_iface_dci_release(iface, dci_index);
 
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-    ep->dci                      = UCT_DC_MLX5_EP_NO_DCI;
-    ep->flags                   &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
-    iface->tx.dcis[dci_index].ep = NULL;
+    ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
+    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
+
+    uct_dc_mlx5_iface_dci(iface, dci_index)->ep = NULL;
 
     /* it is possible that dci is released while ep still has scheduled pending ops.
      * move the group to the 'wait for dci alloc' state
@@ -489,7 +570,8 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
 }
 
-static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+static inline void
+uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     /* take a first available dci from stack.
      * There is no need to check txqp because
@@ -500,11 +582,12 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_shared(iface));
     ucs_assert(pool->release_stack_top < pool->stack_top);
-    ep->dci = pool->stack[pool->stack_top];
-    ucs_assert(ep->dci >= (iface->tx.ndci * pool_index));
-    ucs_assert(ep->dci < (iface->tx.ndci * (pool_index + 1)));
+    ucs_assertv(pool->stack_top < ucs_array_length(&pool->stack),
+                "stack_top=%u, array_length(stack)=%u", pool->stack_top,
+                ucs_array_length(&pool->stack));
+    ep->dci = ucs_array_elem(&pool->stack, pool->stack_top);
     ucs_assert(uct_dc_mlx5_ep_from_dci(iface, ep->dci) == NULL);
-    iface->tx.dcis[ep->dci].ep = ep;
+    uct_dc_mlx5_iface_dci(iface, ep->dci)->ep = ep;
     pool->stack_top++;
     if (ep->flags & UCT_DC_MLX5_EP_FLAG_INVALIDATED) {
         (void)uct_dc_mlx5_ep_qp_to_err(ep);
@@ -529,8 +612,8 @@ uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
     stack_top = ++iface->tx.dci_pool[pool_index].release_stack_top;
     ucs_assert(stack_top < iface->tx.dci_pool[pool_index].stack_top);
 
-    iface->tx.dci_pool_release_bitmap              |= UCS_BIT(pool_index);
-    iface->tx.dci_pool[pool_index].stack[stack_top] = dci;
+    iface->tx.dci_pool_release_bitmap |= UCS_BIT(pool_index);
+    ucs_array_elem(&iface->tx.dci_pool[pool_index].stack, stack_top) = dci;
 
     ucs_callbackq_add_oneshot(&worker->progress_q, iface,
                               uct_dc_mlx5_ep_dci_release_progress, iface);
@@ -549,9 +632,8 @@ uct_dc_mlx5_iface_dci_detach(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         return 0;
     }
 
-    ep->dci                      = UCT_DC_MLX5_EP_NO_DCI;
-    ep->flags                   &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
-    iface->tx.dcis[dci_index].ep = NULL;
+    ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
+    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
 
     uct_dc_mlx5_iface_dci_schedule_release(iface, dci_index);
 
@@ -565,6 +647,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     uint8_t pool_index = uct_dc_mlx5_ep_pool_index(ep);
+    uct_dc_dci_t *dci  = uct_dc_mlx5_iface_dci(iface, ep->dci);
     ucs_arbiter_t *waitq;
     uct_rc_txqp_t *txqp;
     int16_t available;
@@ -575,12 +658,11 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         /* Silence Coverity - in random policy the endpoint always has an
          * assigned DCI */
         ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-
         if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
             return UCS_OK;
         } else {
-            UCS_STATS_UPDATE_COUNTER(iface->tx.dcis[ep->dci].txqp.stats,
-                                     UCT_RC_TXQP_STAT_QP_FULL, 1);
+            UCS_STATS_UPDATE_COUNTER(dci->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL,
+                                     1);
             goto out_no_res;
         }
     }
@@ -595,7 +677,7 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         /* if dci has sent more than quota, and there are eps waiting for dci
          * allocation ep goes into tx_wait state.
          */
-        txqp      = &iface->tx.dcis[ep->dci].txqp;
+        txqp      = &dci->txqp;
         available = uct_rc_txqp_available(txqp);
         waitq     = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
         if ((iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) &&
@@ -614,7 +696,7 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         return UCS_OK;
     }
 
-    if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+    if (uct_dc_mlx5_iface_dci_can_alloc_or_create(iface, pool_index)) {
         waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
         ucs_assert(ucs_arbiter_is_empty(waitq));
 

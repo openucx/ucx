@@ -642,7 +642,7 @@ uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     return UCS_OK;
 }
 
-int uct_rc_ep_is_connected(struct ibv_ah_attr *ah_attr,
+int uct_rc_ep_is_connected(uct_rc_ep_t *ep, struct ibv_ah_attr *ah_attr,
                            const uct_ep_is_connected_params_t *params,
                            uint32_t qp_num, uint32_t addr_qp)
 {
@@ -650,6 +650,10 @@ int uct_rc_ep_is_connected(struct ibv_ah_attr *ah_attr,
     const uct_ib_address_t *ib_addr;
 
     UCT_EP_IS_CONNECTED_CHECK_DEV_ADDR(params);
+
+    if (!(ep->flags & UCT_RC_EP_FLAG_CONNECTED)) {
+        return 0;
+    }
 
     if ((addr_qp != 0) && (qp_num != addr_qp)) {
         return 0;

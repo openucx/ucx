@@ -189,13 +189,23 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
         } else if (read_size == buffer_size - offset) {
             /* enlarge buffer */
             orig_buffer = buffer;
-            buffer      = ucm_orig_mremap(buffer, buffer_size, buffer_size * 2,
-                                          MREMAP_MAYMOVE, NULL);
+            buffer      = ucm_orig_mmap(NULL, buffer_size * 2,
+                                        PROT_READ|PROT_WRITE,
+                                        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
             if (buffer == MAP_FAILED) {
                 ucm_fatal("failed to reallocate buffer for reading "
                           "/proc/self/maps from %p/%zu to size %zu: %m",
                           orig_buffer, buffer_size, buffer_size * 2);
             }
+
+            memcpy(buffer, orig_buffer, buffer_size);
+
+            ret = ucm_orig_munmap(orig_buffer, buffer_size);
+            if (ret != 0) {
+                ucm_warn("munmap(%p, %zu) failed: %m", orig_buffer,
+                         buffer_size);
+            }
+
             buffer_size *= 2;
 
             /* read again from the beginning of the file */

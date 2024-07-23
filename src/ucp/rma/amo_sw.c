@@ -84,7 +84,7 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 
     status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ,
                                     req->send.lane, pack_cb, req, NULL);
-    if ((status != UCS_OK) || ((status == UCS_OK) && !fetch)) {
+    if ((status != UCS_OK) || !fetch) {
         if (fetch) {
             ucp_send_request_id_release(req);
         }

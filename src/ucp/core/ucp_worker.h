@@ -47,6 +47,8 @@
     do { \
         if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
             UCS_ASYNC_BLOCK(&(_worker)->async); \
+        } else if (!((_worker)->flags & UCP_WORKER_FLAG_THREAD_SERIALIZED)) { \
+            ucs_assert(ucs_async_check_owner_thread(&(_worker)->async)); \
         } \
     } while (0)
 
@@ -147,8 +149,10 @@ enum {
     UCP_WORKER_STAT_RNDV_RX_UNEXP,
 
     UCP_WORKER_STAT_RNDV_PUT_ZCOPY,
+    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
     UCP_WORKER_STAT_RNDV_GET_ZCOPY,
     UCP_WORKER_STAT_RNDV_RTR,
+    UCP_WORKER_STAT_RNDV_RTR_MTYPE,
     UCP_WORKER_STAT_RNDV_RKEY_PTR,
 
     UCP_WORKER_STAT_LAST

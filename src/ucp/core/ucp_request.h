@@ -172,7 +172,7 @@ struct ucp_request {
                      * Used by rndv/ppln to track completed fragments
                      * Used by rkey_ptr to track copied data size
                      */
-                    size_t           completed_size;
+                    ssize_t          completed_size;
                 };
             } state;
 
@@ -292,7 +292,7 @@ struct ucp_request {
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
                                 struct {
                                     /* Size to send in ack message */
-                                    size_t ack_data_size;
+                                    ssize_t ack_data_size;
                                 } ppln;
 
                                 /* Used by rndv/rkey_ptr */

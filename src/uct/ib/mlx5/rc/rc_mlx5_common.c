@@ -526,6 +526,7 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                srq->verbs.srq);
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
         uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr, NULL);
         qp_attr->mmio_mode = iface->tx.mmio_mode;
         break;
@@ -579,6 +580,7 @@ void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
         uct_rc_mlx5_devx_cleanup_srq(md, srq);
 #endif
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }

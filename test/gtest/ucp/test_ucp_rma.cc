@@ -10,6 +10,7 @@
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
+#include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/sys.h>
 }
 
@@ -335,6 +336,9 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA, NON_BLOCK | NO_DEVX, "no_devx");
         add_variant_with_value(variants, UCP_FEATURE_RMA, NO_RCACHE, "no_rcache");
         add_variant_with_value(variants, UCP_FEATURE_RMA, NON_BLOCK | NO_RCACHE, "nb_no_rcache");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, NO_DEVX | GVA, "gva");
+        add_variant_with_value(variants, UCP_FEATURE_RMA,
+                               NO_DEVX | NO_RCACHE | GVA, "gva_no_rcache");
     }
 
     virtual void init() {
@@ -347,6 +351,9 @@ public:
         if (get_variant_value() & NO_RCACHE) {
             modify_config("RCACHE_ENABLE", "n");
         }
+        if (get_variant_value() & GVA) {
+            modify_config("GVA_ENABLE", "y");
+        }
         test_ucp_rma::init();
     }
 
@@ -357,6 +364,10 @@ protected:
             mem_buffer::supported_mem_types();
 
         for (size_t i = 0; i < mem_types.size(); ++i) {
+            if ((get_variant_value() & GVA) &&
+                !check_gva_supported(sender(), mem_types[i])) {
+                continue;
+            }
             test_message_sizes(send_func, 128, default_max_size(),
                                mem_types[i], mem_types[i], 0);
         }
@@ -371,15 +382,29 @@ protected:
     }
 
     bool host_only() {
-        return get_variant_value() & NON_BLOCK;
+        // RMA does not support non-host memory with proto v1
+        return (get_variant_value() & NON_BLOCK) || !is_proto_enabled();
     }
 
 private:
     enum {
-        NON_BLOCK = UCS_BIT(0),
-        NO_DEVX   = UCS_BIT(1),
-        NO_RCACHE = UCS_BIT(2),
+        NON_BLOCK = UCS_BIT(3),
+        NO_DEVX   = UCS_BIT(4),
+        NO_RCACHE = UCS_BIT(5),
+        GVA       = UCS_BIT(6),
     };
+
+    bool check_gva_supported(const entity &e, ucs_memory_type_t mem_type)
+    {
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(e.ep());
+             lane++) {
+            if (ucp_ep_md_attr(e.ep(), lane)->gva_mem_types &
+                UCS_BIT(mem_type)) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 UCS_TEST_P(test_ucp_rma_reg, put_blocking) {

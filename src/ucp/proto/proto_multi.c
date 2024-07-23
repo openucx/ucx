@@ -144,7 +144,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     mpriv->min_frag     = 0;
     mpriv->max_frag_sum = 0;
     mpriv->align_thresh = 1;
-    perf.max_frag       = SIZE_MAX;
+    perf.max_frag       = 0;
     perf.min_length     = 0;
     weight_sum          = 0;
     min_end_offset      = 0;
@@ -167,8 +167,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         ucs_assert(max_frag > 0);
 
         lpriv->max_frag = max_frag;
-        perf.max_frag   = ucs_min(perf.max_frag, lpriv->max_frag);
-
+        perf.max_frag  += max_frag;
 
         /* Calculate lane weight as a fixed-point fraction */
         lpriv->weight = ucs_proto_multi_calc_weight(lane_perf->bandwidth,

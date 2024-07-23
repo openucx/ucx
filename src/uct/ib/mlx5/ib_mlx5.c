@@ -786,6 +786,8 @@ void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
         uct_ib_mlx5_iface_put_res_domain(qp);
         uct_worker_tl_data_put(reg, uct_ib_mlx5_mmio_cleanup);
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
+        ucs_fatal("qp %p: TYPE_NULL", qp);
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         if (reg != NULL) {
             uct_worker_tl_data_put(reg, uct_ib_mlx5_mmio_cleanup);
@@ -941,6 +943,8 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         uct_ib_mlx5_devx_destroy_qp(md, qp);
         break;
+    case UCT_IB_MLX5_OBJ_TYPE_NULL:
+        ucs_fatal("md %p: qp %p: TYPE_NULL", md, qp);
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
@@ -1147,5 +1151,52 @@ void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
                 "TX WQ overrun: wq=%p wqe_last_pi=%u max_pi=%u sw_pi=%u "
                 "num_bb=%u hw_ci=%u qp_length=%u",
                 wq, wqe_last_pi, max_pi, wq->sw_pi, num_bb, hw_ci, qp_length);
+#endif
+}
+
+extern uct_tl_t UCT_TL_NAME(dc_mlx5);
+extern uct_tl_t UCT_TL_NAME(rc_mlx5);
+extern uct_tl_t UCT_TL_NAME(ud_mlx5);
+
+extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(devx);
+extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(dv);
+
+void UCS_F_CTOR uct_mlx5_init(void)
+{
+#if defined (HAVE_MLX5_DV)
+    ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(dv).list);
+#endif
+#if defined (HAVE_DEVX)
+    ucs_list_add_head(&uct_ib_ops, &UCT_IB_MD_OPS_NAME(devx).list);
+#endif
+
+#ifdef HAVE_TL_DC
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(dc_mlx5));
+#endif
+#if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(rc_mlx5));
+#endif
+#if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
+    uct_tl_register(&uct_ib_component, &UCT_TL_NAME(ud_mlx5));
+#endif
+}
+
+void UCS_F_DTOR uct_mlx5_cleanup(void)
+{
+#if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
+    uct_tl_unregister(&UCT_TL_NAME(ud_mlx5));
+#endif
+#if defined (HAVE_TL_RC) && defined (HAVE_MLX5_DV)
+    uct_tl_unregister(&UCT_TL_NAME(rc_mlx5));
+#endif
+#ifdef HAVE_TL_DC
+    uct_tl_unregister(&UCT_TL_NAME(dc_mlx5));
+#endif
+
+#if defined (HAVE_MLX5_DV)
+    ucs_list_del(&UCT_IB_MD_OPS_NAME(dv).list);
+#endif
+#if defined (HAVE_DEVX)
+    ucs_list_del(&UCT_IB_MD_OPS_NAME(devx).list);
 #endif
 }
