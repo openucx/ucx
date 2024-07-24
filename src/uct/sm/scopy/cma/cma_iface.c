@@ -79,7 +79,8 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
     ucs_cma_iface_ext_device_addr_t *iface_addr;
     pid_t peer_pid;
 
-    if (!uct_iface_is_reachable_params_addrs_valid(params)) {
+    if (!uct_iface_is_reachable_params_addrs_valid(params) ||
+        (params->device_addr == NULL) || (params->iface_addr == NULL)) {
         return 0;
     }
 
