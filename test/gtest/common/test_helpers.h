@@ -1043,6 +1043,11 @@ public:
 
     ~mock()
     {
+        cleanup();
+    }
+
+    void cleanup()
+    {
         m_mock_map.clear();
     }
 
@@ -1079,8 +1084,17 @@ private:
 
         ~mock_func()
         {
+            /* Reset value for mocked function pointer.
+             * Due to this side effect we make the class non-copyable, to avoid
+             * implementing copy/move semantics */
             *m_orig_ptr = m_orig;
         }
+
+        /* Non-copyable, non-moveable */
+        mock_func(const mock_func &) = delete;
+        mock_func(mock_func &&)      = delete;
+        mock_func & operator=(const mock_func &) = delete;
+        mock_func & operator=(mock_func &&)      = delete;
 
         func *m_orig_ptr;
         func m_orig;

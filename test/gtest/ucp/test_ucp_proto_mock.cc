@@ -20,6 +20,12 @@ class mock_component_test {
 public:
     ~mock_component_test()
     {
+        cleanup();
+    }
+
+    void cleanup()
+    {
+        mock().cleanup();
         map().clear();
     }
 
@@ -33,6 +39,12 @@ private:
     static component_map &map()
     {
         static component_map instance;
+        return instance;
+    }
+
+    static ucs::mock &mock()
+    {
+        static ucs::mock instance;
         return instance;
     }
 
@@ -53,14 +65,14 @@ private:
 
         return nullptr;
     }
-
-    ucs::mock m_mock;
 };
 
 class mock_component {
 public:
-    using perf_attr_func_t  = std::function<void(uct_perf_attr_t&)>;
-    using iface_attr_func_t = std::function<void(uct_iface_attr&)>;
+    /* We could use std::function here, but coverity complains on std::function
+     * copy ctor */
+    using perf_attr_func_t  = void (*)(uct_perf_attr_t&);
+    using iface_attr_func_t = void (*)(uct_iface_attr&);
 
     void set_mock_perf_attr(const std::string &iface_name, perf_attr_func_t cb)
     {
@@ -84,6 +96,12 @@ private:
             m_mock.setup(&tl->iface_open, iface_open_mock);
         }
     }
+
+    /* Non-copyable, non-moveable */
+    mock_component(const mock_component &) = delete;
+    mock_component(mock_component &&)      = delete;
+    mock_component & operator=(const mock_component &) = delete;
+    mock_component & operator=(mock_component &&)      = delete;
 
     uct_tl_t *find_tl(const uct_iface_params_t *params) const
     {
@@ -176,7 +194,7 @@ mock_component &mock_component_test::setup_mock(const std::string &name)
 
     mock_component *mock_comp = find(component);
     if (nullptr == mock_comp) {
-        mock_comp = new mock_component(component, m_mock);
+        mock_comp = new mock_component(component, mock());
         map().emplace(component, std::unique_ptr<mock_component>(mock_comp));
     }
 
@@ -192,7 +210,7 @@ struct proto_select_data {
 
 using proto_select_data_vec_t = std::vector<proto_select_data>;
 
-class test_ucp_proto_select : public ucp_test, public mock_component_test {
+class test_ucp_proto_mock : public ucp_test, public mock_component_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
@@ -211,6 +229,7 @@ public:
 
     virtual void cleanup() override
     {
+        mock_component_test::cleanup();
         ucp_test::cleanup();
         /* Reset topo provider to not affect subsequent tests */
         ucs_sys_topo_provider = NULL;
@@ -356,11 +375,12 @@ protected:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_select, mock_perf_attr, "NET_DEVICES=mlx5_0:1")
+UCS_TEST_P(test_ucp_proto_mock, mock_iface_attr, "NET_DEVICES=mlx5_0:1")
 {
     setup_mock("ib").set_mock_iface_attr("rc_mlx5/mlx5_0:1",
         [](uct_iface_attr_t &iface_attr) {
             iface_attr.dev_num_paths    = 1;
+            iface_attr.cap.am.max_short = 208;
             iface_attr.bandwidth.shared = 10000000000;
             iface_attr.latency.c        = 0.000006;
             iface_attr.latency.m        = 0.000000001;
@@ -373,8 +393,9 @@ UCS_TEST_P(test_ucp_proto_select, mock_perf_attr, "NET_DEVICES=mlx5_0:1")
     key.param.op_attr          = 0;
 
     check_ep_config(sender(), {
-        {"0",          "2038",   "short",                "rc_mlx5/mlx5_0:1"},
-        {"2039",       "8246",   "zero-copy",            "rc_mlx5/mlx5_0:1"},
+        {"0",          "200",    "short",                "rc_mlx5/mlx5_0:1"},
+        {"201",        "257",    "copy-in",              "rc_mlx5/mlx5_0:1"},
+        {"258",        "8246",   "zero-copy",            "rc_mlx5/mlx5_0:1"},
         {"8247",       "288939", "multi-frag zero-copy", "rc_mlx5/mlx5_0:1"},
         {"288940",     "1G",     "rendezvous zero-copy read from remote",
                                                          "rc_mlx5/mlx5_0:1"},
@@ -383,4 +404,4 @@ UCS_TEST_P(test_ucp_proto_select, mock_perf_attr, "NET_DEVICES=mlx5_0:1")
     }, key);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_select, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock, rcx, "rc_x")
