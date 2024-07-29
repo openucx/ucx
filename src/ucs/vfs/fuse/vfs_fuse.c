@@ -24,10 +24,6 @@
 #include <errno.h>
 #include <fuse.h>
 
-#ifdef HAVE_INOTIFY
-#include <sys/inotify.h>
-#endif
-
 
 typedef struct {
     void            *buf;
@@ -41,16 +37,14 @@ static struct {
     struct fuse     *fuse;
     int             fuse_fd;
     int             stop;
-    int             inotify_fd;
-    int             watch_desc;
+    ucs_vfs_data_t  data;
 } ucs_vfs_fuse_context = {
-    .thread_id  = -1,
-    .mutex      = PTHREAD_MUTEX_INITIALIZER,
-    .fuse       = NULL,
-    .fuse_fd    = -1,
-    .stop       = 0,
-    .inotify_fd = -1,
-    .watch_desc = -1
+    .thread_id = -1,
+    .mutex     = PTHREAD_MUTEX_INITIALIZER,
+    .fuse      = NULL,
+    .fuse_fd   = -1,
+    .stop      = 0,
+    .data      = UCS_VFS_DATA_INIT
 };
 
 static void ucs_vfs_enum_dir_cb(const char *name, void *arg)
@@ -239,121 +233,6 @@ out_unlock:
     pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
 }
 
-static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
-{
-#ifdef HAVE_INOTIFY
-    char event_buf[sizeof(struct inotify_event) + NAME_MAX];
-    const struct inotify_event *event;
-    char watch_filename[NAME_MAX];
-    const char *watch_dirname;
-    char dir_buf[PATH_MAX];
-    ucs_status_t status;
-    ssize_t nread;
-    size_t offset;
-
-    pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
-
-    /* copy path components to 'dir_buf' and 'watch_filename' */
-    ucs_strncpy_safe(dir_buf, path, sizeof(dir_buf));
-    ucs_strncpy_safe(watch_filename, ucs_basename(path),
-                     sizeof(watch_filename));
-    watch_dirname = dirname(dir_buf);
-
-    /* Create inotify channel */
-    ucs_vfs_fuse_context.inotify_fd = inotify_init();
-    if (ucs_vfs_fuse_context.inotify_fd < 0) {
-        if ((errno == EMFILE) &&
-            (ucs_sys_check_fd_limit_per_process() == UCS_OK)) {
-            ucs_diag("inotify_init() failed: Too many inotify instances. "
-                     "Please increase sysctl fs.inotify.max_user_instances to "
-                     "avoid the error");
-        } else {
-            ucs_error("inotify_init() failed: %m");
-        }
-        status = UCS_ERR_IO_ERROR;
-        goto out;
-    }
-
-    /* Watch for new files in 'watch_dirname' */
-    ucs_vfs_fuse_context.watch_desc = inotify_add_watch(
-            ucs_vfs_fuse_context.inotify_fd, watch_dirname, IN_CREATE);
-    if (ucs_vfs_fuse_context.watch_desc < 0) {
-        ucs_error("inotify_add_watch(%s) failed: %m", watch_dirname);
-        status = UCS_ERR_IO_ERROR;
-        goto out_close_inotify_fd;
-    }
-
-    /* Check 'stop' flag before entering the loop. If the main thread sets
-     * 'stop' flag before this thread created 'inotify_fd' fd, the execution
-     * of the thread has to be stopped, otherwise - the thread hangs waiting
-     * for the data on 'inotify_fd' fd.
-     */
-    if (ucs_vfs_fuse_context.stop) {
-        status = UCS_ERR_CANCELED;
-        goto out_close_watch_id;
-    }
-
-    /* Read events from inotify channel and exit when either the main thread set
-     * 'stop' flag, or the file was created
-     */
-    ucs_debug("waiting for creation of '%s' in '%s'", watch_filename,
-              watch_dirname);
-    for (;;) {
-        pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
-        nread = read(ucs_vfs_fuse_context.inotify_fd, event_buf,
-                     sizeof(event_buf));
-        pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
-
-        if (ucs_vfs_fuse_context.stop) {
-            status = UCS_ERR_CANCELED;
-            break;
-        }
-
-        if ((nread < 0) && (errno == EINTR)) {
-            ucs_trace("inotify read() failed: %m");
-            continue;
-        } else if (nread < 0) {
-            ucs_error("inotify read() failed: %m");
-            status = UCS_ERR_IO_ERROR;
-            break;
-        }
-
-        /* Go over new events in the buffer */
-        for (offset  = 0; offset < nread;
-             offset += (sizeof(*event) + event->len)) {
-            event = UCS_PTR_BYTE_OFFSET(event_buf, offset);
-            if (!(event->mask & IN_CREATE)) {
-                ucs_trace("ignoring inotify event with mask 0x%x", event->mask);
-                continue;
-            }
-
-            ucs_trace("file '%s' created", event->name);
-            /* coverity[tainted_data] */
-            if ((event->len != (strlen(watch_filename) + 1)) ||
-                (strncmp(event->name, watch_filename, event->len) != 0)) {
-                ucs_trace("ignoring inotify create event of '%s'", event->name);
-                continue;
-            }
-
-            status = UCS_OK;
-            goto out_close_watch_id;
-        }
-    }
-
-out_close_watch_id:
-    inotify_rm_watch(ucs_vfs_fuse_context.inotify_fd,
-                     ucs_vfs_fuse_context.watch_desc);
-out_close_inotify_fd:
-    close(ucs_vfs_fuse_context.inotify_fd);
-    ucs_vfs_fuse_context.inotify_fd = -1;
-out:
-    pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
-    return status;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
-}
-
 static void ucs_vfs_fuse_thread_reset_affinity()
 {
     ucs_sys_cpuset_t cpuset;
@@ -374,10 +253,17 @@ static void ucs_vfs_fuse_thread_reset_affinity()
     }
 }
 
+static void ucs_vfs_fuse_log_info(const ucs_vfs_info_t *info, const char *msg)
+{
+    ucs_debug("%s: pid %d, sequence %" PRIu64 ", start time %" PRIu64,
+              msg, info->pid, info->sequence, info->start_time);
+}
+
 static void *ucs_vfs_fuse_thread_func(void *arg)
 {
     ucs_vfs_sock_message_t vfs_msg_in, vfs_msg_out;
     struct sockaddr_un un_addr;
+    ucs_vfs_info_t info;
     ucs_status_t status;
     int connfd;
     int ret;
@@ -394,6 +280,9 @@ static void *ucs_vfs_fuse_thread_func(void *arg)
         goto out;
     }
 
+    ucs_vfs_data_get(&ucs_vfs_fuse_context.data, &info);
+    ucs_vfs_fuse_log_info(&info, "VFS daemon info before connect");
+
 again:
     ucs_vfs_sock_get_address(&un_addr);
     ucs_debug("connecting vfs socket %d to daemon on '%s'", connfd,
@@ -406,7 +295,8 @@ again:
         if ((errno == ECONNREFUSED) || (errno == ENOENT)) {
             ucs_debug("failed to connect to vfs socket '%s': %m",
                       un_addr.sun_path);
-            status = ucs_vfs_fuse_wait_for_path(un_addr.sun_path);
+            status = ucs_vfs_data_wait(&ucs_vfs_fuse_context.data, &info);
+            ucs_vfs_fuse_log_info(&info, "VFS daemon info after wait");
             if (status == UCS_OK) {
                 goto again;
             }
@@ -476,18 +366,7 @@ static void ucs_fuse_thread_stop()
 
     ucs_vfs_fuse_context.stop = 1;
 
-    /* If the thread is waiting in inotify loop, wake it */
-    if (ucs_vfs_fuse_context.inotify_fd >= 0) {
-#ifdef HAVE_INOTIFY
-        ret = inotify_rm_watch(ucs_vfs_fuse_context.inotify_fd,
-                               ucs_vfs_fuse_context.watch_desc);
-        if (ret != 0) {
-            ucs_warn("inotify_rm_watch(fd=%d, wd=%d) failed: %m",
-                     ucs_vfs_fuse_context.inotify_fd,
-                     ucs_vfs_fuse_context.watch_desc);
-        }
-#endif
-    }
+    ucs_vfs_data_interrupt(&ucs_vfs_fuse_context.data);
 
     /* If the thread is in fuse loop, terminate it */
     if (ucs_vfs_fuse_context.fuse != NULL) {
@@ -504,23 +383,29 @@ static void ucs_fuse_thread_stop()
                  ucs_vfs_fuse_context.thread_id);
     }
 
+    ucs_vfs_data_destroy(&ucs_vfs_fuse_context.data);
     signal(SIGUSR1, orig_handler);
 }
 
 static void ucs_vfs_fuse_atfork_child()
 {
-    /* Reset thread context at fork, since doing inotify_rm_watch() from child
-       will prevent doing it later from the parent */
     ucs_vfs_fuse_context.thread_id  = -1;
     ucs_vfs_fuse_context.fuse       = NULL;
     ucs_vfs_fuse_context.fuse_fd    = -1;
-    ucs_vfs_fuse_context.inotify_fd = -1;
-    ucs_vfs_fuse_context.watch_desc = -1;
 }
 
 void UCS_F_CTOR ucs_vfs_fuse_init()
 {
+    ucs_status_t status;
+
     if (ucs_global_opts.vfs_enable) {
+        /* For simplicity create shared data from the main thread, to make sure
+         * that this data is initialized before we stop the thread. */
+        status = ucs_vfs_data_init(&ucs_vfs_fuse_context.data);
+        if (status != UCS_OK) {
+            return;
+        }
+
         pthread_atfork(NULL, NULL, ucs_vfs_fuse_atfork_child);
         ucs_pthread_create(&ucs_vfs_fuse_context.thread_id,
                            ucs_vfs_fuse_thread_func, NULL, "fuse");

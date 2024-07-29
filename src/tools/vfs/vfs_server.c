@@ -36,6 +36,7 @@ typedef struct {
     struct pollfd          poll_fds[VFS_MAX_FDS];
     int                    nfds;
     int                    stop;
+    ucs_vfs_data_t         data;
 } vfs_server_context_t;
 
 static vfs_server_context_t vfs_server_context;
@@ -333,6 +334,8 @@ int vfs_server_loop(int listen_fd)
 {
     int idx, valid_idx;
     int ret;
+    ucs_status_t status;
+    ucs_vfs_info_t info;
 
     vfs_server_context.nfds = 0;
     vfs_server_context.stop = 0;
@@ -340,6 +343,18 @@ int vfs_server_loop(int listen_fd)
     vfs_server_set_sighandler();
 
     vfs_server_add_fd(listen_fd, VFS_FD_STATE_LISTENING);
+
+    status = ucs_vfs_data_init(&vfs_server_context.data);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Notify all the clients that server had been started */
+    ucs_vfs_data_get(&vfs_server_context.data, &info);
+    info.pid        = getpid();
+    info.sequence   = info.sequence + 1;
+    info.start_time = ucs_get_time();
+    ucs_vfs_data_notify(&vfs_server_context.data, &info);
 
     while (!vfs_server_context.stop) {
         ret = vfs_server_poll_events();
@@ -374,6 +389,7 @@ int vfs_server_loop(int listen_fd)
     }
 
     vfs_server_remove_all_fds();
+    ucs_vfs_data_destroy(&vfs_server_context.data);
 
     return 0;
 }
