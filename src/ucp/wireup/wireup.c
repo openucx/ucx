@@ -1243,7 +1243,8 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
 
 int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             ucp_rsc_index_t rsc_index,
-                            const ucp_address_entry_t *ae)
+                            const ucp_address_entry_t *ae,
+                            char *info_str, size_t info_str_size)
 {
     ucp_context_h context      = ep->worker->context;
     ucp_worker_iface_t *wiface = ucp_worker_iface(ep->worker, rsc_index);
@@ -1254,11 +1255,22 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
         .iface_addr  = ae->iface_addr,
     };
 
-    return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           (/* assume reachability is checked by CM, if EP selects lanes
-             * during CM phase */
-            (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
-            uct_iface_is_reachable_v2(wiface->iface, &params));
+    if (info_str != NULL) {
+        params.field_mask        |=
+                                UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                                UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH;
+        params.info_string        = info_str;
+        params.info_string_length = info_str_size;
+    }
+
+    if (context->tl_rscs[rsc_index].tl_name_csum != ae->tl_name_csum) {
+        return 0;
+    }
+
+    /* assume reachability is checked by CM, if EP selects lanes
+     * during CM phase */
+    return (ep_init_flags & UCP_EP_INIT_CM_PHASE) ||
+           uct_iface_is_reachable_v2(wiface->iface, &params);
 }
 
 static void
@@ -1280,7 +1292,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ae_dst_md_map = 0;
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         ucp_unpacked_address_for_each(ae, remote_address) {
-            if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae)) {
+            if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae, NULL, 0)) {
                 ae_dst_md_map         |= UCS_BIT(ae->md_index);
                 dst_md_index           = context->tl_rscs[rsc_index].md_index;
                 ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;
