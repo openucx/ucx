@@ -234,10 +234,10 @@ test_ucp_reconfigure::entity::get_address(bool ep_only) const
 
     address_pair_p address(new address_pair_t(nullptr, {0}),
                            [](address_pair_t *pair) {
-        ucs_free(pair->first);
-        ucs_free(pair->second.address_list);
-        delete pair;
-    });
+                               ucs_free(pair->first);
+                               ucs_free(pair->second.address_list);
+                               delete pair;
+                           });
 
     unsigned flags = ucp_worker_default_address_pack_flags(worker());
     ASSERT_UCS_OK(ucp_address_pack(worker(), ep(), &tl_bitmap, flags,
