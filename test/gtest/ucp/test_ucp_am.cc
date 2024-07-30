@@ -612,7 +612,7 @@ protected:
         EXPECT_LT(m_recv_counter, m_send_counter);
         check_header(header, header_length);
 
-        bool has_reply_ep = get_send_flag();
+        bool has_reply_ep = get_send_flag() & UCP_AM_SEND_FLAG_REPLY;
 
         EXPECT_EQ(has_reply_ep,
                   !!(rx_param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP));
@@ -1896,19 +1896,23 @@ public:
         return test_ucp_am_nbx_eager_memtype::get_test_variants(variants);
     }
 
-    void init()
+    void init() override
     {
-        modify_config("RNDV_THRESH", "128");
         test_ucp_am_nbx::init();
     }
 
 private:
-    virtual ucs_memory_type_t tx_memtype() const
+    unsigned get_send_flag() const override
+    {
+        return test_ucp_am_nbx_rndv::get_send_flag() | UCP_AM_SEND_FLAG_RNDV;
+    }
+
+    ucs_memory_type_t tx_memtype() const override
     {
         return static_cast<ucs_memory_type_t>(get_variant_value(2));
     }
 
-    virtual ucs_memory_type_t rx_memtype() const
+    ucs_memory_type_t rx_memtype() const override
     {
         return static_cast<ucs_memory_type_t>(get_variant_value(3));
     }
@@ -1917,8 +1921,8 @@ private:
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
     const size_t rndv_frag_size     = get_rndv_frag_size(UCS_MEMORY_TYPE_HOST);
-    const std::vector<size_t> sizes = {64 * UCS_KBYTE, rndv_frag_size - 1,
-                                       rndv_frag_size  + 1};
+    const std::vector<size_t> sizes = {1, 64 * UCS_KBYTE, rndv_frag_size - 1,
+                                       rndv_frag_size + 1};
 
     for (size_t size : sizes) {
         test_am_send_recv_memtype(size);
