@@ -296,6 +296,7 @@ ucs_status_t ucs_vfs_data_init(ucs_vfs_data_t *data)
     ucs_status_t status;
     int ret;
 
+    /* coverity[missing_lock] */
     data->stop = 0;
 
     /* File lock to avoid data races during shared memory creation phase:

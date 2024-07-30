@@ -374,13 +374,16 @@ protected:
 
     virtual void cleanup()
     {
+        /* When VFS is enabled, the "fuse" thread is created that owns the copy
+         * of ucs_vfs_data_t, and therefore prevents this shared memory from
+         * being unlinked immediately */
         EXPECT_EQ(!ucs_global_opts.vfs_enable, ucs_vfs_data_destroy(&m_data));
     }
 
     ucs_vfs_data_t m_data;
 };
 
-UCS_TEST_F(test_vfs_data, shared_data_wait)
+UCS_TEST_F(test_vfs_data, wait)
 {
     std::vector<pid_t> pids;
     for (int i = 0; i < 10; ++i) {
@@ -397,13 +400,13 @@ UCS_TEST_F(test_vfs_data, shared_data_wait)
             exit(HasFailure() ? EXIT_FAILURE : EXIT_SUCCESS);
         }
 
-        /* Simulate server workflow */
-        EXPECT_UCS_OK(ucs_vfs_data_init(&m_data));
-        ucs_vfs_info_t info = { 0, 100, 0 };
-        ucs_vfs_data_notify(&m_data, &info);
-
         pids.push_back(pid);
     }
+
+    /* Simulate server workflow */
+    EXPECT_UCS_OK(ucs_vfs_data_init(&m_data));
+    ucs_vfs_info_t info = { 0, 100, 0 };
+    ucs_vfs_data_notify(&m_data, &info);
 
     for (pid_t pid : pids) {
         int status;
@@ -412,7 +415,7 @@ UCS_TEST_F(test_vfs_data, shared_data_wait)
     }
 }
 
-UCS_TEST_F(test_vfs_data, shared_data_interrupt)
+UCS_TEST_F(test_vfs_data, interrupt)
 {
     EXPECT_UCS_OK(ucs_vfs_data_init(&m_data));
 
