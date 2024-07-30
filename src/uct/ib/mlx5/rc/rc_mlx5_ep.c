@@ -34,22 +34,23 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_base_ep_zcopy_post(
         /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
         /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
         /* TAG  */ uct_tag_t tag, uint32_t app_ctx, uint32_t ib_imm_be,
-        int force_sig, uct_rc_send_handler_t handler, uint16_t op_flags,
+        uint8_t wqe_flags, uct_rc_send_handler_t handler, uint16_t op_flags,
         uct_completion_t *comp)
 {
-    uct_rc_mlx5_iface_common_t *iface  = ucs_derived_of(ep->super.super.super.iface,
-                                                        uct_rc_mlx5_iface_common_t);
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                       uct_rc_mlx5_iface_common_t);
+    uint8_t fm_ce_se                  = (comp == NULL) ? wqe_flags :
+                                        (wqe_flags | MLX5_WQE_CTRL_CQ_UPDATE);
     uint16_t sn;
 
     sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_txqp_dptr_post_iov(iface, IBV_QPT_RC,
-                                   &ep->super.txqp, &ep->tx.wq,
-                                   opcode, iov, iovcnt,
+                                   &ep->super.txqp, &ep->tx.wq, opcode,
+                                   iov, iovcnt,
                                    am_id, am_hdr, am_hdr_len,
                                    rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
-                                   tag, app_ctx, ib_imm_be, 0,
-                                   (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE,
-                                   0,
+                                   tag, app_ctx, ib_imm_be,
+                                   0, fm_ce_se, 0,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp, sn,

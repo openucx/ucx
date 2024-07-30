@@ -10,7 +10,12 @@
 #include "queue_types.h"
 
 #include <ucs/debug/assert.h>
+#include <ucs/debug/debug.h>
 #include <stddef.h>
+
+
+#define UCS_QUEUE_CHECK_HEAD_IS_VALID(_head) \
+    UCS_ASAN_ADDRESS_IS_VALID((_head)->ptail, sizeof(*(_head)->ptail));
 
 
 /**
@@ -31,10 +36,10 @@ static inline void ucs_queue_head_init(ucs_queue_head_t *queue)
  */
 static inline size_t ucs_queue_length(ucs_queue_head_t *queue)
 {
+    size_t length = 0;
     ucs_queue_elem_t **pelem;
-    size_t length;
-
-    length = 0;
+    
+    UCS_QUEUE_CHECK_HEAD_IS_VALID(queue);
     for (pelem = &queue->head; pelem != queue->ptail; pelem = &(*pelem)->next) {
         ++length;
     }
@@ -47,6 +52,8 @@ static inline size_t ucs_queue_length(ucs_queue_head_t *queue)
 static inline int
 ucs_queue_is_tail(ucs_queue_head_t *queue, ucs_queue_elem_t *elem)
 {
+    UCS_QUEUE_CHECK_HEAD_IS_VALID(queue);
+    UCS_ASAN_ADDRESS_IS_VALID(elem, sizeof(*elem));
     return queue->ptail == &elem->next;
 }
 
@@ -55,6 +62,7 @@ ucs_queue_is_tail(ucs_queue_head_t *queue, ucs_queue_elem_t *elem)
  */
 static inline int ucs_queue_is_empty(const ucs_queue_head_t *queue)
 {
+    UCS_QUEUE_CHECK_HEAD_IS_VALID(queue);
     return queue->ptail == &queue->head;
 }
 
@@ -208,6 +216,7 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  * @param member  Member inside 'elem' which is the queue link.
  */
 #define ucs_queue_for_each(elem, queue, member) \
+    UCS_QUEUE_CHECK_HEAD_IS_VALID(queue); \
     /* we set `ptail` field to queue address to not subtract NULL pointer */ \
     for (*(queue)->ptail = (ucs_queue_elem_t*)(void*)(queue), \
              elem = ucs_container_of((queue)->head, ucs_typeof(*elem), member); \
@@ -225,6 +234,7 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  * @param member  Member inside 'elem' which is the queue link.
  */
 #define ucs_queue_for_each_safe(elem, iter, queue, member) \
+    UCS_QUEUE_CHECK_HEAD_IS_VALID(queue); \
     for (iter = &(queue)->head, \
          elem = ucs_container_of(*iter, ucs_typeof(*elem), member); \
           iter != (queue)->ptail; \
@@ -242,6 +252,7 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  * TODO optimize
  */
 #define ucs_queue_for_each_extract(elem, queue, member, cond) \
+    UCS_QUEUE_CHECK_HEAD_IS_VALID(queue); \
     for (elem = ucs_container_of((queue)->head, ucs_typeof(*elem), member); \
          \
          !ucs_queue_is_empty(queue) && (cond) && ucs_queue_pull_non_empty(queue); \
@@ -265,6 +276,7 @@ static inline ucs_queue_iter_t ucs_queue_iter_next(ucs_queue_iter_t i)
 
 static inline int ucs_queue_iter_end(ucs_queue_head_t *q, ucs_queue_iter_t i)
 {
+    UCS_QUEUE_CHECK_HEAD_IS_VALID(q);
     return i == q->ptail;
 }
 

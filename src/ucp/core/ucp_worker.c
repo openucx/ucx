@@ -2101,6 +2101,8 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     ep_config      = ucs_array_append_safe(&worker->ep_config, &old_ep_cfg_buf,
                                            return UCS_ERR_NO_MEMORY);
     if (old_ep_cfg_buf != NULL) {
+        memcpy(worker->ep_config.buffer, old_ep_cfg_buf,
+               sizeof(ucp_ep_config_t) * ucs_array_length(&worker->ep_config));
         /* Schedule release of old ep configs array backing buffer on the main
          * thread (this func can be called by async thread).
          * So the main thread can still access the old configuration buffer

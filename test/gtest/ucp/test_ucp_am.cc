@@ -1977,6 +1977,8 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
 #ifdef ENABLE_STATS
 class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
 public:
+    test_ucp_am_nbx_rndv_ppln() : m_mem_type(UCS_MEMORY_TYPE_HOST) {}
+
     void init() override
     {
         if (!is_proto_enabled()) {
@@ -2006,8 +2008,7 @@ public:
 
 protected:
     void test_ppln_send(ucs_memory_type_t mem_type, size_t num_frags,
-                        uint64_t sender_cntr, uint64_t sender_cntr_value,
-                        uint64_t receiver_cntr, uint64_t receiver_cntr_value)
+                        uint64_t stats_cntr_value)
     {
         if (!sender().is_rndv_put_ppln_supported()) {
             UCS_TEST_SKIP_R("RNDV pipeline is not supported");
@@ -2016,11 +2017,26 @@ protected:
         const size_t rndv_frag_size = get_rndv_frag_size(mem_type);
         test_am_send_recv(rndv_frag_size * num_frags);
 
-        check_stats(sender(), sender_cntr, sender_cntr_value);
-        check_stats(receiver(), receiver_cntr, receiver_cntr_value);
+        check_stats(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
+                    stats_cntr_value);
+        check_stats(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, stats_cntr_value);
+    }
+
+    void set_mem_type(ucs_memory_type_t mem_type) {
+        m_mem_type = mem_type;
     }
 
 private:
+    ucs_memory_type_t tx_memtype() const override
+    {
+        return m_mem_type;
+    }
+
+    ucs_memory_type_t rx_memtype() const override
+    {
+        return m_mem_type;
+    }
+
     void check_stats(entity &e, uint64_t cntr, uint64_t exp_value)
     {
         auto stats_node = e.worker()->stats;
@@ -2029,6 +2045,8 @@ private:
         EXPECT_EQ(exp_value, value) << "counter is "
                                     << stats_node->cls->counter_names[cntr];
     }
+
+    ucs_memory_type_t m_mem_type;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_cuda_frag,
@@ -2036,18 +2054,23 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_cuda_frag,
 {
     const size_t num_frags = 2;
 
-    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags,
-                   UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, num_frags,
-                   UCP_WORKER_STAT_RNDV_RTR_MTYPE, num_frags);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_host_frag,
            "RNDV_FRAG_MEM_TYPE=host")
 {
     // Host memory should not be pipelined thru host staging buffers
-    test_ppln_send(UCS_MEMORY_TYPE_HOST, 2,
-                   UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 0,
-                   UCP_WORKER_STAT_RNDV_RTR_MTYPE, 0);
+    test_ppln_send(UCS_MEMORY_TYPE_HOST, 2, 0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_buff_cuda_frag,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);

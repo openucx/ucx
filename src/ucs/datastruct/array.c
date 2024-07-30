@@ -46,14 +46,10 @@ ucs_status_t ucs_array_grow(void **buffer_p, size_t *capacity_p,
         return UCS_ERR_NO_MEMORY;
     }
 
-    if (*buffer_p == NULL) {
-        goto out;
-    }
-
-    memcpy(new_buffer, *buffer_p, current_capacity * value_size);
-
-out:
     if (old_buffer_p == NULL) {
+        if (*buffer_p != NULL) {
+            memcpy(new_buffer, *buffer_p, current_capacity * value_size);
+        }
         ucs_array_buffer_free(old_buffer);
     } else {
         *old_buffer_p = old_buffer;

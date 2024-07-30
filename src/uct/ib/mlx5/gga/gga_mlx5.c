@@ -10,9 +10,9 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/ib/base/ib_md.h>
-#include <uct/ib/rc/accel/rc_mlx5.h>
+#include <uct/ib/mlx5/rc/rc_mlx5.h>
 
-#include <uct/ib/rc/accel/rc_mlx5.inl>
+#include <uct/ib/mlx5/rc/rc_mlx5.inl>
 
 #define UCT_GGA_MLX5_OPAQUE_BUF_LEN 64
 

@@ -15,6 +15,8 @@ LD_LIBRARY_PATH=${UCX_PR_PATH}/lib "${UCX_PR_PATH}"/bin/ucx_info -v
 LD_LIBRARY_PATH=${UCX_LEGACY_PATH}/lib old_out=$("${UCX_LEGACY_PATH}"/bin/ucx_info -d)
 LD_LIBRARY_PATH=${UCX_PR_PATH}/lib new_out=$("${UCX_PR_PATH}"/bin/ucx_info -d)
 
+export UCX_TCP_BRIDGE_ENABLE=y #bridge devices are not shown by default since v1.16
+
 res=true
 for tl_name in $(echo "${old_out}" | grep Transport | awk '{print $3}')
 do
