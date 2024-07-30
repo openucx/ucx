@@ -1006,7 +1006,21 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                         UCT_RC_MLX5_TM_ENABLED(&iface->super));
         same_version = ((addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS) ==
                         iface->version_flag);
-        if (!same_version || !same_tm) {
+        if (!same_version) {
+            uct_iface_fill_info_str_buf(
+                        params,
+                        "incompatible dc version, %u (local) vs. %u (remote)",
+                        iface->version_flag,
+                        addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_VERS);
+            return 0;
+        }
+
+        if (!same_tm) {
+            uct_iface_fill_info_str_buf(
+                params,
+                "different support for HW tag matching, local: %s, remote: %s",
+                UCT_RC_MLX5_TM_ENABLED(&iface->super)? "enabled" : "disabled",
+                UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(addr) ? "enabled" : "disabled");
             return 0;
         }
     }

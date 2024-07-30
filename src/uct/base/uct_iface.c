@@ -242,6 +242,26 @@ static int uct_iface_is_same_device(const uct_iface_h iface,
     return !memcmp(device_addr, dev_addr, attr.device_addr_len);
 }
 
+void uct_iface_fill_info_str_buf(const uct_iface_is_reachable_params_t *params,
+                                 const char *fmt, ...)
+{
+    char *info_str_buf      = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD,
+                                              params, info_string, INFO_STRING,
+                                              NULL);
+    size_t info_str_buf_len = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD,
+                                              params, info_string_length,
+                                              INFO_STRING_LENGTH, 0);
+    va_list ap;
+
+    if (info_str_buf == NULL) {
+        return;
+    }
+
+    va_start(ap, fmt);
+    ucs_vsnprintf_safe(info_str_buf, info_str_buf_len, fmt, ap);
+    va_end(ap);
+}
+
 int uct_iface_is_reachable_params_valid(
         const uct_iface_is_reachable_params_t *params, uint64_t flags)
 {
@@ -289,6 +309,17 @@ int uct_iface_is_reachable_v2(const uct_iface_h tl_iface,
                               const uct_iface_is_reachable_params_t *params)
 {
     const uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    char *info_str_buf            = UCS_PARAM_VALUE(
+                                          UCT_IFACE_IS_REACHABLE_FIELD, params,
+                                          info_string, INFO_STRING, NULL);
+    size_t info_str_buf_len       = UCS_PARAM_VALUE(
+                                          UCT_IFACE_IS_REACHABLE_FIELD, params,
+                                          info_string_length,
+                                          INFO_STRING_LENGTH, 0);
+
+    if ((info_str_buf != NULL) && (info_str_buf_len > 0)) {
+        info_str_buf[0] = '\0';
+    }
 
     return iface->internal_ops->iface_is_reachable_v2(tl_iface, params);
 }
