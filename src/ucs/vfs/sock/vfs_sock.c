@@ -189,8 +189,9 @@ int ucs_vfs_sock_recv(int sockfd, ucs_vfs_sock_message_t *vfs_msg)
     return 0;
 }
 
-void ucs_vfs_data_destroy_shared(ucs_vfs_data_t *data)
+int ucs_vfs_data_destroy_shared(ucs_vfs_data_t *data)
 {
+    int destroyed = 0;
     struct shmid_ds stat;
     int ret;
 
@@ -213,9 +214,13 @@ void ucs_vfs_data_destroy_shared(ucs_vfs_data_t *data)
             ret = shmctl(data->shmid, IPC_RMID, NULL);
             if (ret != 0) {
                 ucs_warn("shmctl(%d, IPC_RMID) failed: %m", data->shmid);
+            } else {
+                destroyed = 1;
             }
         }
     }
+
+    return destroyed;
 }
 
 static ucs_status_t ucs_vfs_data_init_shared(ucs_vfs_data_t *data)
@@ -291,6 +296,8 @@ ucs_status_t ucs_vfs_data_init(ucs_vfs_data_t *data)
     ucs_status_t status;
     int ret;
 
+    data->stop = 0;
+
     /* File lock to avoid data races during shared memory creation phase:
      * It might happen that one process creates shared memory, and the second
      * one attaches to it, and we must guarantee that all initialization is done
@@ -313,12 +320,15 @@ ucs_status_t ucs_vfs_data_init(ucs_vfs_data_t *data)
     return status;
 }
 
-void ucs_vfs_data_destroy(ucs_vfs_data_t *data)
+int ucs_vfs_data_destroy(ucs_vfs_data_t *data)
 {
+    int ret;
+
     flock(data->flock, LOCK_EX);
-    ucs_vfs_data_destroy_shared(data);
+    ret = ucs_vfs_data_destroy_shared(data);
     flock(data->flock, LOCK_UN);
     close(data->flock);
+    return ret;
 }
 
 void ucs_vfs_data_get(ucs_vfs_data_t *data, ucs_vfs_info_t *info)

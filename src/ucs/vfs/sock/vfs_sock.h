@@ -103,7 +103,7 @@ typedef struct {
 } ucs_vfs_data_t;
 
 
-#define UCS_VFS_UNDEFINED ((void *)-1)
+#define UCS_VFS_UNDEFINED ((struct ucs_vfs_shared_data*)-1)
 #define UCS_VFS_DATA_INIT {UCS_VFS_UNDEFINED, -1, -1, 0}
 
 
@@ -118,8 +118,9 @@ ucs_status_t ucs_vfs_data_init(ucs_vfs_data_t *data);
 /**
  * Destroy VFS shared memory handler.
  * @param [in] data  VFS shared memory handler.
+ * @return 1 if the shared memory was destroyed, 0 if it was just detached
  */
-void ucs_vfs_data_destroy(ucs_vfs_data_t *data);
+int ucs_vfs_data_destroy(ucs_vfs_data_t *data);
 
 
 /**

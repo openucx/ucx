@@ -14,7 +14,7 @@ extern "C" {
 
 #include <fcntl.h>
 #include <time.h>
-
+#include <thread>
 
 class test_vfs_sock : public ucs::test
 {
@@ -358,4 +358,74 @@ UCS_MT_TEST_F(test_vfs_obj, rw_file, 4)
     barrier();
 
     ucs_vfs_obj_remove(&obj);
+}
+
+class test_vfs_data : public ucs::test
+{
+protected:
+    virtual void init()
+    {
+        /* Reset VFS info */
+        EXPECT_UCS_OK(ucs_vfs_data_init(&m_data));
+        ucs_vfs_info_t info = {0};
+        ucs_vfs_data_notify(&m_data, &info);
+        ucs_vfs_data_destroy(&m_data);
+    }
+
+    virtual void cleanup()
+    {
+        EXPECT_EQ(!ucs_global_opts.vfs_enable, ucs_vfs_data_destroy(&m_data));
+    }
+
+    ucs_vfs_data_t m_data;
+};
+
+UCS_TEST_F(test_vfs_data, shared_data_wait)
+{
+    std::vector<pid_t> pids;
+    for (int i = 0; i < 10; ++i) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            /* VFS client workflow */
+            EXPECT_UCS_OK(ucs_vfs_data_init(&m_data));
+
+            ucs_vfs_info_t info = {0};
+            EXPECT_UCS_OK(ucs_vfs_data_wait(&m_data, &info));
+            EXPECT_EQ(100, info.sequence);
+
+            EXPECT_EQ(0, ucs_vfs_data_destroy(&m_data));
+            exit(HasFailure() ? EXIT_FAILURE : EXIT_SUCCESS);
+        }
+
+        /* Simulate server workflow */
+        EXPECT_UCS_OK(ucs_vfs_data_init(&m_data));
+        ucs_vfs_info_t info = { 0, 100, 0 };
+        ucs_vfs_data_notify(&m_data, &info);
+
+        pids.push_back(pid);
+    }
+
+    for (pid_t pid : pids) {
+        int status;
+        waitpid(pid, &status, 0);
+        EXPECT_EQ(EXIT_SUCCESS, status);
+    }
+}
+
+UCS_TEST_F(test_vfs_data, shared_data_interrupt)
+{
+    EXPECT_UCS_OK(ucs_vfs_data_init(&m_data));
+
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 10; ++i) {
+        threads.emplace_back([&] {
+            ucs_vfs_info_t info = {0};
+            EXPECT_EQ(UCS_ERR_CANCELED, ucs_vfs_data_wait(&m_data, &info));
+        });
+    }
+
+    ucs_vfs_data_interrupt(&m_data);
+    for (std::thread &thread : threads) {
+        thread.join();
+    }
 }
