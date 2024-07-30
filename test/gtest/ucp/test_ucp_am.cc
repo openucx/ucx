@@ -2009,7 +2009,7 @@ protected:
                         uint64_t sender_cntr, uint64_t sender_cntr_value,
                         uint64_t receiver_cntr, uint64_t receiver_cntr_value)
     {
-        if (!sender().is_rndv_ppln_supported()) {
+        if (!sender().is_rndv_put_ppln_supported()) {
             UCS_TEST_SKIP_R("RNDV pipeline is not supported");
         }
 

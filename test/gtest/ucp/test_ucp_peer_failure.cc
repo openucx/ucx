@@ -876,7 +876,7 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_abort,
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_rndv_abort)
 
 
-class test_ucp_peer_failure_rndv_ppln_abort :
+class test_ucp_peer_failure_rndv_put_ppln_abort :
       public test_ucp_peer_failure_rndv_abort {
 public:
     static void get_test_variants(variant_vec_t &variants)
@@ -897,9 +897,9 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_peer_failure_rndv_ppln_abort, rtr_mtype)
+UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
 {
-    if (!sender().is_rndv_ppln_supported()) {
+    if (!sender().is_rndv_put_ppln_supported()) {
         UCS_TEST_SKIP_R("RNDV pipeline is not supported");
     }
     // Sender is supposed to use put_zcopy, because put_mtype is not supported
@@ -907,4 +907,4 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_ppln_abort, rtr_mtype)
     rndv_progress_failure_test(rndv_mode::rndv_put, true);
 }
 
-UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_ppln_abort);
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);

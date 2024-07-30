@@ -1182,7 +1182,7 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
     return false;
 }
 
-bool ucp_test_base::entity::is_rndv_ppln_supported() const
+bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
 {
     const auto ep              = this->ep();
     const auto config          = ucp_ep_config(ep);
