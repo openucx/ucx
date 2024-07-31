@@ -55,7 +55,7 @@ function azure_log_warning() {
     echo "##vso[task.logissue type=warning]${msg}"
 }
 
-# Complete the task as "succeeeded with issues"
+# Complete the task as "succeeded with issues"
 function azure_complete_with_issues() {
     test "x$RUNNING_IN_AZURE" = "xno" && return
     msg=$1

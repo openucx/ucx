@@ -426,7 +426,7 @@ static ucs_status_t ucp_proto_rndv_put_zcopy_reset(ucp_request_t *request)
     if (atp_sent_map == rpriv->atp_map) {
         dt_iter->offset = dt_iter->length;
     } else {
-        /* Last ATP was not set yet, so each sent ATP acknownledged 1 byte */
+        /* Last ATP was not set yet, so each sent ATP acknowledged 1 byte */
         dt_iter->offset = ucs_popcount(atp_sent_map);
     }
 

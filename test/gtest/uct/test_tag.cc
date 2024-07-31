@@ -291,7 +291,7 @@ public:
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
 
         // Post modified tag for incoming message to be reported as unexpected
-        // and not to be macthed.
+        // and not to be matched.
         recv_ctx r_ctx;
         init_recv_ctx(r_ctx, &recvbuf, tag + 1);
         send_ctx s_ctx;

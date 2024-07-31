@@ -1,6 +1,6 @@
 parameters:
-  skipped_dirs: ./test/gtest/common,./src/ucs/datastruct/sglib.h,./docs/doxygen/Architecture*,./docs/doxygen/header.tex.in,./src/ucm/ptmalloc286
-  ignored_words: hsa,inout,warmup,pullrequest
+  skipped_dirs: ./test/gtest/common,./src/ucs/datastruct/sglib.h,./docs/doxygen/Architecture*,./docs/doxygen/header.tex.in,./src/ucm/ptmalloc286,./config/m4/ax_prog_doxygen.m4
+  ignored_words: hsa,inout,scoll,warmup,pullrequest,re-use,shft
 jobs:
   # Check for misspelling mistakes
   - job: codespell
