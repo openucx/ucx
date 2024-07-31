@@ -113,6 +113,17 @@ ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
     ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
+    ucs_status_t status;
+
+    /* Make sure the sum of ack_size field in all ATP messages we send will not
+       exceed request length, since each ATP message has to acknowledge at least
+       one byte. */
+    ucs_assertv(req->send.rndv.put.atp_count <= req->send.state.dt_iter.length,
+                "atp_count=%u length=%zu", req->send.rndv.put.atp_count,
+                req->send.state.dt_iter.length);
+    if (req->send.rndv.put.atp_count == req->send.state.dt_iter.length) {
+        return UCS_OK;
+    }
 
     pack_ctx.req = req;
 
@@ -130,10 +141,16 @@ ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
         pack_ctx.ack_size = 1;
     }
 
-    return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
-                                          ucp_proto_rndv_put_common_pack_atp,
-                                          &pack_ctx, sizeof(ucp_rndv_ack_hdr_t),
-                                          0);
+    status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
+                                            ucp_proto_rndv_put_common_pack_atp,
+                                            &pack_ctx,
+                                            sizeof(ucp_rndv_ack_hdr_t), 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ++req->send.rndv.put.atp_count;
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -186,6 +203,7 @@ ucp_proto_rndv_put_common_request_init(ucp_request_t *req)
 
     req->send.rndv.put.atp_map   = rpriv->atp_map;
     req->send.rndv.put.flush_map = rpriv->flush_map;
+    req->send.rndv.put.atp_count = 0;
     ucp_proto_rndv_bulk_request_init(req, &rpriv->bulk);
 }
 
