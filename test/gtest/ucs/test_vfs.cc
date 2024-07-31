@@ -360,8 +360,7 @@ UCS_MT_TEST_F(test_vfs_obj, rw_file, 4)
     ucs_vfs_obj_remove(&obj);
 }
 
-class test_vfs_data : public ucs::test
-{
+class test_vfs_data : public ucs::test {
 protected:
     virtual void init()
     {
@@ -377,7 +376,13 @@ protected:
         /* When VFS is enabled, the "fuse" thread is created that owns the copy
          * of ucs_vfs_data_t, and therefore prevents this shared memory from
          * being unlinked immediately */
-        EXPECT_EQ(!ucs_global_opts.vfs_enable, ucs_vfs_data_destroy(&m_data));
+        EXPECT_EQ(!is_vfs_enabled(), ucs_vfs_data_destroy(&m_data));
+    }
+
+    static bool is_vfs_enabled()
+    {
+        return ucs_global_opts.vfs_enable &&
+               (std::string(ucs_MODULES).find("fuse") != std::string::npos);
     }
 
     ucs_vfs_data_t m_data;
@@ -405,7 +410,7 @@ UCS_TEST_F(test_vfs_data, wait)
 
     /* Simulate server workflow */
     EXPECT_UCS_OK(ucs_vfs_data_init(&m_data));
-    ucs_vfs_info_t info = { 0, 100, 0 };
+    ucs_vfs_info_t info = {0, 100, 0};
     ucs_vfs_data_notify(&m_data, &info);
 
     for (pid_t pid : pids) {

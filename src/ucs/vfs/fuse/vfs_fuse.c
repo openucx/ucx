@@ -255,8 +255,8 @@ static void ucs_vfs_fuse_thread_reset_affinity()
 
 static void ucs_vfs_fuse_log_info(const ucs_vfs_info_t *info, const char *msg)
 {
-    ucs_debug("%s: pid %d, sequence %" PRIu64 ", start time %" PRIu64,
-              msg, info->pid, info->sequence, info->start_time);
+    ucs_debug("%s: pid %d, sequence %" PRIu64 ", start time %" PRIu64, msg,
+              info->pid, info->sequence, info->start_time);
 }
 
 static void *ucs_vfs_fuse_thread_func(void *arg)
