@@ -269,7 +269,7 @@ AC_DEFUN([ADD_COMPILER_FLAGS_IF_SUPPORTED],
 #
 # CHECK_DEPRECATED_DECL_FLAG (flag, variable)
 #
-# The macro checks if the given compiler flag enables usig deprecated declarations.
+# The macro checks if the given compiler flag enables using deprecated declarations.
 # If yes, it appends the flags to "variable".
 #
 AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
@@ -327,7 +327,7 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-diag-disable 269],
 # Set default datatype alignment to 16 bytes.
 # Some compilers (LLVM based, clang) expects allocation of datatypes by 32 bytes
 # to optimize operations memset/memcpy/etc using vectorized processor instructions
-# which requires alignment of memory buffer by 32 or higer bytes. Default malloc method
+# which requires alignment of memory buffer by 32 or higher bytes. Default malloc method
 # guarantee alignment for 16 bytes only. Force using compiler 16-bytes alignment
 # by default if option is supported.
 #
@@ -431,7 +431,7 @@ AS_IF([test "x$enable_asan" = xyes],
                                      [AS_MESSAGE([compiling with sanitizer])
                                       BASE_CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer $BASE_CXXFLAGS"
                                       LDFLAGS="-fsanitize=address -fno-omit-frame-pointer $LDFLAGS"],
-                                     [AC_MSG_ERROR([ASAN check is requested but not supported. Check libasan package existance])])
+                                     [AC_MSG_ERROR([ASAN check is requested but not supported. Check libasan package existence])])
 
       AC_RUN_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>]],
                                      [[void *p = malloc(7); return 0;]])],

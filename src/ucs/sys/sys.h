@@ -229,7 +229,7 @@ int ucs_sys_max_open_files();
  * @param [in]  err_log_level  Logging level that should be used for printing
  *                             errors.
  * @param [out] p_fstream      Pointer that is filled with the stream handle.
- *                             User is responsible to close tha stream handle then.
+ *                             User is responsible to close the stream handle then.
  * @param [out] p_need_close   Pointer to the variable that is set to whether
  *                             fclose() should be called to release resources (1)
  *                             or not (0).

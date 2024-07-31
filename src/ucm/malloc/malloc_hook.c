@@ -773,7 +773,7 @@ static void ucm_malloc_install_optional_symbols()
 static void ucm_malloc_set_env_mallopt()
 {
     /* copy values of M_MMAP_THRESHOLD and M_TRIM_THRESHOLD
-     * if they were overriden by the user
+     * if they were overridden by the user
      */
     char *p;
 

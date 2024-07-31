@@ -1,0 +1,21 @@
+parameters:
+  skipped_dirs: ./test/gtest/common,./src/ucs/datastruct/sglib.h,./docs/doxygen/Architecture*,./docs/doxygen/header.tex.in,./src/ucm/ptmalloc286
+  ignored_words: hsa,inout,warmup,pullrequest
+jobs:
+  # Check for misspelling mistakes
+  - job: codespell
+    displayName: codespell check
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    container: fedora
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        retryCountOnTaskFailure: 5
+
+      - bash: |
+          sudo pip3 install codespell
+          codespell -L ${{ parameters.ignored_words }} -S ${{ parameters.skipped_dirs }}

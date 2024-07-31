@@ -199,7 +199,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
         goto free_ucp_addr;
     }
 
-    /* Update destination MD and RSC indicies in the unpacked address list */
+    /* Update destination MD and RSC indices in the unpacked address list */
     ucp_unpacked_address_for_each(ae, &unpacked_addr) {
         ae->md_index                 = UCP_NULL_RESOURCE;
     }
@@ -996,7 +996,7 @@ ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep)
     cm_lane_params.cm                 = worker->cms[cm_idx].cm;
 
     if (wireup_ep->cm_local_sockaddr.ss_family != 0) {
-        /* user specifed local address */
+        /* user specified local address */
         status = ucs_sockaddr_sizeof((const struct sockaddr*)&wireup_ep->cm_local_sockaddr,
                                      &sockaddr_size);
         if (status != UCS_OK) {

@@ -56,7 +56,7 @@ enum {
 
 
 /* The structure represents a group in regestration cache regions distribution.
-   Regions are distributed by thier size.
+   Regions are distributed by their size.
  */
 typedef struct ucs_rcache_distribution {
     size_t count; /**< Number of regions in the group */

@@ -3710,7 +3710,7 @@ static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
          lane_index++) {
         /* Since the caller may be using a different size ucp_transport_entry_t
          * structure definition than this code, array indexing cannot be used
-         * when accesing array elements. The array element's offset must be computed
+         * when accessing array elements. The array element's offset must be computed
          * as 'lane_index' * attr->transports.entry_size and that offset added to the
          * array's base address. */
         transport_entry =
