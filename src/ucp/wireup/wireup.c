@@ -1361,10 +1361,10 @@ ucp_wireup_are_all_lanes_p2p(ucp_ep_h ep, const ucp_ep_config_key_t *key)
     return 1;
 }
 
-static int
-ucp_wireup_can_reconfigure(ucp_ep_h ep, const ucp_ep_config_key_t *new_key,
-                           const ucp_unpacked_address_t *remote_address,
-                           const unsigned *addr_indices)
+static int ucp_wireup_can_reconfigure_internal(
+        ucp_ep_h ep, const ucp_ep_config_key_t *new_key,
+        const ucp_unpacked_address_t *remote_address,
+        const unsigned *addr_indices)
 {
     ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES];
     const ucp_ep_config_key_t *old_key;
@@ -1396,10 +1396,10 @@ ucp_wireup_can_reconfigure(ucp_ep_h ep, const ucp_ep_config_key_t *new_key,
     return 1;
 }
 
-/* Check whether resource restriction is required */
-static int ucp_wireup_should_restrict_resources(
-        ucp_ep_h ep, unsigned ep_init_flags, const ucp_tl_bitmap_t *tl_bitmap,
-        const ucp_unpacked_address_t *remote_address)
+static int
+ucp_wireup_can_reconfigure(ucp_ep_h ep, unsigned ep_init_flags,
+                           const ucp_tl_bitmap_t *tl_bitmap,
+                           const ucp_unpacked_address_t *remote_address)
 {
     ucp_ep_config_key_t key;
     unsigned addr_indices[UCP_MAX_LANES];
@@ -1409,12 +1409,11 @@ static int ucp_wireup_should_restrict_resources(
     /* Perform selection in order to initialize configuration key */
     if (ucp_wireup_select_lanes(ep, ep_init_flags, *tl_bitmap, remote_address,
                                 addr_indices, &key, 1) != UCS_OK) {
-        /* Restrict resources in case of failure in selection */
-        return 1;
+        return 0;
     }
 
-    /* Restrict resources if created key does not support reconfiguration */
-    return !ucp_wireup_can_reconfigure(ep, &key, remote_address, addr_indices);
+    return ucp_wireup_can_reconfigure_internal(ep, &key, remote_address,
+                                               addr_indices);
 }
 
 static ucp_lane_index_t
@@ -1501,8 +1500,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
 
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        !ucp_wireup_can_reconfigure(ep, new_key, remote_address,
-                                    addr_indices)) {
+        !ucp_wireup_can_reconfigure_internal(ep, new_key, remote_address,
+                                             addr_indices)) {
         /* nothing to intersect with */
         return ucp_ep_realloc_lanes(ep, new_key->num_lanes);
     }
@@ -1621,8 +1620,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
      * without CM to prevent reconfiguration error.
      */
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-        ucp_wireup_should_restrict_resources(ep, ep_init_flags, &tl_bitmap,
-                                             remote_address)) {
+        !ucp_wireup_can_reconfigure(ep, ep_init_flags, &tl_bitmap,
+                                    remote_address)) {
         UCS_STATIC_BITMAP_RESET_ALL(&current_tl_bitmap);
         for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; ++lane) {
             rsc_idx = ucp_ep_config(ep)->key.lanes[lane].rsc_index;
@@ -1677,7 +1676,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     cm_idx = ep->ext->cm_idx;
 
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-        !ucp_wireup_can_reconfigure(ep, &key, remote_address, addr_indices)) {
+        !ucp_wireup_can_reconfigure_internal(ep, &key, remote_address,
+                                             addr_indices)) {
         /*
          * TODO handle a case where we have to change lanes and reconfigure the ep:
          *

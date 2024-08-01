@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -8,16 +8,15 @@
 #include "common/test.h"
 
 extern "C" {
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_ep.h>
-#include <ucp/core/ucp_ep.inl>
 }
 
 class test_ucp_reconfigure : public ucp_test {
 protected:
-    using address_pair_t = std::pair<void*, ucp_unpacked_address_t>;
-    using address_pair_p =
-            std::unique_ptr<address_pair_t, void (*)(address_pair_t*)>;
+    using address_t = std::pair<void*, ucp_unpacked_address_t>;
+    using address_p = std::unique_ptr<address_t, void (*)(address_t*)>;
 
     class entity : public ucp_test_base::entity {
     public:
@@ -34,14 +33,14 @@ protected:
                      const ucp_ep_params_t &ep_params, int ep_idx = 0,
                      int do_set_ep = 1) override;
 
-        void verify(const entity &other) const;
+        void verify_configuration(const entity &other) const;
 
         bool is_reconfigured() const
         {
             return m_cfg_index != ep()->cfg_index;
         }
 
-        static const entity &to_reconfigured(const ucp_test_base::entity &e)
+        static const entity &to_reconfigurable(const ucp_test_base::entity &e)
         {
             return *static_cast<const entity*>(&e);
         }
@@ -49,7 +48,7 @@ protected:
     private:
         void store_config();
         ucp_tl_bitmap_t ep_tl_bitmap() const;
-        address_pair_p get_address(bool ep_only) const;
+        address_p get_address(bool ep_only) const;
         bool has_matching_lane(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
 
@@ -70,22 +69,24 @@ protected:
         m_entities.clear();
     }
 
+    void create_entities_and_connect()
+    {
+        create_entity();
+        create_entity();
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_values(variants, get_test_variants_feature, 0);
-        add_variant_values(variants, get_test_variants_feature, 1, "excl_if");
-    }
-
-    static void
-    get_test_variants_feature(std::vector<ucp_test_variant> &variants)
-    {
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "excl_if");
     }
 
-    bool exclude_iface() const
+    bool is_exclude_iface() const
     {
-        return get_variant_value(1);
+        return get_variant_value();
     }
 
     void create_entity()
@@ -102,9 +103,6 @@ public:
             .op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL
         };
         std::string sbuf(msg_size, 'a'), rbuf(msg_size, 'b');
-
-        sender().connect(&receiver(), get_ep_params());
-        receiver().connect(&sender(), get_ep_params());
 
         for (unsigned i = 0; i < num_iterations; ++i) {
             void *sreq = ucp_tag_send_nbx(sender().ep(), sbuf.c_str(), msg_size,
@@ -154,14 +152,14 @@ void test_ucp_reconfigure::entity::connect(const ucp_test_base::entity *other,
                                            const ucp_ep_params_t &ep_params,
                                            int ep_idx, int do_set_ep)
 {
-    auto r_test      = static_cast<const test_ucp_reconfigure*>(m_test);
-    auto &r_other    = to_reconfigured(*other);
+    auto self        = static_cast<const test_ucp_reconfigure*>(m_test);
+    auto &r_other    = to_reconfigurable(*other);
     auto worker_addr = r_other.get_address(false);
     ucp_tl_bitmap_t tl_bitmap;
     ucp_ep_h ucp_ep;
     unsigned addr_indices[UCP_MAX_LANES];
 
-    tl_bitmap = r_test->exclude_iface() ?
+    tl_bitmap = self->is_exclude_iface() ?
                         UCS_STATIC_BITMAP_NOT(r_other.ep_tl_bitmap()) :
                         ucp_tl_bitmap_max;
 
@@ -205,7 +203,8 @@ bool test_ucp_reconfigure::entity::has_matching_lane(ucp_ep_h ep,
     return false;
 }
 
-void test_ucp_reconfigure::entity::verify(const entity &other) const
+void test_ucp_reconfigure::entity::verify_configuration(
+        const entity &other) const
 {
     unsigned reused                  = 0;
     const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep());
@@ -225,19 +224,18 @@ void test_ucp_reconfigure::entity::verify(const entity &other) const
     EXPECT_EQ(reused, is_reconfigured() ? 0 : num_lanes);
 }
 
-test_ucp_reconfigure::address_pair_p
+test_ucp_reconfigure::address_p
 test_ucp_reconfigure::entity::get_address(bool ep_only) const
 {
     const ucp_tl_bitmap_t tl_bitmap = ep_only ? ep_tl_bitmap() :
                                                 ucp_tl_bitmap_max;
     size_t addr_len;
 
-    address_pair_p address(new address_pair_t(nullptr, {0}),
-                           [](address_pair_t *pair) {
-                               ucs_free(pair->first);
-                               ucs_free(pair->second.address_list);
-                               delete pair;
-                           });
+    address_p address(new address_t(nullptr, {0}), [](address_t *addr) {
+        ucs_free(addr->first);
+        ucs_free(addr->second.address_list);
+        delete addr;
+    });
 
     unsigned flags = ucp_worker_default_address_pack_flags(worker());
     ASSERT_UCS_OK(ucp_address_pack(worker(), ep(), &tl_bitmap, flags,
@@ -251,22 +249,21 @@ test_ucp_reconfigure::entity::get_address(bool ep_only) const
 
 UCS_TEST_P(test_ucp_reconfigure, basic)
 {
-    create_entity();
-    create_entity();
+    create_entities_and_connect();
     send_recv();
 
-    auto &e1 = entity::to_reconfigured(sender());
-    auto &e2 = entity::to_reconfigured(receiver());
+    auto &e1 = entity::to_reconfigurable(sender());
+    auto &e2 = entity::to_reconfigurable(receiver());
 
-    if (exclude_iface()) {
+    if (is_exclude_iface()) {
         EXPECT_NE(e1.is_reconfigured(), e2.is_reconfigured());
     } else {
         EXPECT_FALSE(e1.is_reconfigured());
         EXPECT_FALSE(e2.is_reconfigured());
     }
 
-    e1.verify(e2);
-    e2.verify(e1);
+    e1.verify_configuration(e2);
+    e2.verify_configuration(e1);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, rc, "rc_v,rc_x");
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, rc, "rc");
