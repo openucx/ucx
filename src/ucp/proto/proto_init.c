@@ -289,17 +289,46 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
                                     ucs_popcount(reg_md_map));
 }
 
+static ucp_proto_perf_factor_id_t
+ucp_proto_buffer_copy_get_cpu_factor_id(int local) {
+    return (local) ? UCP_PROTO_PERF_FACTOR_LOCAL_CPU :
+                     UCP_PROTO_PERF_FACTOR_REMOTE_CPU;
+}
+static ucp_proto_perf_factor_id_t
+ucp_proto_buffer_copy_get_factor_id(ucs_memory_type_t local_mem_type,
+                                    ucs_memory_type_t remote_mem_type,
+                                    uct_ep_operation_t memtype_op,
+                                    int local)
+{
+    int h2h      = UCP_MEM_IS_HOST(local_mem_type) &&
+                   UCP_MEM_IS_HOST(remote_mem_type);
+    /* RNDV mtype protocols which do async copy set ZCOPY as `memtype_op`
+     * while eager procols that imply blocking copy set SHORT */
+    int blocking = (memtype_op == UCT_EP_OP_GET_SHORT) ||
+                   (memtype_op == UCT_EP_OP_PUT_SHORT);
+    if (h2h || blocking) {
+        return ucp_proto_buffer_copy_get_cpu_factor_id(local);
+    }
+
+    ucs_assertv((memtype_op == UCT_EP_OP_GET_ZCOPY) ||
+                (memtype_op == UCT_EP_OP_PUT_ZCOPY), "memtype_op=%d",
+                memtype_op);
+    return (local) ? UCP_PROTO_PERF_FACTOR_LOCAL_MTCOPY :
+                        UCP_PROTO_PERF_FACTOR_REMOTE_MTCOPY;
+}
+
 ucs_status_t
 ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
                                     ucs_memory_type_t local_mem_type,
                                     ucs_memory_type_t remote_mem_type,
                                     uct_ep_operation_t memtype_op,
                                     size_t range_start, size_t range_end,
-                                    ucp_proto_perf_factor_id_t cpu_factor_id,
-                                    ucp_proto_perf_t *perf)
+                                    int local, ucp_proto_perf_t *perf)
 {
     ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     ucp_context_h context                 = worker->context;
+    ucp_proto_perf_factor_id_t factor_id  = ucp_proto_buffer_copy_get_factor_id(
+            local_mem_type, remote_mem_type, memtype_op, local);
     ucs_memory_type_t src_mem_type, dst_mem_type;
     ucp_proto_perf_node_t *tl_perf_node;
     const ucp_ep_config_t *ep_config;
@@ -310,7 +339,7 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     ucs_status_t status;
 
     if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
-        perf_factors[cpu_factor_id] =
+        perf_factors[factor_id] =
                 ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
         ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
                                 NULL, title, "memcpy");
@@ -370,9 +399,9 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
 
     perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c =
             ucp_tl_iface_latency(context, &perf_attr.latency);
-    perf_factors[cpu_factor_id].c =
+    perf_factors[ucp_proto_buffer_copy_get_cpu_factor_id(local)].c =
             perf_attr.send_pre_overhead + perf_attr.send_post_overhead;
-    perf_factors[cpu_factor_id].m =
+    perf_factors[factor_id].m =
             1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
 
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
@@ -410,16 +439,16 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
         status = ucp_proto_init_add_memreg_time(
                 params, reg_md_map, UCP_PROTO_PERF_FACTOR_LOCAL_CPU,
-                "send memory registration", range_start, range_end, perf);
+                "local memory registration", range_start, range_end, perf);
         if (status != UCS_OK) {
             return status;
         }
     } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) {
         ucs_assert(reg_md_map == 0);
         status = ucp_proto_init_add_buffer_copy_time(
-                params->super.worker, "send copy", UCS_MEMORY_TYPE_HOST,
+                params->super.worker, "local copy", UCS_MEMORY_TYPE_HOST,
                 select_param->mem_type, params->memtype_op, range_start,
-                range_end, UCP_PROTO_PERF_FACTOR_LOCAL_CPU, perf);
+                range_end, 1, perf);
         if (status != UCS_OK) {
             return status;
         }
@@ -438,7 +467,7 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
         /* Receiver has to register its buffer */
         status = ucp_proto_init_add_memreg_time(
                 params, reg_md_map, UCP_PROTO_PERF_FACTOR_REMOTE_CPU,
-                "send memory registration", range_start, range_end, perf);
+                "remote memory registration", range_start, range_end, perf);
         if (status != UCS_OK) {
             return status;
         }
@@ -449,9 +478,9 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
     recv_mem_type = (params->super.rkey_config_key == NULL) ? 
             select_param->mem_type : params->super.rkey_config_key->mem_type;
     status        = ucp_proto_init_add_buffer_copy_time(
-            params->super.worker, "recv copy", UCS_MEMORY_TYPE_HOST,
-            recv_mem_type, UCT_EP_OP_PUT_SHORT, range_start, range_end,
-            UCP_PROTO_PERF_FACTOR_REMOTE_CPU, perf);
+            params->super.worker, "remote copy", UCS_MEMORY_TYPE_HOST,
+            recv_mem_type, UCT_EP_OP_PUT_SHORT, range_start, range_end, 0,
+            perf);
     if (status != UCS_OK) {
         return status;
     }

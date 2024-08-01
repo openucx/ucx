@@ -620,7 +620,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                                   mpriv->align_thresh + mpriv->min_frag);
 
     status = ucp_proto_rndv_ack_init(&init_params->super, ack_name,
-                                     ucs_linear_func_make(150e-9, 0),
+                                     ucs_linear_func_make(50e-9, 0),
                                      &ack_perf, &rpriv->super);
     if (status != UCS_OK) {
         goto out_destroy_bulk_perf;

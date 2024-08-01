@@ -70,8 +70,7 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
                                     ucs_memory_type_t remote_mem_type,
                                     uct_ep_operation_t memtype_op,
                                     size_t range_start, size_t range_end,
-                                    ucp_proto_perf_factor_id_t cpu_factor_id,
-                                    ucp_proto_perf_t *perf);
+                                    int local, ucp_proto_perf_t *perf);
 
 
 ucs_status_t

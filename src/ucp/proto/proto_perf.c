@@ -446,8 +446,12 @@ ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU];
         perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL];
+        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_MTCOPY] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_MTCOPY];
         perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY];
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_MTCOPY] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_MTCOPY];
         perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL];
         perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU] =

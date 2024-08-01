@@ -54,6 +54,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     char frag_size_str[32];
     void *frag_proto_priv;
     ucs_status_t status;
+    uint8_t proto_flags;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
@@ -66,6 +67,8 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     sel_param             = *select_param;
     sel_param.op_id_flags = ucp_proto_select_op_id(select_param) |
                             UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+    sel_param.op_attr     = ucp_proto_select_op_attr_pack(
+            UCP_OP_ATTR_FLAG_MULTI_SEND);
 
     proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
                                         init_params->rkey_cfg_index,
@@ -85,8 +88,8 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     ack_params.max_length = SIZE_MAX;
     /* Add each proto as a separate variant */
     ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
-        if (ucp_proto_id_field(proto->proto_id, flags) &
-            UCP_PROTO_FLAG_INVALID) {
+        proto_flags = ucp_proto_id_field(proto->proto_id, flags);
+        if (proto_flags & UCP_PROTO_FLAG_INVALID) {
             continue;
         }
 
@@ -94,8 +97,8 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
 
         frag_seg  = ucp_proto_perf_segment_last(proto->perf);
         first_seg = ucp_proto_perf_find_segment_lb(proto->perf, 0);
-        ucs_assert(first_seg != NULL);
         ucs_assert(frag_seg != NULL);
+        ucs_assert(first_seg != NULL);
 
         /* Initialize private data */
         rpriv.frag_size             = ucp_proto_perf_segment_end(frag_seg);
@@ -142,7 +145,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         status = ucp_proto_perf_aggregate2(
                 ucp_proto_id_field(init_params->proto_id, name),
                 ppln_perf, ack_perf, &result_perf);
-        if (status == UCS_OK) {
+        if (status != UCS_OK) {
             goto out_destroy_ack_perf;
         }
 

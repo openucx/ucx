@@ -404,8 +404,8 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
     status = ucp_proto_init_add_buffer_copy_time(
             init_params->worker, "unpack copy", params.mem_info.type,
             init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
-            params.super.min_length, params.super.max_length,
-            UCP_PROTO_PERF_FACTOR_LOCAL_CPU, params.unpack_perf);
+            params.super.min_length, params.super.max_length, 1,
+            params.unpack_perf);
     if (status != UCS_OK) {
         goto out_unpack_perf_destroy;
     }
