@@ -543,31 +543,91 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
 }
 
 #if HAVE_DEVX
-static ucs_status_t
-uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, unsigned flags, int log_level,
-                           char *title, char *fallback,
-                           struct mlx5dv_devx_uar **uar_p)
+static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md,
+                                               uint32_t flags,
+                                               struct mlx5dv_devx_uar **uar_p)
 {
+    const char *uar_type_str      = (flags == UCT_IB_MLX5_UAR_ALLOC_TYPE_WC) ?
+                                    "WC" : "NC_DEDICATED";
+    ucs_log_level_t err_log_level = UCS_LOG_LEVEL_DIAG;
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
     struct mlx5dv_devx_uar *uar;
-    char buf[512];
+    ucs_status_t status;
+    int err;
 
     uar = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, flags);
-    if (uar == NULL) {
-        sprintf(buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x(%s)) "
-                "failed: %m", uct_ib_device_name(&md->super.dev), flags, title);
-        if (fallback == NULL) {
-            ucs_log(log_level, "%s", buf);
-        } else {
-            ucs_log(log_level, "%s, fallback to %s", buf, fallback);
-        }
-
-        return UCS_ERR_NO_MEMORY;
+    if (uar != NULL) {
+        *uar_p = uar;
+        return UCS_OK;
     }
 
-    *uar_p = uar;
-    return UCS_OK;
+    err = errno;
+    ucs_string_buffer_appendf(&strb,
+                              "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x)"
+                              "type=%s failed: %s. ",
+                              uct_ib_device_name(&md->super.dev),
+                              flags,
+                              uar_type_str,
+                              strerror(err));
+    switch (err) {
+    case ENOMEM:
+        ucs_string_buffer_appendf(&strb,
+                                  "Consider increasing PF_LOG_BAR_SIZE "
+                                  "using mlxconfig tool (requires reboot)");
+        err_log_level = UCS_LOG_LEVEL_ERROR;
+        status        = UCS_ERR_NO_MEMORY;
+        break;
+    case EOPNOTSUPP:
+        status = UCS_ERR_UNSUPPORTED;
+        break;
+    case EINVAL:
+        status = UCS_ERR_INVALID_PARAM;
+        break;
+    default:
+        status = UCS_ERR_NO_MEMORY;
+        break;
+    }
+
+    ucs_log(err_log_level, "%s", ucs_string_buffer_cstr(&strb));
+    return status;
 }
 #endif
+
+ucs_status_t uct_ib_mlx5_devx_check_uar(uct_ib_mlx5_md_t *md)
+{
+#if HAVE_DEVX
+    uct_ib_mlx5_devx_uar_t uar;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_alloc_uar(md,
+                                        UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
+                                        &uar.uar);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        status = uct_ib_mlx5_devx_alloc_uar(md,
+                                            UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
+                                            &uar.uar);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            ucs_error("%s: both WC and NC_DEDICATED UAR allocation types "
+                      " are not supported", uct_ib_device_name(&md->super.dev));
+            return status;
+        } else if (status != UCS_OK) {
+            return status;
+        }
+        /* NC_DEDICATED is supported - the flag is automatically set to 0 */
+    } else if (status != UCS_OK) {
+        /* The error is unrelated to the UAR allocation type, no fallback */
+        return status;
+    } else {
+        /* WC is supported - set the flag to 1 */
+        md->flags |= UCT_IB_MLX5_MD_FLAG_UAR_USE_WC;
+    }
+
+    uct_ib_mlx5_devx_uar_cleanup(&uar);
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
 
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,
@@ -575,16 +635,16 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
 {
 #if HAVE_DEVX
     ucs_status_t status;
+    uint32_t flags;
 
-    status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
-                                        UCS_LOG_LEVEL_DEBUG, "WC", "NC",
-                                        &uar->uar);
-    if (status != UCS_OK) {
-        status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
-                                            UCS_LOG_LEVEL_ERROR, "NC", NULL,
-                                            &uar->uar);
+    /* Use UCT_IB_MLX5_MD_FLAG_UAR_USE_WC to determine the supported UAR allocation type */
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC) {
+        flags = UCT_IB_MLX5_UAR_ALLOC_TYPE_WC;
+    } else {
+        flags = UCT_IB_MLX5_UAR_ALLOC_TYPE_NC;
     }
 
+    status = uct_ib_mlx5_devx_alloc_uar(md, flags, &uar->uar);
     if (status != UCS_OK) {
         return status;
     }
