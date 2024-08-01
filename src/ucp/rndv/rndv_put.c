@@ -126,26 +126,40 @@ ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
     ucp_proto_rndv_put_atp_pack_ctx_t pack_ctx;
+    ucs_status_t status;
+
+    /* Make sure the sum of ack_size field in all ATP messages we send will not
+       exceed request length, since each ATP message has to acknowledge at least
+       one byte. */
+    ucs_assertv(req->send.rndv.put.atp_count <= req->send.state.dt_iter.length,
+                "atp_count=%u length=%zu", req->send.rndv.put.atp_count,
+                req->send.state.dt_iter.length);
+    if (req->send.rndv.put.atp_count == req->send.state.dt_iter.length) {
+        return UCS_OK;
+    }
 
     pack_ctx.req = req;
 
     /* When we need to send multiple ATP messages: each will acknowledge 1 byte,
        except the last ATP which will acknowledge the remaining payload size.
        This is simpler than keeping track of how much was sent on each lane */
-    if (lane == ucs_ilog2(rpriv->atp_map)) {
+    if (req->send.rndv.put.atp_count == (rpriv->atp_num_lanes - 1)) {
         pack_ctx.ack_size = req->send.state.dt_iter.length -
-                            rpriv->atp_num_lanes + 1;
-        if (pack_ctx.ack_size == 0) {
-            return UCS_OK; /* Skip sending 0-length ATP */
-        }
+                            req->send.rndv.put.atp_count;
     } else {
         pack_ctx.ack_size = 1;
     }
 
-    return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
-                                          ucp_proto_rndv_put_common_pack_atp,
-                                          &pack_ctx, sizeof(ucp_rndv_ack_hdr_t),
-                                          0);
+    status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,
+                                            ucp_proto_rndv_put_common_pack_atp,
+                                            &pack_ctx,
+                                            sizeof(ucp_rndv_ack_hdr_t), 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ++req->send.rndv.put.atp_count;
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -203,6 +217,7 @@ ucp_proto_rndv_put_common_request_init(ucp_request_t *req)
 
     req->send.rndv.put.flush_lane = 0;
     req->send.rndv.put.atp_lane   = 0;
+    req->send.rndv.put.atp_count  = 0;
     ucp_proto_rndv_bulk_request_init(req, &rpriv->bulk);
 }
 
@@ -416,21 +431,25 @@ ucp_proto_rndv_put_zcopy_query(const ucp_proto_query_params_t *params,
                       UCP_PROTO_ZCOPY_DESC, put_desc);
 }
 
-static ucs_status_t ucp_proto_rndv_put_zcopy_reset(ucp_request_t *request)
+static ucs_status_t ucp_proto_rndv_put_zcopy_reset(ucp_request_t *req)
 {
-    const ucp_proto_rndv_put_priv_t *rpriv = request->send.proto_config->priv;
-    ucp_datatype_iter_t *dt_iter           = &request->send.state.dt_iter;
-    ucp_lane_map_t atp_sent_map;
+    const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
 
-    atp_sent_map = rpriv->atp_map & UCS_MASK(request->send.rndv.put.atp_lane);
-    if (atp_sent_map == rpriv->atp_map) {
-        dt_iter->offset = dt_iter->length;
+    if (req->send.rndv.put.atp_count == rpriv->atp_num_lanes) {
+        /* Sent all ATPs so the iterator should be at the end */
+        ucs_assertv_always(ucp_datatype_iter_is_end(&req->send.state.dt_iter),
+                           "req=%p offset=%zu length=%zu", req,
+                           req->send.state.dt_iter.offset,
+                           req->send.state.dt_iter.length);
     } else {
-        /* Last ATP was not set yet, so each sent ATP acknownledged 1 byte */
-        dt_iter->offset = ucs_popcount(atp_sent_map);
+        /* Last ATP was not sent yet or length was less than number of lanes -
+           in both cases, each sent ATP acknownledged 1 byte. */
+        ucp_datatype_iter_seek(&req->send.state.dt_iter,
+                               req->send.rndv.put.atp_count,
+                               UCS_BIT(UCP_DATATYPE_CONTIG));
     }
 
-    request->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     return UCS_OK;
 }
 

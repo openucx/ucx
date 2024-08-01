@@ -287,6 +287,9 @@ struct ucp_request {
                                     /* Next lane to send ATP is the first set bit
                                        in rpriv->atp_map that's >= atp_lane */
                                     ucp_lane_index_t atp_lane;
+
+                                    /* Number of ATP messages sent so far */
+                                    ucp_lane_index_t atp_count;
                                 } put;
 
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
