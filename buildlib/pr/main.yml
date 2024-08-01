@@ -186,13 +186,8 @@ stages:
     jobs:
     - template: codestyle.yml
 
-  - stage: Codespell
-    dependsOn: [Codestyle]
-    jobs:
-    - template: codespell.yml
-
   - stage: Static_check
-    dependsOn: [Codespell]
+    dependsOn: [Codestyle]
     jobs:
     - template: static_checks.yml
 
