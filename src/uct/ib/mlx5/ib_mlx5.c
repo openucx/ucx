@@ -577,11 +577,11 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
     ucs_status_t status;
 
     status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
-                                        UCS_LOG_LEVEL_DEBUG, "WC", "NC",
+                                        UCS_LOG_LEVEL_DEBUG, "WC", "NC_DEDICATED",
                                         &uar->uar);
     if (status != UCS_OK) {
-        status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
-                                            UCS_LOG_LEVEL_ERROR, "NC", NULL,
+        status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC_DEDICATED,
+                                            UCS_LOG_LEVEL_ERROR, "NC_DEDICATED", NULL,
                                             &uar->uar);
     }
 
