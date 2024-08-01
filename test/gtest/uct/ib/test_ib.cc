@@ -359,6 +359,7 @@ public:
         union ibv_gid gid;
         uct_ib_md_config_t *md_config =
             ucs_derived_of(m_md_config, uct_ib_md_config_t);
+        ucs_config_allow_list_t dummy_subnet_list;
         ucs::handle<uct_md_h> uct_md;
         uct_ib_iface_t dummy_ib_iface;
         uct_ib_md_t *ib_md;
@@ -376,11 +377,14 @@ public:
 
         ASSERT_EQ(&ib_md->dev, uct_ib_iface_device(&dummy_ib_iface));
 
+        dummy_subnet_list.mode = UCS_CONFIG_ALLOW_LIST_ALLOW_ALL;
+
         /* uct_ib_iface_init_roce_gid_info() requires only the port from the
          * ib_iface so we can use a dummy one here.
          * this function will set the gid_index in the dummy ib_iface. */
         status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
-                                                 md_config->ext.gid_index);
+                                                 md_config->ext.gid_index,
+                                                 &dummy_subnet_list);
         ASSERT_UCS_OK(status);
 
         gid_index = dummy_ib_iface.gid_info.gid_index;
