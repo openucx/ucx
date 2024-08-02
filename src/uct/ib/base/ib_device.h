@@ -322,11 +322,13 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev);
  *
  * @param [in]  dev             IB device.
  * @param [in]  port_num        Port number.
+ * @param [in]  ndev_name       Filter network device by name. No filter if
+ *                              empty.
  * @param [out] gid_info        Filled with the selected gid index and the
  *                              port's RoCE version and address family.
  */
-ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
-                                      uint8_t port_num,
+ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                      char *ndev_name,
                                       uct_ib_device_gid_info_t *gid_info);
 
 

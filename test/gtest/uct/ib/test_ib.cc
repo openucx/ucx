@@ -380,7 +380,12 @@ public:
          * ib_iface so we can use a dummy one here.
          * this function will set the gid_index in the dummy ib_iface. */
         status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
-                                                 md_config->ext.gid_index);
+                                                 md_config->ext.gid_index,
+                                                 md_config->gid_ndev);
+        if ((!ucs_string_is_empty(md_config->gid_ndev)) && (status != UCS_OK)) {
+            UCS_TEST_SKIP_R("device not found " +
+                            std::string(md_config->gid_ndev));
+        }
         ASSERT_UCS_OK(status);
 
         gid_index = dummy_ib_iface.gid_info.gid_index;
@@ -405,6 +410,10 @@ public:
 };
 
 UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "IB_GID_INDEX=1") {
+    send_recv_short();
+}
+
+UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_ndev, "GID_NDEV=bond0") {
     send_recv_short();
 }
 

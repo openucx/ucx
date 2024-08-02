@@ -876,6 +876,7 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
 }
 
 ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                      char *ndev_name,
                                       uct_ib_device_gid_info_t *gid_info)
 {
     static const uct_ib_roce_version_info_t roce_prio[] = {
@@ -888,6 +889,7 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
     ucs_status_t status     = UCS_OK;
     int priorities_arr_len  = ucs_static_array_size(roce_prio);
     uct_ib_device_gid_info_t gid_info_tmp;
+    char ndev_name_tmp[IFNAMSIZ];
     int i, prio_idx;
 
     ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
@@ -897,6 +899,15 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
      */
     for (prio_idx = 0; prio_idx < priorities_arr_len; prio_idx++) {
         for (i = 0; i < gid_tbl_len; i++) {
+            if (!ucs_string_is_empty(ndev_name)) {
+                status = uct_ib_device_get_roce_ndev_name(
+                        dev, port_num, i, ndev_name_tmp, sizeof(ndev_name_tmp));
+                if ((status != UCS_OK) ||
+                    (strcmp(ndev_name, ndev_name_tmp) != 0)) {
+                    continue;
+                }
+            }
+
             status = uct_ib_device_query_gid_info(dev->ibv_context,
                                                   uct_ib_device_name(dev),
                                                   port_num, i, &gid_info_tmp);
