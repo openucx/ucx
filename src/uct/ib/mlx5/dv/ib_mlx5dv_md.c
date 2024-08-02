@@ -1890,7 +1890,7 @@ static int uct_ib_mlx5_check_uar(uct_ib_mlx5_md_t *md)
 
     status = uct_ib_mlx5_devx_uar_init(&uar, md, 0);
     if (status != UCS_OK) {
-        return UCS_ERR_UNSUPPORTED;
+        return status;
     }
 
     uct_ib_mlx5_devx_uar_cleanup(&uar);

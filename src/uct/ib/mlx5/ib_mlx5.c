@@ -543,25 +543,56 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
 }
 
 #if HAVE_DEVX
-static ucs_status_t
-uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, unsigned flags, int log_level,
-                           char *title, char *fallback,
-                           struct mlx5dv_devx_uar **uar_p)
+static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, 
+                                               uint32_t flags, 
+                                               const char *allocation_type, 
+                                               const char *fallback,
+                                               struct mlx5dv_devx_uar **uar_p)
 {
     struct mlx5dv_devx_uar *uar;
-    char buf[512];
+    ucs_status_t status;
+    const char *pf_log_bar_size_suggestion = ". Consider increasing PF_LOG_BAR_SIZE using mlxconfig tool (requires reboot)";
+    ucs_log_level_t err_log_level = UCS_LOG_LEVEL_WARN;
+    ucs_string_buffer_t buf;
+    int err;
 
     uar = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, flags);
     if (uar == NULL) {
-        sprintf(buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x(%s)) "
-                "failed: %m", uct_ib_device_name(&md->super.dev), flags, title);
-        if (fallback == NULL) {
-            ucs_log(log_level, "%s", buf);
-        } else {
-            ucs_log(log_level, "%s, fallback to %s", buf, fallback);
-        }
 
-        return UCS_ERR_NO_MEMORY;
+        ucs_string_buffer_init(&buf);
+
+        err = errno;
+        ucs_string_buffer_appendf(&buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x, type=%s) failed: %s",
+                                  uct_ib_device_name(&md->super.dev), flags, allocation_type, strerror(err));
+        
+        switch (err) {
+            case ENOMEM:
+                /* The UAR allocation failed due to insufficient PF_LOG_BAR_SIZE, no need to fallback since the result will be the same */
+                ucs_string_buffer_appendf(&buf, "%s", pf_log_bar_size_suggestion);
+                err_log_level = UCS_LOG_LEVEL_ERROR;
+                status = UCS_ERR_NO_MEMORY;
+                break;
+
+            case EOPNOTSUPP:
+                /* The UAR allocation failed due to unsupported allocation type, if there's no fallback, it's an error */
+                if (fallback) {
+                    ucs_string_buffer_appendf(&buf, ". Falling back to %s", fallback);
+                }
+                err_log_level = fallback ? UCS_LOG_LEVEL_WARN : UCS_LOG_LEVEL_ERROR;
+                status = UCS_ERR_UNSUPPORTED;
+                break;
+
+            case EINVAL:
+                status = UCS_ERR_INVALID_PARAM;
+                break;
+
+            default:
+                status = UCS_ERR_IO_ERROR;
+                break;
+        }
+        ucs_log(err_log_level, "%s", ucs_string_buffer_cstr(&buf));
+        ucs_string_buffer_cleanup(&buf);
+        return status;
     }
 
     *uar_p = uar;
@@ -577,11 +608,11 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
     ucs_status_t status;
 
     status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
-                                        UCS_LOG_LEVEL_DEBUG, "WC", "NC_DEDICATED",
+                                        "WC", "NC_DEDICATED",
                                         &uar->uar);
-    if (status != UCS_OK) {
+    if (status == UCS_ERR_UNSUPPORTED) {
         status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC_DEDICATED,
-                                            UCS_LOG_LEVEL_ERROR, "NC_DEDICATED", NULL,
+                                            "NC_DEDICATED", NULL,
                                             &uar->uar);
     }
 
