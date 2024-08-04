@@ -16,7 +16,7 @@ schedules:
 
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local
-  REPO_MIRROR: harbor.mellanox.com
+  REPO_MIRROR: harbor-pdc.nvidia.com
 
 resources:
   containers:
