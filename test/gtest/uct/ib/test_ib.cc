@@ -392,7 +392,7 @@ public:
         }
 
         /* check if the gid is valid to use */
-        if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
+        if (!uct_ib_device_is_gid_valid(&gid)) {
             UCS_TEST_SKIP_R(device_str.str() + " is empty");
         }
 
