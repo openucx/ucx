@@ -197,6 +197,8 @@ enum {
     UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(15),
     /* Device supports XGVMI UMR workflow */
     UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(16),
+    /* Device supports UAR allocation type (1 for WC, 0 for NC_DEDICATED) */
+    UCT_IB_MLX5_MD_FLAG_UAR_ALLOC_TYPE       = UCS_BIT(17),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 17,
@@ -857,6 +859,8 @@ void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs
 int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
                              uct_ib_mlx5_md_t *md,
                              uct_ib_mlx5_mmio_mode_t mmio_mode);
+
+ucs_status_t uct_ib_mlx5_devx_check_supported_uar_alloc_type(uct_ib_mlx5_md_t *md);
 
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,

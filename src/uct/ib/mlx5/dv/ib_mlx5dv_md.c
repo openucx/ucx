@@ -1885,15 +1885,11 @@ static void uct_ib_mlx5_md_port_counter_set_id_init(uct_ib_mlx5_md_t *md)
 
 static int uct_ib_mlx5_check_uar(uct_ib_mlx5_md_t *md)
 {
-    uct_ib_mlx5_devx_uar_t uar;
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_devx_uar_init(&uar, md, 0);
+    ucs_status_t status = uct_ib_mlx5_devx_check_supported_uar_alloc_type(md);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_ib_mlx5_devx_uar_cleanup(&uar);
     return UCS_OK;
 }
 

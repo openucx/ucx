@@ -544,18 +544,16 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
 
 #if HAVE_DEVX
 static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, 
-                                               uint32_t flags, 
-                                               const char *allocation_type, 
-                                               const char *fallback,
-                                               struct mlx5dv_devx_uar **uar_p)
+                                               uint32_t flags,
+                                               struct mlx5dv_devx_uar **uar_p) 
 {
     const char *pf_log_bar_size_suggestion = "Consider increasing PF_LOG_BAR_SIZE using mlxconfig tool (requires reboot)";
+    const char *allocation_type            = (flags == UCT_IB_MLX5_UAR_ALLOC_TYPE_WC) ? "WC" : "NC_DEDICATED";
     ucs_log_level_t err_log_level          = UCS_LOG_LEVEL_DIAG;
     struct mlx5dv_devx_uar *uar;
     ucs_status_t status;
     ucs_string_buffer_t buf;
     int err;
-    
 
     uar = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, flags);
     if (uar == NULL) {
@@ -575,12 +573,7 @@ static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md,
 
             case EOPNOTSUPP:
                 /* UAR allocation failed due to unsupported allocation type, if there's no fallback, it's an error */
-                if (fallback) {
-                    ucs_string_buffer_appendf(&buf, "Falling back to %s", fallback);
-                } else {
-                    err_log_level = UCS_LOG_LEVEL_ERROR;
-                }
-                status            = UCS_ERR_UNSUPPORTED;
+                status = UCS_ERR_UNSUPPORTED;
                 break;
 
             case EINVAL:
@@ -601,22 +594,58 @@ static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md,
 }
 #endif
 
+ucs_status_t uct_ib_mlx5_devx_check_supported_uar_alloc_type(uct_ib_mlx5_md_t *md)
+{
+#if HAVE_DEVX
+    uct_ib_mlx5_devx_uar_t uar;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC, &uar.uar);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        ucs_debug("WC UAR allocation type is not supported, falling back to NC_DEDICATED");
+        
+        status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC_DEDICATED, &uar.uar);    
+        if (status == UCS_ERR_UNSUPPORTED) {
+            ucs_error("Both WC and NC_DEDICATED UAR allocation types are not supported");
+            return status;
+        } else if (status != UCS_OK) {
+            return status;
+        } 
+
+        /* NC_DEDICATED is supported - set the flag to 0 */
+        md->flags &= ~UCT_IB_MLX5_MD_FLAG_UAR_ALLOC_TYPE;
+    } else if (status != UCS_OK) {
+        /* The error is not related to the UAR allocation type, no need to check the fallback */
+        return status;
+    } else {
+        /* WC is supported - set the flag to 1 */
+        md->flags |= UCT_IB_MLX5_MD_FLAG_UAR_ALLOC_TYPE;
+    }
+
+    uct_ib_mlx5_devx_uar_cleanup(&uar);
+
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,
                                        uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
 #if HAVE_DEVX
     ucs_status_t status;
+    uint32_t flags;
 
-    status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
-                                        "WC", "NC_DEDICATED",
-                                        &uar->uar);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC_DEDICATED,
-                                            "NC_DEDICATED", NULL,
-                                            &uar->uar);
+    /* Use UCT_IB_MLX5_MD_FLAG_UAR_ALLOC_TYPE to determine the supported UAR allocation type */
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_UAR_ALLOC_TYPE) {
+        flags = UCT_IB_MLX5_UAR_ALLOC_TYPE_WC;
+    } else {
+        flags = UCT_IB_MLX5_UAR_ALLOC_TYPE_NC_DEDICATED;
     }
 
+    status = uct_ib_mlx5_devx_alloc_uar(md, flags, &uar->uar);
     if (status != UCS_OK) {
         return status;
     }
@@ -634,6 +663,14 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
 void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 {
 #if HAVE_DEVX
+    if (uar == NULL) {
+        ucs_error("uar is NULL");
+        return;
+    }
+    if (uar->uar == NULL) {
+        ucs_error("uar->uar is NULL");
+        return;
+    }
     mlx5dv_devx_free_uar(uar->uar);
 #endif
 }
