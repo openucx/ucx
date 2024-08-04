@@ -83,7 +83,7 @@ public:
 
         ~entity();
 
-        void connect(const entity *other, const ucp_ep_params_t &ep_params,
+        void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0, int do_set_ep = 1);
 
         bool verify_client_address(struct sockaddr_storage *client_address);
