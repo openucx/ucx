@@ -18,31 +18,20 @@ protected:
     using address_t = std::pair<void*, ucp_unpacked_address_t>;
     using address_p = std::unique_ptr<address_t, void (*)(address_t*)>;
 
-    class entity : public ucp_test_base::entity {
+    class entity {
     public:
-        entity(const ucp_test_param &test_params, ucp_config_t *ucp_config,
-               const ucp_worker_params_t &worker_params,
-               const ucp_test *test_owner) :
-            ucp_test_base::entity(test_params, ucp_config, worker_params,
-                                  test_owner),
-            m_cfg_index(UCP_WORKER_CFG_INDEX_NULL)
+        entity(ucp_test_base::entity *e) :
+            m_cfg_index(UCP_WORKER_CFG_INDEX_NULL), m_entity(e)
         {
         }
 
-        void connect(const ucp_test_base::entity *other,
-                     const ucp_ep_params_t &ep_params, int ep_idx = 0,
-                     int do_set_ep = 1) override;
+        void connect(const entity *other, bool is_exclude_iface);
 
         void verify_configuration(const entity &other) const;
 
         bool is_reconfigured() const
         {
             return m_cfg_index != ep()->cfg_index;
-        }
-
-        static const entity &to_reconfigurable(const ucp_test_base::entity &e)
-        {
-            return *static_cast<const entity*>(&e);
         }
 
     private:
@@ -52,47 +41,48 @@ protected:
         bool has_matching_lane(ucp_ep_h ep, ucp_lane_index_t lane_idx,
                                const entity &other) const;
 
-        ucp_worker_cfg_index_t m_cfg_index;
-        std::vector<uct_ep_h>  m_uct_eps;
-    };
-
-    void init() override
-    {
-        ucp_test::init();
-
-        /* Check presence of IB devices using rc_verbs, as all devices must
-         * support it. */
-        if (!has_resource(sender(), "rc_verbs")) {
-            UCS_TEST_SKIP_R("IB transport is not present");
+        ucp_ep_h ep() const
+        {
+            return m_entity->ep();
         }
 
-        m_entities.clear();
-    }
+        ucp_worker_h worker() const
+        {
+            return m_entity->worker();
+        }
+
+        ucp_context_h ucph() const
+        {
+            return m_entity->ucph();
+        }
+
+        ucp_worker_cfg_index_t m_cfg_index;
+        std::vector<uct_ep_h>  m_uct_eps;
+        ucp_test_base::entity *m_entity;
+    };
 
     void create_entities_and_connect()
     {
-        create_entity();
-        create_entity();
-        sender().connect(&receiver(), get_ep_params());
-        receiver().connect(&sender(), get_ep_params());
+        m_sender.reset(new entity(create_entity(true)));
+        m_receiver.reset(new entity(create_entity(false)));
+
+        m_sender->connect(m_receiver.get(), is_exclude_iface());
+        m_receiver->connect(m_sender.get(), is_exclude_iface());
     }
+
+    std::unique_ptr<entity> m_sender;
+    std::unique_ptr<entity> m_receiver;
 
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "excl_if");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "exclude_iface");
     }
 
     bool is_exclude_iface() const
     {
         return get_variant_value();
-    }
-
-    void create_entity()
-    {
-        m_entities.push_back(new entity(GetParam(), m_ucp_config,
-                                        get_worker_params(), this));
     }
 
     void send_recv()
@@ -102,9 +92,10 @@ public:
         const ucp_request_param_t param          = {
             .op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL
         };
-        std::string sbuf(msg_size, 'a'), rbuf(msg_size, 'b');
 
         for (unsigned i = 0; i < num_iterations; ++i) {
+            std::string sbuf(msg_size, 'a'), rbuf(msg_size, 'b');
+
             void *sreq = ucp_tag_send_nbx(sender().ep(), sbuf.c_str(), msg_size,
                                           0, &param);
             void *rreq = ucp_tag_recv_nbx(receiver().worker(),
@@ -148,19 +139,16 @@ ucp_tl_bitmap_t test_ucp_reconfigure::entity::ep_tl_bitmap() const
     return tl_bitmap;
 }
 
-void test_ucp_reconfigure::entity::connect(const ucp_test_base::entity *other,
-                                           const ucp_ep_params_t &ep_params,
-                                           int ep_idx, int do_set_ep)
+void test_ucp_reconfigure::entity::connect(const entity *other,
+                                           bool is_exclude_iface)
 {
-    auto self        = static_cast<const test_ucp_reconfigure*>(m_test);
-    auto &r_other    = to_reconfigurable(*other);
-    auto worker_addr = r_other.get_address(false);
+    auto worker_addr = other->get_address(false);
     ucp_tl_bitmap_t tl_bitmap;
     ucp_ep_h ucp_ep;
     unsigned addr_indices[UCP_MAX_LANES];
 
-    tl_bitmap = self->is_exclude_iface() ?
-                        UCS_STATIC_BITMAP_NOT(r_other.ep_tl_bitmap()) :
+    tl_bitmap = is_exclude_iface ?
+                        UCS_STATIC_BITMAP_NOT(other->ep_tl_bitmap()) :
                         ucp_tl_bitmap_max;
 
     UCS_ASYNC_BLOCK(&worker()->async);
@@ -169,7 +157,6 @@ void test_ucp_reconfigure::entity::connect(const ucp_test_base::entity *other,
                                                UCP_EP_INIT_CREATE_AM_LANE,
                                                "reconfigure test", addr_indices,
                                                &ucp_ep));
-    m_workers[0].second.push_back({ucp_ep, ucp_ep_destroy});
 
     ucp_ep->conn_sn = 0;
     ASSERT_TRUE(ucp_ep_match_insert(worker(), ucp_ep, worker_addr->second.uuid,
@@ -178,6 +165,7 @@ void test_ucp_reconfigure::entity::connect(const ucp_test_base::entity *other,
     ASSERT_UCS_OK(ucp_wireup_send_request(ucp_ep));
     UCS_ASYNC_UNBLOCK(&worker()->async);
 
+    m_entity->set_ep(ucp_ep, 0, 0);
     store_config();
 }
 
@@ -252,18 +240,15 @@ UCS_TEST_P(test_ucp_reconfigure, basic)
     create_entities_and_connect();
     send_recv();
 
-    auto &e1 = entity::to_reconfigurable(sender());
-    auto &e2 = entity::to_reconfigurable(receiver());
-
     if (is_exclude_iface()) {
-        EXPECT_NE(e1.is_reconfigured(), e2.is_reconfigured());
+        EXPECT_NE(m_sender->is_reconfigured(), m_receiver->is_reconfigured());
     } else {
-        EXPECT_FALSE(e1.is_reconfigured());
-        EXPECT_FALSE(e2.is_reconfigured());
+        EXPECT_FALSE(m_sender->is_reconfigured());
+        EXPECT_FALSE(m_receiver->is_reconfigured());
     }
 
-    e1.verify_configuration(e2);
-    e2.verify_configuration(e1);
+    m_sender->verify_configuration(*(m_receiver.get()));
+    m_receiver->verify_configuration(*(m_sender.get()));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfigure, rc, "rc");

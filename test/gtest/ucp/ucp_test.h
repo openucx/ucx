@@ -81,11 +81,10 @@ public:
                const ucp_worker_params_t& worker_params,
                const ucp_test_base* test_owner);
 
-        virtual ~entity();
+        ~entity();
 
-        virtual void connect(const entity *other,
-                             const ucp_ep_params_t &ep_params, int ep_idx = 0,
-                             int do_set_ep = 1);
+        void connect(const entity *other, const ucp_ep_params_t &ep_params,
+                     int ep_idx = 0, int do_set_ep = 1);
 
         bool verify_client_address(struct sockaddr_storage *client_address);
 
@@ -158,6 +157,8 @@ public:
 
         bool is_conn_reqs_queue_empty() const;
 
+        void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
+
     protected:
         ucs::handle<ucp_context_h>      m_ucph;
         worker_vec_t                    m_workers;
@@ -175,8 +176,6 @@ public:
         static void accept_ep_cb(ucp_ep_h ep, void *arg);
         static void accept_conn_cb(ucp_conn_request_h conn_req, void *arg);
         static void reject_conn_cb(ucp_conn_request_h conn_req, void *arg);
-
-        void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
 
         static ucs_log_func_rc_t
         hide_config_warns_logger(const char *file, unsigned line,
