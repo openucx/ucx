@@ -549,37 +549,38 @@ static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md,
                                                const char *fallback,
                                                struct mlx5dv_devx_uar **uar_p)
 {
+    const char *pf_log_bar_size_suggestion = "Consider increasing PF_LOG_BAR_SIZE using mlxconfig tool (requires reboot)";
+    ucs_log_level_t err_log_level          = UCS_LOG_LEVEL_DIAG;
     struct mlx5dv_devx_uar *uar;
     ucs_status_t status;
-    const char *pf_log_bar_size_suggestion = ". Consider increasing PF_LOG_BAR_SIZE using mlxconfig tool (requires reboot)";
-    ucs_log_level_t err_log_level = UCS_LOG_LEVEL_WARN;
     ucs_string_buffer_t buf;
     int err;
+    
 
     uar = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, flags);
     if (uar == NULL) {
-
         ucs_string_buffer_init(&buf);
 
         err = errno;
-        ucs_string_buffer_appendf(&buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x, type=%s) failed: %s",
+        ucs_string_buffer_appendf(&buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x) type=%s failed: %s. ",
                                   uct_ib_device_name(&md->super.dev), flags, allocation_type, strerror(err));
         
         switch (err) {
             case ENOMEM:
-                /* The UAR allocation failed due to insufficient PF_LOG_BAR_SIZE, no need to fallback since the result will be the same */
+                /* UAR allocation failed due to insufficient PF_LOG_BAR_SIZE; fallback will produce the same result */
                 ucs_string_buffer_appendf(&buf, "%s", pf_log_bar_size_suggestion);
                 err_log_level = UCS_LOG_LEVEL_ERROR;
-                status = UCS_ERR_NO_MEMORY;
+                status        = UCS_ERR_NO_MEMORY;
                 break;
 
             case EOPNOTSUPP:
-                /* The UAR allocation failed due to unsupported allocation type, if there's no fallback, it's an error */
+                /* UAR allocation failed due to unsupported allocation type, if there's no fallback, it's an error */
                 if (fallback) {
-                    ucs_string_buffer_appendf(&buf, ". Falling back to %s", fallback);
+                    ucs_string_buffer_appendf(&buf, "Falling back to %s", fallback);
+                } else {
+                    err_log_level = UCS_LOG_LEVEL_ERROR;
                 }
-                err_log_level = fallback ? UCS_LOG_LEVEL_WARN : UCS_LOG_LEVEL_ERROR;
-                status = UCS_ERR_UNSUPPORTED;
+                status            = UCS_ERR_UNSUPPORTED;
                 break;
 
             case EINVAL:
@@ -587,7 +588,7 @@ static ucs_status_t uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md,
                 break;
 
             default:
-                status = UCS_ERR_IO_ERROR;
+                status = UCS_ERR_NO_MEMORY;
                 break;
         }
         ucs_log(err_log_level, "%s", ucs_string_buffer_cstr(&buf));
