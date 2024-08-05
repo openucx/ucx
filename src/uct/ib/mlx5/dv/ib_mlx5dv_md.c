@@ -1838,7 +1838,8 @@ static void uct_ib_mlx5_devx_check_xgvmi(uct_ib_mlx5_md_t *md, void *cap_2,
 }
 
 static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
-                                              void *cap_2, uct_ib_device_t *dev)
+                                               void *cap_2,
+                                               uct_ib_device_t *dev)
 {
     md->super.dp_ordering.ooo_rw_rc = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
                                                         dp_ordering_ooo_rw_rc);
@@ -1847,7 +1848,7 @@ static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
 
     if (cap_2 != NULL) {
         md->super.dp_ordering.force = UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2,
-                                                       dp_ordering_force);
+                                                        dp_ordering_force);
     }
 
     ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
