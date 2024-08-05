@@ -149,11 +149,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
             uct_ib_mlx5_devx_set_qpc_port_affinity(md, dci_config->path_index,
                                                    qpc, &opt_param_mask);
         }
-
-        UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
-                          rc_iface->super.config.dp_ordering_ooo != UCS_NO);
-        UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
-                          rc_iface->super.config.dp_ordering_ooo == UCS_YES);
+        uct_ib_mlx5_devx_set_qpc_dp_ordering(qpc, &rc_iface->super);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
                           rc_iface->super.config.sl);
