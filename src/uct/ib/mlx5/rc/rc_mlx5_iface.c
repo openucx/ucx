@@ -643,13 +643,21 @@ static int
 uct_rc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                   const uct_iface_is_reachable_params_t *params)
 {
+    static const char *tm_type_to_str[] = {"basic", "tag matching"};
     uint8_t my_type = uct_rc_mlx5_iface_get_address_type(tl_iface);
+    uint8_t remote_type;
     const uct_iface_addr_t *iface_addr;
 
     iface_addr = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
                                  iface_addr, IFACE_ADDR, NULL);
+
     /* Check hardware tag matching compatibility */
-    if ((iface_addr != NULL) && (my_type != *(uint8_t*)iface_addr)) {
+    if ((iface_addr != NULL) &&
+        ((remote_type = *(uint8_t*)iface_addr) != my_type)) {
+        uct_iface_fill_info_str_buf(
+                    params, "incompatible hardware tag matching. "
+                    "%s (local) vs %s (remote)",
+                    tm_type_to_str[my_type], tm_type_to_str[remote_type]);
         return 0;
     }
 

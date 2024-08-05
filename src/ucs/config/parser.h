@@ -21,6 +21,9 @@
 #define UCS_CONFIG_ARRAY_MAX   128
 #define UCX_CONFIG_FILE_NAME   "ucx.conf"
 
+/* String literal for allow-list */
+#define UCS_CONFIG_PARSER_ALL "all"
+
 BEGIN_C_DECLS
 
 /** @file parser.h */

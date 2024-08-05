@@ -951,6 +951,38 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
                   UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN);
 }
 
+int ucs_sockaddr_is_same_subnet(const struct sockaddr *sa1,
+                                const struct sockaddr *sa2, unsigned prefix_len)
+{
+    const void *ipaddr1, *ipaddr2;
+    size_t addr_size, addr_size_bits;
+
+    if (sa1->sa_family != sa2->sa_family) {
+        ucs_debug("different addr_family: s1 %s s2 %s",
+                  ucs_sockaddr_address_family_str(sa1->sa_family),
+                  ucs_sockaddr_address_family_str(sa2->sa_family));
+        return 0;
+    }
+
+    /* Get address size */
+    if (ucs_sockaddr_inet_addr_sizeof(sa1, &addr_size) != UCS_OK) {
+        return 0;
+    }
+
+    addr_size_bits = addr_size * CHAR_BIT;
+
+    /* Truncate prefix_len if it exceeds address size */
+    prefix_len = ucs_min(prefix_len, addr_size_bits);
+
+    ipaddr1 = ucs_sockaddr_get_inet_addr(sa1);
+    ipaddr2 = ucs_sockaddr_get_inet_addr(sa2);
+    ucs_assertv((ipaddr1 != NULL) && (ipaddr2 != NULL), "ipaddr1=%p ipaddr2=%p",
+                ipaddr1, ipaddr2);
+
+    /* Check if the addresses have matching prefixes */
+    return ucs_bitwise_is_equal(ipaddr1, ipaddr2, prefix_len);
+}
+
 ucs_status_t ucs_sockaddr_set_inaddr_any(struct sockaddr *saddr, sa_family_t af)
 {
     struct sockaddr_in *sa_in;

@@ -612,7 +612,7 @@ protected:
         EXPECT_LT(m_recv_counter, m_send_counter);
         check_header(header, header_length);
 
-        bool has_reply_ep = get_send_flag();
+        bool has_reply_ep = get_send_flag() & UCP_AM_SEND_FLAG_REPLY;
 
         EXPECT_EQ(has_reply_ep,
                   !!(rx_param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP));
@@ -1896,19 +1896,23 @@ public:
         return test_ucp_am_nbx_eager_memtype::get_test_variants(variants);
     }
 
-    void init()
+    void init() override
     {
-        modify_config("RNDV_THRESH", "128");
         test_ucp_am_nbx::init();
     }
 
 private:
-    virtual ucs_memory_type_t tx_memtype() const
+    unsigned get_send_flag() const override
+    {
+        return test_ucp_am_nbx_rndv::get_send_flag() | UCP_AM_SEND_FLAG_RNDV;
+    }
+
+    ucs_memory_type_t tx_memtype() const override
     {
         return static_cast<ucs_memory_type_t>(get_variant_value(2));
     }
 
-    virtual ucs_memory_type_t rx_memtype() const
+    ucs_memory_type_t rx_memtype() const override
     {
         return static_cast<ucs_memory_type_t>(get_variant_value(3));
     }
@@ -1917,8 +1921,8 @@ private:
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
     const size_t rndv_frag_size     = get_rndv_frag_size(UCS_MEMORY_TYPE_HOST);
-    const std::vector<size_t> sizes = {64 * UCS_KBYTE, rndv_frag_size - 1,
-                                       rndv_frag_size  + 1};
+    const std::vector<size_t> sizes = {1, 64 * UCS_KBYTE, rndv_frag_size - 1,
+                                       rndv_frag_size + 1};
 
     for (size_t size : sizes) {
         test_am_send_recv_memtype(size);
@@ -1977,6 +1981,8 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
 #ifdef ENABLE_STATS
 class test_ucp_am_nbx_rndv_ppln : public test_ucp_am_nbx_rndv {
 public:
+    test_ucp_am_nbx_rndv_ppln() : m_mem_type(UCS_MEMORY_TYPE_HOST) {}
+
     void init() override
     {
         if (!is_proto_enabled()) {
@@ -2006,8 +2012,7 @@ public:
 
 protected:
     void test_ppln_send(ucs_memory_type_t mem_type, size_t num_frags,
-                        uint64_t sender_cntr, uint64_t sender_cntr_value,
-                        uint64_t receiver_cntr, uint64_t receiver_cntr_value)
+                        uint64_t stats_cntr_value)
     {
         if (!is_ppln_supported(mem_type)) {
             UCS_TEST_SKIP_R("No RMA support");
@@ -2016,11 +2021,26 @@ protected:
         const size_t rndv_frag_size = get_rndv_frag_size(mem_type);
         test_am_send_recv(rndv_frag_size * num_frags);
 
-        check_stats(sender(), sender_cntr, sender_cntr_value);
-        check_stats(receiver(), receiver_cntr, receiver_cntr_value);
+        check_stats(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
+                    stats_cntr_value);
+        check_stats(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, stats_cntr_value);
+    }
+
+    void set_mem_type(ucs_memory_type_t mem_type) {
+        m_mem_type = mem_type;
     }
 
 private:
+    ucs_memory_type_t tx_memtype() const override
+    {
+        return m_mem_type;
+    }
+
+    ucs_memory_type_t rx_memtype() const override
+    {
+        return m_mem_type;
+    }
+
     void check_stats(entity &e, uint64_t cntr, uint64_t exp_value)
     {
         auto stats_node = e.worker()->stats;
@@ -2052,6 +2072,8 @@ private:
 
         return false;
     }
+
+    ucs_memory_type_t m_mem_type;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_cuda_frag,
@@ -2059,18 +2081,23 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_cuda_frag,
 {
     const size_t num_frags = 2;
 
-    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags,
-                   UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, num_frags,
-                   UCP_WORKER_STAT_RNDV_RTR_MTYPE, num_frags);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, host_buff_host_frag,
            "RNDV_FRAG_MEM_TYPE=host")
 {
     // Host memory should not be pipelined thru host staging buffers
-    test_ppln_send(UCS_MEMORY_TYPE_HOST, 2,
-                   UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 0,
-                   UCP_WORKER_STAT_RNDV_RTR_MTYPE, 0);
+    test_ppln_send(UCS_MEMORY_TYPE_HOST, 2, 0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_buff_cuda_frag,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    const size_t num_frags = 2;
+
+    set_mem_type(UCS_MEMORY_TYPE_CUDA);
+    test_ppln_send(UCS_MEMORY_TYPE_CUDA, num_frags, num_frags);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);

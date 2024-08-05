@@ -619,23 +619,15 @@ ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
 }
 
 /*
- * Check if the next iterator has reached the end
- */
-static UCS_F_ALWAYS_INLINE int
-ucp_datatype_iter_is_end_position(const ucp_datatype_iter_t *dt_iter,
-                                  const ucp_datatype_iter_t *pos_iter)
-{
-    ucs_assert(dt_iter->offset <= dt_iter->length);
-    return pos_iter->offset == dt_iter->length;
-}
-
-/*
  * Check if the iterator has reached the end
  */
 static UCS_F_ALWAYS_INLINE int
 ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
 {
-    return ucp_datatype_iter_is_end_position(dt_iter, dt_iter);
+    ucs_assertv(dt_iter->offset <= dt_iter->length,
+                "dt_iter=%p dt_iter->offset=%zu dt_iter->length=%zu", dt_iter,
+                dt_iter->offset, dt_iter->length);
+    return dt_iter->offset == dt_iter->length;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -645,6 +637,20 @@ ucp_datatype_iter_rewind(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         dt_iter->type.iov.iov_index  = 0;
         dt_iter->type.iov.iov_offset = 0;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_seek(ucp_datatype_iter_t *dt_iter, size_t offset,
+                       unsigned dt_mask)
+{
+    ucs_assertv(offset <= dt_iter->length,
+                "dt_iter=%p offset=%zu dt_iter->length=%zu", dt_iter,
+                offset, dt_iter->length);
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
+        ucp_datatype_iter_iov_seek(dt_iter, offset);
+    } else {
+        dt_iter->offset = offset;
     }
 }
 
