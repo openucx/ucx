@@ -175,6 +175,12 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    " - <num> - Specify a numeric bit-length value for the subnet prefix",
    ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_pfx_len), UCS_CONFIG_TYPE_ULUNITS},
 
+  {"ROCE_SUBNETS", UCS_CONFIG_PARSER_ALL,
+   "List of included/excluded subnets to filter RoCE GID entries by. Each subnet contains an\n"
+   "address and a netmask in the form x.x.x.x/y.\n"
+   "It must not be used together with UCX_IB_GID_INDEX.",
+   ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_filter), UCS_CONFIG_TYPE_ALLOW_LIST},
+
   {"ROCE_PATH_FACTOR", "1",
    "Multiplier for RoCE LAG UDP source port calculation. The UDP source port\n"
    "is typically used by switches and network adapters to select a different\n"
@@ -635,35 +641,6 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr_storage *sa1,
     ucs_debug("%s", ucs_string_buffer_cstr(&info));
 }
 
-static ucs_status_t
-uct_ib_iface_roce_to_sockaddr(sa_family_t af, const void *gid,
-                              struct sockaddr_storage *sock_storage)
-{
-    struct sockaddr *sa = (struct sockaddr *)sock_storage;
-    const uint8_t *inet_addr;
-    size_t addr_size;
-    ucs_status_t status;
-
-    /* Set address family */
-    sa->sa_family = af;
-
-    /* Set port to 0 as it's not relevant for RoCE */
-    status = ucs_sockaddr_set_port(sa, 0);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* Get address size */
-    status = ucs_sockaddr_inet_addr_size(af, &addr_size);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* Set IP address */
-    inet_addr = UCS_PTR_BYTE_OFFSET(gid, sizeof(union ibv_gid) - addr_size);
-    return ucs_sockaddr_set_inet_addr(sa, inet_addr);
-}
-
 static int
 uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
                                const uct_ib_address_t *remote_ib_addr,
@@ -714,15 +691,17 @@ uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
     }
 
     remote_ib_addr_af = uct_ib_address_flags_get_roce_af(remote_ib_addr_flags);
-    if ((uct_ib_iface_roce_to_sockaddr(local_ib_addr_af, &local_gid_info->gid,
-                                          &sa_local) != UCS_OK)) {
+    if ((uct_ib_device_roce_gid_to_sockaddr(local_ib_addr_af,
+                                            &local_gid_info->gid,
+                                            &sa_local) != UCS_OK)) {
         uct_iface_fill_info_str_buf(
                params, "Couldn't convert local RoCE address to socket address");
         return 0;
     }
 
-    if (uct_ib_iface_roce_to_sockaddr(remote_ib_addr_af, remote_ib_addr + 1,
-                                          &sa_remote) != UCS_OK) {
+    if (uct_ib_device_roce_gid_to_sockaddr(remote_ib_addr_af,
+                                           remote_ib_addr + 1,
+                                           &sa_remote) != UCS_OK) {
         uct_iface_fill_info_str_buf(
                params, "Couldn't convert remote RoCE address to socket address");
         return 0;
@@ -1300,16 +1279,26 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
            (iface->gid_info.roce_info.ver == UCT_IB_DEVICE_ROCE_V2);
 }
 
-ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             unsigned long cfg_gid_index)
+ucs_status_t
+uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
+                                unsigned long cfg_gid_index,
+                                const ucs_config_allow_list_t *subnets_list)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
 
     ucs_assert(uct_ib_iface_is_roce(iface));
 
+    if ((cfg_gid_index != UCS_ULUNITS_AUTO) &&
+        (subnets_list->mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL)) {
+        ucs_error("both GID_INDEX and ROCE_SUBNET_LIST are specified, please "
+                  "select only one of them");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     if (cfg_gid_index == UCS_ULUNITS_AUTO) {
-        return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
+        return uct_ib_device_select_gid(dev, port_num, subnets_list,
+                                        &iface->gid_info);
     }
 
     return uct_ib_device_query_gid_info(dev->ibv_context,
@@ -1442,7 +1431,8 @@ uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
 
     /* Fill the gid index and the RoCE version */
     if (uct_ib_iface_is_roce(iface)) {
-        status = uct_ib_iface_init_roce_gid_info(iface, cfg_gid_index);
+        status = uct_ib_iface_init_roce_gid_info(iface, cfg_gid_index,
+                                                 &config->rocev2_subnet_filter);
         if (status != UCS_OK) {
             goto out;
         }
