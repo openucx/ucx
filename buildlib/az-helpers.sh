@@ -189,7 +189,7 @@ try_load_cuda_env() {
     [ "${num_gpus}" -gt 0 ] || return 0
 
     # Check cuda env module
-    az_module_load dev/cuda12.2.2 || return 0
+    az_module_load dev/cuda12.2.2 || az_module_load /hpc/local/etc/modulefiles/dev/cuda-latest || return 0
     have_cuda=yes
 
     # Check gdrcopy

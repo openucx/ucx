@@ -477,6 +477,8 @@ ucs_status_t uct_ib_reg_mr(uct_ib_md_t *md, void *address, size_t length,
         mr = UCS_PROFILE_CALL_ALWAYS(ibv_reg_dmabuf_mr, md->pd, dmabuf_offset,
                                      length, (uintptr_t)address, dmabuf_fd,
                                      access_flags);
+        ucs_diag("ibv_reg_dmabuf_mr addr=%p len=%zu fd=%d offset=%zu mr=%p",
+                 address, length, dmabuf_fd, dmabuf_offset, mr);
 #else
         return UCS_ERR_UNSUPPORTED;
 #endif
@@ -1187,7 +1189,7 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
         return;
     }
 
-    ucs_debug("%s: dmabuf is supported", uct_ib_device_name(&md->dev));
+    ucs_diag("%s: dmabuf is supported", uct_ib_device_name(&md->dev));
     md->cap_flags |= UCT_MD_FLAG_REG_DMABUF;
 #endif
 }
