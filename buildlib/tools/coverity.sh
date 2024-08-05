@@ -44,24 +44,34 @@ modules_for_coverity_unload() {
 	return $res
 }
 
-run_coverity() {
-
-	az_init_modules
-	modules_for_coverity
-
+configure_coverity() {
 	ucx_build_type=$1
 
 	xpmem_root=$(module show $XPMEM_MODULE 2>&1 | awk '/CPATH/ {print $3}' | sed -e 's,/include,,')
 	with_xpmem="--with-xpmem=$xpmem_root"
 
-	${WORKSPACE}/contrib/configure-$ucx_build_type --prefix=$ucx_inst --with-cuda --with-gdrcopy --with-java $with_xpmem
+	if [ "${ENABLE_JAVA:-yes}" = yes ]; then
+		java_opt="--with-java"
+	else
+		java_opt="--without-java"
+	fi
+
+	${WORKSPACE}/contrib/configure-$ucx_build_type --prefix=$ucx_inst --with-cuda --with-gdrcopy $java_opt $with_xpmem
+
 	cov_build_id="cov_build_${ucx_build_type}"
 	cov_build="$ucx_build_dir/$cov_build_id"
 	rm -rf $cov_build
 	mkdir -p $cov_build
+}
+
+run_coverity() {
+	ucx_build_type=$1
+
+	cov_build_id="cov_build_${ucx_build_type}"
+	cov_build="$ucx_build_dir/$cov_build_id"
 	cov-build --dir $cov_build $MAKEP all
 	if [ "${ucx_build_type}" == "devel" ]; then
-		cov-manage-emit --dir $cov_build --tu-pattern "file('.*/test/gtest/common/googletest/*')" delete
+		cov-manage-emit --dir $cov_build --tu-pattern "file('.*/test/gtest/common/googletest/*')" delete || :
 	fi
 	cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
 	nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
@@ -69,6 +79,9 @@ run_coverity() {
 
 	if [ $nerrors -gt 0 ]; then
 		cov-format-errors --dir $cov_build --emacs-style
+		if [ -d "$WORKSPACE/$cov_build_id" ]; then
+			rm -rf $WORKSPACE/$cov_build_id
+		fi
 		cp -ar $cov_build $WORKSPACE/$cov_build_id
 		echo "not ok 1 Coverity Detected $nerrors failures"
 	else
@@ -79,5 +92,14 @@ run_coverity() {
 	return $rc
 }
 
-prepare_build
+az_init_modules
+modules_for_coverity
+
+if [ "${INCREMENTAL:-no}" = no ]; then
+	prepare_build
+	configure_coverity "$@"
+else
+	cd "${ucx_build_dir}"
+fi
+
 run_coverity "$@"
