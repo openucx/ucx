@@ -1587,10 +1587,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                               tl_md, worker, params, &config->super,
                               &config->rc_mlx5_common, &init_attr);
 
-    self->super.super.super.config.multi_path =
-        uct_rc_mlx5_multi_path_get(md->super.multi_path.dc_rdma,
-                                   md->super.multi_path.force,
-                                   &config->rc_mlx5_common);
+    self->super.super.super.config.dp_ordering_ooo =
+        uct_rc_mlx5_dp_ordering_ooo_get(md->super.dp_ordering.ooo_rw_dc,
+                                        md->super.dp_ordering.force,
+                                        &config->rc_mlx5_common.super);
 
     tx_cq_size = uct_ib_cq_size(&self->super.super.super, &init_attr,
                                 UCT_IB_DIR_TX);

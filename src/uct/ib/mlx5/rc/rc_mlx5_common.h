@@ -483,16 +483,15 @@ void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
 
 
 static UCS_F_ALWAYS_INLINE ucs_ternary_auto_value_t
-uct_rc_mlx5_multi_path_get(uint8_t multi_path,
-                           uint8_t multi_path_force,
-                           uct_rc_mlx5_iface_common_config_t *config)
+uct_rc_mlx5_dp_ordering_ooo_get(uint8_t dp_ordering_ooo,
+                                uint8_t dp_ordering_ooo_force,
+                                uct_ib_mlx5_iface_config_t *config)
 {
-    if (!multi_path || (config->super.ar_enable == UCS_NO)) {
+    if (!dp_ordering_ooo || (config->ar_enable == UCS_NO)) {
         return UCS_NO;
     }
 
-    if (multi_path_force &&
-        config->super.ar_enable == UCS_YES) {
+    if (dp_ordering_ooo_force && (config->ar_enable == UCS_YES)) {
         return UCS_YES;
     }
 

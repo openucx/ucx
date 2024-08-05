@@ -1837,26 +1837,22 @@ static void uct_ib_mlx5_devx_check_xgvmi(uct_ib_mlx5_md_t *md, void *cap_2,
     }
 }
 
-static void uct_ib_mlx5_devx_check_multi_path(uct_ib_mlx5_md_t *md, void *cap,
+static void uct_ib_mlx5_devx_check_dp_ordering(uct_ib_mlx5_md_t *md, void *cap,
                                               void *cap_2, uct_ib_device_t *dev)
 {
-    md->super.multi_path.rc_rdma  = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
-                                                      multi_path_rc_rdma);
-    md->super.multi_path.dc_rdma  = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
-                                                      multi_path_dc_rdma);
-    md->super.multi_path.xrc_rdma = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
-                                                      multi_path_xrc_rdma);
+    md->super.dp_ordering.ooo_rw_rc = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                                                        dp_ordering_ooo_rw_rc);
+    md->super.dp_ordering.ooo_rw_dc = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                                                        dp_ordering_ooo_rw_dc);
 
     if (cap_2 != NULL) {
-        md->super.multi_path.force = UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2,
-                                                       multi_path_force);
+        md->super.dp_ordering.force = UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2,
+                                                       dp_ordering_force);
     }
 
-    ucs_debug("%s: multi_path support: force=%d rc_rdma=%d dc_rdma=%d "
-              "rcx_rdma=%d",
-              uct_ib_device_name(dev), md->super.multi_path.force,
-              md->super.multi_path.rc_rdma, md->super.multi_path.dc_rdma,
-              md->super.multi_path.xrc_rdma);
+    ucs_debug("%s: dp_ordering support: force=%d ooo_rw_rc=%d ooo_rw_dc=%d",
+              uct_ib_device_name(dev), md->super.dp_ordering.force,
+              md->super.dp_ordering.ooo_rw_rc, md->super.dp_ordering.ooo_rw_dc);
 }
 
 static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
@@ -2296,7 +2292,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         cap_2 = NULL;
     }
 
-    uct_ib_mlx5_devx_check_multi_path(md, cap, cap_2, dev);
+    uct_ib_mlx5_devx_check_dp_ordering(md, cap, cap_2, dev);
 
     uct_ib_mlx5_devx_check_odp(md, md_config, cap);
 

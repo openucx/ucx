@@ -52,10 +52,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
     } else {
-        UCT_IB_MLX5DV_SET(dctc, dctc, multi_path,
-                          ib_iface->config.multi_path != UCS_NO);
-        UCT_IB_MLX5DV_SET(dctc, dctc, multi_path_force,
-                          ib_iface->config.multi_path == UCS_YES);
+        UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_0,
+                          ib_iface->config.dp_ordering_ooo != UCS_NO);
+        UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_force,
+                          ib_iface->config.dp_ordering_ooo == UCS_YES);
     }
 
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->rx.port_affinity);
@@ -150,10 +150,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
                                                    qpc, &opt_param_mask);
         }
 
-        UCT_IB_MLX5DV_SET(qpc, qpc, multi_path,
-                          rc_iface->super.config.multi_path != UCS_NO);
-        UCT_IB_MLX5DV_SET(qpc, qpc, multi_path_force,
-                          rc_iface->super.config.multi_path == UCS_YES);
+        UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
+                          rc_iface->super.config.dp_ordering_ooo != UCS_NO);
+        UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
+                          rc_iface->super.config.dp_ordering_ooo == UCS_YES);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
                           rc_iface->super.config.sl);

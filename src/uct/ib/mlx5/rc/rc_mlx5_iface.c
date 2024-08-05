@@ -915,10 +915,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                               tl_md, worker, params, &config->super.super,
                               &config->rc_mlx5_common, &init_attr);
 
-    self->super.super.super.config.multi_path =
-        uct_rc_mlx5_multi_path_get(md->super.multi_path.xrc_rdma,
-                                   md->super.multi_path.force,
-                                   &config->rc_mlx5_common);
+    self->super.super.super.config.dp_ordering_ooo =
+        uct_rc_mlx5_dp_ordering_ooo_get(md->super.dp_ordering.ooo_rw_rc,
+                                        md->super.dp_ordering.force,
+                                        &config->rc_mlx5_common.super);
 
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {
