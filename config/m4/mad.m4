@@ -14,7 +14,7 @@ AC_ARG_WITH([mad],
             [with_mad=guess])
 
 mad_happy=no
-AS_IF([test "x$with_mad" == "xno"],
+AS_IF([test "x$with_mad" = "xno"],
     [AC_MSG_WARN([Infiniband MAD support explicitly disabled])],
 
     [AS_CASE(["x$with_mad"],
