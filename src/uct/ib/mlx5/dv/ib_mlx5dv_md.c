@@ -1883,16 +1883,6 @@ static void uct_ib_mlx5_md_port_counter_set_id_init(uct_ib_mlx5_md_t *md)
     }
 }
 
-static int uct_ib_mlx5_check_uar(uct_ib_mlx5_md_t *md)
-{
-    ucs_status_t status = uct_ib_mlx5_devx_check_supported_uar_alloc_type(md);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return UCS_OK;
-}
-
 ucs_status_t
 uct_ib_mlx5_devx_device_mem_alloc(uct_md_h uct_md, size_t *length_p,
                                   void **address_p, ucs_memory_type_t mem_type,
@@ -2123,7 +2113,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    status = uct_ib_mlx5_check_uar(md);
+    status = uct_ib_mlx5_devx_check_uar(md);
     if (status != UCS_OK) {
         goto err_free_md;
     }
