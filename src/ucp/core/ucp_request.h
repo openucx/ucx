@@ -283,10 +283,13 @@ struct ucp_request {
                                 /* Used by rndv/put and rndv/put/frag */
                                 struct {
                                     /* Which lanes need to flush (0 in fence mode) */
-                                    ucp_lane_map_t flush_map;
+                                    ucp_lane_map_t   flush_map;
 
                                     /* Which lanes need to send atp */
-                                    ucp_lane_map_t atp_map;
+                                    ucp_lane_map_t   atp_map;
+
+                                    /* Number of ATP messages sent so far */
+                                    ucp_lane_index_t atp_count;
                                 } put;
 
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
