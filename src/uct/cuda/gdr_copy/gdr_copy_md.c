@@ -430,6 +430,7 @@ uct_gdr_copy_md_create(uct_component_t *component,
     md->super.component = &uct_gdr_copy_component;
     md->reg_cost        = md_config->uc_reg_cost;
     md->super.ops       = &uct_gdr_copy_md_ops;
+    md->rcache          = NULL;
 
     md->gdrcpy_ctx = gdr_open();
     if (md->gdrcpy_ctx == NULL) {
