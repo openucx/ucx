@@ -25,7 +25,6 @@
 
 
 #define DEFAULT_DELAY_MS           1.0
-#define DEFAULT_TIMEOUT_SEC       10.0
 #define DEFAULT_VARIANT              0
 
 #define UCT_TEST_CALL_AND_TRY_AGAIN(_func, _res) \
@@ -326,8 +325,8 @@ protected:
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
+        using ucs::get_deadline;
+        ucs_time_t deadline = get_deadline(timeout);
         while ((ucs_get_time() < deadline) && (!(*flag))) {
             short_progress_loop();
         }
@@ -337,9 +336,8 @@ protected:
     void wait_for_bits(FlagType *flag, MaskType mask,
                        double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) *
-                              ucs::test_time_multiplier();
+        using ucs::get_deadline;
+        ucs_time_t deadline = get_deadline(timeout);
         while ((ucs_get_time() < deadline) && (!ucs_test_all_flags(*flag, mask))) {
             /* Don't do short_progress_loop() to avoid extra timings */
             progress_mt();
@@ -347,18 +345,15 @@ protected:
     }
 
     template <typename T>
-    void wait_for_value(volatile T *var, T value, bool progress,
+    void wait_for_value(const volatile T *var, T value, bool progress,
                         double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
-        while ((ucs_get_time() < deadline) && (*var != value)) {
-            if (progress) {
-                short_progress_loop();
-            } else {
-                twait();
-            }
-        }
+        test_base::wait_for_value(
+                var, value,
+                [this, progress]() {
+                    progress ? short_progress_loop() : twait();
+                },
+                timeout);
     }
 
     template <typename T>
@@ -366,18 +361,13 @@ protected:
                                bool progress = true,
                                double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) *
-                              ucs::test_time_multiplier();
-        T initial_value     = *var;
-
-        while ((ucs_get_time() < deadline) && (*var == initial_value)) {
-            if (progress) {
-                short_progress_loop(DEFAULT_DELAY_MS, e);
-            } else {
-                twait();
-            }
-        }
+        const T initial_value = *var;
+        wait_for_cond([var, initial_value]() { return *var != initial_value; },
+                      [this, progress, e]() {
+                          progress ? short_progress_loop(DEFAULT_DELAY_MS, e) :
+                                     twait();
+                      },
+                      timeout);
     }
 
     virtual void init();

@@ -352,14 +352,12 @@ protected:
         }
     }
 
-    template <typename T>
-    void wait_for_value(volatile T *var, T value, double timeout = 10.0) const
+    template<typename T>
+    void wait_for_value(const volatile T *var, T value,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
-        while ((ucs_get_time() < deadline) && (*var != value)) {
-            short_progress_loop();
-        }
+        test_base::wait_for_value(
+                var, value, [this]() { short_progress_loop(); }, timeout);
     }
 
     static const ucp_datatype_t DATATYPE;

@@ -357,6 +357,7 @@ UCS_MT_TEST_F(test_callbackq, oneshot_mt, 10) {
 
     add_oneshot(&ctx);
     dispatch(100);
+    wait_for_value(&ctx.count, 1u);
     EXPECT_EQ(1u, ctx.count);
 }
 
