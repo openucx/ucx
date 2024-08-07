@@ -90,15 +90,28 @@ protected:
 
     virtual void test_body() = 0;
 
-    template<typename T>
-    void wait_for_value(volatile T *var, T value,
+    template<typename Cond, typename Wait>
+    void wait_for_cond(Cond cond, Wait wait,
+                       double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        ucs_time_t deadline = get_deadline(timeout);
+        while ((ucs_get_time() < deadline) && (!cond())) {
+            wait();
+        }
+    }
+
+    template<typename T, typename Wait>
+    void wait_for_value(const volatile T *var, T value, Wait wait,
                         double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() + (ucs_time_from_sec(timeout) *
-                                                ucs::test_time_multiplier());
-        while ((ucs_get_time() < deadline) && (*var != value)) {
-            sched_yield();
-        }
+        wait_for_cond([var, value]() { return *var == value; }, wait, timeout);
+    }
+
+    template<typename T>
+    void wait_for_value(const volatile T *var, T value,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        wait_for_value(var, value, sched_yield, timeout);
     }
 
     static ucs_log_func_rc_t
