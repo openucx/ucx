@@ -257,9 +257,8 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
                      sizeof(watch_filename));
 
     /* Create directory path */
-    ret = ucs_vfs_sock_mkdir(path, watch_dir, sizeof(watch_dir));
+    ret = ucs_vfs_sock_mkdir(path);
     if (ret != 0) {
-        ucs_diag("failed to create directory '%s': %m", watch_dir);
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
@@ -280,6 +279,8 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     }
 
     /* Watch for new files in 'watch_dir' */
+    ucs_strncpy_safe(watch_dir, path, sizeof(watch_dir));
+    dirname(watch_dir);
     ucs_vfs_fuse_context.watch_desc = inotify_add_watch(
             ucs_vfs_fuse_context.inotify_fd, watch_dir, IN_CREATE);
     if (ucs_vfs_fuse_context.watch_desc < 0) {

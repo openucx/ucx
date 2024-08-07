@@ -25,6 +25,10 @@ enum {
 };
 
 
+#define vfs_error ucs_error
+#define vfs_log   ucs_debug
+
+
 typedef struct {
     int        action;
     int        foreground;

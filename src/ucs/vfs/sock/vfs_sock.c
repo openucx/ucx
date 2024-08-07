@@ -11,6 +11,7 @@
 #include "vfs_sock.h"
 
 #include <ucs/config/global_opts.h>
+#include <ucs/debug/log_def.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/sys/string.h>
 #include <sys/socket.h>
@@ -37,14 +38,15 @@ void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
                                sizeof(un_addr->sun_path));
 }
 
-int ucs_vfs_sock_mkdir(const char *sock_path, char *dir, size_t dir_size)
+int ucs_vfs_sock_mkdir(const char *sock_path)
 {
+    char sock_path_dir[PATH_MAX];
     int ret;
 
-    strncpy(dir, sock_path, dir_size);
-    dirname(dir);
-    ret = mkdir(dir, S_IRWXU);
+    ucs_strncpy_safe(sock_path_dir, sock_path, sizeof(sock_path_dir));
+    ret = mkdir(dirname(sock_path_dir), S_IRWXU);
     if ((ret < 0) && (errno != EEXIST)) {
+        ucs_diag("failed to create directory '%s': %m", sock_path_dir);
         return -errno;
     }
 
