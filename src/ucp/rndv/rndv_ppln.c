@@ -125,11 +125,18 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         status        = ucp_proto_rndv_ack_init(
                 init_params, UCP_PROTO_RNDV_ATS_NAME, &ppln_caps,
                 ppln_overhead, &rpriv.ack, &caps);
-        if (status == UCS_OK) {
-            ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
-                                       proto->cfg_priority,
-                                       &caps, &rpriv, sizeof(rpriv));
+        if (status != UCS_OK) {
+            continue;
         }
+
+        status = ucp_proto_rndv_predict_prev_stages(init_params, &caps);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+                                   proto->cfg_priority,
+                                   &caps, &rpriv, sizeof(rpriv));
         ucp_proto_select_caps_cleanup(&ppln_caps);
     }
 }
