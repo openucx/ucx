@@ -10,7 +10,9 @@
 
 #include "vfs_sock.h"
 
+#include <ucs/config/global_opts.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -27,22 +29,12 @@ typedef struct {
 } UCS_S_PACKED ucs_vfs_msg_t;
 
 
-/* Ideally we should use ucs_fill_filename_template here, but ucs library is
- * not linked by vfs_sock */
-static void ucs_vfs_sock_template(const char *tmpl, char *buf, size_t max)
-{
-    if (NULL != strstr(tmpl, "%i")) {
-        snprintf(buf, max, tmpl, (int)geteuid());
-    } else {
-        strncpy(buf, tmpl, max);
-    }
-}
-
-void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr, const char *tmpl)
+void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
 {
     memset(un_addr, 0, sizeof(*un_addr));
     un_addr->sun_family = AF_UNIX;
-    ucs_vfs_sock_template(tmpl, un_addr->sun_path, sizeof(un_addr->sun_path));
+    ucs_fill_filename_template(ucs_global_opts.vfs_sock_path, un_addr->sun_path,
+                               sizeof(un_addr->sun_path));
 }
 
 int ucs_vfs_sock_mkdir(const char *sock_path, char *dir, size_t dir_size)

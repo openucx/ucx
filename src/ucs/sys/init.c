@@ -83,7 +83,9 @@ static UCS_F_NOOPTIMIZE void ucs_check_cpu_flags(void)
     }
 }
 
-static void ucs_modules_load()
+void ucs_modules_load();
+
+void __attribute__((weak)) ucs_modules_load()
 {
     UCS_MODULE_FRAMEWORK_DECLARE(ucs);
     UCS_MODULE_FRAMEWORK_LOAD(ucs, UCS_MODULE_LOAD_FLAG_GLOBAL);

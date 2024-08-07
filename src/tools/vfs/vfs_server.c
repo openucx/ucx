@@ -11,6 +11,7 @@
 #include "vfs_daemon.h"
 
 #include <ucs/datastruct/khash.h>
+#include <ucs/debug/log_def.h>
 #include <sys/poll.h>
 #include <signal.h>
 
@@ -76,10 +77,10 @@ static void vfs_server_log_context(int events)
     }
 
     if (p == log_message) {
-        vfs_log("<no open sockets>");
+        ucs_debug("<no open sockets>");
     } else {
         *(p - 1) = '\0';
-        vfs_log("%s", log_message);
+        ucs_debug("%s", log_message);
     }
 }
 
@@ -93,7 +94,7 @@ static int vfs_server_poll_events()
     if (ret < 0) {
         ret = -errno;
         if (errno != EINTR) {
-            vfs_error("poll(nfds=%d) failed: %m", vfs_server_context.nfds)
+            ucs_error("poll(nfds=%d) failed: %m", vfs_server_context.nfds);
         }
         return ret;
     }
@@ -106,7 +107,7 @@ static void vfs_server_close_fd(int fd)
 {
     int ret = close(fd);
     if (ret < 0) {
-        vfs_error("failed to close fd %d: %m", fd);
+        ucs_error("failed to close fd %d: %m", fd);
     }
 }
 
@@ -115,7 +116,7 @@ static void vfs_server_log_fd(int idx, const char *message)
     vfs_serever_fd_state_t *fd_state = &vfs_server_context.fd_state[idx];
     struct pollfd *pfd               = &vfs_server_context.poll_fds[idx];
 
-    vfs_log("%s fd[%d]=%d %s, pid: %d fuse_fd: %d", message, idx, pfd->fd,
+    ucs_debug("%s fd[%d]=%d %s, pid: %d fuse_fd: %d", message, idx, pfd->fd,
             vfs_server_fd_state_names[fd_state->state], fd_state->fuse_fd,
             fd_state->pid);
 }
@@ -126,13 +127,13 @@ static int vfs_server_add_fd(int fd, vfs_socket_state_t state)
 
     ret = fcntl(fd, F_GETFL);
     if (ret < 0) {
-        vfs_error("fcntl(%d, F_GETFL) failed: %m", fd);
+        ucs_error("fcntl(%d, F_GETFL) failed: %m", fd);
         return -errno;
     }
 
     ret = fcntl(fd, F_SETFL, ret | O_NONBLOCK);
     if (ret < 0) {
-        vfs_error("fcntl(%d, F_SETFL) failed: %m", fd);
+        ucs_error("fcntl(%d, F_SETFL) failed: %m", fd);
         return -errno;
     }
 
@@ -186,7 +187,7 @@ static void vfs_server_accept(int listen_fd)
 
     connfd = accept(listen_fd, NULL, NULL);
     if (connfd < 0) {
-        vfs_error("accept(listen_fd=%d) failed: %m", listen_fd);
+        ucs_error("accept(listen_fd=%d) failed: %m", listen_fd);
         return;
     }
 
@@ -204,7 +205,7 @@ static void vfs_server_mount(int idx, pid_t pid)
     int fuse_fd;
 
     if (pid < 0) {
-        vfs_error("received invalid pid: %d", pid);
+        ucs_error("received invalid pid: %d", pid);
         vfs_server_remove_fd(idx);
         return;
     }
@@ -229,7 +230,7 @@ static void vfs_server_recv(int idx)
 
     ret = ucs_vfs_sock_recv(vfs_server_context.poll_fds[idx].fd, &vfs_msg_in);
     if (ret < 0) {
-        vfs_error("failed to receive a message: %d (%s)", ret, strerror(-ret));
+        ucs_error("failed to receive a message: %d (%s)", ret, strerror(-ret));
         vfs_server_remove_fd(idx);
         return;
     }
@@ -250,7 +251,7 @@ static void vfs_server_recv(int idx)
         vfs_server_remove_fd(idx);
         break;
     default:
-        vfs_error("ignoring invalid action %d", vfs_msg_in.action);
+        ucs_error("ignoring invalid action %d", vfs_msg_in.action);
         vfs_server_remove_fd(idx);
         break;
     }
@@ -291,7 +292,7 @@ static void vfs_server_handle_pollout(int idx)
     vfs_msg_out.fd     = vfs_server_context.fd_state[idx].fuse_fd;
     ret = ucs_vfs_sock_send(vfs_server_context.poll_fds[idx].fd, &vfs_msg_out);
     if (ret < 0) {
-        vfs_error("failed to send a message: %d", ret);
+        ucs_error("failed to send a message: %d", ret);
         vfs_server_remove_fd(idx);
         return;
     }

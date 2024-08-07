@@ -401,7 +401,7 @@ static void *ucs_vfs_fuse_thread_func(void *arg)
     }
 
 again:
-    ucs_vfs_sock_get_address(&un_addr, ucs_global_opts.vfs_sock_path);
+    ucs_vfs_sock_get_address(&un_addr);
     ucs_debug("connecting vfs socket %d to daemon on '%s'", connfd,
               un_addr.sun_path);
     ret = connect(connfd, (const struct sockaddr*)&un_addr, sizeof(un_addr));

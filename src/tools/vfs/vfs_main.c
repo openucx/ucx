@@ -10,6 +10,7 @@
 
 #include "vfs_daemon.h"
 
+#include <ucs/debug/log_def.h>
 #include <sys/wait.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -22,8 +23,7 @@ vfs_opts_t g_opts = {
     .foreground     = 0,
     .verbose        = 0,
     .mountpoint_dir = VFS_DEFAULT_MOUNTPOINT_DIR,
-    .mount_opts     = "",
-    .sock_path      = UCX_VFS_SOCK_DEFAULT_PATH
+    .mount_opts     = ""
 };
 
 const char *vfs_action_names[] = {
@@ -65,11 +65,11 @@ static int vfs_run_fusermount(char **extra_argv)
     }
     *(p - 1) = '\0';
 
-    vfs_log("exec '%s'", command);
+    ucs_debug("exec '%s'", command);
 
     child_pid = fork();
     if (child_pid == -1) {
-        vfs_error("fork() failed: %m");
+        ucs_error("fork() failed: %m");
         return -1;
     }
 
@@ -77,7 +77,7 @@ static int vfs_run_fusermount(char **extra_argv)
         if (!g_opts.verbose) {
             devnull_fd = open("/dev/null", O_WRONLY);
             if (devnull_fd < 0) {
-                vfs_error("failed open /dev/null: %m");
+                ucs_error("failed open /dev/null: %m");
                 exit(1);
             }
 
@@ -86,19 +86,19 @@ static int vfs_run_fusermount(char **extra_argv)
             close(devnull_fd);
         }
         execvp(argv[0], argv);
-        vfs_error("failed to execute '%s': %m", command);
+        ucs_error("failed to execute '%s': %m", command);
         exit(1);
     }
 
     ret = waitpid(child_pid, &status, 0);
     if (ret < 0) {
-        vfs_error("waitpid(%d) failed: %m", child_pid);
+        ucs_error("waitpid(%d) failed: %m", child_pid);
         return -errno;
     } else if (WIFEXITED(status) && (WEXITSTATUS(status) != 0)) {
-        vfs_error("'%s' exited with status %d", command, WEXITSTATUS(status));
+        ucs_error("'%s' exited with status %d", command, WEXITSTATUS(status));
         return -1;
     } else if (!WIFEXITED(status)) {
-        vfs_error("'%s' did not exit properly (%d)", command, status);
+        ucs_error("'%s' did not exit properly (%d)", command, status);
         return -1;
     }
 
@@ -176,20 +176,21 @@ int vfs_mount(int pid)
     ret = mkdir(mountpoint, S_IRWXU);
     if ((ret < 0) && (errno != EEXIST)) {
         ret = -errno;
-        vfs_error("failed to create directory '%s': %m", mountpoint);
+        ucs_error("failed to create directory '%s': %m", mountpoint);
         return ret;
     }
 
     /* Mount a new FUSE filesystem in the mount point directory */
-    vfs_log("mounting directory '%s' with options '%s'", mountpoint, mountopts);
+    ucs_debug("mounting directory '%s' with options '%s'", mountpoint,
+              mountopts);
     fuse_fd = fuse_open_channel(mountpoint, mountopts);
     if (fuse_fd < 0) {
-        vfs_error("fuse_open_channel(%s,opts=%s) failed: %m", mountpoint,
+        ucs_error("fuse_open_channel(%s,opts=%s) failed: %m", mountpoint,
                   mountopts);
         return fuse_fd;
     }
 
-    vfs_log("mounted directory '%s' with fd %d", mountpoint, fuse_fd);
+    ucs_debug("mounted directory '%s' with fd %d", mountpoint, fuse_fd);
     return fuse_fd;
 }
 
@@ -212,10 +213,10 @@ int vfs_unmount(int pid)
     }
 
     /* Remove mount point directory */
-    vfs_log("removing directory '%s'", mountpoint);
+    ucs_debug("removing directory '%s'", mountpoint);
     ret = rmdir(mountpoint);
     if (ret < 0) {
-        vfs_error("failed to remove directory '%s': %m", mountpoint);
+        ucs_error("failed to remove directory '%s': %m", mountpoint);
         return ret;
     }
 
@@ -226,15 +227,15 @@ static int vfs_unlink_socket(int silent_notexist)
 {
     int ret;
 
-    vfs_log("removing existing socket '%s'", g_sockaddr.sun_path);
+    ucs_debug("removing existing socket '%s'", g_sockaddr.sun_path);
 
     ret = unlink(g_sockaddr.sun_path);
     if (ret < 0) {
         ret = -errno;
         if (silent_notexist && (errno == ENOENT)) {
-            vfs_log("could not unlink '%s': %m", g_sockaddr.sun_path);
+            ucs_debug("could not unlink '%s': %m", g_sockaddr.sun_path);
         } else {
-            vfs_error("could not unlink '%s': %m", g_sockaddr.sun_path);
+            ucs_error("could not unlink '%s': %m", g_sockaddr.sun_path);
         }
         return ret;
     }
@@ -251,20 +252,20 @@ static int vfs_listen(int silent_addinuse_err)
     ret = umask(~S_IRWXU);
     if (ret < 0) {
         ret = -errno;
-        vfs_error("failed to set umask permissions: %m");
+        ucs_error("failed to set umask permissions: %m");
         goto out;
     }
 
     ret = ucs_vfs_sock_mkdir(g_sockaddr.sun_path, dir, sizeof(dir));
     if (ret != 0) {
-        vfs_error("failed to create directory '%s': %m", dir);
+        ucs_error("failed to create directory '%s': %m", dir);
         goto out;
     }
 
     listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (listen_fd < 0) {
         ret = -errno;
-        vfs_error("failed to create listening socket: %m");
+        ucs_error("failed to create listening socket: %m");
         goto out;
     }
 
@@ -273,7 +274,7 @@ static int vfs_listen(int silent_addinuse_err)
     if (ret < 0) {
         ret = -errno;
         if ((errno != EADDRINUSE) || !silent_addinuse_err) {
-            vfs_error("bind(%s) failed: %m", g_sockaddr.sun_path);
+            ucs_error("bind(%s) failed: %m", g_sockaddr.sun_path);
         }
         goto out_close;
     }
@@ -281,11 +282,11 @@ static int vfs_listen(int silent_addinuse_err)
     ret = listen(listen_fd, 128);
     if (ret < 0) {
         ret = -errno;
-        vfs_error("listen() failed: %m");
+        ucs_error("listen() failed: %m");
         goto out_unlink;
     }
 
-    vfs_log("listening for connections on '%s'", g_sockaddr.sun_path);
+    ucs_debug("listening for connections on '%s'", g_sockaddr.sun_path);
     ret = vfs_server_loop(listen_fd);
 
 out_unlink:
@@ -303,12 +304,12 @@ static int vfs_connect_and_act()
     int connfd;
     int ret;
 
-    vfs_log("connecting to '%s'", g_sockaddr.sun_path);
+    ucs_debug("connecting to '%s'", g_sockaddr.sun_path);
 
     connfd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (connfd < 0) {
         ret = -errno;
-        vfs_error("failed to create connection socket: %m");
+        ucs_error("failed to create connection socket: %m");
         goto out;
     }
 
@@ -317,21 +318,21 @@ static int vfs_connect_and_act()
     if (ret < 0) {
         ret = -errno;
         if (errno == ECONNREFUSED) {
-            vfs_log("connect(%s) failed: %m", g_sockaddr.sun_path);
+            ucs_debug("connect(%s) failed: %m", g_sockaddr.sun_path);
         } else {
-            vfs_error("connect(%s) failed: %m", g_sockaddr.sun_path);
+            ucs_error("connect(%s) failed: %m", g_sockaddr.sun_path);
         }
         goto out_close;
     }
 
     if (g_opts.action < UCS_VFS_SOCK_ACTION_LAST) {
-        vfs_log("sending action '%s'", vfs_action_names[g_opts.action]);
+        ucs_debug("sending action '%s'", vfs_action_names[g_opts.action]);
 
         /* send action */
         vfs_msg_out.action = g_opts.action;
         ret                = ucs_vfs_sock_send(connfd, &vfs_msg_out);
         if (ret < 0) {
-            vfs_error("failed to send: %d", ret);
+            ucs_error("failed to send: %d", ret);
             goto out_close;
         }
 
@@ -351,7 +352,7 @@ int vfs_start()
 
     mountpoint_dir_created = !mkdir(g_opts.mountpoint_dir, S_IRWXU);
     if (!mountpoint_dir_created && (errno != EEXIST)) {
-        vfs_error("could not create directory '%s': %m", g_opts.mountpoint_dir);
+        ucs_error("could not create directory '%s': %m", g_opts.mountpoint_dir);
         return -1;
     }
 
@@ -380,7 +381,7 @@ out:
     if (mountpoint_dir_created) {
         rmdir_ret = rmdir(g_opts.mountpoint_dir);
         if (rmdir_ret < 0) {
-            vfs_error("failed to remove directory '%s': %m",
+            ucs_error("failed to remove directory '%s': %m",
                       g_opts.mountpoint_dir);
 
             if (ret >= 0) {
@@ -394,9 +395,6 @@ out:
 
 static void vfs_usage()
 {
-    struct sockaddr_un sock_addr = {};
-
-    ucs_vfs_sock_get_address(&sock_addr, UCX_VFS_SOCK_DEFAULT_PATH);
     printf("Usage:   ucx_vfs [options]  [action]\n");
     printf("\n");
     printf("Options:\n");
@@ -405,8 +403,6 @@ static void vfs_usage()
     printf("  -o <opts>  Pass these mount options to mount.fuse\n");
     printf("  -f         Do not daemonize; run in foreground\n");
     printf("  -v         Enable verbose logging (requires -f)\n");
-    printf("  -l <path>  Set listening unix socket path (default: %s)\n",
-           sock_addr.sun_path);
     printf("\n");
     printf("Actions:\n");
     printf("   start     Run the daemon and listen for connection from UCX\n");
@@ -421,7 +417,7 @@ static int vfs_parse_args(int argc, char **argv)
     const char *action_str;
     int c, i;
 
-    while ((c = getopt(argc, argv, "d:o:vfl:h")) != -1) {
+    while ((c = getopt(argc, argv, "d:o:vfh")) != -1) {
         switch (c) {
         case 'd':
             g_opts.mountpoint_dir = optarg;
@@ -435,9 +431,6 @@ static int vfs_parse_args(int argc, char **argv)
         case 'f':
             g_opts.foreground = 1;
             break;
-        case 'l':
-            g_opts.sock_path = optarg;
-            break;
         case 'h':
         default:
             vfs_usage();
@@ -446,7 +439,7 @@ static int vfs_parse_args(int argc, char **argv)
     }
 
     if (g_opts.verbose && !g_opts.foreground) {
-        vfs_error("Option -v requires -f");
+        ucs_error("Option -v requires -f");
         vfs_usage();
         return -1;
     }
@@ -461,7 +454,7 @@ static int vfs_parse_args(int argc, char **argv)
             }
         }
         if (g_opts.action == UCS_VFS_SOCK_ACTION_LAST) {
-            vfs_error("invalid action '%s'", action_str);
+            ucs_error("invalid action '%s'", action_str);
             vfs_usage();
             return 0;
         }
@@ -469,7 +462,7 @@ static int vfs_parse_args(int argc, char **argv)
     }
 
     if (optind < argc) {
-        vfs_error("only one action can be specified");
+        ucs_error("only one action can be specified");
         vfs_usage();
         return -1;
     }
@@ -481,6 +474,12 @@ static int vfs_test_fuse()
 {
     char *argv[] = {"-V", NULL};
     return vfs_run_fusermount(argv);
+}
+
+/* Ignore all UCS modules */
+void ucs_modules_load()
+{
+    ucs_debug("ucs_modules_load() is not implemented");
 }
 
 int main(int argc, char **argv)
@@ -501,7 +500,7 @@ int main(int argc, char **argv)
         fuse_daemonize(0);
     }
 
-    ucs_vfs_sock_get_address(&g_sockaddr, g_opts.sock_path);
+    ucs_vfs_sock_get_address(&g_sockaddr);
 
     switch (g_opts.action) {
     case VFS_DAEMON_ACTION_START:
@@ -509,7 +508,7 @@ int main(int argc, char **argv)
     case UCS_VFS_SOCK_ACTION_STOP:
         return vfs_connect_and_act();
     default:
-        vfs_error("unexpected action %d", g_opts.action);
+        ucs_error("unexpected action %d", g_opts.action);
         return -1;
     }
 }

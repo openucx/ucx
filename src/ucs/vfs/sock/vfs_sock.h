@@ -52,7 +52,7 @@ typedef struct {
  *
  * @param [out] un_addr  Filled with socket address.
  */
-void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr, const char *tmpl);
+void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr);
 
 
 /**
