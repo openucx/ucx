@@ -181,8 +181,7 @@ int vfs_mount(int pid)
     }
 
     /* Mount a new FUSE filesystem in the mount point directory */
-    vfs_log("mounting directory '%s' with options '%s'", mountpoint,
-              mountopts);
+    vfs_log("mounting directory '%s' with options '%s'", mountpoint, mountopts);
     fuse_fd = fuse_open_channel(mountpoint, mountopts);
     if (fuse_fd < 0) {
         vfs_error("fuse_open_channel(%s,opts=%s) failed: %m", mountpoint,
@@ -474,10 +473,10 @@ static int vfs_test_fuse()
     return vfs_run_fusermount(argv);
 }
 
-/* Ignore all UCS modules */
+/* Skip all UCS modules */
 void ucs_modules_load()
 {
-    vfs_log("ucs_modules_load() is not implemented");
+    vfs_log("ucs_modules_load(): skip loading UCS modules in VFS daemon");
 }
 
 int main(int argc, char **argv)
