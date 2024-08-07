@@ -14,6 +14,9 @@
 /* This header file defines socket operations for communicating between UCS
  * library and VFS daemon */
 
+#define UCX_VFS_SOCK_DEFAULT_PATH "/run/user/%i/ucx/vfs.sock"
+
+
 /**
  * VFS socket message type
  */
@@ -49,7 +52,7 @@ typedef struct {
  *
  * @param [out] un_addr  Filled with socket address.
  */
-void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr);
+void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr, const char *tmpl);
 
 
 /**

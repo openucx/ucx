@@ -250,6 +250,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     ucs_status_t status;
     ssize_t nread;
     size_t offset;
+    int ret;
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
@@ -258,6 +259,14 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     ucs_strncpy_safe(watch_filename, ucs_basename(path),
                      sizeof(watch_filename));
     watch_dirname = dirname(dir_buf);
+
+    /* Create directory path */
+    ret = mkdir(watch_dirname, S_IRWXU);
+    if ((ret < 0) && (errno != EEXIST)) {
+        ucs_diag("failed to create directory '%s': %m", watch_dirname);
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
 
     /* Create inotify channel */
     ucs_vfs_fuse_context.inotify_fd = inotify_init();
@@ -328,8 +337,9 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             }
 
             ucs_trace("file '%s' created", event->name);
+            /* event->len is multiply of 16, not the string length */
             /* coverity[tainted_data] */
-            if ((event->len != (strlen(watch_filename) + 1)) ||
+            if ((event->len < (strlen(watch_filename) + 1)) ||
                 (strncmp(event->name, watch_filename, event->len) != 0)) {
                 ucs_trace("ignoring inotify create event of '%s'", event->name);
                 continue;
@@ -395,7 +405,7 @@ static void *ucs_vfs_fuse_thread_func(void *arg)
     }
 
 again:
-    ucs_vfs_sock_get_address(&un_addr);
+    ucs_vfs_sock_get_address(&un_addr, ucs_global_opts.vfs_sock_path);
     ucs_debug("connecting vfs socket %d to daemon on '%s'", connfd,
               un_addr.sun_path);
     ret = connect(connfd, (const struct sockaddr*)&un_addr, sizeof(un_addr));

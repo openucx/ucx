@@ -81,6 +81,11 @@ void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max)
             pf = pp + 2;
             p += strlen(p);
             break;
+        case 'i':
+            snprintf(p, end - p, "%u", geteuid());
+            pf = pp + 2;
+            p += strlen(p);
+            break;
         default:
             *(p++) = *pp;
             pf = pp + 1;

@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
+#include <libgen.h>
 
 
 vfs_opts_t g_opts = {
@@ -245,12 +246,23 @@ static int vfs_unlink_socket(int silent_notexist)
 /* return 0 or the (negative) value of errno in case of error */
 static int vfs_listen(int silent_addinuse_err)
 {
+    char dir_buf[PATH_MAX];
+    const char *sock_dirname;
     int listen_fd, ret;
 
     ret = umask(~S_IRWXU);
     if (ret < 0) {
         ret = -errno;
         vfs_error("failed to set umask permissions: %m");
+        goto out;
+    }
+
+    strncpy(dir_buf, g_sockaddr.sun_path, sizeof(dir_buf));
+    sock_dirname = dirname(dir_buf);
+    ret          = mkdir(sock_dirname, S_IRWXU);
+    if ((ret < 0) && (errno != EEXIST)) {
+        ret = -errno;
+        vfs_error("failed to create directory '%s': %m", sock_dirname);
         goto out;
     }
 
@@ -389,7 +401,7 @@ static void vfs_usage()
 {
     struct sockaddr_un sock_addr = {};
 
-    ucs_vfs_sock_get_address(&sock_addr);
+    ucs_vfs_sock_get_address(&sock_addr, NULL);
     printf("Usage:   ucx_vfs [options]  [action]\n");
     printf("\n");
     printf("Options:\n");
@@ -494,14 +506,7 @@ int main(int argc, char **argv)
         fuse_daemonize(0);
     }
 
-    if (g_opts.sock_path == NULL) {
-        ucs_vfs_sock_get_address(&g_sockaddr);
-    } else {
-        g_sockaddr.sun_family = AF_UNIX;
-        memset(g_sockaddr.sun_path, 0, sizeof(g_sockaddr.sun_path));
-        strncpy(g_sockaddr.sun_path, g_opts.sock_path,
-                sizeof(g_sockaddr.sun_path) - 1);
-    }
+    ucs_vfs_sock_get_address(&g_sockaddr, g_opts.sock_path);
 
     switch (g_opts.action) {
     case VFS_DAEMON_ACTION_START:
