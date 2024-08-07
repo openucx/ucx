@@ -912,6 +912,9 @@ void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
 int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
                                  ucs_sys_namespace_type_t sys_ns_type);
 
+void uct_iface_fill_info_str_buf(const uct_iface_is_reachable_params_t *params,
+                                 const char *fmt, ...);
+
 int uct_iface_is_reachable_params_valid(
         const uct_iface_is_reachable_params_t *params, uint64_t flags);
 

@@ -10,6 +10,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <ucs/datastruct/array.h>
+#include <sys/socket.h>
 #include <sys/uio.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -187,6 +188,16 @@ void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
  */
 void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
                                     const struct iovec *iov, size_t iovcnt);
+
+
+/**
+ * Append a sockaddr representation to the string buffer.
+ *
+ * @param [inout] strb  String buffer to append to.
+ * @param [in]    sa    Pointer to a sockaddr object.
+ */
+void ucs_string_buffer_append_saddr(ucs_string_buffer_t *strb,
+                                    const struct sockaddr *sa);
 
 
 /**
