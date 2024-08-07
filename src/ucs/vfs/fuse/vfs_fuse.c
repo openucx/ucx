@@ -245,8 +245,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     char event_buf[sizeof(struct inotify_event) + NAME_MAX];
     const struct inotify_event *event;
     char watch_filename[NAME_MAX];
-    const char *watch_dirname;
-    char dir_buf[PATH_MAX];
+    char watch_dir[PATH_MAX];
     ucs_status_t status;
     ssize_t nread;
     size_t offset;
@@ -254,16 +253,13 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
-    /* copy path components to 'dir_buf' and 'watch_filename' */
-    ucs_strncpy_safe(dir_buf, path, sizeof(dir_buf));
     ucs_strncpy_safe(watch_filename, ucs_basename(path),
                      sizeof(watch_filename));
-    watch_dirname = dirname(dir_buf);
 
     /* Create directory path */
-    ret = mkdir(watch_dirname, S_IRWXU);
-    if ((ret < 0) && (errno != EEXIST)) {
-        ucs_diag("failed to create directory '%s': %m", watch_dirname);
+    ret = ucs_vfs_sock_mkdir(path, watch_dir, sizeof(watch_dir));
+    if (ret != 0) {
+        ucs_diag("failed to create directory '%s': %m", watch_dir);
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
@@ -283,11 +279,11 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
         goto out;
     }
 
-    /* Watch for new files in 'watch_dirname' */
+    /* Watch for new files in 'watch_dir' */
     ucs_vfs_fuse_context.watch_desc = inotify_add_watch(
-            ucs_vfs_fuse_context.inotify_fd, watch_dirname, IN_CREATE);
+            ucs_vfs_fuse_context.inotify_fd, watch_dir, IN_CREATE);
     if (ucs_vfs_fuse_context.watch_desc < 0) {
-        ucs_error("inotify_add_watch(%s) failed: %m", watch_dirname);
+        ucs_error("inotify_add_watch(%s) failed: %m", watch_dir);
         status = UCS_ERR_IO_ERROR;
         goto out_close_inotify_fd;
     }
@@ -306,7 +302,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
      * 'stop' flag, or the file was created
      */
     ucs_debug("waiting for creation of '%s' in '%s'", watch_filename,
-              watch_dirname);
+              watch_dir);
     for (;;) {
         pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
         nread = read(ucs_vfs_fuse_context.inotify_fd, event_buf,

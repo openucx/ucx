@@ -12,12 +12,14 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
 #include <pwd.h>
+#include <libgen.h>
 
 
 typedef struct {
@@ -40,12 +42,21 @@ void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr, const char *tmpl)
 {
     memset(un_addr, 0, sizeof(*un_addr));
     un_addr->sun_family = AF_UNIX;
+    ucs_vfs_sock_template(tmpl, un_addr->sun_path, sizeof(un_addr->sun_path));
+}
 
-    if (NULL == tmpl) {
-        tmpl = UCX_VFS_SOCK_DEFAULT_PATH;
+int ucs_vfs_sock_mkdir(const char *sock_path, char *dir, size_t dir_size)
+{
+    int ret;
+
+    strncpy(dir, sock_path, dir_size);
+    dirname(dir);
+    ret = mkdir(dir, S_IRWXU);
+    if ((ret < 0) && (errno != EEXIST)) {
+        return -errno;
     }
 
-    ucs_vfs_sock_template(tmpl, un_addr->sun_path, sizeof(un_addr->sun_path));
+    return 0;
 }
 
 int ucs_vfs_sock_setopt_passcred(int sockfd)

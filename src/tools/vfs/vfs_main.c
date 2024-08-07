@@ -15,7 +15,6 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
-#include <libgen.h>
 
 
 vfs_opts_t g_opts = {
@@ -24,7 +23,7 @@ vfs_opts_t g_opts = {
     .verbose        = 0,
     .mountpoint_dir = VFS_DEFAULT_MOUNTPOINT_DIR,
     .mount_opts     = "",
-    .sock_path      = NULL
+    .sock_path      = UCX_VFS_SOCK_DEFAULT_PATH
 };
 
 const char *vfs_action_names[] = {
@@ -246,8 +245,7 @@ static int vfs_unlink_socket(int silent_notexist)
 /* return 0 or the (negative) value of errno in case of error */
 static int vfs_listen(int silent_addinuse_err)
 {
-    char dir_buf[PATH_MAX];
-    const char *sock_dirname;
+    char dir[PATH_MAX];
     int listen_fd, ret;
 
     ret = umask(~S_IRWXU);
@@ -257,12 +255,9 @@ static int vfs_listen(int silent_addinuse_err)
         goto out;
     }
 
-    strncpy(dir_buf, g_sockaddr.sun_path, sizeof(dir_buf));
-    sock_dirname = dirname(dir_buf);
-    ret          = mkdir(sock_dirname, S_IRWXU);
-    if ((ret < 0) && (errno != EEXIST)) {
-        ret = -errno;
-        vfs_error("failed to create directory '%s': %m", sock_dirname);
+    ret = ucs_vfs_sock_mkdir(g_sockaddr.sun_path, dir, sizeof(dir));
+    if (ret != 0) {
+        vfs_error("failed to create directory '%s': %m", dir);
         goto out;
     }
 
@@ -401,7 +396,7 @@ static void vfs_usage()
 {
     struct sockaddr_un sock_addr = {};
 
-    ucs_vfs_sock_get_address(&sock_addr, NULL);
+    ucs_vfs_sock_get_address(&sock_addr, UCX_VFS_SOCK_DEFAULT_PATH);
     printf("Usage:   ucx_vfs [options]  [action]\n");
     printf("\n");
     printf("Options:\n");

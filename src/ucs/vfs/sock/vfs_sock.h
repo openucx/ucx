@@ -56,6 +56,17 @@ void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr, const char *tmpl);
 
 
 /**
+ * Find directory in the given path, and create it if it does not exist.
+ *
+ * @param [in]   sock_path Path to the socket file.
+ * @param [out]  dir       Path to the created directory.
+ * @param [in]   dir_size  Size of the 'dir' buffer.
+ * @return 0 on success, or the negative value of errno in case of failure.
+ */
+int ucs_vfs_sock_mkdir(const char *sock_path, char *dir, size_t dir_size);
+
+
+/**
  * Enable receiving credentials of the remote process for every message.
  * Typically used by the VFS daemon to verify sender identity.
  *
