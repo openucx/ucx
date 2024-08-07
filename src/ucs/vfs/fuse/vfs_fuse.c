@@ -337,7 +337,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             }
 
             ucs_trace("file '%s' created", event->name);
-            /* event->len is multiply of 16, not the string length */
+            /* event->len is a multiple of 16, not the string length */
             /* coverity[tainted_data] */
             if ((event->len < (strlen(watch_filename) + 1)) ||
                 (strncmp(event->name, watch_filename, event->len) != 0)) {
