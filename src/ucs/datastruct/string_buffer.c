@@ -44,7 +44,7 @@ void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb)
 
 void ucs_string_buffer_reset(ucs_string_buffer_t *strb)
 {
-    ucs_array_length(strb) = 0;
+    ucs_array_clear(strb);
 }
 
 size_t ucs_string_buffer_length(ucs_string_buffer_t *strb)

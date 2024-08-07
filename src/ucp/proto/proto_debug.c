@@ -500,9 +500,10 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
     }
 }
 
-static ucp_proto_perf_node_t *
-ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type, const char *name,
-                        const char *desc_fmt, va_list ap)
+ucp_proto_perf_node_t *ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
+                                               unsigned selected_child,
+                                               const char *name,
+                                               const char *desc_fmt, va_list ap)
 {
     ucp_proto_perf_node_t *perf_node;
 
@@ -518,6 +519,12 @@ ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type, const char *name,
     ucs_assert(name != NULL);
     ucs_strncpy_safe(perf_node->name, name, sizeof(perf_node->name));
     ucs_vsnprintf_safe(perf_node->desc, sizeof(perf_node->desc), desc_fmt, ap);
+
+    if (type == UCP_PROTO_PERF_NODE_TYPE_DATA) {
+        ucs_array_init_dynamic(&perf_node->data);
+    } else if (type == UCP_PROTO_PERF_NODE_TYPE_SELECT) {
+        perf_node->selected_child = selected_child;
+    }
 
     return perf_node;
 }
@@ -539,14 +546,15 @@ static void ucp_proto_perf_node_free(ucp_proto_perf_node_t *perf_node)
     ucs_free(perf_node);
 }
 
-#define UCP_PROTO_PERF_NODE_NEW(_type, _name, _desc_fmt) \
+#define UCP_PROTO_PERF_NODE_NEW(_type, _selected_child, _name, _desc_fmt) \
     ({ \
         ucp_proto_perf_node_t *__perf_node; \
         va_list __ap; \
         \
         va_start(__ap, _desc_fmt); \
-        __perf_node = ucp_proto_perf_node_new( \
-                UCP_PROTO_PERF_NODE_TYPE_##_type, _name, _desc_fmt, __ap); \
+        __perf_node = ucp_proto_perf_node_new(UCP_PROTO_PERF_NODE_TYPE_##_type, \
+                                              _selected_child, _name, \
+                                              _desc_fmt, __ap); \
         va_end(__ap); \
         \
         if (__perf_node == NULL) { \
@@ -559,28 +567,20 @@ static void ucp_proto_perf_node_free(ucp_proto_perf_node_t *perf_node)
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new_data(const char *name, const char *desc_fmt, ...)
 {
-    ucp_proto_perf_node_t *perf_node;
-
-    perf_node = UCP_PROTO_PERF_NODE_NEW(DATA, name, desc_fmt);
-    ucs_array_init_dynamic(&perf_node->data);
-    return perf_node;
+    return UCP_PROTO_PERF_NODE_NEW(DATA, 0, name, desc_fmt);
 }
 
 ucp_proto_perf_node_t *ucp_proto_perf_node_new_select(const char *name,
                                                       unsigned selected_child,
                                                       const char *desc_fmt, ...)
 {
-    ucp_proto_perf_node_t *perf_node;
-
-    perf_node                 = UCP_PROTO_PERF_NODE_NEW(SELECT, name, desc_fmt);
-    perf_node->selected_child = selected_child;
-    return perf_node;
+    return UCP_PROTO_PERF_NODE_NEW(SELECT, selected_child, name, desc_fmt);
 }
 
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new_compose(const char *name, const char *desc_fmt, ...)
 {
-    return UCP_PROTO_PERF_NODE_NEW(COMPOSE, name, desc_fmt);
+    return UCP_PROTO_PERF_NODE_NEW(COMPOSE, 0, name, desc_fmt);
 }
 
 void ucp_proto_perf_node_ref(ucp_proto_perf_node_t *perf_node)

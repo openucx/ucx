@@ -423,6 +423,16 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
         ucs_array_length(_array) = (_new_length); \
     }
 
+/**
+ * Remove all elements from array
+ *
+ * @param _array        Array to clean
+ */
+#define ucs_array_clear(_array) \
+    { \
+        ucs_array_length(_array) = 0; \
+    }
+
 
 /**
  * Remove the last element in the array (decrease length by 1)
