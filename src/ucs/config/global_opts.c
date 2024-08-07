@@ -227,8 +227,7 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
   ucs_offsetof(ucs_global_opts_t, vfs_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"VFS_SOCK_PATH", UCX_VFS_SOCK_DEFAULT_PATH,
-   "Listening UNIX socket path of the VFS daemon.\n"
-   "%i in the path will be replaced with user id.",
+   "Listening UNIX socket path of the VFS daemon.",
    ucs_offsetof(ucs_global_opts_t, vfs_sock_path), UCS_CONFIG_TYPE_STRING},
 
  {"VFS_THREAD_AFFINITY", "n",
