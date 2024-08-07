@@ -1,10 +1,44 @@
-#!/bin/bash -eExl
+#!/bin/bash -eEl
 
 realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 
 COV_MODULE="tools/cov-2019.12"
+
+usage() {
+	echo "Usage: $0 <release|devel> [--clean] [<configure opts>]"
+	echo
+	echo "Commands:"
+	echo "    release    build in release mode"
+	echo "    devel      build in development mode"
+	echo
+	echo "Options:"
+	echo "    --clean    start from a full build"
+	exit 1
+}
+
+parse_args() {
+	if [ "$#" -lt 1 ]; then
+		usage
+	fi
+
+	mode=$1
+	shift
+
+	if [ "$mode" != release -a "$mode" != devel ]; then
+		usage
+	fi
+
+	if [ "$#" -gt 0 -a "$1" = "--clean" ]; then
+		clean=yes
+		shift
+	else
+		clean=no
+	fi
+
+	configure_opts=$*
+}
 
 #
 # Run Coverity and report errors
@@ -46,17 +80,12 @@ modules_for_coverity_unload() {
 
 configure_coverity() {
 	ucx_build_type=$1
+	shift
 
 	xpmem_root=$(module show $XPMEM_MODULE 2>&1 | awk '/CPATH/ {print $3}' | sed -e 's,/include,,')
 	with_xpmem="--with-xpmem=$xpmem_root"
 
-	if [ "${ENABLE_JAVA:-yes}" = yes ]; then
-		java_opt="--with-java"
-	else
-		java_opt="--without-java"
-	fi
-
-	${WORKSPACE}/contrib/configure-$ucx_build_type --prefix=$ucx_inst --with-cuda --with-gdrcopy $java_opt $with_xpmem
+	${WORKSPACE}/contrib/configure-$ucx_build_type --prefix=$ucx_inst $with_xpmem $*
 
 	cov_build_id="cov_build_${ucx_build_type}"
 	cov_build="$ucx_build_dir/$cov_build_id"
@@ -92,14 +121,18 @@ run_coverity() {
 	return $rc
 }
 
+parse_args $*
+
+set -x
+
 az_init_modules
 modules_for_coverity
 
-if [ "${INCREMENTAL:-no}" = no ]; then
+if [ "$clean" = yes -o ! -d "${ucx_build_dir}" ]; then
 	prepare_build
-	configure_coverity "$@"
+	configure_coverity "$mode" $configure_opts
 else
 	cd "${ucx_build_dir}"
 fi
 
-run_coverity "$@"
+run_coverity "$mode"
