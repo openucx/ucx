@@ -1016,7 +1016,7 @@ void ucp_proto_select_write_info(
         proto     = &ucs_array_elem(&proto_init->protocols, proto_idx);
         range     = ucp_proto_flat_perf_find_lb(proto->flat_perf, range_start);
         ucs_assert_always(range != NULL);
-        ucs_assertv(range->start <= range_start, 
+        ucs_assertv(range->start <= range_start,
                     "range->start=%zu range_start=%zu",
                     range->start, range_start);
         ucs_assertv(range->end >= range_end, "range->end=%zu range_end=%zu",

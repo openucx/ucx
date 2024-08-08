@@ -261,12 +261,4 @@ unsigned ucp_protocols_count(void);
 void ucp_proto_default_query(const ucp_proto_query_params_t *params,
                              ucp_proto_query_attr_t *attr);
 
-
-// void ucp_proto_perf_copy(ucs_linear_func_t dest[UCP_PROTO_PERF_TYPE_LAST],
-//                          const ucs_linear_func_t src[UCP_PROTO_PERF_TYPE_LAST]);
-
-
-// void ucp_proto_perf_add(ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST],
-//                         ucs_linear_func_t func);
-
 #endif

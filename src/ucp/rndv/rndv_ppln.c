@@ -39,7 +39,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     static const double frag_overhead            = 30e-9;
     ucp_worker_h worker                          = init_params->worker;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
-    ucp_proto_common_init_params_t ack_params    = 
+    ucp_proto_common_init_params_t ack_params    =
             ucp_proto_common_params_init(init_params);
     ucp_proto_perf_t *ppln_perf, *ack_perf, *result_perf;
     const ucp_proto_perf_segment_t *frag_seg, *first_seg;

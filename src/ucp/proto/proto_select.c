@@ -860,13 +860,3 @@ int ucp_proto_select_elem_query(ucp_worker_h worker,
 
     return !(thresh_elem->proto_config.proto->flags & UCP_PROTO_FLAG_INVALID);
 }
-
-const ucp_proto_init_elem_t *
-ucp_proto_select_elem_get_proto(const ucp_proto_select_elem_t *select_elem,
-                                size_t msg_length)
-{
-    const ucp_proto_threshold_elem_t *thresh_elem;
-
-    thresh_elem = ucp_proto_select_thresholds_search(select_elem, msg_length);
-    return thresh_elem->proto_config.init_elem;
-}

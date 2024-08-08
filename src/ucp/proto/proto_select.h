@@ -201,8 +201,6 @@ ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
 void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short);
 
 
-
-
 void ucp_proto_select_short_init(ucp_worker_h worker,
                                  ucp_proto_select_t *proto_select,
                                  ucp_worker_cfg_index_t ep_cfg_index,
@@ -233,9 +231,5 @@ int ucp_proto_select_elem_query(ucp_worker_h worker,
                                 const ucp_proto_select_elem_t *select_elem,
                                 size_t msg_length,
                                 ucp_proto_query_attr_t *proto_attr);
-
-const ucp_proto_init_elem_t *
-ucp_proto_select_elem_get_proto(const ucp_proto_select_elem_t *select_elem,
-                                size_t msg_length);
 
 #endif

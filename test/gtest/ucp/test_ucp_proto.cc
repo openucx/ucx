@@ -640,7 +640,8 @@ const ucs_linear_func_t test_proto_perf::remote_tl_func = perf_func(20, 2000);
 const ucs_linear_func_t test_proto_perf::local_cpu_func = perf_func(30, 3000);
 const size_t test_proto_perf::max_envelope_check_size   = UCS_GBYTE;
 
-UCS_TEST_F(test_proto_perf, empty) {
+UCS_TEST_F(test_proto_perf, empty)
+{
     m_perf = create();
 
     make_flat_perf();
