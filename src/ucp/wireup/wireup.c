@@ -1424,7 +1424,7 @@ static ucs_status_t ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep,
 {
     ucp_lane_index_t old_lane, new_lane;
     ucp_wireup_ep_t *old_ep, *new_ep;
-    uct_ep_h uct_ep, msg_ep;
+    uct_ep_h uct_ep = NULL, msg_ep;
     ucp_rsc_index_t aux_rsc_index;
     ucs_queue_head_t pending_queue;
     int is_p2p;
@@ -1485,7 +1485,9 @@ static ucs_status_t ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep,
     return UCS_OK;
 
 destroy_ep:
-    uct_ep_destroy(uct_ep);
+    if (uct_ep != NULL) {
+        uct_ep_destroy(uct_ep);
+    }
     return status;
 }
 
