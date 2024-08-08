@@ -1613,7 +1613,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                           sizeof(in), out, sizeof(out),
                                           "QUERY_HCA_CAP, ODP", 0);
     if (status != UCS_OK) {
-        reason = "faied to query HCA capabilities";
+        reason = "failed to query HCA capabilities";
         goto no_odp;
     }
 
@@ -1639,7 +1639,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.send) ||
         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.write) ||
         !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, rc_odp_caps.read)) {
-        reason = "it's not suported for UD/RC transports";
+        reason = "it's not supported for UD/RC transports";
         goto no_odp;
     }
 
@@ -1647,7 +1647,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
         (!UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.send) ||
          !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.write) ||
          !UCT_IB_MLX5DV_GET(odp_scheme_cap, odp_cap, dc_odp_caps.read))) {
-        reason = "it's not suported for DC transport";
+        reason = "it's not supported for DC transport";
         goto no_odp;
     }
 

@@ -443,7 +443,7 @@ static ucs_status_t ucp_proto_rndv_put_zcopy_reset(ucp_request_t *req)
                            req->send.state.dt_iter.length);
     } else {
         /* Last ATP was not sent yet or length was less than number of lanes -
-           in both cases, each sent ATP acknownledged 1 byte. */
+           in both cases, each sent ATP acknowledged 1 byte. */
         ucp_datatype_iter_seek(&req->send.state.dt_iter,
                                req->send.rndv.put.atp_count,
                                UCS_BIT(UCP_DATATYPE_CONTIG));

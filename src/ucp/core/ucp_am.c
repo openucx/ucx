@@ -1500,7 +1500,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                                                first_ftr->super.msg_id));
 
     /* Alloc buffer for the data and its desc, as we know total_size.
-     * Need to allocate a separate rdesc which would be in one contigious chunk
+     * Need to allocate a separate rdesc which would be in one contiguous chunk
      * with data buffer. The layout of assembled message is below:
      *
      * +-------+-----------+--------+---------+---------+----------+

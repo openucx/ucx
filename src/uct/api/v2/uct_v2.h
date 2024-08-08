@@ -196,7 +196,7 @@ typedef struct {
      * operations simultaneously.
      * Protocols that require sending to multiple destinations at the same time
      * (such as keepalive) could benefit from using a transport that has a
-     * large number of maximum inflight endpoints.
+     * large number of maximum in-flight endpoints.
      * This field is set by the UCT layer.
      */
     size_t              max_inflight_eps;

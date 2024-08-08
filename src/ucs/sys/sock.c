@@ -542,7 +542,7 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
  * @param [in]  fd         The socket fd.
  * @param [in]  data       The pointer to user's data or pointer to the array of
  *                         iov elements.
- * @param [in]  count      The length of user's data or the number of elemnts in
+ * @param [in]  count      The length of user's data or the number of elements in
  *                         the array of iov.
  * @param [out] length_p   Pointer to the result length of user's data that was
  *                         sent/received.

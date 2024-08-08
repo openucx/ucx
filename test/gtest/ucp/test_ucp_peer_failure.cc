@@ -387,7 +387,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     flush_ep(sender(), 0, FAILING_EP_INDEX);
     EXPECT_EQ(UCS_OK, m_err_status);
 
-    /* Since UCT/UD EP has a SW implementation of reliablity on which peer
+    /* Since UCT/UD EP has a SW implementation of reliability on which peer
      * failure mechanism is based, we should set small UCT/UD EP timeout
      * for UCT/UD EPs for sender's UCP EP to reduce testing time */
     double prev_ib_ud_peer_timeout = sender().set_ib_ud_peer_timeout(3.);

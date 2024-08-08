@@ -513,7 +513,7 @@ uct_rc_mlx5_fill_tmh_priv_data(struct ibv_tmh *tmh, const void *hdr,
 {
     uct_rc_mlx5_tmh_priv_data_t *priv = (uct_rc_mlx5_tmh_priv_data_t*)tmh->reserved;
 
-    /* If header length is bigger tha max_rndv_priv_data size, need to add the
+    /* If header length is bigger than max_rndv_priv_data size, need to add the
      * rest to the TMH reserved field. */
     if (hdr_len > max_rndv_priv_data) {
         priv->length = hdr_len - max_rndv_priv_data;

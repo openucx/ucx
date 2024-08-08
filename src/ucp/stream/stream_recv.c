@@ -472,7 +472,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_t *ep_ext,
 
     rdesc_tmp.length         = length;
     rdesc_tmp.payload_offset = sizeof(*am_data); /* add sizeof(*rdesc) only if
-                                                    am_data wont be handled in
+                                                    am_data won't be handled in
                                                     place */
 
     /* First, process expected requests */

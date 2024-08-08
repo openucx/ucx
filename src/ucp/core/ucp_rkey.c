@@ -764,7 +764,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
      */
     rkey->cache.ep_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
 
-    /* Look up remote key's configration */
+    /* Look up remote key's configuration */
     rkey_config_key.ep_cfg_index       = ep->cfg_index;
     rkey_config_key.md_map             = rkey->md_map;
     rkey_config_key.mem_type           = rkey->mem_type;
