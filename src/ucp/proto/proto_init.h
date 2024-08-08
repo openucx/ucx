@@ -29,7 +29,7 @@ extern const char *ucp_envelope_convex_names[];
 
 
 /*
- * Accepts an array of performance functions for a given range and appends the
+ * Accepts a list of performance functions for a given range and appends the
  * convex or concave envelope of these functions to an output list.
  *
  * @param [in] funcs           Array of performance functions.
