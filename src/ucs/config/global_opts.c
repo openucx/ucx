@@ -17,6 +17,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <ucs/vfs/sock/vfs_sock.h>
 #include <sys/signal.h>
 
 
@@ -224,6 +225,10 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
  {"VFS_ENABLE", "y",
   "Enable virtual monitoring filesystem",
   ucs_offsetof(ucs_global_opts_t, vfs_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"VFS_SOCK_PATH", UCX_VFS_SOCK_DEFAULT_PATH,
+   "Listening UNIX socket path of the VFS daemon.",
+   ucs_offsetof(ucs_global_opts_t, vfs_sock_path), UCS_CONFIG_TYPE_STRING},
 
  {"VFS_THREAD_AFFINITY", "n",
   "Enable inheriting main process affinity for virtual monitoring filesystem\n"

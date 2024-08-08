@@ -83,7 +83,11 @@ static UCS_F_NOOPTIMIZE void ucs_check_cpu_flags(void)
     }
 }
 
-static void ucs_modules_load()
+void ucs_modules_load();
+
+/* Weak linker symbol to allow override it in certain binaries (ucx_vfx), which
+ * don't need to load any modules apart from the UCS library */
+void __attribute__((weak)) ucs_modules_load()
 {
     UCS_MODULE_FRAMEWORK_DECLARE(ucs);
     UCS_MODULE_FRAMEWORK_LOAD(ucs, UCS_MODULE_LOAD_FLAG_GLOBAL);
