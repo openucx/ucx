@@ -214,15 +214,26 @@ check_release_build() {
     build_reason=$1
     build_sourceversion=$2
     title_mask=$3
+    launch=False
 
-
-    if [ "${build_reason}" == "IndividualCI" ] || \
-       [ "${build_reason}" == "ResourceTrigger" ]
+    # DRP release scheduled testing
+    if [[ $build_reason = "Schedule" && $BUILD_DEFINITIONNAME = *"DRP" ]]
     then
         launch=True
+
+    elif [ "${build_reason}" == "IndividualCI" ] || [ "${build_reason}" == "ResourceTrigger" ]
+    then
+        if [[ "$BUILD_DEFINITIONNAME" == *"DRP" ]]
+        then
+            # Release from DRP only if main pipeline is disabled
+            install_az_tools
+            launch=$(check_main_pipeline_status)
+        else
+            launch=True
+        fi
+
     elif [ "${build_reason}" == "PullRequest" ]
     then
-        launch=False
         # In case of pull request, HEAD^ is the branch commit we merge with
         range="$(git rev-parse HEAD^)..${build_sourceversion}"
         for sha1 in `git log $range --format="%h"`
@@ -235,6 +246,25 @@ check_release_build() {
     echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
 }
 
+check_main_pipeline_status() {
+    status=$(az pipelines show \
+        --name "UCX release" \
+        --project "UCX" \
+        --organization "https://dev.azure.com/ucfconsort" \
+        --query 'queueStatus' \
+        -o tsv)
+
+    if [ "$status" == "disabled" ]; then
+        echo "True"
+    else
+        echo "False"
+    fi
+}
+
+install_az_tools() {
+    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+    az extension add --name azure-devops --allow-preview false
+}
 
 #
 # Return arch in the same format as Java System.getProperty("os.arch")
