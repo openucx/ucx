@@ -96,8 +96,8 @@ void ucp_wireup_ep_pending_queue_purge(uct_ep_h uct_ep,
                                        uct_pending_purge_callback_t cb,
                                        void *arg);
 
-void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
-                           ucp_rsc_index_t rsc_index, int is_p2p);
+ucs_status_t ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
+                           ucp_rsc_index_t rsc_index, int is_p2p, ucs_queue_head_t *pending_queue);
 
 void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                                   unsigned ep_flush_flags,
@@ -110,6 +110,14 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
                                ucp_rsc_index_t rsc_index);
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
+
+void ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep, uct_ep_h *msg_ep_p,
+                                  ucs_queue_head_t *pending_queue);
+
+static inline int ucp_wireup_ep_is_next_ep_active(ucp_wireup_ep_t *wireup_ep)
+{
+    return wireup_ep->aux_ep == NULL;
+}
 
 void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep);
 
