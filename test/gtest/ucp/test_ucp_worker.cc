@@ -86,6 +86,8 @@ protected:
         (*discarded_count_p)++;
     }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
     void test_worker_discard(void *ep_flush_func,
                              void *ep_pending_add_func,
                              void *ep_pending_purge_func,
@@ -291,6 +293,7 @@ out:
         cleanup();
         EXPECT_EQ(m_created_ep_count, m_destroyed_ep_count);
     }
+#pragma GCC diagnostic pop
 
     static void ep_destroy_func(uct_ep_h ep)
     {

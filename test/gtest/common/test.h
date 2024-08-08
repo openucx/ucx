@@ -261,20 +261,22 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public test_case_name 
   static ::testing::TestInfo* const test_info_;\
   GTEST_DISALLOW_COPY_AND_ASSIGN_(\
       GTEST_TEST_CLASS_NAME_(test_case_name, test_name));\
+    \
+  static ::testing::TestInfo* __attribute__ ((noinline)) create_test_info() { \
+        return ::testing::internal::MakeAndRegisterTestInfo( \
+            #test_case_name, \
+            (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
+            "", "", \
+            ::testing::internal::CodeLocation(__FILE__, __LINE__), \
+            (parent_id), \
+            test_case_name::SetUpTestCase, \
+            test_case_name::TearDownTestCase, \
+            new ::testing::internal::TestFactoryImpl< \
+                GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>); \
+  } \
 }; \
 \
-::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)\
-  ::test_info_ = \
-    ::testing::internal::MakeAndRegisterTestInfo( \
-        #test_case_name, \
-        (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
-        "", "", \
-        ::testing::internal::CodeLocation(__FILE__, __LINE__), \
-        (parent_id), \
-		test_case_name::SetUpTestCase, \
-		test_case_name::TearDownTestCase, \
-        new ::testing::internal::TestFactoryImpl< \
-            GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>); \
+::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_info_ = create_test_info(); \
 void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
 
 

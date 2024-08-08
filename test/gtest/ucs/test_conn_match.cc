@@ -173,7 +173,8 @@ const size_t test_conn_match::m_default_address_length = 64;
 size_t test_conn_match::m_purged_elems                 = 0;
 ucs_conn_match_ctx_t test_conn_match::m_conn_match_ctx = {};
 
-
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 UCS_TEST_F(test_conn_match, random_insert_retrieve) {
     const size_t max_conn_iters     =
             ucs_max(1, ucs_min(5, 128 / ucs::test_time_multiplier()));;       
@@ -284,7 +285,10 @@ UCS_TEST_F(test_conn_match, random_insert_retrieve) {
         }
     }
 }
+#pragma GCC diagnostic pop
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 UCS_TEST_F(test_conn_match, purge_elems) {
     const size_t        max_addresses  = 128;
     const ucs_conn_sn_t max_conns      = 128;
@@ -339,3 +343,4 @@ UCS_TEST_F(test_conn_match, purge_elems) {
         delete[] (uint8_t*)dest_address;
     }
 }
+#pragma GCC diagnostic pop

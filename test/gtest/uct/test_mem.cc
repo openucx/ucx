@@ -142,6 +142,8 @@ UCS_TEST_P(test_mem, md_alloc) {
     }
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 UCS_TEST_P(test_mem, md_fixed) {
     std::vector<md_resource> md_resources;
     uct_md_attr_t            md_attr;
@@ -217,6 +219,7 @@ UCS_TEST_P(test_mem, md_fixed) {
         uct_md_close(md);
     }
 }
+#pragma GCC diagnostic pop
 
 
 UCS_TEST_P(test_mem, mmap_fixed) {
