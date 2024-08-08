@@ -1424,8 +1424,9 @@ static ucs_status_t ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep,
 {
     ucp_lane_index_t old_lane, new_lane;
     ucp_wireup_ep_t *old_ep, *new_ep;
-    uct_ep_h uct_ep;
+    uct_ep_h uct_ep, msg_ep;
     ucp_rsc_index_t aux_rsc_index;
+    ucs_queue_head_t pending_queue;
     int is_p2p;
     ucs_status_t status;
 
@@ -1458,10 +1459,16 @@ static ucs_status_t ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep,
         is_p2p        = old_ep->flags & UCP_WIREUP_EP_FLAG_AUX_P2P;
     }
 
-    /* Move aux EP to new wireup lane */
     ucs_assert(aux_rsc_index != UCP_NULL_RESOURCE);
-    ucp_wireup_ep_set_aux(new_ep, ucp_wireup_ep_extract_msg_ep(old_ep),
-                          aux_rsc_index, is_p2p);
+    ucs_queue_head_init(&pending_queue);
+
+    /* Move aux EP to new wireup lane */
+    ucp_wireup_ep_extract_msg_ep(old_ep, &msg_ep, &pending_queue);
+    status = ucp_wireup_ep_set_aux(new_ep, msg_ep,
+                                   aux_rsc_index, is_p2p, &pending_queue);
+    if (status != UCS_OK) {
+        goto destroy_ep;
+    }
 
     /* Remove old wireup_ep as it's not needed anymore.
      * NOTICE: Next two lines are intentionally not merged with the lane
@@ -1476,6 +1483,10 @@ static ucs_status_t ucp_wireup_replace_wireup_msg_lane(ucp_ep_h ep,
     new_uct_eps[new_lane] = &new_ep->super.super;
     key->wireup_msg_lane  = new_lane;
     return UCS_OK;
+
+destroy_ep:
+    uct_ep_destroy(uct_ep);
+    return status;
 }
 
 static ucs_status_t

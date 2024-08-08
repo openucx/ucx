@@ -52,9 +52,26 @@ static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
-uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep)
+static void ucp_wireup_ep_pending_req_append(uct_pending_req_t *self, void *arg)
 {
-    uct_ep_h msg_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
+    ucp_request_t *proxy_req   = ucs_container_of(self, ucp_request_t,
+                                                  send.uct);
+    ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
+    ucs_queue_head_t *queue    = arg;
+
+    ucp_request_t *req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
+                                          send.uct);
+
+    ucs_atomic_sub32(&wireup_ep->pending_count, 1);
+    ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+    ucs_free(proxy_req);
+}
+
+void
+ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep, uct_ep_h *msg_ep_p,
+                             ucs_queue_head_t *pending_queue)
+{
+    uct_ep_h uct_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
 
     if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
         ucp_proxy_ep_set_uct_ep(&wireup_ep->super, NULL, 0, UCP_NULL_RESOURCE);
@@ -63,7 +80,10 @@ uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep)
         wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
     }
 
-    return msg_ep;
+    uct_ep_pending_purge(uct_ep, ucp_wireup_ep_pending_req_append, pending_queue);
+    ucs_assert(wireup_ep->pending_count == 0);
+
+    *msg_ep_p = uct_ep;
 }
 
 uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
@@ -215,11 +235,13 @@ static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
                                 ucp_ep_h);
 
-void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
-                           ucp_rsc_index_t rsc_index, int is_p2p)
+ucs_status_t ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
+                           ucp_rsc_index_t rsc_index, int is_p2p, ucs_queue_head_t *pending_queue)
 {
     ucp_worker_iface_t *wiface =
         ucp_worker_iface(wireup_ep->super.ucp_ep->worker, rsc_index);
+    ucp_request_t *req;
+    ucs_status_t status;
 
     ucs_assert(!ucp_wireup_ep_test(uct_ep));
     wireup_ep->aux_ep        = uct_ep;
@@ -229,7 +251,18 @@ void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
         wireup_ep->flags |= UCP_WIREUP_EP_FLAG_AUX_P2P;
     }
 
+    if (pending_queue != NULL) {
+        /* Add pending wireup messages to pending queue */
+        ucs_queue_for_each_extract(req, pending_queue, send.uct.priv, 1) {
+            status = ucp_wireup_ep_pending_add(&wireup_ep->super.super, &req->send.uct, 0);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+    }
+
     ucp_worker_iface_progress_ep(wiface);
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -271,8 +304,12 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
         return status;
     }
 
-    ucp_wireup_ep_set_aux(wireup_ep, uct_ep, select_info.rsc_index, 0);
+    status = ucp_wireup_ep_set_aux(wireup_ep, uct_ep, select_info.rsc_index, 0, NULL);
+    if (status != UCS_OK) {
+        uct_ep_destroy(uct_ep);
+        return status;
 
+    }
     ucs_debug("ep %p: wireup_ep %p created aux_ep %p to %s using "
               UCT_TL_RESOURCE_DESC_FMT, ucp_ep, wireup_ep, wireup_ep->aux_ep,
               ucp_ep_peer_name(ucp_ep),
