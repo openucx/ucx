@@ -103,8 +103,6 @@ test_ucp_peer_failure::test_ucp_peer_failure() :
     m_mem_type(UCS_MEMORY_TYPE_HOST),
     m_err_status(UCS_OK)
 {
-    m_sbuf.reset();
-    m_rbuf.reset();
     configure_peer_failure_settings();
 }
 
@@ -891,17 +889,20 @@ public:
     void init() override
     {
         modify_config("RNDV_SCHEME", "put_ppln");
+        // Avoid 2-stage ppln being selected, as the intent is to test 3-stage
+        // ppln protocol
         modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
         m_mem_type = UCS_MEMORY_TYPE_CUDA;
         test_ucp_peer_failure_rndv_abort::init();
+        if (!sender().is_rndv_put_ppln_supported()) {
+            cleanup();
+            UCS_TEST_SKIP_R("RNDV pipeline is not supported");
+        }
     }
 };
 
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
 {
-    if (!sender().is_rndv_put_ppln_supported()) {
-        UCS_TEST_SKIP_R("RNDV pipeline is not supported");
-    }
     // Sender is supposed to use put_zcopy, because put_mtype is not supported
     // with error handling yet
     rndv_progress_failure_test(rndv_mode::rndv_put, true);
