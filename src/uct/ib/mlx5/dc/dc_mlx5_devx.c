@@ -53,9 +53,12 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
     } else {
         UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_0,
-                          ib_iface->config.dp_ordering_ooo != UCS_NO);
+                          (ib_iface->config.dp_ordering_ooo == UCS_YES) ||
+                          (ib_iface->config.dp_ordering_ooo == UCS_TRY));
+        UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_1, 0);
         UCT_IB_MLX5DV_SET(dctc, dctc, dp_ordering_force,
-                          ib_iface->config.dp_ordering_ooo == UCS_YES);
+                          (ib_iface->config.dp_ordering_ooo == UCS_NO) ||
+                          (ib_iface->config.dp_ordering_ooo == UCS_YES));
     }
 
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->rx.port_affinity);

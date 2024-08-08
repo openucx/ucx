@@ -487,15 +487,15 @@ uct_rc_mlx5_dp_ordering_ooo_get(uint8_t dp_ordering_ooo,
                                 uint8_t dp_ordering_ooo_force,
                                 uct_ib_mlx5_iface_config_t *config)
 {
-    if (!dp_ordering_ooo || (config->ar_enable == UCS_NO)) {
+    if ((config->ar_enable == UCS_TRY) && dp_ordering_ooo) {
+        return UCS_TRY;
+    } else if ((config->ar_enable == UCS_NO) && dp_ordering_ooo_force) {
         return UCS_NO;
+    } else if ((config->ar_enable == UCS_YES) && dp_ordering_ooo) {
+        return (dp_ordering_ooo_force ? UCS_YES : UCS_TRY);
     }
 
-    if (dp_ordering_ooo_force && (config->ar_enable == UCS_YES)) {
-        return UCS_YES;
-    }
-
-    return UCS_TRY;
+    return UCS_AUTO; /* Do not change anything */
 }
 
 
