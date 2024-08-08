@@ -8,6 +8,7 @@
 #define UCP_PROTO_SELECT_H_
 
 #include "proto.h"
+#include "proto_perf.h"
 
 #include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/array.h>
@@ -43,11 +44,12 @@
 
 
 typedef struct {
-    ucp_proto_id_t   proto_id;
-    size_t           priv_offset;
-    size_t           cfg_thresh; /* Configured protocol threshold */
-    unsigned         cfg_priority; /* Priority of configuration */
-    ucp_proto_caps_t caps;
+    ucp_proto_id_t        proto_id;
+    size_t                priv_offset;
+    size_t                cfg_thresh; /* Configured protocol threshold */
+    unsigned              cfg_priority; /* Priority of configuration */
+    ucp_proto_perf_t      *perf;
+    ucp_proto_flat_perf_t *flat_perf; /* Flat performance considering all parts */
 } ucp_proto_init_elem_t;
 
 
@@ -111,6 +113,9 @@ typedef struct {
      * existing in-progress request
      */
     ucp_proto_select_param_t select_param;
+
+    /* Pointer to the corresponding initialization data */
+    const ucp_proto_init_elem_t *init_elem;
 } ucp_proto_config_t;
 
 
@@ -129,9 +134,6 @@ typedef struct {
 typedef struct {
     /* Array of which protocol to use for different message sizes */
     const ucp_proto_threshold_elem_t  *thresholds;
-
-    /* Estimated performance for the selected protocols */
-    ucp_proto_perf_range_t            *perf_ranges;
 
     /* All the initialized protocols that can be chosen */
     ucp_proto_select_init_protocols_t proto_init;
@@ -176,13 +178,11 @@ ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
 void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
 
 
-void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
-                                size_t cfg_thresh, unsigned cfg_priority,
-                                const ucp_proto_caps_t *proto_caps,
-                                const void *priv, size_t priv_size);
-
-
-void ucp_proto_select_caps_cleanup(ucp_proto_caps_t *caps);
+ucs_status_t
+ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
+                           size_t cfg_thresh, unsigned cfg_priority,
+                           ucp_proto_perf_t *perf, const void *priv,
+                           size_t priv_size);
 
 
 ucp_proto_select_elem_t *
@@ -199,6 +199,8 @@ ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
 
 
 void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short);
+
+
 
 
 void ucp_proto_select_short_init(ucp_worker_h worker,
@@ -231,5 +233,9 @@ int ucp_proto_select_elem_query(ucp_worker_h worker,
                                 const ucp_proto_select_elem_t *select_elem,
                                 size_t msg_length,
                                 ucp_proto_query_attr_t *proto_attr);
+
+const ucp_proto_init_elem_t *
+ucp_proto_select_elem_get_proto(const ucp_proto_select_elem_t *select_elem,
+                                size_t msg_length);
 
 #endif

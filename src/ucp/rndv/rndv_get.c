@@ -60,7 +60,7 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
                                             cap.get.opt_zcopy_align),
     };
     ucp_proto_rndv_bulk_priv_t rpriv;
-    ucp_proto_caps_t caps;
+    ucp_proto_perf_t *perf;
     ucs_status_t status;
     size_t priv_size;
 
@@ -71,13 +71,13 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
     }
 
     status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_GET_DESC,
-                                      UCP_PROTO_RNDV_ATS_NAME, &rpriv, &caps);
+                                      UCP_PROTO_RNDV_ATS_NAME, &perf, &rpriv);
     if (status != UCS_OK) {
         return;
     }
 
     priv_size = UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, mpriv);
-    ucp_proto_common_add_proto(&params.super, &caps, &rpriv, priv_size);
+    ucp_proto_common_add_proto(&params.super, perf, &rpriv, priv_size);
 }
 
 static UCS_F_ALWAYS_INLINE void

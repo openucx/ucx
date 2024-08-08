@@ -414,6 +414,67 @@ err:
     return status;
 }
 
+ucs_status_t ucp_proto_perf_aggregate2(const char *name,
+                                       const ucp_proto_perf_t *perf1,
+                                       const ucp_proto_perf_t *perf2,
+                                       ucp_proto_perf_t **perf_p)
+{
+    const ucp_proto_perf_t *perf_elems[2] = {perf1, perf2};
+
+    return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
+}
+
+ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
+                                   ucp_proto_perf_t **perf_p)
+{
+    ucp_proto_perf_segment_t *remote_seg, *new_seg;
+    ucp_proto_perf_factors_t perf_factors;
+    ucp_proto_perf_t *perf;
+    ucs_status_t status;
+
+    ucp_proto_perf_check(remote_perf);
+
+    status = ucp_proto_perf_create("remote", &perf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Turn local factors to remote and vice versa */
+    ucp_proto_perf_segment_foreach(remote_seg, remote_perf) {
+        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU];
+        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL];
+        perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY];
+        perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY];
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_MTYPE_COPY] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_MTYPE_COPY];
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_TL] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL];
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU] =
+                remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU];
+
+        status = ucp_proto_perf_segment_new(perf, remote_seg->start,
+                                            remote_seg->end, &new_seg);
+        if (status != UCS_OK) {
+            goto err_cleanup_perf;
+        }
+
+        ucs_list_add_tail(&perf->segments, &new_seg->list);
+        ucp_proto_perf_segment_add_funcs(perf, new_seg, perf_factors,
+                                         remote_seg->node);
+    }
+
+    *perf_p = perf;
+    return UCS_OK;
+
+err_cleanup_perf:
+    ucp_proto_perf_destroy(perf);
+    return status;
+}
+
 static ucs_status_t
 ucp_proto_flat_perf_alloc(ucp_proto_flat_perf_t **flat_perf_p)
 {

@@ -39,26 +39,26 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     static const double frag_overhead            = 30e-9;
     ucp_worker_h worker                          = init_params->worker;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
-    ucp_proto_common_init_params_t err_params    = {
-        .super = *init_params,
-        .flags = 0
-    };
+    ucp_proto_common_init_params_t ack_params    = 
+            ucp_proto_common_params_init(init_params);
+    ucp_proto_perf_t *ppln_perf, *ack_perf, *result_perf;
+    const ucp_proto_perf_segment_t *frag_seg, *first_seg;
     const ucp_proto_select_elem_t *select_elem;
-    const ucp_proto_perf_range_t *frag_range;
+    UCS_STRING_BUFFER_ONSTACK(seg_strb, 128);
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
     ucp_proto_rndv_ppln_priv_t rpriv;
     ucp_proto_select_t *proto_select;
-    ucp_proto_caps_t caps, ppln_caps;
     ucs_linear_func_t ppln_overhead;
     ucp_proto_init_elem_t *proto;
     char frag_size_str[32];
     void *frag_proto_priv;
     ucs_status_t status;
+    uint8_t proto_flags;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_init_check_op(init_params, UCP_PROTO_RNDV_OP_ID_MASK) ||
-        !ucp_proto_common_init_check_err_handling(&err_params) ||
+        !ucp_proto_common_init_check_err_handling(&ack_params) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         return;
     }
@@ -85,23 +85,27 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    ack_params.max_length = SIZE_MAX;
     /* Add each proto as a separate variant */
     ucs_array_for_each(proto, &select_elem->proto_init.protocols) {
-        if (ucp_proto_id_field(proto->proto_id, flags) &
-            UCP_PROTO_FLAG_INVALID) {
+        proto_flags = ucp_proto_id_field(proto->proto_id, flags);
+        if (proto_flags & UCP_PROTO_FLAG_INVALID) {
             continue;
         }
 
-        ucs_assert(proto->caps.num_ranges > 0);
+        ucs_assert(!ucp_proto_perf_is_empty(proto->perf));
 
-        frag_range = proto->caps.ranges + (proto->caps.num_ranges - 1);
-        if (frag_range->max_length == 0) {
-            continue;
-        }
+        frag_seg  = ucp_proto_perf_segment_last(proto->perf);
+        first_seg = ucp_proto_perf_find_segment_lb(proto->perf, 0);
+        ucs_assert(frag_seg != NULL);
+        ucs_assert(first_seg != NULL);
 
         /* Initialize private data */
-        rpriv.frag_size             = frag_range->max_length;
-        rpriv.frag_proto_min_length = proto->caps.min_length;
+        rpriv.frag_size             = ucp_proto_perf_segment_end(frag_seg);
+        rpriv.frag_proto_min_length = ucp_proto_perf_segment_start(first_seg);
+        ucs_assertv(rpriv.frag_size >= rpriv.frag_proto_min_length,
+                    "rpriv.frag_size=%zu rpriv.frag_proto_min_length=%zu",
+                    rpriv.frag_size, rpriv.frag_proto_min_length);
 
         frag_proto_priv = &ucs_array_elem(&select_elem->proto_init.priv_buf,
                                           proto->priv_offset);
@@ -109,28 +113,53 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
                                           &sel_param, frag_proto_priv,
                                           &rpriv.frag_proto_cfg);
 
-        ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+        ucp_proto_perf_segment_str(frag_seg, &seg_strb);
+        ucs_trace("rndv_ppln frag: %s proto: %s segment: %s",
                   ucs_memunits_to_str(rpriv.frag_size, frag_size_str,
                                       sizeof(frag_size_str)),
-                  UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->perf));
+                  ucp_proto_id_field(proto->proto_id, name),
+                  ucs_string_buffer_cstr(&seg_strb));
 
         /* Add the single range of the pipeline protocol to ppln_caps */
-        ppln_caps.min_length = frag_range->max_length + 1;
-        ppln_caps.num_ranges = 0;
-        ucp_proto_common_add_ppln_range(&ppln_caps, frag_range, SIZE_MAX);
+        status = ucp_proto_perf_create("pipeline", &ppln_perf);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        status = ucp_proto_common_add_ppln_perf(ppln_perf, frag_seg, SIZE_MAX);
+        if (status != UCS_OK) {
+            goto out_destroy_ppln_perf;
+        }
 
         /* Add ATS overhead */
-        ppln_overhead = ucs_linear_func_make(
-                frag_overhead, frag_overhead / frag_range->max_length);
-        status        = ucp_proto_rndv_ack_init(
-                init_params, UCP_PROTO_RNDV_ATS_NAME, &ppln_caps,
-                ppln_overhead, &rpriv.ack, &caps);
-        if (status == UCS_OK) {
-            ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
-                                       proto->cfg_priority,
-                                       &caps, &rpriv, sizeof(rpriv));
+        ppln_overhead = ucs_linear_func_make(frag_overhead,
+                                             frag_overhead / rpriv.frag_size);
+        status        = ucp_proto_rndv_ack_init(&ack_params,
+                                                UCP_PROTO_RNDV_ATS_NAME,
+                                                ppln_overhead, &ack_perf,
+                                                &rpriv.ack);
+        if ((status != UCS_OK) || (rpriv.ack.lane == UCP_NULL_LANE)) {
+            goto out_destroy_ppln_perf;
         }
-        ucp_proto_select_caps_cleanup(&ppln_caps);
+
+        status = ucp_proto_perf_aggregate2(
+                ucp_proto_id_field(init_params->proto_id, name),
+                ppln_perf, ack_perf, &result_perf);
+        if (status != UCS_OK) {
+            goto out_destroy_ack_perf;
+        }
+
+        status = ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+                                            proto->cfg_priority,
+                                            result_perf, &rpriv, sizeof(rpriv));
+        if (status != UCS_OK) {
+            ucp_proto_perf_destroy(result_perf);
+        }
+
+out_destroy_ack_perf:
+        ucp_proto_perf_destroy(ack_perf);
+out_destroy_ppln_perf:
+        ucp_proto_perf_destroy(ppln_perf);
     }
 }
 
