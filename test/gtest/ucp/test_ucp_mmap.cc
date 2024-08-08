@@ -421,6 +421,9 @@ void test_ucp_mmap::check_distance_precision(double rkey_value,
     } else if (rkey_value == pack_max) {
         /* Capped by pack_max, no cache entry */
         EXPECT_GE(std::lround(topo_value), pack_max);
+    } else if (topo_value == INFINITY) {
+        /* Infinity values can be packed without loss */
+        EXPECT_EQ(topo_value, rkey_value);
     } else {
         /* Inside the borders or cache entry */
         EXPECT_NEAR(rkey_value, topo_value, topo_value * allowed_diff_ratio);

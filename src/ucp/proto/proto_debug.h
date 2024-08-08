@@ -6,6 +6,8 @@
 #ifndef UCP_PROTO_DEBUG_H_
 #define UCP_PROTO_DEBUG_H_
 
+#include <ucs/datastruct/dynamic_bitmap.h>
+
 #include "proto_common.h"
 #include "proto_select.h"
 
@@ -35,17 +37,6 @@
     UCP_PROTO_PERF_FUNC_TIME_ARG(_perf_func), \
     UCP_PROTO_PERF_FUNC_BW_ARG(_perf_func)
 
-/* Format string to display a protocol performance estimations
- * of different types. See ucp_proto_perf_type_t */
-#define UCP_PROTO_PERF_FUNC_TYPES_FMT \
-    "single: " UCP_PROTO_PERF_FUNC_FMT \
-    "multi: " UCP_PROTO_PERF_FUNC_FMT \
-    "cpu: " UCP_PROTO_PERF_FUNC_FMT
-#define UCP_PROTO_PERF_FUNC_TYPES_ARG(_perf_func) \
-    UCP_PROTO_PERF_FUNC_ARG((&(_perf_func)[UCP_PROTO_PERF_TYPE_SINGLE])), \
-    UCP_PROTO_PERF_FUNC_ARG((&(_perf_func)[UCP_PROTO_PERF_TYPE_MULTI])), \
-    UCP_PROTO_PERF_FUNC_ARG((&(_perf_func)[UCP_PROTO_PERF_TYPE_CPU]))
-
 
 /*
  * Protocol performance node types
@@ -62,8 +53,8 @@ void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
                                size_t bw_str_max);
 
 
-void ucp_proto_select_init_trace_caps(const ucp_proto_init_params_t *init_params,
-                                      const ucp_proto_caps_t *proto_caps,
+void ucp_proto_select_init_trace_perf(const ucp_proto_init_params_t *init_params,
+                                      const ucp_proto_perf_t *perf,
                                       const void *priv);
 
 
@@ -94,6 +85,11 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
 void ucp_proto_config_info_str(ucp_worker_h worker,
                                const ucp_proto_config_t *proto_config,
                                size_t msg_length, ucs_string_buffer_t *strb);
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
+                        unsigned selected_child, const char *name,
+                        const char *desc_fmt, va_list ap);
 
 ucp_proto_perf_node_t *
 ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
@@ -170,6 +166,14 @@ void ucp_proto_select_elem_trace(ucp_worker_h worker,
                                  ucp_worker_cfg_index_t rkey_cfg_index,
                                  const ucp_proto_select_param_t *select_param,
                                  ucp_proto_select_elem_t *select_elem);
+
+
+void ucp_proto_select_write_info(
+        ucp_worker_h worker,
+        const ucp_proto_select_init_protocols_t *proto_init,
+        const ucs_dynamic_bitmap_t *proto_mask, unsigned selected_idx,
+        ucp_proto_config_t *selected_config, size_t range_start,
+        size_t range_end);
 
 
 #endif
