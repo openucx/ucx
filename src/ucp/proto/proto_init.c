@@ -525,13 +525,9 @@ ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
     range_start = ucs_max(params->min_length, tl_perf->min_length);
 
     if (ucp_proto_common_check_mem_access(params)) {
-        range_end = params->max_length;
-        if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG) {
-            /* Cap single-fragment protocols by max fragment size */
-            ucs_assert(tl_perf->max_frag >= params->hdr_size);
-            range_end = ucs_min(range_end,
-                                tl_perf->max_frag - params->hdr_size);
-        }
+        ucs_assert(tl_perf->max_frag >= params->hdr_size);
+        range_end = ucs_min(params->max_length,
+                            tl_perf->max_frag - params->hdr_size);
     } else {
         /* If memory access is not possible, support only empty message */
         range_end = 0;
