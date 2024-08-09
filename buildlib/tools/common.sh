@@ -168,6 +168,7 @@ get_ifaddr() {
 }
 
 get_rdma_device_ip_addr() {
+	device=$1
 	if [ ! -r /dev/infiniband/rdma_cm  ]
 	then
 		return
@@ -185,6 +186,11 @@ get_rdma_device_ip_addr() {
 		port=$(echo "${line}" | awk '{print $3}')
 		netif=$(echo "${line}" | awk '{print $5}')
 		node_guid=`cat /sys/class/infiniband/${ibdev}/node_guid`
+
+		if [ -n "${device}" ] && [ "${device}" != "${ibdev}:${port}" ]
+		then
+			continue
+		fi
 
 		# skip devices that do not have proper gid (representors)
 		if [ -e "/sys/class/infiniband/${ibdev}/ports/${port}/gids/0" ] && \

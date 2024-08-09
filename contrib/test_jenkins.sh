@@ -576,7 +576,7 @@ start_perftest_daemon() {
 	# unless we run both processes on host for testing purposes.
 
 	# Mandatory options to run the daemon
-	dmn_env="UCX_TLS=^cuda UCX_TCP_CM_REUSEADDR=y UCX_MAX_RNDV_LANES=1 UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=get_zcopy"
+	dmn_env="UCX_TLS=^cuda UCX_TCP_CM_REUSEADDR=y UCX_RNDV_THRESH=0 UCX_RNDV_SCHEME=put_zcopy"
 
 	# Run the daemon
 	env $dmn_env $daemon_exe -p $dmn_port &
@@ -601,16 +601,20 @@ run_ucx_perftest_with_daemon() {
 	for ucx_dev in $my_devices
 	do
 		echo "==== Running ucx_perftest over a daemon on $ucx_dev ===="
-		export UCX_NET_DEVICES=$ucx_dev,lo
+		export UCX_NET_DEVICES=$ucx_dev
+		export UCX_MAX_RNDV_LANES=1
+		ip_addr=$(get_rdma_device_ip_addr $ucx_dev)
 
 		# Start client and server daemons
 		start_perftest_daemon $ucx_perftest_daemon server_dmn_pid server_dmn_port
 		start_perftest_daemon $ucx_perftest_daemon client_dmn_pid client_dmn_port
 
-		ucp_client_args="-g 127.0.0.1:$client_dmn_port -G 127.0.0.1:$server_dmn_port $(hostname)"
+		ucp_client_args="-g $ip_addr:$client_dmn_port -G $ip_addr:$server_dmn_port $(hostname)"
 
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 
+		kill ${client_dmn_pid} || true # ignore failure
+		kill ${server_dmn_pid} || true # ignore failure
 		wait $client_dmn_pid || true
 		wait $server_dmn_pid || true
 

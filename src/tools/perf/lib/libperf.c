@@ -927,33 +927,13 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
 }
 
 static ucs_status_ptr_t
-ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index,
-                         const ucx_perf_params_t *params)
+ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index)
 {
     ucp_request_param_t ep_close_params = {0};
-    ucp_request_param_t dmn_fin_param   = {0};
     ucs_status_ptr_t req;
-    ucp_perf_daemon_fin_req_t dmn_fin_req;
 
     if (NULL == ep) {
         return NULL;
-    }
-
-    if (params->ucp.is_daemon_mode) {
-        dmn_fin_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-        dmn_fin_param.flags        = UCP_AM_SEND_FLAG_EAGER;
-        dmn_fin_req.keep_running   = !!params->ucp.is_keep_running;
-
-        req = ucp_am_send_nbx(ep, UCP_PERF_DAEMON_AM_ID_FIN, NULL, 0,
-                              &dmn_fin_req, sizeof(dmn_fin_req),
-                              &dmn_fin_param);
-        if (UCS_PTR_IS_PTR(req)) {
-            ucp_request_free(req);
-        } else if (UCS_PTR_STATUS(req) != UCS_OK) {
-            ucs_warn("failed to send FIN message to daemon ep %p "
-                     "on thread %d: %s\n",
-                     ep, index, ucs_status_string(UCS_PTR_STATUS(req)));
-        }
     }
 
     req = ucp_ep_close_nbx(ep, &ep_close_params);
@@ -1005,8 +985,7 @@ static void ucp_perf_test_destroy_self_eps(ucx_perf_context_t *perf)
         ucp_perf_test_rkey_destroy(perf->ucp.tctx[i].perf.ucp.self_send_rkey);
         ucp_perf_test_rkey_destroy(perf->ucp.tctx[i].perf.ucp.self_recv_rkey);
 
-        req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.self_ep, i,
-                                       &perf->params);
+        req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.self_ep, i);
         if (req != NULL) {
             reqs[num_in_prog++] = req;
         }
@@ -1026,8 +1005,7 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t *perf)
     for (i = 0; i < thread_count; ++i) {
         ucp_perf_test_rkey_destroy(perf->ucp.tctx[i].perf.ucp.rkey);
 
-        req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.ep, i,
-                                       &perf->params);
+        req = ucp_perf_test_destroy_ep(perf->ucp.tctx[i].perf.ucp.ep, i);
         if (req != NULL) {
             reqs[num_in_prog++] = req;
         }

@@ -1408,6 +1408,18 @@ uct_ib_mlx5_devx_umr_mkey_hash_find(uct_ib_mlx5_md_t *md,
     }
 
     *umr_alias = kh_val(md->umr.mkey_hash, khiter);
+    /* Check if alias is from the same MD as packed_mkey */
+    if (packed_mkey->uuid != umr_alias->uuid) {
+        ucs_debug("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x in "
+                  "hash, but uuid %"PRIu64" doesn't match, removing stale alias",
+                  uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
+                  uct_ib_mlx5_mkey_index(packed_mkey->lkey), packed_mkey->uuid);
+        /* Remove stale entry from hash, and destroy */
+        kh_del(umr_mkey_map, md->umr.mkey_hash, khiter);
+        uct_ib_mlx5_devx_umr_mkey_alias_destroy(md, umr_alias);
+        return UCS_ERR_UNREACHABLE;
+    }
+
     ucs_trace("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x in hash",
               uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
               uct_ib_mlx5_mkey_index(packed_mkey->lkey));
@@ -1613,7 +1625,7 @@ static void uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                                           sizeof(in), out, sizeof(out),
                                           "QUERY_HCA_CAP, ODP", 0);
     if (status != UCS_OK) {
-        reason = "faied to query HCA capabilities";
+        reason = "failed to query HCA capabilities";
         goto no_odp;
     }
 
@@ -2353,6 +2365,7 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     md->flags           |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
     md->super.name       = UCT_IB_MD_NAME(mlx5);
     md->super.vhca_id    = vhca_id;
+    md->super.uuid       = ucs_generate_uuid(0);
 
     if ((md->flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_XGVMI) &&
         (md_config->xgvmi_umr_enable == UCS_YES)) {
@@ -2905,6 +2918,7 @@ ucs_status_t uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md,
     ucs_strncpy_zero(access_key, uct_ib_mkey_token,
                      UCT_IB_MLX5DV_FLD_SZ_BYTES(alias_context, access_key));
 
+    umr_alias.uuid     = packed_mkey->uuid;
     umr_alias.cross_mr = uct_ib_mlx5_devx_obj_create(md->super.dev.ibv_context,
                                                      in, sizeof(in), out,
                                                      sizeof(out), "MKEY_ALIAS",

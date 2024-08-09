@@ -270,6 +270,11 @@ static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
     return UCS_OK;
 }
 
+/**
+ * Verifies that the daemon parameters are valid before each test run in the
+ * batch. Parameters verified by this function are configured per test case
+ * basis, therefore need to be checked before each test run.
+ */
 static ucs_status_t check_daemon_params(const ucx_perf_params_t *params)
 {
     if (!params->ucp.is_daemon_mode) {
@@ -307,6 +312,10 @@ static ucs_status_t check_daemon_params(const ucx_perf_params_t *params)
     return UCS_OK;
 }
 
+/**
+ * This function initializes the daemon parameters once, before the test starts.
+ * All the initialized variables remain immutable during the test execution.
+ */
 static ucs_status_t init_daemon_params(ucx_perf_params_t *params)
 {
     struct sockaddr_storage *local_addr  = &params->ucp.dmn_local_addr;
@@ -325,7 +334,6 @@ static ucs_status_t init_daemon_params(ucx_perf_params_t *params)
     }
 
     params->ucp.is_daemon_mode  = 1;
-    params->ucp.is_keep_running = 1;
     return UCS_OK;
 }
 
