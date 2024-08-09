@@ -600,7 +600,7 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
 
 uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
-    uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+    uint64_t access_flags = md->dev.mr_access_flags;
 
     if (memh->flags & UCT_IB_MEM_FLAG_ODP) {
         access_flags |= IBV_ACCESS_ON_DEMAND;
@@ -759,7 +759,11 @@ static const char *uct_ib_device_transport_type_name(struct ibv_device *device)
 static int uct_ib_device_is_supported(struct ibv_device *device)
 {
     /* TODO: enable additional transport types when ready */
-    int ret = device->transport_type == IBV_TRANSPORT_IB;
+    int ret =
+#if HAVE_DECL_IBV_TRANSPORT_UNSPECIFIED
+              (device->transport_type == IBV_TRANSPORT_UNSPECIFIED) ||
+#endif
+              (device->transport_type == IBV_TRANSPORT_IB);
     if (!ret) {
         ucs_debug("device %s of type %s is not supported",
                   device->dev_name, uct_ib_device_transport_type_name(device));
@@ -1430,6 +1434,8 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     }
 
     md->super.ops = &uct_ib_verbs_md_ops.super;
+
+    uct_ib_device_configure(&md->dev);
 
     status = uct_ib_md_open_common(md, ibv_device, md_config);
     if (status != UCS_OK) {

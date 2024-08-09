@@ -50,6 +50,10 @@ public:
 
     virtual void init()
     {
+        if (has_transport("ud_v") && ucs::is_aws()) {
+            UCS_TEST_SKIP_R("AWS EFA/UD: low SGE count per WQE AM IOV sends");
+        }
+
         modify_config("MAX_EAGER_LANES", "2");
 
         ucp_test::init();

@@ -2322,6 +2322,8 @@ ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     md->super.super.ops = &uct_ib_mlx5_devx_md_ops.super;
 
+    uct_ib_device_configure(&md->super.dev);
+
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {
         goto err_lru_cleanup;
@@ -3128,6 +3130,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     }
 
     uct_ib_mlx5dv_check_dc(dev);
+
+    uct_ib_device_configure(&md->super.dev);
 
     md->super.super.ops  = &uct_ib_mlx5_md_ops.super;
     md->max_rd_atomic_dc = IBV_DEV_ATTR(dev, max_qp_rd_atom);

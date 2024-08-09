@@ -185,6 +185,7 @@ static void uct_ud_iface_destroy_qp(uct_ud_iface_t *ud_iface)
 static ucs_status_t
 uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config)
 {
+    uct_ib_device_t *dev    = uct_ib_iface_device(&self->super);
     uct_ud_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_ud_iface_ops_t);
     uct_ib_qp_attr_t qp_init_attr = {};
     struct ibv_qp_attr qp_attr;
@@ -198,6 +199,20 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.cap.max_send_sge    = config->super.tx.min_sge + 1;
     qp_init_attr.cap.max_recv_sge    = 1;
     qp_init_attr.cap.max_inline_data = config->super.tx.min_inline;
+
+    if (qp_init_attr.cap.max_inline_data > dev->max_inline_data) {
+        ucs_diag("create QP: TX inline: using device cap %uB (configured %uB)",
+                 dev->max_inline_data, qp_init_attr.cap.max_inline_data);
+
+        qp_init_attr.cap.max_inline_data = dev->max_inline_data;
+    }
+
+    if (qp_init_attr.cap.max_send_sge > dev->max_sq_sge) {
+        ucs_diag("create QP: max_sq_sge: using device cap %d (configured %u+1)",
+                 dev->max_sq_sge, qp_init_attr.cap.max_send_sge - 1);
+
+        qp_init_attr.cap.max_send_sge = dev->max_sq_sge;
+    }
 
     status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
     if (status != UCS_OK) {
@@ -450,6 +465,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
 
     self->tx.unsignaled         = 0;
     self->tx.available          = config->super.tx.queue_len;
+    self->tx.ordered_send_comp =
+            uct_ib_iface_device(&self->super)->ordered_send_comp;
     self->tx.timer_sweep_count  = 0;
     self->async.disable         = 0;
 
@@ -498,8 +515,13 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
         self->async.tick = ucs_time_from_sec(config->event_timer_tick);
     }
 
-    uct_iface_set_async_event_params(params, &self->async.event_cb,
-                                     &self->async.event_arg);
+    if (uct_ib_iface_device(&self->super)->req_notify_cq_support) {
+        uct_iface_set_async_event_params(params, &self->async.event_cb,
+                                         &self->async.event_arg);
+    } else {
+        self->async.event_cb  = NULL;
+        self->async.event_arg = NULL;
+    }
 
     self->async.timer_id = 0;
 
@@ -546,7 +568,13 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     self->tx.async_before_pending = 0;
 
     ucs_arbiter_init(&self->tx.pending_q);
-    ucs_queue_head_init(&self->tx.outstanding_q);
+
+    if (uct_ib_iface_device(&self->super)->ordered_send_comp) {
+        ucs_queue_head_init(&self->tx.outstanding.queue);
+    } else {
+        kh_init_inplace(uct_ud_iface_ctl_desc_hash, &self->tx.outstanding.map);
+    }
+
     ucs_queue_head_init(&self->tx.async_comp_q);
     ucs_queue_head_init(&self->rx.pending_q);
 
@@ -604,13 +632,23 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
-    ucs_mpool_cleanup(&self->rx.mp, 0);
+
+    /*
+     * Destroy QP before deregistering pre-posted receive buffers from
+     * self->rx.mp, to avoid ibv_dereg_mr() errors on some devices.
+     */
     uct_ud_iface_destroy_qp(self);
+    ucs_mpool_cleanup(&self->rx.mp, 0);
+
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps, 1);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     UCS_STATS_NODE_FREE(self->stats);
     kh_destroy_inplace(uct_ud_iface_gid, &self->gid_table.hash);
+    if (!uct_ib_iface_device(&self->super)->ordered_send_comp) {
+        kh_destroy_inplace(uct_ud_iface_ctl_desc_hash,
+                           &self->tx.outstanding.map);
+    }
     uct_ud_leave(self);
 }
 
@@ -693,12 +731,20 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                          UCT_IFACE_FLAG_CB_SYNC          |
                                          UCT_IFACE_FLAG_CB_ASYNC         |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
-    iface_attr->cap.event_flags        = UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                         UCT_IFACE_FLAG_EVENT_RECV      |
-                                         UCT_IFACE_FLAG_EVENT_ASYNC_CB;
+    if (uct_ib_iface_device(&iface->super)->req_notify_cq_support) {
+        iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                      UCT_IFACE_FLAG_EVENT_RECV |
+                                      UCT_IFACE_FLAG_EVENT_ASYNC_CB;
+    }
 
-    iface_attr->cap.am.max_short       = uct_ib_iface_hdr_size(iface->config.max_inline,
-                                                               sizeof(uct_ud_neth_t));
+    /* Make sure we cannot use more than two SGE */
+    if (uct_ib_iface_device(&iface->super)->max_sq_sge < 4) {
+        iface_attr->cap.am.max_short = sizeof(uct_ud_neth_t) + 1;
+    } else {
+        iface_attr->cap.am.max_short = uct_ib_iface_hdr_size(
+                iface->config.max_inline, sizeof(uct_ud_neth_t));
+    }
+
     iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - UCT_UD_RX_HDR_LEN;
     iface_attr->cap.am.min_zcopy       = 0;
     iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - UCT_UD_RX_HDR_LEN;
@@ -736,6 +782,14 @@ uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ud_iface_tx_outstanding_is_empty(uct_ud_iface_t *iface)
+{
+    return uct_ib_iface_device(&iface->super)->ordered_send_comp ?
+                   ucs_queue_is_empty(&iface->tx.outstanding.queue) :
+                   (kh_size(&iface->tx.outstanding.map) == 0);
+}
+
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp)
 {
@@ -753,7 +807,7 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
     uct_ud_enter(iface);
 
     if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface) ||
-                     !ucs_queue_is_empty(&iface->tx.outstanding_q))) {
+                     !uct_ud_iface_tx_outstanding_is_empty(iface))) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
         uct_ud_leave(iface);
         return UCS_INPROGRESS;
@@ -1045,10 +1099,20 @@ void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
                                   int is_async)
 {
     uct_ud_ctl_desc_t *cdesc;
+    khiter_t it;
 
-    ucs_queue_for_each_extract(cdesc, &iface->tx.outstanding_q, queue,
-                               UCS_CIRCULAR_COMPARE16(cdesc->sn, <=, sn)) {
-        uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
+    if (iface->tx.ordered_send_comp) {
+        ucs_queue_for_each_extract(cdesc, &iface->tx.outstanding.queue, queue,
+                                   UCS_CIRCULAR_COMPARE16(cdesc->sn, <=, sn)) {
+            uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
+        }
+    } else {
+        it = kh_get(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, sn);
+        if (ucs_likely(it != kh_end(&iface->tx.outstanding.map))) {
+            cdesc = kh_value(&iface->tx.outstanding.map, it);
+            uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
+            kh_del(uct_ud_iface_ctl_desc_hash, &iface->tx.outstanding.map, it);
+        }
     }
 }
 
