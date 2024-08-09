@@ -487,6 +487,24 @@ uct_rc_mlx5_dp_ordering_ooo_get(uint8_t dp_ordering_ooo,
                                 uint8_t dp_ordering_ooo_force,
                                 uct_ib_mlx5_iface_config_t *config)
 {
+    /*
+     * HCA has an mlxreg admin configuration to force enable adaptive routing
+     * (AR) or not.
+     *
+     * HCA cap/cap_2 booleans:
+     * - if dp_ordering_ooo is set, QPC/DCTC can enable AR.
+     * - if dp_ordering_ooo_force is set, QPC/DCTC can request mlxreg
+     *   configuration override, useful to force disable.
+     *
+     * QP modify behavior with returned values:
+     * - UCS_AUTO: Do not affect existing system behavior.
+     * - UCS_NO  : Force AR disabling on the QP if supported. QP modify will
+     *   return error on failure.
+     * - UCS_TRY: Set AR to enable, ignored if any failure.
+     * - UCS_YES : Force AR enabling on the QP if supported. QP modify will
+     *   return error on failure.
+     */
+
     if ((config->ar_enable == UCS_TRY) && dp_ordering_ooo) {
         return UCS_TRY;
     } else if ((config->ar_enable == UCS_NO) && dp_ordering_ooo_force) {
