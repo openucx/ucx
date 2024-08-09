@@ -926,8 +926,7 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     return UCS_OK;
 }
 
-static ucs_status_ptr_t
-ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index)
+static ucs_status_ptr_t ucp_perf_test_destroy_ep(ucp_ep_h ep, unsigned index)
 {
     ucp_request_param_t ep_close_params = {0};
     ucs_status_ptr_t req;
