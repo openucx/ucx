@@ -462,6 +462,18 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
     return UCS_OK;
 }
 
+void uct_ib_mlx5_devx_set_qpc_dp_ordering(void *qpc,
+                                          const uct_ib_iface_t *iface)
+{
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_0,
+                      (iface->config.dp_ordering_ooo == UCS_YES) ||
+                      (iface->config.dp_ordering_ooo == UCS_TRY));
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_1, 0);
+    UCT_IB_MLX5DV_SET(qpc, qpc, dp_ordering_force,
+                      (iface->config.dp_ordering_ooo == UCS_NO) ||
+                      (iface->config.dp_ordering_ooo == UCS_YES));
+}
+
 void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,
                                             uint32_t *opt_param_mask)

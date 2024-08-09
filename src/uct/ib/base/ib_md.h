@@ -157,6 +157,11 @@ typedef struct uct_ib_md {
         uint32_t             base;
         uint32_t             size;
     } mkey_by_name_reserve;
+    struct {
+        uint8_t              ooo_rw_rc;
+        uint8_t              ooo_rw_dc;
+        uint8_t              force;
+    } dp_ordering;
 } uct_ib_md_t;
 
 
