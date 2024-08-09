@@ -15,7 +15,7 @@
 #include <ucs/stats/stats.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
-#define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)
+#define UCT_IB_MD_PACKED_RKEY_SIZE   2 * sizeof(uint64_t)
 #define UCT_IB_MD_INVALID_FLUSH_RKEY 0xff
 
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
