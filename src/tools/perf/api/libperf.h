@@ -232,12 +232,6 @@ typedef struct ucx_perf_rte {
 } ucx_perf_rte_t;
 
 
-typedef struct {
-    uint64_t addr;
-    uint64_t length;
-} ucp_perf_daemon_req_t;
-
-
 /**
  * Common report function
  */
@@ -308,6 +302,12 @@ typedef struct ucx_perf_params {
     } ucp;
 
 } ucx_perf_params_t;
+
+
+typedef struct {
+    uint64_t addr;
+    uint64_t length;
+} ucp_perf_daemon_req_t;
 
 
 /* Allocators for each memory type */
