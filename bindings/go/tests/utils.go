@@ -5,7 +5,7 @@
 package goucxtests
 
 import (
-	. "ucx"
+	. "github.com/openucx/ucx/bindings/go/src/ucx"
 	"unsafe"
 )
 

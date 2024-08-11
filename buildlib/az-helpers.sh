@@ -291,3 +291,7 @@ git_clone_with_retry() {
     echo "Failed to clone UCX after $max_attempts attempts"
     return 1
 }
+
+setup_go_env() {
+    go env -w GO111MODULE=auto
+}
