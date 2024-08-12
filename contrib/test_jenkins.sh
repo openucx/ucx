@@ -601,9 +601,15 @@ run_ucx_perftest_with_daemon() {
 	for ucx_dev in $my_devices
 	do
 		echo "==== Running ucx_perftest over a daemon on $ucx_dev ===="
+		ip_addr=$(get_rdma_device_ip_addr $ucx_dev)
+		if [ -z "$ip_addr" ]
+		then
+			echo "Cannot find IPv4 address for device $ucx_dev"
+			continue
+		fi
+
 		export UCX_NET_DEVICES=$ucx_dev
 		export UCX_MAX_RNDV_LANES=1
-		ip_addr=$(get_rdma_device_ip_addr $ucx_dev)
 
 		# Start client and server daemons
 		start_perftest_daemon $ucx_perftest_daemon server_dmn_pid server_dmn_port
