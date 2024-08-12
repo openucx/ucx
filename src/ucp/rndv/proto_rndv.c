@@ -364,8 +364,9 @@ static void ucp_proto_rndv_ctrl_variant_probe(
     status = ucp_proto_perf_aggregate(proto_name, perf_elems, num_elems, &perf);
     if (status != UCS_OK) {
         goto out_destroy_remote_perf;
+    } else if (ucp_proto_perf_is_empty(perf)) {
+        goto out_destroy_perf; // TODO: CHECK WHEN PERF IS EMPTY ????
     }
-    ucs_assertv(!ucp_proto_perf_is_empty(perf), "proto_name=%s", proto_name);
 
     ucp_proto_rndv_set_variant_config(&params->super.super, remote_proto,
                                       remote_select_param, remote_priv,
@@ -395,10 +396,14 @@ static void ucp_proto_rndv_ctrl_variant_probe(
 
     status = ucp_proto_select_add_proto(&params->super.super, cfg_thresh,
                                         cfg_priority, perf, rpriv, priv_size);
-    if (status != UCS_OK) {
-        ucp_proto_perf_destroy(perf);
+    if (status == UCS_OK) {
+        /* `perf` ownership was moved to `init_params->ctx`, so it shouldn't be
+         * destroyed now */
+        goto out_destroy_remote_perf;
     }
 
+out_destroy_perf:
+    ucp_proto_perf_destroy(perf);
 out_destroy_remote_perf:
     ucp_proto_perf_destroy(remote_perf);
 out_destroy_ctrl_perf:
