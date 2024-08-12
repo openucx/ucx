@@ -256,6 +256,7 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
     ucp_proto_perf_node_t *reg_perf_node;
     const uct_md_attr_v2_t *md_attr;
     ucp_md_index_t md_index;
+    ucs_status_t status;
     const char *md_name;
 
     if (reg_md_map == 0) {
@@ -265,9 +266,9 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
     if (context->rcache != NULL) {
         perf_factors[cpu_factor_id] =
                 ucs_linear_func_make(context->config.ext.rcache_overhead, 0);
-        ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
-                                 NULL, "rcache lookup", "");
-        return UCS_OK;
+        return ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                        perf_factors, NULL, "rcache lookup",
+                                        "");
     }
 
     reg_perf_node = ucp_proto_perf_node_new_data("mem reg", "");
@@ -289,9 +290,12 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
                                      perf_factors[cpu_factor_id]);
     }
 
-    return ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
-                                    reg_perf_node, perf_node_name, "%u mds",
-                                    ucs_popcount(reg_md_map));
+    status = ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                      perf_factors, reg_perf_node,
+                                      perf_node_name, "%u mds",
+                                      ucs_popcount(reg_md_map));
+    ucp_proto_perf_node_deref(&reg_perf_node);
+    return status;
 }
 
 static ucp_proto_perf_factor_id_t
@@ -346,9 +350,8 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
         perf_factors[factor_id] =
                 ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
-        ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
-                                NULL, title, "memcpy");
-        return UCS_OK;
+        return ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                        perf_factors, NULL, title, "memcpy");
     }
 
     if (worker->mem_type_ep[local_mem_type] != NULL) {
@@ -421,14 +424,14 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     ucp_proto_common_lane_perf_node(context, rsc_index, &perf_attr,
                                     &tl_perf_node);
 
-    ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
-                             tl_perf_node, title, "%s to %s",
-                             ucs_memory_type_names[src_mem_type],
-                             ucs_memory_type_names[dst_mem_type]);
-
+    status = ucp_proto_perf_add_funcs(perf, range_start, range_end,
+                                      perf_factors, tl_perf_node, title,
+                                      "%s to %s",
+                                      ucs_memory_type_names[src_mem_type],
+                                      ucs_memory_type_names[dst_mem_type]);
     ucp_proto_perf_node_deref(&tl_perf_node);
 
-    return UCS_OK;
+    return status;
 }
 
 static ucs_status_t
