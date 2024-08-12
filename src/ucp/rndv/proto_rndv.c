@@ -362,9 +362,10 @@ static void ucp_proto_rndv_ctrl_variant_probe(
     }
 
     status = ucp_proto_perf_aggregate(proto_name, perf_elems, num_elems, &perf);
-    if ((status != UCS_OK) || ucp_proto_perf_is_empty(perf)) {
+    if (status != UCS_OK) {
         goto out_destroy_remote_perf;
     }
+    ucs_assertv(!ucp_proto_perf_is_empty(perf), "proto_name=%s", proto_name);
 
     ucp_proto_rndv_set_variant_config(&params->super.super, remote_proto,
                                       remote_select_param, remote_priv,
