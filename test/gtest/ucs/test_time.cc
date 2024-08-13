@@ -53,15 +53,18 @@ UCS_TEST_SKIP_COND_F(test_time, get_time,
 }
 #endif
 
-UCS_TEST_F(test_time, timerq) {
-    static const int TIMER_ID_1  = 100;
-    static const int TIMER_ID_2  = 200;
+void init_timerq(ucs_timer_queue_t *timerq) {
+    ASSERT_UCS_OK(ucs_timerq_init(timerq));
+    EXPECT_TRUE(ucs_timerq_is_empty(timerq));
+    EXPECT_EQ(UCS_TIME_INFINITY, ucs_timerq_min_interval(timerq));
+}
 
+UCS_TEST_F(test_time, timerq) {
+    static const int TIMER_ID_1 = 100;
+    static const int TIMER_ID_2 = 200;
     ucs_timer_queue_t timerq;
-    ucs_status_t status;
 
     for (unsigned test_count = 0; test_count < 500; ++test_count) {
-
         const ucs_time_t interval1 = (ucs::rand() % 20) + 1;
         const ucs_time_t interval2 = (ucs::rand() % 20) + 1;
         const ucs_time_t test_time = ucs::rand() % 10000;
@@ -69,11 +72,7 @@ UCS_TEST_F(test_time, timerq) {
         ucs_timer_t *timer;
         unsigned counter1, counter2;
 
-        status = ucs_timerq_init(&timerq);
-        ASSERT_UCS_OK(status);
-
-        EXPECT_TRUE(ucs_timerq_is_empty(&timerq));
-        EXPECT_EQ(UCS_TIME_INFINITY, ucs_timerq_min_interval(&timerq));
+        init_timerq(&timerq);
 
         ucs_time_t current_time = time_base;
 
@@ -103,8 +102,7 @@ UCS_TEST_F(test_time, timerq) {
          */
         counter1 = 0;
         counter2 = 0;
-        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
-        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(ucs_timerq_remove(&timerq, TIMER_ID_1));
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
             ucs_timerq_for_each_expired(timer, &timerq, current_time, {
@@ -133,13 +131,9 @@ UCS_TEST_F(test_time, timerq) {
         EXPECT_NEAR(test_time / interval1, counter1, 1);
         EXPECT_NEAR(test_time / interval2, counter2, 1);
 
-        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
-        ASSERT_UCS_OK(status);
-        status = ucs_timerq_remove(&timerq, TIMER_ID_2);
-        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(ucs_timerq_remove(&timerq, TIMER_ID_1));
+        ASSERT_UCS_OK(ucs_timerq_remove(&timerq, TIMER_ID_2));
 
         ucs_timerq_cleanup(&timerq);
     }
 }
-
-
