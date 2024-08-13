@@ -1410,8 +1410,8 @@ uct_ib_mlx5_devx_umr_mkey_hash_find(uct_ib_mlx5_md_t *md,
     *umr_alias = kh_val(md->umr.mkey_hash, khiter);
     /* Check if alias is from the same MD as packed_mkey */
     if (packed_mkey->uuid != umr_alias->uuid) {
-        ucs_debug("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x in "
-                  "hash, but uuid %"PRIu64" doesn't match, removing stale alias",
+        ucs_debug("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " in hash, but uuid %"
+                  PRIu64 " doesn't match, removing stale alias",
                   uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
                   uct_ib_mlx5_mkey_index(packed_mkey->lkey), packed_mkey->uuid);
         /* Remove stale entry from hash, and destroy */
@@ -1420,7 +1420,7 @@ uct_ib_mlx5_devx_umr_mkey_hash_find(uct_ib_mlx5_md_t *md,
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_trace("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x in hash",
+    ucs_trace("%s: found " UCT_IB_MLX5_UMR_ALIAS_FMT " in hash",
               uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
               uct_ib_mlx5_mkey_index(packed_mkey->lkey));
     return UCS_OK;
@@ -1452,7 +1452,7 @@ uct_ib_mlx5_devx_umr_mkey_hash_put(uct_ib_mlx5_md_t *md,
     }
 
     kh_val(md->umr.mkey_hash, khiter) = *umr_alias;
-    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " for index 0x%x to hash",
+    ucs_trace("%s: added " UCT_IB_MLX5_UMR_ALIAS_FMT " to hash",
               uct_ib_mlx5_dev_name(md), UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
               uct_ib_mlx5_mkey_index(packed_mkey->lkey));
     return UCS_OK;

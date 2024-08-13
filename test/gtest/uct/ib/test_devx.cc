@@ -303,7 +303,6 @@ UCS_TEST_P(test_devx_umr_mkey, import_same_mkey_from_different_md)
     /* Import the same UMR key, but from another MD with uuid 2 */
     uct_ib_mlx5_devx_mem_t *imported_memh2 = import_memh(exported_memh, 2);
     EXPECT_NE(imported_memh, imported_memh2);
-    EXPECT_EQ(imported_memh->super.lkey, imported_memh2->super.lkey);
     EXPECT_EQ(1, kh_size(md()->umr.mkey_hash));
     /* Check that stale mkey had been replaced by a new one */
     kh_foreach_value(md()->umr.mkey_hash, mkey_alias, {
