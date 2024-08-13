@@ -159,13 +159,17 @@ ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf,
      * 
      * All the factors except longest one turn into constant fragment overhead
      * due to overlapping (1 and 3 from example).
+     * 
+     * LATENCY factor cannot be chosen as longest one since it overlaps with
+     * other simultanious LATENCY factor operations.
      */
     max_factor_id = 0;
     max_value     = -DBL_MAX;
     for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; factor_id++) {
         factor_func          = ucp_proto_perf_segment_func(frag_seg, factor_id);
         factors[factor_id].c = ucs_linear_func_apply(factor_func, frag_size);
-        if (factors[factor_id].c > max_value) {
+        if ((factors[factor_id].c > max_value) &&
+            (factor_id != UCP_PROTO_PERF_FACTOR_LATENCY)) {
             max_factor_id = factor_id;
             max_value     = factors[factor_id].c;
         }
