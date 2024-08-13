@@ -365,7 +365,9 @@ static void ucp_proto_rndv_ctrl_variant_probe(
     if (status != UCS_OK) {
         goto out_destroy_remote_perf;
     } else if (ucp_proto_perf_is_empty(perf)) {
-        goto out_destroy_perf; // TODO: CHECK WHEN PERF IS EMPTY ????
+        /* Empty perf means that this ctrl message cannot be used with that
+         * remote proto (e.g. rndv/rtr/mtype + rndv/send/ppln) */
+        goto out_destroy_perf;
     }
 
     ucp_proto_rndv_set_variant_config(&params->super.super, remote_proto,
