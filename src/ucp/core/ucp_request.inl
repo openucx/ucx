@@ -251,7 +251,6 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
     /* Coverity wrongly resolves completion callback function to
      * 'ucp_cm_client_connect_progress'/'ucp_cm_server_conn_request_progress'
      */
-    /* coverity[offset_free] */
     ucp_request_complete(req, send.cb, status, req->user_data);
 }
 
@@ -264,8 +263,6 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
                   req->recv.tag.info.sender_tag, req->recv.tag.info.length,
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_tag_recv", status);
-    /* coverity[address_free] */
-    /* coverity[offset_free] */
     ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info,
                          req->user_data);
 }
@@ -303,7 +300,6 @@ static int UCS_F_ALWAYS_INLINE ucp_request_try_send(ucp_request_t *req)
     ucs_status_t status;
 
     /* coverity wrongly resolves (*req).send.uct.func to test_uct_pending::pending_send_op_ok */
-    /* coverity[address_free] */
     status = req->send.uct.func(&req->send.uct);
     if (status == UCS_OK) {
         /* Completed the operation, error also goes here */
@@ -692,7 +688,6 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
 
     /* Coverity wrongly resolves completion callback function to
      * 'ucp_cm_server_conn_request_progress' */
-    /* coverity[offset_free] */
     ucp_request_complete(req, recv.am.cb, status, req->recv.dt_iter.length,
                          req->user_data);
 }

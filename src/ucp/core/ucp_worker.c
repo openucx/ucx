@@ -713,7 +713,6 @@ static void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
              * which in turn releases wiface->iface. this leads coverity to assume
              * that ucp_worker_iface_check_events_do() dereferences a freed pointer
              * in the subsequent call in the following loop */
-            /* coverity[freed_arg] */
             status = ucp_worker_iface_check_events_do(wiface, &progress_count);
             ucs_assert(progress_count == 0);
         } while (status == UCS_ERR_BUSY);
@@ -1055,7 +1054,6 @@ ucp_worker_select_best_ifaces(ucp_worker_h worker, ucp_tl_bitmap_t *tl_bitmap_p)
             }
             ++iface_id;
         } else {
-            /* coverity[overrun-local] */
             ucs_debug("closing resource[%d] "UCT_TL_RESOURCE_DESC_FMT
                       ", since resource[%d] "UCT_TL_RESOURCE_DESC_FMT
                       " is better, worker %p",
@@ -2700,7 +2698,6 @@ static void ucp_worker_discard_uct_ep_complete(ucp_request_t *req)
     ucp_worker_flush_ops_count_add(ucp_ep->worker, -1);
     /* Coverity wrongly resolves completion callback function to
      * 'ucp_cm_server_conn_request_progress' */
-    /* coverity[offset_free] */
     ucp_request_complete(req, send.cb, UCS_OK, req->user_data);
     ucp_ep_refcount_remove(ucp_ep, discard);
 }
@@ -3022,7 +3019,6 @@ unsigned ucp_worker_progress(ucp_worker_h worker)
     unsigned count;
 
     /* worker->inprogress is used only for assertion check.
-     * coverity[assert_side_effect]
      */
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -3031,7 +3027,6 @@ unsigned ucp_worker_progress(ucp_worker_h worker)
     count = uct_worker_progress(worker->uct);
     ucs_async_check_miss(&worker->async);
 
-    /* coverity[assert_side_effect] */
     ucs_assert(--worker->inprogress == 0);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
