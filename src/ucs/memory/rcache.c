@@ -496,6 +496,8 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
         pthread_rwlock_wrlock(&rcache->pgt_lock);
     }
 
+    /* coverity[double_unlock] */
+    /* coverity[double_lock] */
     ucs_mem_region_destroy_internal(rcache, region,
                                     flags & UCS_RCACHE_REGION_PUT_FLAG_TAKE_PGLOCK);
 
