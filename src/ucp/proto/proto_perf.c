@@ -439,7 +439,7 @@ ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,
         return status;
     }
 
-    /* Turn local factors to remote and vice versa */
+    /* Convert local factors to remote and vice versa */
     ucp_proto_perf_segment_foreach(remote_seg, remote_perf) {
         perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU] =
                 remote_seg->perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU];

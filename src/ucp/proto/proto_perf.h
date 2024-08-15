@@ -154,8 +154,8 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
 
 
 /**
- * Create a proto perf structure that is equal to @a remote_perf but all
- * local factors' values are turned to remote ones and vice versa.
+ * Create a proto perf structure based on @a remote_perf, converting the values
+ * of local factors to remote ones and vice versa.
  *
  * @param [in]  remote_perf Performance data structure to turn.
  * @param [out] perf_p      Filled with the new performance data structure.
