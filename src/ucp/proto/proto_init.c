@@ -191,6 +191,21 @@ ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf,
                                     "pipeline", "frag size: %s", frag_str);
 }
 
+static ucs_linear_func_t
+ucp_proto_init_tl_recv_ovh(const ucp_proto_common_init_params_t *params,
+                           const ucp_proto_common_tl_perf_t *tl_perf,
+                           uint32_t op_attr_mask)
+{
+    if (/* Don't care about receiver time for one-sided remote access */
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) ||
+        /* Count only send completion time without waiting for a response */
+        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE))) {
+        return UCS_LINEAR_FUNC_ZERO;
+    }
+    return ucs_linear_func_make(tl_perf->recv_overhead, 0);
+}
+
 static ucs_status_t
 ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
@@ -199,48 +214,49 @@ ucp_proto_init_add_tl_perf(const ucp_proto_common_init_params_t *params,
                            ucp_proto_perf_t *perf)
 {
     ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
-    const double latency       = tl_perf->latency + tl_perf->sys_latency;
     const double send_overhead = tl_perf->send_pre_overhead +
                                  tl_perf->send_post_overhead;
     uint32_t op_attr_mask;
 
     ucs_trace("caps" UCP_PROTO_TIME_FMT(send_pre_overhead)
               UCP_PROTO_TIME_FMT(send_post_overhead)
-              UCP_PROTO_TIME_FMT(recv_overhead) UCP_PROTO_TIME_FMT(latency),
+              UCP_PROTO_TIME_FMT(recv_overhead) UCP_PROTO_TIME_FMT(latency)
+              UCP_PROTO_TIME_FMT(sys_latency),
               UCP_PROTO_TIME_ARG(tl_perf->send_pre_overhead),
               UCP_PROTO_TIME_ARG(tl_perf->send_post_overhead),
               UCP_PROTO_TIME_ARG(tl_perf->recv_overhead),
-              UCP_PROTO_TIME_ARG(tl_perf->latency));
+              UCP_PROTO_TIME_ARG(tl_perf->latency),
+              UCP_PROTO_TIME_ARG(tl_perf->sys_latency));
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(
             params->super.select_param->op_attr);
 
     perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_CPU].c += send_overhead;
-    perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c   += latency;
+    perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c   += tl_perf->latency;
+    perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c   += tl_perf->sys_latency;
 
-    if (!(op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-        !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS)) {
-        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU].c +=
-                tl_perf->recv_overhead;
-    }
+    /* Add remote CPU TL overhead */
+    ucs_linear_func_add_inplace(
+            &perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU],
+            ucp_proto_init_tl_recv_ovh(params, tl_perf, op_attr_mask)
+    );
 
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) {
-        perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c    += latency;
-        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU].c += send_overhead;
-    }
-
-    /* With fast completion bcopy we don't count transport time */
+    /* With non-zcopy fast-completion we don't count transport time */
     if (!(op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
         perf_factors[UCP_PROTO_PERF_FACTOR_LOCAL_TL].m += 1.0 /
                                                           tl_perf->bandwidth;
     }
 
-    /* Send time is representing request completion, which in case of zcopy
-       waits for ACK from remote side. */
-    if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
-        perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c += latency;
+    if (/* Protocol is waiting for response */
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) ||
+        /* Send time is representing request completion, which in case of zcopy
+           waits for ACK from remote side. */
+        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY))) {
+        perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c    += tl_perf->latency;
+        perf_factors[UCP_PROTO_PERF_FACTOR_REMOTE_CPU].c +=
+                tl_perf->send_post_overhead;
     }
 
     return ucp_proto_perf_add_funcs(perf, range_start, range_end, perf_factors,
