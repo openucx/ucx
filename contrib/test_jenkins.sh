@@ -51,7 +51,7 @@ have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
 have_strace=$(strace -V || true)
 
 #
-# Override maven repository path, to cache the downloaded packages accross tests
+# Override maven repository path, to cache the downloaded packages across tests
 #
 export maven_repo=${WORKSPACE}/.deps
 

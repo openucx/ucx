@@ -79,7 +79,7 @@ jobs:
               if [ -z "$server_ip" ]; then
                   continue
               fi
-              echo "Running standalone benchamrk on $iface:$jucx_port"
+              echo "Running standalone benchmark on $iface:$jucx_port"
               java_cmd='java -XX:ErrorFile=$(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log  \
                   -XX:OnError="cat $(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log" \
                   -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \

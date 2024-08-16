@@ -881,7 +881,7 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, invalid_align,
 UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, invalid_offset,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
-    // Align ofsset has no meaning if alignment is not requested
+    // Align offset has no meaning if alignment is not requested
     test_invalid_alignment(0, 11, UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET);
 
     // Align offset must be less than alignment itself

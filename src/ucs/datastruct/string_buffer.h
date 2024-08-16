@@ -88,7 +88,7 @@ UCS_ARRAY_DECLARE_TYPE(ucs_string_buffer_t, size_t, char);
  *
  * @param [in]  ch  Input character from the string
  *
- * @return Character to put in the string insted of the input character. If '\0'
+ * @return Character to put in the string instead of the input character. If '\0'
  *         is returned, it will cause the removal of the source character from
  *         the string buffer without any replacement.
  */

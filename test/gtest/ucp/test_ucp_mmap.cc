@@ -908,7 +908,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
     /* Make sure eps are connected, because UCX async thread may add some
      * progress callbacks to worker callback queue
      * (e.g. ucp_worker_iface_check_events_progress) and mmap some memory
-     * for it (see ucs_callbackq_array_grow->ucs_sys_realloc). This mmaped
+     * for it (see ucs_callbackq_array_grow->ucs_sys_realloc). This mapped
      * address may conflict with the one used in this test, because
      * ucs::mmap_fixed_address() does mmap/munmap to obtain a pointer for
      * ucp_mem_map() with UCP_MEM_MAP_FIXED which creates a race with async

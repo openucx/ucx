@@ -343,7 +343,7 @@ typedef struct uct_tl_resource_desc {
  * uct_ep_atomic32_fetch and uct_ep_atomic64_fetch.
  *
  * This enumeration defines which atomic memory operation should be
- * performed by the uct_ep_atomic family of fuctions.
+ * performed by the uct_ep_atomic family of functions.
  */
 typedef enum uct_atomic_op {
     UCT_ATOMIC_OP_ADD,   /**< Atomic add  */

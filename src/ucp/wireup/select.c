@@ -2508,7 +2508,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 {
     ucp_worker_h worker                = ep->worker;
     ucp_tl_bitmap_t scalable_tl_bitmap = worker->scalable_tl_bitmap;
-    /* TO DO: remove initializtion after all ucp_wireup_add_X_lanes functions
+    /* TODO: remove initialization after all ucp_wireup_add_X_lanes functions
        will support specifying a reason */
     char wireup_info[256]              = {0};
     ucp_wireup_select_context_t select_ctx;
