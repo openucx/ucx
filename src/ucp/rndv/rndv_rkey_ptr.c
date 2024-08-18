@@ -186,6 +186,14 @@ ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
     return UCS_OK;
 }
 
+static ucs_status_t ucp_proto_rndv_rkey_ptr_reset(ucp_request_t *request)
+{
+    /* Verify ack stage is active */
+    ucs_assertv(request->send.proto_stage == UCP_PROTO_RNDV_RKEY_PTR_STAGE_ACK,
+                "stage=%u", request->send.proto_stage);
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_rkey_ptr_proto = {
     .name     = "rndv/rkey_ptr",
     .desc     = "copy from mapped remote memory",
@@ -197,7 +205,7 @@ ucp_proto_t ucp_rndv_rkey_ptr_proto = {
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_ACK]  = ucp_proto_rndv_ats_progress
     },
     .abort    = ucp_proto_abort_fatal_not_implemented,
-    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_rkey_ptr_reset
 };
 
 static void
