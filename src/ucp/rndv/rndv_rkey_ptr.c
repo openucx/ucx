@@ -65,7 +65,9 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
 
     if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
-        !ucp_proto_common_init_check_err_handling(&params.super)) {
+        !ucp_proto_common_init_check_err_handling(&params.super) ||
+        (ucp_proto_select_op_flags(params.super.super.select_param) &
+                 UCP_PROTO_SELECT_OP_FLAG_RESUME)) {
         return;
     }
 
@@ -188,9 +190,17 @@ ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
 
 static ucs_status_t ucp_proto_rndv_rkey_ptr_reset(ucp_request_t *request)
 {
-    /* Verify ack stage is active */
-    ucs_assertv(request->send.proto_stage == UCP_PROTO_RNDV_RKEY_PTR_STAGE_ACK,
-                "stage=%u", request->send.proto_stage);
+    switch (request->send.proto_stage) {
+    case UCP_PROTO_RNDV_RKEY_PTR_STAGE_COPY:
+        ucp_proto_rndv_rkey_destroy(request);
+        ucs_queue_remove(&request->send.ep->worker->rkey_ptr_reqs, &request->send.rndv.rkey_ptr.queue_elem);
+        break;
+    case UCP_PROTO_RNDV_RKEY_PTR_STAGE_ACK:
+        break;
+    default:
+        ucp_proto_fatal_invalid_stage(request, "reset");
+    }
+
     return UCS_OK;
 }
 
