@@ -151,6 +151,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_mem_type.cc \
 	ucp/test_ucp_perf.cc \
 	ucp/test_ucp_proto.cc \
+	ucp/test_ucp_reconfigure.cc \	
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_rma_mt.cc \
 	ucp/test_ucp_tag_cancel.cc \

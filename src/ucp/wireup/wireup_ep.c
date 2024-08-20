@@ -52,11 +52,44 @@ static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
+static void ucp_wireup_ep_pending_req_append(uct_pending_req_t *self, void *arg)
+{
+    ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
+    ucs_queue_head_t *queue    = arg;
+
+    ucp_request_t *req = ucs_container_of(proxy_req->send.proxy.req,
+                                          ucp_request_t, send.uct);
+
+    ucs_atomic_sub32(&wireup_ep->pending_count, 1);
+    ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+    ucs_free(proxy_req);
+}
+
+uct_ep_h ucp_wireup_ep_extract_msg_ep(ucp_wireup_ep_t *wireup_ep,
+                                      ucs_queue_head_t *pending_queue)
+{
+    uct_ep_h msg_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
+
+    uct_ep_pending_purge(&wireup_ep->super.super,
+                         ucp_wireup_ep_pending_req_append, pending_queue);
+    ucs_assert(wireup_ep->pending_count == 0);
+
+    if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
+        ucp_proxy_ep_set_uct_ep(&wireup_ep->super, NULL, 0, UCP_NULL_RESOURCE);
+    } else {
+        wireup_ep->aux_ep        = NULL;
+        wireup_ep->aux_rsc_index = UCP_NULL_RESOURCE;
+    }
+
+    return msg_ep;
+}
+
 uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
 {
     uct_ep_h wireup_msg_ep;
 
-    if ((wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) || (wireup_ep->aux_ep == NULL)) {
+    if (ucp_wireup_ep_is_next_ep_active(wireup_ep)) {
         wireup_msg_ep = wireup_ep->super.uct_ep;
     } else {
         wireup_msg_ep = wireup_ep->aux_ep;
@@ -488,8 +521,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
               UCT_TL_RESOURCE_DESC_ARG(
                       &worker->context->tl_rscs[rsc_index].tl_rsc));
 
-    /* we need to create an auxiliary transport only for active messages */
-    if (connect_aux) {
+    /* We need to create an auxiliary transport only for active messages.
+       Skip this step if auxiliary already exists. */
+    if (connect_aux && (wireup_ep->aux_ep == NULL)) {
         status = ucp_wireup_ep_connect_aux(wireup_ep, ep_init_flags,
                                            remote_address);
         if (status != UCS_OK) {
