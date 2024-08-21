@@ -534,17 +534,20 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
     }
 
     reg_md_map = ~memh->md_map & md_map;
+    if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
+        !(uct_flags & UCT_MD_MEM_FLAG_LOCK)) {
+        /* Do not register MDs that doesn't support nonblock registration if
+         * this memtype exists in `config.ext.reg_nb_mem_types`
+         */
+        reg_md_map &= context->reg_nonblock_md_map[mem_type];
+        uct_flags  |= UCT_MD_MEM_FLAG_NONBLOCK;
+    }
+
     if (reg_md_map == 0) {
         return UCS_OK;
     }
 
-    if ((context->config.ext.reg_nb_mem_types & UCS_BIT(mem_type)) &&
-        !(uct_flags & UCT_MD_MEM_FLAG_LOCK)) {
-        uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
-    }
-
     /* When adding registrations, existing access flags must be supported */
-    reg_params.flags         = uct_flags | memh->uct_flags;
     reg_params.dmabuf_fd     = UCT_DMABUF_FD_INVALID;
     reg_params.dmabuf_offset = 0;
 
@@ -580,7 +583,13 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_md_map[mem_type],
                     context->reg_block_md_map[mem_type]);
 
+        reg_params.flags      = uct_flags | memh->uct_flags;
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        if (!(context->reg_nonblock_md_map[mem_type] & md_index)) {
+            /* Ignore nonblcok flag if MD doesn't support it */
+            reg_params.flags &= !UCT_MD_MEM_FLAG_NONBLOCK;
+        }
+
         if (dmabuf_md_map & UCS_BIT(md_index)) {
             /* If this MD can consume a dmabuf and we have it - provide it */
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_DMABUF_FD |
