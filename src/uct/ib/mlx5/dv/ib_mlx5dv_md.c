@@ -1875,11 +1875,12 @@ static void uct_ib_mlx5_devx_check_mkey_by_name(uct_ib_mlx5_md_t *md,
 
 static void uct_ib_mlx5_md_port_counter_set_id_init(uct_ib_mlx5_md_t *md)
 {
-    uint8_t *counter_set_id;
+    const uint8_t last_port = md->super.dev.first_port + md->super.dev.num_ports;
+    uint8_t port;
 
-    ucs_carray_for_each(counter_set_id, md->port_counter_set_ids,
-                        sizeof(md->port_counter_set_ids)) {
-        *counter_set_id = UCT_IB_COUNTER_SET_ID_INVALID;
+    for (port = md->super.dev.first_port; port < last_port; port++) {
+        md->port_counter_set_ids[port] =
+                uct_ib_mlx5_devx_md_get_counter_set_id(md, port);
     }
 }
 
