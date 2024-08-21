@@ -124,6 +124,9 @@ typedef struct {
     /* Enable VFS monitoring */
     int                        vfs_enable;
 
+    /* Listening UNIX socket path of the VFS daemon */
+    char                       *vfs_sock_path;
+
     /* registration cache checks if physical pages are not moved */
     unsigned                   rcache_check_pfn;
 
