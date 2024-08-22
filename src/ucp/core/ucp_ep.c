@@ -3527,7 +3527,7 @@ int ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_index, int is_p2p)
             /* Transport is not connected as point-to-point */
             !is_p2p &&
             /* Transport supports active messages */
-            (ucp_worker_iface(ep->worker, rsc_index)->flags &
+            (ucp_worker_iface(ep->worker, rsc_index)->attr.cap.flags &
              UCT_IFACE_FLAG_AM_BCOPY);
 }
 
