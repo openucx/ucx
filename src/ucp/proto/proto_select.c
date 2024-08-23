@@ -15,27 +15,10 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/dt/dt.h>
-#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/dynamic_bitmap.h>
 
 #include <ucp/core/ucp_worker.inl>
 
-
-typedef struct {
-    ucp_proto_id_t   proto_id;
-    size_t           priv_offset;
-    size_t           cfg_thresh; /* Configured protocol threshold */
-    unsigned         cfg_priority; /* Priority of configuration */
-    ucp_proto_caps_t caps;
-} ucp_proto_init_elem_t;
-
-/* Parameters structure for initializing protocols for a selection parameter */
-struct ucp_proto_probe_ctx {
-    ucs_array_s(size_t, uint8_t)                 priv_buf;
-    ucs_array_s(unsigned, ucp_proto_init_elem_t) protocols;
-};
-
-typedef ucp_proto_probe_ctx_t ucp_proto_select_init_protocols_t;
 
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_ranges_t, unsigned, ucp_proto_perf_range_t);
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_thresh_t, unsigned,
@@ -217,12 +200,8 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
                                 const ucp_proto_select_param_t *select_param,
                                 ucp_proto_select_init_protocols_t *proto_init)
 {
-    ucp_proto_caps_t proto_caps = {};
     UCS_STRING_BUFFER_ONSTACK(strb, UCP_PROTO_CONFIG_STR_MAX);
-    void *proto_priv = ucs_alloca(UCP_PROTO_PRIV_MAX);
     ucp_proto_init_params_t init_params;
-    ucs_status_t status;
-    size_t priv_size;
 
     ucs_assert(ep_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
 
@@ -250,29 +229,10 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     ucs_array_init_dynamic(&proto_init->priv_buf);
 
     ucs_for_each_bit(init_params.proto_id, worker->context->proto_bitmap) {
-        ucs_assert(init_params.proto_id < ucp_protocols_count()); /* coverity */
-        init_params.priv       = proto_priv;
-        init_params.priv_size  = &priv_size;
-        init_params.caps       = &proto_caps;
-        init_params.proto_name = ucp_proto_id_field(init_params.proto_id, name);
-
+        ucs_assert(init_params.proto_id < ucp_protocols_count()); /* Coverity */
+        ucs_trace("probing %s", ucp_proto_id_field(init_params.proto_id, name));
         ucs_log_indent(1);
-        if (ucp_proto_id_field(init_params.proto_id, probe) != NULL) {
-            ucs_trace("probing %s", init_params.proto_name);
-            ucp_proto_id_call(init_params.proto_id, probe, &init_params);
-        } else if (ucp_proto_id_field(init_params.proto_id, init) != NULL) {
-            ucs_trace("initializing %s", init_params.proto_name);
-            status = ucp_proto_id_call(init_params.proto_id, init,
-                                       &init_params);
-            if (status == UCS_OK) {
-                ucp_proto_select_add_proto(&init_params, proto_caps.cfg_thresh,
-                                           proto_caps.cfg_priority, &proto_caps,
-                                           proto_priv, priv_size);
-            }
-        } else {
-            ucs_fatal("protocol '%s' both init and probe are NULL",
-                      init_params.proto_name);
-        }
+        ucp_proto_id_call(init_params.proto_id, probe, &init_params);
         ucs_log_indent(-1);
     }
 
@@ -300,18 +260,9 @@ ucp_proto_select_perf_ranges_cleanup(ucp_proto_perf_range_t *perf_ranges,
     }
 }
 
-void ucp_proto_select_caps_reset(ucp_proto_caps_t *caps)
-{
-    caps->cfg_thresh   = UCS_MEMUNITS_AUTO;
-    caps->cfg_priority = 0;
-    caps->min_length   = 0;
-    caps->num_ranges   = 0;
-}
-
 void ucp_proto_select_caps_cleanup(ucp_proto_caps_t *caps)
 {
     ucp_proto_select_perf_ranges_cleanup(caps->ranges, caps->num_ranges);
-    ucp_proto_select_caps_reset(caps);
 }
 
 static void
@@ -392,7 +343,6 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
             proto_config                 = &thresh_elem->proto_config;
             proto_config->proto          = ucp_protocols[proto->proto_id];
             proto_config->priv           = proto_priv;
-            proto_config->cfg_thresh     = proto->cfg_thresh;
             proto_config->ep_cfg_index   = ep_cfg_index;
             proto_config->rkey_cfg_index = rkey_cfg_index;
             proto_config->select_param   = *select_param;
@@ -471,9 +421,12 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
         }
 
         ucs_assert_always(!ucs_array_is_empty(&perf_list));
+        ucs_assert_always(ucs_array_length(&perf_list) < 64);
 
-        status = ucp_proto_perf_envelope_make(&perf_list, msg_length,
-                                              max_length, 1, &envelope);
+        status = ucp_proto_perf_envelope_make(ucs_array_begin(&perf_list),
+                                              ucs_array_length(&perf_list),
+                                              msg_length, max_length, 1,
+                                              &envelope);
         if (status != UCS_OK) {
             goto err_cleanup_perf_list;
         }
@@ -499,9 +452,11 @@ ucp_proto_select_elem_init_thresh(ucp_worker_h worker,
     ucs_assert_always(!ucs_array_is_empty(&thresholds));
 
     /* Set pointer to priv buffer (to release it during cleanup) */
-    select_elem->priv_buf    = ucs_array_extract_buffer(&proto_init->priv_buf);
     select_elem->perf_ranges = ucs_array_extract_buffer(&perf_ranges);
     select_elem->thresholds  = ucs_array_extract_buffer(&thresholds);
+    select_elem->proto_init  = *proto_init;
+    ucs_array_init_dynamic(&proto_init->priv_buf);
+    ucs_array_init_dynamic(&proto_init->protocols);
 
     return UCS_OK;
 
@@ -626,7 +581,7 @@ ucp_proto_select_elem_cleanup(ucp_proto_select_elem_t *select_elem)
     } while ((range++)->max_length < SIZE_MAX);
     ucs_free(select_elem->perf_ranges);
     ucs_free((void*)select_elem->thresholds);
-    ucs_free(select_elem->priv_buf);
+    ucp_proto_select_cleanup_protocols(&select_elem->proto_init);
 }
 
 static void ucp_proto_select_cache_reset(ucp_proto_select_t *proto_select)
@@ -730,14 +685,14 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
 
     ucs_trace("added protocol %s min_length %s cfg_thresh %s cfg_priority %d "
               "priv_size %zu",
-              init_params->proto_name,
+              proto_name,
               ucs_memunits_to_str(proto_caps->min_length, min_length_str,
                                   sizeof(min_length_str)),
               ucs_memunits_to_str(cfg_thresh, thresh_str, sizeof(thresh_str)),
               cfg_priority, priv_size);
 
     ucs_log_indent(1);
-    ucp_proto_select_init_trace_caps(init_params);
+    ucp_proto_select_init_trace_caps(init_params, proto_caps, priv);
     ucs_log_indent(-1);
 
     /* Copy private data */
@@ -759,14 +714,11 @@ void ucp_proto_select_add_proto(const ucp_proto_init_params_t *init_params,
             return);
 
     memset(init_elem, 0, sizeof(*init_elem));
-    init_elem->proto_id        = proto_id;
-    init_elem->priv_offset     = priv_offset;
-    init_elem->cfg_thresh      = cfg_thresh;
-    init_elem->cfg_priority    = cfg_priority;
-    init_elem->caps.min_length = proto_caps->min_length;
-    init_elem->caps.num_ranges = proto_caps->num_ranges;
-    memcpy(init_elem->caps.ranges, proto_caps->ranges,
-           proto_caps->num_ranges * sizeof(*init_elem->caps.ranges));
+    init_elem->proto_id     = proto_id;
+    init_elem->priv_offset  = priv_offset;
+    init_elem->cfg_thresh   = cfg_thresh;
+    init_elem->cfg_priority = cfg_priority;
+    init_elem->caps         = *proto_caps;
 }
 
 void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short)
@@ -794,6 +746,11 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
     ucp_memory_info_t mem_info;
     ssize_t max_short_signed;
     const uint32_t *op_attribute;
+
+    if (worker->context->config.progress_wrapper_enabled) {
+        ucp_proto_select_short_disable(proto_short);
+        return;
+    }
 
     ucp_memory_info_set_host(&mem_info);
 

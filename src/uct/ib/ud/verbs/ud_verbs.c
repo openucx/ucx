@@ -29,6 +29,10 @@
 
 #include <uct/ib/ud/base/ud_inl.h>
 
+
+#define UCT_UD_VERBS_IFACE_OVERHEAD 105e-9
+
+
 static UCS_F_NOINLINE void
 uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max);
 
@@ -36,7 +40,7 @@ static inline void
 uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface);
 
 static ucs_config_field_t uct_ud_verbs_iface_config_table[] = {
-  {"UD_", "", NULL,
+  {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_VERBS_IFACE_OVERHEAD), NULL,
    0, UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
   {NULL}
@@ -535,7 +539,7 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead = 105e-9; /* Software overhead */
+    iface_attr->overhead = UCT_UD_VERBS_IFACE_OVERHEAD; /* Software overhead */
 
     return UCS_OK;
 }

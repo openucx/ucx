@@ -94,7 +94,7 @@ typedef struct uct_ib_md_ext_config {
                                                        invalidated memory keys
                                                        that are kept idle before
                                                        reuse*/
-    unsigned                 reg_retry_cnt; /**< Memory registration retry count */
+    unsigned long            reg_retry_cnt; /**< Memory registration retry count */
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
 } uct_ib_md_ext_config_t;
 
@@ -142,6 +142,7 @@ typedef struct uct_ib_md {
     int                      relaxed_order;
     int                      fork_init;
     uint64_t                 reg_mem_types;
+    uint64_t                 gva_mem_types;
     uint64_t                 reg_nonblock_mem_types;
     uint64_t                 cap_flags;
     char                     *name;
@@ -188,6 +189,7 @@ typedef struct uct_ib_md_config {
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
+    int                      xgvmi_umr_enable; /**< Enable UMR workflow for XGVMI */
 } uct_ib_md_config_t;
 
 /**
@@ -220,6 +222,7 @@ typedef struct uct_ib_md_ops {
  * - determine device attributes and flags
  */
 typedef struct uct_ib_md_ops_entry {
+    ucs_list_link_t             list;
     const char                  *name;
     uct_ib_md_ops_t             *ops;
 } uct_ib_md_ops_entry_t;
@@ -233,7 +236,9 @@ typedef struct uct_ib_md_ops_entry {
         .ops  = &_md_ops, \
     }
 
+/* Used by IB module and IB sub-modules */
 extern uct_component_t uct_ib_component;
+extern ucs_list_link_t uct_ib_ops;
 
 
 static UCS_F_ALWAYS_INLINE uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)

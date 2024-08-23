@@ -49,25 +49,21 @@ uct_rocm_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_rocm_copy_md_t *md = ucs_derived_of(uct_md, uct_rocm_copy_md_t);
 
-    md_attr->flags                  = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY |
-                                      UCT_MD_FLAG_ALLOC;
-    md_attr->reg_mem_types          = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->reg_nonblock_mem_types = 0;
-    md_attr->cache_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                      UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->alloc_mem_types        = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->access_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->detect_mem_types       = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->dmabuf_mem_types       = 0;
+    uct_md_base_md_query(md_attr);
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY |
+                                UCT_MD_FLAG_ALLOC;
+    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     if (md->have_dmabuf) {
         md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     }
-    md_attr->max_alloc              = SIZE_MAX;
-    md_attr->max_reg                = ULONG_MAX;
-    md_attr->rkey_packed_size       = sizeof(uct_rocm_copy_key_t);
-    md_attr->reg_cost               = UCS_LINEAR_FUNC_ZERO;
-    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
+    md_attr->max_alloc        = SIZE_MAX;
+    md_attr->rkey_packed_size = sizeof(uct_rocm_copy_key_t);
 
     return UCS_OK;
 }
@@ -393,6 +389,7 @@ static void uct_rocm_copy_rcache_dump_region_cb(void *context, ucs_rcache_t *rca
 static ucs_rcache_ops_t uct_rocm_copy_rcache_ops = {
     .mem_reg     = uct_rocm_copy_rcache_mem_reg_cb,
     .mem_dereg   = uct_rocm_copy_rcache_mem_dereg_cb,
+    .merge       = (void*)ucs_empty_function,
     .dump_region = uct_rocm_copy_rcache_dump_region_cb
 };
 
@@ -436,7 +433,7 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_rocm_copy_rcache_ops;
-        rcache_params.flags              = 0;
+        rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
 
         status = ucs_rcache_create(&rcache_params, "rocm_copy", NULL, &md->rcache);
         if (status == UCS_OK) {

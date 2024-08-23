@@ -761,7 +761,7 @@ UCT_TAG_INSTANTIATE_TEST_CASE(test_tag)
 #if defined (ENABLE_STATS) && IBV_HW_TM
 extern "C" {
 #include <uct/api/uct.h>
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/base/ib_verbs.h>
 }
 
@@ -929,7 +929,7 @@ UCT_TAG_INSTANTIATE_TEST_CASE(test_tag_stats)
 #if IBV_HW_TM
 
 extern "C" {
-#include <uct/ib/rc/accel/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 }
 
 // TODO: Unite with test_tag + add GRH testing for DC

@@ -472,7 +472,7 @@ static void print_md_info(uct_component_h component,
             printf("#           memory invalidation is supported\n");
         }
 
-        if (md_attr.reg_alignment != 0) {
+        if (md_attr.reg_alignment != 1) {
             printf("#            alignment: %zx\n", md_attr.reg_alignment);
         }
 
@@ -501,6 +501,7 @@ static void print_md_info(uct_component_h component,
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, cache);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, detect);
             PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, dmabuf);
+            PRINT_MD_MEM_TYPE(&strb, md_attr, mem_type, gva);
             ucs_string_buffer_rtrim(&strb, ",");
 
             ucs_string_buffer_appendf(&strb, "), ");

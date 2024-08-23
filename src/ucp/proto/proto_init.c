@@ -25,6 +25,9 @@
  */
 #define UCP_PROTO_MSGLEN_EPSILON   0.5
 
+const char *ucp_envelope_convex_names[] = {"concave envelope",
+                                           "convex envelope"};
+
 void ucp_proto_common_add_ppln_range(ucp_proto_caps_t *caps,
                                      const ucp_proto_perf_range_t *frag_range,
                                      size_t max_length)
@@ -55,10 +58,16 @@ void ucp_proto_common_add_ppln_range(ucp_proto_caps_t *caps,
     frag_overhead =
             ucs_linear_func_apply(ppln_perf[UCP_PROTO_PERF_TYPE_SINGLE], frag_size) -
             ucs_linear_func_apply(ppln_perf[UCP_PROTO_PERF_TYPE_MULTI], frag_size);
-    ucs_assert(frag_overhead >= 0);
 
     ucs_trace("frag-size: %zd" UCP_PROTO_TIME_FMT(frag_overhead), frag_size,
               UCP_PROTO_TIME_ARG(frag_overhead));
+
+    /* In certain cases multi perf can be bigger than single (e.g. FAST_CMPL
+     * with huge send_post_overhead) so the fragment overhead can be negative
+     * according to the logic above. The simplest estimation is to ignore
+     * fragment overhead in that particular case.
+     */
+    frag_overhead = ucs_max(frag_overhead, 0);
 
     /* Apply the pipelining effect when sending multiple fragments */
     ppln_perf[UCP_PROTO_PERF_TYPE_SINGLE] =
@@ -78,10 +87,8 @@ void ucp_proto_common_init_base_caps(
         const ucp_proto_common_init_params_t *params, ucp_proto_caps_t *caps,
         size_t min_length)
 {
-    caps->cfg_thresh   = params->cfg_thresh;
-    caps->cfg_priority = params->cfg_priority;
-    caps->min_length   = ucs_max(params->min_length, min_length);
-    caps->num_ranges   = 0;
+    caps->min_length = ucs_max(params->min_length, min_length);
+    caps->num_ranges = 0;
 }
 
 static int ucp_proto_perf_range_is_zero(const ucp_proto_perf_range_t *range)
@@ -103,13 +110,11 @@ void ucp_proto_perf_range_add_data(const ucp_proto_perf_range_t *range)
 }
 
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
+ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs, uint64_t funcs_num,
                              size_t range_start, size_t range_end, int convex,
                              ucp_proto_perf_envelope_t *envelope_list)
 {
-    const ucs_linear_func_t *perf_list_ptr = ucs_array_begin(perf_list);
-    const unsigned perf_list_length        = ucs_array_length(perf_list);
-    size_t start                           = range_start;
+    size_t start = range_start;
     char num_str[64];
     struct {
         unsigned index;
@@ -121,20 +126,25 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
     double x_sample, x_intersect;
     uint64_t mask;
 
-    ucs_assert_always(perf_list_length < 64);
-    mask = UCS_MASK(perf_list_length);
+    ucs_assertv_always((funcs_num > 0) && (funcs_num < 64),
+                       "funcs_num=%zu", funcs_num);
+    mask = UCS_MASK(funcs_num);
 
     do {
-        ucs_assert(mask != 0);
-
         /* Find best trend at the 'start' point */
         best.index  = UINT_MAX;
         best.result = DBL_MAX;
+        x_sample    = start;
+        if (x_sample < range_end) {
+            x_sample += UCP_PROTO_MSGLEN_EPSILON;
+        }
         ucs_for_each_bit(curr.index, mask) {
-            x_sample    = start + UCP_PROTO_MSGLEN_EPSILON;
-            curr.result = ucs_linear_func_apply(perf_list_ptr[curr.index],
-                                                x_sample);
-            ucs_assert(curr.result != DBL_MAX);
+            curr.result = ucs_linear_func_apply(funcs[curr.index], x_sample);
+            ucs_assertv((curr.result != DBL_MAX) && !isnan(curr.result),
+                        "curr.index=%u curr.result=%f x_sample=%f "
+                        "funcs[curr.index]="UCP_PROTO_PERF_FUNC_FMT,
+                        curr.index, curr.result, x_sample,
+                        UCP_PROTO_PERF_FUNC_ARG(&funcs[curr.index]));
             if ((best.index == UINT_MAX) ||
                 ((curr.result < best.result) == convex)) {
                 best = curr;
@@ -155,13 +165,14 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
         midpoint = range_end;
         mask    &= ~UCS_BIT(best.index);
         ucs_for_each_bit(curr.index, mask) {
-            status = ucs_linear_func_intersect(perf_list_ptr[curr.index],
-                                               perf_list_ptr[best.index],
-                                               &x_intersect);
-            if ((status == UCS_OK) && (x_intersect > start)) {
-                /* We care only if the intersection is after 'start', since
-                 * otherwise 'best' is better than 'curr' at
-                 * 'end' as well as at 'start'.
+            status = ucs_linear_func_intersect(funcs[curr.index],
+                                               funcs[best.index], &x_intersect);
+            if ((status == UCS_OK) && (x_intersect > x_sample)) {
+                /* We care only if the intersection is after 'x_sample', since
+                 * otherwise 'best' is better than 'curr' at 'end' as well as
+                 * at 'x_sample'. Since 'x_sample' differs from start only
+                 * for 0.5 we make an estimation and set it as 'best' for
+                 * 'start' as well.
                  */
                 midpoint = ucs_min(ucs_double_to_sizet(x_intersect, SIZE_MAX),
                                    midpoint);
@@ -223,7 +234,7 @@ ucp_proto_init_parallel_stages(const char *proto_name, size_t range_start,
         *perf_elem = (*stage_elem)->perf[UCP_PROTO_PERF_TYPE_MULTI];
 
         ucs_trace("stage[%zu] %s " UCP_PROTO_PERF_FUNC_TYPES_FMT
-                  UCP_PROTO_PERF_FUNC_FMT(perf_elem),
+                  UCP_PROTO_PERF_FUNC_FMT,
                   stage_elem - stages,
                   ucp_proto_perf_node_name((*stage_elem)->node),
                   UCP_PROTO_PERF_FUNC_TYPES_ARG((*stage_elem)->perf),
@@ -236,8 +247,9 @@ ucp_proto_init_parallel_stages(const char *proto_name, size_t range_start,
     *perf_elem = sum_cpu_perf;
 
     /* Multi-fragment is pipelining overheads and network transfer */
-    status = ucp_proto_perf_envelope_make(&stage_list, range_start, range_end,
-                                          0, &concave);
+    status = ucp_proto_perf_envelope_make(ucs_array_begin(&stage_list),
+                                          ucs_array_length(&stage_list),
+                                          range_start, range_end, 0, &concave);
     if (status != UCS_OK) {
         goto out;
     }
@@ -317,7 +329,8 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
     if (context->rcache != NULL) {
         perf_node = ucp_proto_perf_node_new_data("rcache lookup", "");
 
-        *memreg_time = UCP_RCACHE_LOOKUP_FUNC;
+        *memreg_time = ucs_linear_func_make(context->config.ext.rcache_overhead,
+                                            0);
 
         ucp_proto_perf_node_add_data(perf_node, "lookup", *memreg_time);
 
@@ -331,7 +344,7 @@ void ucp_proto_init_memreg_time(const ucp_proto_common_init_params_t *params,
         md_attr = &context->tl_mds[md_index].attr;
         md_name = context->tl_mds[md_index].rsc.md_name;
         ucs_linear_func_add_inplace(memreg_time, md_attr->reg_cost);
-        ucs_trace("md %s" UCP_PROTO_PERF_FUNC_FMT(reg_cost), md_name,
+        ucs_trace("md %s reg_cost: " UCP_PROTO_PERF_FUNC_FMT, md_name,
                   UCP_PROTO_PERF_FUNC_ARG(&md_attr->reg_cost));
 
         ucp_proto_perf_node_add_data(perf_node, md_name, md_attr->reg_cost);

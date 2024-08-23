@@ -21,6 +21,7 @@
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/datastruct/ptr_map.h>
+#include <ucs/datastruct/usage_tracker.h>
 #include <ucs/arch/bitops.h>
 
 #include <ucs/datastruct/array.h>
@@ -46,6 +47,8 @@
     do { \
         if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
             UCS_ASYNC_BLOCK(&(_worker)->async); \
+        } else if (!((_worker)->flags & UCP_WORKER_FLAG_THREAD_SERIALIZED)) { \
+            ucs_assert(ucs_async_check_owner_thread(&(_worker)->async)); \
         } \
     } while (0)
 
@@ -146,8 +149,10 @@ enum {
     UCP_WORKER_STAT_RNDV_RX_UNEXP,
 
     UCP_WORKER_STAT_RNDV_PUT_ZCOPY,
+    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
     UCP_WORKER_STAT_RNDV_GET_ZCOPY,
     UCP_WORKER_STAT_RNDV_RTR,
+    UCP_WORKER_STAT_RNDV_RTR_MTYPE,
     UCP_WORKER_STAT_RNDV_RKEY_PTR,
 
     UCP_WORKER_STAT_LAST
@@ -363,6 +368,18 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    struct {
+        /* Usage tracker handle */
+        ucs_usage_tracker_h          handle;
+        /* Number of progress iterations passed so far (used to minimize
+         * calls to ucs_get_time) */
+        unsigned                     iter_count;
+        /* Number of rounds passed so far */
+        unsigned                     rounds_count;
+        /* Last round timestamp */
+        ucs_time_t                   last_round;
+    } usage_tracker;
 } ucp_worker_t;
 
 
@@ -393,6 +410,8 @@ void ucp_worker_signal_internal(ucp_worker_h worker);
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
 
+int ucp_worker_iface_is_activated(const ucp_worker_iface_t *wiface);
+
 void ucp_worker_keepalive_add_ep(ucp_ep_h );
 
 /* EP should be removed from worker all_eps prior to call this function */
@@ -411,6 +430,8 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                        void *discarded_cb_arg);
 
 void ucp_worker_vfs_refresh(void *obj);
+
+void ucp_worker_track_ep_usage_always(ucp_request_t *req);
 
 ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 

@@ -427,7 +427,7 @@ public:
         if (m_test_offload) {
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
         }
-        m_min_rndv = 0;
+        m_tag_min_rndv = 0;
     }
 
     void init() {
@@ -439,8 +439,8 @@ public:
 
         if (m_test_offload) {
             ucp_ep_config_t *cfg = ucp_ep_config(sender().ep());
-            m_min_rndv = ucp_ep_tag_offload_min_rndv_thresh(sender().ucph(),
-                                                            &cfg->key);
+            m_tag_min_rndv = ucp_ep_tag_offload_min_rndv_thresh(sender().ucph(),
+                                                                &cfg->key);
         }
     }
 
@@ -454,7 +454,7 @@ public:
 
 protected:
     bool    m_test_offload;
-    size_t  m_min_rndv;
+    size_t  m_tag_min_rndv;
 
     static void check_short_thresh(const ucp_memtype_thresh_t &thresh,
                                    size_t cfg_thresh, bool strict = false)
@@ -484,8 +484,8 @@ protected:
         if (m_test_offload) {
             /* If configured threshold is less than min_rndv, then expect exact
              * min_rndv limit for short messages */
-            if (cfg_thresh < m_min_rndv) {
-                check_short_thresh(cfg->tag.offload.max_eager_short, m_min_rndv,
+            if (cfg_thresh < m_tag_min_rndv) {
+                check_short_thresh(cfg->tag.offload.max_eager_short, m_tag_min_rndv,
                                    true);
             } else {
                 check_short_thresh(cfg->tag.offload.max_eager_short, cfg_thresh);
@@ -505,37 +505,32 @@ protected:
 
     void check_ep_proto_rndv_v2(size_t cfg_thresh, bool expect_rndv)
     {
-        ucp_ep_config_t *cfg             = ucp_ep_config(sender().ep());
-        ucp_proto_select_t *proto_select = &cfg->proto_select;
-        size_t msg_length                = cfg_thresh;
+        ucp_ep_config_t *cfg = ucp_ep_config(sender().ep());
+        const ucp_proto_config_t *proto_config;
         ucp_proto_select_elem_t value;
 
+        /* Skip proto_select hash map check for HWTM since eager has certain
+           max_frag threshold in that case and there is no reliable way
+           on UCP side to obtain that value. So RNDV can be used instead 
+           of eager even if RNDV_THRESH is set to higher value. */
         if (m_test_offload) {
-            /* There is a lower bound for rndv threshold with tag offload.
-             * We should not send messages smaller than this limit */
-            msg_length = ucs_max(m_min_rndv, msg_length);
+            UCS_TEST_SKIP_R("Skip EP RNDV_THRESH check for HWTM");
         }
 
-        kh_foreach_value(proto_select->hash, value, {
+        kh_foreach_value(cfg->proto_select.hash, value, {
             /* Find index of the corresponding ucp_proto_threshold_elem_t
              * to handle the given message size */
             unsigned idx = 0;
-            const ucp_proto_config_t *proto_config;
-            for (; msg_length > value.thresholds[idx].max_msg_length; ++idx) {
+            for (; cfg_thresh > value.thresholds[idx].max_msg_length; ++idx) {
                 proto_config = &value.thresholds[idx].proto_config;
                 /* Assert no rndv before expected limit */
                 EXPECT_EQ(nullptr, strstr(proto_config->proto->name, "rndv"));
             }
-            proto_config = &value.thresholds[idx].proto_config;
 
+            proto_config = &value.thresholds[idx].proto_config;
             if (expect_rndv) {
-                EXPECT_EQ(proto_config->cfg_thresh, cfg_thresh);
                 EXPECT_NE(nullptr, strstr(proto_config->proto->name, "rndv"));
-            } else if (!m_test_offload) {
-                /* Skip check that rndv is disabled for tag offload use case.
-                 * With tag offload rndv protocol might still be used for large
-                 * messages, because of HWTM limitation for eager transfers. */
-                EXPECT_NE(proto_config->cfg_thresh, cfg_thresh);
+            } else {
                 EXPECT_EQ(nullptr, strstr(proto_config->proto->name, "rndv"));
             }
         });

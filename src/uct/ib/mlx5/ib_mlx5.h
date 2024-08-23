@@ -61,7 +61,8 @@
 #define UCT_IB_MLX5_CQ_SET_CI            0
 #define UCT_IB_MLX5_CQ_ARM_DB            1
 #define UCT_IB_MLX5_LOG_MAX_MSG_SIZE     30
-#define UCT_IB_MLX5_ATOMIC_MODE          3
+#define UCT_IB_MLX5_ATOMIC_MODE_COMP     1
+#define UCT_IB_MLX5_ATOMIC_MODE_EXT      3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE   UCS_BIT(29) /* GRH/IP in the CQE */
 #define UCT_IB_MLX5_CQE_FORMAT_MASK      0xc
@@ -77,10 +78,10 @@
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC 0x0
 #endif
 
-#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC
-#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC MLX5DV_UAR_ALLOC_TYPE_NC
+#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC MLX5DV_UAR_ALLOC_TYPE_NC_DEDICATED
 #else
-#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC 0x1
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC (1U << 31)
 #endif
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
@@ -194,9 +195,13 @@ enum {
     UCT_IB_MLX5_MD_FLAG_MKEY_BY_NAME_RESERVE = UCS_BIT(14),
     /* Device supports DMA MMO */
     UCT_IB_MLX5_MD_FLAG_MMO_DMA              = UCS_BIT(15),
+    /* Device supports XGVMI UMR workflow */
+    UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(16),
+    /* Device supports UAR WC allocation type */
+    UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 18,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -247,22 +252,52 @@ typedef union {
 } uct_ib_mlx5_devx_mr_t;
 
 
+/* Data structure to hold the UMR MR (on the host) item in the mkey pool */
 typedef struct {
-    uct_ib_mem_t            super;
-    void                    *address;
-    struct mlx5dv_devx_obj  *atomic_dvmr;
-    struct mlx5dv_devx_obj  *indirect_dvmr;
-    struct mlx5dv_devx_umem *umem;
-    struct mlx5dv_devx_obj  *cross_mr;
-    struct mlx5dv_devx_obj  *smkey_mr;
-    struct mlx5dv_devx_obj  *dm_addr_dvmr;
+    ucs_list_link_t    super;
+    struct mlx5dv_mkey *mkey;
+} uct_ib_mlx5_devx_umr_mkey_t;
+
+
+#define UCT_IB_MLX5_UMR_MKEY_FMT "UMR mkey %p index 0x%x"
+#define UCT_IB_MLX5_UMR_MKEY_ARG(_umr) \
+    (_umr)->mkey, uct_ib_mlx5_mkey_index((_umr)->mkey->lkey)
+
+
+/* Data structure to hold the UMR mkey alias on the DPU item in the hash map */
+typedef struct {
+    struct mlx5dv_devx_obj *cross_mr;
+    uint32_t               lkey;
+} uct_ib_mlx5_devx_umr_alias_t;
+
+
+#define UCT_IB_MLX5_UMR_ALIAS_FMT "UMR mkey alias %p index 0x%x"
+#define UCT_IB_MLX5_UMR_ALIAS_ARG(_umr_alias) \
+    (_umr_alias)->cross_mr, uct_ib_mlx5_mkey_index((_umr_alias)->lkey)
+
+
+/* Hash map of indirect mkey (from the host) to mkey alias (on the DPU) */
+/* Note the hash key here is: gvmi_id << 32 | mkey (both uint32_t) */
+KHASH_MAP_INIT_INT64(umr_mkey_map, uct_ib_mlx5_devx_umr_alias_t);
+
+
+typedef struct {
+    uct_ib_mem_t                super;
+    void                        *address;
+    struct mlx5dv_devx_obj      *atomic_dvmr;
+    struct mlx5dv_devx_obj      *indirect_dvmr;
+    struct mlx5dv_devx_umem     *umem;
+    struct mlx5dv_devx_obj      *cross_mr;
+    uct_ib_mlx5_devx_umr_mkey_t *exported_umr_mkey;
+    struct mlx5dv_devx_obj      *smkey_mr;
+    struct mlx5dv_devx_obj      *dm_addr_dvmr;
 #if HAVE_IBV_DM
-    struct ibv_dm           *dm;
+    struct ibv_dm               *dm;
 #endif
-    uint32_t                atomic_rkey;
-    uint32_t                indirect_rkey;
-    uint32_t                exported_lkey;
-    uct_ib_mlx5_devx_mr_t   mrs[];
+    uint32_t                    atomic_rkey;
+    uint32_t                    indirect_rkey;
+    uint32_t                    exported_lkey;
+    uct_ib_mlx5_devx_mr_t       mrs[];
 } uct_ib_mlx5_devx_mem_t;
 
 
@@ -302,6 +337,19 @@ typedef struct uct_ib_mlx5_mem_lru_entry {
 
 KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
 
+
+/**
+ * We increment mkey tag (8 LSB of the mkey) for each newly created mkey, in
+ * order to reduce the probability of reusing the same mkey value.
+ * This constant is the modulo for the mkey tag increment.
+ */
+#define UCT_IB_MLX5_MKEY_TAG_MAX    251
+
+/**
+ * Indicate that exported key is indirect UMR mkey.
+ */
+#define UCT_IB_MLX5_MKEY_TAG_UMR    UCT_IB_MLX5_MKEY_TAG_MAX
+
 #endif
 
 
@@ -330,6 +378,17 @@ typedef struct uct_ib_mlx5_md {
 
     /* Cached values of counter set id per port */
     uint8_t                  port_counter_set_ids[UCT_IB_DEV_MAX_PORTS];
+
+    struct {
+        /* CQ for indirect (UMR) mkeys */
+        struct ibv_cq         *cq;
+        /* QP for indirect (UMR) mkeys */
+        struct ibv_qp         *qp;
+        /* Indirect (UMR) mkey pool (on the host) */
+        ucs_list_link_t       mkey_pool;
+        /* Hash map of indirect mkey (from the host) to alias (on the DPU) */
+        khash_t(umr_mkey_map) *mkey_hash;
+    } umr;
 #endif
     struct {
         size_t dc;
@@ -383,6 +442,7 @@ typedef struct uct_ib_mlx5_dbrec {
 typedef enum {
     UCT_IB_MLX5_OBJ_TYPE_VERBS,
     UCT_IB_MLX5_OBJ_TYPE_DEVX,
+    UCT_IB_MLX5_OBJ_TYPE_NULL,
     UCT_IB_MLX5_OBJ_TYPE_LAST
 } uct_ib_mlx5_obj_type_t;
 
@@ -800,6 +860,8 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
                              uct_ib_mlx5_md_t *md,
                              uct_ib_mlx5_mmio_mode_t mmio_mode);
 
+ucs_status_t uct_ib_mlx5_devx_check_uar(uct_ib_mlx5_md_t *md);
+
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,
                                        uct_ib_mlx5_mmio_mode_t mmio_mode);
@@ -850,13 +912,42 @@ uct_ib_mlx5_devx_obj_create(struct ibv_context *context, const void *in,
                             size_t inlen, void *out, size_t outlen,
                             char *msg_arg, ucs_log_level_t log_level);
 
-ucs_status_t
-uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg);
+static inline ucs_status_t
+uct_ib_mlx5_devx_obj_destroy(struct mlx5dv_devx_obj *obj, char *msg_arg)
+{
+    int ret;
 
-ucs_status_t uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
-                                          const void *in, size_t inlen,
-                                          void *out, size_t outlen,
-                                          char *msg_arg, int silent);
+    ret = mlx5dv_devx_obj_destroy(obj);
+    if (ret != 0) {
+        ucs_warn("mlx5dv_devx_obj_destroy(%s) failed: %m", msg_arg);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static inline ucs_status_t
+uct_ib_mlx5_devx_general_cmd(struct ibv_context *context,
+                             const void *in, size_t inlen,
+                             void *out, size_t outlen,
+                             char *msg_arg, int silent)
+{
+    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    int ret;
+    unsigned syndrome;
+
+    ret = mlx5dv_devx_general_cmd(context, in, inlen, out, outlen);
+    if (ret != 0) {
+        syndrome = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome);
+        ucs_log(level,
+                "mlx5dv_devx_general_cmd(%s) failed on %s, syndrome 0x%x: %m",
+                msg_arg, ibv_get_device_name(context->device), syndrome);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 
 ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
@@ -878,12 +969,18 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
 void uct_ib_mlx5_devx_destroy_cq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_cq_t *cq);
 
+ucs_status_t
+uct_ib_mlx5_devx_allow_xgvmi_access(uct_ib_mlx5_md_t *md,
+                                    uint32_t exported_lkey, int silent);
+
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
                          int access_mode, char *name)
 {
-    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    struct ibv_context *ibv_context = md->super.dev.ibv_context;
+    const ucs_log_level_t level     = silent ? UCS_LOG_LEVEL_DEBUG :
+                                               UCS_LOG_LEVEL_ERROR;
     ucs_status_t status;
     void *buf;
     int ret;
@@ -904,10 +1001,12 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
     }
 
     mem->size = size;
-    mem->mem  = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size,
-                                     access_mode);
+    mem->mem  = mlx5dv_devx_umem_reg(ibv_context, buf, size, access_mode);
     if (mem->mem == NULL) {
-        uct_ib_check_memlock_limit_msg(level, "mlx5dv_devx_umem_reg()");
+        uct_ib_check_memlock_limit_msg(
+                ibv_context, level,
+                "mlx5dv_devx_umem_reg(size=%zu access=0x%x)", size,
+                access_mode);
         status = UCS_ERR_NO_MEMORY;
         goto err_dofork;
     }
@@ -1029,6 +1128,9 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                       const uct_ib_md_config_t *md_config,
                                       uct_ib_md_t **p_md);
+
+ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
+                                               uct_ib_mlx5_devx_mem_t *memh);
 #endif
 
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length);
@@ -1079,6 +1181,11 @@ static inline uct_ib_mlx5_md_t *uct_ib_mlx5_iface_md(uct_ib_iface_t *iface)
 static inline uint8_t uct_ib_mlx5_inl_cqe(size_t inl, size_t cqe_size)
 {
     return (inl > 0) ? (cqe_size / 2) : 0;
+}
+
+static inline const char *uct_ib_mlx5_dev_name(uct_ib_mlx5_md_t *md)
+{
+    return uct_ib_device_name(&md->super.dev);
 }
 
 #endif

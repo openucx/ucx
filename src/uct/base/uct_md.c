@@ -418,6 +418,8 @@ uct_md_attr_v2_copy(uct_md_attr_v2_t *dst, const uct_md_attr_v2_t *src)
                               UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, access_mem_types,
                               UCT_MD_ATTR_FIELD_ACCESS_MEM_TYPES);
+    UCT_MD_ATTR_V2_FIELD_COPY(dst, src, gva_mem_types,
+                              UCT_MD_ATTR_FIELD_GVA_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, dmabuf_mem_types,
                               UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES);
     UCT_MD_ATTR_V2_FIELD_COPY(dst, src, reg_cost, UCT_MD_ATTR_FIELD_REG_COST);
@@ -484,6 +486,25 @@ ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr)
     uct_md_attr_v2_copy(md_attr, &md_attr_v2);
 
     return UCS_OK;
+}
+
+void uct_md_base_md_query(uct_md_attr_v2_t *md_attr)
+{
+    md_attr->reg_mem_types             = 0;
+    md_attr->reg_nonblock_mem_types    = 0;
+    md_attr->cache_mem_types           = 0;
+    md_attr->detect_mem_types          = 0;
+    md_attr->alloc_mem_types           = 0;
+    md_attr->access_mem_types          = 0;
+    md_attr->dmabuf_mem_types          = 0;
+    md_attr->gva_mem_types             = 0;
+    md_attr->max_alloc                 = 0;
+    md_attr->max_reg                   = ULONG_MAX;
+    md_attr->reg_cost                  = UCS_LINEAR_FUNC_ZERO;
+    md_attr->rkey_packed_size          = 0;
+    md_attr->exported_mkey_packed_size = 0;
+    md_attr->reg_alignment             = 1;
+    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
 }
 
 ucs_status_t uct_mem_alloc_check_params(size_t length,
@@ -557,7 +578,7 @@ ucs_status_t uct_md_mem_reg_v2(uct_md_h md, void *address, size_t length,
 {
     uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
 
-    if ((length == 0) || (address == NULL)) {
+    if (length == 0) {
         uct_md_log_mem_reg_error(flags,
                                  "uct_md_mem_reg(address=%p length=%zu): "
                                  "invalid parameters", address, length);
@@ -618,17 +639,4 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
     ucs_assert(params->memh == (void*)0xdeadbeef);
 
     return UCS_OK;
-}
-
-double uct_md_rcache_overhead(const ucs_rcache_config_t *rcache_config)
-{
-    if (rcache_config->overhead == UCS_TIME_AUTO) {
-        if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {
-            return 360e-9;
-        } else {
-            return 180e-9;
-        }
-    } else {
-        return ucs_time_to_sec(rcache_config->overhead);
-    }
 }

@@ -90,6 +90,9 @@ UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(32)
 UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(64)
 
 
+#define UCT_RC_MLX5_IFACE_OVERHEAD 40e-9
+
+
 typedef enum {
     UCT_RC_MLX5_SRQ_TOPO_LIST,
     UCT_RC_MLX5_SRQ_TOPO_CYCLIC,
@@ -387,6 +390,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_release_desc_t     am_desc;
         UCS_STATS_NODE_DECLARE(stats)
     } tm;
+
 #if HAVE_IBV_DM
     struct {
         uct_mlx5_dm_data_t             *dm;

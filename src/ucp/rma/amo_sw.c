@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
  * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -38,10 +39,10 @@ static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
 
     if (worker->context->config.ext.proto_enable) {
         ucp_dt_contig_pack(worker, atomich + 1, &req->send.amo.value, size,
-                           UCS_MEMORY_TYPE_HOST);
+                           UCS_MEMORY_TYPE_HOST, size);
         if (req->send.amo.uct_op == UCT_ATOMIC_OP_CSWAP) {
             ucp_dt_contig_pack(worker, cswaph, req->send.amo.reply_buffer, size,
-                               ucp_amo_request_reply_mem_type(req));
+                               ucp_amo_request_reply_mem_type(req), size);
             length += size;
         }
     } else {
@@ -83,7 +84,7 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 
     status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ,
                                     req->send.lane, pack_cb, req, NULL);
-    if ((status != UCS_OK) || ((status == UCS_OK) && !fetch)) {
+    if ((status != UCS_OK) || !fetch) {
         if (fetch) {
             ucp_send_request_id_release(req);
         }
@@ -303,7 +304,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_fl
 
     if (worker->context->config.ext.proto_enable) {
         ucp_dt_contig_unpack(worker, req->send.amo.reply_buffer, hdr + 1,
-                             frag_length, ucp_amo_request_reply_mem_type(req));
+                             frag_length, ucp_amo_request_reply_mem_type(req),
+                             frag_length);
     } else {
         memcpy(req->send.buffer, hdr + 1, frag_length);
     }

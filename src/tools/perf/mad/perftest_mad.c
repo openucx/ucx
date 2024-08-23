@@ -316,8 +316,10 @@ static ucs_status_t perftest_mad_barrier(perftest_mad_rte_group_t *group)
     ucs_status_t status = UCS_OK;
     unsigned value;
 
-#pragma omp barrier
-#pragma omp single copyprivate(status)
+#if _OPENMP
+#  pragma omp barrier
+#  pragma omp single copyprivate(status)
+#endif
     {
         value = ++mad_magic;
 
@@ -331,7 +333,9 @@ static ucs_status_t perftest_mad_barrier(perftest_mad_rte_group_t *group)
 
         status = perftest_mad_recv_magic(group, ~value);
     }
-#pragma omp barrier
+#if _OPENMP
+#  pragma omp barrier
+#endif
     return status;
 }
 
@@ -532,40 +536,32 @@ static int perftest_mad_accept_is_valid(const void *buf, size_t size)
 static ucs_status_t perftest_mad_accept(perftest_mad_rte_group_t *rte_group,
                                         struct perftest_context *ctx)
 {
+    union {
+        perftest_params_t params;
+        uint8_t           buf[4096];
+    } peer;
     size_t size;
     ucs_status_t status;
-    uint8_t buf[4096];
     int lid;
-    unsigned needed_flags;
-
-    release_msg_size_list(&ctx->params);
 
     do {
-        size   = sizeof(buf);
-        status = perftest_mad_recv(rte_group, buf, &size, &rte_group->dst_port);
+        size   = sizeof(peer.buf);
+        status = perftest_mad_recv(rte_group, peer.buf, &size,
+                                   &rte_group->dst_port);
 
         ucs_debug("MAD: accept: receive got status:%d, size:%zu/%zu", status,
-                  size, sizeof(buf));
-    } while ((status != UCS_OK) || !perftest_mad_accept_is_valid(buf, size));
+                  size, sizeof(peer.buf));
+    } while ((status != UCS_OK) || !perftest_mad_accept_is_valid(peer.buf, size));
 
     lid = rte_group->dst_port.lid;
     ucs_debug("MAD: accept: remote lid:%d/0x%02x", lid, lid);
 
-    /* Import receive params, preserving passed flags */
-    needed_flags = ctx->params.super.flags & UCX_PERF_TEST_FLAG_ERR_HANDLING;
-    memcpy(&ctx->params, buf, sizeof(ctx->params));
-    ctx->params.super.flags |= needed_flags;
-
-    /* Import received message size list */
-    size = sizeof(*ctx->params.super.msg_size_list) *
-           ctx->params.super.msg_size_cnt;
-
-    ctx->params.super.msg_size_list = malloc(size);
-    if (ctx->params.super.msg_size_list == NULL) {
-        return UCS_ERR_NO_MEMORY;
+    peer.params.super.msg_size_list =
+            UCS_PTR_TYPE_OFFSET(&peer.params, peer.params);
+    status = perftest_params_merge(&ctx->params, &peer.params);
+    if (status != UCS_OK) {
+        return status;
     }
-
-    memcpy(ctx->params.super.msg_size_list, buf + sizeof(ctx->params), size);
 
     return perftest_mad_send(rte_group, &mad_magic, sizeof(mad_magic));
 }

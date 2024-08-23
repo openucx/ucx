@@ -247,14 +247,18 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
                                     dt_mask);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_multi_lane_map_progress(ucp_request_t *req, ucp_lane_map_t *lane_map,
-                                   ucp_proto_multi_lane_send_func_t send_func)
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_lane_map_progress(
+        ucp_request_t *req, ucp_lane_index_t *lane_p, ucp_lane_map_t lane_map,
+        ucp_proto_multi_lane_send_func_t send_func)
 {
-    ucp_lane_index_t lane = ucs_ffs32(*lane_map);
+    ucp_lane_map_t remaining_lane_map = lane_map & ~UCS_MASK(*lane_p);
+    ucp_lane_index_t lane;
     ucs_status_t status;
 
-    ucs_assert(*lane_map != 0);
+    ucs_assertv(remaining_lane_map != 0,
+                "req=%p *lane_p=%d lane_map=0x%" PRIx64, req, *lane_p,
+                lane_map);
+    lane = ucs_ffs64(remaining_lane_map);
 
     status = send_func(req, lane);
     if (ucs_likely(status == UCS_OK)) {
@@ -265,13 +269,15 @@ ucp_proto_multi_lane_map_progress(ucp_request_t *req, ucp_lane_map_t *lane_map,
         return ucp_proto_multi_handle_send_error(req, lane, status);
     }
 
-    *lane_map &= ~UCS_BIT(lane);
-    if (*lane_map != 0) {
-        return UCS_INPROGRESS; /* Not finished all lanes yet */
+    if (ucs_is_pow2_or_zero(remaining_lane_map)) {
+        /* This lane was the last one */
+        ucp_request_invoke_uct_completion_success(req);
+        return UCS_OK;
     }
 
-    ucp_request_invoke_uct_completion_success(req);
-    return UCS_OK;
+    /* Not finished yet, so continue from next lane */
+    *lane_p = lane + 1;
+    return UCS_INPROGRESS;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

@@ -93,9 +93,15 @@ public:
     /* returns whether ROCM device supports hipMallocPitch */
     static bool is_rocm_malloc_pitch_supported();
 
+    /* Get from NVML BAR1 free size */
+    static void get_bar1_free_size_nvml();
+
     /* Return free memory on the BAR1 / GPU. If GPU is not used
      * SIZE_MAX is returned */
-    static size_t get_bar1_free_size();
+    static size_t get_bar1_free_size()
+    {
+        return m_bar1_free_size;
+    }
 
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed);
@@ -129,7 +135,7 @@ private:
                                      size_t length, size_t offset,
                                      const void *buffer, const void *orig_ptr)
     {
-        const uint64_t mask = UCS_MASK_SAFE(length * 8 * sizeof(char));
+        const uint64_t mask = UCS_MASK(length * 8 * sizeof(char));
 
         if (ucs_unlikely(actual != (expected & mask))) {
             pattern_check_failed(expected, actual, length, mask, offset,
@@ -143,6 +149,8 @@ private:
     static bool check_mem_types(ucs_memory_type_t dst_mem_type,
                                 ucs_memory_type_t src_mem_type,
                                 const uint64_t mem_types);
+
+    static size_t           m_bar1_free_size;
 
     const ucs_memory_type_t m_mem_type;
     void * const            m_ptr;

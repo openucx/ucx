@@ -76,26 +76,27 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
                                   size_t length,
                                   uct_log_data_dump_func_t packet_dump_cb);
 
-#define uct_ib_check_memlock_limit_msg(level, _fmt, ...) \
+#define uct_ib_check_memlock_limit_msg(_ibv_context, _level, _fmt, ...) \
     ({ \
         UCS_STRING_BUFFER_ONSTACK(_msg, 256); \
         int _tmp_errno = errno; \
-        ucs_string_buffer_appendf(&_msg, _fmt, ## __VA_ARGS__); \
+        ucs_string_buffer_appendf(&_msg, _fmt, ##__VA_ARGS__); \
         ucs_string_buffer_appendf(&_msg, " failed: %s", strerror(_tmp_errno)); \
         uct_ib_memlock_limit_msg(&_msg, _tmp_errno); \
-        ucs_log(level, "%s", ucs_string_buffer_cstr(&_msg)); \
+        ucs_log(_level, "%s: %s", ibv_get_device_name((_ibv_context)->device), \
+                ucs_string_buffer_cstr(&_msg)); \
     })
 
 #define uct_ib_log_post_send(_iface, _qp, _wr, _max_sge, _dump_cb) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_log_post_send(__FILE__, __LINE__, __FUNCTION__, \
+        __uct_ib_log_post_send(__FILE__, __LINE__, __func__, \
                                 _iface, _qp, _wr, _max_sge, _dump_cb); \
     }
 
 /* Suitable for both: regular and exp wcs */
 #define uct_ib_log_recv_completion(_iface, _wc, _data, _length, _dump_cb, ...) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_log_recv_completion(__FILE__, __LINE__, __FUNCTION__, \
+        __uct_ib_log_recv_completion(__FILE__, __LINE__, __func__, \
                                      _iface, (_wc)->qp_num, (_wc)->src_qp, (_wc)->slid, \
                                      _data, _length, _dump_cb, ## __VA_ARGS__); \
     }

@@ -250,14 +250,16 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     ucs_status_t status;
     ssize_t nread;
     size_t offset;
+    int ret;
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
-    /* copy path components to 'dir_buf' and 'watch_filename' */
-    ucs_strncpy_safe(dir_buf, path, sizeof(dir_buf));
-    ucs_strncpy_safe(watch_filename, ucs_basename(path),
-                     sizeof(watch_filename));
-    watch_dirname = dirname(dir_buf);
+    /* Create directory path */
+    ret = ucs_vfs_sock_mkdir(path, UCS_LOG_LEVEL_DIAG);
+    if (ret != 0) {
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
 
     /* Create inotify channel */
     ucs_vfs_fuse_context.inotify_fd = inotify_init();
@@ -273,6 +275,12 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
+
+    /* copy path components to 'dir_buf' and 'watch_filename' */
+    ucs_strncpy_safe(dir_buf, path, sizeof(dir_buf));
+    ucs_strncpy_safe(watch_filename, ucs_basename(path),
+                     sizeof(watch_filename));
+    watch_dirname = dirname(dir_buf);
 
     /* Watch for new files in 'watch_dirname' */
     ucs_vfs_fuse_context.watch_desc = inotify_add_watch(
@@ -328,8 +336,9 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             }
 
             ucs_trace("file '%s' created", event->name);
+            /* event->len is a multiple of 16, not the string length */
             /* coverity[tainted_data] */
-            if ((event->len != (strlen(watch_filename) + 1)) ||
+            if ((event->len < (strlen(watch_filename) + 1)) ||
                 (strncmp(event->name, watch_filename, event->len) != 0)) {
                 ucs_trace("ignoring inotify create event of '%s'", event->name);
                 continue;

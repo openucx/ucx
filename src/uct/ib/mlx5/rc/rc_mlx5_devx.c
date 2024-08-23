@@ -460,7 +460,8 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max, ucs_ilog2_or0(max_rd_atomic));
-    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
+    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode,
+                      uct_ib_mlx5_get_atomic_mode(&iface->super.super));
     UCT_IB_MLX5DV_SET(qpc, qpc, rre, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);

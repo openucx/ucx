@@ -567,7 +567,13 @@ enum {
      * received from different peers are compared equal, they can be used
      * interchangeably, avoiding the need to keep all of them in memory.
      */
-    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3)
+    UCP_MEM_MAP_SYMMETRIC_RKEY = UCS_BIT(3),
+
+    /**
+     * Enforce pinning of the memory pages in the mapping and populate them up-front.
+     * This flag is mutually exclusive with UCP_MEM_MAP_NONBLOCK.
+     */
+    UCP_MEM_MAP_LOCK           = UCS_BIT(4)
 };
 
 
@@ -1875,6 +1881,7 @@ typedef struct ucp_am_handler_param {
 
     /**
      * Active Message id.
+     * @warning Value must be between 0 and UINT16_MAX.
      */
     unsigned                 id;
 
@@ -2892,7 +2899,7 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr);
  *                          The format of the string is: "<size>[,<type>]".
  *                          For example:
  *                           - "32768"   : allocate 32 kilobytes of host memory.
- *                           - "1m,cuda" : allocate 1 megabayte of cuda memory.
+ *                           - "1m,cuda" : allocate 1 megabyte of cuda memory.
  * @param [in] context      The context on which the memory is mapped.
  * @param [in] stream       Output stream on which to print the information.
  */
@@ -4065,7 +4072,8 @@ enum ucp_ep_attr_field {
     UCP_EP_ATTR_FIELD_NAME            = UCS_BIT(0), /**< UCP endpoint name */
     UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
     UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2), /**< Sockaddr the endpoint is connected to */
-    UCP_EP_ATTR_FIELD_TRANSPORTS      = UCS_BIT(3)  /**< Transport and device used by endpoint */
+    UCP_EP_ATTR_FIELD_TRANSPORTS      = UCS_BIT(3), /**< Transport and device used by endpoint */
+    UCP_EP_ATTR_FIELD_USER_DATA       = UCS_BIT(4)  /**< User data associated with the endpoint */
 };
 
 
@@ -4114,6 +4122,11 @@ typedef struct ucp_ep_attr {
      */
     ucp_transports_t        transports;
 
+    /**
+     * User data associated with an endpoint passed in
+     * @ref ucp_ep_params_t::user_data.
+     */
+    void                   *user_data;
 } ucp_ep_attr_t;
 
 

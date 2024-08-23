@@ -104,11 +104,27 @@ static inline uint64_t ucs_async_missed_event_pack(int id,
     return ((uint64_t)id << UCS_ASYNC_MISSED_QUEUE_SHIFT) | (uint32_t)events;
 }
 
+static inline int ucs_async_missed_event_unpack_id(uint64_t value)
+{
+    return value >> UCS_ASYNC_MISSED_QUEUE_SHIFT;
+}
+
+static inline int ucs_async_missed_event_unpack_events(uint64_t value)
+{
+    return value & UCS_ASYNC_MISSED_QUEUE_MASK;
+}
+
 static inline void ucs_async_missed_event_unpack(uint64_t value, int *id_p,
                                                  int *events_p)
 {
-    *id_p     = value >> UCS_ASYNC_MISSED_QUEUE_SHIFT;
-    *events_p = value & UCS_ASYNC_MISSED_QUEUE_MASK;
+    *id_p     = ucs_async_missed_event_unpack_id(value);
+    *events_p = ucs_async_missed_event_unpack_events(value);
+}
+
+static int ucs_async_missed_event_is_same(uint64_t value, void *arg)
+{
+    return ucs_async_missed_event_unpack_id(value) ==
+           ((ucs_async_handler_t *)arg)->id;
 }
 
 static void ucs_async_handler_hold(ucs_async_handler_t *handler)
@@ -350,6 +366,9 @@ ucs_status_t ucs_async_context_init(ucs_async_context_t *async, ucs_async_mode_t
         goto err_free_miss_fds;
     }
 
+#if UCS_ENABLE_ASSERT
+    async->owner       = UCS_ASYNC_PTHREAD_ID_NULL;
+#endif
     async->mode        = mode;
     async->last_wakeup = ucs_get_time();
     return UCS_OK;
@@ -530,6 +549,7 @@ err:
 ucs_status_t ucs_async_remove_handler(int id, int is_sync)
 {
     ucs_async_handler_t *handler;
+    ucs_async_context_t *async;
     ucs_status_t status;
 
     /* We can't find the async handle mode without taking a read lock, which in
@@ -566,6 +586,12 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
              * for the async handler to complete */
             sched_yield();
         }
+    }
+
+    async = handler->async;
+    if (async != NULL) {
+        ucs_mpmc_queue_remove_if(&async->missed, ucs_async_missed_event_is_same,
+                                 handler);
     }
 
     ucs_async_handler_put(handler);

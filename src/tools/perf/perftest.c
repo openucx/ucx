@@ -172,7 +172,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.api               = UCX_PERF_API_LAST;
     params->super.command           = UCX_PERF_CMD_LAST;
     params->super.test_type         = UCX_PERF_TEST_TYPE_LAST;
-    params->super.thread_mode       = UCS_THREAD_MODE_SINGLE;
+    params->super.thread_mode       = UCS_THREAD_MODE_SERIALIZED;
     params->super.thread_count      = 1;
     params->super.async_mode        = UCS_ASYNC_THREAD_LOCK_TYPE;
     params->super.wait_mode         = UCX_PERF_WAIT_MODE_LAST;
@@ -228,9 +228,10 @@ static unsigned sock_rte_group_index(void *rte_group)
 static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
                              void *arg)
 {
-#pragma omp barrier
-
-#pragma omp master
+#if _OPENMP
+#  pragma omp barrier
+#  pragma omp master
+#endif
   {
     sock_rte_group_t *group = rte_group;
 
@@ -251,7 +252,10 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
         }
     }
   }
-#pragma omp barrier
+
+#if _OPENMP
+#  pragma omp barrier
+#endif
 }
 
 static void sock_rte_post_vec(void *rte_group, const struct iovec *iovec,
@@ -345,7 +349,7 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
     int ret;
     char service[8];
     char err_str[64];
-    unsigned needed_flags;
+    perftest_params_t peer_params;
 
     ucs_snprintf_safe(service, sizeof(service), "%u", ctx->port);
     memset(&hints, 0, sizeof(hints));
@@ -425,36 +429,36 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
     }
 
     if (ctx->server_addr == NULL) {
-        /* release the memory for the list of the message sizes allocated
-         * during the initialization of the default testing parameters */
-        release_msg_size_list(&ctx->params);
-
-        needed_flags = ctx->params.super.flags &
-                       UCX_PERF_TEST_FLAG_ERR_HANDLING;
-        ret = safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
+        ret = safe_recv(connfd, &peer_params, sizeof(peer_params), NULL, NULL);
         if (ret) {
             status = UCS_ERR_IO_ERROR;
             goto err_close_connfd;
         }
-        ctx->params.super.flags |= needed_flags;
 
-        if (ctx->params.super.msg_size_cnt != 0) {
-            ctx->params.super.msg_size_list =
+        if (peer_params.super.msg_size_cnt != 0) {
+            peer_params.super.msg_size_list =
                     calloc(ctx->params.super.msg_size_cnt,
                            sizeof(*ctx->params.super.msg_size_list));
-            if (NULL == ctx->params.super.msg_size_list) {
+            if (peer_params.super.msg_size_list == NULL) {
                 status = UCS_ERR_NO_MEMORY;
                 goto err_close_connfd;
             }
 
-            ret = safe_recv(connfd, ctx->params.super.msg_size_list,
-                            sizeof(*ctx->params.super.msg_size_list) *
-                            ctx->params.super.msg_size_cnt,
+            ret = safe_recv(connfd, peer_params.super.msg_size_list,
+                            sizeof(*peer_params.super.msg_size_list) *
+                            peer_params.super.msg_size_cnt,
                             NULL, NULL);
             if (ret) {
+                perftest_params_release_msg_size_list(&peer_params);
                 status = UCS_ERR_IO_ERROR;
                 goto err_close_connfd;
             }
+        }
+
+        status = perftest_params_merge(&ctx->params, &peer_params);
+        perftest_params_release_msg_size_list(&peer_params);
+        if (status != UCS_OK) {
+            goto err_close_connfd;
         }
 
         ctx->sock_rte_group.sendfd    = connfd;

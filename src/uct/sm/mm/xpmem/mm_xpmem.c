@@ -181,6 +181,7 @@ static void uct_xpmem_rcache_dump_region(void *context, ucs_rcache_t *rcache,
 static ucs_rcache_ops_t uct_xpmem_rcache_ops = {
     .mem_reg     = uct_xpmem_rcache_mem_reg,
     .mem_dereg   = uct_xpmem_rcache_mem_dereg,
+    .merge       = (void*)ucs_empty_function,
     .dump_region = uct_xpmem_rcache_dump_region
 };
 

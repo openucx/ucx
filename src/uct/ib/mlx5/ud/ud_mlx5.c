@@ -1,6 +1,7 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -32,8 +33,11 @@
 #include <uct/ib/ud/base/ud_inl.h>
 
 
+#define UCT_UD_MLX5_IFACE_OVERHEAD 80e-9
+
+
 static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
-  {"UD_", "", NULL,
+  {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_MLX5_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_ud_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
@@ -200,7 +204,7 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
 
     for (count = 0; count < batch; count ++) {
         next_pi = (pi + 1) &  iface->rx.wq.mask;
-        ucs_prefetch(rx_wqes + next_pi);
+        ucs_read_prefetch(rx_wqes + next_pi);
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, break);
         rx_wqes[pi].lkey = htonl(desc->lkey);
@@ -489,7 +493,7 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
 
     ci            = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
     packet        = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
-    ucs_prefetch(UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN));
+    ucs_read_prefetch(UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN));
     rx_hdr_offset = iface->super.super.config.rx_hdr_offset;
     desc          = UCS_PTR_BYTE_OFFSET(packet, -rx_hdr_offset);
 
@@ -627,7 +631,7 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead = 80e-9; /* Software overhead */
+    iface_attr->overhead = UCT_UD_MLX5_IFACE_OVERHEAD; /* Software overhead */
 
     return UCS_OK;
 }
@@ -803,7 +807,9 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
     status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {
-        uct_ib_check_memlock_limit_msg(UCS_LOG_LEVEL_ERROR, "ibv_create_qp()");
+        uct_ib_check_memlock_limit_msg(ib_md->super.dev.ibv_context,
+                                       UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_qp(UD)");
         return status;
     }
 
@@ -910,22 +916,31 @@ static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
     uct_ib_device_t *dev               = &md->super.dev;
     ucs_status_t status;
     struct ibv_qp *qp;
-    uct_ib_mlx5dv_qp_tmp_objs_t qp_tmp_objs;
+    struct ibv_cq *cq;
 
     if (md->dv_tx_wqe_ratio.ud != 0) {
         return UCS_OK;
     }
 
-    status = uct_ib_mlx5dv_qp_tmp_objs_create(dev, md->super.pd, &qp_tmp_objs, 0);
-    if (status != UCS_OK) {
+    cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
+    if (cq == NULL) {
+        uct_ib_check_memlock_limit_msg(dev->ibv_context, UCS_LOG_LEVEL_ERROR,
+                                       "ibv_create_cq()");
+        status = UCS_ERR_IO_ERROR;
         goto out;
     }
 
-    uct_ib_mlx5dv_qp_init_attr(&qp_init_attr, md->super.pd, &qp_tmp_objs,
-                               IBV_QPT_UD, 128);
+    qp_init_attr.send_cq         = cq;
+    qp_init_attr.recv_cq         = cq;
+    qp_init_attr.qp_type         = IBV_QPT_UD;
+    qp_init_attr.sq_sig_all      = 0;
+    qp_init_attr.cap.max_send_wr = 128;
+    qp_init_attr.cap.max_recv_wr = 128;
     uct_ud_mlx5_qp_update_caps(&qp_init_attr.cap);
 
 #if HAVE_DECL_IBV_CREATE_QP_EX
+    qp_init_attr.comp_mask       = IBV_QP_INIT_ATTR_PD;
+    qp_init_attr.pd              = md->super.pd;
     qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp_ex, dev->ibv_context,
                                  &qp_init_attr);
 #else
@@ -940,7 +955,7 @@ static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
                   qp_init_attr.cap.max_inline_data,
                   qp_init_attr.cap.max_recv_wr, qp_init_attr.cap.max_recv_sge);
         status = UCS_ERR_IO_ERROR;
-        goto out_qp_tmp_objs_close;
+        goto out_destroy_cq;
     }
 
     status = uct_ib_mlx5dv_calc_tx_wqe_ratio(qp, qp_init_attr.cap.max_send_wr,
@@ -948,8 +963,8 @@ static ucs_status_t uct_ud_mlx5dv_calc_tx_wqe_ratio(uct_ib_mlx5_md_t *md)
 
     uct_ib_destroy_qp(qp);
 
-out_qp_tmp_objs_close:
-    uct_ib_mlx5dv_qp_tmp_objs_destroy(&qp_tmp_objs);
+out_destroy_cq:
+    ibv_destroy_cq(cq);
 out:
     return status;
 }

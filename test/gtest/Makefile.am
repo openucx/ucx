@@ -33,8 +33,8 @@ export ASAN_OPTIONS=protect_shadow_gap=0
 
 # LD_PRELOAD puts ASAN first in initial library list which is required for
 # correct ASAN work.
-ASAN_LD_PRELOAD=$(shell ldconfig -p | grep libasan.so | tr ' ' '\n' | grep /)
-TEST_ENV=LD_PRELOAD=$(ASAN_LD_PRELOAD):$(LD_PRELOAD)
+ASAN_LIB=$(shell ldd $(abs_builddir)/gtest | grep libasan.so | cut -d' ' -f3)
+TEST_ENV=LD_PRELOAD=$(ASAN_LIB):$(LD_PRELOAD)
 endif
 
 GTEST_ARGS = \
@@ -82,6 +82,11 @@ gtest_CPPFLAGS = \
 	$(OPENMP_CFLAGS)
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install $(LDFLAGS_DYNAMIC_LIST_DATA)
+
+# disable-new-dtags to force using RPATH instead of RUNPATH to avoid loading of
+# wrong shared libraries accessible by LD_LIBRARY_PATH
+gtest_LDFLAGS += -Wl,--disable-new-dtags
+
 gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = \
 	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11 \
@@ -100,6 +105,7 @@ gtest_SOURCES = \
 	ucm/malloc_hook.cc \
 	\
 	uct/test_amo.cc \
+	uct/test_atomic_key_reg_rdma_mem_type.cc \
 	uct/test_amo_add_xor.cc \
 	uct/test_amo_and_or.cc \
 	uct/test_amo_cswap.cc \
@@ -217,6 +223,11 @@ gtest_CPPFLAGS += \
 gtest_LDADD += \
 	$(IBVERBS_LDFLAGS) \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
+if HAVE_MLX5_DV
+gtest_LDADD += \
+	$(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la
+endif
+
 if HAVE_DEVX
 gtest_SOURCES += \
 	uct/ib/test_devx.cc
@@ -245,7 +256,8 @@ endif # HAVE_IB
 
 if HAVE_CUDA
 gtest_SOURCES += \
-	ucm/cuda_hooks.cc
+	ucm/cuda_hooks.cc \
+	uct/cuda/test_cuda_ipc_md.cc
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
 gtest_LDFLAGS += \

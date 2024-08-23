@@ -1,5 +1,6 @@
 /**
  * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (C) 2024, Advanced Micro Devices, Inc. All rights reserved.
  *
  * See file LICENSE for terms.
  */
@@ -22,7 +23,8 @@ ucp_amo_memtype_unpack_reply_buffer(ucp_request_t *req)
 {
     ucp_dt_contig_unpack(req->send.ep->worker, req->send.amo.reply_buffer,
                          &req->send.amo.result, req->send.state.dt_iter.length,
-                         ucp_amo_request_reply_mem_type(req));
+                         ucp_amo_request_reply_mem_type(req),
+                         req->send.state.dt_iter.length);
 }
 
 static void ucp_proto_amo_completion(uct_completion_t *self)
@@ -71,7 +73,7 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
                                     UCS_MEMORY_TYPE_HOST;
             ucp_dt_contig_pack(req->send.ep->worker, &req->send.amo.value,
                                req->send.state.dt_iter.type.contig.buffer,
-                               op_size, mem_type);
+                               op_size, mem_type, op_size);
             req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
         }
 
@@ -84,7 +86,7 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
         if (op_id == UCP_OP_ID_AMO_CSWAP) {
             ucp_dt_contig_pack(ep->worker, &req->send.amo.result,
                                req->send.amo.reply_buffer, op_size,
-                               ucp_amo_request_reply_mem_type(req));
+                               ucp_amo_request_reply_mem_type(req), op_size);
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;

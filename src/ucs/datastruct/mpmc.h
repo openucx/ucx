@@ -32,6 +32,17 @@ typedef struct ucs_mpmc_elem {
 
 
 /**
+ * MPMC queue element value predicate.
+ *
+ * @param [in] value MPMC queue element value to check.
+ * @param [in] arg   User-defined argument.
+ *
+ * @return Predicate result value - nonzero means "true", zero means "false".
+ */
+typedef int (*ucs_mpmc_queue_predicate_t)(uint64_t value, void *arg);
+
+
+/**
  * Initialize MPMC queue.
  *
  * @param length   Queue length.
@@ -62,6 +73,19 @@ ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint64_t value);
  *                            or another thread removed the current item.
  */
 ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p);
+
+
+/**
+ * Remove all elements from the MPMC queue with the given value for which the
+ * given predicate returns "true" (nonzero) value.
+ * This can be used from any context and any thread.
+ *
+ * @param  [in] mpmc      MPMC queue.
+ * @param  [in] predicate Predicate to check candidates for removal.
+ * @param  [in] arg       User-defined argument for the predicate.
+ */
+void ucs_mpmc_queue_remove_if(ucs_mpmc_queue_t *mpmc,
+                              ucs_mpmc_queue_predicate_t predicate, void *arg);
 
 
 /**

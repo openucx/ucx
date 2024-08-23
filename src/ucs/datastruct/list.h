@@ -7,6 +7,7 @@
 #ifndef UCS_LIST_H_
 #define UCS_LIST_H_
 
+#include <ucs/debug/debug.h>
 #include <ucs/sys/compiler_def.h>
 
 
@@ -15,6 +16,8 @@ BEGIN_C_DECLS
 #define UCS_LIST_INITIALIZER(_prev, _next) \
     { (_prev), (_next) }
 
+#define UCS_LIST_CHECK_ELEM_IS_VALID(_elem) \
+    UCS_ASAN_ADDRESS_IS_VALID(_elem, sizeof(ucs_list_link_t));
 
 /**
  * Declare an empty list
@@ -109,18 +112,41 @@ static inline void ucs_list_del(ucs_list_link_t *elem)
 /**
  * @return Whether the list is empty.
  */
-static inline int ucs_list_is_empty(ucs_list_link_t *head)
+static inline int ucs_list_is_empty(const ucs_list_link_t *head)
 {
+    UCS_LIST_CHECK_ELEM_IS_VALID(head->next);
     return head->next == head;
 }
 
 /**
- * @return Whether the list contains only elem.
+ * @return Whether @a elem is the first element in the list @a head.
  */
-static inline int ucs_list_is_only(ucs_list_link_t *head,
-                                   ucs_list_link_t *elem)
+static inline int
+ucs_list_is_first(const ucs_list_link_t *head, const ucs_list_link_t *elem)
 {
-    return (head->next == elem) && (elem->next == head);
+    UCS_LIST_CHECK_ELEM_IS_VALID(head);
+    UCS_LIST_CHECK_ELEM_IS_VALID(elem->prev);
+    return elem->prev == head;
+}
+
+/**
+ * @return Whether @a elem is the last element in the list @a head.
+ */
+static inline int
+ucs_list_is_last(const ucs_list_link_t *head, const ucs_list_link_t *elem)
+{
+    UCS_LIST_CHECK_ELEM_IS_VALID(head);
+    UCS_LIST_CHECK_ELEM_IS_VALID(elem->next);
+    return elem->next == head;
+}
+
+/**
+ * @return Whether the list @a head contains only then element @a elem.
+ */
+static inline int
+ucs_list_is_only(const ucs_list_link_t *head, const ucs_list_link_t *elem)
+{
+    return ucs_list_is_first(head, elem) && ucs_list_is_last(head, elem);
 }
 
 /**
@@ -159,7 +185,9 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
     unsigned long length;
     ucs_list_link_t *ptr;
 
+    UCS_LIST_CHECK_ELEM_IS_VALID(head->next);
     for (ptr = head->next, length = 0; ptr != head; ptr = ptr->next, ++length);
+
     return length;
 }
 
@@ -197,6 +225,7 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
  * Iterate over members of the list.
  */
 #define ucs_list_for_each(_elem, _head, _member) \
+    UCS_LIST_CHECK_ELEM_IS_VALID(_head); \
     for (_elem = ucs_container_of((_head)->next, ucs_typeof(*_elem), _member); \
         &(_elem)->_member != (_head); \
         _elem = ucs_container_of((_elem)->_member.next, ucs_typeof(*_elem), _member))
@@ -205,6 +234,7 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
  * Iterate over members of the list, the user may invalidate the current entry.
  */
 #define ucs_list_for_each_safe(_elem, _telem, _head, _member) \
+    UCS_LIST_CHECK_ELEM_IS_VALID(_head); \
     for (_elem = ucs_container_of((_head)->next, ucs_typeof(*_elem), _member), \
         _telem = ucs_container_of(_elem->_member.next, ucs_typeof(*_elem), _member); \
         &_elem->_member != (_head); \

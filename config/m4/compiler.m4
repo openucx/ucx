@@ -134,7 +134,7 @@ AC_DEFUN([COMPILER_CPU_OPTIMIZATION],
                 [AS_HELP_STRING([--with-$1], [Use $2 compiler option.])],
                 [],
                 [with_$1=$enable_optimizations])
-   
+
     AS_IF([test "x$with_$1" != "xno"],
           [SAVE_CFLAGS="$CFLAGS"
            CFLAGS="$BASE_CFLAGS $CFLAGS $3"
@@ -161,15 +161,15 @@ AC_DEFUN([DETECT_UARCH],
     cpuarch=`grep 'CPU architecture' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
     cpuvar=`grep 'CPU variant' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
     cpupart=`grep 'CPU part' /proc/cpuinfo 2> /dev/null | cut -d: -f2 | tr -d " " | head -n 1`
-   
+
     ax_cpu=""
     ax_arch=""
-    
+
     AC_MSG_NOTICE(Detected CPU implementation: ${cpuimpl})
     AC_MSG_NOTICE(Detected CPU architecture: ${cpuarch})
     AC_MSG_NOTICE(Detected CPU variant: ${cpuvar})
     AC_MSG_NOTICE(Detected CPU part: ${cpupart})
-   
+
     case $cpuimpl in
       0x42) case $cpupart in
         0x516 | 0x0516)
@@ -205,7 +205,7 @@ AC_DEFUN([DETECT_UARCH],
         ;;
       *)
         ;;
-    esac 
+    esac
     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test x$ax_cpu = xthunderx2t99])
     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test x$ax_cpu = xthunderxt88])
     AM_CONDITIONAL([HAVE_AARCH64_HI1620], [test x$ax_cpu = xtsv110])
@@ -222,7 +222,7 @@ AC_DEFUN([CHECK_COMPILER_FLAG],
 [
          AC_MSG_CHECKING([compiler flag $1])
          SAVE_CFLAGS="$CFLAGS"
-         SAVE_CXXFLAGS="$CFLAGS"
+         SAVE_CXXFLAGS="$CXXFLAGS"
          CFLAGS="$BASE_CFLAGS $CFLAGS $2"
          CXXFLAGS="$BASE_CXXFLAGS $CXXFLAGS $2"
          AC_LINK_IFELSE([$3],
@@ -282,7 +282,7 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
                                   int main(int argc, char** argv) { return f(); }
                             ]])],
                            [AC_MSG_RESULT([yes])
-                            $2="${$2} $1"],
+                            $2="$1"],
                            [AC_MSG_RESULT([no])])
          CFLAGS="$SAVE_CFLAGS"
 ])
@@ -296,6 +296,10 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-diag-error 10006],
                                  [-diag-error 10148]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
+#
+# Disable all deprecations if a finer grained approach does not work
+#
+CFLAGS_NO_DEPRECATED="-Wno-deprecated"
 
 CHECK_DEPRECATED_DECL_FLAG([-diag-disable 1478], CFLAGS_NO_DEPRECATED) # icc
 CHECK_DEPRECATED_DECL_FLAG([-Wno-deprecated-declarations], CFLAGS_NO_DEPRECATED) # gcc
@@ -370,9 +374,9 @@ AS_IF([test "x$ax_cpu" != "x"],
       ])
 
 
-# 
+#
 # Architecture tuning
-# 
+#
 AS_IF([test "x$ax_arch" != "x"],
       [COMPILER_CPU_OPTIMIZATION([march], [architecture tuning], [-march=$ax_arch],
                                  [int main(int argc, char** argv) { return 0;}])
@@ -562,6 +566,17 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                  [-Wno-deprecated-declarations],
                                  [-Winvalid-pch]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
+
+#
+# Intel Compiler specifics
+#
+if $CC --version 2>&1 | grep -q Intel; then
+    ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-language-extension-token],
+                                     [-fno-finite-math-only],
+                                     [-Wno-recommended-option],
+                                     [-Wno-c99-extensions]],
+                                     [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
+fi
 
 
 #

@@ -377,6 +377,15 @@ public:
         };
     }
 
+    void fence(int peer_index)
+    {
+        ucs_status_t status = uct_ep_fence(m_perf.uct.peers[peer_index].ep, 0);
+
+        if (status != UCS_OK) {
+            ucs_error("uct_ep_fence() failed: %s", ucs_status_string(status));
+        }
+    }
+
     void flush(int peer_index)
     {
         if (m_perf.params.flags & UCX_PERF_TEST_FLAG_FLUSH_EP) {
@@ -536,6 +545,7 @@ public:
             sn = 2;
             /* Send "sentinel" value */
             if (direction_to_responder) {
+                fence(peer_index);
                 wait_for_window(send_window);
                 set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn,
                        m_perf.send_allocator);

@@ -1,0 +1,115 @@
+trigger:
+  tags:
+    include:
+      - v*
+pr:
+  - master
+  - v*.*.x
+
+variables:
+  DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local
+  REPO_MIRROR: harbor-pdc.nvidia.com
+
+resources:
+  containers:
+    # x86_64
+    - container: centos7_cuda11_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/centos7-mofed5-cuda11:3
+      options: $(DOCKER_OPT_VOLUMES)
+    - container: centos8_cuda11_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/centos8-mofed5-cuda11:3
+      options: $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu16_cuda11_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/ubuntu16.04-mofed5-cuda11:3
+    - container: ubuntu18_cuda11_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/ubuntu18.04-mofed5-cuda11:3
+    - container: ubuntu20_cuda11_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/ubuntu20.04-mofed5-cuda11:3
+    - container: ubuntu22_cuda11_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/ubuntu22.04-mofed5-cuda11:3
+    - container: centos7_cuda12_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/centos7-mofed5-cuda12:3
+      options: $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu18_cuda12_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/ubuntu18.04-mofed5-cuda12:3
+    - container: ubuntu20_cuda12_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/ubuntu20.04-mofed5-cuda12:3
+    - container: ubuntu22_cuda12_x86_64
+      image: $(REPO_MIRROR)/ucx/x86_64/ubuntu22.04-mofed5-cuda12:3
+
+    # aarch64
+    - container: centos8_cuda11_aarch64
+      image: $(REPO_MIRROR)/ucx/aarch64/centos8-mofed5-cuda11:3
+      options: $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu18_cuda11_aarch64
+      image: $(REPO_MIRROR)/ucx/aarch64/ubuntu18.04-mofed5-cuda11:3
+    - container: ubuntu20_cuda11_aarch64
+      image: $(REPO_MIRROR)/ucx/aarch64/ubuntu20.04-mofed5-cuda11:3
+    - container: ubuntu22_cuda11_aarch64
+      image: $(REPO_MIRROR)/ucx/aarch64/ubuntu22.04-mofed5-cuda11:3
+    - container: ubuntu20_cuda12_aarch64
+      image: $(REPO_MIRROR)/ucx/aarch64/ubuntu20.04-mofed5-cuda12:3
+    - container: ubuntu22_cuda12_aarch64
+      image: $(REPO_MIRROR)/ucx/aarch64/ubuntu22.04-mofed5-cuda12:3
+
+stages:
+  - stage: Prepare
+    jobs:
+      - job: CheckRelease
+        pool:
+          name: MLNX
+          demands:
+            - ucx_docker_drp
+        steps:
+          - checkout: self
+            fetchDepth: 100
+            clean: true
+            retryCountOnTaskFailure: 5
+
+          - bash: |
+              set -eE
+              source ./buildlib/az-helpers.sh
+              set -x
+              check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/DRP-RELEASE: "
+            name: Result
+            displayName: Check build condition
+
+  - stage: GitHubDraft
+    condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
+    dependsOn: Prepare
+    jobs:
+      - template: az-github-draft.yml
+        parameters:
+          container: centos7_cuda11_x86_64
+          demands: ucx_docker_drp
+
+  - stage: Build
+    displayName: Build binary packages
+    dependsOn:
+      - Prepare
+      - GitHubDraft
+    condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
+    jobs:
+      - template: az-distro-release.yml
+        parameters:
+          arch: x86_64
+          demands: ucx_docker_drp
+
+      - template: az-distro-release.yml
+        parameters:
+          arch: aarch64
+          demands: ucx_arm64_drp
+
+      - template: jucx/jucx-build.yml
+        parameters:
+          arch: amd64
+          container: centos8_cuda11_x86_64
+          demands: ucx_docker_drp
+          target: publish-release
+
+      - template: jucx/jucx-build.yml
+        parameters:
+          arch: aarch64
+          container: centos8_cuda11_aarch64
+          demands: ucx_arm64_drp
+          target: publish-release

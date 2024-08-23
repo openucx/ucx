@@ -30,8 +30,6 @@
 /* width of titles in docstring */
 #define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
-/* String literal for allow-list */
-#define UCS_CONFIG_PARSER_ALL "all"
 
 /* list of prefixes for a configuration variable, used to dump all possible
  * aliases.
@@ -1759,7 +1757,8 @@ void ucs_config_parse_config_files()
     path_p = ucs_sys_get_lib_path();
     if (path_p != NULL) {
         ucs_strncpy_safe(path, path_p, PATH_MAX);
-        ucs_config_parse_config_file(dirname(path), "../etc/" UCX_CONFIG_FILE_NAME, 1);
+        ucs_config_parse_config_file(dirname(path),
+                                     "../etc/ucx/" UCX_CONFIG_FILE_NAME, 1);
     }
 
     /* User home dir */

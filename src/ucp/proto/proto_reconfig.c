@@ -78,8 +78,7 @@ static void ucp_proto_reconfig_probe(const ucp_proto_init_params_t *init_params)
     caps.num_ranges           = 1;
     caps.ranges[0].max_length = SIZE_MAX;
     caps.ranges[0].node       = ucp_proto_perf_node_new_data("dummy", "");
-    ucp_proto_perf_set(caps.ranges[0].perf,
-                       ucs_linear_func_make(INFINITY, INFINITY));
+    ucp_proto_perf_set(caps.ranges[0].perf, ucs_linear_func_make(INFINITY, 0));
 
     ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_INF, 0, &caps, NULL,
                                0);

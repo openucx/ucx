@@ -174,7 +174,7 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
     req->send.proto_stage = proto_stage;
 
     /* Set pointer to progress function */
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+    if (req->send.ep->worker->context->config.progress_wrapper_enabled) {
         req->send.uct.func = ucp_request_progress_wrapper;
     } else {
         req->send.uct.func = proto->progress[proto_stage];
@@ -195,16 +195,6 @@ static void ucp_proto_request_set_proto(ucp_request_t *req,
     }
 
     ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_select_proto(ucp_request_t *req,
-                               const ucp_proto_select_elem_t *select_elem,
-                               size_t msg_length)
-{
-    const ucp_proto_threshold_elem_t *thresh_elem =
-            ucp_proto_select_thresholds_search(select_elem, msg_length);
-    ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
 }
 
 /* Select protocol for the request and initialize protocol-related fields */

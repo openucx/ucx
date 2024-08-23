@@ -21,6 +21,8 @@ KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t,
            ucp_worker_cfg_index_t, 1, ucp_rkey_config_hash_func,
            ucp_rkey_config_is_equal);
 
+#define UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT 32
+
 /**
  * Resolve remote key configuration key to a remote key configuration index.
  *
@@ -236,6 +238,25 @@ ucp_worker_default_address_pack_flags(ucp_worker_h worker)
            UCP_ADDRESS_PACK_FLAG_RELEASE_VER_V1 |
            UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
            UCP_ADDRESS_PACK_FLAG_IFACE_ADDR | UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_should_track_usage(ucp_worker_h worker)
+{
+    return ucp_context_usage_tracker_enabled(worker->context) &&
+           ((worker->usage_tracker.iter_count++ %
+             UCP_WORKER_PROGRESS_TIMER_SKIP_COUNT) == 0);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_worker_track_ep_usage(ucp_request_t *req)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+
+    if (ucs_likely(!ucp_worker_should_track_usage(worker))) {
+        return;
+    }
+
+    ucp_worker_track_ep_usage_always(req);
 }
 
 #define UCP_WORKER_GET_EP_BY_ID(_ep_p, _worker, _ep_id, _action, _fmt_str, ...) \

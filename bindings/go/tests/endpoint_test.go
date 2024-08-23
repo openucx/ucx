@@ -112,7 +112,7 @@ func TestUcpEpTag(t *testing.T) {
 		receiver := prepareContext(t, nil)
 		t.Logf("Testing tag %v -> %v", memType.senderMemType, memType.recvMemType)
 
-		ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_SINGLE)
+		ucpWorkerParams := (&UcpWorkerParams{}).SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
 		ucpWorkerParams.WakeupTagSend().WakeupTagRecv()
 
 		receiver.worker, _ = receiver.context.NewWorker(ucpWorkerParams)

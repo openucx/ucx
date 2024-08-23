@@ -29,7 +29,7 @@ func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_requ
 			cRequestParams.user_data = unsafe.Pointer(uintptr(cbId))
 		}
 
-		cRequestParams.SetMemType(goRequestParams)
+		setMemType(goRequestParams, cRequestParams)
 	}
 
 	return cbId
@@ -40,9 +40,8 @@ func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_requ
 // both at the origin and at the target endpoint when this call returns.
 func (e *UcpEp) FlushNonBlocking(params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
-	var cbId uint64
 
-	setSendParams(params, &requestParams)
+	cbId := setSendParams(params, &requestParams)
 
 	request := C.ucp_ep_flush_nbx(e.ep, &requestParams)
 	return NewRequest(request, cbId, nil)
@@ -50,11 +49,10 @@ func (e *UcpEp) FlushNonBlocking(params *UcpRequestParams) (*UcpRequest, error) 
 
 func (e *UcpEp) CloseNonBlocking(mode C.uint, params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
-	var cbId uint64
 	requestParams.op_attr_mask = C.UCP_OP_ATTR_FIELD_FLAGS
 	requestParams.flags = mode
 
-	setSendParams(params, &requestParams)
+	cbId := setSendParams(params, &requestParams)
 
 	request := C.ucp_ep_close_nbx(e.ep, &requestParams)
 	delete(errorHandles, e.ep)
@@ -82,9 +80,8 @@ func (e *UcpEp) CloseNonBlockingFlush(params *UcpRequestParams) (*UcpRequest, er
 func (e *UcpEp) SendTagNonBlocking(tag uint64, address unsafe.Pointer, size uint64,
 	params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
-	var cbId uint64
 
-	setSendParams(params, &requestParams)
+	cbId := setSendParams(params, &requestParams)
 
 	request := C.ucp_tag_send_nbx(e.ep, address, C.size_t(size), C.ucp_tag_t(tag), &requestParams)
 	return NewRequest(request, cbId, nil)
@@ -96,9 +93,8 @@ func (e *UcpEp) SendTagNonBlocking(tag uint64, address unsafe.Pointer, size uint
 func (e *UcpEp) SendAmNonBlocking(id uint, header unsafe.Pointer, headerSize uint64,
 	data unsafe.Pointer, dataSize uint64, flags UcpAmSendFlags, params *UcpRequestParams) (*UcpRequest, error) {
 	var requestParams C.ucp_request_param_t
-	var cbId uint64
 
-	setSendParams(params, &requestParams)
+	cbId := setSendParams(params, &requestParams)
 
 	requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_FLAGS
 	requestParams.flags = C.uint(flags)

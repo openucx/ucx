@@ -23,8 +23,8 @@ extern "C" {
 #  include <uct/ib/rc/verbs/rc_verbs.h>
 #endif
 #if HAVE_TL_DC
-#  include <uct/ib/dc/dc_mlx5_ep.h>
-#  include <uct/ib/dc/dc_mlx5.h>
+#  include <uct/ib/mlx5/dc/dc_mlx5_ep.h>
+#  include <uct/ib/mlx5/dc/dc_mlx5.h>
 #endif
 #if HAVE_TL_UD
 #  include <uct/ib/ud/base/ud_ep.h>

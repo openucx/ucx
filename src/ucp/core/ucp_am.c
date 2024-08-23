@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -315,6 +316,17 @@ ucp_am_zcopy_pack_user_header(ucp_request_t *req)
     return UCS_OK;
 }
 
+static ucs_status_t ucp_am_check_id(unsigned am_id)
+{
+    if (ENABLE_PARAMS_CHECK && ucs_unlikely(am_id > UINT16_MAX)) {
+        ucs_error("invalid AM id %u, must be in range [0, %u]",
+                  am_id, UINT16_MAX);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
                                             const ucp_am_handler_param_t *param)
 {
@@ -325,6 +337,11 @@ ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
     if (!ucs_test_all_flags(param->field_mask, UCP_AM_HANDLER_PARAM_FIELD_ID |
                                                UCP_AM_HANDLER_PARAM_FIELD_CB)) {
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucp_am_check_id(param->id);
+    if (status != UCS_OK) {
+        return status;
     }
 
     id    = param->id;
@@ -948,6 +965,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_REQUEST_CHECK_PARAM(param);
 
+    status = ucp_am_check_id(id);
+    if (status != UCS_OK) {
+        return UCS_STATUS_PTR(status);
+    }
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     status = ucp_am_send_nbx_check_header_length(worker, header_length);
@@ -1350,7 +1372,7 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
 {
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1, offset),
-                           data, length);
+                           data, length, UCS_ARCH_MEMCPY_NT_SOURCE, length);
     first_rdesc->am_first.remaining -= length;
 }
 
@@ -1507,11 +1529,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     /* Copy first fragment and base headers before the data, it will be needed
      * for middle fragments processing. */
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
-                           first_rdesc + 1, first_ftr, sizeof(*first_ftr));
+                           first_rdesc + 1, first_ftr, sizeof(*first_ftr),
+                           UCS_ARCH_MEMCPY_NT_SOURCE, sizeof(*first_ftr));
     UCS_PROFILE_NAMED_CALL("am_memcpy_recv", ucs_memcpy_relaxed,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
                                                sizeof(*first_ftr)),
-                           hdr, sizeof(*hdr));
+                           hdr, sizeof(*hdr), UCS_ARCH_MEMCPY_NT_SOURCE,
+                           sizeof(*hdr));
 
     /* Copy user header to the end of message */
     user_hdr = UCS_PTR_BYTE_OFFSET(first_ftr, -user_hdr_length);
@@ -1519,7 +1543,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                            UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
                                                first_rdesc->payload_offset +
                                                        first_ftr->total_size),
-                           user_hdr, user_hdr_length);
+                           user_hdr, user_hdr_length,
+                           UCS_ARCH_MEMCPY_NT_SOURCE, user_hdr_length);
 
     /* Copy all already arrived middle fragments to the data buffer */
     ucs_queue_for_each_safe(mid_rdesc, iter, &ep_ext->am.mid_rdesc_q,

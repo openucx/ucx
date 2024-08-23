@@ -24,6 +24,7 @@
 
 
 #define UCT_IB_QPN_ORDER                  24  /* How many bits can be an IB QP number */
+#define UCT_IB_INVALID_QPN                UCS_MASK(UCT_IB_QPN_ORDER)
 #define UCT_IB_UIDX_SHIFT                 8   /* BE uidx shift */
 #define UCT_IB_LRH_LEN                    8   /* IB Local routing header */
 #define UCT_IB_GRH_LEN                    40  /* IB GLobal routing header */
@@ -92,6 +93,7 @@ enum {
     UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
     UCT_IB_DEVICE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
     UCT_IB_DEVICE_FLAG_MELLANOX = UCS_BIT(3),   /* Mellanox device */
+    UCT_IB_DEVICE_FLAG_SRQ      = UCS_BIT(4),   /* Supports SRQ */
     UCT_IB_DEVICE_FLAG_LINK_IB  = UCS_BIT(5),   /* Require only IB */
     UCT_IB_DEVICE_FLAG_DC_V1    = UCS_BIT(6),   /* Device supports DC ver 1 */
     UCT_IB_DEVICE_FLAG_DC_V2    = UCS_BIT(7),   /* Device supports DC ver 2 */
@@ -320,12 +322,15 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev);
  *
  * @param [in]  dev             IB device.
  * @param [in]  port_num        Port number.
+ * @param [in]  subnet_strs     List of allowed/restricted subnets to select
+ *                              from.
  * @param [out] gid_info        Filled with the selected gid index and the
  *                              port's RoCE version and address family.
  */
-ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
-                                      uint8_t port_num,
-                                      uct_ib_device_gid_info_t *gid_info);
+ucs_status_t
+uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                         const ucs_config_allow_list_t *subnets_array,
+                         uct_ib_device_gid_info_t *gid_info);
 
 
 /**
@@ -347,9 +352,9 @@ int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num);
 
 
 /**
- * @return 1 if the gid_raw is 0, 0 otherwise.
+ * @return whether the gid is valid
  */
-int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw);
+int uct_ib_device_is_gid_valid(const union ibv_gid *gid);
 
 
 /**
@@ -461,6 +466,10 @@ int uct_ib_get_cqe_size(int cqe_size_min);
 const char* uct_ib_ah_attr_str(char *buf, size_t max,
                                const struct ibv_ah_attr *ah_attr);
 
+ucs_status_t
+uct_ib_device_roce_gid_to_sockaddr(sa_family_t af, const void *gid,
+                                   struct sockaddr_storage *sock_storage);
+
 static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, struct ibv_wc *wcs)
 {
     int ret;
@@ -475,6 +484,14 @@ static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, st
 
     *count = ret;
     return UCS_OK;
+}
+
+static inline void uct_ib_destroy_cq(struct ibv_cq *cq, const char *desc)
+{
+    int ret = ibv_destroy_cq(cq);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_cq(%s) failed with error %d: %m", desc, ret);
+    }
 }
 
 void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event);
