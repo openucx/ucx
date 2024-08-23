@@ -1287,7 +1287,7 @@ ucp_wireup_iface_avail_bandwidth(const ucp_worker_iface_t *wiface,
     /* Apply dev num paths ratio after fp8 pack/unpack to make sure it is not
      * neglected because of fp8 inaccuracy
      */
-    path_index = dev_count->local[dev_index] - dev_count->local_skip[dev_index],
+    path_index = dev_count->local[dev_index] - dev_count->local_skip[dev_index];
     local_bw  *= ucp_tl_iface_bandwidth_ratio(context, path_index,
                                               wiface->attr.dev_num_paths);
 
