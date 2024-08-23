@@ -15,7 +15,7 @@ public:
         /*
          * Method: Add may random values from multiple workers running at the same
          * time. We expect the final result to be the and/or of all these values.
-         * This is simplified version of add/xor test: operated value is costant
+         * This is simplified version of add/xor test: operated value is constant
          * for every worker to eliminate result to 0 or MAX_INT
          */
 

@@ -15,7 +15,7 @@
 
 
 /* Init HW rendezvous as a single protocol which does not require operation on
- * remote side (which is the case when tag is matched - everyting is done by the
+ * remote side (which is the case when tag is matched - everything is done by the
  * HW/FW).
  */
 static void

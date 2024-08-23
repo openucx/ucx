@@ -17,7 +17,7 @@ extern "C" {
 class test_arbiter : public ucs::test {
 protected:
 
-    static ucs_arbiter_cb_result_t resched_groups(ucs_arbiter_t *arbitrer,
+    static ucs_arbiter_cb_result_t resched_groups(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)

@@ -34,7 +34,7 @@
   *
   * @param[in] _regs source register number (0-31)
   * @param[in] _regd destination register number (0-31)
-  * @param[in] _imm 12 bit immmediate value
+  * @param[in] _imm 12 bit immediate value
   */
 #define JALR(_regs, _regd, _imm) \
     (((_imm) << 20) | ((_regs) << 15) | (0b000 << 12) | ((_regd) << 7) | (0x67))
@@ -42,7 +42,7 @@
 /**
   * @brief C_J - Indirect jump (using compressed instruction)
   *
-  * @param[in] _imm 12 bit immmediate value
+  * @param[in] _imm 12 bit immediate value
   */
 #define C_J(_imm) \
     ((0b101) << 13 | ((_imm >> 1) << 2) | (0b01))
@@ -51,7 +51,7 @@
   * @brief AUIPIC - Add upper intermediate to PC
   *
   * @param[in] _regd register number (0-31)
-  * @param[in] _imm 12 bit immmediate value
+  * @param[in] _imm 12 bit immediate value
   */
 #define AUIPC(_regd, _imm) (((_imm) << 12) | ((_regd) << 7) | (0x17))
 
@@ -60,7 +60,7 @@
   *
   * @param[in] _regs source register number (0-31)
   * @param[in] _regd destination register number (0-31)
-  * @param[in] _imm 12 bit immmediate value
+  * @param[in] _imm 12 bit immediate value
   */
 #define LD(_regs, _regd, _imm) \
     (((_imm) << 20) | ((_regs) << 15) | (0b011 << 12) | ((_regd) << 7) | (0x3))

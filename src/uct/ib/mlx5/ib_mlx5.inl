@@ -154,7 +154,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
     }
 
     cq->cq_ci = idx + 1;
-    return cqe; /* TODO optimize - let complier know cqe is not null */
+    return cqe; /* TODO optimize - let compiler know cqe is not null */
 }
 
 

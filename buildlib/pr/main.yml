@@ -290,7 +290,7 @@ stages:
       parameters:
         name: new
         demands: ucx_new -equals yes
-    # Temporaly disable wire-compat tests on rain machines
+    # Temporarily disable wire-compat tests on rain machines
     #- template: wire_compat.yml
     #  parameters:
     #    name: bond

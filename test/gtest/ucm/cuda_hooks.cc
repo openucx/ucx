@@ -17,7 +17,7 @@ protected:
         CUresult ret;
         ucs::test::init();
 
-        /* intialize device context */
+        /* initialize device context */
         if (cudaSetDevice(0) != cudaSuccess) {
             UCS_TEST_SKIP_R("can't set cuda device");
         }

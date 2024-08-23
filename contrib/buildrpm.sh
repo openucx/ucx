@@ -75,7 +75,7 @@ if [ $opt_tarball -eq 1 ]; then
 fi
 
 # Version includes revision, while tarball in Source doesn't have it since
-# it uses GitHub standart name v<Version>.tar.gz, so make:
+# it uses GitHub standard name v<Version>.tar.gz, so make:
 # ucx-1.3.0.6a61458.tar.gz --> v1.3.0.tar.gz for rpmbuild
 tgz=(ucx*.tar.gz)
 tarball=${tgz[0]}

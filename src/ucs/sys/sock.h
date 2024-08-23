@@ -328,7 +328,7 @@ ucs_status_t ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt,
  * @param [in]      data            A pointer to a buffer to receive the incoming
  *                                  data.
  * @param [in/out]  length          The length, in bytes, of the data in buffer
- *                                  pointed to by the `data` paramete.
+ *                                  pointed to by the `data` parameter.
  *
  * @return UCS_OK on success or an error code on failure.
  */

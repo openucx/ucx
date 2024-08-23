@@ -619,7 +619,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, pending_add,
     EXPECT_EQ(UCS_ERR_BUSY, uct_ep_pending_add(sender().ep(0), &p_reqs[0], 0));
     EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PENDING, 0UL);
 
-    // Check that counter gets increased on every successfull pending_add returns NOT_OK
+    // Check that counter gets increased on every successful pending_add returns NOT_OK
     fill_tx_q(0);
 
     UCT_TEST_CALL_AND_TRY_AGAIN(
