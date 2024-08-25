@@ -44,19 +44,12 @@ ucp_proto_select_thresholds_search(const ucp_proto_select_elem_t *select_elem,
     return ucp_proto_thresholds_search_slow(thresholds + 4, msg_length);
 }
 
-static UCS_F_ALWAYS_INLINE uint8_t
-ucp_proto_select_op_attr_pack(uint32_t op_attr_mask)
+static UCS_F_ALWAYS_INLINE uint32_t
+ucp_proto_select_op_attr_unpack(uint8_t op_attr)
 {
     UCS_STATIC_ASSERT(
             (UCP_PROTO_SELECT_OP_ATTR_MASK / UCP_PROTO_SELECT_OP_ATTR_BASE) <
             UCP_PROTO_SELECT_OP_FLAGS_BASE);
-    return (op_attr_mask & UCP_PROTO_SELECT_OP_ATTR_MASK) /
-           UCP_PROTO_SELECT_OP_ATTR_BASE;
-}
-
-static UCS_F_ALWAYS_INLINE uint32_t
-ucp_proto_select_op_attr_unpack(uint8_t op_attr)
-{
     return op_attr * UCP_PROTO_SELECT_OP_ATTR_BASE;
 }
 
@@ -141,7 +134,8 @@ static UCS_F_ALWAYS_INLINE void ucp_proto_select_param_init_common(
      * op_flags are modifiers for the operation, for now only FAST_CMPL is
      * supported */
     select_param->op_id_flags   = op_id | op_flags;
-    select_param->op_attr       = ucp_proto_select_op_attr_pack(op_attr_mask);
+    select_param->op_attr       = ucp_proto_select_op_attr_pack(
+        op_attr_mask, UCP_PROTO_SELECT_OP_ATTR_MASK);
     select_param->dt_class      = dt_class;
     select_param->mem_type      = mem_info->type;
     select_param->sys_dev       = mem_info->sys_dev;

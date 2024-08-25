@@ -456,12 +456,15 @@ ucp_proto_select_elem_init(ucp_worker_h worker, int internal,
                            const ucp_proto_select_param_t *select_param,
                            ucp_proto_select_elem_t *select_elem)
 {
+    ucp_proto_select_param_t select_param_copy = *select_param;
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
     UCS_STRING_BUFFER_ONSTACK(config_name_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
     ucp_proto_select_init_protocols_t proto_init;
     ucs_status_t status;
 
-    ucp_proto_select_info_str(worker, rkey_cfg_index, select_param,
+    select_param_copy.op_attr |= worker->context->config.ext.extra_op_attr_flags;
+
+    ucp_proto_select_info_str(worker, rkey_cfg_index, &select_param_copy,
                               ucp_operation_names, &sel_param_strb);
     ucp_ep_config_name(worker, ep_cfg_index, &config_name_strb);
 
@@ -472,7 +475,7 @@ ucp_proto_select_elem_init(ucp_worker_h worker, int internal,
     ucs_log_indent(1);
 
     status = ucp_proto_select_init_protocols(worker, ep_cfg_index,
-                                             rkey_cfg_index, select_param,
+                                             rkey_cfg_index, &select_param_copy,
                                              &proto_init);
     if (status != UCS_OK) {
         goto out;
@@ -480,7 +483,7 @@ ucp_proto_select_elem_init(ucp_worker_h worker, int internal,
 
     status = ucp_proto_select_elem_init_thresh(worker, select_elem, &proto_init,
                                                ep_cfg_index, rkey_cfg_index,
-                                               select_param, internal);
+                                               &select_param_copy, internal);
     if (status != UCS_OK) {
         goto out_cleanup_proto_init;
     }
@@ -489,7 +492,7 @@ ucp_proto_select_elem_init(ucp_worker_h worker, int internal,
 
     if (!internal) {
         ucp_proto_select_elem_trace(worker, ep_cfg_index, rkey_cfg_index,
-                                    select_param, select_elem);
+                                    &select_param_copy, select_elem);
     }
 
     status = UCS_OK;
