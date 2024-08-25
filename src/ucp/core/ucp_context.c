@@ -522,6 +522,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Prefetch memory when using global VA MR",
    ucs_offsetof(ucp_context_config_t, gva_prefetch), UCS_CONFIG_TYPE_BOOL},
 
+  {"FORCE_FAST_CMPL", "n",
+   "Enable or disable forced FAST_CMPL flag for all operations.",
+   ucs_offsetof(ucp_context_config_t, force_fast_cmpl), UCS_CONFIG_TYPE_BOOL},
+
+  {"FORCE_MULTI_SEND", "n",
+   "Enable or disable forced MULTI_SEND flag for all operations.",
+   ucs_offsetof(ucp_context_config_t, force_multi_send), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 

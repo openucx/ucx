@@ -532,7 +532,8 @@ ucp_proto_common_init_xfer_perf(const ucp_proto_common_init_params_t *params,
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr);
 
-    if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+    if (((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+        (params->super.worker->context->config.ext.force_fast_cmpl)) &&
         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
         /* If we care only about time to start sending the message, ignore
            the transport time */
@@ -554,7 +555,8 @@ ucp_proto_common_init_xfer_perf(const ucp_proto_common_init_params_t *params,
         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) ||
         /* Send time is representing request completion, which in case of zcopy
            waits for ACK from remote side. */
-        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        (((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+         (params->super.worker->context->config.ext.force_fast_cmpl)) &&
          (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY))) {
         xfer_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE].c += tl_perf->latency;
         xfer_perf->perf[UCP_PROTO_PERF_TYPE_SINGLE].c +=
@@ -585,9 +587,10 @@ ucp_proto_common_init_recv_perf(const ucp_proto_common_init_params_t *params,
     if (/* Don't care about receiver time for one-sided remote access */
         (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) ||
         /* Count only send completion time without waiting for a response */
-        ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        (((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+         (params->super.worker->context->config.ext.force_fast_cmpl)) &&
          !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE)) ||
-        empty_msg) {
+         (empty_msg)) {
         recv_overhead = UCS_LINEAR_FUNC_ZERO;
     } else {
         if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {

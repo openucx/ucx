@@ -204,7 +204,8 @@ public:
         params.cb.send      = cb;
         params.user_data    = this;
 
-        if (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI) {
+        if ((TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI) ||
+            (m_perf.ucp.worker->context->config.ext.force_multi_send)) {
             params.op_attr_mask |= UCP_OP_ATTR_FLAG_MULTI_SEND;
         }
 

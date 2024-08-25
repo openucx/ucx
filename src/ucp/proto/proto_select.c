@@ -736,8 +736,7 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
                                  ucp_operation_id_t op_id, unsigned proto_flags,
                                  ucp_proto_select_short_t *proto_short)
 {
-    static const uint32_t op_attributes[] = {0, UCP_OP_ATTR_FLAG_FAST_CMPL,
-                                             UCP_OP_ATTR_FLAG_MULTI_SEND};
+    uint32_t op_attributes[3]             = {0};
     ucp_context_h context                 = worker->context;
     const ucp_proto_t *proto              = NULL;
     const ucp_proto_threshold_elem_t *thresh;
@@ -746,6 +745,16 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
     ucp_memory_info_t mem_info;
     ssize_t max_short_signed;
     const uint32_t *op_attribute;
+
+    if ((UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+        (worker->context->config.ext.force_fast_cmpl)) {
+        op_attributes[1] = UCP_OP_ATTR_FLAG_FAST_CMPL;
+    }
+
+    if ((UCP_OP_ATTR_FLAG_MULTI_SEND) ||
+        (worker->context->config.ext.force_multi_send)) {
+        op_attributes[2] = UCP_OP_ATTR_FLAG_MULTI_SEND;
+    }
 
     if (worker->context->config.progress_wrapper_enabled) {
         ucp_proto_select_short_disable(proto_short);

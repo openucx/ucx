@@ -68,6 +68,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                                              rndv_rma_thresh, rndv_am_thresh);
 
     if (!(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+        !(req->send.ep->worker->context->config.ext.force_fast_cmpl) ||
         ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, dt_count,
                                                      rndv_thresh);
@@ -81,7 +82,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                   req, req->send.datatype, req->send.buffer, req->send.length,
                   ucs_memory_type_names[req->send.mem_type],
                   max_short, rndv_thresh, zcopy_thresh,
-                  !(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL));
+                  !(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+                  !(req->send.ep->worker->context->config.ext.force_fast_cmpl));
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
                                     dt_count, 0, req->send.length, msg_config,
@@ -196,12 +198,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_send_nbr,
                  ucp_datatype_t datatype, ucp_tag_t tag, void *request)
 {
     ucp_request_param_t param = {
-        .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FIELD_REQUEST |
-                        UCP_OP_ATTR_FLAG_FAST_CMPL,
+        .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FIELD_REQUEST,
         .datatype     = datatype,
         .request      = request
     };
     ucs_status_ptr_t status;
+
+    if ((UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+        (ep->worker->context->config.ext.force_fast_cmpl)) {
+        param.op_attr_mask |= UCP_OP_ATTR_FLAG_FAST_CMPL;
+    }
 
     status = ucp_tag_send_nbx(ep, buffer, count, tag, &param);
     if (ucs_likely(status == UCS_OK)) {

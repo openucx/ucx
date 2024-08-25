@@ -232,7 +232,8 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
     uint32_t op_attr_mask;
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
-                   UCP_OP_ATTR_FLAG_MULTI_SEND;
+                   UCP_OP_ATTR_FLAG_MULTI_SEND ||
+                   (init_params->worker->context->config.ext.force_multi_send);
     /* Construct select parameter for the remote protocol */
     if (init_params->rkey_config_key == NULL) {
         /* Remote buffer is unknown, assume same params as local */
@@ -425,7 +426,7 @@ void ucp_proto_rndv_ctrl_probe(const ucp_proto_rndv_ctrl_init_params_t *params,
         max_length = caps->ranges[caps->num_ranges - 1].max_length;
         min_length = caps->min_length;
         ucs_trace("%s proto variant: min_length=%zu max_length=%zu "
-                  "cfg_thresh=%zu cfg_priority=%u", proto_name, 
+                  "cfg_thresh=%zu cfg_priority=%u", proto_name,
                   min_length, max_length, remote_proto->cfg_thresh,
                   remote_proto->cfg_priority);
 
@@ -504,9 +505,10 @@ size_t ucp_proto_rndv_thresh(const ucp_proto_init_params_t *init_params)
     }
 
     if ((rndv_thresh == UCS_MEMUNITS_AUTO) &&
-        (ucp_proto_select_op_attr_unpack(select_param->op_attr) &
-         UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-        ucs_likely(UCP_MEM_IS_HOST(select_param->mem_type))) {
+        ((ucp_proto_select_op_attr_unpack(select_param->op_attr) &
+         UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+        (cfg->force_fast_cmpl)) &&
+        (ucs_likely(UCP_MEM_IS_HOST(select_param->mem_type)))) {
         rndv_thresh = cfg->rndv_send_nbr_thresh;
     }
 

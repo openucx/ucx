@@ -189,6 +189,10 @@ typedef struct ucp_context_config {
     double                                 proto_overhead_rkey_ptr;
     /** Registration cache lookup overhead estimation */
     double                                 rcache_overhead;
+    /** Enable forced FAST_CMPL flag for all operations */
+    int                                    force_fast_cmpl;
+    /** Enable forced MULTI_SEND flag for all operations */
+    int                                    force_multi_send;
 } ucp_context_config_t;
 
 

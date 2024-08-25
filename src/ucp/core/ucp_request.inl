@@ -958,8 +958,9 @@ ucp_request_param_rndv_thresh(ucp_request_t *req,
                               ucp_rndv_thresh_t *am_thresh_config,
                               size_t *rndv_rma_thresh, size_t *rndv_am_thresh)
 {
-    if ((param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-        ucs_likely(UCP_MEM_IS_HOST(req->send.mem_type))) {
+    if (((param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
+        (req->send.ep->worker->context->config.ext.force_fast_cmpl)) &&
+        (ucs_likely(UCP_MEM_IS_HOST(req->send.mem_type)))) {
         *rndv_rma_thresh = rma_thresh_config->local;
         *rndv_am_thresh  = am_thresh_config->local;
     } else {
