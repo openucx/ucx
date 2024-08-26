@@ -583,11 +583,11 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_md_map[mem_type],
                     context->reg_block_md_map[mem_type]);
 
-        reg_params.flags      = uct_flags | memh->uct_flags;
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
+        reg_params.flags      = uct_flags | memh->uct_flags;
         if (!(context->reg_nonblock_md_map[mem_type] & md_index)) {
-            /* Ignore nonblcok flag if MD doesn't support it */
-            reg_params.flags &= !UCT_MD_MEM_FLAG_NONBLOCK;
+            /* Ignore nonblock flag if MD doesn't support it */
+            reg_params.flags &= ~UCT_MD_MEM_FLAG_NONBLOCK;
         }
 
         if (dmabuf_md_map & UCS_BIT(md_index)) {
