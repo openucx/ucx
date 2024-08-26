@@ -74,6 +74,22 @@ static UCS_CONFIG_DEFINE_ARRAY(signo,
                                UCS_CONFIG_TYPE_SIGNO);
 
 
+#define UCS_DISTANCE_KEYS_DESCRIPTION(_field) \
+    {"phb", \
+     "connection traversing PCIe as well as a PCIe Host Bridge (typically " \
+     "the CPU)", \
+     ucs_offsetof(ucs_global_opts_t, dist.phb._field)}, \
+    {"node", \
+     "connection traversing PCIe as well as the interconnect between PCIe " \
+     "Host Bridges within a NUMA node", \
+     ucs_offsetof(ucs_global_opts_t, dist.node._field)}, \
+    {"sys", \
+     "connection traversing PCIe as well as the SMP interconnect between " \
+     "NUMA nodes", \
+     ucs_offsetof(ucs_global_opts_t, dist.sys._field)}, \
+    {NULL}
+
+
 static ucs_config_field_t ucs_global_opts_table[] = {
  {"LOG_LEVEL", "warn",
   "UCS logging level. Messages with a level higher or equal to the selected "
@@ -190,6 +206,16 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Comma-separated list of providers for detecting system topology.\n"
   "The list order decides the priority of the providers.",
   ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+ {"DISTANCE_LAT", "phb:300ns,node:300ns,sys:500ns",
+  "Estimated latency between system devices", 0,
+  UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_TIME,
+                            UCS_DISTANCE_KEYS_DESCRIPTION(latency))},
+
+ {"DISTANCE_BW", "auto",
+  "Estimated bandwidth between system devices", 0,
+  UCS_CONFIG_TYPE_KEY_VALUE(UCS_CONFIG_TYPE_BW,
+                            UCS_DISTANCE_KEYS_DESCRIPTION(bandwidth))},
 
  {NULL}
 };
