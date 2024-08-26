@@ -155,6 +155,8 @@ public:
 
         bool has_lane_with_caps(uint64_t caps) const;
 
+        bool is_rndv_put_ppln_supported() const;
+
         bool is_conn_reqs_queue_empty() const;
 
     protected:

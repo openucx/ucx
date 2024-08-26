@@ -277,11 +277,14 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     return sizeof(*rtr) + packed_rkey_size;
 }
 
-static void ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
 {
-    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    if (!abort || (req->send.rndv.mdesc != NULL)) {
+        ucs_mpool_put_inline(req->send.rndv.mdesc);
+    }
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
-        ucp_proto_rndv_ppln_recv_frag_complete(req, 0, 0);
+        ucp_proto_rndv_ppln_recv_frag_complete(req, 0, abort);
     } else {
         ucp_proto_rndv_rtr_common_complete(req, UCS_BIT(UCP_DATATYPE_CONTIG));
     }
@@ -290,15 +293,13 @@ static void ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req)
 static void
 ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 {
-    req->status = status;
-    ucp_send_request_id_release(req);
-    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    ucp_request_t *super_req = ucp_request_get_super(req);
 
-    if (ucp_proto_rndv_request_is_ppln_frag(req)) {
-        ucp_proto_rndv_ppln_recv_frag_complete(req, 0, 1);
-    } else {
-        ucp_proto_rndv_rtr_common_complete(req, UCS_BIT(UCP_DATATYPE_CONTIG));
-    }
+    super_req->status = status;
+
+    /*TODO: Invalidate memh */
+    ucp_send_request_id_release(req);
+    ucp_proto_rndv_rtr_mtype_complete(req, 1);
 }
 
 static ucs_status_t ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
@@ -315,7 +316,7 @@ static void ucp_proto_rndv_rtr_mtype_copy_completion(uct_completion_t *uct_comp)
 {
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
-    ucp_proto_rndv_rtr_mtype_complete(req);
+    ucp_proto_rndv_rtr_mtype_complete(req, 0);
 }
 
 static void
@@ -325,7 +326,7 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
     if (in_buffer) {
         /* Data was already placed in user buffer because the sender responded
            with RNDV_DATA packets */
-        ucp_proto_rndv_rtr_mtype_complete(req);
+        ucp_proto_rndv_rtr_mtype_complete(req, 0);
     } else {
         /* Data was not placed in user buffer, which means it was placed to
            the remote address we published - the rendezvous fragment */

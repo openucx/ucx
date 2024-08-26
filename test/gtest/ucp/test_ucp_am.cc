@@ -2014,8 +2014,8 @@ protected:
     void test_ppln_send(ucs_memory_type_t mem_type, size_t num_frags,
                         uint64_t stats_cntr_value)
     {
-        if (!is_ppln_supported(mem_type)) {
-            UCS_TEST_SKIP_R("No RMA support");
+        if (!sender().is_rndv_put_ppln_supported()) {
+            UCS_TEST_SKIP_R("RNDV pipeline is not supported");
         }
 
         const size_t rndv_frag_size = get_rndv_frag_size(mem_type);
@@ -2048,29 +2048,6 @@ private:
 
         EXPECT_EQ(exp_value, value) << "counter is "
                                     << stats_node->cls->counter_names[cntr];
-    }
-
-    bool is_ppln_supported(ucs_memory_type_t mem_type)
-    {
-        const auto ep     = sender().ep();
-        const auto config = ucp_ep_config(ep);
-
-        for (auto i = 0; i < config->key.num_lanes; ++i) {
-            const auto lane = config->key.rma_bw_lanes[i];
-            if (lane == UCP_NULL_LANE) {
-                break;
-            }
-            if (ucp_ep_md_attr(ep, lane)->reg_mem_types & UCS_BIT(mem_type)) {
-                const auto iface_attr =
-                    ucp_worker_iface_get_attr(sender().worker(),
-                                              ucp_ep_get_rsc_index(ep, lane));
-                if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     ucs_memory_type_t m_mem_type;
