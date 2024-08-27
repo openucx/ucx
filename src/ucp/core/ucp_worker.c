@@ -578,7 +578,7 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("activate " UCP_WIFACE_FMT " acount=%u aifaces=%u",
+    ucs_trace("activate " UCP_WIFACE_FMT " a_count=%u a_ifaces=%u",
               UCP_WIFACE_ARG(wiface), wiface->activate_count,
               worker->num_active_ifaces);
 
@@ -732,7 +732,7 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("deactivate " UCP_WIFACE_FMT " force=%d acount=%u aifaces=%u",
+    ucs_trace("deactivate " UCP_WIFACE_FMT " force=%d a_count=%u a_ifaces=%u",
               UCP_WIFACE_ARG(wiface), force, wiface->activate_count,
               worker->num_active_ifaces);
 
@@ -3135,7 +3135,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
 
     if (worker->keepalive.timerfd >= 0) {
         /* Do read() of 8-byte unsigned integer containing the number of
-         * expirations that have occured to make sure no events will be
+         * expirations that have occurred to make sure no events will be
          * triggered again until timer isn't expired again.
          */
         status = ucp_worker_fd_read(worker, worker->keepalive.timerfd,

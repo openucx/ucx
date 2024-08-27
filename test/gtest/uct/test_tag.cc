@@ -272,7 +272,7 @@ public:
 
         wait_for_flag(&r_ctx.unexp);
         if (static_cast<send_func>(&test_tag::tag_rndv_zcopy) == sfunc) {
-            // Need to cancel origin RNDV operation, beacuse no RNDV_COMP
+            // Need to cancel origin RNDV operation, because no RNDV_COMP
             // will be received (as it arrived unexpectedly and should be
             // handled by SW).
             ASSERT_UCS_OK(tag_rndv_cancel(sender(), s_ctx.rndv_op));
@@ -291,7 +291,7 @@ public:
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
 
         // Post modified tag for incoming message to be reported as unexpected
-        // and not to be macthed.
+        // and not to be matched.
         recv_ctx r_ctx;
         init_recv_ctx(r_ctx, &recvbuf, tag + 1);
         send_ctx s_ctx;
@@ -795,7 +795,7 @@ public:
 
         // Counters are synced every IBV_DEVICE_MAX_UNEXP_COUNT ops, set
         // it one op before, so that any following unexpected message would
-        // cause HW ans SW counters sync.
+        // cause HW and SW counters sync.
         iface->tm.unexpected_cnt = IBV_DEVICE_MAX_UNEXP_COUNT - 1;
     }
 

@@ -123,7 +123,7 @@ unsigned ucs_numa_num_configured_cpus()
 
 ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
 {
-    /* Used for caching to improve perfromance */
+    /* Used for caching to improve performance */
     static ucs_numa_node_t cpu_numa_node[__CPU_SETSIZE] = {0};
     ucs_numa_node_t node;
     char core_dir_path[PATH_MAX];

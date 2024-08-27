@@ -419,7 +419,7 @@ UCS_TEST_P(test_ucp_tag_offload, eager_multi_probe,
     request_wait(rreq);
 }
 
-// Test that message is received correctly if the corresponging receive
+// Test that message is received correctly if the corresponding receive
 // operation was posted when the first (but not all) fragments arrived. This is
 // to ensure that the following sequence does not happen:
 // 1. First fragment arrives and is not added to the unexp queue
@@ -681,7 +681,7 @@ UCS_TEST_P(test_ucp_tag_offload_gpu, sw_rndv_to_gpu_mem, "TM_SW_RNDV=y")
     wait_and_validate(sreq);
 }
 
-// Test that small buffers wich can be scattered to CQE are not posted to the
+// Test that small buffers which can be scattered to CQE are not posted to the
 // HW. Otherwise it may segfault, while copying data from CQE to the
 // (potentially) GPU buffer.
 UCS_TEST_P(test_ucp_tag_offload_gpu, rx_scatter_to_cqe, "TM_THRESH=1")

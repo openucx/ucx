@@ -1401,7 +1401,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err;
     }
 
-    md = uct_ib_md_alloc(sizeof(*md), "ib_mlx5_devx_md", ctx);
+    md = uct_ib_md_alloc(sizeof(*md), "ib_verbs_md", ctx);
     if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_context;

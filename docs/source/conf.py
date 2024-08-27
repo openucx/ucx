@@ -106,7 +106,7 @@ def config_doxygen_file(dox_dir, src_dir, output_dir):
     with open(dox_dir +'/ucxdox', 'r') as file :
         doxygenfile = file.read()
     # Using upstream doxygen configuration to generate "breathe" friendly
-    # configration. Since autotools are not availible at RTD we are doing this
+    # configuration. Since autotools are not available at RTD we are doing this
     # python way
     doxygenfile = doxygenfile.replace('$(PROJECT)', 'UCX')
     doxygenfile = doxygenfile.replace('$(VERSION)', getLatestVersion())

@@ -21,7 +21,7 @@ typedef enum ucs_iov_copy_direction {
 } ucs_iov_copy_direction_t;
 
 
-/* An iterator that should be used by IOV convertor in order to save
+/* An iterator that should be used by IOV converter in order to save
  * information about the current offset in the destination IOV array */
 typedef struct ucs_iov_iter {
     size_t     iov_index;     /* The current index in iov array */
