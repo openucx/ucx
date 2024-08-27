@@ -199,9 +199,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_XGVMI_UMR            = UCS_BIT(16),
     /* Device supports UAR WC allocation type */
     UCT_IB_MLX5_MD_FLAG_UAR_USE_WC           = UCS_BIT(17),
+    /* Device supports implicit ODP with PCI relaxed order */
+    UCT_IB_MLX5_MD_FLAG_GVA_RO               = UCS_BIT(18),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 18,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 19,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),

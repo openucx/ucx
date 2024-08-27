@@ -598,7 +598,7 @@ ucs_status_t uct_ib_memh_alloc(uct_ib_md_t *md, size_t length,
     return UCS_OK;
 }
 
-uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh)
+uint64_t uct_ib_memh_access_flags(uct_ib_mem_t *memh, int relaxed_order)
 {
     uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
 
@@ -606,7 +606,7 @@ uint64_t uct_ib_memh_access_flags(uct_ib_md_t *md, uct_ib_mem_t *memh)
         access_flags |= IBV_ACCESS_ON_DEMAND;
     }
 
-    if (md->relaxed_order) {
+    if (relaxed_order) {
         access_flags |= IBV_ACCESS_RELAXED_ORDERING;
     }
 
@@ -633,7 +633,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     }
 
     memh         = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
-    access_flags = uct_ib_memh_access_flags(md, &memh->super);
+    access_flags = uct_ib_memh_access_flags(&memh->super, md->relaxed_order);
 
     status = uct_ib_reg_mr(md, address, length, params, access_flags, NULL,
                            &mr_default);
