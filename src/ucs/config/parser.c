@@ -1750,8 +1750,14 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
 
 void ucs_config_parse_config_files()
 {
+    char *path;
     const char *path_p;
-    char path[PATH_MAX];
+    ucs_status_t status;
+
+    status = ucs_string_alloc_path_buffer(&path, "path");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     /* System-wide configuration file */
     ucs_config_parse_config_file(UCX_CONFIG_DIR, UCX_CONFIG_FILE_NAME, 1);
@@ -1778,6 +1784,11 @@ void ucs_config_parse_config_files()
 
     /* Current working dir */
     ucs_config_parse_config_file(".", UCX_CONFIG_FILE_NAME, 1);
+
+out_free_path:
+    ucs_free(path);
+out:
+    return;
 }
 
 ucs_status_t
