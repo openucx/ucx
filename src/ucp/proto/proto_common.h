@@ -266,11 +266,6 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
                             ucp_lane_map_t lane_map);
 
 
-void ucp_proto_common_add_proto(const ucp_proto_common_init_params_t *params,
-                                ucp_proto_perf_t *perf, const void *priv,
-                                size_t priv_size);
-
-
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
 
 

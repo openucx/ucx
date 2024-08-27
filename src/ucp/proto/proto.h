@@ -127,20 +127,20 @@ typedef struct {
     /* Maximal message size of the range started from 'msg_length' for
        which the description and configuration information is relevant.
        It must be > msg_length. */
-    size_t                         max_msg_length;
+    size_t max_msg_length;
 
     /* Whether the reported information is not definitive, and the actual used
        protocol depends on remote side decision as well. */
-    int                            is_estimation;
+    int    is_estimation;
 
     /* High-level description of what the protocol is doing in this range */
-    char                           desc[UCP_PROTO_DESC_STR_MAX];
+    char   desc[UCP_PROTO_DESC_STR_MAX];
 
     /* Protocol configuration in the range, such as devices and transports */
-    char                           config[UCP_PROTO_CONFIG_STR_MAX];
+    char   config[UCP_PROTO_CONFIG_STR_MAX];
 
     /* Map of used lanes */
-    ucp_lane_map_t                 lane_map;
+    ucp_lane_map_t lane_map;
 } ucp_proto_query_attr_t;
 
 

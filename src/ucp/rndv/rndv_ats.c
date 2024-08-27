@@ -40,7 +40,12 @@ static void ucp_proto_rndv_ats_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    ucp_proto_common_add_proto(&params, perf, &priv, sizeof(priv));
+    status = ucp_proto_select_add_proto(&params.super, params.cfg_thresh,
+                                        params.cfg_priority, perf, &priv,
+                                        sizeof(priv));
+    if (status != UCS_OK) {
+        ucp_proto_perf_destroy(perf);
+    }
 }
 
 static void

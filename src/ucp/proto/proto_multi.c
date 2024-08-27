@@ -270,8 +270,14 @@ void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
         return;
     }
 
-    ucp_proto_common_add_proto(&params->super, perf, &mpriv,
-                               ucp_proto_multi_priv_size(&mpriv));
+    status = ucp_proto_select_add_proto(&params->super.super,
+                                        params->super.cfg_thresh,
+                                        params->super.cfg_priority, perf,
+                                        &mpriv,
+                                        ucp_proto_multi_priv_size(&mpriv));
+    if (status != UCS_OK) {
+        ucp_proto_perf_destroy(perf);
+    }
 }
 
 static const ucp_ep_config_key_lane_t *

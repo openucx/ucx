@@ -349,7 +349,13 @@ ucp_proto_rndv_put_common_probe(const ucp_proto_init_params_t *init_params,
     rpriv.stat_counter  = stat_counter;
 
     priv_size = UCP_PROTO_MULTI_EXTENDED_PRIV_SIZE(&rpriv, bulk.mpriv);
-    ucp_proto_common_add_proto(&params.super, perf, &rpriv, priv_size);
+    status    = ucp_proto_select_add_proto(&params.super.super,
+                                           params.super.cfg_thresh,
+                                           params.super.cfg_priority, perf,
+                                           &rpriv, priv_size);
+    if (status != UCS_OK) {
+        ucp_proto_perf_destroy(perf);
+    }
 }
 
 static const char *

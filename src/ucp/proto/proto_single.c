@@ -78,7 +78,13 @@ void ucp_proto_single_probe(const ucp_proto_single_init_params_t *params)
         return;
     }
 
-    ucp_proto_common_add_proto(&params->super, perf, &spriv, sizeof(spriv));
+    status = ucp_proto_select_add_proto(&params->super.super,
+                                        params->super.cfg_thresh,
+                                        params->super.cfg_priority, perf,
+                                        &spriv, sizeof(spriv));
+    if (status != UCS_OK) {
+        ucp_proto_perf_destroy(perf);
+    }
 }
 
 void ucp_proto_single_query(const ucp_proto_query_params_t *params,

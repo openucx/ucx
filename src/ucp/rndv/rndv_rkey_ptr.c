@@ -53,21 +53,24 @@ static void ucp_proto_rndv_rkey_ptr_probe_common(
 
     if (rpriv->ack.lane == UCP_NULL_LANE) {
         /* Add perf without ACK in case of pipeline */
-        ucp_proto_common_add_proto(init_params, rndv_op_perf, rpriv, priv_size);
-        return;
+        perf = rndv_op_perf;
+    } else {
+        status = ucp_proto_perf_aggregate2(proto_name, rndv_op_perf, ack_perf,
+                                           &perf);
+        ucp_proto_perf_destroy(ack_perf);
+        ucp_proto_perf_destroy(rndv_op_perf);
+        if (status != UCS_OK) {
+            return;
+        }
     }
 
-    status = ucp_proto_perf_aggregate2(proto_name, rndv_op_perf, ack_perf,
-                                       &perf);
+    status = ucp_proto_select_add_proto(&init_params->super,
+                                        init_params->cfg_thresh,
+                                        init_params->cfg_priority, perf,
+                                        rpriv, priv_size);
     if (status != UCS_OK) {
-        goto out_destroy_perf;
+        ucp_proto_perf_destroy(perf);
     }
-
-    ucp_proto_common_add_proto(init_params, perf, rpriv, priv_size);
-
-out_destroy_perf:
-    ucp_proto_perf_destroy(ack_perf);
-    ucp_proto_perf_destroy(rndv_op_perf);
 }
 
 static void
