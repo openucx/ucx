@@ -665,8 +665,7 @@ UCS_TEST_F(test_proto_perf, single_func)
     expect_empty_range(2000, SIZE_MAX);
 }
 
-UCS_TEST_F(test_proto_perf, to_inf)
-{
+UCS_TEST_F(test_proto_perf, to_inf) {
     /*
      *  0    172                   SIZE_MAX
      *  |     |                       |

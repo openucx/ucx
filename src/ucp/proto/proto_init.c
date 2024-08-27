@@ -319,12 +319,13 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
 }
 
 static ucp_proto_perf_factor_id_t
-ucp_proto_buffer_copy_get_cpu_factor_id(int local) {
+ucp_proto_buffer_copy_cpu_factor_id(int local) {
     return (local) ? UCP_PROTO_PERF_FACTOR_LOCAL_CPU :
                      UCP_PROTO_PERF_FACTOR_REMOTE_CPU;
 }
+
 static ucp_proto_perf_factor_id_t
-ucp_proto_buffer_copy_get_factor_id(ucs_memory_type_t local_mem_type,
+ucp_proto_buffer_copy_factor_id(ucs_memory_type_t local_mem_type,
                                     ucs_memory_type_t remote_mem_type,
                                     uct_ep_operation_t memtype_op,
                                     int local)
@@ -336,7 +337,7 @@ ucp_proto_buffer_copy_get_factor_id(ucs_memory_type_t local_mem_type,
     int blocking = (memtype_op == UCT_EP_OP_GET_SHORT) ||
                    (memtype_op == UCT_EP_OP_PUT_SHORT);
     if (h2h || blocking) {
-        return ucp_proto_buffer_copy_get_cpu_factor_id(local);
+        return ucp_proto_buffer_copy_cpu_factor_id(local);
     }
 
     ucs_assertv((memtype_op == UCT_EP_OP_GET_ZCOPY) ||
@@ -356,7 +357,7 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
 {
     ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     ucp_context_h context                 = worker->context;
-    ucp_proto_perf_factor_id_t factor_id  = ucp_proto_buffer_copy_get_factor_id(
+    ucp_proto_perf_factor_id_t factor_id  = ucp_proto_buffer_copy_factor_id(
             local_mem_type, remote_mem_type, memtype_op, local);
     ucs_memory_type_t src_mem_type, dst_mem_type;
     ucp_proto_perf_node_t *tl_perf_node;
@@ -427,7 +428,7 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
 
     perf_factors[UCP_PROTO_PERF_FACTOR_LATENCY].c =
             ucp_tl_iface_latency(context, &perf_attr.latency);
-    perf_factors[ucp_proto_buffer_copy_get_cpu_factor_id(local)].c =
+    perf_factors[ucp_proto_buffer_copy_cpu_factor_id(local)].c =
             perf_attr.send_pre_overhead + perf_attr.send_post_overhead;
     perf_factors[factor_id].m =
             1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
@@ -568,7 +569,7 @@ ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
     status = ucp_proto_init_add_tl_perf(params, tl_perf, tl_perf_node,
                                         range_start, range_end, perf);
     if (status != UCS_OK) {
-            goto out;
+        goto out;
     }
 
     if (range_end > 0) {
@@ -579,7 +580,7 @@ ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
             goto out;
         }
 
-        /* Add range that represent sending many fragments */
+        /* Add range that represents sending many fragments */
         if ((range_end < params->max_length) &&
             !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
             frag_seg = ucp_proto_perf_segment_last(perf);

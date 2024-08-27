@@ -325,7 +325,7 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         ucp_proto_init_elem_t *remote_proto, const void *remote_priv)
 {
     const char *proto_name = ucp_proto_id_field(remote_proto->proto_id, name);
-    size_t num_elems  = 0;
+    size_t num_elems       = 0;
     const ucp_proto_perf_t *perf_elems[3];
     ucp_proto_perf_t *ctrl_perf, *remote_perf;
     size_t cfg_thresh, cfg_priority;
