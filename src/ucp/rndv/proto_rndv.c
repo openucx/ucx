@@ -198,13 +198,13 @@ static ucs_status_t ucp_proto_rndv_ctrl_perf(
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
+    if (lane == UCP_NULL_LANE) {
+        return UCS_ERR_NO_ELEM;
+    }
+
     status = ucp_proto_perf_create("rndv_ctrl", &perf);
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (lane == UCP_NULL_LANE) {
-        goto out;
     }
 
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
@@ -218,7 +218,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_perf(
     wiface    = ucp_worker_iface(worker, rsc_index);
     status    = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
-        return status;
+        goto err_destroy_perf;
     }
 
     /* TODO: consider control message size */
@@ -236,12 +236,15 @@ static ucs_status_t ucp_proto_rndv_ctrl_perf(
                                       init_params->max_length, perf_factors,
                                       NULL, name, "");
     if (status != UCS_OK) {
-        return status;
+        goto err_destroy_perf;
     }
 
-out:
     *perf_p = perf;
     return UCS_OK;
+
+err_destroy_perf:
+    ucp_proto_perf_destroy(perf);
+    return status;
 }
 
 static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
