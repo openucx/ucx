@@ -25,7 +25,7 @@
 
 /* Mask of UCT memory flags that need make sure are present when reusing an
    existing region */
-#define UCP_MM_UCT_ACCESS_MASK UCT_MD_MEM_ACCESS_ALL
+#define UCP_MM_UCT_ACCESS_FLAGS(_flags) ((_flags) & UCT_MD_MEM_ACCESS_ALL)
 
 
 /**
