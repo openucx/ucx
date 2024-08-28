@@ -112,15 +112,12 @@ void ucp_proto_select_init_trace_perf(const ucp_proto_init_params_t *init_params
         range_end = query_attr.max_msg_length;
         ucp_proto_perf_segment_foreach_range(seg, seg_start, seg_end, perf,
                                              range_start, range_end) {
-            seg_start = ucs_max(range_start, ucp_proto_perf_segment_start(seg));
-            seg_end   = ucs_min(range_end, ucp_proto_perf_segment_end(seg));
             ucs_string_buffer_reset(&seg_strb);
             ucp_proto_perf_segment_str(seg, &seg_strb);
             ucs_trace("%s: %s %s %s", ucs_string_buffer_cstr(&seg_strb),
                       ucs_memunits_range_str(seg_start, seg_end, range_str,
                                              sizeof(range_str)),
                       query_attr.desc, query_attr.config);
-            seg = ucp_proto_perf_segment_next(perf, seg);
         }
     } while (range_end < SIZE_MAX);
 }
