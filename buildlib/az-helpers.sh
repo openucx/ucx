@@ -12,6 +12,10 @@ if [ -z "$AGENT_ID" ]; then
     RUNNING_IN_AZURE="no"
 fi
 
+# Keep track of loaded modules because they are unloaded before
+# log_info_on_exit is called
+loaded_modules=()
+
 # Report error and exit
 function error() {
     msg=$1
@@ -128,7 +132,17 @@ function az_module_load() {
         fi
         ((retries--))
     done
-    module load $module
+
+    if module load "$module"; then
+        # Check if module is already in the array
+        if [[ ! " ${loaded_modules[*]} " =~ " ${module} " ]]; then
+            loaded_modules+=("$module")
+        fi
+    else
+        echo "Failed to load module $module"
+        return 1
+    fi
+
     return 0
 }
 
@@ -300,4 +314,242 @@ git_clone_with_retry() {
 
 setup_go_env() {
     go env -w GO111MODULE=auto
+
+declare -A COLORS=(
+    [RED]='\033[0;31m'
+    [GREEN]='\033[0;32m'
+    [BLUE]='\033[0;34m'
+    [CYAN]='\033[0;36m'
+    [NC]='\033[0m' # No Color
+)
+
+function log_script_info() {
+    echo -e "${COLORS[CYAN]}Script Information${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    echo -e "${COLORS[GREEN]}Script:${COLORS[NC]} $0"
+    echo -e "${COLORS[GREEN]}Working Directory:${COLORS[NC]} $(pwd)"
+    echo -e "${COLORS[GREEN]}User:${COLORS[NC]} $(whoami)"
+}
+
+function log_docker_variables() {
+    if env | grep -q 'DOCKER_OPT_'; then
+        echo -e "${COLORS[GREEN]}Docker Variables:${COLORS[NC]}"
+        for var in DOCKER_OPT_VOLUMES DOCKER_OPT_IB DOCKER_OPT_GPU \
+            DOCKER_OPT_ARGS; do
+            [ -n "${!var}" ] && echo -e "    ${!var}"
+        done
+    else
+        echo -e "${COLORS[RED]}    No Docker-specific environment variables " \
+                "set.${COLORS[NC]}"
+    fi
+}
+
+function log_machine_info() {
+    echo -e "\n${COLORS[CYAN]}Machine Information${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    if [ -f /.dockerenv ]; then
+        echo -e "${COLORS[GREEN]}Running in container:${COLORS[NC]} Yes"
+        echo -e "${COLORS[GREEN]}Agent Machine Name:${COLORS[NC]} " \
+                "$AGENT_MACHINENAME"
+        echo -e "${COLORS[GREEN]}Container Image:${COLORS[NC]} TODO"
+        log_docker_variables
+    else
+        echo -e "${COLORS[GREEN]}Running in container:${COLORS[NC]} No"
+        echo -e "${COLORS[GREEN]}Host Machine:${COLORS[NC]} $(uname -n)"
+    fi
+    echo -e "${COLORS[GREEN]}OS:${COLORS[NC]} $(uname -s) ($(uname -o))"
+    echo -e "${COLORS[GREEN]}Kernel:${COLORS[NC]} $(uname -r) ($(uname -v))"
+}
+
+function log_ucx_env_vars() {
+    echo -e "\n${COLORS[CYAN]}UCX Environment Variables${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    if env | grep -q '^UCX_'; then
+        env | grep '^UCX_' | sed 's/^/    /'
+    else
+        echo -e "${COLORS[RED]}    No UCX-specific environment variables set."\
+                "${COLORS[NC]}"
+    fi
+}
+
+function log_ucx_info() {
+    echo -e "\n${COLORS[CYAN]}UCX Information${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+
+    local ucx_cmd
+    if command -v ucx_info &> /dev/null; then
+        ucx_cmd="ucx_info"
+    elif [ -x "$ucx_inst/bin/ucx_info" ]; then
+        ucx_cmd="$ucx_inst/bin/ucx_info"
+    elif [ -x "./src/tools/info/ucx_info" ]; then
+        ucx_cmd="./src/tools/info/ucx_info"
+    else
+        echo -e "${COLORS[RED]}ucx_info command not found.${COLORS[NC]}"
+        return
+    fi
+
+    declare -A ucx_sections=(
+        ["-v"]="Version"
+        ["-d"]="Devices and Transports"
+        ["-b"]="Build Configuration"
+        ["-p"]="UCP Context Information"
+        ["-w"]="UCP Worker Information"
+        ["-e"]="UCP Endpoint Configuration"
+    )
+
+    local ordered_flags=(
+        "-v"
+        "-d"
+        "-b"
+        "-p"
+        "-w"
+        "-e"
+    )
+
+    for flag in "${ordered_flags[@]}"; do
+        local section="${ucx_sections[$flag]}"
+        echo "##[group]    $section"
+
+        case "$flag" in
+            -p|-w|-e)
+                cmd="$ucx_cmd -u a r t s $flag"
+                ;;
+            *)
+                cmd="$ucx_cmd $flag"
+                ;;
+        esac
+
+        if output=$($cmd 2>&1); then
+            echo "$output" | sed 's/^/    /'
+        else
+            echo -e "${COLORS[RED]}Error executing $cmd:${COLORS[NC]}"
+            echo "$output" | sed 's/^/    /'
+        fi
+        echo "##[endgroup]"
+    done
+}
+
+function log_loaded_modules() {
+    # Use loaded_modules array because modules may be unloaded before
+    # this function is called
+    echo -e "\n${COLORS[CYAN]}Modules Loaded${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    if [ ${#loaded_modules[@]} -eq 0 ]; then
+        echo -e "${COLORS[RED]}    No modules loaded.${COLORS[NC]}"
+    else
+        for module in "${loaded_modules[@]}"; do
+            echo -e "    ${module}"
+        done
+    fi
+}
+
+function log_cpu_info() {
+    echo -e "\n${COLORS[CYAN]}CPU Information${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    if command -v lscpu &> /dev/null; then
+        echo "##[group]    lscpu Output"
+        lscpu | sed 's/^/    /'
+        echo "##[endgroup]"
+    else
+        echo -e "${COLORS[RED]}    lscpu command not found.${COLORS[NC]}"
+    fi
+}
+
+function log_cpu_affinity() {
+    echo -e "\n${COLORS[CYAN]}CPU Affinity${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    taskset -p $$ | sed 's/^/    /'
+}
+
+function log_cpu_utilization() {
+    echo -e "\n${COLORS[CYAN]}CPU Utilization${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    echo "##[group]    CPU Utilization Info"
+    if command -v vmstat &> /dev/null; then
+        echo "##[group]    mpstat Output"
+        vmstat
+        echo "##[endgroup]"
+    else
+        echo -e "${COLORS[RED]}    mpstat command not found.${COLORS[NC]}"
+    fi
+
+    echo "##[endgroup]"
+}
+
+function log_gpu_info() {
+    echo -e "\n${COLORS[CYAN]}GPU Information${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    if command -v nvidia-smi &> /dev/null; then
+        echo "##[group]    nvidia-smi Output"
+        nvidia-smi | sed 's/^/    /'
+        echo "##[endgroup]"
+    else
+        echo -e "${COLORS[RED]}    nvidia-smi command not found or no NVIDIA " \
+                "GPUs detected.${COLORS[NC]}"
+    fi
+}
+
+function log_ibv_info() {
+    echo -e "\n${COLORS[CYAN]}InfiniBand Information${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    if command -v ibv_devinfo &> /dev/null; then
+        echo "##[group]    ibv_devinfo Output"
+        ibv_devinfo | sed 's/^/    /'
+        echo "##[endgroup]"
+    else
+        echo -e "${COLORS[RED]}    ibv_devinfo command not found or no " \
+                "InfiniBand devices detected.${COLORS[NC]}"
+    fi
+}
+
+function log_lshca_info() {
+    echo -e "\n${COLORS[CYAN]}HCA Information${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    if command -v lshca &> /dev/null; then
+        echo "##[group]    lshca Output"
+        lshca | sed 's/^/    /'
+        echo "##[endgroup]"
+    else
+        echo -e "${COLORS[RED]}    lshca command not found.${COLORS[NC]}"
+    fi
+}
+
+function log_ulimit_info() {
+    echo -e "\n${COLORS[CYAN]}Ulimit Information${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    echo "##[group]    Ulimit Info"
+    ulimit -a | sed 's/^/    /'
+    echo "##[endgroup]"
+}
+
+function log_disk_usage() {
+    echo -e "\n${COLORS[CYAN]}Disk Usage${COLORS[NC]}"
+    echo -e "${COLORS[BLUE]}----------------------------${COLORS[NC]}"
+    echo "##[group]    Disk Usage Info"
+    df -h | sed 's/^/    /'
+    echo "##[endgroup]"
+}
+
+function log_info_on_exit() {
+    set +x
+
+    echo "##[group]Log Information on Exit"
+    echo -e "${COLORS[BLUE]}\n======================${COLORS[NC]}"
+
+    log_script_info
+    log_machine_info
+    log_ucx_env_vars
+    log_ucx_info
+    log_loaded_modules
+    log_cpu_info
+    log_cpu_affinity
+    log_cpu_utilization
+    log_gpu_info
+    log_ibv_info
+    log_lshca_info
+    log_ulimit_info
+    log_disk_usage
+
+    echo -e "${COLORS[NC]}======================${COLORS[NC]}"
+    echo "##[endgroup]"
 }

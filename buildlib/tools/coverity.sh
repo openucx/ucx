@@ -3,6 +3,7 @@
 realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
+trap "log_info_on_exit" EXIT
 
 COV_MODULE="tools/cov-2019.12"
 
