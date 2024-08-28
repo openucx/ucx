@@ -538,9 +538,9 @@ ucs_status_t
 ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
                            ucp_proto_perf_node_t *const tl_perf_node,
-                           ucp_md_map_t reg_md_map, ucp_proto_perf_t **perf_p)
+                           ucp_md_map_t reg_md_map, const char *perf_name,
+                           ucp_proto_perf_t **perf_p)
 {
-    const char *proto_name = ucp_proto_id_field(params->super.proto_id, name);
     const ucp_proto_perf_segment_t *frag_seg;
     size_t range_start, range_end;
     ucp_proto_perf_t *perf;
@@ -561,7 +561,7 @@ ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_perf_create(proto_name, &perf);
+    status = ucp_proto_perf_create(perf_name, &perf);
     if (status != UCS_OK) {
         return status;
     }

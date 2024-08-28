@@ -21,6 +21,7 @@
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
+                                  const char *perf_name,
                                   ucp_proto_perf_t **perf_p,
                                   ucp_proto_multi_priv_t *mpriv)
 {
@@ -241,7 +242,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     status = ucp_proto_common_init_perf(&params->super, &perf,
-                                        perf_node, reg_md_map, perf_p);
+                                        perf_node, reg_md_map, perf_name,
+                                        perf_p);
 
     /* Deref unused nodes */
     for (i = 0; i < num_lanes; ++i) {
@@ -261,11 +263,13 @@ size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv)
 
 void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
 {
+    const char *perf_name = ucp_proto_id_field(params->super.super.proto_id,
+                                               name);
     ucp_proto_multi_priv_t mpriv;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    status = ucp_proto_multi_init(params, &perf, &mpriv);
+    status = ucp_proto_multi_init(params, perf_name, &perf, &mpriv);
     if (status != UCS_OK) {
         return;
     }

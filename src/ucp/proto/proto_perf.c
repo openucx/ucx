@@ -228,6 +228,10 @@ int ucp_proto_perf_is_empty(const ucp_proto_perf_t *perf)
     return ucs_list_is_empty(&perf->segments);
 }
 
+const char *ucp_proto_perf_name(const ucp_proto_perf_t *perf) {
+    return perf->name;
+}
+
 ucs_status_t
 ucp_proto_perf_add_funcs(ucp_proto_perf_t *perf, size_t start, size_t end,
                          const ucp_proto_perf_factors_t perf_factors,

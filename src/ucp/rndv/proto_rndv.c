@@ -324,16 +324,21 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         const ucp_proto_select_param_t *remote_select_param,
         ucp_proto_init_elem_t *remote_proto, const void *remote_priv)
 {
-    const char *proto_name = ucp_proto_id_field(remote_proto->proto_id, name);
+    const char *variant_name = ucp_proto_id_field(remote_proto->proto_id, name);
     size_t num_elems       = 0;
     const ucp_proto_perf_t *perf_elems[3];
     ucp_proto_perf_t *ctrl_perf, *remote_perf;
+    UCS_STRING_BUFFER_ONSTACK(perf_name_buf, 256);
     size_t cfg_thresh, cfg_priority;
     ucs_linear_func_t overhead;
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    ucs_trace("%s proto variant: cfg_thresh=%zu cfg_priority=%u", proto_name,
+    ucs_string_buffer_appendf(&perf_name_buf,
+                              "%s"UCP_PROTO_PERF_NODE_NEW_LINE"%s",
+                              params->ctrl_msg_name,
+                              ucp_proto_perf_name(remote_proto->perf));
+    ucs_trace("%s proto variant: cfg_thresh=%zu cfg_priority=%u", variant_name,
               remote_proto->cfg_thresh, remote_proto->cfg_priority);
 
     /* Set send_overheads to the time to send and receive RTS message */
@@ -364,7 +369,8 @@ static void ucp_proto_rndv_ctrl_variant_probe(
         perf_elems[num_elems++] = params->unpack_perf;
     }
 
-    status = ucp_proto_perf_aggregate(proto_name, perf_elems, num_elems, &perf);
+    status = ucp_proto_perf_aggregate(ucs_string_buffer_cstr(&perf_name_buf),
+                                      perf_elems, num_elems, &perf);
     if (status != UCS_OK) {
         goto out_destroy_remote_perf;
     } else if (ucp_proto_perf_is_empty(perf)) {
@@ -396,7 +402,7 @@ static void ucp_proto_rndv_ctrl_variant_probe(
      */
     ucs_assertv(params->super.cfg_priority <= remote_proto->cfg_priority,
                 "remote_proto=%s params->super.cfg_priority=%u "
-                "remote_proto->cfg_priority=%u", proto_name,
+                "remote_proto->cfg_priority=%u", variant_name,
                 params->super.cfg_priority, remote_proto->cfg_priority);
 
     status = ucp_proto_select_add_proto(&params->super.super, cfg_thresh,
@@ -611,7 +617,7 @@ ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
 
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
-                         const char *name, const char *ack_name,
+                         const char *op_name, const char *ack_name,
                          ucp_proto_perf_t **perf_p,
                          ucp_proto_rndv_bulk_priv_t *rpriv)
 {
@@ -619,9 +625,10 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     size_t rndv_align_thresh      = context->config.ext.rndv_align_thresh;
     ucp_proto_multi_priv_t *mpriv = &rpriv->mpriv;
     ucp_proto_perf_t *bulk_perf, *ack_perf;
+    const char *perf_name;
     ucs_status_t status;
 
-    status = ucp_proto_multi_init(init_params, &bulk_perf, mpriv);
+    status = ucp_proto_multi_init(init_params, op_name, &bulk_perf, mpriv);
     if (status != UCS_OK) {
         return status;
     }
@@ -643,7 +650,9 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
         return UCS_OK;
     }
 
-    status = ucp_proto_perf_aggregate2(name, bulk_perf, ack_perf, perf_p);
+    perf_name = ucp_proto_id_field(init_params->super.super.proto_id, name);
+    status    = ucp_proto_perf_aggregate2(perf_name, bulk_perf, ack_perf,
+                                          perf_p);
 
     ucp_proto_perf_destroy(ack_perf);
 out_destroy_bulk_perf:

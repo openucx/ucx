@@ -22,6 +22,8 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
                                    ucp_proto_perf_t **perf_p,
                                    ucp_proto_single_priv_t *spriv)
 {
+    const char *perf_name = ucp_proto_id_field(params->super.super.proto_id,
+                                               name);
     ucp_proto_perf_node_t *tl_perf_node;
     ucp_proto_common_tl_perf_t tl_perf;
     ucp_lane_index_t num_lanes;
@@ -57,7 +59,7 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params,
     }
 
     status = ucp_proto_common_init_perf(&params->super, &tl_perf, tl_perf_node,
-                                        reg_md_map, perf_p);
+                                        reg_md_map, perf_name, perf_p);
     ucp_proto_perf_node_deref(&tl_perf_node);
 
     return status;

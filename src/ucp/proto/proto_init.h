@@ -81,7 +81,8 @@ ucs_status_t
 ucp_proto_common_init_perf(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *tl_perf,
                            ucp_proto_perf_node_t *const tl_perf_node,
-                           ucp_md_map_t reg_md_map, ucp_proto_perf_t **perf_p);
+                           ucp_md_map_t reg_md_map, const char *perf_name,
+                           ucp_proto_perf_t **perf_p);
 
 
 /**

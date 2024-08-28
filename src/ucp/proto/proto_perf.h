@@ -95,6 +95,12 @@ int ucp_proto_perf_is_empty(const ucp_proto_perf_t *perf);
 
 
 /**
+ * @return Perf structure name.
+ */
+const char *ucp_proto_perf_name(const ucp_proto_perf_t *perf);
+
+
+/**
  * Add linear functions to several performance factors at the range
  * [ @a start, @a end ]. The performance functions to add are provided in the
  * array @a funcs, each entry corresponding to a factor id defined in
