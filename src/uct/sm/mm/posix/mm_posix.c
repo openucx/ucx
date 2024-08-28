@@ -255,13 +255,23 @@ static ucs_status_t uct_posix_shm_open(uint64_t mmid, int open_flags, int *fd_p)
 static ucs_status_t uct_posix_file_open(const char *dir, uint64_t mmid,
                                         int open_flags, int* fd_p)
 {
-    char file_path[PATH_MAX];
+    char *file_path;
     int ret;
+    ucs_status_t status;
 
-    ucs_snprintf_safe(file_path, sizeof(file_path), "%s" UCT_POSIX_FILE_FMT,
-                      dir, mmid);
+    status = ucs_string_alloc_path_buffer(&file_path, "file_path");
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ucs_snprintf_safe(file_path, PATH_MAX, "%s" UCT_POSIX_FILE_FMT, dir, mmid);
     ret = open(file_path, open_flags | O_RDWR, UCT_POSIX_SHM_OPEN_MODE);
-    return uct_posix_open_check_result("open", file_path, open_flags, ret, fd_p);
+    status = uct_posix_open_check_result("open", file_path, open_flags, ret, fd_p);
+
+out_free_file_path:
+    ucs_free(file_path);
+out:
+    return status;
 }
 
 static ucs_status_t uct_posix_procfs_open(int pid, int peer_fd, int* fd_p)
