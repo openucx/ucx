@@ -36,7 +36,7 @@ typedef enum {
 } ucp_proto_perf_factor_id_t;
 
 
-/* Final protocol perfomance segment, represents estimated protocol performance
+/* Final protocol performance segment, represents estimated protocol performance
  * in a single range */
 typedef struct {
     size_t                start;
