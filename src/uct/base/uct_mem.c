@@ -69,6 +69,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
 {
     const char *alloc_name;
     const uct_alloc_method_t *method;
+    ucs_log_level_t log_level;
     ucs_memory_type_t mem_type;
     uct_md_attr_t md_attr;
     ucs_status_t status;
@@ -101,6 +102,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
     mem_type     = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE) ?
                    params->mem_type : UCS_MEMORY_TYPE_HOST;
     alloc_length = length;
+    log_level    = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                   UCS_LOG_LEVEL_ERROR;
 
     ucs_trace("allocating %s: %s memory length %zu flags 0x%x", alloc_name,
               ucs_memory_type_names[mem_type], alloc_length, flags);
@@ -122,7 +125,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 md           = params->mds.mds[md_index];
                 status = uct_md_query(md, &md_attr);
                 if (status != UCS_OK) {
-                    ucs_error("Failed to query MD");
+                    ucs_log(log_level, "Failed to query MD");
                     goto out;
                 }
 
@@ -152,9 +155,10 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                                           mem_type, flags, alloc_name,
                                           &memh);
                 if (status != UCS_OK) {
-                    ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
-                              alloc_length, md->component->name,
-                              alloc_name, ucs_status_string(status));
+                    ucs_log(log_level,
+                            "failed to allocate %zu bytes using md %s for %s: %s",
+                            alloc_length, md->component->name, alloc_name,
+                            ucs_status_string(status));
                     goto out;
                 }
 

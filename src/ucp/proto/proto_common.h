@@ -61,6 +61,7 @@ typedef enum {
 
     /* Supports starting the request when its datatype iterator offset is > 0 */
     UCP_PROTO_COMMON_INIT_FLAG_RESUME        = UCS_BIT(10),
+    UCP_PROTO_COMMON_KEEP_MD_MAP             = UCS_BIT(11)
 } ucp_proto_common_init_flags_t;
 
 
@@ -120,6 +121,13 @@ typedef struct {
 
     /* Map of unsuitable lanes */
     ucp_lane_map_t          exclude_map;
+
+    /* Memory type of the buffer used for data transfer on the transport level.
+     * If UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY flag is set, it is expected to
+     * be the user buffer memory type. Alternatively, it refers to the type of
+     * memory used for bounce buffers (either in the UCP or UCT layer) where
+     * data needs to be copied as part of the protocol. */
+    ucs_memory_type_t       reg_mem_type;
 } ucp_proto_common_init_params_t;
 
 
@@ -259,8 +267,9 @@ ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
                             uct_ep_operation_t memtype_op, unsigned flags,
                             ptrdiff_t max_iov_offs, size_t min_iov,
-                            ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-                            ucp_lane_index_t max_lanes,
+                            ucp_lane_type_t lane_type,
+                            ucs_memory_type_t reg_mem_type,
+                            uint64_t tl_cap_flags, ucp_lane_index_t max_lanes,
                             ucp_lane_map_t exclude_map,
                             ucp_lane_index_t *lanes);
 

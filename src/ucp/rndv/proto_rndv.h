@@ -69,6 +69,11 @@ typedef struct {
 typedef struct {
     ucp_proto_rndv_ack_priv_t super;
 
+    /* Memory type of fragment buffers which are used by get/mtype and put/mtype
+     * protocols.
+     * TODO: Create a separate struct for mtype protocols and move it there. */
+    ucs_memory_type_t         frag_mem_type;
+
     /* Multi-lane common part. Must be the last field, see
        @ref ucp_proto_multi_priv_t */
     ucp_proto_multi_priv_t    mpriv;

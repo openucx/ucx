@@ -32,6 +32,11 @@ typedef struct {
     ucp_proto_rndv_rtr_data_received_cb_t data_received;
 } ucp_proto_rndv_rtr_priv_t;
 
+typedef struct {
+    ucp_proto_rndv_rtr_priv_t super;
+    ucs_memory_type_t         frag_mem_type;
+} ucp_proto_rndv_rtr_mtype_priv_t;
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rtr_common_request_init(ucp_request_t *req)
 {
@@ -172,6 +177,7 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
         .super.exclude_map   = 0,
+        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
@@ -334,21 +340,20 @@ ucp_proto_rndv_rtr_mtype_data_received(ucp_request_t *req, int in_buffer)
     } else {
         /* Data was not placed in user buffer, which means it was placed to
            the remote address we published - the rendezvous fragment */
-        ucp_proto_rndv_mtype_copy(req, req->send.rndv.mdesc->ptr,
-                                  ucp_proto_rndv_mtype_get_req_memh(req),
-                                  uct_ep_put_zcopy,
-                                  ucp_proto_rndv_rtr_mtype_copy_completion,
-                                  "out to");
+        ucp_proto_rndv_mdesc_mtype_copy(
+                req, uct_ep_put_zcopy, ucp_proto_rndv_rtr_mtype_copy_completion,
+                "out to");
     }
 }
 
 static ucs_status_t ucp_proto_rndv_rtr_mtype_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_rndv_rtr_mtype_priv_t *rpriv = req->send.proto_config->priv;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_proto_rndv_mtype_request_init(req);
+        status = ucp_proto_rndv_mtype_request_init(req, rpriv->frag_mem_type);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;
@@ -385,16 +390,18 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               UCP_PROTO_COMMON_KEEP_MD_MAP,
         .super.exclude_map   = 0,
+        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
-        .mem_info.type       = context->config.ext.rndv_frag_mem_type,
         .mem_info.sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
     };
-    ucp_proto_rndv_rtr_priv_t rpriv;
+    ucs_memory_type_t frag_mem_type;
+    ucp_proto_rndv_rtr_mtype_priv_t rpriv;
     ucp_md_map_t dummy_md_map;
     ucp_md_index_t md_index;
     ucs_status_t status;
@@ -404,56 +411,67 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    status = ucp_proto_rndv_mtype_init(init_params, &dummy_md_map,
-                                       &params.super.max_length);
-    if (status != UCS_OK) {
-        return;
-    }
+    ucs_for_each_bit(frag_mem_type, context->config.ext.rndv_frag_mem_types) {
+        status = ucp_proto_rndv_mtype_init(init_params, frag_mem_type,
+                                           &dummy_md_map,
+                                           &params.super.max_length);
+        if (status != UCS_OK) {
+            continue;
+        }
 
-    status = ucp_proto_perf_create("rtr/mtype unpack", &params.unpack_perf);
-    if (status != UCS_OK) {
-        return;
-    }
+        params.mem_info.type = frag_mem_type;
 
-    status = ucp_proto_init_add_buffer_copy_time(
-            init_params->worker, "unpack copy", params.mem_info.type,
-            init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
-            params.super.min_length, params.super.max_length, 1,
-            params.unpack_perf);
-    if (status != UCS_OK) {
-        goto out_unpack_perf_destroy;
-    }
+        status = ucp_mm_get_alloc_md_index(context, &md_index, frag_mem_type);
+        if ((status == UCS_OK) && (md_index != UCP_NULL_RESOURCE)) {
+            params.md_map = UCS_BIT(md_index);
+        } else if (frag_mem_type == UCS_MEMORY_TYPE_HOST) {
+            params.md_map = 0;
+        } else {
+            /* To use non-host staging buffers it should be possible to
+             * allocate them with MD */
+            continue;
+        }
 
-    status = ucp_mm_get_alloc_md_index(context, &md_index,
-                                       params.mem_info.type);
-    if ((status != UCS_OK) || (md_index == UCP_NULL_RESOURCE)) {
-        params.md_map = 0;
-    } else {
-        params.md_map = UCS_BIT(md_index);
-    }
+        status = ucp_proto_perf_create("rtr/mtype unpack", &params.unpack_perf);
+        if (status != UCS_OK) {
+            return;
+        }
 
-    rpriv.pack_cb       = ucp_proto_rndv_rtr_mtype_pack;
-    rpriv.data_received = ucp_proto_rndv_rtr_mtype_data_received;
+        status = ucp_proto_init_add_buffer_copy_time(
+                init_params->worker, "unpack copy", frag_mem_type,
+                init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
+                params.super.min_length, params.super.max_length, 1,
+                params.unpack_perf);
+        if (status != UCS_OK) {
+            goto out_unpack_perf_destroy;
+        }
 
-    ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
+        rpriv.super.pack_cb       = ucp_proto_rndv_rtr_mtype_pack;
+        rpriv.super.data_received = ucp_proto_rndv_rtr_mtype_data_received;
+        rpriv.frag_mem_type       = frag_mem_type;
+
+        ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
 out_unpack_perf_destroy:
-    ucp_proto_perf_destroy(params.unpack_perf);
+        ucp_proto_perf_destroy(params.unpack_perf);
+    }
 }
 
 static void
 ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
                                ucp_proto_query_attr_t *attr)
 {
-    const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+    const ucp_proto_rndv_rtr_mtype_priv_t *rpriv = params->priv;
     ucp_proto_query_attr_t remote_attr;
 
-    ucp_proto_config_query(params->worker, &rpriv->remote_proto_config,
+    ucp_proto_config_query(params->worker,
+                           &rpriv->super.super.remote_proto_config,
                            params->msg_length, &remote_attr);
 
     attr->is_estimation  = 1;
     attr->max_msg_length = remote_attr.max_msg_length;
-    attr->lane_map       = UCS_BIT(rpriv->lane);
-    ucp_proto_rndv_mtype_query_desc(params, attr, remote_attr.desc);
+    attr->lane_map       = UCS_BIT(rpriv->super.super.lane);
+    ucp_proto_rndv_mtype_query_desc(params, rpriv->frag_mem_type, attr,
+                                    remote_attr.desc);
     ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
 }
 

@@ -376,6 +376,7 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
                                ucp_md_map_t reg_md_map, ucp_proto_perf_t *perf)
 {
     const ucp_proto_select_param_t *select_param = params->super.select_param;
+    ucs_memory_type_t buffer_mem_type;
     ucs_memory_type_t recv_mem_type;
     uint32_t op_attr_mask;
     ucs_status_t status;
@@ -390,8 +391,17 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
         }
     } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) {
         ucs_assert(reg_md_map == 0);
+
+        /* TODO: This mem_type initialization is specific to put and get mtype
+         * protocols. Consider moving it to the corresponding probe functions.
+         */
+        if (params->reg_mem_type != UCS_MEMORY_TYPE_UNKNOWN) {
+            buffer_mem_type = params->reg_mem_type;
+        } else {
+            buffer_mem_type = UCS_MEMORY_TYPE_HOST;
+        }
         status = ucp_proto_init_add_buffer_copy_time(
-                params->super.worker, "local copy", UCS_MEMORY_TYPE_HOST,
+                params->super.worker, "local copy", buffer_mem_type,
                 select_param->mem_type, params->memtype_op, range_start,
                 range_end, 1, perf);
         if (status != UCS_OK) {
@@ -423,11 +433,8 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
             params->super.worker, "remote copy", UCS_MEMORY_TYPE_HOST,
             recv_mem_type, UCT_EP_OP_PUT_SHORT, range_start, range_end, 0,
             perf);
-    if (status != UCS_OK) {
-        return status;
-    }
 
-    return UCS_OK;
+    return status;
 }
 
 static int

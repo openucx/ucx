@@ -93,6 +93,7 @@ ucp_proto_rndv_rkey_ptr_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .super.exclude_map   = 0,
+        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };
@@ -253,6 +254,7 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
         .super.exclude_map   = (rkey_ptr_lane == UCP_NULL_LANE) ?
                                0 : UCS_BIT(rkey_ptr_lane),
+        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
         .lane_type           = UCP_LANE_TYPE_LAST,
         .tl_cap_flags        = 0
     };
@@ -268,8 +270,9 @@ ucp_proto_rndv_rkey_ptr_mtype_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    status = ucp_proto_rndv_mtype_init(init_params, &mdesc_md_map,
-                                       &params.super.max_length);
+    /* 2-stage ppln protocols work with host staging buffers only */
+    status = ucp_proto_rndv_mtype_init(init_params, UCS_MEMORY_TYPE_HOST,
+                                       &mdesc_md_map, &params.super.max_length);
     if (status != UCS_OK) {
         return;
     }
@@ -342,7 +345,7 @@ ucp_proto_rndv_rkey_ptr_mtype_copy_progress(uct_pending_req_t *uct_req)
 
     req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     ucp_proto_rndv_mtype_copy(req, ppln_data->local_ptr, ppln_data->uct_memh,
-                              uct_ep_get_zcopy,
+                              UCS_MEMORY_TYPE_HOST, uct_ep_get_zcopy,
                               ucp_proto_rndv_rkey_ptr_mtype_copy_completion,
                               "in from");
 
@@ -368,7 +371,7 @@ ucp_proto_rndv_rkey_ptr_mtype_query(const ucp_proto_query_params_t *params,
     const char *desc = UCP_PROTO_RNDV_RKEY_PTR_DESC;
 
     ucp_rndv_rkey_ptr_query_common(params, attr);
-    ucp_proto_rndv_mtype_query_desc(params, attr, desc);
+    ucp_proto_rndv_mtype_query_desc(params, UCS_MEMORY_TYPE_HOST, attr, desc);
 }
 
 ucp_proto_t ucp_rndv_rkey_ptr_mtype_proto = {

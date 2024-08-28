@@ -45,6 +45,7 @@ ucp_tag_rndv_offload_proto_probe(const ucp_proto_init_params_t *init_params)
                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
        .super.exclude_map   = 0,
+       .super.reg_mem_type  = init_params->select_param->mem_type,
        .lane_type           = UCP_LANE_TYPE_TAG,
        .tl_cap_flags        = UCT_IFACE_FLAG_TAG_RNDV_ZCOPY
     };
@@ -179,6 +180,7 @@ ucp_tag_rndv_offload_sw_proto_probe(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .super.exclude_map   = 0,
+        .super.reg_mem_type  = UCS_MEMORY_TYPE_UNKNOWN,
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
         .lane                = init_params->ep_config_key->tag_lane,
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
