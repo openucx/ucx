@@ -177,6 +177,7 @@ resources:
     - container: ubuntu22_cuda12
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04-mofed5-cuda12:3
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
+
     - container: ubuntu2204_rocm_6_0_0
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu2204:rocm-6.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
