@@ -460,6 +460,7 @@ uct_gdr_copy_md_create(uct_component_t *component,
 
     md->super.ops = &uct_gdr_copy_md_rcache_ops;
     md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
+    md->have_c2c  = uct_cuda_base_have_c2c();
 
 out:
     *md_p = md;

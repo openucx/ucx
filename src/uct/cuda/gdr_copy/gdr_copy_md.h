@@ -22,6 +22,7 @@ typedef struct {
     gdr_t               gdrcpy_ctx; /**< gdr copy context */
     ucs_linear_func_t   reg_cost;   /**< Memory registration cost */
     ucs_rcache_t        *rcache;    /**< Registration cache */
+    int                 have_c2c;
 } uct_gdr_copy_md_t;
 
 
