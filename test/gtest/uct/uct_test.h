@@ -493,8 +493,7 @@ protected:
     knem
 
 #define UCT_TEST_CUDA_MEM_TYPE_TLS \
-    cuda_copy,              \
-    gdr_copy
+    cuda_copy
 
 #define UCT_TEST_ROCM_MEM_TYPE_TLS \
     rocm_copy

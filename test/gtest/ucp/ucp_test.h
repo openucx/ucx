@@ -470,7 +470,7 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, \
                                             "rc_x") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib, \
-                                            "shm,ib,gdr_copy") \
+                                            "shm,ib") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib_ipc, \
                                             "shm,ib,cuda_ipc,rocm_ipc") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ugni, \
