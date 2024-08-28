@@ -658,7 +658,7 @@ static void ucp_memh_set_uct_flags(ucp_mem_h memh, unsigned uct_flags)
                 "memh=%p memh->md_map=0x%" PRIx64
                 " memh->uct_flags=0x%x uct_flags=0x%x",
                 memh, memh->md_map, memh->uct_flags, uct_flags);
-    memh->uct_flags = uct_flags & UCP_MM_UCT_ACCESS_MASK;
+    memh->uct_flags = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
 }
 
 static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
@@ -863,6 +863,7 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
                    ucp_md_map_t reg_md_map, unsigned uct_flags,
                    const char *alloc_name, ucp_mem_h *memh_p)
 {
+    unsigned access_flags = UCP_MM_UCT_ACCESS_FLAGS(uct_flags);
     ucs_status_t status;
     ucp_mem_h memh;
 
@@ -886,15 +887,16 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
         ucs_ptr_check_align(ucp_memh_address(memh), ucp_memh_length(memh),
                             align);
 
-        if (ucs_test_all_flags(memh->uct_flags,
-                               uct_flags & UCP_MM_UCT_ACCESS_MASK)) {
+        if (ucs_test_all_flags(memh->uct_flags, access_flags)) {
             *memh_p = memh;
             return UCS_OK;
         }
 
         ucs_trace("memh %p uct_flags mismatch, expected 0x%x got 0x%x", memh,
-                  uct_flags & UCP_MM_UCT_ACCESS_MASK,
-                  memh->uct_flags & UCP_MM_UCT_ACCESS_MASK);
+                  access_flags, UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags));
+
+        /* Augment permissions to avoid back and forth invalidation */
+        uct_flags |= UCP_MM_UCT_ACCESS_FLAGS(memh->uct_flags);
 
         /* Invalidate the mismatching region and get a new one */
         ucs_rcache_region_invalidate(context->rcache, &memh->super,
