@@ -254,6 +254,16 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
+    /* Check 'stop' flag before entering the loop. If the main thread sets
+     * 'stop' flag before this thread created 'inotify_fd' fd, the execution
+     * of the thread has to be stopped, otherwise - the thread hangs waiting
+     * for the data on 'inotify_fd' fd.
+     */
+    if (ucs_vfs_fuse_context.stop) {
+        status = UCS_ERR_CANCELED;
+        goto out;
+    }
+
     /* Create directory path */
     ret = ucs_vfs_sock_mkdir(path, UCS_LOG_LEVEL_DIAG);
     if (ret != 0) {
@@ -282,23 +292,15 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
                      sizeof(watch_filename));
     watch_dirname = dirname(dir_buf);
 
-    /* Watch for new files in 'watch_dirname' */
+    /* Watch for new files in 'watch_dirname' and monitor if this watch gets
+     * deleted explicitly or implicitly */
     ucs_vfs_fuse_context.watch_desc = inotify_add_watch(
-            ucs_vfs_fuse_context.inotify_fd, watch_dirname, IN_CREATE);
+            ucs_vfs_fuse_context.inotify_fd, watch_dirname,
+            IN_CREATE | IN_IGNORED);
     if (ucs_vfs_fuse_context.watch_desc < 0) {
         ucs_error("inotify_add_watch(%s) failed: %m", watch_dirname);
         status = UCS_ERR_IO_ERROR;
         goto out_close_inotify_fd;
-    }
-
-    /* Check 'stop' flag before entering the loop. If the main thread sets
-     * 'stop' flag before this thread created 'inotify_fd' fd, the execution
-     * of the thread has to be stopped, otherwise - the thread hangs waiting
-     * for the data on 'inotify_fd' fd.
-     */
-    if (ucs_vfs_fuse_context.stop) {
-        status = UCS_ERR_CANCELED;
-        goto out_close_watch_id;
     }
 
     /* Read events from inotify channel and exit when either the main thread set
@@ -330,6 +332,15 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
         for (offset  = 0; offset < nread;
              offset += (sizeof(*event) + event->len)) {
             event = UCS_PTR_BYTE_OFFSET(event_buf, offset);
+
+            /* Watch was removed explicitly (inotify_rm_watch) or automatically
+             * (file was deleted, or file system was unmounted). */
+            if (event->mask & IN_IGNORED) {
+                ucs_debug("inotify watch on '%s' was removed", watch_dirname);
+                status = UCS_ERR_IO_ERROR;
+                goto out_close_watch_id;
+            }
+
             if (!(event->mask & IN_CREATE)) {
                 ucs_trace("ignoring inotify event with mask 0x%x", event->mask);
                 continue;
