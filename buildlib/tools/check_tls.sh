@@ -5,6 +5,10 @@
 # See file LICENSE for terms.
 #
 
+realdir=$(realpath $(dirname $0))
+source ${realdir}/../az-helpers.sh
+trap "log_info_on_exit" EXIT
+
 # check_tls.sh [extra-tls-to-check]
 
 res=true;

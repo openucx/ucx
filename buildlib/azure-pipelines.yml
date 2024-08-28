@@ -16,7 +16,7 @@ resources:
     - container: centos8_cuda11_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/centos8-mofed5-cuda11:3
       options: $(DOCKER_OPT_VOLUMES)
-      
+
 stages:
   - stage: Prepare
     jobs:
@@ -35,7 +35,7 @@ stages:
               set -x
               check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/SNAPSHOT: "
             name: Result
-            
+
   - stage: Build
     dependsOn: Prepare
     condition: eq(dependencies.Prepare.outputs['Check.Result.Launch'], 'True')

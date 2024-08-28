@@ -7,6 +7,7 @@
 
 realdir="$(realpath "$(dirname "$0")")"
 source "${realdir}"/../az-helpers.sh
+trap "log_info_on_exit" EXIT
 
 legacy_info_file=ucx_info_legacy.txt
 pr_info_file=ucx_info_pr.txt
