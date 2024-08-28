@@ -368,8 +368,7 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         }
         ep->dci               = 0;
         dci                   = uct_dc_mlx5_iface_dci(iface, ep->dci);
-        ep->dci_channel_index = dci->next_channel_index++ %
-                                iface->tx.num_dci_channels;
+        ep->dci_channel_index = dci->next_channel_index++;
     } else {
         ep->dci               = UCT_DC_MLX5_EP_NO_DCI;
         ep->dci_channel_index = 0;
