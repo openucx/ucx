@@ -12,6 +12,7 @@
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/arch/global_opts.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -150,6 +151,19 @@ typedef struct {
        values. */
     size_t                     rcache_stat_min;
     size_t                     rcache_stat_max;
+
+    /* Estimated latency and bandwidth between devices according to distance
+       within the sysfs device tree */
+    struct {
+        /* Connection traversing PCIe as well as a PCIe Host Bridge */
+        ucs_sys_dev_distance_t phb;
+        /* Connection traversing PCIe as well as the interconnect between PCIe
+           Host Bridges within a NUMA node */
+        ucs_sys_dev_distance_t node;
+        /* Connection traversing PCIe as well as the SMP interconnect between
+           NUMA nodes */
+        ucs_sys_dev_distance_t sys;
+    } dist;
 } ucs_global_opts_t;
 
 
