@@ -223,17 +223,28 @@ static void ucs_vfs_node_build_path(ucs_vfs_node_t *parent_node,
 static ucs_vfs_node_t *
 ucs_vfs_node_add_subdir(ucs_vfs_node_t *parent_node, const char *name)
 {
-    char path_buf[PATH_MAX];
-    ucs_vfs_node_t *node;
+    ucs_vfs_node_t *node = NULL;
+    char *path_buf;
+    ucs_status_t status;
 
-    ucs_vfs_node_build_path(parent_node, name, path_buf, sizeof(path_buf));
-    node = ucs_vfs_node_find_by_path(path_buf);
-    if (node != NULL) {
-        return node;
+    status = ucs_string_alloc_path_buffer(&path_buf, "path_buf");
+    if (status != UCS_OK) {
+        goto out;
     }
 
-    return ucs_vfs_node_create(parent_node, path_buf, UCS_VFS_NODE_TYPE_SUBDIR,
+    ucs_vfs_node_build_path(parent_node, name, path_buf, PATH_MAX);
+    node = ucs_vfs_node_find_by_path(path_buf);
+    if (node != NULL) {
+        goto out_free_path_buf;
+    }
+
+    node = ucs_vfs_node_create(parent_node, path_buf, UCS_VFS_NODE_TYPE_SUBDIR,
                                NULL);
+
+out_free_path_buf:
+    ucs_free(path_buf);
+out:
+    return node;
 }
 
 static int ucs_vfs_node_need_update_path(ucs_vfs_node_type_t type,
