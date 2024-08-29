@@ -320,6 +320,10 @@ typedef struct ucp_context {
        ucp_mem_map() will register memory for all those domains. */
     ucp_md_map_t                  reg_md_map[UCS_MEMORY_TYPE_LAST];
 
+    /* Map of MDs that provide nonblocking registration for given memory type,
+       ucp_mem_map() will register memory for all those domains. */
+    ucp_md_map_t                  reg_nonblock_md_map[UCS_MEMORY_TYPE_LAST];
+
     /* Map of MDs that provide blocking registration for given memory type.
      * This map is initialized if non-blocking registration is requested for
      * the memory type (thus reg_md_map contains only MDs supporting

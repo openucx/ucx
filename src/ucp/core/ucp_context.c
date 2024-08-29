@@ -1605,6 +1605,11 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                         context->reg_md_map[mem_type] |= UCS_BIT(md_index);
                     }
 
+                    if (md_attr->reg_nonblock_mem_types & UCS_BIT(mem_type)) {
+                        context->reg_nonblock_md_map[mem_type] |=
+                                UCS_BIT(md_index);
+                    }
+
                     if (md_attr->cache_mem_types & UCS_BIT(mem_type)) {
                         context->cache_md_map[mem_type] |= UCS_BIT(md_index);
                     }
@@ -1732,6 +1737,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucs_memory_type_for_each(mem_type) {
         context->reg_md_map[mem_type]           = 0;
         context->reg_block_md_map[mem_type]     = 0;
+        context->reg_nonblock_md_map[mem_type]  = 0;
         context->cache_md_map[mem_type]         = 0;
         context->gva_md_map[mem_type]           = 0;
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;

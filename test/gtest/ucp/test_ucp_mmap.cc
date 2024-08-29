@@ -106,6 +106,11 @@ public:
             modify_config("PROTO_ENABLE", "n");
         }
 
+        if (get_variant_value() == VARIANT_MAP_NONBLOCK) {
+            // ODPv1 cannot interact with DEVX objects
+            modify_config("IB_MLX5_DEVX_OBJECTS", "", SETENV_IF_NOT_EXIST);
+        }
+
         if (get_variant_value() == VARIANT_NO_RCACHE) {
             modify_config("RCACHE_ENABLE", "n");
             ucp_test::init(); // Init UCP with rcache disabled
@@ -944,7 +949,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
     }
 }
 
-UCS_TEST_P(test_ucp_mmap, gva, "GVA_ENABLE=y", "IB_MLX5_DEVX_OBJECTS?=")
+UCS_TEST_P(test_ucp_mmap, gva, "GVA_ENABLE=y")
 {
     std::list<void*> bufs;
     ucp_mem_h first     = NULL;
