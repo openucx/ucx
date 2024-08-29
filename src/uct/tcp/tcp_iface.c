@@ -244,9 +244,14 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
 static const char *
 uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
 {
+    const char *sysfs_path = NULL;
     ucs_status_t status;
-    const char *sysfs_path;
-    char lowest_path_buf[PATH_MAX];
+    char *lowest_path_buf;
+
+    status = ucs_string_alloc_path_buffer(&lowest_path_buf, "lowest_path_buf");
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     /* Deep search to find the lowest device sysfs path:
      * 1) For regular device, use regular sysfs form.
@@ -255,11 +260,15 @@ uct_tcp_iface_get_sysfs_path(const char *dev_name, char *path_buffer)
     status = ucs_netif_get_lowest_device_path(dev_name, lowest_path_buf,
                                               PATH_MAX);
     if (status != UCS_OK) {
-        return NULL;
+        goto out_free_lowest_path_buf;
     }
 
     /* 'path_buffer' size is PATH_MAX */
     sysfs_path = ucs_topo_resolve_sysfs_path(lowest_path_buf, path_buffer);
+
+out_free_lowest_path_buf:
+    ucs_free(lowest_path_buf);
+out:
     return sysfs_path;
 }
 
