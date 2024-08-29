@@ -134,7 +134,7 @@ protected:
     }
 
     static unsigned default_num_iters() {
-        return ucs_max(100 / ucs::test_time_multiplier(), 1);
+        return ucs_max((128 * 1024) / ucs::test_time_multiplier(), 1);
     }
 
     void test(send_func_t send_func, uint64_t op_mask,
