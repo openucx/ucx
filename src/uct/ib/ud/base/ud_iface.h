@@ -314,7 +314,7 @@ Ack on connection reply. It may be send as part of the data packet.
 
 Implicit endpoints reuse
 
-Endpoints created upon receive of CREP request can be re-used when
+Endpoints created upon receive of CREP request can be reused when
 application calls ep_create_connected(). */
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);

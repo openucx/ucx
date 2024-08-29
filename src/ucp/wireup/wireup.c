@@ -1391,7 +1391,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucp_ep_config_lanes_intersect(old_key, new_key, ep, remote_address,
                                   addr_indices, reuse_lane_map);
 
-    /* CM lane has to be re-used by the new EP configuration */
+    /* CM lane has to be reused by the new EP configuration */
     ucs_assert(reuse_lane_map[ucp_ep_get_cm_lane(ep)] != UCP_NULL_LANE);
     /* wireup lane has to be selected for the old configuration */
     ucs_assert(old_key->wireup_msg_lane != UCP_NULL_LANE);
@@ -1404,7 +1404,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     if (reuse_lane != UCP_NULL_LANE) {
         /* previous wireup lane is part of the new configuration, so reuse it */
         new_key->wireup_msg_lane = reuse_lane;
-    } else /* old wireup lane won't be re-used */ {
+    } else /* old wireup lane won't be reused */ {
         /* previous wireup lane is not part of new configuration, so add it as
          * auxiliary endpoint inside cm lane, to be able to continue wireup
          * messages exchange */
