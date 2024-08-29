@@ -75,6 +75,8 @@ protected:
 
     typedef std::vector<ucs_global_opts_t> config_stack_t;
 
+    static constexpr double DEFAULT_TIMEOUT_SEC = 10.0;
+
     void SetUpProxy();
     void TearDownProxy();
     void TestBodyProxy();
@@ -87,6 +89,30 @@ protected:
     virtual void check_skip_test() = 0;
 
     virtual void test_body() = 0;
+
+    template<typename Cond, typename Wait>
+    void wait_for_cond(Cond cond, Wait wait,
+                       double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        ucs_time_t deadline = get_deadline(timeout);
+        while ((ucs_get_time() < deadline) && (!cond())) {
+            wait();
+        }
+    }
+
+    template<typename T, typename Wait>
+    void wait_for_value(const volatile T *var, T value, Wait wait,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        wait_for_cond([var, value]() { return *var == value; }, wait, timeout);
+    }
+
+    template<typename T>
+    void wait_for_value(const volatile T *var, T value,
+                        double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        wait_for_value(var, value, sched_yield, timeout);
+    }
 
     static ucs_log_func_rc_t
     common_logger(ucs_log_level_t log_level_to_handle, bool print,
