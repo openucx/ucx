@@ -59,7 +59,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ud_common),
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
-    {"NUM_DCI", "8",
+    {"NUM_DCI", "32",
      "Number of DC initiator QPs (DCI) used by the interface. Not relevant for hw_dcs policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
 
@@ -125,7 +125,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, fc_hard_req_timeout),
      UCS_CONFIG_TYPE_TIME_UNITS},
 
-    {"NUM_DCI_CHANNELS", "8",
+    {"NUM_DCI_CHANNELS", "32",
      "Number of stream channels per DCI to be used. A value "
      "of 1 disables DCI multi-channel support. Relevant only for hw_dcs policy.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, num_dci_channels),
