@@ -182,6 +182,10 @@ typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
 typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
 
 
+ucp_proto_common_init_params_t
+ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params);
+
+
 /**
  * Check if protocol can be used according to error handling requirements.
  *

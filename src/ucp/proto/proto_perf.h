@@ -160,6 +160,41 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
 
 
 /**
+ * Expand given perf by estimation that all meassages on interval
+ * [end of @a frag_seg + 1, @a max_length] would be sent in a pipeline async
+ * manner using data provided by @a frag_seg as a performance for sending one
+ * fragment.
+ *
+ * To understand what does it mean, please see the following example:
+ *
+ * 3-factor 3-msg pipeline:
+ * 1 msg: [=1=] [======2======] [=3=]
+ * 2 msg:       [=1=]           [======2======] [=3=]
+ * 3 msg:             [=1=]                     [======2======] [=3=]
+ * Approximation:
+ *        [=1=] [======================2======================] [=3=]
+ * 
+ * All the factors except longest one turn into constant fragment overhead
+ * due to overlapping (1 and 3 from example).
+ *
+ * Longest factor still saves the slope but it's constant part turns
+ * to dynamic since it start to depend on number of sent fragments
+ * (2 from example).
+ * 
+ * LATENCY factor cannot be chosen as longest one since it overlaps with
+ * other simultanious LATENCY factor operations.
+ *
+ * @param [in] perf       Performance data structure to update.
+ * @param [in] frag_seg   Segment that is considered as a performance for
+ *                        sending one fragment.
+ * @param [in] max_length Message size until what @a perf would be updated
+ */
+ucs_status_t ucp_perf_add_ppln(ucp_proto_perf_t *perf,
+                               const ucp_proto_perf_segment_t *frag_seg,
+                               size_t max_length);
+
+
+/**
  * Create a proto perf structure based on @a remote_perf, converting the values
  * of local factors to remote ones and vice versa.
  *

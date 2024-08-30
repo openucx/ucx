@@ -18,6 +18,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 
+#include <float.h>
 
 struct ucp_proto_perf_segment {
     /* List element */
@@ -426,6 +427,51 @@ ucs_status_t ucp_proto_perf_aggregate2(const char *name,
     const ucp_proto_perf_t *perf_elems[2] = {perf1, perf2};
 
     return ucp_proto_perf_aggregate(name, perf_elems, 2, perf_p);
+}
+
+ucs_status_t ucp_perf_add_ppln(ucp_proto_perf_t *perf,
+                               const ucp_proto_perf_segment_t *frag_seg,
+                               size_t max_length)
+{
+    ucp_proto_perf_factors_t factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
+    ucp_proto_perf_factor_id_t factor_id, max_factor_id;
+    ucs_linear_func_t factor_func;
+    double max_value;
+    size_t frag_size;
+    char frag_str[64];
+
+    ucs_assert(frag_seg != NULL);
+    frag_size = ucp_proto_perf_segment_end(frag_seg);
+    ucs_assertv(frag_size < max_length, "frag_size=%zu max_length=%zu",
+                frag_size, max_length);
+    ucs_assertv(ucp_proto_perf_find_segment_lb(perf, frag_size + 1) == NULL,
+                "ppln range already contains perf data frag_size=%zu",
+                frag_size);
+
+    /* Turn all factors overheads to constant and choose longest one */
+    max_factor_id = 0;
+    max_value     = -DBL_MAX;
+    for (factor_id = 0; factor_id < UCP_PROTO_PERF_FACTOR_LAST; factor_id++) {
+        factor_func          = ucp_proto_perf_segment_func(frag_seg, factor_id);
+        factors[factor_id].c = ucs_linear_func_apply(factor_func, frag_size);
+        if ((factors[factor_id].c > max_value) &&
+            (factor_id != UCP_PROTO_PERF_FACTOR_LATENCY)) {
+            max_factor_id = factor_id;
+            max_value     = factors[factor_id].c;
+        }
+    }
+
+    /* Turn longest factor overhead to dynamic only */
+    factors[max_factor_id]    = ucp_proto_perf_segment_func(frag_seg,
+                                                            max_factor_id);
+    factors[max_factor_id].m += factors[max_factor_id].c / frag_size;
+    factors[max_factor_id].c  = 0;
+
+
+    ucs_memunits_to_str(frag_size, frag_str, sizeof(frag_str));
+    return ucp_proto_perf_add_funcs(perf, frag_size + 1, max_length, factors,
+                                    ucp_proto_perf_segment_node(frag_seg),
+                                    "pipeline", "frag size: %s", frag_str);
 }
 
 ucs_status_t ucp_proto_perf_remote(const ucp_proto_perf_t *remote_perf,

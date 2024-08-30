@@ -49,16 +49,6 @@ ucp_proto_perf_envelope_make(const ucs_linear_func_t *funcs, uint64_t funcs_num,
                              ucp_proto_perf_envelope_t *envelope_list);
 
 
-ucp_proto_common_init_params_t
-ucp_proto_common_params_init(const ucp_proto_init_params_t *init_params);
-
-
-ucs_status_t
-ucp_proto_common_add_ppln_perf(ucp_proto_perf_t *perf,
-                               const ucp_proto_perf_segment_t *frag_seg,
-                               size_t max_length);
-
-
 ucs_status_t
 ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
                                ucp_md_map_t reg_md_map,

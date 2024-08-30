@@ -18,7 +18,7 @@ static void ucp_proto_rndv_ats_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    params              = ucp_proto_common_params_init(init_params);
+    params              = ucp_proto_common_init_params(init_params);
     params.cfg_priority = 80;
 
     /* This protocols supports either a regular rendezvous receive but without

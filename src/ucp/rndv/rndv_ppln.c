@@ -40,7 +40,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
     ucp_worker_h worker                          = init_params->worker;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     ucp_proto_common_init_params_t ack_params    =
-            ucp_proto_common_params_init(init_params);
+            ucp_proto_common_init_params(init_params);
     ucp_proto_perf_t *ppln_perf, *ack_perf, *result_perf;
     const ucp_proto_perf_segment_t *frag_seg, *first_seg;
     const ucp_proto_select_elem_t *select_elem;
@@ -126,7 +126,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
             continue;
         }
 
-        status = ucp_proto_common_add_ppln_perf(ppln_perf, frag_seg, SIZE_MAX);
+        status = ucp_perf_add_ppln(ppln_perf, frag_seg, SIZE_MAX);
         if (status != UCS_OK) {
             goto out_destroy_ppln_perf;
         }

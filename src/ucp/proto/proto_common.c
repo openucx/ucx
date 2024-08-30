@@ -16,6 +16,21 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+ucp_proto_common_init_params_t
+ucp_proto_common_init_params(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_common_init_params_t params = {
+        .super         = *init_params,
+        .cfg_thresh    = UCS_MEMUNITS_AUTO,
+        .min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .send_op       = UCT_EP_OP_LAST,
+        .memtype_op    = UCT_EP_OP_LAST
+    };
+    return params;
+}
+
 int ucp_proto_common_init_check_err_handling(
         const ucp_proto_common_init_params_t *init_params)
 {
